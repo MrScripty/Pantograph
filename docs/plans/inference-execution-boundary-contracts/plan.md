@@ -1566,7 +1566,7 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - [ ] Migrate old PyTorch nodes to canonical inference with a
   Transformers/PyTorch runtime hint and a Pumas model reference where the
   HF-compatible source can resolve through Pumas.
-- [ ] Migrate old embedding nodes to canonical inference with
+- [x] Migrate old embedding nodes to canonical inference with
   `task_kind = embedding`; remove public embedding-mode semantics from the
   graph contract while preserving embedding inputs/outputs.
 - [ ] Migrate reranker nodes to canonical inference or a canonical rerank task
@@ -1617,8 +1617,14 @@ unresolved Pumas model-reference diagnostics. It also migrates legacy
 `pytorch-inference` nodes to `llm-inference`, preserves PyTorch/Transformers
 runtime evidence, maps ASR-style legacy model types to `audio_transcription`,
 and keeps audio input topology compatible with the canonical descriptor.
-Pumas-backed GGUF/HF resolution, mmproj-specific preservation, embedding,
-reranker, frontend/template, and validation slices remain open.
+The canonical descriptor now treats task-specific inputs such as prompt, text,
+and audio as optional graph ports so task registry validation can enforce the
+right required input per task instead of making text generation semantics
+universal. Saved-workflow canonicalization now migrates legacy `embedding`
+nodes to `llm-inference` with `task_kind = embedding`, preserves text input,
+embedding output, and metadata output topology, and records unresolved Pumas
+model-reference diagnostics. Pumas-backed GGUF/HF resolution, mmproj-specific
+preservation, reranker, frontend/template, and validation slices remain open.
 
 ### Milestone 12: Prepare Native Candle Slice
 

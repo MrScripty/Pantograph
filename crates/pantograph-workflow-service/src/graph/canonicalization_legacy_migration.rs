@@ -15,6 +15,7 @@ pub(super) enum LegacyNodeMigrationKind {
     OllamaInference,
     LlamaCppInference,
     PyTorchInference,
+    Embedding,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -327,6 +328,11 @@ pub(super) fn canonicalize_legacy_node_types(
                     node.node_type = "llm-inference".to_string();
                     migrate_pytorch_node_data(&mut node.data);
                 }
+                "embedding" => {
+                    migrated_nodes.insert(node.id.clone(), LegacyNodeMigrationKind::Embedding);
+                    node.node_type = "llm-inference".to_string();
+                    migrate_embedding_node_data(&mut node.data);
+                }
                 _ => {}
             }
 
@@ -360,6 +366,11 @@ pub(super) fn canonicalize_legacy_node_types(
                     edge.target_handle.as_str(),
                     "temperature" | "max_tokens" | "device" | "model_type" | "environment_ref"
                 )
+            {
+                return None;
+            }
+            if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::Embedding)
+                && edge.target_handle == "model"
             {
                 return None;
             }
@@ -414,6 +425,7 @@ pub(super) fn legacy_node_type_migration_records(
             LegacyNodeMigrationKind::OllamaInference => legacy_ollama_migration_record(node_id),
             LegacyNodeMigrationKind::LlamaCppInference => legacy_llamacpp_migration_record(node_id),
             LegacyNodeMigrationKind::PyTorchInference => legacy_pytorch_migration_record(node_id),
+            LegacyNodeMigrationKind::Embedding => legacy_embedding_migration_record(node_id),
         })
         .collect::<Vec<_>>();
     records.sort_by(|left, right| {
@@ -587,6 +599,38 @@ fn migrate_pytorch_node_data(data: &mut serde_json::Value) {
                 "legacy_model_type": legacy_model_type,
                 "legacy_device": legacy_device,
                 "legacy_environment_ref": legacy_environment_ref
+            }])
+        });
+}
+
+fn migrate_embedding_node_data(data: &mut serde_json::Value) {
+    let object = ensure_json_object(data);
+    let legacy_model = object.get("model").cloned();
+
+    object
+        .entry("task_kind".to_string())
+        .or_insert_with(|| json!("embedding"));
+    object
+        .entry("runtime_hint".to_string())
+        .or_insert_with(|| json!("llamacpp"));
+    object
+        .entry("pumas_model_ref".to_string())
+        .or_insert_with(|| {
+            json!({
+                "status": "unresolved",
+                "source": "legacy_embedding",
+                "legacy_model": legacy_model,
+                "message": "Resolve this legacy embedding model reference through Pumas before running the canonical inference node."
+            })
+        });
+    object
+        .entry("migration_diagnostics".to_string())
+        .or_insert_with(|| {
+            json!([{
+                "code": "legacy_embedding_node",
+                "severity": "warning",
+                "message": "Migrated from dedicated embedding node to canonical llm-inference with task_kind=embedding. Dedicated embedding runtime residency is now backend-local rather than graph-visible.",
+                "legacy_model": legacy_model
             }])
         });
 }
@@ -802,6 +846,40 @@ fn legacy_pytorch_migration_record(node_id: &str) -> Option<ContractUpgradeRecor
             message: "pytorch-inference was migrated to canonical llm-inference; legacy model path and model type evidence must resolve through Pumas/Transformers package facts before execution.".to_string(),
             node_id: Some(node_id),
             node_type: Some(NodeTypeId::try_from("pytorch-inference".to_string()).ok()?),
+            port_id: None,
+        }],
+    };
+    record.validate().ok()?;
+    Some(record)
+}
+
+fn legacy_embedding_migration_record(node_id: &str) -> Option<ContractUpgradeRecord> {
+    let node_id = NodeInstanceId::try_from(node_id.to_string()).ok()?;
+    let record = ContractUpgradeRecord {
+        node_type: NodeTypeId::try_from("embedding".to_string()).ok()?,
+        outcome: ContractUpgradeOutcome::Upgraded,
+        source_contract_version: Some("0.0.0".to_string()),
+        source_contract_digest: None,
+        target_contract_version: Some("1.0.0".to_string()),
+        target_contract_digest: None,
+        diagnostics_lineage: DiagnosticsLineagePolicy::RejectToAvoidSilentChange,
+        changes: vec![
+            ContractUpgradeChange::NodeTypeChanged {
+                node_id: node_id.clone(),
+                from: NodeTypeId::try_from("embedding".to_string()).ok()?,
+                to: NodeTypeId::try_from("llm-inference".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("model".to_string()).ok()?,
+            },
+        ],
+        diagnostics: vec![ContractUpgradeDiagnostic {
+            reason: ContractUpgradeRejectionReason::UnsupportedLegacyContract,
+            message: "embedding was migrated to canonical llm-inference with task_kind=embedding; legacy model evidence must resolve through Pumas before execution.".to_string(),
+            node_id: Some(node_id),
+            node_type: Some(NodeTypeId::try_from("embedding".to_string()).ok()?),
             port_id: None,
         }],
     };

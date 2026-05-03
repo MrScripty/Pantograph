@@ -574,6 +574,115 @@ fn canonicalize_workflow_graph_migrates_legacy_pytorch_nodes() {
 }
 
 #[test]
+fn canonicalize_workflow_graph_migrates_legacy_embedding_nodes() {
+    let registry = NodeRegistry::new();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "text".to_string(),
+                node_type: "text-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 0.0 },
+                data: json!({ "text": "Pantograph embeddings are inference tasks." }),
+            },
+            GraphNode {
+                id: "embedding".to_string(),
+                node_type: "embedding".to_string(),
+                position: super::super::types::Position { x: 100.0, y: 0.0 },
+                data: json!({
+                    "model": "bge-small-en-v1.5",
+                }),
+            },
+            GraphNode {
+                id: "vector-output".to_string(),
+                node_type: "vector-output".to_string(),
+                position: super::super::types::Position { x: 200.0, y: 0.0 },
+                data: json!({}),
+            },
+            GraphNode {
+                id: "metadata-output".to_string(),
+                node_type: "text-output".to_string(),
+                position: super::super::types::Position { x: 200.0, y: 100.0 },
+                data: json!({}),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "text-embedding-text".to_string(),
+                source: "text".to_string(),
+                source_handle: "text".to_string(),
+                target: "embedding".to_string(),
+                target_handle: "text".to_string(),
+            },
+            GraphEdge {
+                id: "embedding-vector-output-vector".to_string(),
+                source: "embedding".to_string(),
+                source_handle: "embedding".to_string(),
+                target: "vector-output".to_string(),
+                target_handle: "vector".to_string(),
+            },
+            GraphEdge {
+                id: "embedding-metadata-output-text".to_string(),
+                source: "embedding".to_string(),
+                source_handle: "metadata".to_string(),
+                target: "metadata-output".to_string(),
+                target_handle: "text".to_string(),
+            },
+        ],
+        derived_graph: None,
+    };
+
+    let result = canonicalize_workflow_graph_with_migrations(graph, &registry);
+    let canonical = result.graph;
+    let migrated = canonical
+        .nodes
+        .iter()
+        .find(|node| node.id == "embedding")
+        .expect("migrated embedding node");
+
+    assert_eq!(migrated.node_type, "llm-inference");
+    assert_eq!(migrated.data["task_kind"], json!("embedding"));
+    assert_eq!(migrated.data["runtime_hint"], json!("llamacpp"));
+    assert_eq!(
+        migrated.data["pumas_model_ref"]["legacy_model"],
+        json!("bge-small-en-v1.5")
+    );
+    assert_eq!(
+        migrated.data["migration_diagnostics"][0]["code"],
+        json!("legacy_embedding_node")
+    );
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "text-embedding-text"
+            && edge.target == "embedding"
+            && edge.target_handle == "text"
+    }));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "embedding-vector-output-vector"
+            && edge.source == "embedding"
+            && edge.source_handle == "embedding"
+    }));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "embedding-metadata-output-text"
+            && edge.source == "embedding"
+            && edge.source_handle == "metadata"
+    }));
+
+    assert_eq!(result.migration_records.len(), 1);
+    let record = &result.migration_records[0];
+    assert_eq!(record.node_type.as_str(), "embedding");
+    assert_eq!(record.outcome, ContractUpgradeOutcome::Upgraded);
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::NodeTypeChanged { from, to, .. }
+            if from.as_str() == "embedding" && to.as_str() == "llm-inference"
+    )));
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::PortRemoved { port_id, kind, .. }
+            if port_id.as_str() == "model" && *kind == PortKind::Input
+    )));
+}
+
+#[test]
 fn canonicalize_workflow_graph_hydrates_expand_settings_and_passthrough_edges() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {

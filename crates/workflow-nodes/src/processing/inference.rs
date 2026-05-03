@@ -98,6 +98,8 @@ impl InferenceTask {
     pub const PORT_GENERATION_OPTIONS: &'static str = "generation_options";
     /// Port ID for canonical task option input
     pub const PORT_TASK_OPTIONS: &'static str = "task_options";
+    /// Port ID for text input used by embedding/scoring tasks
+    pub const PORT_TEXT: &'static str = "text";
     /// Port ID for prompt input
     pub const PORT_PROMPT: &'static str = "prompt";
     /// Port ID for audio input used by transcription tasks
@@ -112,6 +114,10 @@ impl InferenceTask {
     pub const PORT_KV_CACHE_IN: &'static str = "kv_cache_in";
     /// Port ID for response output
     pub const PORT_RESPONSE: &'static str = "response";
+    /// Port ID for embedding vector output
+    pub const PORT_EMBEDDING: &'static str = "embedding";
+    /// Port ID for task metadata output
+    pub const PORT_METADATA: &'static str = "metadata";
     /// Port ID for canonical model reference output
     pub const PORT_MODEL_REF: &'static str = "model_ref";
     /// Port ID for tool calls output
@@ -168,7 +174,8 @@ impl TaskDescriptor for InferenceTask {
                     "Resolved Model Source",
                     PortDataType::Json,
                 ),
-                PortMetadata::required(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
+                PortMetadata::optional(Self::PORT_TEXT, "Text", PortDataType::String),
+                PortMetadata::optional(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
                 PortMetadata::optional(Self::PORT_AUDIO, "Audio", PortDataType::Audio),
                 PortMetadata::optional(
                     Self::PORT_SYSTEM_PROMPT,
@@ -196,6 +203,8 @@ impl TaskDescriptor for InferenceTask {
             ],
             outputs: vec![
                 PortMetadata::optional(Self::PORT_RESPONSE, "Response", PortDataType::String),
+                PortMetadata::optional(Self::PORT_EMBEDDING, "Embedding", PortDataType::Embedding),
+                PortMetadata::optional(Self::PORT_METADATA, "Metadata", PortDataType::Json),
                 PortMetadata::optional(Self::PORT_MODEL_REF, "Model Ref", PortDataType::Json),
                 PortMetadata::optional(Self::PORT_TOOL_CALLS, "Tool Calls", PortDataType::Json),
                 PortMetadata::optional(
@@ -459,6 +468,15 @@ mod tests {
             .iter()
             .any(|p| p.id == InferenceTask::PORT_PUMAS_MODEL_REF
                 && p.data_type == PortDataType::Json));
+        assert!(meta.inputs.iter().any(|p| p.id == InferenceTask::PORT_TEXT
+            && p.data_type == PortDataType::String
+            && !p.required));
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_PROMPT
+                && p.data_type == PortDataType::Prompt
+                && !p.required));
         assert!(meta
             .inputs
             .iter()
@@ -483,6 +501,12 @@ mod tests {
             .outputs
             .iter()
             .any(|p| p.id == InferenceTask::PORT_MODEL_REF && p.data_type == PortDataType::Json));
+        assert!(meta.outputs.iter().any(|p| {
+            p.id == InferenceTask::PORT_EMBEDDING && p.data_type == PortDataType::Embedding
+        }));
+        assert!(meta.outputs.iter().any(|p| {
+            p.id == InferenceTask::PORT_METADATA && p.data_type == PortDataType::Json
+        }));
         assert!(meta
             .outputs
             .iter()
