@@ -1723,6 +1723,9 @@ the retired `pytorch-inference` node name.
 Node-engine dependency inference no longer treats retired backend-specific node
 types as backend selectors; canonical task/runtime evidence is now required for
 backend inference outside migration diagnostics.
+The `unload-model` node no longer contains a live Ollama HTTP unload path:
+Ollama `model_ref` inputs now fail locally with a canonical/Pumas migration
+message, and supported-engine diagnostics no longer list Ollama.
 
 ### Milestone 12: Prepare Native Candle Slice
 

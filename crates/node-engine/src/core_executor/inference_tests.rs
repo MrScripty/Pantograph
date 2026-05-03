@@ -103,6 +103,34 @@ async fn test_retired_llamacpp_node_type_is_not_executable() {
     }
 }
 
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_unload_model_rejects_ollama_model_ref_without_network() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "model_ref".to_string(),
+        serde_json::json!({
+            "contractVersion": 2,
+            "engine": "ollama",
+            "modelId": "llama3:8b",
+            "modelPath": "llama3:8b",
+            "taskTypePrimary": "text-generation"
+        }),
+    );
+
+    let error = execute_unload_model(None, &inputs)
+        .await
+        .expect_err("Ollama unload should be retired before network access");
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Ollama model_ref"));
+            assert!(message.contains("canonical llm-inference"));
+            assert!(message.contains("Pumas model reference"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
 #[cfg(all(feature = "inference-nodes", feature = "pytorch-nodes"))]
 #[tokio::test]
 async fn test_canonical_llm_pytorch_hint_dispatches_to_dependency_preflight() {

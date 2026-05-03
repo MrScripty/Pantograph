@@ -309,37 +309,9 @@ pub(crate) async fn execute_unload_model(
             );
         }
         "ollama" => {
-            let client = reqwest::Client::new();
-            let url = "http://localhost:11434/api/generate";
-            let request_body = serde_json::json!({
-                "model": model_id,
-                "keep_alive": 0
-            });
-
-            match client.post(url).json(&request_body).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    log::info!(
-                        "UnloadModel: Ollama model '{}' unloaded from VRAM",
-                        model_id
-                    );
-                }
-                Ok(resp) => {
-                    let status = resp.status();
-                    let body = resp.text().await.unwrap_or_default();
-                    log::warn!(
-                        "UnloadModel: Ollama unload returned {} for model '{}': {}",
-                        status,
-                        model_id,
-                        body
-                    );
-                }
-                Err(e) => {
-                    return Err(NodeEngineError::ExecutionFailed(format!(
-                        "Failed to connect to Ollama server to unload model '{}': {}",
-                        model_id, e
-                    )));
-                }
-            }
+            return Err(NodeEngineError::ExecutionFailed(format!(
+                "Ollama model_ref for '{model_id}' cannot be unloaded because Ollama is no longer supported as a first-party Pantograph inference backend. Migrate this workflow to canonical llm-inference with a Pumas model reference and a supported runtime."
+            )));
         }
         #[cfg(feature = "pytorch-nodes")]
         "pytorch" => {
@@ -390,7 +362,7 @@ pub(crate) async fn execute_unload_model(
         }
         other => {
             return Err(NodeEngineError::ExecutionFailed(format!(
-                "Unknown inference engine '{}'. Supported: llamacpp, ollama, pytorch, stable_audio, onnx-runtime",
+                "Unknown inference engine '{}'. Supported: llamacpp, pytorch, stable_audio, onnx-runtime",
                 other
             )));
         }
