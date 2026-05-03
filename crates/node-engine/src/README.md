@@ -53,9 +53,12 @@ boundaries instead of forcing new workloads through incompatible legacy paths.
 ## Decision
 Keep `core_executor.rs` as the single dispatch boundary for built-in node types
 and normalize node inputs there before handing them to downstream runtimes.
-Reranking therefore enters as a first-class `reranker` node with dedicated
-document parsing and task classification instead of overloading
-`llamacpp-inference`. `engine.rs` also remains the backend-owned source for
+Reranking and embeddings therefore enter execution through canonical
+`llm-inference` task kinds with dedicated document parsing, embedding checks,
+and task classification instead of preserving backend-specific graph node
+types. Retired backend-specific inference node names are only accepted as
+stale-node guards that return migration errors. `engine.rs` also remains the
+backend-owned source for
 graph-mutation and incremental-demand workflow events, so adapters only
 translate emitted execution facts instead of inferring graph-change semantics
 locally.
@@ -95,6 +98,9 @@ are resolved through `pantograph-node-contracts` projections.
 - Retired Ollama-node handling stays in `core_executor/ollama.rs` only to
   return a migration error for stale workflow nodes; it must not call an
   Ollama daemon or preserve direct HTTP generation.
+- Retired backend-specific inference node types in `core_executor.rs` must
+  return canonical migration errors. New runtime-backed behavior must enter via
+  canonical `llm-inference` task/runtime evidence.
 - Gateway-backed inference execution stays in `core_executor/inference_nodes.rs`
   so OpenAI-compatible chat, vision, and unload-model handlers remain separate
   from Python-worker adapters.
