@@ -73,7 +73,9 @@ pub use managed_binaries::{
     ManagedBinaryCategory, ManagedBinaryFacadeError, ManagedBinaryKey, ManagedBinarySource,
     ManagedBinaryStatus, ManagedBinaryVersionStatus,
 };
-pub use managed_dependencies::list_all_managed_dependency_statuses;
+pub use managed_dependencies::{
+    list_all_managed_dependency_statuses, resolve_managed_dependency_command,
+};
 pub use managed_media_dependencies::{
     acquire_media_conversion_dependency_plan, format_media_conversion_dependency_lease_holder,
     media_conversion_dependency_lease_holder_convention, open_color_io_activation_validation_state,

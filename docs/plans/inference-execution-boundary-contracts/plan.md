@@ -1247,7 +1247,10 @@ dependency status migration, backed by the inference-level
 `list_all_managed_dependency_statuses` aggregation API so host adapters do not
 need to stitch runtime and media projections together. The existing
 managed-media methods remain compatibility surfaces returning the legacy
-redistributable shape.
+redistributable shape. Runtime sidecar command resolution is also exposed
+through `resolve_managed_dependency_command(ManagedDependencyKey::RuntimeSidecar(..))`;
+media tool command resolution and native artifact activation explicitly reject
+there so conversion execution remains owned by media conversion.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`
