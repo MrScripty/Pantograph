@@ -1925,6 +1925,11 @@ correlates request-scoped started and terminal events to populate bounded
 `duration_ms` node execution status facts when a matching start is known, while
 leaving cleanup non-persisted and preserving the existing stateless adapter for
 one-off conversions.
+- 2026-05-03: Diagnostics follow-up added an append-only optional
+  `runtime_id` to inference request lifecycle events and changed the
+  embedded-runtime ledger adapter to prefer that canonical runtime id while
+  retaining backend key as separate backend context. This records the
+  backend-versus-runtime distinction without a diagnostics-ledger schema change.
 
 ## Execution Notes
 

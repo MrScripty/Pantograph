@@ -760,17 +760,16 @@ impl InferenceGateway {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
     {
         let backend_key = Some(canonical_backend_key(&self.current_backend_name().await));
-        let runtime_instance_id = self
-            .runtime_lifecycle_snapshot()
-            .await
-            .runtime_instance_id
-            .clone();
+        let runtime_snapshot = self.runtime_lifecycle_snapshot().await;
+        let runtime_id = runtime_snapshot.runtime_id.clone();
+        let runtime_instance_id = runtime_snapshot.runtime_instance_id.clone();
         let model_id = chat_request_model_id(&request_json);
 
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
             backend_key.clone(),
+            runtime_id.clone(),
             runtime_instance_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -783,6 +782,7 @@ impl InferenceGateway {
                 lifecycle_sink,
                 request_id,
                 backend_key,
+                runtime_id,
                 runtime_instance_id,
                 model_id,
             ))),
@@ -791,6 +791,7 @@ impl InferenceGateway {
                     lifecycle_sink.as_ref(),
                     request_id.clone(),
                     backend_key.clone(),
+                    runtime_id.clone(),
                     runtime_instance_id.clone(),
                     model_id.clone(),
                     InferenceRequestLifecycleEventKind::Failed,
@@ -800,6 +801,7 @@ impl InferenceGateway {
                     lifecycle_sink.as_ref(),
                     request_id,
                     backend_key,
+                    runtime_id,
                     runtime_instance_id,
                     model_id,
                     InferenceRequestLifecycleEventKind::CleanupCompleted,
@@ -834,12 +836,13 @@ impl InferenceGateway {
         request_id: Option<String>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     ) -> Result<Vec<EmbeddingResult>, GatewayError> {
-        let (backend_key, runtime_instance_id) = self.lifecycle_event_context().await;
+        let (backend_key, runtime_id, runtime_instance_id) = self.lifecycle_event_context().await;
         let model_id = non_empty_model_id(model);
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
             backend_key.clone(),
+            runtime_id.clone(),
             runtime_instance_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -851,6 +854,7 @@ impl InferenceGateway {
             lifecycle_sink.as_ref(),
             request_id,
             backend_key,
+            runtime_id,
             runtime_instance_id,
             model_id,
             &result,
@@ -874,12 +878,13 @@ impl InferenceGateway {
         request_id: Option<String>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     ) -> Result<RerankResponse, GatewayError> {
-        let (backend_key, runtime_instance_id) = self.lifecycle_event_context().await;
+        let (backend_key, runtime_id, runtime_instance_id) = self.lifecycle_event_context().await;
         let model_id = non_empty_model_id(&request.model);
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
             backend_key.clone(),
+            runtime_id.clone(),
             runtime_instance_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -891,6 +896,7 @@ impl InferenceGateway {
             lifecycle_sink.as_ref(),
             request_id,
             backend_key,
+            runtime_id,
             runtime_instance_id,
             model_id,
             &result,
@@ -920,12 +926,13 @@ impl InferenceGateway {
         request_id: Option<String>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     ) -> Result<ImageGenerationResult, GatewayError> {
-        let (backend_key, runtime_instance_id) = self.lifecycle_event_context().await;
+        let (backend_key, runtime_id, runtime_instance_id) = self.lifecycle_event_context().await;
         let model_id = non_empty_model_id(&request.model);
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
             backend_key.clone(),
+            runtime_id.clone(),
             runtime_instance_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -937,6 +944,7 @@ impl InferenceGateway {
             lifecycle_sink.as_ref(),
             request_id,
             backend_key,
+            runtime_id,
             runtime_instance_id,
             model_id,
             &result,
@@ -1050,14 +1058,12 @@ impl InferenceGateway {
         self.backend.clone()
     }
 
-    async fn lifecycle_event_context(&self) -> (Option<String>, Option<String>) {
-        (
-            Some(canonical_backend_key(&self.current_backend_name().await)),
-            self.runtime_lifecycle_snapshot()
-                .await
-                .runtime_instance_id
-                .clone(),
-        )
+    async fn lifecycle_event_context(&self) -> (Option<String>, Option<String>, Option<String>) {
+        let runtime_snapshot = self.runtime_lifecycle_snapshot().await;
+        let runtime_id = runtime_snapshot.runtime_id.clone();
+        let runtime_instance_id = runtime_snapshot.runtime_instance_id.clone();
+        let backend_key = Some(canonical_backend_key(&self.current_backend_name().await));
+        (backend_key, runtime_id, runtime_instance_id)
     }
 }
 
@@ -1066,6 +1072,7 @@ struct LifecycleStream {
     lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     request_id: Option<String>,
     backend_key: Option<String>,
+    runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     model_id: Option<String>,
     finished: bool,
@@ -1077,6 +1084,7 @@ impl LifecycleStream {
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
         request_id: Option<String>,
         backend_key: Option<String>,
+        runtime_id: Option<String>,
         runtime_instance_id: Option<String>,
         model_id: Option<String>,
     ) -> Self {
@@ -1085,6 +1093,7 @@ impl LifecycleStream {
             lifecycle_sink,
             request_id,
             backend_key,
+            runtime_id,
             runtime_instance_id,
             model_id,
             finished: false,
@@ -1096,6 +1105,7 @@ impl LifecycleStream {
             self.lifecycle_sink.as_ref(),
             self.request_id.clone(),
             self.backend_key.clone(),
+            self.runtime_id.clone(),
             self.runtime_instance_id.clone(),
             self.model_id.clone(),
             kind,
@@ -1225,6 +1235,7 @@ fn record_inference_lifecycle_event(
     sink: &dyn InferenceRequestLifecycleEventSink,
     request_id: Option<String>,
     backend_key: Option<String>,
+    runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
@@ -1236,6 +1247,7 @@ fn record_inference_lifecycle_event(
         kind,
         occurred_at_ms: unix_timestamp_ms(),
         backend_key,
+        runtime_id,
         runtime_instance_id,
         model_id,
         detail,
@@ -1246,6 +1258,7 @@ fn record_non_streaming_lifecycle_result<T>(
     sink: &dyn InferenceRequestLifecycleEventSink,
     request_id: Option<String>,
     backend_key: Option<String>,
+    runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
@@ -1255,6 +1268,7 @@ fn record_non_streaming_lifecycle_result<T>(
             sink,
             request_id.clone(),
             backend_key.clone(),
+            runtime_id.clone(),
             runtime_instance_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Completed,
@@ -1264,6 +1278,7 @@ fn record_non_streaming_lifecycle_result<T>(
             sink,
             request_id.clone(),
             backend_key.clone(),
+            runtime_id.clone(),
             runtime_instance_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Failed,
@@ -1275,6 +1290,7 @@ fn record_non_streaming_lifecycle_result<T>(
         sink,
         request_id,
         backend_key,
+        runtime_id,
         runtime_instance_id,
         model_id,
         InferenceRequestLifecycleEventKind::CleanupCompleted,

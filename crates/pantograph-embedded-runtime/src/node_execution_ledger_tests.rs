@@ -120,6 +120,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         kind: inference::InferenceRequestLifecycleEventKind::Failed,
         occurred_at_ms: 123,
         backend_key: Some("pytorch".to_string()),
+        runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail: Some("backend failed".to_string()),
@@ -132,7 +133,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         request.source_instance_id.as_deref(),
         Some("python-runtime:pytorch:1")
     );
-    assert_eq!(request.runtime_id.as_deref(), Some("pytorch"));
+    assert_eq!(request.runtime_id.as_deref(), Some("pytorch.transformers"));
     assert_eq!(
         request.model_id.as_deref(),
         Some("pumas://models/tiny-transformers")
@@ -159,6 +160,7 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         kind: inference::InferenceRequestLifecycleEventKind::CleanupCompleted,
         occurred_at_ms: 124,
         backend_key: Some("pytorch".to_string()),
+        runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail: None,
@@ -214,7 +216,7 @@ fn inference_lifecycle_recorder_leaves_duration_empty_without_matching_started()
         .append_request(&context, &failed)
         .expect("failed event should map");
 
-    assert_eq!(request.runtime_id.as_deref(), Some("pytorch"));
+    assert_eq!(request.runtime_id.as_deref(), Some("pytorch.transformers"));
     assert_eq!(
         request.model_id.as_deref(),
         Some("pumas://models/tiny-transformers")
@@ -277,6 +279,7 @@ fn inference_lifecycle_event(
         kind,
         occurred_at_ms,
         backend_key: Some("pytorch".to_string()),
+        runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail,

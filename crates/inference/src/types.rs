@@ -455,6 +455,8 @@ pub struct InferenceRequestLifecycleEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_instance_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
@@ -1021,6 +1023,7 @@ mod tests {
             kind: InferenceRequestLifecycleEventKind::CleanupCompleted,
             occurred_at_ms: 42,
             backend_key: Some("llama_cpp".to_string()),
+            runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-main-1".to_string()),
             model_id: Some("pumas://models/tiny-llama".to_string()),
             detail: Some("stream dropped by consumer".to_string()),
@@ -1036,6 +1039,7 @@ mod tests {
             encoded["model_id"],
             serde_json::json!("pumas://models/tiny-llama")
         );
+        assert_eq!(encoded["runtime_id"], serde_json::json!("llama.cpp"));
         assert_eq!(decoded, event);
     }
 

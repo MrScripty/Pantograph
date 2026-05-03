@@ -99,6 +99,7 @@ struct InferenceLifecycleDurationKey {
     request_id: String,
     phase: &'static str,
     backend_key: Option<String>,
+    runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
 }
 
@@ -112,6 +113,7 @@ impl InferenceLifecycleDurationKey {
             request_id: event.request_id.clone()?,
             phase: inference_lifecycle_phase_key(&event.phase),
             backend_key: event.backend_key.clone(),
+            runtime_id: event.runtime_id.clone(),
             runtime_instance_id: event.runtime_instance_id.clone(),
         })
     }
@@ -171,7 +173,10 @@ fn build_inference_lifecycle_event_ledger_append_request(
             .static_contract
             .contract_version
             .clone(),
-        runtime_id: event.backend_key.clone(),
+        runtime_id: event
+            .runtime_id
+            .clone()
+            .or_else(|| event.backend_key.clone()),
         runtime_version: None,
         model_id: event.model_id.clone(),
         model_version: None,
