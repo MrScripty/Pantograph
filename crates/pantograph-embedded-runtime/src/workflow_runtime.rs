@@ -217,7 +217,7 @@ pub async fn sync_embedding_emit_metadata_flags(
     }
 
     for node in &snapshot.nodes {
-        if node.node_type != "embedding" {
+        if !is_canonical_embedding_inference_node(&node.node_type, &node.data) {
             continue;
         }
         let key = format!("{}:metadata", node.id);
@@ -240,6 +240,17 @@ pub async fn sync_embedding_emit_metadata_flags(
     Ok(())
 }
 
+fn is_canonical_embedding_inference_node(node_type: &str, data: &serde_json::Value) -> bool {
+    if node_type != "llm-inference" {
+        return false;
+    }
+
+    data.get("task_kind")
+        .and_then(serde_json::Value::as_str)
+        .and_then(inference::resolve_task_registry_entry)
+        .is_some_and(|entry| entry.task_id == inference::InferenceTaskId::Embedding)
+}
+
 pub fn trace_runtime_metrics(
     snapshot: &inference::RuntimeLifecycleSnapshot,
     model_target: Option<&str>,
@@ -256,6 +267,31 @@ pub fn trace_runtime_metrics(
         warmup_duration_ms: snapshot.warmup_duration_ms,
         runtime_reused: snapshot.runtime_reused,
         lifecycle_decision_reason: snapshot.normalized_lifecycle_decision_reason(),
+    }
+}
+
+#[cfg(test)]
+mod canonical_embedding_metadata_tests {
+    use super::is_canonical_embedding_inference_node;
+
+    #[test]
+    fn canonical_embedding_metadata_detection_uses_task_registry_aliases() {
+        assert!(is_canonical_embedding_inference_node(
+            "llm-inference",
+            &serde_json::json!({ "task_kind": "embedding" })
+        ));
+        assert!(is_canonical_embedding_inference_node(
+            "llm-inference",
+            &serde_json::json!({ "task_kind": "feature-extraction" })
+        ));
+        assert!(!is_canonical_embedding_inference_node(
+            "embedding",
+            &serde_json::json!({ "task_kind": "embedding" })
+        ));
+        assert!(!is_canonical_embedding_inference_node(
+            "llm-inference",
+            &serde_json::json!({ "task_kind": "rerank" })
+        ));
     }
 }
 

@@ -1914,6 +1914,10 @@ Pumas model references instead of the retired `embedding` node and `model` port.
 Workflow-service session graph hydration/sync now derives embedding metadata
 emission from canonical embedding inference nodes instead of the retired
 `embedding` node type.
+Embedded-runtime edit-session metadata emission sync now uses the inference task
+registry to detect canonical `llm-inference` embedding tasks, including task
+aliases such as `feature-extraction`, and no longer treats the retired
+`embedding` node type as the executable shape.
 Workflow-service saved-workflow migration coverage now includes a mixed legacy
 inference graph fixture proving llama.cpp, embedding, and reranker nodes migrate
 to canonical `llm-inference` nodes while preserving cross-node topology and
@@ -2524,6 +2528,14 @@ Update during implementation:
 - 2026-05-03: Removed unused Ollama model-name fields from inference gateway
   start request DTOs and clarified node-engine comments around retired direct
   backend nodes.
+- 2026-05-03: Moved embedded-runtime embedding metadata emission detection from
+  the retired `embedding` node type to canonical `llm-inference` task-registry
+  semantics.
+- 2026-05-03: Follow-up issue discovered during focused embedded-runtime
+  validation: `node-engine` still emits a dead-code warning for
+  `enforce_dependency_preflight_with_lifecycle` when compiled without the
+  PyTorch feature set. Resolve by tightening cfg ownership or adding a focused
+  non-PyTorch validation slice.
 
 ## Commit Cadence Notes
 
