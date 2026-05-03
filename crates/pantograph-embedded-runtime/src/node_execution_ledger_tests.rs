@@ -363,9 +363,17 @@ fn inference_diagnostic_event_adapter_persists_usage_and_cache_summary() {
         total_tokens: Some(55),
     });
     event.cache_handle_id = Some("kv-checkpoint-2".to_string());
+    event.detail = Some(
+        "SECRET_PROMPT raw prompt text SECRET_RESULT generated text SECRET_TENSOR [1,2,3]"
+            .to_string(),
+    );
 
     let request = inference_diagnostic_event_ledger_append_request(&context, &event)
         .expect("completed backend lifecycle with usage/cache metadata should map");
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("SECRET_PROMPT"));
+    assert!(!payload_json.contains("SECRET_RESULT"));
+    assert!(!payload_json.contains("SECRET_TENSOR"));
 
     match request.payload {
         DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {

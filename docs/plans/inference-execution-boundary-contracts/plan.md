@@ -2210,6 +2210,8 @@ inference write ledger events directly.
 - [ ] Keep prompts, chat messages, raw media, generated content, embeddings,
   token arrays, logits, tensors, Python kwargs, backend CLI flags, full local
   paths where stable ids exist, and unbounded stderr/stdout out of ledger
+  payloads. Usage/cache diagnostic adapter coverage now asserts that raw-looking
+  lifecycle detail markers are not serialized into durable inference diagnostic
   payloads.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
@@ -2664,6 +2666,10 @@ Update during implementation:
   chance that secondary diagnostic appends fail because a backend surfaced
   oversized or control-character-heavy error text. The original execution
   error path remains separate from this bounded diagnostic copy.
+- 2026-05-03: Added a payload-hygiene regression for usage/cache inference
+  diagnostics proving raw-looking prompt, result, and tensor markers in
+  lifecycle detail are not serialized into durable inference diagnostic summary
+  payloads.
 
 ## Commit Cadence Notes
 
