@@ -2188,8 +2188,9 @@ inference write ledger events directly.
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup. Diagnostic-observed
   inference payloads now preserve lifecycle phase and event kind for events that
-  carry compatibility or option summaries; broader phase coverage and duration
-  summaries remain open.
+  carry compatibility or option summaries, and workflow-owned lifecycle sinks
+  now copy matched terminal durations into durable bounded diagnostic summaries
+  when a matching start is known; broader phase coverage remains open.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -2696,6 +2697,11 @@ Update during implementation:
   `inference.execution_diagnostic_observed` payloads, so typed gateway
   compatibility reports emitted before backend execution are durable without
   adding ledger dependencies to `crates/inference`.
+- 2026-05-03: Durable inference diagnostic summaries now include optional
+  `duration_ms` when the workflow-owned lifecycle sink can correlate a terminal
+  inference lifecycle event with its matching start. The stateless adapter still
+  emits summaries without synthetic timing, so duration remains an observed
+  fact rather than an inferred one.
 
 ## Commit Cadence Notes
 

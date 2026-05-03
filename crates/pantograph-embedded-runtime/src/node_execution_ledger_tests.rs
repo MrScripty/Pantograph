@@ -13,6 +13,7 @@ use pantograph_runtime_attribution::{
 };
 use pantograph_workflow_service::{WorkflowNodeStatusQueryRequest, WorkflowService};
 
+use crate::node_execution_ledger::inference_diagnostic_event_ledger_append_request_with_duration;
 use crate::{
     inference_diagnostic_event_ledger_append_request,
     inference_lifecycle_event_ledger_append_request, InferenceLifecycleLedgerRecorder,
@@ -448,6 +449,36 @@ fn inference_diagnostic_event_adapter_persists_usage_and_cache_summary() {
             assert_eq!(payload.cache_handle_id.as_deref(), Some("kv-checkpoint-2"));
             assert_eq!(payload.option_diagnostics.len(), 0);
             assert!(payload.compatibility_report.is_none());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_carries_known_lifecycle_duration() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.usage = Some(inference::InferenceUsage {
+        prompt_tokens: Some(8),
+        completion_tokens: Some(5),
+        total_tokens: Some(13),
+    });
+
+    let request =
+        inference_diagnostic_event_ledger_append_request_with_duration(&context, &event, Some(75))
+            .expect("completed backend lifecycle with usage metadata should map");
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.duration_ms, Some(75));
+            assert_eq!(
+                payload.lifecycle_phase.as_deref(),
+                Some("backend_execution")
+            );
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }

@@ -301,8 +301,9 @@ let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
   run snapshot node-version payloads, and lineage node contract
   version/digest facts are machine-consumed by diagnostics projections.
 - Inference diagnostic summary fields are bounded metadata only: request id,
-  task id, lifecycle phase/kind, selected backend key/family, compatibility
-  summaries, option-support summaries, usage counts, and cache-handle ids.
+  task id, lifecycle phase/kind, duration when known, selected backend
+  key/family, compatibility summaries, option-support summaries, usage counts,
+  and cache-handle ids.
   Producers must keep raw request/result bodies, embeddings, tensors, token
   arrays, Python kwargs, backend CLI flags, and unbounded process output out of
   these payloads.

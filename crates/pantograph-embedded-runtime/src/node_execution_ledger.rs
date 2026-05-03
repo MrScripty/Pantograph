@@ -68,9 +68,18 @@ pub fn inference_diagnostic_event_ledger_append_request(
     context: &NodeExecutionContext,
     event: &inference::InferenceRequestLifecycleEvent,
 ) -> Option<DiagnosticEventAppendRequest> {
+    inference_diagnostic_event_ledger_append_request_with_duration(context, event, None)
+}
+
+pub(crate) fn inference_diagnostic_event_ledger_append_request_with_duration(
+    context: &NodeExecutionContext,
+    event: &inference::InferenceRequestLifecycleEvent,
+    duration_ms: Option<u64>,
+) -> Option<DiagnosticEventAppendRequest> {
     build_inference_diagnostic_event_ledger_append_request(
         &InferenceLifecycleLedgerAppendContext::from_node_execution_context(context),
         event,
+        duration_ms,
     )
 }
 
@@ -190,6 +199,7 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
         else {
             return;
         };
+        let duration_ms = inference_lifecycle_duration_ms_from_append_request(&request);
 
         if let Err(error) = self
             .workflow_service
@@ -199,7 +209,7 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
         }
 
         if let Some(request) =
-            build_inference_diagnostic_event_ledger_append_request(&context, &event)
+            build_inference_diagnostic_event_ledger_append_request(&context, &event, duration_ms)
         {
             if let Err(error) = self
                 .workflow_service
@@ -427,9 +437,19 @@ fn sanitize_inference_lifecycle_error_detail(value: &str) -> String {
     sanitize_diagnostic_error_text(value, MAX_DIAGNOSTIC_ERROR_TEXT_LEN)
 }
 
+fn inference_lifecycle_duration_ms_from_append_request(
+    request: &DiagnosticEventAppendRequest,
+) -> Option<u64> {
+    match &request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => payload.duration_ms,
+        _ => None,
+    }
+}
+
 fn build_inference_diagnostic_event_ledger_append_request(
     context: &InferenceLifecycleLedgerAppendContext<'_>,
     event: &inference::InferenceRequestLifecycleEvent,
+    duration_ms: Option<u64>,
 ) -> Option<DiagnosticEventAppendRequest> {
     let has_bounded_diagnostics = !event.option_diagnostics.is_empty()
         || event.compatibility_report.is_some()
@@ -484,6 +504,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 lifecycle_event_kind: Some(
                     inference_lifecycle_event_kind_key(&event.kind).to_string(),
                 ),
+                duration_ms,
                 selected_backend_key: event.backend_key.clone(),
                 selected_backend_family: event.backend_key.clone(),
                 usage: event.usage.as_ref().map(inference_usage_summary),

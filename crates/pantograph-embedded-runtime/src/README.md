@@ -163,9 +163,10 @@ delegating methods; scheduler authority and diagnostics events stay in
   into workflow-service diagnostics, but inference and node-engine must not
   import or write the diagnostics ledger directly. Completed backend-execution
   lifecycle events may additionally project bounded option-support summaries,
-  compatibility summaries, usage counts, and cache-handle ids; prompt/result
-  bodies, embeddings, tensors, token arrays, backend kwargs, and raw backend
-  output remain outside durable diagnostic payloads.
+  compatibility summaries, usage counts, cache-handle ids, and matched
+  lifecycle duration; prompt/result bodies, embeddings, tensors, token arrays,
+  backend kwargs, and raw backend output remain outside durable diagnostic
+  payloads.
 - Public embedded-runtime graph persistence, edit-session, mutation,
   connection, and insert-preview facade methods stay in
   `embedded_workflow_graph_api.rs` so graph API forwarding remains separate
