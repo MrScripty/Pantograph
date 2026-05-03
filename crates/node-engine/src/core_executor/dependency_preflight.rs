@@ -6,6 +6,9 @@ use std::sync::Arc;
 use pantograph_runtime_identity::canonical_engine_backend_key;
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+use inference::{resolve_task_registry_entry, InferenceTaskId, TaskRegistryEntry};
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::error::{NodeEngineError, Result};
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::extensions::extension_keys;
@@ -54,14 +57,8 @@ pub(crate) fn infer_task_type_primary(
     node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> String {
-    if let Some(task_kind) = canonical_inference_task_kind(inputs) {
-        return match task_kind.as_str() {
-            "embedding" => "feature-extraction".to_string(),
-            "rerank" | "reranking" => "reranking".to_string(),
-            "text-generation" => "text-generation".to_string(),
-            "audio-transcription" => "automatic-speech-recognition".to_string(),
-            other => other.to_string(),
-        };
+    if let Some(task_entry) = canonical_inference_task_entry(inputs) {
+        return resolver_task_type_primary(&task_entry);
     }
 
     if let Some(task) =
@@ -103,25 +100,60 @@ pub(crate) fn infer_task_type_primary(
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-pub(crate) fn canonical_inference_task_kind(
+pub(crate) fn canonical_inference_task_id(
     inputs: &HashMap<String, serde_json::Value>,
-) -> Option<String> {
-    read_optional_input_string_aliases(inputs, &["task_kind", "taskKind"])
-        .or_else(|| {
-            inputs.get("pumas_model_ref").and_then(|model_ref| {
-                read_optional_string_aliases_from_value(
-                    model_ref,
-                    &[
-                        "task_kind",
-                        "taskKind",
-                        "task_type_primary",
-                        "taskTypePrimary",
-                    ],
-                )
-            })
+) -> Option<InferenceTaskId> {
+    canonical_inference_task_entry(inputs).map(|entry| entry.task_id)
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+pub(crate) fn canonical_inference_task_entry(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<TaskRegistryEntry> {
+    read_inference_task_label(inputs).and_then(|label| resolve_task_registry_entry(&label))
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+fn read_inference_task_label(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
+    read_optional_input_string_aliases(
+        inputs,
+        &[
+            "task_kind",
+            "taskKind",
+            "task_type_primary",
+            "taskTypePrimary",
+            "pipeline_tag",
+            "pipelineTag",
+        ],
+    )
+    .or_else(|| {
+        inputs.get("pumas_model_ref").and_then(|model_ref| {
+            read_optional_string_aliases_from_value(
+                model_ref,
+                &[
+                    "task_kind",
+                    "taskKind",
+                    "task_type_primary",
+                    "taskTypePrimary",
+                    "pipeline_tag",
+                    "pipelineTag",
+                ],
+            )
         })
-        .map(|value| value.trim().to_ascii_lowercase().replace('_', "-"))
-        .filter(|value| !value.is_empty())
+    })
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+fn resolver_task_type_primary(task: &TaskRegistryEntry) -> String {
+    match task.task_id {
+        InferenceTaskId::Embedding => "feature-extraction".to_string(),
+        InferenceTaskId::Rerank => "reranking".to_string(),
+        InferenceTaskId::AudioTranscription => "automatic-speech-recognition".to_string(),
+        InferenceTaskId::TextGeneration | InferenceTaskId::ChatCompletion => {
+            "text-generation".to_string()
+        }
+        _ => task.canonical_label().replace('_', "-"),
+    }
 }
 
 pub(crate) fn build_model_ref_v2(
@@ -188,7 +220,7 @@ pub(crate) fn infer_backend_key(
         // execution profile.
         "diffusion-inference" => None,
         "llm-inference" => {
-            let task_kind = canonical_inference_task_kind(inputs);
+            let task_id = canonical_inference_task_id(inputs);
             let model_type =
                 read_optional_input_string_aliases(inputs, &["model_type", "modelType"])
                     .or_else(|| {
@@ -201,8 +233,10 @@ pub(crate) fn infer_backend_key(
                     })
                     .unwrap_or_default()
                     .to_ascii_lowercase();
-            match task_kind.as_deref() {
-                Some("embedding" | "rerank" | "reranking") => Some("llamacpp".to_string()),
+            match task_id.as_ref() {
+                Some(InferenceTaskId::Embedding | InferenceTaskId::Rerank) => {
+                    Some("llamacpp".to_string())
+                }
                 _ if model_type == "embedding" || model_type == "reranker" => {
                     Some("llamacpp".to_string())
                 }

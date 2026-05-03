@@ -1719,6 +1719,11 @@ reranker handler, and explicit llama.cpp backend hints through the llama.cpp
 handler. Dependency request inference now understands canonical task kinds,
 runtime hints, and Pumas model references while preserving diffusion
 `recommended_backend` precedence.
+Node-engine canonical task dispatch and dependency requests now resolve task
+aliases through the inference task registry, so upstream labels such as
+`feature-extraction`, `sentence-similarity`, `text-ranking`, and
+`text-reranking` map to canonical embedding/rerank behavior and resolver-facing
+task labels without ad hoc string branching.
 Direct node-engine execution of retired `embedding`, `reranker`,
 `llamacpp-inference`, and `pytorch-inference` node types now fails with a
 canonical migration error, while canonical `llm-inference` with an explicit
