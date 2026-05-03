@@ -325,6 +325,86 @@ fn legacy_inference_port_mappings_are_deterministic_per_node() {
 }
 
 #[test]
+fn canonicalize_workflow_graph_removes_retired_inference_node_types() {
+    let registry = NodeRegistry::new();
+    let retired_node_types = [
+        "ollama-inference",
+        "llamacpp-inference",
+        "pytorch-inference",
+        "embedding",
+        "reranker",
+    ];
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "ollama".to_string(),
+                node_type: "ollama-inference".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 0.0 },
+                data: json!({ "model": "llama3", "prompt": "hello" }),
+            },
+            GraphNode {
+                id: "llamacpp".to_string(),
+                node_type: "llamacpp-inference".to_string(),
+                position: super::super::types::Position { x: 100.0, y: 0.0 },
+                data: json!({ "model_path": "/models/chat.gguf", "prompt": "hello" }),
+            },
+            GraphNode {
+                id: "pytorch".to_string(),
+                node_type: "pytorch-inference".to_string(),
+                position: super::super::types::Position { x: 200.0, y: 0.0 },
+                data: json!({ "model_path": "/models/hf", "prompt": "hello" }),
+            },
+            GraphNode {
+                id: "embedding".to_string(),
+                node_type: "embedding".to_string(),
+                position: super::super::types::Position { x: 300.0, y: 0.0 },
+                data: json!({ "model": "embed.gguf", "text": "hello" }),
+            },
+            GraphNode {
+                id: "reranker".to_string(),
+                node_type: "reranker".to_string(),
+                position: super::super::types::Position { x: 400.0, y: 0.0 },
+                data: json!({ "model_path": "/models/rerank.gguf", "query": "hello" }),
+            },
+        ],
+        edges: Vec::new(),
+        derived_graph: None,
+    };
+
+    let result = canonicalize_workflow_graph_with_migrations(graph, &registry);
+    let canonical_node_types = result
+        .graph
+        .nodes
+        .iter()
+        .map(|node| node.node_type.as_str())
+        .collect::<HashSet<_>>();
+
+    for retired_node_type in retired_node_types {
+        assert!(
+            !canonical_node_types.contains(retired_node_type),
+            "{retired_node_type} survived canonicalization"
+        );
+    }
+    assert!(result
+        .graph
+        .nodes
+        .iter()
+        .all(|node| node.node_type == "llm-inference"));
+
+    let migrated_node_types = result
+        .migration_records
+        .iter()
+        .map(|record| record.node_type.as_str())
+        .collect::<HashSet<_>>();
+    for retired_node_type in retired_node_types {
+        assert!(
+            migrated_node_types.contains(retired_node_type),
+            "{retired_node_type} missing migration record"
+        );
+    }
+}
+
+#[test]
 fn canonicalize_workflow_graph_migrates_legacy_llamacpp_nodes() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {

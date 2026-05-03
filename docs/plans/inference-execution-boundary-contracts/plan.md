@@ -1610,7 +1610,7 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - [ ] Update node registry, workflow-node descriptors, graph validation,
   frontend node renderers, and templates so new saved workflows use the
   canonical node shape.
-- [ ] Add validation that old backend-specific inference node types do not
+- [x] Add validation that old backend-specific inference node types do not
   persist after migration succeeds.
 
 **Verification:**
@@ -1698,6 +1698,10 @@ retired backend-specific inference or dedicated embedding node descriptors.
 Workflow-service capability fixtures now model inference and KV-cache extension
 requirements with canonical `llm-inference` node data instead of retired
 backend-specific inference node names.
+Workflow-service canonicalization now has an aggregate regression test proving
+that retired `ollama-inference`, `llamacpp-inference`, `pytorch-inference`,
+`embedding`, and `reranker` node types are all rewritten to canonical
+`llm-inference` nodes and still produce migration records.
 Embedded-runtime Python dependency preflight and host dispatch now route
 canonical `llm-inference` through the Python adapter only when canonical backend
 data resolves to PyTorch/Transformers, and the Python bridge accepts
