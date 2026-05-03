@@ -330,7 +330,8 @@ pub(crate) fn build_model_dependency_request(
     ModelDependencyRequest {
         node_type: node_type.to_string(),
         model_path: model_path.to_string(),
-        model_id: read_optional_input_string_aliases(inputs, &["model_id", "modelId"]),
+        model_id: read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
+            .or_else(|| read_resolved_model_source_model_id(inputs)),
         model_type: read_optional_input_string_aliases(inputs, &["model_type", "modelType"]),
         task_type_primary: Some(task_type_primary),
         backend_key,

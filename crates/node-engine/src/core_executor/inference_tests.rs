@@ -396,6 +396,25 @@ fn test_build_model_ref_v2_prefers_resolved_model_source_identity() {
     assert_eq!(model_ref.model_path, "/models/tiny/model.gguf");
 }
 
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_model_dependency_request_uses_resolved_model_source_identity() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_value("pumas://models/tiny-gguf", "/models/tiny/model.gguf"),
+    );
+
+    let request =
+        build_model_dependency_request("llm-inference", "/models/tiny/model.gguf", &inputs);
+
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("pumas://models/tiny-gguf")
+    );
+    assert_eq!(request.model_path, "/models/tiny/model.gguf");
+}
+
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[test]
 fn test_build_model_dependency_request_maps_canonical_embedding_task() {
