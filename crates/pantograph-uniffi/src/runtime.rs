@@ -342,11 +342,8 @@ impl FfiPantographRuntime {
 
     /// Return neutral ManagedDependencyStatus JSON for runtime and media dependencies.
     pub fn managed_dependency_statuses(&self) -> Result<String, FfiError> {
-        let mut response = inference::list_managed_runtime_dependency_statuses(&self.app_data_dir)
+        let response = inference::list_all_managed_dependency_statuses(&self.app_data_dir)
             .map_err(map_managed_dependency_error)?;
-        response.extend(inference::list_managed_dependency_statuses(
-            &self.app_data_dir,
-        ));
         serialize_response(&response)
     }
 
