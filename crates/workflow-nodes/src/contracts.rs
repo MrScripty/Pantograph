@@ -4,6 +4,10 @@
 //! `node-engine`, while this module projects those descriptors into
 //! `pantograph-node-contracts` for graph-authoring and binding surfaces.
 
+use inference::model_contracts::{
+    default_task_registry_entries, InferenceExecutionInputKind, InferenceExecutionResultKind,
+    InferenceModality, InferenceTaskId, TaskRequestContract, TaskStreamingSupport,
+};
 use pantograph_node_contracts::{
     ComposedInternalEdge, ComposedInternalGraph, ComposedInternalNode, ComposedNodeContract,
     ComposedPortMapping, ComposedPortMappings, ComposedTracePolicy,
@@ -187,61 +191,130 @@ fn inference_task_contracts(
         return Vec::new();
     }
 
-    vec![
-        inference_task_contract(
-            ContractInferenceTaskId::TextGeneration,
-            ContractInferenceExecutionInputKind::TextGeneration,
-            ContractInferenceExecutionResultKind::TextGeneration,
-            ContractInferenceStreamingSupport::BackendDependent,
-            vec![ContractInferenceModality::Text],
-            vec![ContractInferenceModality::Text],
-        ),
-        inference_task_contract(
-            ContractInferenceTaskId::ChatCompletion,
-            ContractInferenceExecutionInputKind::TextGeneration,
-            ContractInferenceExecutionResultKind::TextGeneration,
-            ContractInferenceStreamingSupport::BackendDependent,
-            vec![ContractInferenceModality::Text],
-            vec![ContractInferenceModality::Text],
-        ),
-        inference_task_contract(
-            ContractInferenceTaskId::Embedding,
-            ContractInferenceExecutionInputKind::Embedding,
-            ContractInferenceExecutionResultKind::Embedding,
-            ContractInferenceStreamingSupport::Unsupported,
-            vec![ContractInferenceModality::Text],
-            vec![ContractInferenceModality::Embedding],
-        ),
-        inference_task_contract(
-            ContractInferenceTaskId::Rerank,
-            ContractInferenceExecutionInputKind::Rerank,
-            ContractInferenceExecutionResultKind::Rerank,
-            ContractInferenceStreamingSupport::Unsupported,
-            vec![
-                ContractInferenceModality::Text,
-                ContractInferenceModality::Json,
-            ],
-            vec![ContractInferenceModality::Json],
-        ),
-    ]
+    default_task_registry_entries()
+        .into_iter()
+        .filter(|entry| llm_supported_registry_task_ids().contains(&entry.task_id))
+        .filter_map(|entry| entry.request_contract())
+        .map(inference_task_contract_from_registry)
+        .collect()
 }
 
-fn inference_task_contract(
-    task_id: ContractInferenceTaskId,
-    input_kind: ContractInferenceExecutionInputKind,
-    result_kind: ContractInferenceExecutionResultKind,
-    streaming_support: ContractInferenceStreamingSupport,
-    required_input_modalities: Vec<ContractInferenceModality>,
-    output_modalities: Vec<ContractInferenceModality>,
+fn inference_task_contract_from_registry(
+    contract: TaskRequestContract,
 ) -> NodeInferenceTaskContract {
     NodeInferenceTaskContract {
-        task_id,
-        input_kind,
-        result_kind,
-        execution_supported: true,
-        streaming_support,
-        required_input_modalities,
-        output_modalities,
+        task_id: contract_task_id(&contract.task_id),
+        input_kind: contract_input_kind(contract.input_kind),
+        result_kind: contract_result_kind(contract.result_kind),
+        execution_supported: contract.execution_supported,
+        streaming_support: contract_streaming_support(contract.streaming_support),
+        required_input_modalities: contract
+            .required_input_modalities
+            .iter()
+            .map(contract_modality)
+            .collect(),
+        output_modalities: contract
+            .output_modalities
+            .iter()
+            .map(contract_modality)
+            .collect(),
+    }
+}
+
+fn contract_task_id(task_id: &InferenceTaskId) -> ContractInferenceTaskId {
+    match task_id {
+        InferenceTaskId::TextGeneration => ContractInferenceTaskId::TextGeneration,
+        InferenceTaskId::ChatCompletion => ContractInferenceTaskId::ChatCompletion,
+        InferenceTaskId::Embedding => ContractInferenceTaskId::Embedding,
+        InferenceTaskId::Rerank => ContractInferenceTaskId::Rerank,
+        InferenceTaskId::ImageGeneration => ContractInferenceTaskId::ImageGeneration,
+        InferenceTaskId::ImageUnderstanding => ContractInferenceTaskId::ImageUnderstanding,
+        InferenceTaskId::AudioTranscription => ContractInferenceTaskId::AudioTranscription,
+        InferenceTaskId::VideoUnderstanding => ContractInferenceTaskId::VideoUnderstanding,
+        InferenceTaskId::MultimodalGeneration => ContractInferenceTaskId::MultimodalGeneration,
+        InferenceTaskId::Unknown => ContractInferenceTaskId::Unknown,
+    }
+}
+
+fn contract_input_kind(
+    input_kind: InferenceExecutionInputKind,
+) -> ContractInferenceExecutionInputKind {
+    match input_kind {
+        InferenceExecutionInputKind::TextGeneration => {
+            ContractInferenceExecutionInputKind::TextGeneration
+        }
+        InferenceExecutionInputKind::Embedding => ContractInferenceExecutionInputKind::Embedding,
+        InferenceExecutionInputKind::Rerank => ContractInferenceExecutionInputKind::Rerank,
+        InferenceExecutionInputKind::ImageGeneration => {
+            ContractInferenceExecutionInputKind::ImageGeneration
+        }
+        InferenceExecutionInputKind::ImageUnderstanding => {
+            ContractInferenceExecutionInputKind::ImageUnderstanding
+        }
+        InferenceExecutionInputKind::AudioTranscription => {
+            ContractInferenceExecutionInputKind::AudioTranscription
+        }
+        InferenceExecutionInputKind::VideoUnderstanding => {
+            ContractInferenceExecutionInputKind::VideoUnderstanding
+        }
+        InferenceExecutionInputKind::MultimodalGeneration => {
+            ContractInferenceExecutionInputKind::MultimodalGeneration
+        }
+    }
+}
+
+fn contract_result_kind(
+    result_kind: InferenceExecutionResultKind,
+) -> ContractInferenceExecutionResultKind {
+    match result_kind {
+        InferenceExecutionResultKind::TextGeneration => {
+            ContractInferenceExecutionResultKind::TextGeneration
+        }
+        InferenceExecutionResultKind::Embedding => ContractInferenceExecutionResultKind::Embedding,
+        InferenceExecutionResultKind::Rerank => ContractInferenceExecutionResultKind::Rerank,
+        InferenceExecutionResultKind::ImageGeneration => {
+            ContractInferenceExecutionResultKind::ImageGeneration
+        }
+        InferenceExecutionResultKind::ImageUnderstanding => {
+            ContractInferenceExecutionResultKind::ImageUnderstanding
+        }
+        InferenceExecutionResultKind::AudioTranscription => {
+            ContractInferenceExecutionResultKind::AudioTranscription
+        }
+        InferenceExecutionResultKind::VideoUnderstanding => {
+            ContractInferenceExecutionResultKind::VideoUnderstanding
+        }
+        InferenceExecutionResultKind::MultimodalGeneration => {
+            ContractInferenceExecutionResultKind::MultimodalGeneration
+        }
+    }
+}
+
+fn contract_streaming_support(
+    streaming_support: TaskStreamingSupport,
+) -> ContractInferenceStreamingSupport {
+    match streaming_support {
+        TaskStreamingSupport::Supported => ContractInferenceStreamingSupport::Supported,
+        TaskStreamingSupport::Unsupported => ContractInferenceStreamingSupport::Unsupported,
+        TaskStreamingSupport::BackendDependent => {
+            ContractInferenceStreamingSupport::BackendDependent
+        }
+        TaskStreamingSupport::Unknown => ContractInferenceStreamingSupport::Unknown,
+    }
+}
+
+fn contract_modality(modality: &InferenceModality) -> ContractInferenceModality {
+    match modality {
+        InferenceModality::Text => ContractInferenceModality::Text,
+        InferenceModality::Image => ContractInferenceModality::Image,
+        InferenceModality::Audio => ContractInferenceModality::Audio,
+        InferenceModality::Video => ContractInferenceModality::Video,
+        InferenceModality::Embedding => ContractInferenceModality::Embedding,
+        InferenceModality::Tokens => ContractInferenceModality::Tokens,
+        InferenceModality::Json => ContractInferenceModality::Json,
+        InferenceModality::PointCloud => ContractInferenceModality::PointCloud,
+        InferenceModality::Mesh => ContractInferenceModality::Mesh,
+        InferenceModality::Other => ContractInferenceModality::Other,
     }
 }
 
@@ -369,6 +442,15 @@ fn llm_supported_task_ids() -> [ContractInferenceTaskId; 4] {
         ContractInferenceTaskId::ChatCompletion,
         ContractInferenceTaskId::Embedding,
         ContractInferenceTaskId::Rerank,
+    ]
+}
+
+fn llm_supported_registry_task_ids() -> [InferenceTaskId; 4] {
+    [
+        InferenceTaskId::TextGeneration,
+        InferenceTaskId::ChatCompletion,
+        InferenceTaskId::Embedding,
+        InferenceTaskId::Rerank,
     ]
 }
 
@@ -559,6 +641,24 @@ mod tests {
                 && task.input_kind == ContractInferenceExecutionInputKind::Rerank
                 && task.result_kind == ContractInferenceExecutionResultKind::Rerank
         }));
+        let registry_embedding = default_task_registry_entries()
+            .into_iter()
+            .find(|entry| entry.task_id == InferenceTaskId::Embedding)
+            .and_then(|entry| entry.request_contract())
+            .expect("embedding registry contract");
+        let projected_embedding = llm
+            .inference_tasks
+            .iter()
+            .find(|task| task.task_id == ContractInferenceTaskId::Embedding)
+            .expect("projected embedding contract");
+        assert_eq!(
+            projected_embedding.execution_supported,
+            registry_embedding.execution_supported
+        );
+        assert_eq!(
+            projected_embedding.streaming_support,
+            contract_streaming_support(registry_embedding.streaming_support)
+        );
 
         let prompt = llm
             .input(&port_id("prompt").expect("prompt port id"))

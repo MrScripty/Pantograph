@@ -15,6 +15,7 @@ workspace = true
 # Framework
 node-engine = { path = "../node-engine" }
 pantograph-node-contracts = { path = "../pantograph-node-contracts" }
+inference = { path = "../inference", default-features = false }
 graph-flow.workspace = true
 
 # Model management (optional — enable via `model-library` feature)

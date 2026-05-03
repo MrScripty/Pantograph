@@ -1145,10 +1145,9 @@ audio, video, image-understanding, and multimodal roadmap tasks. Typed request
 validation now consumes this contract instead of carrying an independent
 task/input table, and `crates/inference/src/README.md` documents the consumer
 rule that payload compatibility comes from the registry contract rather than
-backend names or raw task strings. Node-engine and workflow-service still carry
-their own neighboring task/output projections, so later consumer-migration
-slices should move those consumers to the exported contract before marking the
-broader task request/registry tasks complete.
+backend names or raw task strings. Neighboring consumer-migration slices should
+continue moving graph/runtime consumers to the exported contract before marking
+the broader task request/registry tasks complete.
 The first neighboring node-engine consumer slice now uses the exported
 `TaskRequestContract` to decide whether a canonical task can be built through
 the text-generation typed request path. Text/chat aliases still map to the text
@@ -1169,7 +1168,9 @@ transport-neutral inference task and port payload metadata for the canonical
 `llm-inference` text/chat, embedding, and rerank families. This makes graph
 authoring and workflow consumers able to inspect request/result families from
 backend-owned contracts while leaving frontend `NodeDefinition` rendering and
-runtime backend selection unchanged.
+runtime backend selection unchanged. The workflow-node projection now derives
+the task contract fields from `inference::model_contracts` rather than carrying
+a separate task detail table.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2401,6 +2402,10 @@ Update during implementation:
   `pantograph-node-contracts`, then projected `llm-inference` text/chat,
   embedding, and rerank request/result families from `workflow-nodes` without
   changing frontend node rendering or runtime backend selection.
+- 2026-05-03: Migrated `workflow-nodes` inference task descriptor metadata to
+  derive task fields from `inference::model_contracts::TaskRequestContract`,
+  reducing duplicated task semantics while preserving the graph-facing
+  `pantograph-node-contracts` DTOs.
 
 ## Commit Cadence Notes
 
