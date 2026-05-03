@@ -76,6 +76,8 @@ _asr_model_path = None
 
 _DIFFUSION_PREVIEW_MAX_EVENTS = 8
 _DIFFUSION_PREVIEW_MAX_DIMENSION = 384
+_WORKER_CONTRACT_VERSION = 1
+_LOAD_TRANSFORMERS_MODEL_OPERATION = "load_transformers_model"
 
 
 def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
@@ -230,6 +232,48 @@ def _transformers_package_requires_remote_code(path):
     if isinstance(auto_map, list):
         return bool(auto_map)
     return False
+
+
+def _load_transformers_model_kwargs_from_envelope(envelope):
+    """Validate a Rust worker envelope and project it to load_model kwargs."""
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    if not isinstance(envelope, dict):
+        raise ValueError("PyTorch worker load envelope must be an object")
+    contract_version = envelope.get("contract_version")
+    if contract_version != _WORKER_CONTRACT_VERSION:
+        raise ValueError(f"Unsupported PyTorch worker contract_version: {contract_version}")
+    operation = envelope.get("operation")
+    if operation != _LOAD_TRANSFORMERS_MODEL_OPERATION:
+        raise ValueError(f"Unexpected PyTorch worker operation for load: {operation}")
+
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("PyTorch worker load envelope payload must be an object")
+
+    trust_policy = payload.get("trust_policy") or {}
+    if not isinstance(trust_policy, dict):
+        raise ValueError("PyTorch worker load trust_policy must be an object")
+
+    return {
+        "model_path": payload.get("entry_path"),
+        "device": payload.get("device") or "auto",
+        "model_type": payload.get("model_type_hint"),
+        "trust_remote_code": bool(trust_policy.get("allow_remote_code", False)),
+        "trust_policy_decision_id": trust_policy.get("decision_id"),
+        "local_files_only": bool(trust_policy.get("local_files_only", True)),
+        "revision": trust_policy.get("revision"),
+        "code_revision": trust_policy.get("code_revision"),
+        "cache_policy": trust_policy.get("cache_policy", "backend_default"),
+    }
+
+
+def load_transformers_model_from_envelope(envelope):
+    """Load a Transformers model from the Rust worker envelope contract."""
+    kwargs = _load_transformers_model_kwargs_from_envelope(envelope)
+    if not kwargs.get("model_path"):
+        raise ValueError("PyTorch worker load envelope missing payload.entry_path")
+    return load_model(**kwargs)
 
 
 def load_model(

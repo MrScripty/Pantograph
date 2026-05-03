@@ -1521,9 +1521,10 @@ the current causal-LM loader and rejecting registry-resolved tasks that do not
 yet have a PyTorch loader instead of matching raw task strings ad hoc.
 The Rust package-derived load envelope now reaches the PyTorch backend load
 edge through `load_transformers_package`: package facts build and validate the
-worker envelope, then the envelope payload adapts into the current embedded
-Python `load_model` call. Full Python-side envelope dispatch remains a later
-adapter-local step.
+worker envelope, then Rust sends that envelope to a backend-local Python
+worker entrypoint that validates the contract and adapts into the current
+embedded `load_model` implementation. Full envelope dispatch for generation,
+streaming, and KV operations remains a later adapter-local step.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

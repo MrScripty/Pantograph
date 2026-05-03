@@ -63,6 +63,7 @@ pub struct LoadedModelInfo {
     pub device: String,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PyTorchTransformersLoadArgs {
     model_path: String,
@@ -415,14 +416,54 @@ impl PyTorchBackend {
         envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
     ) -> Result<LoadedModelInfo, BackendError> {
         Self::validate_transformers_load_envelope(&envelope)?;
-        let args = Self::transformers_load_args_from_request(&envelope.payload);
-        self.load_model_with_trust_policy(
-            &args.model_path,
-            &args.device,
-            args.model_type.as_deref(),
-            args.trust_policy,
-        )
+        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+            BackendError::Config(format!(
+                "Failed to encode PyTorch worker load envelope: {error}"
+            ))
+        })?;
+
+        let info = tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
+                let worker = pytorch_worker::worker_module(py).map_err(|e| {
+                    BackendError::StartupFailed(format!("Failed to load worker module: {}", e))
+                })?;
+
+                let result = worker
+                    .call_method1("load_transformers_model_from_envelope", (envelope_json,))
+                    .map_err(|e| {
+                        BackendError::Inference(format!(
+                            "Transformers envelope model load failed: {}",
+                            e
+                        ))
+                    })?;
+
+                let info = LoadedModelInfo {
+                    model_path: result
+                        .get_item("model_path")
+                        .ok()
+                        .and_then(|v| v.extract::<String>().ok())
+                        .unwrap_or_default(),
+                    model_type: result
+                        .get_item("model_type")
+                        .ok()
+                        .and_then(|v| v.extract::<String>().ok())
+                        .unwrap_or_else(|| "text-generation".to_string()),
+                    device: result
+                        .get_item("device")
+                        .ok()
+                        .and_then(|v| v.extract::<String>().ok())
+                        .unwrap_or_else(|| "cpu".to_string()),
+                };
+
+                Ok(info)
+            })
+        })
         .await
+        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))??;
+
+        self.loaded_model = Some(info.clone());
+        self.ready = true;
+        Ok(info)
     }
 
     fn validate_transformers_load_envelope(
@@ -443,6 +484,7 @@ impl PyTorchBackend {
         Ok(())
     }
 
+    #[cfg(test)]
     fn transformers_load_args_from_request(
         request: &PyTorchTransformersLoadRequest,
     ) -> PyTorchTransformersLoadArgs {
