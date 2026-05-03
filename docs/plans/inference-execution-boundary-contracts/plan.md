@@ -1344,7 +1344,7 @@ publishing scheduler conclusions.
   instance id, active model target, resolved device, warmup timings, reuse
   result, readiness, and last backend error.
 - [x] Define absence semantics for unloaded, failed, and unsupported backends.
-- [ ] Define cancellation and cleanup semantics for preprocessing, streaming,
+- [x] Define cancellation and cleanup semantics for preprocessing, streaming,
   backend execution, postprocessing, process leases, and KV-cache handle
   publication.
 - [x] Map llama.cpp, PyTorch, and placeholder Candle behavior into the
@@ -1365,24 +1365,24 @@ publishing scheduler conclusions.
 - Cross-layer acceptance check from backend start to runtime registry or host
   projection if consumer DTOs change.
 
-**Status:** In progress. Runtime fact DTO and normalization helpers are
+**Status:** Implemented. Runtime fact DTO and normalization helpers are
 implemented in `crates/inference/src/types.rs`; stop cleanup and failed-start
-preservation are covered in gateway lifecycle tests, and llama.cpp startup-error
-process lease cleanup is covered in server tests. KV-cache `MemoryAndDisk`
-publication cleanup is covered in store tests. Remaining work covers
-preprocessing, streaming, backend execution, and postprocessing
-cancellation/cleanup semantics.
+preservation are covered in gateway lifecycle tests; llama.cpp startup-error
+process lease cleanup is covered in server tests; KV-cache `MemoryAndDisk`
+publication cleanup is covered in store tests; backend request-lifecycle facts
+define preprocessing, streaming, backend execution, postprocessing, process
+lease, and KV-cache publication cleanup semantics; workflow capability
+projection exposes static lifecycle facts to graph/preflight consumers; opt-in
+gateway lifecycle APIs emit backend-execution lifecycle events for streaming and
+non-streaming requests; and embedded-runtime ledger adapters can persist those
+events as bounded node execution status diagnostics.
 
-**Open implementation gap:** Preprocessing and postprocessing currently exist as
-backend capability facts and compatibility checks, not as request-scoped
-lifecycle hooks in the inference backend trait. Streaming request lifecycle
-events are now available through the opt-in gateway API, non-streaming gateway
-execution can report backend-execution completion/failure cleanup facts, and the
-embedded runtime can adapt lifecycle events into diagnostics-ledger node status
-append requests. Preprocessing and postprocessing remain pending. Milestone 8
-should not be closed until the inference crate defines whether those lifecycle
-phases stay hidden inside backend adapters or become explicit request lifecycle
-facts/errors for diagnostics-ledger consumers.
+**Boundary decision:** Preprocessing and postprocessing remain backend-adapter
+internal request phases for this plan. Pantograph exposes their cancellation and
+cleanup semantics as static backend lifecycle facts, but does not emit
+request-scoped pre/postprocessing events until a later typed execution pipeline
+introduces explicit pre/post hooks. Backend execution is the request-scoped
+event boundary for Milestone 8.
 
 ### Milestone 9: Bind PyTorch Through Transformers
 
