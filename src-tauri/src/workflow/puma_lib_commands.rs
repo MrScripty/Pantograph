@@ -146,6 +146,46 @@ pub async fn start_hf_download_with_audit(
     })
 }
 
+pub async fn model_package_facts_summary_snapshot(
+    extensions: State<'_, SharedExtensions>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<pumas_library::models::ModelPackageFactsSummarySnapshot, String> {
+    let api = require_pumas_api(&extensions).await?;
+    api.model_package_facts_summary_snapshot(
+        validate_pumas_model_library_page_limit(limit.unwrap_or(100))?,
+        offset.unwrap_or(0),
+    )
+    .await
+    .map_err(|error| error.to_string())
+}
+
+pub async fn resolve_model_package_facts_summary(
+    extensions: State<'_, SharedExtensions>,
+    model_id: String,
+) -> Result<pumas_library::models::ModelPackageFactsSummaryResult, String> {
+    let model_id = validate_pumas_model_id_for_lookup(&model_id)?;
+    let api = require_pumas_api(&extensions).await?;
+    api.resolve_model_package_facts_summary(model_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+pub async fn list_model_library_updates_since(
+    extensions: State<'_, SharedExtensions>,
+    cursor: Option<String>,
+    limit: Option<usize>,
+) -> Result<pumas_library::models::ModelLibraryUpdateFeed, String> {
+    let cursor = validate_optional_pumas_update_cursor(cursor)?;
+    let api = require_pumas_api(&extensions).await?;
+    api.list_model_library_updates_since(
+        cursor.as_deref(),
+        validate_pumas_model_library_page_limit(limit.unwrap_or(100))?,
+    )
+    .await
+    .map_err(|error| error.to_string())
+}
+
 fn record_pumas_model_delete_audit(
     workflow_service: &SharedWorkflowService,
     model_id: &str,
@@ -410,6 +450,40 @@ fn validate_pumas_model_id_for_audit(model_id: &str) -> Result<&str, String> {
         return Err("model_id contains an invalid path segment".to_string());
     }
     Ok(trimmed)
+}
+
+fn validate_pumas_model_id_for_lookup(model_id: &str) -> Result<&str, String> {
+    let trimmed = model_id.trim();
+    if trimmed.is_empty() {
+        return Err("model_id is required".to_string());
+    }
+    if trimmed != model_id || trimmed.chars().any(char::is_control) {
+        return Err("model_id is not a valid Pumas model identifier".to_string());
+    }
+    Ok(trimmed)
+}
+
+fn validate_pumas_model_library_page_limit(limit: usize) -> Result<usize, String> {
+    if limit == 0 || limit > 1000 {
+        return Err("limit must be between 1 and 1000".to_string());
+    }
+    Ok(limit)
+}
+
+fn validate_optional_pumas_update_cursor(cursor: Option<String>) -> Result<Option<String>, String> {
+    cursor
+        .map(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Ok(None);
+            }
+            if trimmed != value || trimmed.chars().any(char::is_control) || trimmed.len() > 128 {
+                return Err("cursor is not a valid Pumas model-library update cursor".to_string());
+            }
+            Ok(Some(value))
+        })
+        .transpose()
+        .map(Option::flatten)
 }
 
 fn validate_hf_search_query(query: &str) -> Result<&str, String> {
@@ -682,6 +756,41 @@ mod tests {
         ] {
             assert!(
                 validate_pumas_model_id_for_audit(value).is_err(),
+                "{value:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_pumas_model_library_page_limit_bounds_queries() {
+        assert_eq!(
+            validate_pumas_model_library_page_limit(1).expect("minimum"),
+            1
+        );
+        assert_eq!(
+            validate_pumas_model_library_page_limit(1000).expect("maximum"),
+            1000
+        );
+        assert!(validate_pumas_model_library_page_limit(0).is_err());
+        assert!(validate_pumas_model_library_page_limit(1001).is_err());
+    }
+
+    #[test]
+    fn validate_optional_pumas_update_cursor_rejects_ambiguous_cursors() {
+        assert_eq!(
+            validate_optional_pumas_update_cursor(Some("model-library-updates:42".to_string()))
+                .expect("valid cursor"),
+            Some("model-library-updates:42".to_string())
+        );
+        assert_eq!(
+            validate_optional_pumas_update_cursor(Some("  ".to_string()))
+                .expect("blank cursor clears"),
+            None
+        );
+
+        for value in [" padded", "bad\ncursor"] {
+            assert!(
+                validate_optional_pumas_update_cursor(Some(value.to_string())).is_err(),
                 "{value:?} should be rejected"
             );
         }

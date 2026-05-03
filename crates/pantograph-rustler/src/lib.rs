@@ -744,6 +744,35 @@ fn pumas_get_model(
     pumas_nifs::get_model(resource, model_id)
 }
 
+/// Return a package-facts summary snapshot plus update cursor as JSON.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_model_package_facts_summary_snapshot(
+    resource: ResourceArc<PumasApiResource>,
+    limit: usize,
+    offset: usize,
+) -> NifResult<String> {
+    pumas_nifs::model_package_facts_summary_snapshot(resource, limit, offset)
+}
+
+/// Resolve one model package-facts summary as JSON.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_resolve_model_package_facts_summary(
+    resource: ResourceArc<PumasApiResource>,
+    model_id: String,
+) -> NifResult<String> {
+    pumas_nifs::resolve_model_package_facts_summary(resource, model_id)
+}
+
+/// List Pumas model-library updates after an optional cursor as JSON.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_list_model_library_updates_since(
+    resource: ResourceArc<PumasApiResource>,
+    cursor: Option<String>,
+    limit: usize,
+) -> NifResult<String> {
+    pumas_nifs::list_model_library_updates_since(resource, cursor, limit)
+}
+
 /// Rebuild the model index. Returns the number of models indexed.
 #[rustler::nif(schedule = "DirtyCpu")]
 fn pumas_rebuild_index(resource: ResourceArc<PumasApiResource>) -> NifResult<usize> {

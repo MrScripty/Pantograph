@@ -831,6 +831,32 @@ pub async fn start_hf_download_with_audit(
 }
 
 #[command]
+pub async fn model_package_facts_summary_snapshot(
+    extensions: State<'_, SharedExtensions>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<pumas_library::models::ModelPackageFactsSummarySnapshot, String> {
+    super::puma_lib_commands::model_package_facts_summary_snapshot(extensions, limit, offset).await
+}
+
+#[command]
+pub async fn resolve_model_package_facts_summary(
+    extensions: State<'_, SharedExtensions>,
+    model_id: String,
+) -> Result<pumas_library::models::ModelPackageFactsSummaryResult, String> {
+    super::puma_lib_commands::resolve_model_package_facts_summary(extensions, model_id).await
+}
+
+#[command]
+pub async fn list_model_library_updates_since(
+    extensions: State<'_, SharedExtensions>,
+    cursor: Option<String>,
+    limit: Option<usize>,
+) -> Result<pumas_library::models::ModelLibraryUpdateFeed, String> {
+    super::puma_lib_commands::list_model_library_updates_since(extensions, cursor, limit).await
+}
+
+#[command]
 pub async fn run_dependency_environment_action(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
     request: super::dependency_environment_commands::DependencyEnvironmentActionRequest,

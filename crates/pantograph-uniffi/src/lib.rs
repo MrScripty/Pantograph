@@ -581,6 +581,59 @@ impl FfiPumasApi {
         }
     }
 
+    /// Return a bounded package-facts summary snapshot plus update cursor.
+    pub async fn model_package_facts_summary_snapshot(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<String, FfiError> {
+        let snapshot = self
+            .api
+            .model_package_facts_summary_snapshot(limit as usize, offset as usize)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
+        serde_json::to_string(&snapshot).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })
+    }
+
+    /// Resolve one model's package-facts summary. Returns JSON ModelPackageFactsSummaryResult.
+    pub async fn resolve_model_package_facts_summary(
+        &self,
+        model_id: String,
+    ) -> Result<String, FfiError> {
+        let summary = self
+            .api
+            .resolve_model_package_facts_summary(&model_id)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
+        serde_json::to_string(&summary).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })
+    }
+
+    /// List model-library updates after an optional producer cursor.
+    pub async fn list_model_library_updates_since(
+        &self,
+        cursor: Option<String>,
+        limit: u32,
+    ) -> Result<String, FfiError> {
+        let feed = self
+            .api
+            .list_model_library_updates_since(cursor.as_deref(), limit as usize)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
+        serde_json::to_string(&feed).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })
+    }
+
     // --- HuggingFace ---
 
     /// Search HuggingFace for models. Returns JSON array of HuggingFaceModel.

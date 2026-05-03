@@ -1667,6 +1667,11 @@ Update during implementation:
   summaries through Pumas' public summary API, and attaches bounded summary
   status/payload/cursor metadata to model options without inspecting Pumas
   storage internals.
+- 2026-05-03: Exposed Pumas package-summary snapshot, single-summary, and
+  model-library update-feed APIs through Pantograph host surfaces: Tauri
+  commands, UniFFI JSON methods, and Rustler NIFs. This unblocks UI/runtime
+  consumers from polling updates after a cached snapshot cursor without
+  depending on Pumas storage internals.
 
 ## Commit Cadence Notes
 
@@ -1895,6 +1900,13 @@ Update during implementation:
   adding Pumas package-summary cache population to `puma-lib` options.
 - `cargo check -p workflow-nodes --features model-library` passed after adding
   Pumas package-summary cache population to `puma-lib` options.
+- `cargo check -p pantograph-uniffi` passed after exposing Pumas summary/update
+  APIs and fixing the existing workflow error envelope diagnostics field.
+- `cargo check --manifest-path crates/pantograph-rustler/Cargo.toml` passed
+  after exposing Pumas summary/update NIFs.
+- `cargo check --manifest-path src-tauri/Cargo.toml` passed after exposing
+  Pumas summary/update Tauri commands, with existing dead-code warnings in the
+  Tauri workflow modules.
 - `cargo test -p inference` failed in
   `managed_redistributables::install_from_staging_validates_expected_files_before_finalizing`
   due to the unrelated managed-dependency path mismatch recorded above.

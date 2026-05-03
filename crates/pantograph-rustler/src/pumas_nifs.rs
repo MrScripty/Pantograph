@@ -121,6 +121,65 @@ pub(crate) fn get_model(
     }
 }
 
+pub(crate) fn model_package_facts_summary_snapshot(
+    resource: ResourceArc<PumasApiResource>,
+    limit: usize,
+    offset: usize,
+) -> NifResult<String> {
+    resource
+        .runtime
+        .block_on(async {
+            resource
+                .api
+                .model_package_facts_summary_snapshot(limit, offset)
+                .await
+        })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("summary_snapshot error: {}", e))))
+        .and_then(|snapshot| {
+            serde_json::to_string(&snapshot)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
+pub(crate) fn resolve_model_package_facts_summary(
+    resource: ResourceArc<PumasApiResource>,
+    model_id: String,
+) -> NifResult<String> {
+    resource
+        .runtime
+        .block_on(async {
+            resource
+                .api
+                .resolve_model_package_facts_summary(&model_id)
+                .await
+        })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("summary error: {}", e))))
+        .and_then(|summary| {
+            serde_json::to_string(&summary)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
+pub(crate) fn list_model_library_updates_since(
+    resource: ResourceArc<PumasApiResource>,
+    cursor: Option<String>,
+    limit: usize,
+) -> NifResult<String> {
+    resource
+        .runtime
+        .block_on(async {
+            resource
+                .api
+                .list_model_library_updates_since(cursor.as_deref(), limit)
+                .await
+        })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("updates error: {}", e))))
+        .and_then(|feed| {
+            serde_json::to_string(&feed)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
 pub(crate) fn rebuild_index(resource: ResourceArc<PumasApiResource>) -> NifResult<usize> {
     resource
         .runtime
