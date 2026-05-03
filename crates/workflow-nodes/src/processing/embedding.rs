@@ -1,7 +1,8 @@
 //! Embedding Task
 //!
-//! Generates vector embeddings from text using an embedding model.
-//! Can use local models (via inference crate) or remote APIs.
+//! Preserves the retired graph-visible embedding node implementation for
+//! saved-workflow migration and direct compatibility tests. New workflows
+//! should use canonical `llm-inference` with `task_kind = embedding`.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, NextAction, Task, TaskResult};
@@ -102,8 +103,6 @@ impl TaskDescriptor for EmbeddingTask {
         }
     }
 }
-
-inventory::submit!(node_engine::DescriptorFn(EmbeddingTask::descriptor));
 
 #[async_trait]
 impl Task for EmbeddingTask {

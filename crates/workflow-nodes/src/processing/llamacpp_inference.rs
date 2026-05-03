@@ -1,9 +1,8 @@
 //! LlamaCpp Inference Task — Stub Descriptor
 //!
-//! Provides metadata so that `register_builtins()` discovers the
-//! `llamacpp-inference` node type. Actual execution is delegated to
-//! the host application via the callback bridge, so `run()` always
-//! returns an error directing callers to that path.
+//! Preserves metadata for the retired graph-visible `llamacpp-inference`
+//! node type so saved-workflow migration can understand old shapes. New
+//! workflows should use canonical `llm-inference` with `task_kind`.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
@@ -82,8 +81,6 @@ impl TaskDescriptor for LlamaCppInferenceTask {
         }
     }
 }
-
-inventory::submit!(node_engine::DescriptorFn(LlamaCppInferenceTask::descriptor));
 
 #[async_trait]
 impl Task for LlamaCppInferenceTask {

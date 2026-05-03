@@ -1628,7 +1628,11 @@ legacy `reranker` nodes to `llm-inference` with `task_kind = rerank`,
 preserves query/document/result/top-document topology, maps rerank options into
 canonical task options, and records unresolved Pumas model-reference
 diagnostics. Pumas-backed GGUF/HF resolution, mmproj-specific preservation,
-frontend/template, and validation slices remain open.
+frontend/template, and validation slices remain open. Rust workflow-node
+inventory no longer registers retired `llamacpp-inference`,
+`pytorch-inference`, `embedding`, or `reranker` node descriptors as
+graph-visible built-ins; the descriptor structs remain only as migration
+references and compatibility test surfaces.
 
 ### Milestone 12: Prepare Native Candle Slice
 

@@ -1,9 +1,8 @@
 //! PyTorch Inference Task — Stub Descriptor
 //!
-//! Provides metadata so that `register_builtins()` discovers the
-//! `pytorch-inference` node type. Actual execution is delegated to
-//! `CoreTaskExecutor`, so `run()` always returns an error directing
-//! callers to that path.
+//! Preserves metadata for the retired graph-visible `pytorch-inference`
+//! node type so saved-workflow migration can understand old shapes. New
+//! workflows should use canonical `llm-inference` with `task_kind`.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
@@ -80,8 +79,6 @@ impl TaskDescriptor for PyTorchInferenceTask {
         }
     }
 }
-
-inventory::submit!(node_engine::DescriptorFn(PyTorchInferenceTask::descriptor));
 
 #[async_trait]
 impl Task for PyTorchInferenceTask {

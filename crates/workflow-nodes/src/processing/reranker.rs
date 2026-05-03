@@ -1,8 +1,8 @@
 //! Reranker Task — Stub Descriptor
 //!
-//! Provides metadata so that `register_builtins()` discovers the `reranker`
-//! node type. Actual execution is delegated to the host application via the
-//! node-engine executor.
+//! Preserves metadata for the retired graph-visible `reranker` node type so
+//! saved-workflow migration can understand old shapes. New workflows should
+//! use canonical `llm-inference` with `task_kind = rerank`.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
@@ -71,8 +71,6 @@ impl TaskDescriptor for RerankerTask {
         }
     }
 }
-
-inventory::submit!(node_engine::DescriptorFn(RerankerTask::descriptor));
 
 #[async_trait]
 impl Task for RerankerTask {

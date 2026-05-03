@@ -320,7 +320,16 @@ mod tests {
             .expect("prompt port");
         assert_eq!(prompt.kind, PortKind::Input);
         assert_eq!(prompt.value_type, PortValueType::Prompt);
-        assert_eq!(prompt.requirement, PortRequirement::Required);
+        assert_eq!(prompt.requirement, PortRequirement::Optional);
+
+        let text = llm
+            .inputs
+            .iter()
+            .find(|port| port.id.as_str() == "text")
+            .expect("text port");
+        assert_eq!(text.kind, PortKind::Input);
+        assert_eq!(text.value_type, PortValueType::String);
+        assert_eq!(text.requirement, PortRequirement::Optional);
 
         let response = llm
             .outputs

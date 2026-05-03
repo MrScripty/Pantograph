@@ -46,14 +46,14 @@ mod tests {
         #[cfg(feature = "desktop")]
         assert_eq!(
             all.len(),
-            44,
-            "Expected 44 built-in nodes with desktop feature"
+            40,
+            "Expected 40 built-in nodes with desktop feature"
         );
         #[cfg(not(feature = "desktop"))]
         assert_eq!(
             all.len(),
-            41,
-            "Expected 41 built-in nodes without desktop feature"
+            37,
+            "Expected 37 built-in nodes without desktop feature"
         );
 
         // Spot-check known types
@@ -73,12 +73,9 @@ mod tests {
         assert!(registry.has_node_type("audio-generation"));
         assert!(registry.has_node_type("depth-estimation"));
         assert!(registry.has_node_type("process"));
-        assert!(registry.has_node_type("llamacpp-inference"));
-        assert!(registry.has_node_type("reranker"));
         assert!(registry.has_node_type("puma-lib"));
         assert!(registry.has_node_type("agent-tools"));
         assert!(registry.has_node_type("unload-model"));
-        assert!(registry.has_node_type("pytorch-inference"));
         assert!(registry.has_node_type("kv-cache-save"));
         assert!(registry.has_node_type("kv-cache-load"));
         assert!(registry.has_node_type("kv-cache-truncate"));
@@ -89,6 +86,17 @@ mod tests {
             !registry.has_node_type("ollama-inference"),
             "Ollama is retired as a first-party graph-visible node"
         );
+        for retired_node_type in [
+            "llamacpp-inference",
+            "pytorch-inference",
+            "embedding",
+            "reranker",
+        ] {
+            assert!(
+                !registry.has_node_type(retired_node_type),
+                "{retired_node_type} should migrate to canonical llm-inference instead of registering as graph-visible"
+            );
+        }
 
         #[cfg(feature = "desktop")]
         assert!(registry.has_node_type("point-cloud-output"));
