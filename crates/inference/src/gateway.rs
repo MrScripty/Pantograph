@@ -759,6 +759,23 @@ impl InferenceGateway {
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
     {
+        self.chat_completion_stream_with_lifecycle_for_task(
+            request_json,
+            request_id,
+            None,
+            lifecycle_sink,
+        )
+        .await
+    }
+
+    async fn chat_completion_stream_with_lifecycle_for_task(
+        &self,
+        request_json: String,
+        request_id: Option<String>,
+        task_id: Option<String>,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
+    {
         let backend_key = Some(canonical_backend_key(&self.current_backend_name().await));
         let runtime_snapshot = self.runtime_lifecycle_snapshot().await;
         let runtime_id = runtime_snapshot.runtime_id.clone();
@@ -768,7 +785,7 @@ impl InferenceGateway {
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
-            None,
+            task_id.clone(),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -782,7 +799,7 @@ impl InferenceGateway {
                 stream,
                 lifecycle_sink,
                 request_id,
-                None,
+                task_id,
                 backend_key,
                 runtime_id,
                 runtime_instance_id,
@@ -792,7 +809,7 @@ impl InferenceGateway {
                 record_inference_lifecycle_event(
                     lifecycle_sink.as_ref(),
                     request_id.clone(),
-                    None,
+                    task_id.clone(),
                     backend_key.clone(),
                     runtime_id.clone(),
                     runtime_instance_id.clone(),
@@ -803,7 +820,7 @@ impl InferenceGateway {
                 record_inference_lifecycle_event(
                     lifecycle_sink.as_ref(),
                     request_id,
-                    None,
+                    task_id,
                     backend_key,
                     runtime_id,
                     runtime_instance_id,
@@ -883,8 +900,13 @@ impl InferenceGateway {
             &Ok(()),
         );
         let request_json = typed_text_generation_stream_request_json(request)?;
-        self.chat_completion_stream_with_lifecycle(request_json, request_id, lifecycle_sink)
-            .await
+        self.chat_completion_stream_with_lifecycle_for_task(
+            request_json,
+            request_id,
+            task_id,
+            lifecycle_sink,
+        )
+        .await
     }
 
     /// Generate embeddings for the given texts

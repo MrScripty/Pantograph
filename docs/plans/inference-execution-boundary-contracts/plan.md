@@ -2268,6 +2268,10 @@ one-off conversions.
   updated Rust/TypeScript consumer DTOs. This also corrected frontend diagnostics
   DTO drift by exposing the already-durable `selected_backend_key` field in the
   TypeScript projection contract.
+- 2026-05-03: Typed streaming lifecycle follow-up now carries the canonical
+  `task_id` through backend-execution stream events as well as task-validation
+  events. Raw chat lifecycle calls still record no task id unless a typed wrapper
+  supplies one.
 
 ## Execution Notes
 

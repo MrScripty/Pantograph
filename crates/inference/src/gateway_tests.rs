@@ -1222,6 +1222,7 @@ async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_ph
     );
     assert!(events.iter().all(|event| {
         event.request_id.as_deref() == Some("req-typed-stream")
+            && event.task_id.as_deref() == Some("text_generation")
             && event.backend_key.as_deref() == Some("mock")
             && event.model_id.as_deref() == Some("typed-model")
     }));
