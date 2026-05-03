@@ -194,6 +194,11 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
 
 #[test]
 fn test_pytorch_worker_trust_policy_defaults_closed() {
+    let default_policy = PyTorchBackend::default_transformers_trust_policy();
+    assert!(!default_policy.allow_remote_code);
+    assert!(default_policy.accepted_sources.is_empty());
+    assert!(default_policy.decision_id.is_none());
+
     let request = PyTorchTransformersLoadRequest {
         model_ref: PumasModelRef {
             model_id: "pumas://models/no-custom-code".to_string(),

@@ -73,13 +73,16 @@ The worker is loaded by Rust; direct Python execution is not the supported
 product path:
 
 ```python
-load_model("/path/to/model", device="auto")
+load_model("/path/to/model", device="auto", trust_remote_code=False)
 generate("hello", max_tokens=64)
 ```
 
 ## API Consumer Contract
 - Inputs: model paths, device labels, prompts, generation options, and encoded
   payloads supplied by Rust.
+- Custom code: `trust_remote_code` defaults to `False`. Rust must pass an
+  explicit trust-policy decision before loading Transformers packages that
+  declare custom code.
 - Outputs: JSON-serializable text/audio results, streaming chunks, and loaded
   model metadata.
 - Lifecycle: Rust loads the module, calls load/generate/unload functions, and

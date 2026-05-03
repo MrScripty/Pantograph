@@ -209,7 +209,36 @@ def get_loaded_asr_info():
     }
 
 
-def load_model(model_path, device="auto", model_type=None):
+def _transformers_package_requires_remote_code(path):
+    """Return whether config metadata declares custom Transformers code."""
+    if path.is_dir():
+        config_path = path / "config.json"
+    else:
+        config_path = path.parent / "config.json"
+    if not config_path.exists():
+        return False
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("Failed to inspect config.json for trust policy: %s", e)
+        return False
+
+    auto_map = config.get("auto_map")
+    if isinstance(auto_map, dict):
+        return bool(auto_map)
+    if isinstance(auto_map, list):
+        return bool(auto_map)
+    return False
+
+
+def load_model(
+    model_path,
+    device="auto",
+    model_type=None,
+    trust_remote_code=False,
+    trust_policy_decision_id=None,
+):
     """Load a model + tokenizer into module globals.
 
     Args:
@@ -217,6 +246,8 @@ def load_model(model_path, device="auto", model_type=None):
         device: Device string — "auto", "cpu", "cuda", "cuda:0", "mps", etc.
         model_type: Optional hint — "dllm", "sherry", or "text-generation".
                     If None, auto-detected from config.json.
+        trust_remote_code: Explicit custom-code policy decision. Defaults closed.
+        trust_policy_decision_id: Optional Rust-side policy record id for logs.
 
     Returns:
         Dict with model_path, model_type, device.
@@ -237,14 +268,23 @@ def load_model(model_path, device="auto", model_type=None):
 
     resolved_device = _resolve_device(device)
     detected_type = model_type or _detect_model_type(path)
+    trust_remote_code = bool(trust_remote_code)
+
+    if _transformers_package_requires_remote_code(path) and not trust_remote_code:
+        raise RuntimeError(
+            "Model package requires custom Transformers code but trust policy is closed."
+        )
 
     logger.info(
-        "Loading %s model from %s onto %s", detected_type, model_path, resolved_device
+        "Loading %s model from %s onto %s (trust_remote_code=%s, trust_policy_decision_id=%s)",
+        detected_type,
+        model_path,
+        resolved_device,
+        trust_remote_code,
+        trust_policy_decision_id,
     )
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        str(path), trust_remote_code=True
-    )
+    tokenizer = AutoTokenizer.from_pretrained(str(path), trust_remote_code=trust_remote_code)
     # Some local model exports ship chat_template.jinja without wiring it into
     # tokenizer_config.json. Load it explicitly so apply_chat_template works.
     if not getattr(tokenizer, "chat_template", None):
@@ -260,7 +300,7 @@ def load_model(model_path, device="auto", model_type=None):
         str(path),
         torch_dtype="auto",
         device_map=str(resolved_device),
-        trust_remote_code=True,
+        trust_remote_code=trust_remote_code,
         low_cpu_mem_usage=True,
     )
     model.eval()

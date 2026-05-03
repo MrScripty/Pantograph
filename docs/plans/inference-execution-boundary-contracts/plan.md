@@ -1404,7 +1404,7 @@ using Python Transformers behind the boundary for broad HF-compatible support.
 - [ ] Map Rust task registry entries to Transformers pipeline/model loading
   behavior inside the worker while keeping upstream Python task names as
   adapter-local implementation details after validation.
-- [ ] Make `trust_remote_code` and custom-code loading explicit inputs from the
+- [x] Make `trust_remote_code` and custom-code loading explicit inputs from the
   validated contract and default them closed unless an accepted policy says
   otherwise.
 - [ ] Keep Python-specific compatibility shims and kwargs inside the PyTorch
@@ -1431,8 +1431,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
 PyTorch worker envelope DTOs, Transformers load request fields, request
 correlation, init/shutdown operations, cancellation metadata, trust policy
 defaults, response/error DTOs, and JSON fixtures for load and error envelopes.
-Worker behavior still needs to move from ad hoc Python method calls to this
-contract.
+The PyTorch worker now defaults `trust_remote_code` closed and rejects
+Transformers packages that declare custom code unless Rust passes an explicit
+trust-policy opt-in. Worker behavior still needs to move from ad hoc Python
+method calls to the full envelope contract.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 
@@ -1847,6 +1849,11 @@ Update during implementation:
   request correlation, init/shutdown operation names, cancellation metadata,
   explicit closed-by-default custom-code trust policy, typed worker errors, and
   JSON fixtures before changing the Python worker behavior.
+- 2026-05-03: Hardened the PyTorch Transformers load path so
+  `trust_remote_code` is an explicit Rust-owned input and defaults closed.
+  The Python worker now rejects packages declaring `auto_map` custom code until
+  Rust passes a validated trust-policy opt-in, while leaving the public gateway
+  config shape unchanged for this slice.
 
 ## Commit Cadence Notes
 

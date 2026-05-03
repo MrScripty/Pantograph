@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use futures_util::Stream;
 use pyo3::prelude::*;
 
+use self::pytorch_worker_contract::PyTorchTransformersTrustPolicy;
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
     BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
@@ -281,9 +282,31 @@ impl PyTorchBackend {
         device: &str,
         model_type: Option<&str>,
     ) -> Result<LoadedModelInfo, BackendError> {
+        self.load_model_with_trust_policy(
+            model_path,
+            device,
+            model_type,
+            Self::default_transformers_trust_policy(),
+        )
+        .await
+    }
+
+    fn default_transformers_trust_policy() -> PyTorchTransformersTrustPolicy {
+        PyTorchTransformersTrustPolicy::default()
+    }
+
+    async fn load_model_with_trust_policy(
+        &mut self,
+        model_path: &str,
+        device: &str,
+        model_type: Option<&str>,
+        trust_policy: PyTorchTransformersTrustPolicy,
+    ) -> Result<LoadedModelInfo, BackendError> {
         let model_path = model_path.to_string();
         let device = device.to_string();
         let model_type = model_type.map(|s| s.to_string());
+        let allow_remote_code = trust_policy.allow_remote_code;
+        let trust_policy_decision_id = trust_policy.decision_id.clone();
 
         let info = tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
@@ -296,6 +319,14 @@ impl PyTorchBackend {
                 kwargs.set_item("device", &device).unwrap();
                 if let Some(ref mt) = model_type {
                     kwargs.set_item("model_type", mt).unwrap();
+                }
+                kwargs
+                    .set_item("trust_remote_code", allow_remote_code)
+                    .unwrap();
+                if let Some(ref decision_id) = trust_policy_decision_id {
+                    kwargs
+                        .set_item("trust_policy_decision_id", decision_id)
+                        .unwrap();
                 }
 
                 let result = worker
