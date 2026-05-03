@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::backend::BackendError;
 use crate::model_contracts::{
     InferenceTaskId, ModelArtifactKind, OptionCompatibilityDiagnostic, PumasModelRef,
 };
@@ -114,6 +115,23 @@ pub(super) struct PyTorchWorkerFailure {
     pub error: PyTorchWorkerError,
 }
 
+#[allow(dead_code)]
+impl PyTorchWorkerFailure {
+    pub(super) fn into_backend_error(self) -> BackendError {
+        let message = self.error.backend_message(&self.request_id);
+        match self.error.kind {
+            PyTorchWorkerErrorKind::InvalidRequest
+            | PyTorchWorkerErrorKind::UnsupportedTask
+            | PyTorchWorkerErrorKind::TrustPolicyRejected => BackendError::Config(message),
+            PyTorchWorkerErrorKind::RuntimeUnavailable => BackendError::NotRunning(message),
+            PyTorchWorkerErrorKind::ModelLoadFailed => BackendError::StartupFailed(message),
+            PyTorchWorkerErrorKind::GenerationFailed
+            | PyTorchWorkerErrorKind::Cancelled
+            | PyTorchWorkerErrorKind::Internal => BackendError::Inference(message),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchWorkerError {
@@ -121,6 +139,15 @@ pub(super) struct PyTorchWorkerError {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical_code: Option<String>,
+}
+
+impl PyTorchWorkerError {
+    fn backend_message(&self, request_id: &str) -> String {
+        match self.canonical_code.as_deref() {
+            Some(code) => format!("PyTorch worker {code} for {request_id}: {}", self.message),
+            None => format!("PyTorch worker error for {request_id}: {}", self.message),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

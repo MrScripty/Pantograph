@@ -252,6 +252,26 @@ fn test_pytorch_worker_error_response_preserves_request_correlation() {
 }
 
 #[test]
+fn test_pytorch_worker_failure_normalizes_to_backend_error() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/worker_error_response.json");
+    let response: PyTorchWorkerResponse<serde_json::Value> =
+        serde_json::from_str(fixture).expect("decode worker error fixture");
+    let PyTorchWorkerResponse::Error(failure) = response else {
+        panic!("expected worker error response");
+    };
+
+    match failure.into_backend_error() {
+        BackendError::Config(message) => {
+            assert!(message.contains("pytorch_transformers_trust_policy_rejected"));
+            assert!(message.contains("req-load-001"));
+            assert!(message.contains("trust policy is closed"));
+        }
+        other => panic!("expected Config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_envelope_rejects_missing_required_fields() {
     let fixture = include_str!(
         "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"

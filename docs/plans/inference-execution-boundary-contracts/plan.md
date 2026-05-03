@@ -1438,6 +1438,9 @@ method calls to the full envelope contract. Rust can now derive a
 Transformers load envelope from Pumas package facts with contract-version,
 artifact-kind, task-evidence, generation-default, and custom-code trust
 validation before invoking Python.
+Typed worker failures now normalize into Pantograph `BackendError` categories
+with request correlation and canonical worker error codes preserved in the
+bounded message.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 
@@ -1861,6 +1864,9 @@ Update during implementation:
   package facts. The mapper validates contract version, artifact kind, artifact
   validity, text/chat task evidence, generation defaults, and custom-code trust
   before Python receives a Transformers load request.
+- 2026-05-03: Added typed PyTorch worker failure normalization into
+  Pantograph `BackendError` categories, preserving request ids and canonical
+  worker error codes without exposing raw Python exception payloads.
 
 ## Commit Cadence Notes
 
