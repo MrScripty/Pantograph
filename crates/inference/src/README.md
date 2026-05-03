@@ -17,9 +17,9 @@ details.
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
 | `gateway_tests.rs` | Gateway lifecycle, request forwarding, runtime reuse, embedding prepare/restore, and mock-backend tests extracted from the production gateway facade. |
 | `gateway_tests/` | Behavior-focused child modules for oversized gateway test families. |
-| `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp`; legacy Ollama state remains only until the managed-runtime cleanup slice. |
-| `managed_media_dependencies.rs` | Managed media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling. |
-| `managed_redistributables/` | Shared managed redistributable catalog, state, install, activation, lease, and removal helpers for runtime sidecars and media dependencies. |
+| `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp`, plus temporary adapters into neutral managed-dependency DTOs. |
+| `managed_media_dependencies.rs` | Transitional media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling while lease ownership moves behind the neutral managed-dependency boundary. |
+| `managed_redistributables/` | Transitional managed redistributable catalog, state, install, activation, lease, removal, and neutral status projection helpers for media dependencies. |
 | `model_contracts.rs` | Transformers-aligned model/package/task facts, generation defaults, Pumas package-facts summary snapshots, and model-library update feeds consumed by inference without taking runtime-selection policy. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes, including the managed-binary launch error tag consumed before backend startup errors are classified. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
@@ -78,10 +78,11 @@ llama.cpp reranking is modeled as its own capability and sidecar mode rather
 than as a chat completion variant. The planned `RuntimeRegistry` sits above
 this crate as a Pantograph application-layer coordinator; `InferenceGateway`
 remains the execution facade and lifecycle fact source that the registry
-consumes rather than replaces. Managed media dependency planning stays in this
-crate because it owns managed redistributable activation and lease state, but
-real media conversion process execution stays in the neutral
-`pantograph-media-conversion` boundary and host adapters.
+consumes rather than replaces. Managed media dependency planning is currently
+transitional in this crate because existing activation and lease state still
+live here. Shared managed dependency DTOs now live in
+`pantograph-managed-dependencies`, and real media conversion process execution
+stays in the neutral `pantograph-media-conversion` boundary and host adapters.
 
 ## Alternatives Rejected
 
@@ -153,7 +154,8 @@ real media conversion process execution stays in the neutral
 - Media conversion dependency plans expose dependency id, active version, lease
   id, holder, install root, and expected files so host-owned conversion code can
   record per-conversion attribution without depending on ambient active-version
-  snapshots.
+  snapshots. New cross-crate managed dependency status and command consumers
+  should use `pantograph-managed-dependencies` DTOs.
 - Media conversion executable paths must be resolved through the typed managed
   media dependency resolver. Host adapters must not assume that the first
   `expected_files` entry is executable for every dependency; OpenColorIO is a
@@ -270,7 +272,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   `strength` for later img2img/inpaint support.
 - `RerankRequest`, `RerankResult`, and `RerankResponse` are append-only
   contracts shared across gateway, backend, and host layers.
-- `MediaConversionDependencyPlan` and lease-token records are append-only
-  managed dependency contracts consumed by host-owned conversion executors.
+- `MediaConversionDependencyPlan` and lease-token records are transitional
+  append-only managed dependency contracts consumed by host-owned conversion
+  executors until lease ownership moves behind `pantograph-managed-dependencies`
+  adapters.
 - Contract changes that affect persisted consumers or saved workflows must be
   append-only or accompanied by migration guidance.

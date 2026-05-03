@@ -5,14 +5,14 @@ Multi-backend AI inference infrastructure for Pantograph.
 ## Purpose
 This crate owns backend execution, managed runtime resolution, process
 spawning contracts, backend lifecycle facts, and OpenAI-compatible inference
-facades. Host crates provide process/app-data integration, but backend
-capability and lifecycle behavior stay here.
+facades. Host crates provide process/app-data integration, while shared managed
+dependency DTOs live in `pantograph-managed-dependencies`.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
 | `Cargo.toml` | Crate manifest and backend feature declarations. |
-| `src/` | Backend implementations, gateway facade, model/package contract DTOs, process contracts, KV-cache support, managed-runtime lifecycle code, and the managed-binary status facade. |
+| `src/` | Backend implementations, gateway facade, model/package contract DTOs, process contracts, KV-cache support, managed-runtime lifecycle code, and temporary adapters into the neutral managed-dependency contracts. |
 | `audio/`, `depth/`, `onnx/`, `torch/` | Python/runtime helper assets used by optional backend families. |
 
 ## Problem
@@ -51,10 +51,12 @@ without depending on Pumas SQLite or turning inference into a model library.
 
 ## Invariants
 - Backends expose explicit capabilities and unsupported behavior.
-- Managed runtime install/remove/resolve operations remain backend-owned.
+- Managed runtime install/remove/resolve operations remain backend-owned until
+  the neutral managed-dependency owner takes over implementation state.
 - Managed binary status for runtime sidecars, media tools, and native
-  redistributable artifacts is projected through backend-owned DTOs rather than
-  frontend or Tauri-synthesized state.
+  redistributable artifacts is projected through
+  `pantograph-managed-dependencies` DTOs rather than frontend or
+  Tauri-synthesized state.
 - Process spawning is injected through `ProcessSpawner`.
 - Feature flags are public contracts and must stay documented.
 - Runtime reuse, attach, and start facts are emitted by backend-owned code.
@@ -69,7 +71,8 @@ without depending on Pumas SQLite or turning inference into a model library.
   scheduler policy inside this crate.
 
 ## Dependencies
-**Internal:** `pantograph-runtime-identity`.
+**Internal:** `pantograph-managed-dependencies` and
+`pantograph-runtime-identity`.
 
 **External:** `tokio`, `serde`, `reqwest`, `async-trait`, compression/archive
 crates, optional Candle crates, optional PyO3, and process/runtime utilities.
@@ -111,8 +114,8 @@ selection must use supported runtimes through Pumas model references.
 - Inputs: backend configuration, process spawner implementations, managed
   runtime IDs, and inference requests.
 - Outputs: chat, embedding, rerank, KV-cache, runtime lifecycle, managed
-  runtime DTOs, additive managed-binary facade DTOs, and model/package fact
-  DTOs.
+  runtime DTOs, neutral managed-dependency DTO projections, additive
+  managed-binary facade DTOs, and model/package fact DTOs.
 - Lifecycle: callers configure a gateway, inject host process behavior, start
   or attach backends, and stop them through the gateway.
 - Errors: backend and lifecycle failures are surfaced as typed or structured

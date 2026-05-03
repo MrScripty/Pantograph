@@ -1210,7 +1210,7 @@ runtime launch behavior and media conversion readiness facts.
   eventual conversion execution contracts.
 - [ ] Add temporary compatibility shims only where needed, and document their
   removal trigger.
-- [ ] Update READMEs so inference is not described as the owner of media
+- [x] Update READMEs so inference is not described as the owner of media
   dependencies.
 
 **Verification:**
