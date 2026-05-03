@@ -244,7 +244,7 @@ fn text_generation_task_id(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<inference::InferenceTaskId> {
     let Some(task_label) =
-        read_optional_input_string_aliases(inputs, &["task_kind", "taskKind", "task_id", "taskId"])
+        read_text_generation_task_label(inputs, &["task_kind", "taskKind", "task_id", "taskId"])?
     else {
         return Ok(inference::InferenceTaskId::TextGeneration);
     };
@@ -265,6 +265,30 @@ fn text_generation_task_id(
             task_id.canonical_label()
         ))),
     }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_text_generation_task_label(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Result<Option<String>> {
+    for alias in aliases {
+        if let Some(value) = inputs
+            .get(*alias)
+            .or_else(|| inputs.get("_data").and_then(|data| data.get(*alias)))
+        {
+            return value
+                .as_str()
+                .map(|value| Some(value.to_string()))
+                .ok_or_else(|| {
+                    NodeEngineError::ExecutionFailed(format!(
+                        "Invalid text generation task kind input '{alias}': expected string"
+                    ))
+                });
+        }
+    }
+
+    Ok(None)
 }
 
 #[cfg(feature = "inference-nodes")]

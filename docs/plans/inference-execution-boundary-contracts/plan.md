@@ -1138,8 +1138,9 @@ instead of relying only on serde defaults.
 Node-engine text/chat request construction now validates supplied `task_kind`,
 `taskKind`, `task_id`, and `taskId` labels through the inference task registry.
 Missing task labels still default to text generation for existing text nodes,
-but unknown labels or labels that resolve to non-text tasks now fail before
-gateway/backend execution instead of silently collapsing to text generation.
+but non-string labels, unknown labels, or labels that resolve to non-text tasks
+now fail before gateway/backend execution instead of silently collapsing to text
+generation.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
