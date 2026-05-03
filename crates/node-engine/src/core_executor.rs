@@ -475,6 +475,8 @@ fn record_task_validation_failure_lifecycle(
             runtime_id: runtime_id.clone(),
             runtime_instance_id: None,
             model_id: model_id.clone(),
+            usage: None,
+            cache_handle_id: None,
             detail,
             compatibility_report: None,
             compatibility_issues: Vec::new(),

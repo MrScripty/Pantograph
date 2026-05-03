@@ -7,10 +7,10 @@ use pantograph_diagnostics_ledger::{
     DiagnosticsLedgerRepository, ExecutionGuaranteeLevel,
     InferenceCompatibilityIssueDiagnosticSummary, InferenceCompatibilityReportDiagnosticSummary,
     InferenceExecutionDiagnosticObservedPayload, InferenceOptionDiagnosticSummary,
-    InferenceOptionSupportCounts, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
-    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
-    RetentionClass, UsageEventStatus, UsageLineage, MAX_INFERENCE_COMPATIBILITY_ISSUES,
-    MAX_INFERENCE_OPTION_DIAGNOSTICS,
+    InferenceOptionSupportCounts, InferenceUsageDiagnosticSummary, LicenseSnapshot, ModelIdentity,
+    ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
+    NodeExecutionStatusPayload, RetentionClass, UsageEventStatus, UsageLineage,
+    MAX_INFERENCE_COMPATIBILITY_ISSUES, MAX_INFERENCE_OPTION_DIAGNOSTICS,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
@@ -425,7 +425,9 @@ fn build_inference_diagnostic_event_ledger_append_request(
 ) -> Option<DiagnosticEventAppendRequest> {
     let has_bounded_diagnostics = !event.option_diagnostics.is_empty()
         || event.compatibility_report.is_some()
-        || !event.compatibility_issues.is_empty();
+        || !event.compatibility_issues.is_empty()
+        || event.usage.is_some()
+        || event.cache_handle_id.is_some();
     if !has_bounded_diagnostics
         || event.phase != inference::InferenceLifecyclePhase::BackendExecution
         || event.kind != inference::InferenceRequestLifecycleEventKind::Completed
@@ -476,6 +478,8 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 ),
                 selected_backend_key: event.backend_key.clone(),
                 selected_backend_family: event.backend_key.clone(),
+                usage: event.usage.as_ref().map(inference_usage_summary),
+                cache_handle_id: event.cache_handle_id.clone(),
                 compatibility_report: event
                     .compatibility_report
                     .as_ref()
@@ -498,6 +502,14 @@ fn build_inference_diagnostic_event_ledger_append_request(
             },
         ),
     })
+}
+
+fn inference_usage_summary(usage: &inference::InferenceUsage) -> InferenceUsageDiagnosticSummary {
+    InferenceUsageDiagnosticSummary {
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        total_tokens: usage.total_tokens,
+    }
 }
 
 fn compatibility_report_summary(

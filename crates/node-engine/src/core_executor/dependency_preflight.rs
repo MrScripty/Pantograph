@@ -755,6 +755,8 @@ fn record_dependency_preflight_failure_lifecycle(
             runtime_id: runtime_id.clone(),
             runtime_instance_id: None,
             model_id: context.model_id.clone(),
+            usage: None,
+            cache_handle_id: None,
             detail,
             compatibility_report: None,
             compatibility_issues: Vec::new(),

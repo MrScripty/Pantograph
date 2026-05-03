@@ -126,6 +126,8 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
+        usage: None,
+        cache_handle_id: None,
         detail: Some("backend failed".to_string()),
         compatibility_report: None,
         compatibility_issues: Vec::new(),
@@ -172,6 +174,8 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
+        usage: None,
+        cache_handle_id: None,
         detail: None,
         compatibility_report: None,
         compatibility_issues: Vec::new(),
@@ -217,6 +221,12 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         path: Some("model.gguf".to_string()),
     }];
+    event.usage = Some(inference::InferenceUsage {
+        prompt_tokens: Some(8),
+        completion_tokens: Some(5),
+        total_tokens: Some(13),
+    });
+    event.cache_handle_id = Some("kv-checkpoint-1".to_string());
 
     let request = inference_diagnostic_event_ledger_append_request(&context, &event)
         .expect("completed backend lifecycle with option diagnostics should map");
@@ -237,6 +247,11 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
             );
             assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(
+                payload.usage.as_ref().and_then(|usage| usage.total_tokens),
+                Some(13)
+            );
+            assert_eq!(payload.cache_handle_id.as_deref(), Some("kv-checkpoint-1"));
             assert_eq!(
                 payload
                     .compatibility_report
@@ -309,6 +324,48 @@ fn inference_diagnostic_event_adapter_persists_compatibility_only_summary() {
                 payload.compatibility_issues[0].kind,
                 "unsupported_model_artifact"
             );
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_persists_usage_and_cache_summary() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        177,
+    );
+    event.usage = Some(inference::InferenceUsage {
+        prompt_tokens: Some(21),
+        completion_tokens: Some(34),
+        total_tokens: Some(55),
+    });
+    event.cache_handle_id = Some("kv-checkpoint-2".to_string());
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("completed backend lifecycle with usage/cache metadata should map");
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(
+                payload.usage.as_ref().and_then(|usage| usage.prompt_tokens),
+                Some(21)
+            );
+            assert_eq!(
+                payload
+                    .usage
+                    .as_ref()
+                    .and_then(|usage| usage.completion_tokens),
+                Some(34)
+            );
+            assert_eq!(
+                payload.usage.as_ref().and_then(|usage| usage.total_tokens),
+                Some(55)
+            );
+            assert_eq!(payload.cache_handle_id.as_deref(), Some("kv-checkpoint-2"));
+            assert_eq!(payload.option_diagnostics.len(), 0);
+            assert!(payload.compatibility_report.is_none());
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }
@@ -491,6 +548,8 @@ fn inference_lifecycle_event(
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
+        usage: None,
+        cache_handle_id: None,
         detail,
         compatibility_report: None,
         compatibility_issues: Vec::new(),

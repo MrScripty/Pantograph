@@ -32,8 +32,8 @@ use crate::types::{
     InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionRequest,
     InferenceExecutionRequestValidationError, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, RerankRequest, RerankResponse, RuntimeLifecycleSnapshot,
-    ServerModeInfo,
+    InferenceRequestLifecycleEventSink, InferenceUsage, RerankRequest, RerankResponse,
+    RuntimeLifecycleSnapshot, ServerModeInfo,
 };
 
 const MAX_LIFECYCLE_COMPATIBILITY_ISSUES: usize = 32;
@@ -1163,7 +1163,7 @@ impl InferenceGateway {
         let mut option_diagnostics = option_diagnostics_from_execution_result(&result);
         option_diagnostics.extend(request_option_diagnostics);
         dedupe_option_diagnostics(&mut option_diagnostics);
-        record_non_streaming_lifecycle_result_with_option_diagnostics(
+        record_typed_lifecycle_result_with_option_diagnostics(
             lifecycle_sink.as_ref(),
             request_id,
             task_id,
@@ -1914,6 +1914,43 @@ fn record_inference_lifecycle_phase_event_with_diagnostics(
     compatibility_report: Option<InferenceCompatibilityReportSummary>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
 ) {
+    record_inference_lifecycle_phase_event_with_references(
+        sink,
+        phase,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        kind,
+        detail,
+        option_diagnostics,
+        compatibility_report,
+        compatibility_issues,
+        None,
+        None,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_inference_lifecycle_phase_event_with_references(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    kind: InferenceRequestLifecycleEventKind,
+    detail: Option<String>,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+    usage: Option<InferenceUsage>,
+    cache_handle_id: Option<String>,
+) {
     sink.record(InferenceRequestLifecycleEvent {
         request_id,
         phase,
@@ -1924,6 +1961,8 @@ fn record_inference_lifecycle_phase_event_with_diagnostics(
         runtime_id,
         runtime_instance_id,
         model_id,
+        usage,
+        cache_handle_id,
         detail,
         compatibility_report,
         compatibility_issues,
@@ -1952,6 +1991,36 @@ fn record_non_streaming_lifecycle_result<T>(
         model_id,
         result,
         Vec::new(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_typed_lifecycle_result_with_option_diagnostics(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    result: &Result<InferenceExecutionResult, GatewayError>,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+) {
+    record_non_streaming_lifecycle_phase_result_with_references(
+        sink,
+        InferenceLifecyclePhase::BackendExecution,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        result,
+        option_diagnostics,
+        None,
+        Vec::new(),
+        usage_from_execution_result(result),
+        cache_handle_from_execution_result(result),
     );
 }
 
@@ -2051,8 +2120,43 @@ fn record_non_streaming_lifecycle_phase_result_with_diagnostics<T>(
     compatibility_report: Option<InferenceCompatibilityReportSummary>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
 ) {
+    record_non_streaming_lifecycle_phase_result_with_references(
+        sink,
+        phase,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        result,
+        option_diagnostics,
+        compatibility_report,
+        compatibility_issues,
+        None,
+        None,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_non_streaming_lifecycle_phase_result_with_references<T>(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    result: &Result<T, GatewayError>,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+    usage: Option<InferenceUsage>,
+    cache_handle_id: Option<String>,
+) {
     match result {
-        Ok(_) => record_inference_lifecycle_phase_event_with_diagnostics(
+        Ok(_) => record_inference_lifecycle_phase_event_with_references(
             sink,
             phase.clone(),
             request_id.clone(),
@@ -2066,6 +2170,8 @@ fn record_non_streaming_lifecycle_phase_result_with_diagnostics<T>(
             option_diagnostics,
             compatibility_report,
             compatibility_issues,
+            usage,
+            cache_handle_id,
         ),
         Err(error) => record_inference_lifecycle_phase_event(
             sink,
@@ -2106,6 +2212,27 @@ fn option_diagnostics_from_execution_result(
             option_diagnostics, ..
         }) => option_diagnostics.clone(),
         _ => Vec::new(),
+    }
+}
+
+fn usage_from_execution_result(
+    result: &Result<InferenceExecutionResult, GatewayError>,
+) -> Option<InferenceUsage> {
+    match result {
+        Ok(InferenceExecutionResult::TextGeneration { usage, .. })
+        | Ok(InferenceExecutionResult::Embedding { usage, .. }) => usage.clone(),
+        _ => None,
+    }
+}
+
+fn cache_handle_from_execution_result(
+    result: &Result<InferenceExecutionResult, GatewayError>,
+) -> Option<String> {
+    match result {
+        Ok(InferenceExecutionResult::TextGeneration {
+            cache_handle_id, ..
+        }) => cache_handle_id.clone(),
+        _ => None,
     }
 }
 

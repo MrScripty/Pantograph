@@ -2190,7 +2190,10 @@ inference write ledger events directly.
   summaries remain open.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
-  without storing prompt/result payload bodies.
+  without storing prompt/result payload bodies. Typed lifecycle events and
+  durable inference diagnostic payloads now carry bounded usage counts and
+  cache-handle ids; KV checkpoint ids, artifact refs, and additional backend
+  producers remain open.
 - [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
@@ -2647,6 +2650,11 @@ Update during implementation:
   node-derived selected backend key, model id, and task id from
   `node.execution_status` events while preserving scheduler-owned selected
   runtime/device/network-node semantics.
+- 2026-05-03: Inference lifecycle and durable diagnostic payloads now carry
+  bounded usage summaries and cache-handle ids for completed typed backend
+  execution events without storing prompt, output, token-array, tensor, or raw
+  artifact payloads. Backend-specific usage producers, KV checkpoint ids, and
+  artifact refs remain follow-up work.
 
 ## Commit Cadence Notes
 

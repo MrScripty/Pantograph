@@ -1318,6 +1318,10 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_backend_family: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<InferenceUsageDiagnosticSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_handle_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility_report: Option<InferenceCompatibilityReportDiagnosticSummary>,
     #[serde(default)]
     pub compatibility_issue_count: u32,
@@ -1353,6 +1357,11 @@ impl InferenceExecutionDiagnosticObservedPayload {
             self.selected_backend_family.as_deref(),
             MAX_ID_LEN,
         )?;
+        validate_optional_text(
+            "cache_handle_id",
+            self.cache_handle_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
         if self.option_diagnostics.len() > MAX_INFERENCE_OPTION_DIAGNOSTICS {
             return Err(DiagnosticsLedgerError::FieldTooLong {
                 field: "option_diagnostics",
@@ -1368,11 +1377,41 @@ impl InferenceExecutionDiagnosticObservedPayload {
         if let Some(report) = self.compatibility_report.as_ref() {
             report.validate()?;
         }
+        if let Some(usage) = self.usage.as_ref() {
+            usage.validate()?;
+        }
         for issue in &self.compatibility_issues {
             issue.validate()?;
         }
         for diagnostic in &self.option_diagnostics {
             diagnostic.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceUsageDiagnosticSummary {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_tokens: Option<u32>,
+}
+
+impl InferenceUsageDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        if matches!(
+            (
+                self.prompt_tokens,
+                self.completion_tokens,
+                self.total_tokens
+            ),
+            (None, None, None)
+        ) {
+            return Err(DiagnosticsLedgerError::MissingField { field: "usage" });
         }
         Ok(())
     }

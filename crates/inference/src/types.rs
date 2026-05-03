@@ -522,6 +522,10 @@ pub struct InferenceRequestLifecycleEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<InferenceUsage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_handle_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility_report: Option<InferenceCompatibilityReportSummary>,
@@ -1143,6 +1147,12 @@ mod tests {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-main-1".to_string()),
             model_id: Some("pumas://models/tiny-llama".to_string()),
+            usage: Some(InferenceUsage {
+                prompt_tokens: Some(8),
+                completion_tokens: Some(5),
+                total_tokens: Some(13),
+            }),
+            cache_handle_id: Some("kv-checkpoint-1".to_string()),
             detail: Some("stream dropped by consumer".to_string()),
             compatibility_report: Some(InferenceCompatibilityReportSummary {
                 status: "accepted".to_string(),
@@ -1174,6 +1184,11 @@ mod tests {
         );
         assert_eq!(encoded["runtime_id"], serde_json::json!("llama.cpp"));
         assert_eq!(encoded["task_id"], serde_json::json!("text_generation"));
+        assert_eq!(encoded["usage"]["total_tokens"], serde_json::json!(13));
+        assert_eq!(
+            encoded["cache_handle_id"],
+            serde_json::json!("kv-checkpoint-1")
+        );
         assert_eq!(
             encoded["compatibility_report"]["compatible"],
             serde_json::json!(true)
