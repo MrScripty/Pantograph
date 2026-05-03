@@ -249,6 +249,7 @@ impl TaskExecutor for CoreTaskExecutor {
                 let canonical_inputs = inputs_with_model_path_from_ref(&inputs)?;
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
                 let preferred_backend = preferred_backend_key("llm-inference", &canonical_inputs);
+                reject_contract_only_inference_task(&canonical_inputs)?;
                 match canonical_inference_input_kind(&canonical_inputs) {
                     Some(InferenceExecutionInputKind::Embedding) => {
                         execute_embedding_inference(
@@ -378,6 +379,25 @@ impl TaskExecutor for CoreTaskExecutor {
             ))),
         }
     }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn reject_contract_only_inference_task(inputs: &HashMap<String, serde_json::Value>) -> Result<()> {
+    let Some(entry) = canonical_inference_task_entry(inputs) else {
+        return Ok(());
+    };
+    let Some(contract) = entry.request_contract() else {
+        return Ok(());
+    };
+    if contract.execution_supported {
+        return Ok(());
+    }
+
+    Err(NodeEngineError::ExecutionFailed(format!(
+        "Canonical inference task '{}' is contract-only at this execution boundary: task request contract has execution_supported=false for input kind '{}'.",
+        entry.canonical_label(),
+        contract.input_kind.canonical_label()
+    )))
 }
 
 // ---------------------------------------------------------------------------

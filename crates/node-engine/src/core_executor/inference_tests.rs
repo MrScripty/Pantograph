@@ -790,6 +790,41 @@ async fn test_canonical_llm_feature_extraction_alias_dispatches_to_embedding_han
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_canonical_llm_contract_only_task_rejects_before_gateway() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("audio_transcription"),
+    );
+    inputs.insert(
+        "audio".to_string(),
+        serde_json::json!("artifact://audio.wav"),
+    );
+
+    let executor = CoreTaskExecutor::new();
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("llm-inference-1", inputs, &context, &extensions)
+        .await
+        .expect_err("contract-only audio task should reject before gateway execution");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("audio_transcription"));
+            assert!(message.contains("execution_supported=false"));
+            assert!(!message.contains("Missing prompt input"));
+            assert!(!message.contains("InferenceGateway not configured"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_canonical_llm_rerank_uses_typed_gateway_boundary() {
     let rerank_requests = Arc::new(Mutex::new(Vec::new()));
     let gateway = Arc::new(InferenceGateway::with_backend(

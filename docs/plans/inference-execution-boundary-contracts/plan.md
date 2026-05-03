@@ -1197,6 +1197,10 @@ Node-engine typed request construction now also derives `PumasModelRef`
 identity from `resolved_model_source.model_ref` when a canonical node receives
 fully resolved Pumas model-source facts instead of a separate
 `pumas_model_ref` input.
+Node-engine canonical `llm-inference` dispatch now rejects contract-only task
+registry entries such as `audio_transcription` before gateway or backend
+preflight execution, returning a task-contract error that cites
+`execution_supported=false` instead of falling through to text/prompt handling.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2453,6 +2457,9 @@ Update during implementation:
   canonical Pumas model identity from `resolved_model_source.model_ref`, so
   resolved model-source facts can carry identity into typed backend requests
   without requiring a duplicate `pumas_model_ref` input.
+- 2026-05-03: Added a node-engine guard for contract-only canonical inference
+  tasks, so descriptor-visible but non-executable tasks reject with a
+  task-contract diagnostic before gateway, backend, or prompt validation.
 
 ## Commit Cadence Notes
 
