@@ -84,8 +84,9 @@ pub use managed_media_dependencies::{
 };
 pub use managed_redistributables::{
     acquire_managed_redistributable_lease, activate_managed_redistributable_version,
-    install_managed_redistributable_from_staging, list_managed_redistributable_statuses,
-    load_managed_redistributable_state, managed_redistributable_catalog,
+    install_managed_redistributable_from_staging, list_managed_dependency_statuses,
+    list_managed_redistributable_statuses, load_managed_redistributable_state,
+    managed_dependency_status, managed_redistributable_catalog,
     managed_redistributable_catalog_entry, managed_redistributable_status,
     managed_redistributables_dir, release_managed_redistributable_lease,
     remove_managed_redistributable_version, save_managed_redistributable_state,
@@ -137,6 +138,12 @@ pub use model_contracts::{
     TaskModalitySignature, TaskRegistryEntry, TaskRegistryResolutionDiagnostic,
     TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport, TransformersPackageEvidence,
     MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+};
+pub use pantograph_managed_dependencies::{
+    ManagedDependencyCategory, ManagedDependencyInstallState, ManagedDependencyKey,
+    ManagedDependencyReadinessState, ManagedDependencySelectionState, ManagedDependencyStatus,
+    ManagedDependencyVersionStatus, MediaToolDependencyId, NativeArtifactDependencyId,
+    ResolvedManagedDependencyCommand, RuntimeSidecarDependencyId,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};

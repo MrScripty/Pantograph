@@ -1,11 +1,14 @@
 use inference::{
     acquire_managed_redistributable_lease, activate_managed_redistributable_version,
-    install_managed_redistributable_from_staging, list_managed_redistributable_statuses,
-    load_managed_redistributable_state, managed_redistributable_catalog,
-    managed_redistributable_status, release_managed_redistributable_lease,
+    install_managed_redistributable_from_staging, list_managed_dependency_statuses,
+    list_managed_redistributable_statuses, load_managed_redistributable_state,
+    managed_dependency_status, managed_redistributable_catalog, managed_redistributable_status,
+    managed_redistributables_dir, release_managed_redistributable_lease,
     remove_managed_redistributable_version, select_managed_redistributable_version,
-    set_default_managed_redistributable_version, ManagedRedistributableCategory,
-    ManagedRedistributableId, ManagedRedistributablePackageKind, ManagedRedistributableReadiness,
+    set_default_managed_redistributable_version, ManagedDependencyCategory,
+    ManagedDependencyInstallState, ManagedDependencyKey, ManagedDependencyReadinessState,
+    ManagedRedistributableCategory, ManagedRedistributableId, ManagedRedistributablePackageKind,
+    ManagedRedistributableReadiness, MediaToolDependencyId, NativeArtifactDependencyId,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -44,6 +47,72 @@ fn categories_match_tools_and_native_library() {
         };
         assert_eq!(status.category, expected);
     }
+}
+
+#[test]
+fn neutral_dependency_statuses_preserve_media_dependency_facts() {
+    let temp = tempfile::tempdir().unwrap();
+    let statuses = list_managed_dependency_statuses(temp.path());
+
+    assert_eq!(statuses.len(), 4);
+    assert!(statuses.iter().any(|status| {
+        status.key == ManagedDependencyKey::MediaTool(MediaToolDependencyId::Ffmpeg)
+            && status.category == ManagedDependencyCategory::MediaTool
+            && status.install_state == ManagedDependencyInstallState::Missing
+            && status.readiness_state == ManagedDependencyReadinessState::Missing
+            && !status.available
+    }));
+    assert!(statuses.iter().any(|status| {
+        status.key == ManagedDependencyKey::NativeArtifact(NativeArtifactDependencyId::OpenColorIo)
+            && status.category == ManagedDependencyCategory::NativeArtifact
+            && status.install_state == ManagedDependencyInstallState::Missing
+            && status.readiness_state == ManagedDependencyReadinessState::Missing
+            && !status.available
+    }));
+}
+
+#[test]
+fn neutral_dependency_status_preserves_active_version_projection() {
+    let temp = tempfile::tempdir().unwrap();
+    let version = install_ready_dependency(temp.path(), ManagedRedistributableId::Ocioconvert);
+
+    activate_managed_redistributable_version(
+        temp.path(),
+        ManagedRedistributableId::Ocioconvert,
+        &version,
+    )
+    .unwrap();
+
+    let status = managed_dependency_status(temp.path(), ManagedRedistributableId::Ocioconvert);
+
+    assert_eq!(
+        status.key,
+        ManagedDependencyKey::MediaTool(MediaToolDependencyId::Ocioconvert)
+    );
+    assert_eq!(status.category, ManagedDependencyCategory::MediaTool);
+    assert_eq!(
+        status.install_state,
+        ManagedDependencyInstallState::Installed
+    );
+    assert_eq!(
+        status.readiness_state,
+        ManagedDependencyReadinessState::Ready
+    );
+    assert!(status.available);
+    assert_eq!(
+        status.selection.active_version.as_deref(),
+        Some(version.as_str())
+    );
+    assert_eq!(status.versions.len(), 1);
+    assert_eq!(
+        status.versions[0].version.as_deref(),
+        Some(version.as_str())
+    );
+    assert!(status.versions[0].active);
+    assert_eq!(
+        status.versions[0].readiness_state,
+        ManagedDependencyReadinessState::Ready
+    );
 }
 
 #[test]
@@ -233,7 +302,7 @@ fn install_from_staging_validates_expected_files_before_finalizing() {
     )
     .unwrap_err();
     assert!(error.contains("missing expected file"));
-    assert!(!version_dir(
+    assert!(!canonical_version_dir(
         temp.path(),
         ManagedRedistributableId::Ocioconvert,
         &catalog.version
@@ -250,7 +319,7 @@ fn install_from_staging_validates_expected_files_before_finalizing() {
     .unwrap();
     assert_eq!(
         installed,
-        version_dir(
+        canonical_version_dir(
             temp.path(),
             ManagedRedistributableId::Ocioconvert,
             &catalog.version
@@ -334,6 +403,17 @@ fn version_dir(
 ) -> std::path::PathBuf {
     app_data_dir
         .join("managed-dependencies")
+        .join(id.key())
+        .join("versions")
+        .join(version)
+}
+
+fn canonical_version_dir(
+    app_data_dir: &Path,
+    id: ManagedRedistributableId,
+    version: &str,
+) -> std::path::PathBuf {
+    managed_redistributables_dir(app_data_dir)
         .join(id.key())
         .join("versions")
         .join(version)

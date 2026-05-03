@@ -1,5 +1,6 @@
 mod catalog;
 mod contracts;
+mod neutral_contracts;
 mod operations;
 mod paths;
 mod state;
@@ -14,6 +15,7 @@ pub use contracts::{
     ManagedRedistributableSelection, ManagedRedistributableSource, ManagedRedistributableStatus,
     ManagedRedistributableVersionStatus,
 };
+pub use neutral_contracts::{list_managed_dependency_statuses, managed_dependency_status};
 pub use operations::{
     acquire_managed_redistributable_lease, activate_managed_redistributable_version,
     install_managed_redistributable_from_staging, list_managed_redistributable_statuses,

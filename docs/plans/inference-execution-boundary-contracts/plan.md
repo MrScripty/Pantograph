@@ -738,18 +738,11 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 
 ## Unrelated Issues Not in Scope
 
-- 2026-05-02: `cargo test -p inference` exposed an existing managed
-  redistributable path expectation mismatch in
-  `install_from_staging_validates_expected_files_before_finalizing`. The test
-  expects `/managed-dependencies/ocioconvert/...`, while the implementation
-  returns `/third-party/managed-dependencies/ocioconvert/...`.
-- 2026-05-03: The same issue still fails under
-  `cargo test -p inference --all-features`; the PyTorch worker-contract slice
-  did not touch managed redistributable path construction.
-- Reason: this is in the managed redistributable path contract and is unrelated
-  to the model/package contract fixture slice.
-- Revisit trigger: fix in a separate managed-dependency slice before treating
-  full `cargo test -p inference` as green.
+- 2026-05-03: The managed dependency adapter slice resolved the known managed
+  redistributable path expectation mismatch by updating
+  `install_from_staging_validates_expected_files_before_finalizing` to assert
+  the canonical `/third-party/managed-dependencies/...` install root while
+  preserving separate legacy install-root fallback coverage.
 - 2026-05-02: Earlier `cargo check -p pantograph-embedded-runtime
   --no-default-features` failure from missing upstream Pumas package-fact
   helpers has been resolved in Pumas. The remaining Pantograph work is
@@ -1229,8 +1222,12 @@ runtime launch behavior and media conversion readiness facts.
   by touched files.
 - `git diff --check`.
 
-**Status:** Inventory complete. The current implementation still keeps the
-authoritative runtime and redistributable managers in `crates/inference`:
+**Status:** In progress. Inventory is complete and inference now depends on the
+neutral `pantograph-managed-dependencies` contract crate. The first adapter
+slice projects existing ffmpeg, ocioconvert, oiiotool, and OpenColorIO
+redistributable statuses into `ManagedDependencyStatus` values without moving
+persisted state or lease ownership yet. The current implementation still keeps
+the authoritative runtime and redistributable managers in `crates/inference`:
 `managed_runtime/` owns llama.cpp sidecar catalog, install state, job state,
 and command resolution; `managed_redistributables/` owns media dependency
 catalog, install state, activation, selection, lease, removal, and status
@@ -1240,9 +1237,18 @@ conversion lease projections and OpenColorIO activation validation; and
 status/command facts. `pantograph-media-conversion` already owns conversion
 planning and media dependency identifiers, while `pantograph-uniffi`,
 `pantograph-embedded-runtime`, `pantograph-workflow-service`, and inference
-tests still consume inference-owned managed dependency APIs. This confirms the
-migration target must add a neutral dependency boundary or adapter facade before
-moving command resolution, status DTOs, and media leases out of inference.
+tests still consume inference-owned managed dependency APIs.
+
+**Implementation findings:** Do not move media conversion DTOs by type alias
+without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`
+does not currently serialize the same way as `pantograph-media-conversion`'s
+`3d` media-kind shape. The OpenColorIO identifier also has multiple public
+spellings across surfaces (`open_color_io` serde, `opencolorio` key/display
+paths), so the migration needs an explicit compatibility decision before moving
+DTO ownership. Current install directory fallback covers legacy version
+directories, but state loading does not import legacy
+`managed-dependencies/state.json`; decide whether the neutral owner imports that
+state or explicitly treats it as unsupported.
 
 ### Milestone 6: Retire Ollama Backend Surface
 
