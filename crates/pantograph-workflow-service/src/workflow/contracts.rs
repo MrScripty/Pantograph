@@ -198,6 +198,8 @@ pub struct WorkflowBackendCapabilityFacts {
     pub model_sources: WorkflowBackendModelSourceCapabilityFacts,
     #[serde(default)]
     pub features: WorkflowBackendFeatureCapabilityFacts,
+    #[serde(default)]
+    pub request_lifecycle: WorkflowBackendRequestLifecycleFacts,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -240,6 +242,58 @@ pub struct WorkflowBackendModelSourceCapabilityFacts {
     pub backend_hints: Vec<WorkflowBackendHintLabel>,
     #[serde(default)]
     pub custom_code: WorkflowBackendFeatureSupport,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowBackendRequestLifecycleFacts {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phases: Vec<WorkflowBackendRequestLifecyclePhaseFacts>,
+    #[serde(default)]
+    pub kv_cache_publication_cleanup: WorkflowBackendRequestCleanupSemantics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowBackendRequestLifecyclePhaseFacts {
+    pub phase: WorkflowInferenceLifecyclePhase,
+    pub component: WorkflowBackendComponentCapability,
+    pub cancellation: WorkflowBackendRequestCancellationSemantics,
+    pub cleanup: WorkflowBackendRequestCleanupSemantics,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowInferenceLifecyclePhase {
+    ModelPackageResolution,
+    TaskValidation,
+    Preprocessing,
+    BackendExecution,
+    Postprocessing,
+    ResultProjection,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowBackendRequestCancellationSemantics {
+    #[default]
+    Unknown,
+    NotApplicable,
+    NotSupported,
+    AdapterManaged,
+    DropConsumer,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowBackendRequestCleanupSemantics {
+    #[default]
+    Unknown,
+    NotApplicable,
+    NotRequired,
+    AdapterManaged,
+    DropStream,
+    RollbackPublication,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

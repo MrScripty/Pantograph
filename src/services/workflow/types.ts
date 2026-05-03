@@ -478,12 +478,48 @@ export interface WorkflowBackendModelSourceCapabilityFacts {
   custom_code: WorkflowBackendFeatureSupport;
 }
 
+export type WorkflowInferenceLifecyclePhase =
+  | 'model_package_resolution'
+  | 'task_validation'
+  | 'preprocessing'
+  | 'backend_execution'
+  | 'postprocessing'
+  | 'result_projection';
+
+export type WorkflowBackendRequestCancellationSemantics =
+  | 'unknown'
+  | 'not_applicable'
+  | 'not_supported'
+  | 'adapter_managed'
+  | 'drop_consumer';
+
+export type WorkflowBackendRequestCleanupSemantics =
+  | 'unknown'
+  | 'not_applicable'
+  | 'not_required'
+  | 'adapter_managed'
+  | 'drop_stream'
+  | 'rollback_publication';
+
+export interface WorkflowBackendRequestLifecyclePhaseFacts {
+  phase: WorkflowInferenceLifecyclePhase;
+  component: WorkflowBackendComponentCapability;
+  cancellation: WorkflowBackendRequestCancellationSemantics;
+  cleanup: WorkflowBackendRequestCleanupSemantics;
+}
+
+export interface WorkflowBackendRequestLifecycleFacts {
+  phases: WorkflowBackendRequestLifecyclePhaseFacts[];
+  kv_cache_publication_cleanup: WorkflowBackendRequestCleanupSemantics;
+}
+
 export interface WorkflowBackendCapabilityFacts {
   tasks: WorkflowBackendTaskCapability[];
   preprocessing: WorkflowBackendComponentCapability;
   postprocessing: WorkflowBackendComponentCapability;
   model_sources: WorkflowBackendModelSourceCapabilityFacts;
   features: WorkflowBackendFeatureCapabilityFacts;
+  request_lifecycle: WorkflowBackendRequestLifecycleFacts;
 }
 
 export interface WorkflowRuntimeCapability {

@@ -12,11 +12,13 @@ use pantograph_runtime_identity::{
 use pantograph_workflow_service::{
     WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
     WorkflowBackendFeatureCapabilityFacts, WorkflowBackendFeatureSupport, WorkflowBackendHintLabel,
-    WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendTaskCapability,
-    WorkflowCapabilitiesResponse, WorkflowInferenceModality, WorkflowInferenceTaskId,
-    WorkflowModelArtifactKind, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeReadinessState, WorkflowRuntimeSourceKind, WorkflowSupportTier,
-    WorkflowTaskModalitySignature,
+    WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendRequestCancellationSemantics,
+    WorkflowBackendRequestCleanupSemantics, WorkflowBackendRequestLifecycleFacts,
+    WorkflowBackendRequestLifecyclePhaseFacts, WorkflowBackendTaskCapability,
+    WorkflowCapabilitiesResponse, WorkflowInferenceLifecyclePhase, WorkflowInferenceModality,
+    WorkflowInferenceTaskId, WorkflowModelArtifactKind, WorkflowRuntimeCapability,
+    WorkflowRuntimeInstallState, WorkflowRuntimeReadinessState, WorkflowRuntimeSourceKind,
+    WorkflowSupportTier, WorkflowTaskModalitySignature,
 };
 
 pub fn managed_runtime_capabilities(
@@ -389,6 +391,99 @@ fn project_backend_capability_facts(
             external_connection: workflow_feature_support(facts.features.external_connection),
             kv_cache: workflow_feature_support(facts.features.kv_cache),
         },
+        request_lifecycle: workflow_request_lifecycle_facts(&facts.request_lifecycle_facts()),
+    }
+}
+
+fn workflow_request_lifecycle_facts(
+    facts: &inference::BackendRequestLifecycleFacts,
+) -> WorkflowBackendRequestLifecycleFacts {
+    WorkflowBackendRequestLifecycleFacts {
+        phases: facts
+            .phases
+            .iter()
+            .map(|phase| WorkflowBackendRequestLifecyclePhaseFacts {
+                phase: workflow_lifecycle_phase(&phase.phase),
+                component: workflow_component_capability(phase.component),
+                cancellation: workflow_request_cancellation_semantics(phase.cancellation),
+                cleanup: workflow_request_cleanup_semantics(phase.cleanup),
+            })
+            .collect(),
+        kv_cache_publication_cleanup: workflow_request_cleanup_semantics(
+            facts.kv_cache_publication_cleanup,
+        ),
+    }
+}
+
+fn workflow_lifecycle_phase(
+    phase: &inference::InferenceLifecyclePhase,
+) -> WorkflowInferenceLifecyclePhase {
+    match phase {
+        inference::InferenceLifecyclePhase::ModelPackageResolution => {
+            WorkflowInferenceLifecyclePhase::ModelPackageResolution
+        }
+        inference::InferenceLifecyclePhase::TaskValidation => {
+            WorkflowInferenceLifecyclePhase::TaskValidation
+        }
+        inference::InferenceLifecyclePhase::Preprocessing => {
+            WorkflowInferenceLifecyclePhase::Preprocessing
+        }
+        inference::InferenceLifecyclePhase::BackendExecution => {
+            WorkflowInferenceLifecyclePhase::BackendExecution
+        }
+        inference::InferenceLifecyclePhase::Postprocessing => {
+            WorkflowInferenceLifecyclePhase::Postprocessing
+        }
+        inference::InferenceLifecyclePhase::ResultProjection => {
+            WorkflowInferenceLifecyclePhase::ResultProjection
+        }
+    }
+}
+
+fn workflow_request_cancellation_semantics(
+    semantics: inference::BackendRequestCancellationSemantics,
+) -> WorkflowBackendRequestCancellationSemantics {
+    match semantics {
+        inference::BackendRequestCancellationSemantics::Unknown => {
+            WorkflowBackendRequestCancellationSemantics::Unknown
+        }
+        inference::BackendRequestCancellationSemantics::NotApplicable => {
+            WorkflowBackendRequestCancellationSemantics::NotApplicable
+        }
+        inference::BackendRequestCancellationSemantics::NotSupported => {
+            WorkflowBackendRequestCancellationSemantics::NotSupported
+        }
+        inference::BackendRequestCancellationSemantics::AdapterManaged => {
+            WorkflowBackendRequestCancellationSemantics::AdapterManaged
+        }
+        inference::BackendRequestCancellationSemantics::DropConsumer => {
+            WorkflowBackendRequestCancellationSemantics::DropConsumer
+        }
+    }
+}
+
+fn workflow_request_cleanup_semantics(
+    semantics: inference::BackendRequestCleanupSemantics,
+) -> WorkflowBackendRequestCleanupSemantics {
+    match semantics {
+        inference::BackendRequestCleanupSemantics::Unknown => {
+            WorkflowBackendRequestCleanupSemantics::Unknown
+        }
+        inference::BackendRequestCleanupSemantics::NotApplicable => {
+            WorkflowBackendRequestCleanupSemantics::NotApplicable
+        }
+        inference::BackendRequestCleanupSemantics::NotRequired => {
+            WorkflowBackendRequestCleanupSemantics::NotRequired
+        }
+        inference::BackendRequestCleanupSemantics::AdapterManaged => {
+            WorkflowBackendRequestCleanupSemantics::AdapterManaged
+        }
+        inference::BackendRequestCleanupSemantics::DropStream => {
+            WorkflowBackendRequestCleanupSemantics::DropStream
+        }
+        inference::BackendRequestCleanupSemantics::RollbackPublication => {
+            WorkflowBackendRequestCleanupSemantics::RollbackPublication
+        }
     }
 }
 
@@ -933,6 +1028,14 @@ mod tests {
             facts.model_sources.artifact_kinds,
             vec![WorkflowModelArtifactKind::HfCompatibleDirectory]
         );
+        assert_eq!(
+            facts.request_lifecycle.kv_cache_publication_cleanup,
+            WorkflowBackendRequestCleanupSemantics::NotApplicable
+        );
+        assert!(facts.request_lifecycle.phases.iter().any(|phase| {
+            phase.phase == WorkflowInferenceLifecyclePhase::Postprocessing
+                && phase.cleanup == WorkflowBackendRequestCleanupSemantics::NotRequired
+        }));
     }
 
     #[test]
@@ -1027,6 +1130,15 @@ mod tests {
             facts.model_sources.backend_hints,
             vec![WorkflowBackendHintLabel::LlamaCpp]
         );
+        assert_eq!(
+            facts.request_lifecycle.kv_cache_publication_cleanup,
+            WorkflowBackendRequestCleanupSemantics::RollbackPublication
+        );
+        assert!(facts.request_lifecycle.phases.iter().any(|phase| {
+            phase.phase == WorkflowInferenceLifecyclePhase::BackendExecution
+                && phase.cancellation == WorkflowBackendRequestCancellationSemantics::DropConsumer
+                && phase.cleanup == WorkflowBackendRequestCleanupSemantics::DropStream
+        }));
         assert_eq!(
             capability.install_state,
             WorkflowRuntimeInstallState::Installed

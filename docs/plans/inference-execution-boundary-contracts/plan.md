@@ -1319,7 +1319,10 @@ while preserving the previous successful inference config for restoration flows.
 The fourteenth slice added derived backend request-lifecycle facts that map
 existing preprocessing, backend execution, postprocessing, streaming, and
 KV-cache capability facts into explicit cancellation and cleanup semantics
-without changing backend execution methods.
+without changing backend execution methods. The fifteenth slice projected those
+facts through workflow-owned capability DTOs and TypeScript contracts so
+graph/preflight consumers can inspect lifecycle semantics without importing
+inference crate internals.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
@@ -1370,7 +1373,8 @@ inference boundary. Milestone 8 should not be closed until the inference crate
 defines whether these lifecycle phases stay hidden inside backend adapters or
 become explicit request lifecycle facts/errors for diagnostics-ledger consumers.
 Derived `BackendRequestLifecycleFacts` now records the current static behavior;
-workflow-facing projection and any request-scoped event stream remain pending.
+workflow-facing projection is implemented. A request-scoped event stream remains
+pending.
 
 ### Milestone 9: Bind PyTorch Through Transformers
 

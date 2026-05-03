@@ -18,14 +18,16 @@ use pantograph_workflow_service::{
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
     WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
     WorkflowBackendFeatureCapabilityFacts, WorkflowBackendFeatureSupport, WorkflowBackendHintLabel,
-    WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendTaskCapability,
+    WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendRequestCancellationSemantics,
+    WorkflowBackendRequestCleanupSemantics, WorkflowBackendRequestLifecycleFacts,
+    WorkflowBackendRequestLifecyclePhaseFacts, WorkflowBackendTaskCapability,
     WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowExecutionSessionCreateRequest,
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
-    WorkflowInferenceModality, WorkflowInferenceTaskId, WorkflowIoArtifactQueryRequest,
-    WorkflowIoArtifactQueryResponse, WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest,
-    WorkflowIoResponse, WorkflowLibraryAssetAccessRecordRequest,
+    WorkflowInferenceLifecyclePhase, WorkflowInferenceModality, WorkflowInferenceTaskId,
+    WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
+    WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryAssetAccessRecordRequest,
     WorkflowLibraryAssetAccessRecordResponse, WorkflowLibraryUsageQueryRequest,
     WorkflowLibraryUsageQueryResponse, WorkflowLocalNetworkStatusQueryResponse,
     WorkflowModelArtifactKind, WorkflowNodeStatusQueryRequest, WorkflowNodeStatusQueryResponse,
@@ -112,6 +114,16 @@ impl WorkflowHost for ContractHost {
                         device_selection: WorkflowBackendFeatureSupport::Supported,
                         external_connection: WorkflowBackendFeatureSupport::Supported,
                         kv_cache: WorkflowBackendFeatureSupport::Supported,
+                    },
+                    request_lifecycle: WorkflowBackendRequestLifecycleFacts {
+                        phases: vec![WorkflowBackendRequestLifecyclePhaseFacts {
+                            phase: WorkflowInferenceLifecyclePhase::BackendExecution,
+                            component: WorkflowBackendComponentCapability::BackendManaged,
+                            cancellation: WorkflowBackendRequestCancellationSemantics::DropConsumer,
+                            cleanup: WorkflowBackendRequestCleanupSemantics::DropStream,
+                        }],
+                        kv_cache_publication_cleanup:
+                            WorkflowBackendRequestCleanupSemantics::RollbackPublication,
                     },
                 }),
                 backend_keys: vec!["llamacpp".to_string(), "llama.cpp".to_string()],
@@ -319,6 +331,15 @@ async fn workflow_capabilities_contract_snapshot() {
                     "device_selection": "supported",
                     "external_connection": "supported",
                     "kv_cache": "supported"
+                },
+                "request_lifecycle": {
+                    "phases": [{
+                        "phase": "backend_execution",
+                        "component": "backend_managed",
+                        "cancellation": "drop_consumer",
+                        "cleanup": "drop_stream"
+                    }],
+                    "kv_cache_publication_cleanup": "rollback_publication"
                 }
             },
             "backend_keys": ["llamacpp", "llama.cpp"],
