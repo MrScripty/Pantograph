@@ -5,7 +5,7 @@ use uuid::Uuid;
 use pantograph_diagnostics_ledger::SchedulerModelCacheState;
 
 use crate::graph::WorkflowExecutionSessionKind;
-use crate::technical_fit::WorkflowTechnicalFitOverride;
+use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
 use crate::workflow::{
     WorkflowLocalRunPlacementRecord, WorkflowLocalRunPlacementState, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowRuntimeIssue, WorkflowServiceError,
@@ -57,6 +57,7 @@ pub(crate) struct WorkflowExecutionSessionPreflightCache {
     pub(crate) override_selection: Option<WorkflowTechnicalFitOverride>,
     pub(crate) required_backends: Vec<String>,
     pub(crate) required_models: Vec<String>,
+    pub(crate) technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
     pub(crate) blocking_runtime_issues: Vec<WorkflowRuntimeIssue>,
 }
 

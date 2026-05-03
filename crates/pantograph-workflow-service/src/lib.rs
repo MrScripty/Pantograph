@@ -55,7 +55,8 @@ pub use scheduler::{
     WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotDiagnostics,
 };
 pub use technical_fit::{
-    build_workflow_technical_fit_request, WorkflowTechnicalFitDecision,
+    build_workflow_technical_fit_request, WorkflowTechnicalFitCompatibilityIssue,
+    WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
     WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
 };

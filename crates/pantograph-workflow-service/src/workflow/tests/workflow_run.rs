@@ -115,6 +115,9 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
                     None,
                 ),
             ],
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         },
     );
     let service = WorkflowService::new();

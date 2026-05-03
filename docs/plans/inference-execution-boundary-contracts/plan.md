@@ -2602,6 +2602,14 @@ Update during implementation:
   `enforce_dependency_preflight_with_lifecycle` to PyTorch builds and crate
   tests, preserving direct test coverage without exposing unused symbols to
   non-PyTorch consumers.
+- 2026-05-03: Carried selected backend compatibility summaries through the
+  technical-fit decision path. Runtime-registry decisions now retain the
+  selected candidate's compatibility report and bounded issues, embedded-runtime
+  projects those facts into workflow-service DTOs, and workflow-service keeps
+  the selected decision in the session preflight cache so post-preflight
+  scheduler reservation events can use the selected runtime id. This narrows
+  the diagnostics producer gap while leaving full lifecycle/preflight event
+  emission open for execution paths that have node context.
 
 ## Commit Cadence Notes
 

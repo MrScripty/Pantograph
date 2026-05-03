@@ -11,7 +11,8 @@ use pantograph_runtime_registry::{
 };
 use pantograph_workflow_service::{
     WorkflowHost, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind, WorkflowServiceError, WorkflowTechnicalFitDecision,
+    WorkflowRuntimeSourceKind, WorkflowServiceError, WorkflowTechnicalFitCompatibilityIssue,
+    WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
     WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
     WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
 };
@@ -125,8 +126,43 @@ pub fn project_workflow_technical_fit_decision(
             .iter()
             .map(project_reason)
             .collect::<Vec<_>>(),
+        compatibility_report: decision
+            .compatibility_report
+            .as_ref()
+            .map(project_compatibility_report),
+        compatibility_issue_count: decision.compatibility_issue_count,
+        compatibility_issues: decision
+            .compatibility_issues
+            .iter()
+            .map(project_compatibility_issue)
+            .collect(),
     }
     .normalized()
+}
+
+fn project_compatibility_report(
+    report: &RuntimeTechnicalFitCompatibilityReport,
+) -> WorkflowTechnicalFitCompatibilityReport {
+    WorkflowTechnicalFitCompatibilityReport {
+        status: report.status.clone(),
+        compatible: report.compatible,
+        task: report.task.clone(),
+        model_source: report.model_source.clone(),
+        preprocessing: report.preprocessing.clone(),
+        postprocessing: report.postprocessing.clone(),
+    }
+}
+
+fn project_compatibility_issue(
+    issue: &RuntimeTechnicalFitCompatibilityIssue,
+) -> WorkflowTechnicalFitCompatibilityIssue {
+    WorkflowTechnicalFitCompatibilityIssue {
+        kind: issue.kind.clone(),
+        phase: issue.phase.clone(),
+        message: issue.message.clone(),
+        model_id: issue.model_id.clone(),
+        path: issue.path.clone(),
+    }
 }
 
 fn runtime_capability_candidates(
@@ -744,6 +780,22 @@ mod tests {
                 RuntimeTechnicalFitReasonCode::QueuePressure,
                 Some("candidate-a"),
             )],
+            compatibility_report: Some(RuntimeTechnicalFitCompatibilityReport {
+                status: "rejected".to_string(),
+                compatible: false,
+                task: "supported".to_string(),
+                model_source: "unsupported".to_string(),
+                preprocessing: "supported".to_string(),
+                postprocessing: "supported".to_string(),
+            }),
+            compatibility_issue_count: 1,
+            compatibility_issues: vec![RuntimeTechnicalFitCompatibilityIssue {
+                kind: "unsupported_model_artifact".to_string(),
+                phase: "model_package_resolution".to_string(),
+                message: "backend cannot load artifact".to_string(),
+                model_id: Some("model-a".to_string()),
+                path: Some("model.gguf".to_string()),
+            }],
         };
 
         let projected = project_workflow_technical_fit_decision(&decision);
@@ -759,6 +811,22 @@ mod tests {
                 reasons: vec![WorkflowTechnicalFitReason {
                     code: WorkflowTechnicalFitReasonCode::QueuePressure,
                     candidate_id: Some("candidate-a".to_string()),
+                }],
+                compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {
+                    status: "rejected".to_string(),
+                    compatible: false,
+                    task: "supported".to_string(),
+                    model_source: "unsupported".to_string(),
+                    preprocessing: "supported".to_string(),
+                    postprocessing: "supported".to_string(),
+                }),
+                compatibility_issue_count: 1,
+                compatibility_issues: vec![WorkflowTechnicalFitCompatibilityIssue {
+                    kind: "unsupported_model_artifact".to_string(),
+                    phase: "model_package_resolution".to_string(),
+                    message: "backend cannot load artifact".to_string(),
+                    model_id: Some("model-a".to_string()),
+                    path: Some("model.gguf".to_string()),
                 }],
             }
         );
@@ -804,6 +872,9 @@ mod tests {
                     code: WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,
                     candidate_id: Some("llama_cpp".to_string()),
                 }],
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             }
         );
     }
@@ -1099,5 +1170,21 @@ mod tests {
             Some("llm/llama/tiny-gguf")
         );
         assert_eq!(decision.selected_backend_key.as_deref(), Some("llama_cpp"));
+        assert_eq!(
+            decision
+                .compatibility_report
+                .as_ref()
+                .map(|report| report.status.as_str()),
+            Some("accepted")
+        );
+
+        let workflow_decision = project_workflow_technical_fit_decision(&decision);
+        assert_eq!(
+            workflow_decision
+                .compatibility_report
+                .as_ref()
+                .map(|report| report.status.as_str()),
+            Some("accepted")
+        );
     }
 }

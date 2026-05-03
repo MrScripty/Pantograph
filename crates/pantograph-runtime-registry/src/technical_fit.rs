@@ -330,6 +330,12 @@ pub struct RuntimeTechnicalFitDecision {
     pub selected_model_id: Option<String>,
     #[serde(default)]
     pub reasons: Vec<RuntimeTechnicalFitReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compatibility_report: Option<RuntimeTechnicalFitCompatibilityReport>,
+    #[serde(default)]
+    pub compatibility_issue_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compatibility_issues: Vec<RuntimeTechnicalFitCompatibilityIssue>,
 }
 
 impl RuntimeTechnicalFitDecision {
@@ -341,6 +347,16 @@ impl RuntimeTechnicalFitDecision {
             selected_backend_key: normalize_backend_key(self.selected_backend_key.as_deref()),
             selected_model_id: normalize_trimmed_string(self.selected_model_id.as_deref()),
             reasons: self.reasons.clone(),
+            compatibility_report: self
+                .compatibility_report
+                .as_ref()
+                .map(RuntimeTechnicalFitCompatibilityReport::normalized),
+            compatibility_issue_count: self.compatibility_issue_count,
+            compatibility_issues: self
+                .compatibility_issues
+                .iter()
+                .map(RuntimeTechnicalFitCompatibilityIssue::normalized)
+                .collect(),
         }
     }
 }
@@ -510,6 +526,9 @@ pub fn select_runtime_technical_fit(
             selected_backend_key: None,
             selected_model_id: None,
             reasons,
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         }
         .normalized()
     }
@@ -621,6 +640,9 @@ fn decision_from_candidate(
         selected_backend_key: candidate.backend_key.clone(),
         selected_model_id: candidate.model_id.clone(),
         reasons,
+        compatibility_report: candidate.compatibility_report.clone(),
+        compatibility_issue_count: candidate.compatibility_issue_count,
+        compatibility_issues: candidate.compatibility_issues.clone(),
     }
     .normalized()
 }

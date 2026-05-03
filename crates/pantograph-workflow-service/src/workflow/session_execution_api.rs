@@ -24,7 +24,7 @@ use crate::graph::{
     WorkflowExecutionSessionKind, WorkflowGraph, WorkflowGraphRunSettings,
 };
 use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
-use crate::technical_fit::WorkflowTechnicalFitOverride;
+use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
 
 use super::diagnostic_errors::{
     WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticRunContext, WorkflowDiagnosticRunScope,
@@ -330,7 +330,7 @@ impl WorkflowService {
             run_snapshot.as_ref(),
             &queued_run,
         )?;
-        let reservation_context = scheduler_reservation_context(
+        let mut reservation_context = scheduler_reservation_context(
             run_snapshot.as_ref(),
             &queued_run.required_backends,
             &queued_run.required_models,
@@ -398,6 +398,10 @@ impl WorkflowService {
                 return terminal_result;
             }
         };
+        apply_technical_fit_to_reservation_context(
+            &mut reservation_context,
+            preflight_cache.technical_fit_decision.as_ref(),
+        );
         let required_backends = preflight_cache.required_backends.clone();
         let required_models = preflight_cache.required_models.clone();
 
@@ -2036,6 +2040,21 @@ fn scheduler_reservation_context(
         selected_runtime_id,
         reserved_model_ids,
     })
+}
+
+fn apply_technical_fit_to_reservation_context(
+    context: &mut SchedulerReservationContext,
+    technical_fit_decision: Option<&WorkflowTechnicalFitDecision>,
+) {
+    let Some(selected_runtime_id) = technical_fit_decision
+        .and_then(|decision| decision.selected_runtime_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return;
+    };
+
+    context.selected_runtime_id = Some(selected_runtime_id.to_string());
 }
 
 fn scheduler_runtime_slot_reservation_id(workflow_run_id: &WorkflowRunId) -> String {

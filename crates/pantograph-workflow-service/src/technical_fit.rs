@@ -169,6 +169,57 @@ impl WorkflowTechnicalFitReason {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
+pub struct WorkflowTechnicalFitCompatibilityReport {
+    pub status: String,
+    pub compatible: bool,
+    pub task: String,
+    pub model_source: String,
+    pub preprocessing: String,
+    pub postprocessing: String,
+}
+
+impl WorkflowTechnicalFitCompatibilityReport {
+    pub fn normalized(&self) -> Self {
+        Self {
+            status: normalize_trimmed_string(Some(self.status.as_str())).unwrap_or_default(),
+            compatible: self.compatible,
+            task: normalize_trimmed_string(Some(self.task.as_str())).unwrap_or_default(),
+            model_source: normalize_trimmed_string(Some(self.model_source.as_str()))
+                .unwrap_or_default(),
+            preprocessing: normalize_trimmed_string(Some(self.preprocessing.as_str()))
+                .unwrap_or_default(),
+            postprocessing: normalize_trimmed_string(Some(self.postprocessing.as_str()))
+                .unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowTechnicalFitCompatibilityIssue {
+    pub kind: String,
+    pub phase: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+impl WorkflowTechnicalFitCompatibilityIssue {
+    pub fn normalized(&self) -> Self {
+        Self {
+            kind: normalize_trimmed_string(Some(self.kind.as_str())).unwrap_or_default(),
+            phase: normalize_trimmed_string(Some(self.phase.as_str())).unwrap_or_default(),
+            message: normalize_trimmed_string(Some(self.message.as_str())).unwrap_or_default(),
+            model_id: normalize_trimmed_string(self.model_id.as_deref()),
+            path: normalize_trimmed_string(self.path.as_deref()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
 pub struct WorkflowTechnicalFitDecision {
     #[serde(default)]
     pub selection_mode: WorkflowTechnicalFitSelectionMode,
@@ -182,6 +233,12 @@ pub struct WorkflowTechnicalFitDecision {
     pub selected_model_id: Option<String>,
     #[serde(default)]
     pub reasons: Vec<WorkflowTechnicalFitReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compatibility_report: Option<WorkflowTechnicalFitCompatibilityReport>,
+    #[serde(default)]
+    pub compatibility_issue_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compatibility_issues: Vec<WorkflowTechnicalFitCompatibilityIssue>,
 }
 
 impl WorkflowTechnicalFitDecision {
@@ -193,6 +250,16 @@ impl WorkflowTechnicalFitDecision {
             selected_backend_key: normalize_backend_key(self.selected_backend_key.as_deref()),
             selected_model_id: normalize_trimmed_string(self.selected_model_id.as_deref()),
             reasons: self.reasons.clone(),
+            compatibility_report: self
+                .compatibility_report
+                .as_ref()
+                .map(WorkflowTechnicalFitCompatibilityReport::normalized),
+            compatibility_issue_count: self.compatibility_issue_count,
+            compatibility_issues: self
+                .compatibility_issues
+                .iter()
+                .map(WorkflowTechnicalFitCompatibilityIssue::normalized)
+                .collect(),
         }
     }
 }
@@ -657,6 +724,22 @@ mod tests {
                 WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,
                 Some(" candidate-a "),
             )],
+            compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {
+                status: " rejected ".to_string(),
+                compatible: false,
+                task: " supported ".to_string(),
+                model_source: " unsupported ".to_string(),
+                preprocessing: " supported ".to_string(),
+                postprocessing: " supported ".to_string(),
+            }),
+            compatibility_issue_count: 1,
+            compatibility_issues: vec![WorkflowTechnicalFitCompatibilityIssue {
+                kind: " unsupported_model_artifact ".to_string(),
+                phase: " model_package_resolution ".to_string(),
+                message: " backend cannot load artifact ".to_string(),
+                model_id: Some(" model-a ".to_string()),
+                path: Some(" model.gguf ".to_string()),
+            }],
         };
 
         let normalized = decision.normalized();
@@ -677,6 +760,22 @@ mod tests {
                 code: WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,
                 candidate_id: Some("candidate-a".to_string()),
             }]
+        );
+        assert_eq!(
+            normalized
+                .compatibility_report
+                .as_ref()
+                .map(|report| (report.status.as_str(), report.model_source.as_str())),
+            Some(("rejected", "unsupported"))
+        );
+        assert_eq!(normalized.compatibility_issue_count, 1);
+        assert_eq!(
+            normalized.compatibility_issues[0].kind,
+            "unsupported_model_artifact"
+        );
+        assert_eq!(
+            normalized.compatibility_issues[0].model_id.as_deref(),
+            Some("model-a")
         );
     }
 }

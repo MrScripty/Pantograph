@@ -196,6 +196,9 @@ async fn keep_alive_session_create_blocks_when_runtime_preflight_fails() {
                 WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 None,
             )],
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         },
     );
     let service = WorkflowService::with_max_sessions(1);
@@ -240,6 +243,9 @@ async fn keep_alive_enable_blocks_when_runtime_preflight_fails() {
                 WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 None,
             )],
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         },
     );
     let service = WorkflowService::with_max_sessions(1);

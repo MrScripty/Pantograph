@@ -150,6 +150,22 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
             RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
             Some(" candidate-1 "),
         )],
+        compatibility_report: Some(RuntimeTechnicalFitCompatibilityReport {
+            status: " rejected ".to_string(),
+            compatible: false,
+            task: " supported ".to_string(),
+            model_source: " unsupported ".to_string(),
+            preprocessing: " supported ".to_string(),
+            postprocessing: " supported ".to_string(),
+        }),
+        compatibility_issue_count: 1,
+        compatibility_issues: vec![RuntimeTechnicalFitCompatibilityIssue {
+            kind: " unsupported_model_artifact ".to_string(),
+            phase: " model_package_resolution ".to_string(),
+            message: " backend cannot load artifact ".to_string(),
+            model_id: Some(" model-a ".to_string()),
+            path: Some(" model.gguf ".to_string()),
+        }],
     };
 
     let normalized = decision.normalized();
@@ -170,6 +186,22 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
             code: RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
             candidate_id: Some("candidate-1".to_string()),
         }]
+    );
+    assert_eq!(
+        normalized
+            .compatibility_report
+            .as_ref()
+            .map(|report| (report.status.as_str(), report.model_source.as_str())),
+        Some(("rejected", "unsupported"))
+    );
+    assert_eq!(normalized.compatibility_issue_count, 1);
+    assert_eq!(
+        normalized.compatibility_issues[0].kind,
+        "unsupported_model_artifact"
+    );
+    assert_eq!(
+        normalized.compatibility_issues[0].model_id.as_deref(),
+        Some("model-a")
     );
 }
 
@@ -244,6 +276,9 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 code: RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
                 candidate_id: Some("runtime-b".to_string()),
             }],
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         }
     );
 }

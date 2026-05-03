@@ -1,4 +1,5 @@
 use super::*;
+use crate::WorkflowTechnicalFitCompatibilityReport;
 
 #[tokio::test]
 async fn workflow_preflight_reports_missing_required_inputs_and_invalid_targets() {
@@ -100,6 +101,16 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
                 WorkflowTechnicalFitReasonCode::ConservativeFallback,
                 Some("llama_cpp"),
             )],
+            compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {
+                status: "accepted".to_string(),
+                compatible: true,
+                task: "supported".to_string(),
+                model_source: "supported".to_string(),
+                preprocessing: "supported".to_string(),
+                postprocessing: "supported".to_string(),
+            }),
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         },
     );
     let service = WorkflowService::new();
@@ -137,6 +148,16 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
                 code: WorkflowTechnicalFitReasonCode::ConservativeFallback,
                 candidate_id: Some("llama_cpp".to_string()),
             }],
+            compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {
+                status: "accepted".to_string(),
+                compatible: true,
+                task: "supported".to_string(),
+                model_source: "supported".to_string(),
+                preprocessing: "supported".to_string(),
+                postprocessing: "supported".to_string(),
+            }),
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         })
     );
     assert!(response.blocking_runtime_issues.is_empty());
@@ -194,6 +215,9 @@ async fn workflow_preflight_blocks_selected_technical_fit_runtime_when_capabilit
                 WorkflowTechnicalFitReasonCode::ConservativeFallback,
                 Some("llama_cpp"),
             )],
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         },
     );
     let service = WorkflowService::new();
