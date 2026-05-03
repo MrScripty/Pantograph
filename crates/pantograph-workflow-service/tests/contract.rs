@@ -25,6 +25,7 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
+    WorkflowInferenceExecutionInputKind, WorkflowInferenceExecutionResultKind,
     WorkflowInferenceLifecyclePhase, WorkflowInferenceModality, WorkflowInferenceTaskId,
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
     WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryAssetAccessRecordRequest,
@@ -40,9 +41,10 @@ use pantograph_workflow_service::{
     WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
     WorkflowServiceError, WorkflowSupportTier, WorkflowTaskModalitySignature,
-    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowTaskRequestContract, WorkflowTaskStreamingSupport, WorkflowTraceNodeRecord,
+    WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
+    WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -101,6 +103,15 @@ impl WorkflowHost for ContractHost {
                             inputs: vec![WorkflowInferenceModality::Text],
                             outputs: vec![WorkflowInferenceModality::Embedding],
                         },
+                        request_contract: Some(WorkflowTaskRequestContract {
+                            task_id: WorkflowInferenceTaskId::Embedding,
+                            input_kind: WorkflowInferenceExecutionInputKind::Embedding,
+                            result_kind: WorkflowInferenceExecutionResultKind::Embedding,
+                            execution_supported: true,
+                            streaming_support: WorkflowTaskStreamingSupport::Unsupported,
+                            required_input_modalities: vec![WorkflowInferenceModality::Text],
+                            output_modalities: vec![WorkflowInferenceModality::Embedding],
+                        }),
                     }],
                     preprocessing: WorkflowBackendComponentCapability::RequiresPackageComponent,
                     postprocessing: WorkflowBackendComponentCapability::NotRequired,
@@ -317,6 +328,15 @@ async fn workflow_capabilities_contract_snapshot() {
                     "modality_signature": {
                         "inputs": ["text"],
                         "outputs": ["embedding"]
+                    },
+                    "request_contract": {
+                        "task_id": "embedding",
+                        "input_kind": "embedding",
+                        "result_kind": "embedding",
+                        "execution_supported": true,
+                        "streaming_support": "unsupported",
+                        "required_input_modalities": ["text"],
+                        "output_modalities": ["embedding"]
                     }
                 }],
                 "preprocessing": "requires_package_component",

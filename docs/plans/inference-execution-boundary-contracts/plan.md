@@ -1154,8 +1154,11 @@ The first neighboring node-engine consumer slice now uses the exported
 the text-generation typed request path. Text/chat aliases still map to the text
 payload contract, while embedding and image-generation task aliases are rejected
 because their registry contracts require different input payload families.
-Workflow-service capability projection and node-engine result projection still
-need equivalent contract-driven cleanup.
+Workflow-service backend task capability DTOs now carry optional
+`WorkflowTaskRequestContract` payload metadata, and embedded-runtime projects
+that metadata from inference backend task facts into workflow runtime
+capabilities. Node-engine result projection still needs equivalent
+contract-driven cleanup.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2340,6 +2343,10 @@ Update during implementation:
   builder to consume `TaskRequestContract` input payload metadata instead of a
   hard-coded text/chat task allowlist, with regression coverage for embedding
   and text-to-image aliases.
+- 2026-05-03: Added workflow-service and embedded-runtime projection of
+  inference task request/result contracts into runtime capability DTOs, keeping
+  the projection as workflow-visible facts rather than scheduler/runtime
+  selection policy.
 - 2026-05-03: Expanded the typed text/chat generation edge mapping so
   `sampling.top_p` and `sampling.top_k` travel with `max_new_tokens` and
   `temperature` through `ChatRequest` and `InferenceGateway::execute_typed`

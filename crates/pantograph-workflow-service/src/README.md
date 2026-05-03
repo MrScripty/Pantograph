@@ -110,6 +110,11 @@ Local Network status now carries scheduler-owned run placement plus typed
 model-cache posture through workflow-service DTOs so adapters can render
 selected-run Network facts without reconstructing scheduler or diagnostics
 payload state.
+Workflow backend task capability DTOs now carry optional
+`WorkflowTaskRequestContract` payload metadata projected from backend facts.
+The contract describes task input/result families and executable versus
+contract-only status without encoding runtime selection, scheduler admission, or
+backend residency policy.
 Artifact format metadata now includes optional typed conversion status,
 conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through

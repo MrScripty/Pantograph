@@ -118,6 +118,7 @@ pub use workflow::{
     WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
     WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
     WorkflowHostCapabilities, WorkflowHostModelDescriptor, WorkflowIdentity, WorkflowIdentityError,
+    WorkflowInferenceExecutionInputKind, WorkflowInferenceExecutionResultKind,
     WorkflowInferenceLifecyclePhase, WorkflowInferenceModality, WorkflowInferenceTaskId,
     WorkflowInputTarget, WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse,
     WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse,
@@ -150,7 +151,8 @@ pub use workflow::{
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
     WorkflowServiceError, WorkflowSupportTier, WorkflowTaskModalitySignature,
-    WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    WorkflowTaskRequestContract, WorkflowTaskStreamingSupport, WorkflowVersionRecord,
+    WorkflowVersionResolveRequest,
 };
 pub use workflow::{
     IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,

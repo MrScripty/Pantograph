@@ -15,10 +15,12 @@ use pantograph_workflow_service::{
     WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendRequestCancellationSemantics,
     WorkflowBackendRequestCleanupSemantics, WorkflowBackendRequestLifecycleFacts,
     WorkflowBackendRequestLifecyclePhaseFacts, WorkflowBackendTaskCapability,
-    WorkflowCapabilitiesResponse, WorkflowInferenceLifecyclePhase, WorkflowInferenceModality,
-    WorkflowInferenceTaskId, WorkflowModelArtifactKind, WorkflowRuntimeCapability,
-    WorkflowRuntimeInstallState, WorkflowRuntimeReadinessState, WorkflowRuntimeSourceKind,
-    WorkflowSupportTier, WorkflowTaskModalitySignature,
+    WorkflowCapabilitiesResponse, WorkflowInferenceExecutionInputKind,
+    WorkflowInferenceExecutionResultKind, WorkflowInferenceLifecyclePhase,
+    WorkflowInferenceModality, WorkflowInferenceTaskId, WorkflowModelArtifactKind,
+    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeReadinessState,
+    WorkflowRuntimeSourceKind, WorkflowSupportTier, WorkflowTaskModalitySignature,
+    WorkflowTaskRequestContract, WorkflowTaskStreamingSupport,
 };
 
 pub fn managed_runtime_capabilities(
@@ -366,6 +368,8 @@ fn project_backend_capability_facts(
                         .map(workflow_modality)
                         .collect(),
                 },
+                request_contract: inference::TaskRequestContract::for_task(&task.task_id)
+                    .map(|contract| workflow_task_request_contract(&contract)),
             })
             .collect(),
         preprocessing: workflow_component_capability(facts.preprocessing),
@@ -557,6 +561,103 @@ fn workflow_support_tier(tier: &inference::SupportTier) -> WorkflowSupportTier {
         inference::SupportTier::Roadmap => WorkflowSupportTier::Roadmap,
         inference::SupportTier::Unsupported => WorkflowSupportTier::Unsupported,
         inference::SupportTier::Unknown => WorkflowSupportTier::Unknown,
+    }
+}
+
+fn workflow_task_request_contract(
+    contract: &inference::TaskRequestContract,
+) -> WorkflowTaskRequestContract {
+    WorkflowTaskRequestContract {
+        task_id: workflow_task_id(&contract.task_id),
+        input_kind: workflow_input_kind(contract.input_kind),
+        result_kind: workflow_result_kind(contract.result_kind),
+        execution_supported: contract.execution_supported,
+        streaming_support: workflow_task_streaming_support(&contract.streaming_support),
+        required_input_modalities: contract
+            .required_input_modalities
+            .iter()
+            .map(workflow_modality)
+            .collect(),
+        output_modalities: contract
+            .output_modalities
+            .iter()
+            .map(workflow_modality)
+            .collect(),
+    }
+}
+
+fn workflow_input_kind(
+    kind: inference::InferenceExecutionInputKind,
+) -> WorkflowInferenceExecutionInputKind {
+    match kind {
+        inference::InferenceExecutionInputKind::TextGeneration => {
+            WorkflowInferenceExecutionInputKind::TextGeneration
+        }
+        inference::InferenceExecutionInputKind::Embedding => {
+            WorkflowInferenceExecutionInputKind::Embedding
+        }
+        inference::InferenceExecutionInputKind::Rerank => {
+            WorkflowInferenceExecutionInputKind::Rerank
+        }
+        inference::InferenceExecutionInputKind::ImageGeneration => {
+            WorkflowInferenceExecutionInputKind::ImageGeneration
+        }
+        inference::InferenceExecutionInputKind::ImageUnderstanding => {
+            WorkflowInferenceExecutionInputKind::ImageUnderstanding
+        }
+        inference::InferenceExecutionInputKind::AudioTranscription => {
+            WorkflowInferenceExecutionInputKind::AudioTranscription
+        }
+        inference::InferenceExecutionInputKind::VideoUnderstanding => {
+            WorkflowInferenceExecutionInputKind::VideoUnderstanding
+        }
+        inference::InferenceExecutionInputKind::MultimodalGeneration => {
+            WorkflowInferenceExecutionInputKind::MultimodalGeneration
+        }
+    }
+}
+
+fn workflow_result_kind(
+    kind: inference::InferenceExecutionResultKind,
+) -> WorkflowInferenceExecutionResultKind {
+    match kind {
+        inference::InferenceExecutionResultKind::TextGeneration => {
+            WorkflowInferenceExecutionResultKind::TextGeneration
+        }
+        inference::InferenceExecutionResultKind::Embedding => {
+            WorkflowInferenceExecutionResultKind::Embedding
+        }
+        inference::InferenceExecutionResultKind::Rerank => {
+            WorkflowInferenceExecutionResultKind::Rerank
+        }
+        inference::InferenceExecutionResultKind::ImageGeneration => {
+            WorkflowInferenceExecutionResultKind::ImageGeneration
+        }
+        inference::InferenceExecutionResultKind::ImageUnderstanding => {
+            WorkflowInferenceExecutionResultKind::ImageUnderstanding
+        }
+        inference::InferenceExecutionResultKind::AudioTranscription => {
+            WorkflowInferenceExecutionResultKind::AudioTranscription
+        }
+        inference::InferenceExecutionResultKind::VideoUnderstanding => {
+            WorkflowInferenceExecutionResultKind::VideoUnderstanding
+        }
+        inference::InferenceExecutionResultKind::MultimodalGeneration => {
+            WorkflowInferenceExecutionResultKind::MultimodalGeneration
+        }
+    }
+}
+
+fn workflow_task_streaming_support(
+    support: &inference::TaskStreamingSupport,
+) -> WorkflowTaskStreamingSupport {
+    match support {
+        inference::TaskStreamingSupport::Supported => WorkflowTaskStreamingSupport::Supported,
+        inference::TaskStreamingSupport::Unsupported => WorkflowTaskStreamingSupport::Unsupported,
+        inference::TaskStreamingSupport::BackendDependent => {
+            WorkflowTaskStreamingSupport::BackendDependent
+        }
+        inference::TaskStreamingSupport::Unknown => WorkflowTaskStreamingSupport::Unknown,
     }
 }
 
@@ -1019,6 +1120,23 @@ mod tests {
         assert_eq!(
             facts.tasks[0].modality_signature.outputs,
             vec![WorkflowInferenceModality::Embedding]
+        );
+        let request_contract = facts.tasks[0]
+            .request_contract
+            .as_ref()
+            .expect("task request contract should be projected");
+        assert_eq!(
+            request_contract.input_kind,
+            WorkflowInferenceExecutionInputKind::Embedding
+        );
+        assert_eq!(
+            request_contract.result_kind,
+            WorkflowInferenceExecutionResultKind::Embedding
+        );
+        assert!(request_contract.execution_supported);
+        assert_eq!(
+            request_contract.streaming_support,
+            WorkflowTaskStreamingSupport::Unsupported
         );
         assert_eq!(
             facts.features.kv_cache,

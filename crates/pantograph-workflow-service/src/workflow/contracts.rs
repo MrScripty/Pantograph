@@ -209,6 +209,60 @@ pub struct WorkflowBackendTaskCapability {
     #[serde(default)]
     pub support_tier: WorkflowSupportTier,
     pub modality_signature: WorkflowTaskModalitySignature,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_contract: Option<WorkflowTaskRequestContract>,
+}
+
+/// Workflow-owned projection of the canonical task request/result payload
+/// contract. This describes task semantics, not runtime selection policy.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowTaskRequestContract {
+    pub task_id: WorkflowInferenceTaskId,
+    pub input_kind: WorkflowInferenceExecutionInputKind,
+    pub result_kind: WorkflowInferenceExecutionResultKind,
+    pub execution_supported: bool,
+    pub streaming_support: WorkflowTaskStreamingSupport,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_input_modalities: Vec<WorkflowInferenceModality>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_modalities: Vec<WorkflowInferenceModality>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowInferenceExecutionInputKind {
+    TextGeneration,
+    Embedding,
+    Rerank,
+    ImageGeneration,
+    ImageUnderstanding,
+    AudioTranscription,
+    VideoUnderstanding,
+    MultimodalGeneration,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowInferenceExecutionResultKind {
+    TextGeneration,
+    Embedding,
+    Rerank,
+    ImageGeneration,
+    ImageUnderstanding,
+    AudioTranscription,
+    VideoUnderstanding,
+    MultimodalGeneration,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowTaskStreamingSupport {
+    Supported,
+    Unsupported,
+    BackendDependent,
+    #[default]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
