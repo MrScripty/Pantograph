@@ -2610,6 +2610,10 @@ Update during implementation:
   scheduler reservation events can use the selected runtime id. This narrows
   the diagnostics producer gap while leaving full lifecycle/preflight event
   emission open for execution paths that have node context.
+- 2026-05-03: Extended scheduler model-lifecycle diagnostics to use the
+  post-preflight selected runtime id when technical-fit has chosen a concrete
+  runtime, instead of continuing to infer runtime identity only from required
+  backend strings.
 
 ## Commit Cadence Notes
 

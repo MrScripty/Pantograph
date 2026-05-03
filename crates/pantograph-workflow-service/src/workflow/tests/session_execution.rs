@@ -199,7 +199,24 @@ async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_id
 
 #[tokio::test]
 async fn workflow_execution_session_run_records_snapshot_before_execution() {
-    let host = MockWorkflowHost::new(8, 1024);
+    let host = MockWorkflowHost::with_technical_fit_decision(
+        8,
+        1024,
+        WorkflowTechnicalFitDecision {
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+            selected_candidate_id: Some("candidate-managed-llama".to_string()),
+            selected_runtime_id: Some("managed-llama-slot".to_string()),
+            selected_backend_key: Some("llama_cpp".to_string()),
+            selected_model_id: Some("model-a".to_string()),
+            reasons: vec![WorkflowTechnicalFitReason::new(
+                WorkflowTechnicalFitReasonCode::RuntimeRequirements,
+                Some("candidate-managed-llama"),
+            )],
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        },
+    );
     let service = WorkflowService::with_max_sessions(2)
         .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"))
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
@@ -515,9 +532,14 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .as_ref()
         .map(|id| id.as_str())
         == Some(response.workflow_run_id.as_str())));
-    assert!(reservation_events
-        .iter()
-        .all(|event| event.runtime_id.as_deref() == Some("llama_cpp")));
+    assert_eq!(
+        reservation_events[0].runtime_id.as_deref(),
+        Some("llama_cpp")
+    );
+    assert_eq!(
+        reservation_events[1].runtime_id.as_deref(),
+        Some("managed-llama-slot")
+    );
     assert!(reservation_events.iter().all(|event| event
         .payload_json
         .contains("\"resource_kind\":\"runtime_slot\"")));
@@ -576,7 +598,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .all(|event| event.model_id.as_deref() == Some("model-a")));
     assert!(model_lifecycle_events
         .iter()
-        .all(|event| event.runtime_id.as_deref() == Some("llama_cpp")));
+        .all(|event| event.runtime_id.as_deref() == Some("managed-llama-slot")));
     assert!(model_lifecycle_events[0].event_seq > started_event.event_seq);
     assert!(model_lifecycle_events[0]
         .payload_json
@@ -630,6 +652,9 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(reservation_events[1]
         .payload_json
         .contains("\"transition\":\"released\""));
+    assert!(reservation_events[1]
+        .payload_json
+        .contains("\"selected_runtime_id\":\"managed-llama-slot\""));
     assert!(reservation_events[1]
         .payload_json
         .contains("\"reason\":\"workflow run finished\""));

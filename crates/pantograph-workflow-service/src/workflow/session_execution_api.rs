@@ -57,6 +57,7 @@ struct SchedulerModelLifecycleEventRequest<'a> {
     snapshot: Option<&'a WorkflowRunSnapshotRecord>,
     workflow_run_id: &'a str,
     workflow_semantic_version: &'a str,
+    selected_runtime_id: Option<&'a str>,
     required_backends: &'a [String],
     required_models: &'a [String],
     transition: SchedulerModelLifecycleTransition,
@@ -412,6 +413,7 @@ impl WorkflowService {
                 snapshot: run_snapshot.as_ref(),
                 workflow_run_id: &workflow_run_id,
                 workflow_semantic_version: &queued_workflow_semantic_version,
+                selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
                 required_backends: &required_backends,
                 required_models: &required_models,
                 transition: SchedulerModelLifecycleTransition::LoadRequested,
@@ -442,6 +444,7 @@ impl WorkflowService {
                     snapshot: run_snapshot.as_ref(),
                     workflow_run_id: &workflow_run_id,
                     workflow_semantic_version: &queued_workflow_semantic_version,
+                    selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::LoadDependencyResolved,
@@ -473,6 +476,7 @@ impl WorkflowService {
                     snapshot: run_snapshot.as_ref(),
                     workflow_run_id: &workflow_run_id,
                     workflow_semantic_version: &queued_workflow_semantic_version,
+                    selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::LoadFailed,
@@ -560,6 +564,7 @@ impl WorkflowService {
                     snapshot: run_snapshot.as_ref(),
                     workflow_run_id: &workflow_run_id,
                     workflow_semantic_version: &queued_workflow_semantic_version,
+                    selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadScheduled,
@@ -576,6 +581,7 @@ impl WorkflowService {
                     snapshot: run_snapshot.as_ref(),
                     workflow_run_id: &workflow_run_id,
                     workflow_semantic_version: &queued_workflow_semantic_version,
+                    selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadStarted,
@@ -601,6 +607,7 @@ impl WorkflowService {
                         snapshot: run_snapshot.as_ref(),
                         workflow_run_id: &workflow_run_id,
                         workflow_semantic_version: &queued_workflow_semantic_version,
+                        selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
                         required_backends: &required_backends,
                         required_models: &required_models,
                         transition: SchedulerModelLifecycleTransition::UnloadCompleted,
@@ -618,6 +625,7 @@ impl WorkflowService {
                             snapshot: run_snapshot.as_ref(),
                             workflow_run_id: &workflow_run_id,
                             workflow_semantic_version: &queued_workflow_semantic_version,
+                            selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
                             required_backends: &required_backends,
                             required_models: &required_models,
                             transition: SchedulerModelLifecycleTransition::UnloadFailed,
@@ -1177,7 +1185,10 @@ impl WorkflowService {
         let workflow_run_id = WorkflowRunId::try_from(request.workflow_run_id.to_string())?;
         let workflow_id = workflow_id_for_scheduler_event(request.session, request.snapshot)?;
         let occurred_at_ms = unix_timestamp_ms() as i64;
-        let runtime_id = request.required_backends.first().cloned();
+        let runtime_id = request
+            .selected_runtime_id
+            .map(str::to_string)
+            .or_else(|| request.required_backends.first().cloned());
 
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
