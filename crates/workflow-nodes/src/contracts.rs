@@ -6,10 +6,13 @@
 
 use pantograph_node_contracts::{
     ComposedInternalEdge, ComposedInternalGraph, ComposedInternalNode, ComposedNodeContract,
-    ComposedPortMapping, ComposedPortMappings, ComposedTracePolicy, NodeAuthoringMetadata,
+    ComposedPortMapping, ComposedPortMappings, ComposedTracePolicy,
+    ContractInferenceExecutionInputKind, ContractInferenceExecutionResultKind,
+    ContractInferenceModality, ContractInferenceStreamingSupport, ContractInferenceTaskId,
+    InferencePortPayloadContract, InferencePortPayloadRole, NodeAuthoringMetadata,
     NodeCapabilityRequirement, NodeCategory, NodeContractError, NodeExecutionSemantics,
-    NodeInstanceId, NodeTypeContract, NodeTypeId, PortCardinality, PortContract, PortId, PortKind,
-    PortRequirement, PortValueType, PortVisibility,
+    NodeInferenceTaskContract, NodeInstanceId, NodeTypeContract, NodeTypeId, PortCardinality,
+    PortContract, PortId, PortKind, PortRequirement, PortValueType, PortVisibility,
 };
 
 pub fn builtin_node_contracts() -> Result<Vec<NodeTypeContract>, NodeContractError> {
@@ -46,7 +49,7 @@ pub fn task_metadata_to_contract(
         .map(|port| port_metadata_to_contract(PortKind::Output, port))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let contract = NodeTypeContract {
+    let mut contract = NodeTypeContract {
         node_type,
         category: convert_category(metadata.category),
         label: metadata.label.clone(),
@@ -55,10 +58,12 @@ pub fn task_metadata_to_contract(
         outputs,
         execution_semantics: convert_execution_semantics(metadata.execution_mode),
         capability_requirements: capability_requirements(metadata),
+        inference_tasks: inference_task_contracts(metadata),
         authoring: authoring_metadata(metadata),
         contract_version: Some("1.0.0".to_string()),
         contract_digest: None,
     };
+    apply_inference_port_payloads(metadata, &mut contract)?;
     contract.validate()?;
     Ok(contract)
 }
@@ -169,9 +174,202 @@ fn port_metadata_to_contract(
         visibility: PortVisibility::Public,
         constraints: Vec::new(),
         editor_hints: Vec::new(),
+        inference_payloads: Vec::new(),
     };
     contract.validate()?;
     Ok(contract)
+}
+
+fn inference_task_contracts(
+    metadata: &node_engine::TaskMetadata,
+) -> Vec<NodeInferenceTaskContract> {
+    if metadata.node_type != "llm-inference" {
+        return Vec::new();
+    }
+
+    vec![
+        inference_task_contract(
+            ContractInferenceTaskId::TextGeneration,
+            ContractInferenceExecutionInputKind::TextGeneration,
+            ContractInferenceExecutionResultKind::TextGeneration,
+            ContractInferenceStreamingSupport::BackendDependent,
+            vec![ContractInferenceModality::Text],
+            vec![ContractInferenceModality::Text],
+        ),
+        inference_task_contract(
+            ContractInferenceTaskId::ChatCompletion,
+            ContractInferenceExecutionInputKind::TextGeneration,
+            ContractInferenceExecutionResultKind::TextGeneration,
+            ContractInferenceStreamingSupport::BackendDependent,
+            vec![ContractInferenceModality::Text],
+            vec![ContractInferenceModality::Text],
+        ),
+        inference_task_contract(
+            ContractInferenceTaskId::Embedding,
+            ContractInferenceExecutionInputKind::Embedding,
+            ContractInferenceExecutionResultKind::Embedding,
+            ContractInferenceStreamingSupport::Unsupported,
+            vec![ContractInferenceModality::Text],
+            vec![ContractInferenceModality::Embedding],
+        ),
+        inference_task_contract(
+            ContractInferenceTaskId::Rerank,
+            ContractInferenceExecutionInputKind::Rerank,
+            ContractInferenceExecutionResultKind::Rerank,
+            ContractInferenceStreamingSupport::Unsupported,
+            vec![
+                ContractInferenceModality::Text,
+                ContractInferenceModality::Json,
+            ],
+            vec![ContractInferenceModality::Json],
+        ),
+    ]
+}
+
+fn inference_task_contract(
+    task_id: ContractInferenceTaskId,
+    input_kind: ContractInferenceExecutionInputKind,
+    result_kind: ContractInferenceExecutionResultKind,
+    streaming_support: ContractInferenceStreamingSupport,
+    required_input_modalities: Vec<ContractInferenceModality>,
+    output_modalities: Vec<ContractInferenceModality>,
+) -> NodeInferenceTaskContract {
+    NodeInferenceTaskContract {
+        task_id,
+        input_kind,
+        result_kind,
+        execution_supported: true,
+        streaming_support,
+        required_input_modalities,
+        output_modalities,
+    }
+}
+
+fn apply_inference_port_payloads(
+    metadata: &node_engine::TaskMetadata,
+    contract: &mut NodeTypeContract,
+) -> Result<(), NodeContractError> {
+    if metadata.node_type != "llm-inference" {
+        return Ok(());
+    }
+
+    for port in &mut contract.inputs {
+        port.inference_payloads = llm_input_payloads(port.id.as_str());
+    }
+    for port in &mut contract.outputs {
+        port.inference_payloads = llm_output_payloads(port.id.as_str());
+    }
+    Ok(())
+}
+
+fn llm_input_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
+    match port_id {
+        "pumas_model_ref" | "resolved_model_source" => task_role_payloads(
+            &llm_supported_task_ids(),
+            InferencePortPayloadRole::ModelReference,
+        ),
+        "generation_options" => task_role_payloads(
+            &[
+                ContractInferenceTaskId::TextGeneration,
+                ContractInferenceTaskId::ChatCompletion,
+            ],
+            InferencePortPayloadRole::Options,
+        ),
+        "task_options" | "inference_settings" => {
+            task_role_payloads(&llm_supported_task_ids(), InferencePortPayloadRole::Options)
+        }
+        "prompt" | "system_prompt" | "context" | "tools" => vec![
+            InferencePortPayloadContract::task_input(
+                ContractInferenceTaskId::TextGeneration,
+                ContractInferenceExecutionInputKind::TextGeneration,
+            ),
+            InferencePortPayloadContract::task_input(
+                ContractInferenceTaskId::ChatCompletion,
+                ContractInferenceExecutionInputKind::TextGeneration,
+            ),
+        ],
+        "text" => vec![InferencePortPayloadContract::task_input(
+            ContractInferenceTaskId::Embedding,
+            ContractInferenceExecutionInputKind::Embedding,
+        )],
+        "query" | "documents" | "documents_json" => {
+            vec![InferencePortPayloadContract::task_input(
+                ContractInferenceTaskId::Rerank,
+                ContractInferenceExecutionInputKind::Rerank,
+            )]
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn llm_output_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
+    match port_id {
+        "model_ref" => task_role_payloads(
+            &llm_supported_task_ids(),
+            InferencePortPayloadRole::ModelReference,
+        ),
+        "metadata" | "diagnostics" => task_role_payloads(
+            &llm_supported_task_ids(),
+            InferencePortPayloadRole::Diagnostics,
+        ),
+        "usage" => task_role_payloads(
+            &[
+                ContractInferenceTaskId::TextGeneration,
+                ContractInferenceTaskId::ChatCompletion,
+            ],
+            InferencePortPayloadRole::Usage,
+        ),
+        "response" | "tool_calls" | "has_tool_calls" | "stream" => {
+            vec![
+                InferencePortPayloadContract::task_output(
+                    ContractInferenceTaskId::TextGeneration,
+                    ContractInferenceExecutionResultKind::TextGeneration,
+                ),
+                InferencePortPayloadContract::task_output(
+                    ContractInferenceTaskId::ChatCompletion,
+                    ContractInferenceExecutionResultKind::TextGeneration,
+                ),
+            ]
+        }
+        "kv_cache_out" => task_role_payloads(
+            &[
+                ContractInferenceTaskId::TextGeneration,
+                ContractInferenceTaskId::ChatCompletion,
+            ],
+            InferencePortPayloadRole::TaskOutput,
+        ),
+        "embedding" => vec![InferencePortPayloadContract::task_output(
+            ContractInferenceTaskId::Embedding,
+            ContractInferenceExecutionResultKind::Embedding,
+        )],
+        "results" | "scores" | "top_document" | "top_score" => {
+            vec![InferencePortPayloadContract::task_output(
+                ContractInferenceTaskId::Rerank,
+                ContractInferenceExecutionResultKind::Rerank,
+            )]
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn task_role_payloads(
+    task_ids: &[ContractInferenceTaskId],
+    role: InferencePortPayloadRole,
+) -> Vec<InferencePortPayloadContract> {
+    task_ids
+        .iter()
+        .copied()
+        .map(|task_id| InferencePortPayloadContract::task_role(task_id, role))
+        .collect()
+}
+
+fn llm_supported_task_ids() -> [ContractInferenceTaskId; 4] {
+    [
+        ContractInferenceTaskId::TextGeneration,
+        ContractInferenceTaskId::ChatCompletion,
+        ContractInferenceTaskId::Embedding,
+        ContractInferenceTaskId::Rerank,
+    ]
 }
 
 fn convert_category(category: node_engine::NodeCategory) -> NodeCategory {
@@ -336,6 +534,70 @@ mod tests {
             .expect("response port");
         assert_eq!(response.kind, PortKind::Output);
         assert_eq!(response.value_type, PortValueType::String);
+    }
+
+    #[test]
+    fn llm_inference_contract_exposes_inference_task_payload_metadata() {
+        let contracts = builtin_node_contracts().expect("canonical contracts");
+        let llm = contracts
+            .iter()
+            .find(|contract| contract.node_type.as_str() == "llm-inference")
+            .expect("llm contract");
+
+        assert!(llm.inference_tasks.iter().any(|task| {
+            task.task_id == ContractInferenceTaskId::TextGeneration
+                && task.input_kind == ContractInferenceExecutionInputKind::TextGeneration
+                && task.result_kind == ContractInferenceExecutionResultKind::TextGeneration
+        }));
+        assert!(llm.inference_tasks.iter().any(|task| {
+            task.task_id == ContractInferenceTaskId::Embedding
+                && task.input_kind == ContractInferenceExecutionInputKind::Embedding
+                && task.result_kind == ContractInferenceExecutionResultKind::Embedding
+        }));
+        assert!(llm.inference_tasks.iter().any(|task| {
+            task.task_id == ContractInferenceTaskId::Rerank
+                && task.input_kind == ContractInferenceExecutionInputKind::Rerank
+                && task.result_kind == ContractInferenceExecutionResultKind::Rerank
+        }));
+
+        let prompt = llm
+            .input(&port_id("prompt").expect("prompt port id"))
+            .unwrap();
+        assert!(prompt.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::TextGeneration
+                && payload.input_kind == Some(ContractInferenceExecutionInputKind::TextGeneration)
+        }));
+
+        let text = llm.input(&port_id("text").expect("text port id")).unwrap();
+        assert!(text.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::Embedding
+                && payload.input_kind == Some(ContractInferenceExecutionInputKind::Embedding)
+        }));
+
+        let pumas_model_ref = llm
+            .input(&port_id("pumas_model_ref").expect("pumas model ref port id"))
+            .unwrap();
+        assert!(pumas_model_ref.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::Embedding
+                && payload.role == InferencePortPayloadRole::ModelReference
+        }));
+
+        let results = llm
+            .output(&port_id("results").expect("results port id"))
+            .unwrap();
+        assert!(results.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::Rerank
+                && payload.result_kind == Some(ContractInferenceExecutionResultKind::Rerank)
+        }));
+
+        let usage = llm
+            .output(&port_id("usage").expect("usage port id"))
+            .unwrap();
+        assert!(usage.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::TextGeneration
+                && payload.role == InferencePortPayloadRole::Usage
+                && payload.result_kind.is_none()
+        }));
     }
 
     #[test]

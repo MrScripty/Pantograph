@@ -23,6 +23,7 @@ fn test_contract() -> NodeTypeContract {
         )],
         execution_semantics: NodeExecutionSemantics::Reactive,
         capability_requirements: vec![NodeCapabilityRequirement::required("llm")],
+        inference_tasks: Vec::new(),
         authoring: NodeAuthoringMetadata::default(),
         contract_version: Some("1.0.0".to_string()),
         contract_digest: None,
@@ -233,6 +234,43 @@ fn contracts_round_trip_as_snake_case_json() {
     assert_eq!(parsed.node_type.as_str(), "llm-inference");
 }
 
+#[test]
+fn inference_task_payload_contracts_round_trip_as_snake_case_json() {
+    let mut contract = test_contract();
+    contract.inference_tasks = vec![NodeInferenceTaskContract {
+        task_id: ContractInferenceTaskId::Embedding,
+        input_kind: ContractInferenceExecutionInputKind::Embedding,
+        result_kind: ContractInferenceExecutionResultKind::Embedding,
+        execution_supported: true,
+        streaming_support: ContractInferenceStreamingSupport::Unsupported,
+        required_input_modalities: vec![ContractInferenceModality::Text],
+        output_modalities: vec![ContractInferenceModality::Embedding],
+    }];
+    contract.inputs[0].inference_payloads = vec![InferencePortPayloadContract::task_input(
+        ContractInferenceTaskId::Embedding,
+        ContractInferenceExecutionInputKind::Embedding,
+    )];
+
+    let value = serde_json::to_value(&contract).expect("serialize");
+
+    assert_eq!(value["inference_tasks"][0]["task_id"], "embedding");
+    assert_eq!(value["inference_tasks"][0]["input_kind"], "embedding");
+    assert_eq!(
+        value["inputs"][0]["inference_payloads"][0]["role"],
+        "task_input"
+    );
+
+    let parsed: NodeTypeContract = serde_json::from_value(value).expect("deserialize");
+    assert_eq!(
+        parsed.inference_tasks[0].result_kind,
+        ContractInferenceExecutionResultKind::Embedding
+    );
+    assert_eq!(
+        parsed.inputs[0].inference_payloads[0].input_kind,
+        Some(ContractInferenceExecutionInputKind::Embedding)
+    );
+}
+
 fn composed_contract() -> ComposedNodeContract {
     ComposedNodeContract {
         external_contract: NodeTypeContract {
@@ -253,6 +291,7 @@ fn composed_contract() -> ComposedNodeContract {
             )],
             execution_semantics: NodeExecutionSemantics::Stream,
             capability_requirements: vec![NodeCapabilityRequirement::required("llm")],
+            inference_tasks: Vec::new(),
             authoring: NodeAuthoringMetadata::default(),
             contract_version: Some("1.0.0".to_string()),
             contract_digest: Some("digest-tool-loop-v1".to_string()),

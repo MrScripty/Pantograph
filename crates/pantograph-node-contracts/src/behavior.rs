@@ -127,6 +127,7 @@ mod tests {
             )],
             execution_semantics: NodeExecutionSemantics::Reactive,
             capability_requirements: vec![NodeCapabilityRequirement::required("llm")],
+            inference_tasks: Vec::new(),
             authoring: NodeAuthoringMetadata::default(),
             contract_version: version.map(ToOwned::to_owned),
             contract_digest: digest.map(ToOwned::to_owned),

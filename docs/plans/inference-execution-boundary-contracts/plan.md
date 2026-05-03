@@ -1164,6 +1164,12 @@ selectors. Node-engine typed result projection now checks the task contract's
 `result_kind` before unpacking text, embedding, or rerank output payloads,
 keeping projection errors tied to canonical request/result semantics while
 preserving the existing graph-visible output shapes.
+Node-contract and workflow-node descriptor projections now also carry
+transport-neutral inference task and port payload metadata for the canonical
+`llm-inference` text/chat, embedding, and rerank families. This makes graph
+authoring and workflow consumers able to inspect request/result families from
+backend-owned contracts while leaving frontend `NodeDefinition` rendering and
+runtime backend selection unchanged.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2391,6 +2397,10 @@ Update during implementation:
   `INFERENCE_LIFECYCLE_SINK` and persist bounded inference lifecycle facts
   through workflow-service diagnostics, with regression coverage against the
   node-status projection.
+- 2026-05-03: Added contract-only inference task and port payload metadata to
+  `pantograph-node-contracts`, then projected `llm-inference` text/chat,
+  embedding, and rerank request/result families from `workflow-nodes` without
+  changing frontend node rendering or runtime backend selection.
 
 ## Commit Cadence Notes
 

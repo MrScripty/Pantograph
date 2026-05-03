@@ -116,5 +116,9 @@ candidates, graph-authoring diagnostics, or saved-workflow migration results.
   regenerating, or rejecting saved workflow artifacts.
 - Effective-contract producers preserve the canonical static contract unless a
   backend-owned resolution reason explains the change.
+- Inference-capable node producers may attach task and port payload metadata to
+  describe graph-visible request/result families. This metadata is
+  transport-neutral authoring information; it does not select a backend,
+  scheduler policy, loaded model, or runtime process.
 - Compatibility diagnostics should be safe to return to GUI, binding, and
   headless clients.

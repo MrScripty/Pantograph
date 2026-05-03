@@ -373,6 +373,8 @@ pub struct PortContract {
     pub constraints: Vec<PortConstraint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub editor_hints: Vec<EditorHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inference_payloads: Vec<InferencePortPayloadContract>,
 }
 
 impl PortContract {
@@ -392,6 +394,7 @@ impl PortContract {
             visibility: PortVisibility::Public,
             constraints: Vec::new(),
             editor_hints: Vec::new(),
+            inference_payloads: Vec::new(),
         }
     }
 
@@ -406,6 +409,7 @@ impl PortContract {
             visibility: PortVisibility::Public,
             constraints: Vec::new(),
             editor_hints: Vec::new(),
+            inference_payloads: Vec::new(),
         }
     }
 
@@ -417,6 +421,143 @@ impl PortContract {
     pub fn validate(&self) -> Result<(), NodeContractError> {
         validate_display_text("port.label", &self.label, MAX_LABEL_LEN)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct InferencePortPayloadContract {
+    pub task_id: ContractInferenceTaskId,
+    pub role: InferencePortPayloadRole,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_kind: Option<ContractInferenceExecutionInputKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_kind: Option<ContractInferenceExecutionResultKind>,
+}
+
+impl InferencePortPayloadContract {
+    pub fn task_role(task_id: ContractInferenceTaskId, role: InferencePortPayloadRole) -> Self {
+        Self {
+            task_id,
+            role,
+            input_kind: None,
+            result_kind: None,
+        }
+    }
+
+    pub fn task_input(
+        task_id: ContractInferenceTaskId,
+        input_kind: ContractInferenceExecutionInputKind,
+    ) -> Self {
+        Self {
+            task_id,
+            role: InferencePortPayloadRole::TaskInput,
+            input_kind: Some(input_kind),
+            result_kind: None,
+        }
+    }
+
+    pub fn task_output(
+        task_id: ContractInferenceTaskId,
+        result_kind: ContractInferenceExecutionResultKind,
+    ) -> Self {
+        Self {
+            task_id,
+            role: InferencePortPayloadRole::TaskOutput,
+            input_kind: None,
+            result_kind: Some(result_kind),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum InferencePortPayloadRole {
+    TaskInput,
+    TaskOutput,
+    ModelReference,
+    Options,
+    Diagnostics,
+    Usage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct NodeInferenceTaskContract {
+    pub task_id: ContractInferenceTaskId,
+    pub input_kind: ContractInferenceExecutionInputKind,
+    pub result_kind: ContractInferenceExecutionResultKind,
+    pub execution_supported: bool,
+    pub streaming_support: ContractInferenceStreamingSupport,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_input_modalities: Vec<ContractInferenceModality>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_modalities: Vec<ContractInferenceModality>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractInferenceTaskId {
+    TextGeneration,
+    ChatCompletion,
+    Embedding,
+    Rerank,
+    ImageGeneration,
+    ImageUnderstanding,
+    AudioTranscription,
+    VideoUnderstanding,
+    MultimodalGeneration,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractInferenceExecutionInputKind {
+    TextGeneration,
+    Embedding,
+    Rerank,
+    ImageGeneration,
+    ImageUnderstanding,
+    AudioTranscription,
+    VideoUnderstanding,
+    MultimodalGeneration,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractInferenceExecutionResultKind {
+    TextGeneration,
+    Embedding,
+    Rerank,
+    ImageGeneration,
+    ImageUnderstanding,
+    AudioTranscription,
+    VideoUnderstanding,
+    MultimodalGeneration,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractInferenceModality {
+    Text,
+    Image,
+    Audio,
+    Video,
+    Embedding,
+    Tokens,
+    Json,
+    PointCloud,
+    Mesh,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractInferenceStreamingSupport {
+    Supported,
+    Unsupported,
+    BackendDependent,
+    #[default]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -433,6 +574,8 @@ pub struct NodeTypeContract {
     pub execution_semantics: NodeExecutionSemantics,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capability_requirements: Vec<NodeCapabilityRequirement>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inference_tasks: Vec<NodeInferenceTaskContract>,
     #[serde(default)]
     pub authoring: NodeAuthoringMetadata,
     #[serde(default, skip_serializing_if = "Option::is_none")]

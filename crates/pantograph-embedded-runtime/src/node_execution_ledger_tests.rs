@@ -370,6 +370,7 @@ fn context() -> NodeExecutionContext {
         )],
         execution_semantics: NodeExecutionSemantics::Batch,
         capability_requirements: vec![NodeCapabilityRequirement::required("llm")],
+        inference_tasks: Vec::new(),
         authoring: NodeAuthoringMetadata::default(),
         contract_version: Some("v1".to_string()),
         contract_digest: Some("digest-a".to_string()),

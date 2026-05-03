@@ -111,6 +111,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   releases.
 - Regeneration/migration: descriptor changes require frontend registry,
   template, saved workflow, and tests updates in the same slice.
+- Inference descriptors publish graph-authoring task and port payload metadata
+  for canonical request/result families. The current `llm-inference`
+  projection annotates text/chat, embedding, and rerank payloads without
+  changing frontend rendering, scheduler policy, or runtime backend selection.
 
 ## Testing
 ```bash

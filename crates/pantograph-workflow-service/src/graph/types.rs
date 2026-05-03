@@ -133,6 +133,7 @@ impl PortDefinition {
             visibility: pantograph_node_contracts::PortVisibility::Public,
             constraints: Vec::new(),
             editor_hints: Vec::new(),
+            inference_payloads: Vec::new(),
         })
     }
 }
