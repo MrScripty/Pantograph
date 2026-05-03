@@ -1234,6 +1234,12 @@ to gate behavior without backend-name conditionals.
   - [ ] Wire compatibility reports into embedded-runtime technical-fit
     candidate construction so package-fact candidates no longer rely only on
     backend hints and artifact validity.
+    - [x] Added a report-aware package-fact candidate constructor that consumes
+      available backend facts and marks candidates compatible only when the
+      inference compatibility report passes.
+    - [ ] Resolve/fetch package facts during the live host technical-fit path
+      so `workflow_technical_fit_decision` can use the report-aware constructor
+      without test-only fixture injection.
 - [ ] Make capability checks consume task registry entries and package facts
   rather than backend names, raw task strings, or graph-node type names.
   - [x] The inference-local compatibility API consumes canonical task registry
@@ -1271,10 +1277,12 @@ added backend model-source facts and an inference-local compatibility report API
 that checks task registry entries, Pumas-resolved package facts,
 preprocessing/postprocessing component needs, and requested options without
 selecting a runtime or moving scheduler policy into inference. Broader consumer
-migration remains pending. The next vertical slice should consume these reports in
-`pantograph-embedded-runtime/src/technical_fit.rs` when constructing
-package-fact-derived runtime candidates; workflow-service preflight can then
-consume the improved host technical-fit decision through its existing path.
+migration remains pending. The fifth slice added a report-aware
+`pantograph-embedded-runtime/src/technical_fit.rs` package-fact candidate path
+that consumes available backend facts and compatibility reports instead of only
+trusting package backend hints and artifact validity. The remaining technical-fit
+work is to resolve package facts in the live host path so workflow-service
+preflight can consume the improved host decision through its existing path.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 

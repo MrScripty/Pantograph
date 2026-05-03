@@ -21,11 +21,33 @@ pub fn build_runtime_technical_fit_request_with_package_facts(
     runtime_capabilities: &[WorkflowRuntimeCapability],
     package_facts: &[inference::ResolvedModelPackageFacts],
 ) -> RuntimeTechnicalFitRequest {
+    build_runtime_technical_fit_request_with_backend_package_facts(
+        request,
+        runtime_snapshot,
+        runtime_capabilities,
+        &[],
+        package_facts,
+    )
+}
+
+pub fn build_runtime_technical_fit_request_with_backend_package_facts(
+    request: &WorkflowTechnicalFitRequest,
+    runtime_snapshot: Option<RuntimeRegistrySnapshot>,
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+    available_backends: &[inference::BackendInfo],
+    package_facts: &[inference::ResolvedModelPackageFacts],
+) -> RuntimeTechnicalFitRequest {
     let mut runtime_request =
         build_runtime_technical_fit_request(request, runtime_snapshot, runtime_capabilities);
-    runtime_request
-        .candidates
-        .extend(runtime_candidates_from_pumas_package_facts(package_facts));
+    let package_fact_candidates = if available_backends.is_empty() {
+        runtime_candidates_from_pumas_package_facts(package_facts)
+    } else {
+        runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
+            package_facts,
+            available_backends,
+        )
+    };
+    runtime_request.candidates.extend(package_fact_candidates);
     runtime_request.normalized()
 }
 
@@ -143,6 +165,133 @@ pub fn runtime_candidates_from_pumas_package_facts(
                 })
         })
         .collect()
+}
+
+pub fn runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
+    package_facts: &[inference::ResolvedModelPackageFacts],
+    available_backends: &[inference::BackendInfo],
+) -> Vec<RuntimeTechnicalFitCandidate> {
+    package_facts
+        .iter()
+        .filter_map(|facts| task_registry_entry_from_package_facts(facts).map(|task| (facts, task)))
+        .flat_map(|(facts, task)| {
+            available_backends.iter().map(move |backend| {
+                let compatibility = backend.capabilities.check_model_compatibility(
+                    Some(&backend.backend_key),
+                    inference::BackendCompatibilityRequest::new(&task, facts),
+                );
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: format!("{}|{}", backend.backend_key, facts.model_ref.model_id),
+                    runtime_id: None,
+                    backend_key: Some(backend.backend_key.clone()),
+                    model_id: Some(facts.model_ref.model_id.clone()),
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
+                    context_window_tokens: None,
+                    residency_state: None,
+                    warmup_state: None,
+                    supports_runtime_requirements: compatibility.compatible,
+                }
+            })
+        })
+        .collect()
+}
+
+fn task_registry_entry_from_package_facts(
+    facts: &inference::ResolvedModelPackageFacts,
+) -> Option<inference::TaskRegistryEntry> {
+    let labels = vec![
+        facts.task.task_type_primary.as_deref(),
+        facts.task.pipeline_tag.as_deref(),
+    ];
+    let task_id = labels
+        .iter()
+        .copied()
+        .flatten()
+        .find_map(inference_task_id_from_label)?;
+    let result_family = task_result_family(&task_id).to_string();
+    Some(inference::TaskRegistryEntry {
+        task_id,
+        aliases: labels
+            .into_iter()
+            .flatten()
+            .map(str::to_string)
+            .collect::<Vec<_>>(),
+        modality_signature: inference::TaskModalitySignature::new(
+            facts
+                .task
+                .input_modalities
+                .iter()
+                .filter_map(|modality| inference_modality_from_label(modality))
+                .collect(),
+            facts
+                .task
+                .output_modalities
+                .iter()
+                .filter_map(|modality| inference_modality_from_label(modality))
+                .collect(),
+        ),
+        result_family,
+        support_tier: inference::SupportTier::Stable,
+    })
+}
+
+fn inference_task_id_from_label(label: &str) -> Option<inference::InferenceTaskId> {
+    match normalize_package_label(label).as_str() {
+        "text_generation" | "text2text_generation" => {
+            Some(inference::InferenceTaskId::TextGeneration)
+        }
+        "chat_completion" | "conversational" => Some(inference::InferenceTaskId::ChatCompletion),
+        "embedding" | "feature_extraction" | "sentence_similarity" => {
+            Some(inference::InferenceTaskId::Embedding)
+        }
+        "rerank" | "text_reranking" => Some(inference::InferenceTaskId::Rerank),
+        "image_generation" | "text_to_image" => Some(inference::InferenceTaskId::ImageGeneration),
+        "image_understanding" | "image_to_text" | "visual_question_answering" => {
+            Some(inference::InferenceTaskId::ImageUnderstanding)
+        }
+        "audio_transcription" | "automatic_speech_recognition" => {
+            Some(inference::InferenceTaskId::AudioTranscription)
+        }
+        "video_understanding" => Some(inference::InferenceTaskId::VideoUnderstanding),
+        "multimodal_generation" => Some(inference::InferenceTaskId::MultimodalGeneration),
+        _ => None,
+    }
+}
+
+fn inference_modality_from_label(label: &str) -> Option<inference::InferenceModality> {
+    match normalize_package_label(label).as_str() {
+        "text" => Some(inference::InferenceModality::Text),
+        "image" => Some(inference::InferenceModality::Image),
+        "audio" => Some(inference::InferenceModality::Audio),
+        "video" => Some(inference::InferenceModality::Video),
+        "embedding" => Some(inference::InferenceModality::Embedding),
+        "tokens" => Some(inference::InferenceModality::Tokens),
+        "json" => Some(inference::InferenceModality::Json),
+        "point_cloud" => Some(inference::InferenceModality::PointCloud),
+        "mesh" => Some(inference::InferenceModality::Mesh),
+        "other" => Some(inference::InferenceModality::Other),
+        _ => None,
+    }
+}
+
+fn task_result_family(task_id: &inference::InferenceTaskId) -> &'static str {
+    match task_id {
+        inference::InferenceTaskId::Embedding => "embedding",
+        inference::InferenceTaskId::Rerank => "ranking",
+        inference::InferenceTaskId::ImageGeneration => "image",
+        inference::InferenceTaskId::AudioTranscription => "text",
+        inference::InferenceTaskId::VideoUnderstanding
+        | inference::InferenceTaskId::ImageUnderstanding
+        | inference::InferenceTaskId::MultimodalGeneration => "multimodal",
+        inference::InferenceTaskId::TextGeneration | inference::InferenceTaskId::ChatCompletion => {
+            "text"
+        }
+        inference::InferenceTaskId::Unknown => "unknown",
+    }
+}
+
+fn normalize_package_label(label: &str) -> String {
+    label.trim().to_ascii_lowercase().replace('-', "_")
 }
 
 fn pumas_backend_hint_label_to_backend_key(label: inference::BackendHintLabel) -> Option<String> {
@@ -331,6 +480,47 @@ mod tests {
         }
     }
 
+    fn backend_info(
+        backend_key: &str,
+        artifact_kinds: Vec<inference::ModelArtifactKind>,
+        backend_hints: Vec<inference::BackendHintLabel>,
+    ) -> inference::BackendInfo {
+        inference::BackendInfo {
+            name: backend_key.to_string(),
+            backend_key: backend_key.to_string(),
+            description: "test backend".to_string(),
+            capabilities: inference::BackendCapabilities {
+                facts: inference::BackendCapabilityFacts {
+                    tasks: vec![inference::BackendTaskCapability::stable(
+                        inference::InferenceTaskId::TextGeneration,
+                        vec![inference::InferenceModality::Text],
+                        vec![inference::InferenceModality::Text],
+                    )],
+                    preprocessing: inference::BackendComponentCapability::RequiresPackageComponent,
+                    postprocessing: inference::BackendComponentCapability::BackendManaged,
+                    model_sources: inference::BackendModelSourceCapabilityFacts {
+                        artifact_kinds,
+                        backend_hints,
+                        custom_code: inference::BackendFeatureSupport::Unsupported,
+                    },
+                    features: inference::BackendFeatureCapabilityFacts {
+                        streaming: inference::BackendFeatureSupport::Supported,
+                        device_selection: inference::BackendFeatureSupport::Supported,
+                        external_connection: inference::BackendFeatureSupport::Unsupported,
+                        kv_cache: inference::BackendFeatureSupport::Supported,
+                    },
+                },
+                ..inference::BackendCapabilities::default()
+            },
+            default_start_mode: inference::backend::BackendDefaultStartMode::Inference,
+            active: false,
+            available: true,
+            unavailable_reason: None,
+            can_install: false,
+            runtime_binary_id: None,
+        }
+    }
+
     #[test]
     fn runtime_request_projection_maps_service_request_into_registry_contract() {
         let workflow_request = build_workflow_technical_fit_request(
@@ -495,6 +685,69 @@ mod tests {
     }
 
     #[test]
+    fn pumas_package_facts_candidates_use_backend_compatibility_reports() {
+        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+            include_str!(
+                "../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+            ),
+        )
+        .expect("decode package facts fixture");
+        let backends = vec![
+            backend_info(
+                "llama_cpp",
+                vec![inference::ModelArtifactKind::Gguf],
+                vec![inference::BackendHintLabel::LlamaCpp],
+            ),
+            backend_info(
+                "pytorch",
+                vec![inference::ModelArtifactKind::HfCompatibleDirectory],
+                vec![inference::BackendHintLabel::Transformers],
+            ),
+        ];
+
+        let candidates = runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
+            &[package_facts],
+            &backends,
+        );
+
+        let llama = candidates
+            .iter()
+            .find(|candidate| candidate.backend_key.as_deref() == Some("llama_cpp"))
+            .expect("llama candidate");
+        let pytorch = candidates
+            .iter()
+            .find(|candidate| candidate.backend_key.as_deref() == Some("pytorch"))
+            .expect("pytorch candidate");
+
+        assert!(llama.supports_runtime_requirements);
+        assert!(!pytorch.supports_runtime_requirements);
+    }
+
+    #[test]
+    fn pumas_package_facts_candidates_reject_missing_package_components() {
+        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+            include_str!(
+                "../../inference/tests/fixtures/inference_package_facts/missing_tokenizer_package_facts.json"
+            ),
+        )
+        .expect("decode package facts fixture");
+        let backends = vec![backend_info(
+            "pytorch",
+            vec![inference::ModelArtifactKind::HfCompatibleDirectory],
+            vec![inference::BackendHintLabel::Transformers],
+        )];
+
+        let candidates = runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
+            &[package_facts],
+            &backends,
+        );
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].backend_key.as_deref(), Some("pytorch"));
+        assert!(!candidates[0].supports_runtime_requirements);
+    }
+
+    #[test]
     fn pumas_package_facts_do_not_project_remote_discovery_hints() {
         let remote_search_hint: serde_json::Value = serde_json::from_str(
             include_str!(
@@ -552,6 +805,61 @@ mod tests {
             RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts
         );
 
+        let decision = select_runtime_technical_fit(&runtime_request);
+        assert_eq!(
+            decision.selected_model_id.as_deref(),
+            Some("llm/llama/tiny-gguf")
+        );
+        assert_eq!(decision.selected_backend_key.as_deref(), Some("llama_cpp"));
+    }
+
+    #[test]
+    fn technical_fit_request_can_include_backend_checked_pumas_package_facts_candidates() {
+        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+            include_str!(
+                "../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+            ),
+        )
+        .expect("decode package facts fixture");
+        let workflow_request = build_workflow_technical_fit_request(
+            "workflow-a",
+            &WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: None,
+                estimated_peak_ram_mb: None,
+                estimated_min_vram_mb: None,
+                estimated_min_ram_mb: None,
+                estimation_confidence: "fixture".to_string(),
+                required_models: vec!["llm/llama/tiny-gguf".to_string()],
+                required_backends: vec!["llama_cpp".to_string()],
+                required_extensions: Vec::new(),
+            },
+            None,
+            None,
+            None,
+            None,
+        );
+        let backends = vec![
+            backend_info(
+                "llama_cpp",
+                vec![inference::ModelArtifactKind::Gguf],
+                vec![inference::BackendHintLabel::LlamaCpp],
+            ),
+            backend_info(
+                "pytorch",
+                vec![inference::ModelArtifactKind::HfCompatibleDirectory],
+                vec![inference::BackendHintLabel::Transformers],
+            ),
+        ];
+
+        let runtime_request = build_runtime_technical_fit_request_with_backend_package_facts(
+            &workflow_request,
+            None,
+            &[],
+            &backends,
+            &[package_facts],
+        );
+
+        assert_eq!(runtime_request.candidates.len(), 2);
         let decision = select_runtime_technical_fit(&runtime_request);
         assert_eq!(
             decision.selected_model_id.as_deref(),
