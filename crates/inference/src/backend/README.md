@@ -15,7 +15,6 @@ isolated here.
 | `registry.rs` | Compile-time backend registration and backend discovery helpers. |
 | `llamacpp.rs` | llama.cpp backend adapter for chat, embeddings, and sidecar reranking. |
 | `llamacpp_support.rs` | Shared llama.cpp request parsing, rerank response normalization, sidecar start helpers, and KV-cache fingerprint helpers used by `llamacpp.rs`. |
-| `ollama.rs` | Retired Ollama adapter implementation kept out of the public backend registry while cleanup and state migration are staged. |
 | `candle.rs` | Candle backend placeholder and capability declaration. |
 | `pytorch.rs` | PyTorch backend implementation used for HuggingFace-style runtimes. |
 | `pytorch_worker.rs` | Embedded PyTorch worker loader, sibling-module registration, and Python result extraction helpers used by `pytorch.rs`. |

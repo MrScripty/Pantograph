@@ -96,8 +96,8 @@ Do not add crate-wide or workspace-wide unsafe exceptions.
 Non-test platform `cfg` blocks are allowed only when they stay in one of these
 categories:
 
-- Thin platform adapter modules such as managed-runtime `llama.cpp` and Ollama
-  platform selectors.
+- Thin platform adapter modules such as managed-runtime `llama.cpp` platform
+  selectors.
 - Small platform filesystem/process affordances, for example Unix symlink,
   permission, PID, or port-inspection helpers.
 - Compile-time native artifact naming for binding packaging.
@@ -106,7 +106,6 @@ categories:
 The April 21 review found current non-test platform `cfg` usage in:
 
 - `crates/inference/src/managed_runtime/llama_cpp_platform/`
-- `crates/inference/src/managed_runtime/ollama_platform/`
 - `crates/inference/src/managed_runtime/archive.rs`
 - `src-tauri/src/llm/port_manager.rs`
 - `src-tauri/src/llm/server_discovery.rs`

@@ -1,5 +1,4 @@
 pub mod llama_cpp_platform;
-pub mod ollama_platform;
 
 mod archive;
 mod catalog;

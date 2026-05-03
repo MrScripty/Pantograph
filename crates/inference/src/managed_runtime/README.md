@@ -23,7 +23,6 @@ and transition coordination without moving runtime lifecycle policy into Tauri.
 | `paths.rs` | Managed runtime root/path helpers plus shared argument and environment helpers used by platform adapters. |
 | `state.rs` | Durable managed runtime catalog, selection, and interrupted-job reconciliation helpers for restart-safe state projection. |
 | `llama_cpp_platform/` | Thin per-platform `llama.cpp` install/finalization/launch adapters kept behind the managed runtime boundary. |
-| `ollama_platform/` | Retired per-platform `Ollama` adapters retained only until legacy managed-runtime state cleanup is completed. |
 | `managed_binaries/` | Reserved marker documenting that runtime binary artifacts must not be stored under `src/`. |
 
 ## Problem

@@ -2,11 +2,6 @@ use crate::managed_runtime::llama_cpp_platform::{
     current_platform as current_llama_platform, current_platform_key as current_llama_platform_key,
     install_distribution as install_llama_distribution,
 };
-use crate::managed_runtime::ollama_platform::{
-    current_platform as current_ollama_platform,
-    current_platform_key as current_ollama_platform_key,
-    install_distribution as install_ollama_distribution,
-};
 
 use super::contracts::{ManagedBinaryId, ReleaseAsset, ResolvedCommand};
 use std::path::{Path, PathBuf};
@@ -91,46 +86,46 @@ impl ManagedBinaryDefinition for OllamaBinary {
     }
 
     fn default_release_version(&self) -> &'static str {
-        crate::managed_runtime::ollama_platform::OLLAMA_RELEASE_TAG
+        "retired"
     }
 
     fn release_asset(&self, version: &str) -> Result<ReleaseAsset, String> {
-        Ok(current_ollama_platform().release_asset(version))
+        Err(format!(
+            "Ollama managed runtime support is retired; release {} is not installable by Pantograph",
+            version
+        ))
     }
 
-    fn download_url(&self, version: &str, release_asset: &ReleaseAsset) -> String {
-        format!(
-            "https://github.com/ollama/ollama/releases/download/{}/{}",
-            version, release_asset.archive_name
-        )
+    fn download_url(&self, _version: &str, _release_asset: &ReleaseAsset) -> String {
+        String::new()
     }
 
     fn platform_key(&self) -> &'static str {
-        current_ollama_platform_key()
+        "retired"
     }
 
     fn executable_name(&self) -> &'static str {
-        current_ollama_platform().executable_name()
+        "ollama"
     }
 
     fn validate_installation(&self, install_dir: &Path) -> Vec<String> {
-        current_ollama_platform().validate_installation(install_dir)
+        vec![install_dir.join("retired").display().to_string()]
     }
 
-    fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String> {
-        install_ollama_distribution(extracted_dir, install_dir)
+    fn install_distribution(
+        &self,
+        _extracted_dir: &Path,
+        _install_dir: &Path,
+    ) -> Result<(), String> {
+        Err("Ollama managed runtime support is retired".to_string())
     }
 
     fn resolve_command(
         &self,
-        install_dir: &Path,
-        args: &[&str],
+        _install_dir: &Path,
+        _args: &[&str],
     ) -> Result<ResolvedCommand, String> {
-        current_ollama_platform().resolve_command(install_dir, args)
-    }
-
-    fn system_command(&self) -> Option<PathBuf> {
-        which::which("ollama").ok()
+        Err("Ollama managed runtime support is retired".to_string())
     }
 }
 

@@ -420,9 +420,11 @@ reliability while keeping scheduling and workflow policy outside inference.
 
 - `crates/inference/src/backend/`: backend trait, capabilities, backend config,
   and concrete adapters.
-- `crates/inference/src/backend/ollama.rs`: backend slated for removal.
-- `crates/inference/src/managed_runtime/ollama_platform/`: managed runtime
-  support slated for removal or historical migration.
+- `crates/inference/src/backend/ollama.rs`: removed retired backend adapter;
+  stale behavior now lives in explicit migration guards.
+- `crates/inference/src/managed_runtime/ollama_platform/`: removed retired
+  managed-runtime platform adapters; serialized `ollama` ids project through
+  unsupported compatibility records.
 - `crates/inference/src/managed_runtime/`: current runtime sidecar manager that
   should move under or adapt to the neutral managed-dependency boundary.
 - `crates/inference/src/managed_redistributables/`: current media dependency
@@ -1181,7 +1183,7 @@ entry points.
 - `cargo check -p inference --all-features`.
 - Relevant consumer tests selected by touched files.
 
-**Status:** Partially implemented. The first Ollama retirement slice removed
+**Status:** Implemented. The first Ollama retirement slice removed
 the graph-visible `ollama-inference` registration from Rust workflow-node
 inventory and frontend node maps, changed node-engine stale `ollama-inference`
 execution to return a migration-focused error without contacting Ollama, and
@@ -1199,8 +1201,12 @@ edges, and retaining unresolved Pumas model-reference metadata for user repair.
 The fifth slice made the persisted `ollama_vlm_model` setting a scrubbed
 compatibility field, stopped configured startup requests from forwarding it, and
 removed the frontend model-setting/runtime-manager type surfaces that could
-reintroduce Ollama as a user-selectable runtime. Final deletion of retired
-adapter files remains pending.
+reintroduce Ollama as a user-selectable runtime. The sixth slice deleted the
+retired inference Ollama backend implementation and per-platform managed
+Ollama adapters while keeping small unsupported compatibility definitions for
+old serialized runtime ids. Milestone 6 is implemented; remaining Ollama
+references are intentional migration guards, unsupported-id compatibility,
+tests/fixtures, or historical documentation.
 
 ### Milestone 7: Strengthen Capability Facts
 
