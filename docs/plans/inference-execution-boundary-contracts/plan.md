@@ -2178,7 +2178,9 @@ inference write ledger events directly.
 - [ ] Map non-generation task option support summaries into durable bounded
   metadata for embedding, rerank, image/video/audio, and KV-cache task options
   after those task option diagnostics are emitted by the corresponding typed
-  execution paths.
+  execution paths. Embedding/rerank typed gateway diagnostics now emit bounded
+  option support for extra options and rerank controls; image/video/audio and
+  KV-cache task-specific options remain open.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup.
@@ -2621,6 +2623,10 @@ Update during implementation:
   inference inputs, and typed gateway lifecycle task-validation completion
   emits backend/model compatibility summaries without importing the diagnostics
   ledger or moving compatibility derivation into node-engine.
+- 2026-05-03: Added the first non-generation option diagnostics producer.
+  Typed embedding and rerank lifecycle completion events now emit bounded
+  option support summaries for backend extra-option keys and rerank controls,
+  leaving image/video/audio and KV-cache task-specific option diagnostics open.
 
 ## Commit Cadence Notes
 

@@ -1132,6 +1132,8 @@ impl InferenceGateway {
         let compatibility_diagnostics = self
             .compatibility_diagnostics_for_request(&request, backend_key.as_deref())
             .await;
+        let request_option_diagnostics =
+            typed_non_generation_option_diagnostics(&request, backend_key.as_deref());
         record_non_streaming_lifecycle_phase_result_with_diagnostics(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
@@ -1158,7 +1160,8 @@ impl InferenceGateway {
             None,
         );
         let result = self.execute_typed_validated(request).await;
-        let option_diagnostics = option_diagnostics_from_execution_result(&result);
+        let mut option_diagnostics = option_diagnostics_from_execution_result(&result);
+        option_diagnostics.extend(request_option_diagnostics);
         record_non_streaming_lifecycle_result_with_option_diagnostics(
             lifecycle_sink.as_ref(),
             request_id,
@@ -1558,6 +1561,80 @@ fn typed_text_generation_option_diagnostics(
     }
 
     diagnostics
+}
+
+fn typed_non_generation_option_diagnostics(
+    request: &InferenceExecutionRequest,
+    backend_key: Option<&str>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    let mut diagnostics = match &request.input {
+        InferenceExecutionInput::Embedding { .. } => Vec::new(),
+        InferenceExecutionInput::Rerank {
+            top_n,
+            return_documents,
+            ..
+        } => {
+            let mut diagnostics = Vec::new();
+            if top_n.is_some() {
+                diagnostics.push(OptionCompatibilityDiagnostic {
+                    option_path: "rerank.top_n".to_string(),
+                    state: OptionSupportState::Honored,
+                    backend_key: backend_key.map(ToOwned::to_owned),
+                    message: Some("typed rerank gateway forwards top_n".to_string()),
+                });
+            }
+            if !return_documents {
+                diagnostics.push(OptionCompatibilityDiagnostic {
+                    option_path: "rerank.return_documents".to_string(),
+                    state: OptionSupportState::Honored,
+                    backend_key: backend_key.map(ToOwned::to_owned),
+                    message: Some("typed rerank gateway forwards return_documents".to_string()),
+                });
+            }
+            diagnostics
+        }
+        InferenceExecutionInput::ImageGeneration { .. }
+        | InferenceExecutionInput::TextGeneration { .. } => Vec::new(),
+    };
+
+    diagnostics.extend(extra_option_diagnostics(
+        &request.extra_options,
+        backend_key,
+        "extra_options",
+    ));
+    diagnostics
+}
+
+fn extra_option_diagnostics(
+    value: &serde_json::Value,
+    backend_key: Option<&str>,
+    root_path: &str,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    match value {
+        serde_json::Value::Object(options) => {
+            let mut diagnostics = options
+                .keys()
+                .filter(|key| !key.trim().is_empty())
+                .map(|key| OptionCompatibilityDiagnostic {
+                    option_path: format!("{root_path}.{key}"),
+                    state: OptionSupportState::Mapped,
+                    backend_key: backend_key.map(ToOwned::to_owned),
+                    message: Some(
+                        "typed gateway forwards backend-specific extra option by key".to_string(),
+                    ),
+                })
+                .collect::<Vec<_>>();
+            diagnostics.sort_by(|left, right| left.option_path.cmp(&right.option_path));
+            diagnostics
+        }
+        serde_json::Value::Null => Vec::new(),
+        _ => vec![OptionCompatibilityDiagnostic {
+            option_path: root_path.to_string(),
+            state: OptionSupportState::Unsupported,
+            backend_key: backend_key.map(ToOwned::to_owned),
+            message: Some("typed gateway extra_options must be an object".to_string()),
+        }],
+    }
 }
 
 fn push_chat_option_diagnostic(

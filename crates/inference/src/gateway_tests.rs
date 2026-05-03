@@ -986,6 +986,115 @@ async fn test_execute_typed_with_lifecycle_reports_package_compatibility() {
 }
 
 #[tokio::test]
+async fn test_execute_typed_rerank_lifecycle_reports_task_option_diagnostics() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-rerank-options".to_string()),
+        task_id: InferenceTaskId::Rerank,
+        model_ref: None,
+        model_name: Some("mock-rerank".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::Rerank {
+            query: "alpha".to_string(),
+            documents: vec!["a".to_string(), "b".to_string()],
+            top_n: Some(1),
+            return_documents: false,
+        },
+        generation_options: None,
+        extra_options: serde_json::json!({
+            "score_threshold": 0.25,
+            "trace": true
+        }),
+    };
+
+    gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed rerank request should execute");
+
+    let events = sink.events();
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend completion event");
+    let option_paths = backend_completed
+        .option_diagnostics
+        .iter()
+        .map(|diagnostic| {
+            (
+                diagnostic.option_path.as_str(),
+                diagnostic.state,
+                diagnostic.backend_key.as_deref(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(option_paths.contains(&("rerank.top_n", OptionSupportState::Honored, Some("mock"))));
+    assert!(option_paths.contains(&(
+        "rerank.return_documents",
+        OptionSupportState::Honored,
+        Some("mock")
+    )));
+    assert!(option_paths.contains(&(
+        "extra_options.score_threshold",
+        OptionSupportState::Mapped,
+        Some("mock")
+    )));
+    assert!(option_paths.contains(&(
+        "extra_options.trace",
+        OptionSupportState::Mapped,
+        Some("mock")
+    )));
+}
+
+#[tokio::test]
+async fn test_execute_typed_embedding_lifecycle_reports_extra_option_diagnostics() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-embedding-options".to_string()),
+        task_id: InferenceTaskId::Embedding,
+        model_ref: None,
+        model_name: Some("mock-embedding".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::Embedding {
+            texts: vec!["alpha".to_string()],
+        },
+        generation_options: None,
+        extra_options: serde_json::json!({
+            "normalize": true
+        }),
+    };
+
+    gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed embedding request should execute");
+
+    let events = sink.events();
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend completion event");
+    assert!(backend_completed
+        .option_diagnostics
+        .iter()
+        .any(
+            |diagnostic| diagnostic.option_path == "extra_options.normalize"
+                && diagnostic.state == OptionSupportState::Mapped
+                && diagnostic.backend_key.as_deref() == Some("mock")
+        ));
+}
+
+#[tokio::test]
 async fn test_execute_typed_validates_before_backend_execution() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
     let request = InferenceExecutionRequest {

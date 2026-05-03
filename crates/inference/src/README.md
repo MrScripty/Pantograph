@@ -274,8 +274,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   Completed task-validation events may include bounded backend/model
   compatibility summaries when the typed request carries resolved Pumas package
   facts, and completed backend-execution events may include bounded option
-  compatibility diagnostics and the canonical task id so host adapters can
-  persist support summaries without seeing backend-local payloads.
+  compatibility diagnostics for generation, embedding, and rerank request
+  options plus the canonical task id so host adapters can persist support
+  summaries without seeing backend-local payloads.
 - `InferenceGateway::stream_typed_text` and
   `InferenceGateway::stream_typed_text_with_lifecycle` keep streaming
   text/chat requests on the same canonical `InferenceExecutionRequest` boundary
