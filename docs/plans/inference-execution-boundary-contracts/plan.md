@@ -1949,6 +1949,11 @@ reranker handler, and explicit llama.cpp backend hints through the llama.cpp
 handler. Dependency request inference now understands canonical task kinds,
 runtime hints, and Pumas model references while preserving diffusion
 `recommended_backend` precedence.
+Saved-workflow canonicalization now also migrates legacy same-type
+`llm-inference` nodes that still carry flat `temperature`/`max_tokens`
+settings into grouped `generation_options`, preserving node id, position,
+user-authored data, prompt/response topology, and migration diagnostics while
+dropping stale flat option edges.
 Node-engine canonical task dispatch and dependency requests now resolve task
 aliases through the inference task registry, so upstream labels such as
 `feature-extraction`, `sentence-similarity`, `text-ranking`, and
@@ -2494,6 +2499,10 @@ Update during implementation:
 - 2026-05-03: Threaded stable task/execution context into canonical PyTorch
   dependency preflight and emits host-owned model-package-resolution lifecycle
   failure facts when preflight blocks execution.
+- 2026-05-03: Added same-node saved-workflow canonicalization for legacy
+  generic `llm-inference` flat generation settings, moving them into grouped
+  `generation_options` and removing stale flat option edges without changing
+  node identity or prompt/response topology.
 
 ## Commit Cadence Notes
 

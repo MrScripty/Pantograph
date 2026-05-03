@@ -907,6 +907,132 @@ fn canonicalize_workflow_graph_migrates_legacy_reranker_nodes() {
 }
 
 #[test]
+fn canonicalize_workflow_graph_migrates_legacy_generic_llm_settings() {
+    let registry = NodeRegistry::new();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 0.0 },
+                data: json!({ "text": "Explain the plan." }),
+            },
+            GraphNode {
+                id: "temperature".to_string(),
+                node_type: "number-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 100.0 },
+                data: json!({ "value": 0.6 }),
+            },
+            GraphNode {
+                id: "llm".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: super::super::types::Position { x: 125.0, y: 25.0 },
+                data: json!({
+                    "label": "Draft response",
+                    "model": "local-chat",
+                    "temperature": 0.6,
+                    "max_tokens": 72,
+                    "base_url": "http://localhost:8080",
+                    "enable_tools": false,
+                    "user_note": "preserve me"
+                }),
+            },
+            GraphNode {
+                id: "output".to_string(),
+                node_type: "text-output".to_string(),
+                position: super::super::types::Position { x: 260.0, y: 25.0 },
+                data: json!({}),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "prompt-llm-prompt".to_string(),
+                source: "prompt".to_string(),
+                source_handle: "text".to_string(),
+                target: "llm".to_string(),
+                target_handle: "prompt".to_string(),
+            },
+            GraphEdge {
+                id: "temperature-llm-temperature".to_string(),
+                source: "temperature".to_string(),
+                source_handle: "value".to_string(),
+                target: "llm".to_string(),
+                target_handle: "temperature".to_string(),
+            },
+            GraphEdge {
+                id: "llm-response-output-text".to_string(),
+                source: "llm".to_string(),
+                source_handle: "response".to_string(),
+                target: "output".to_string(),
+                target_handle: "text".to_string(),
+            },
+        ],
+        derived_graph: None,
+    };
+
+    let result = canonicalize_workflow_graph_with_migrations(graph, &registry);
+    let canonical = result.graph;
+    let migrated = canonical
+        .nodes
+        .iter()
+        .find(|node| node.id == "llm")
+        .expect("migrated generic llm node");
+
+    assert_eq!(migrated.node_type, "llm-inference");
+    assert_eq!(migrated.position.x, 125.0);
+    assert_eq!(migrated.position.y, 25.0);
+    assert_eq!(migrated.data["label"], json!("Draft response"));
+    assert_eq!(migrated.data["user_note"], json!("preserve me"));
+    assert_eq!(migrated.data["task_kind"], json!("text_generation"));
+    assert_eq!(migrated.data["runtime_hint"], json!("openai_compatible"));
+    assert_eq!(
+        migrated.data["generation_options"]["sampling"]["temperature"],
+        json!(0.6)
+    );
+    assert_eq!(
+        migrated.data["generation_options"]["length"]["max_new_tokens"],
+        json!(72)
+    );
+    assert_eq!(
+        migrated.data["migration_diagnostics"][0]["code"],
+        json!("legacy_generic_inference_node")
+    );
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "prompt-llm-prompt" && edge.target == "llm" && edge.target_handle == "prompt"
+    }));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "llm-response-output-text"
+            && edge.source == "llm"
+            && edge.source_handle == "response"
+            && edge.target == "output"
+            && edge.target_handle == "text"
+    }));
+    assert!(!canonical
+        .edges
+        .iter()
+        .any(|edge| edge.target == "llm" && edge.target_handle == "temperature"));
+    assert!(!canonical
+        .edges
+        .iter()
+        .any(|edge| edge.target == "llm" && edge.target_handle == "max_tokens"));
+
+    assert_eq!(result.migration_records.len(), 1);
+    let record = &result.migration_records[0];
+    assert_eq!(record.node_type.as_str(), "llm-inference");
+    assert_eq!(record.outcome, ContractUpgradeOutcome::Upgraded);
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::PortRemoved { port_id, kind, .. }
+            if port_id.as_str() == "temperature" && *kind == PortKind::Input
+    )));
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::PortRemoved { port_id, kind, .. }
+            if port_id.as_str() == "max_tokens" && *kind == PortKind::Input
+    )));
+}
+
+#[test]
 fn canonicalize_workflow_graph_preserves_mixed_inference_topology() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {

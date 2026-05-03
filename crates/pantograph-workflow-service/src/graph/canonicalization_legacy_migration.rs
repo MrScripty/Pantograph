@@ -17,6 +17,7 @@ pub(super) enum LegacyNodeMigrationKind {
     PyTorchInference,
     Embedding,
     Reranker,
+    GenericInference,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -360,6 +361,11 @@ pub(super) fn canonicalize_legacy_node_types(
                     node.node_type = "llm-inference".to_string();
                     migrate_reranker_node_data(&mut node.data);
                 }
+                "llm-inference" if generic_inference_node_requires_migration(&node.data) => {
+                    migrated_nodes
+                        .insert(node.id.clone(), LegacyNodeMigrationKind::GenericInference);
+                    migrate_generic_inference_node_data(&mut node.data);
+                }
                 _ => {}
             }
 
@@ -406,6 +412,11 @@ pub(super) fn canonicalize_legacy_node_types(
                     edge.target_handle.as_str(),
                     "model_path" | "top_k" | "return_documents"
                 )
+            {
+                return None;
+            }
+            if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::GenericInference)
+                && matches!(edge.target_handle.as_str(), "temperature" | "max_tokens")
             {
                 return None;
             }
@@ -467,6 +478,9 @@ pub(super) fn legacy_node_type_migration_records(
             LegacyNodeMigrationKind::PyTorchInference => legacy_pytorch_migration_record(node_id),
             LegacyNodeMigrationKind::Embedding => legacy_embedding_migration_record(node_id),
             LegacyNodeMigrationKind::Reranker => legacy_reranker_migration_record(node_id),
+            LegacyNodeMigrationKind::GenericInference => {
+                legacy_generic_inference_migration_record(node_id)
+            }
         })
         .collect::<Vec<_>>();
     records.sort_by(|left, right| {
@@ -723,6 +737,57 @@ fn migrate_reranker_node_data(data: &mut serde_json::Value) {
                 "legacy_model_path": legacy_model_path,
                 "legacy_top_k": legacy_top_k,
                 "legacy_return_documents": legacy_return_documents
+            }])
+        });
+}
+
+fn generic_inference_node_requires_migration(data: &serde_json::Value) -> bool {
+    let Some(object) = data.as_object() else {
+        return false;
+    };
+    object.contains_key("temperature")
+        || object.contains_key("max_tokens")
+        || object.contains_key("base_url")
+        || object.contains_key("enable_tools")
+}
+
+fn migrate_generic_inference_node_data(data: &mut serde_json::Value) {
+    let object = ensure_json_object(data);
+    let legacy_temperature = object.get("temperature").cloned();
+    let legacy_max_tokens = object.get("max_tokens").cloned();
+    let legacy_base_url = object.get("base_url").cloned();
+    let legacy_enable_tools = object.get("enable_tools").cloned();
+
+    object
+        .entry("task_kind".to_string())
+        .or_insert_with(|| json!(CanonicalInferenceTaskKind::TextGeneration.as_str()));
+    object
+        .entry("runtime_hint".to_string())
+        .or_insert_with(|| json!("openai_compatible"));
+
+    let generation_options = object
+        .entry("generation_options".to_string())
+        .or_insert_with(|| json!({}));
+    if let Some(options) = generation_options.as_object_mut() {
+        if let Some(value) = legacy_temperature.clone() {
+            insert_nested_option_if_missing(options, &["sampling", "temperature"], value);
+        }
+        if let Some(value) = legacy_max_tokens.clone() {
+            insert_nested_option_if_missing(options, &["length", "max_new_tokens"], value);
+        }
+    }
+
+    object
+        .entry("migration_diagnostics".to_string())
+        .or_insert_with(|| {
+            json!([{
+                "code": "legacy_generic_inference_node",
+                "severity": "warning",
+                "message": "Migrated legacy llm-inference node settings into the canonical inference task contract. Flat generation settings are now grouped under generation_options.",
+                "legacy_temperature": legacy_temperature,
+                "legacy_max_tokens": legacy_max_tokens,
+                "legacy_base_url": legacy_base_url,
+                "legacy_enable_tools": legacy_enable_tools
             }])
         });
 }
@@ -1045,6 +1110,40 @@ fn legacy_reranker_migration_record(node_id: &str) -> Option<ContractUpgradeReco
             message: "reranker was migrated to canonical llm-inference with task_kind=rerank; legacy model path and task options must resolve through Pumas/inference validation before execution.".to_string(),
             node_id: Some(node_id),
             node_type: Some(NodeTypeId::try_from("reranker".to_string()).ok()?),
+            port_id: None,
+        }],
+    };
+    record.validate().ok()?;
+    Some(record)
+}
+
+fn legacy_generic_inference_migration_record(node_id: &str) -> Option<ContractUpgradeRecord> {
+    let node_id = NodeInstanceId::try_from(node_id.to_string()).ok()?;
+    let record = ContractUpgradeRecord {
+        node_type: NodeTypeId::try_from("llm-inference".to_string()).ok()?,
+        outcome: ContractUpgradeOutcome::Upgraded,
+        source_contract_version: Some("0.0.0".to_string()),
+        source_contract_digest: None,
+        target_contract_version: Some("1.0.0".to_string()),
+        target_contract_digest: None,
+        diagnostics_lineage: DiagnosticsLineagePolicy::RejectToAvoidSilentChange,
+        changes: vec![
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("temperature".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("max_tokens".to_string()).ok()?,
+            },
+        ],
+        diagnostics: vec![ContractUpgradeDiagnostic {
+            reason: ContractUpgradeRejectionReason::UnsupportedLegacyContract,
+            message: "legacy llm-inference flat generation settings were migrated into canonical generation_options.".to_string(),
+            node_id: Some(node_id),
+            node_type: Some(NodeTypeId::try_from("llm-inference".to_string()).ok()?),
             port_id: None,
         }],
     };
