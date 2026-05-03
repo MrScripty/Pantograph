@@ -222,11 +222,9 @@ fn convert_value_type(value_type: node_engine::PortDataType) -> PortValueType {
 
 fn capability_requirements(metadata: &node_engine::TaskMetadata) -> Vec<NodeCapabilityRequirement> {
     match metadata.node_type.as_str() {
-        "llm-inference" | "llamacpp-inference" | "ollama-inference" | "pytorch-inference"
-        | "onnx-inference" => vec![NodeCapabilityRequirement::required("llm")],
+        "llm-inference" | "onnx-inference" => vec![NodeCapabilityRequirement::required("llm")],
         "diffusion-inference" => vec![NodeCapabilityRequirement::required("image_generation")],
         "audio-generation" => vec![NodeCapabilityRequirement::required("audio_generation")],
-        "embedding" => vec![NodeCapabilityRequirement::required("embedding")],
         "puma-lib" | "model-provider" => {
             vec![NodeCapabilityRequirement::required("model_library")]
         }

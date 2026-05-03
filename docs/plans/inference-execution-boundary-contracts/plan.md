@@ -1663,6 +1663,8 @@ from retired PyTorch/llama.cpp/reranker node type names; canonical rerank model
 type evidence maps to llama.cpp, explicit backend keys still take precedence,
 and other canonical inference requests default through the existing backend
 fallback path.
+Workflow-node contract projection no longer assigns capability requirements to
+retired backend-specific inference or dedicated embedding node descriptors.
 
 ### Milestone 12: Prepare Native Candle Slice
 
