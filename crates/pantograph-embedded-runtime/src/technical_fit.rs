@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use pantograph_runtime_registry::{
     select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
     RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor,
@@ -60,8 +62,21 @@ pub(crate) async fn workflow_technical_fit_decision(
         .runtime_registry
         .as_ref()
         .map(|registry| registry.snapshot());
-    let runtime_request =
-        build_runtime_technical_fit_request(request, runtime_snapshot, &runtime_capabilities);
+    let available_backends = host.gateway.available_backends();
+    let package_facts =
+        resolve_required_model_package_facts(host, &request.runtime_requirements.required_models)
+            .await;
+    let runtime_request = if package_facts.is_empty() {
+        build_runtime_technical_fit_request(request, runtime_snapshot, &runtime_capabilities)
+    } else {
+        build_runtime_technical_fit_request_with_backend_package_facts(
+            request,
+            runtime_snapshot,
+            &runtime_capabilities,
+            &available_backends,
+            &package_facts,
+        )
+    };
     let decision = select_runtime_technical_fit(&runtime_request);
     Ok(Some(project_workflow_technical_fit_decision(&decision)))
 }
@@ -292,6 +307,62 @@ fn task_result_family(task_id: &inference::InferenceTaskId) -> &'static str {
 
 fn normalize_package_label(label: &str) -> String {
     label.trim().to_ascii_lowercase().replace('-', "_")
+}
+
+async fn resolve_required_model_package_facts(
+    host: &EmbeddedWorkflowHost,
+    required_model_ids: &[String],
+) -> Vec<inference::ResolvedModelPackageFacts> {
+    let api = host.pumas_api().await;
+    resolve_required_model_package_facts_from_api(api.as_deref(), required_model_ids).await
+}
+
+async fn resolve_required_model_package_facts_from_api(
+    api: Option<&pumas_library::PumasApi>,
+    required_model_ids: &[String],
+) -> Vec<inference::ResolvedModelPackageFacts> {
+    let Some(api) = api else {
+        return Vec::new();
+    };
+
+    let mut seen = HashSet::new();
+    let mut resolved = Vec::new();
+    for model_id in required_model_ids
+        .iter()
+        .map(|model_id| model_id.trim())
+        .filter(|model_id| !model_id.is_empty())
+    {
+        if !seen.insert(model_id.to_string()) {
+            continue;
+        }
+
+        match api.resolve_model_package_facts(model_id).await {
+            Ok(facts) => match decode_inference_package_facts(&facts) {
+                Ok(facts) => resolved.push(facts),
+                Err(error) => {
+                    log::warn!(
+                        "Pumas package facts for '{}' did not match Pantograph inference contract: {}",
+                        model_id,
+                        error
+                    );
+                }
+            },
+            Err(error) => {
+                log::warn!(
+                    "Pumas package fact lookup failed during technical-fit for '{}': {}",
+                    model_id,
+                    error
+                );
+            }
+        }
+    }
+    resolved
+}
+
+fn decode_inference_package_facts<T: serde::Serialize>(
+    facts: &T,
+) -> Result<inference::ResolvedModelPackageFacts, serde_json::Error> {
+    serde_json::from_value(serde_json::to_value(facts)?)
 }
 
 fn pumas_backend_hint_label_to_backend_key(label: inference::BackendHintLabel) -> Option<String> {
@@ -745,6 +816,58 @@ mod tests {
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].backend_key.as_deref(), Some("pytorch"));
         assert!(!candidates[0].supports_runtime_requirements);
+    }
+
+    #[tokio::test]
+    async fn required_model_package_facts_resolve_from_pumas_api() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let model_id = "llm/test/live-technical-fit-facts";
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models")
+            .join(model_id);
+        std::fs::create_dir_all(&model_dir).expect("model dir");
+        std::fs::write(
+            model_dir.join("config.json"),
+            r#"{"model_type":"llama","architectures":["LlamaForCausalLM"]}"#,
+        )
+        .expect("config");
+        std::fs::write(model_dir.join("model.safetensors"), b"test").expect("weights");
+        std::fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "model_id": model_id,
+                "family": "test",
+                "model_type": "llm",
+                "official_name": "Live Technical Fit Facts",
+                "cleaned_name": "live-technical-fit-facts",
+                "files": [{"name": "model.safetensors"}],
+                "runtime_engine_hints": ["transformers"]
+            }))
+            .expect("metadata json"),
+        )
+        .expect("metadata");
+        let api = pumas_library::PumasApi::builder(temp_dir.path())
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("pumas api");
+        let required_models = vec![model_id.to_string(), model_id.to_string(), " ".to_string()];
+
+        let facts =
+            resolve_required_model_package_facts_from_api(Some(&api), &required_models).await;
+
+        assert_eq!(facts.len(), 1);
+        assert_eq!(facts[0].model_ref.model_id, model_id);
+        assert_eq!(
+            facts[0].artifact.artifact_kind,
+            inference::ModelArtifactKind::HfCompatibleDirectory
+        );
+        assert_eq!(
+            facts[0].backend_hints.accepted,
+            vec![inference::BackendHintLabel::Transformers]
+        );
     }
 
     #[test]
