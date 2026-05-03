@@ -1158,7 +1158,10 @@ Workflow-service backend task capability DTOs now carry optional
 `WorkflowTaskRequestContract` payload metadata, and embedded-runtime projects
 that metadata from inference backend task facts into workflow runtime
 capabilities. Node-engine result projection still needs equivalent
-contract-driven cleanup.
+contract-driven cleanup. Node-engine canonical `llm-inference` dispatch now
+also uses `TaskRequestContract` input payload families to route embedding and
+rerank tasks, so dispatch no longer needs to treat those task ids as special
+backend selectors.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2347,6 +2350,10 @@ Update during implementation:
   inference task request/result contracts into runtime capability DTOs, keeping
   the projection as workflow-visible facts rather than scheduler/runtime
   selection policy.
+- 2026-05-03: Switched node-engine canonical `llm-inference` dispatch from
+  direct embedding/rerank task-id matches to request-contract input payload
+  families, preserving the same handlers while reducing duplicated task
+  semantics in dispatcher code.
 - 2026-05-03: Expanded the typed text/chat generation edge mapping so
   `sampling.top_p` and `sampling.top_k` travel with `max_new_tokens` and
   `temperature` through `ChatRequest` and `InferenceGateway::execute_typed`

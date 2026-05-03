@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 #[cfg(feature = "inference-nodes")]
-use inference::{InferenceGateway, InferenceTaskId};
+use inference::{InferenceExecutionInputKind, InferenceGateway};
 
 use crate::engine::TaskExecutor;
 use crate::error::{NodeEngineError, Result};
@@ -249,8 +249,8 @@ impl TaskExecutor for CoreTaskExecutor {
                 let canonical_inputs = inputs_with_model_path_from_ref(&inputs)?;
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
                 let preferred_backend = preferred_backend_key("llm-inference", &canonical_inputs);
-                match canonical_inference_task_id(&canonical_inputs).as_ref() {
-                    Some(InferenceTaskId::Embedding) => {
+                match canonical_inference_input_kind(&canonical_inputs) {
+                    Some(InferenceExecutionInputKind::Embedding) => {
                         execute_embedding_inference(
                             self.gateway.as_ref(),
                             &canonical_inputs,
@@ -260,7 +260,7 @@ impl TaskExecutor for CoreTaskExecutor {
                         )
                         .await
                     }
-                    Some(InferenceTaskId::Rerank) => {
+                    Some(InferenceExecutionInputKind::Rerank) => {
                         execute_rerank_inference(
                             self.gateway.as_ref(),
                             &canonical_inputs,

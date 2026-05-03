@@ -1111,6 +1111,18 @@ fn test_build_model_dependency_request_maps_embedding_alias_task() {
     );
 }
 
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_canonical_inference_input_kind_uses_task_request_contract() {
+    let mut inputs = HashMap::new();
+    inputs.insert("task_kind".to_string(), serde_json::json!("text-to-image"));
+
+    assert_eq!(
+        canonical_inference_input_kind(&inputs),
+        Some(inference::InferenceExecutionInputKind::ImageGeneration)
+    );
+}
+
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[test]
 fn test_build_model_dependency_request_maps_canonical_rerank_task() {

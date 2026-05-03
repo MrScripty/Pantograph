@@ -6,7 +6,9 @@ use std::sync::Arc;
 use pantograph_runtime_identity::canonical_engine_backend_key;
 
 #[cfg(feature = "inference-nodes")]
-use inference::{resolve_task_registry_entry, InferenceTaskId, TaskRegistryEntry};
+use inference::{
+    resolve_task_registry_entry, InferenceExecutionInputKind, InferenceTaskId, TaskRegistryEntry,
+};
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::error::{NodeEngineError, Result};
@@ -105,6 +107,15 @@ pub(crate) fn canonical_inference_task_id(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Option<InferenceTaskId> {
     canonical_inference_task_entry(inputs).map(|entry| entry.task_id)
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) fn canonical_inference_input_kind(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<InferenceExecutionInputKind> {
+    canonical_inference_task_entry(inputs)
+        .and_then(|entry| entry.request_contract())
+        .map(|contract| contract.input_kind)
 }
 
 #[cfg(feature = "inference-nodes")]
