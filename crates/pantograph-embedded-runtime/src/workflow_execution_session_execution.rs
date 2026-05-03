@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 use crate::task_executor;
 use crate::{
     apply_runtime_extensions_for_execution, EmbeddedWorkflowHost,
-    InferenceLifecycleWorkflowLedgerSink, RuntimeExtensionsSnapshot,
+    InferenceLifecycleWorkflowLedgerSink, NodeExecutionWorkflowLedgerSink,
+    RuntimeExtensionsSnapshot,
 };
 use node_engine::{CoreTaskExecutor, NullEventSink, WorkflowEvent, WorkflowExecutor};
 use pantograph_workflow_service::{
@@ -274,10 +275,25 @@ pub(crate) async fn run_session_workflow(
         }
     };
 
+    let node_execution_sink = NodeExecutionWorkflowLedgerSink::try_new(
+        host.workflow_service.clone(),
+        workflow_id.to_string(),
+        workflow_execution_session_id.to_string(),
+        workflow_execution_session_id.to_string(),
+        &graph,
+        None,
+    )
+    .ok()
+    .map(|sink| Arc::new(sink) as Arc<dyn node_engine::EventSink>);
     let core = Arc::new(
         CoreTaskExecutor::new()
             .with_project_root(host.project_root.clone())
             .with_gateway(host.gateway.clone())
+            .with_event_sink(
+                node_execution_sink
+                    .clone()
+                    .unwrap_or_else(|| Arc::new(NullEventSink)),
+            )
             .with_execution_id(workflow_execution_session_id.to_string()),
     );
     let tauri_executor = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
@@ -290,6 +306,11 @@ pub(crate) async fn run_session_workflow(
     );
 
     let mut executor = session_executor.lock().await;
+    executor.set_event_sink(
+        node_execution_sink
+            .clone()
+            .unwrap_or_else(|| Arc::new(NullEventSink)),
+    );
     let checkpoint_summary = executor
         .workflow_execution_session_checkpoint_summary(workflow_execution_session_id)
         .await;
@@ -315,7 +336,7 @@ pub(crate) async fn run_session_workflow(
     apply_runtime_extensions_for_execution(
         &mut executor,
         &runtime_ext,
-        None,
+        node_execution_sink,
         Some(workflow_execution_session_id.to_string()),
         Some(python_runtime_execution_recorder.clone()),
         InferenceLifecycleWorkflowLedgerSink::try_new(

@@ -2708,10 +2708,9 @@ Update during implementation:
   `inference.execution_diagnostic_observed` payloads and introduced a
   host-owned workflow event sink that maps structured node-engine
   `TaskProgressDetail::KvCache` facts into ledger events. The slice wires this
-  sink into request-scoped workflow, data-graph, and edit-session execution
-  paths while keeping cache bytes, fingerprints, and temp paths out of durable
-  diagnostics; warm workflow-session executor reuse remains a follow-up wiring
-  point.
+  sink into request-scoped workflow, warm workflow-session, data-graph, and
+  edit-session execution paths while keeping cache bytes, fingerprints, and temp
+  paths out of durable diagnostics.
 
 ## Commit Cadence Notes
 
