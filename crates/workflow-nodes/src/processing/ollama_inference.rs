@@ -13,11 +13,10 @@ use node_engine::{
 
 const OLLAMA_RETIRED_MESSAGE: &str = "Ollama is no longer supported as a first-party Pantograph inference backend. Migrate this saved workflow node to the canonical inference node with a Pumas model reference.";
 
-/// Ollama Inference Task
+/// Retired Ollama inference task.
 ///
-/// Sends a prompt to an Ollama server using the specified model.
-/// The model name is received as an input, allowing dynamic model selection
-/// from a Model Provider node.
+/// Preserves the old node shape as a migration reference without preserving
+/// Ollama execution support.
 ///
 /// # Inputs (from context)
 /// - `{task_id}.input.prompt` - The prompt to send (required)
@@ -33,8 +32,6 @@ const OLLAMA_RETIRED_MESSAGE: &str = "Ollama is no longer supported as a first-p
 pub struct OllamaInferenceTask {
     /// Unique identifier for this task instance
     task_id: String,
-    /// Base URL of the Ollama server (default: http://localhost:11434)
-    base_url: String,
 }
 
 impl OllamaInferenceTask {
@@ -61,15 +58,6 @@ impl OllamaInferenceTask {
     pub fn new(task_id: impl Into<String>) -> Self {
         Self {
             task_id: task_id.into(),
-            base_url: "http://localhost:11434".to_string(),
-        }
-    }
-
-    /// Create with a custom base URL
-    pub fn with_base_url(task_id: impl Into<String>, base_url: impl Into<String>) -> Self {
-        Self {
-            task_id: task_id.into(),
-            base_url: base_url.into(),
         }
     }
 
@@ -84,8 +72,10 @@ impl TaskDescriptor for OllamaInferenceTask {
         TaskMetadata {
             node_type: "ollama-inference".to_string(),
             category: NodeCategory::Processing,
-            label: "Ollama Inference".to_string(),
-            description: "Runs inference using a local Ollama server".to_string(),
+            label: "Retired Ollama Inference".to_string(),
+            description:
+                "Retired legacy node shape; migrate to canonical inference with a Pumas model ref"
+                    .to_string(),
             inputs: vec![
                 PortMetadata::required(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
                 PortMetadata::required(Self::PORT_MODEL, "Model", PortDataType::String),
@@ -134,18 +124,6 @@ mod tests {
     fn test_task_id() {
         let task = OllamaInferenceTask::new("ollama_task");
         assert_eq!(task.id(), "ollama_task");
-    }
-
-    #[test]
-    fn test_default_base_url() {
-        let task = OllamaInferenceTask::new("test");
-        assert_eq!(task.base_url, "http://localhost:11434");
-    }
-
-    #[test]
-    fn test_custom_base_url() {
-        let task = OllamaInferenceTask::with_base_url("test", "http://custom:8080");
-        assert_eq!(task.base_url, "http://custom:8080");
     }
 
     #[test]
