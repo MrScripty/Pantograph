@@ -226,6 +226,20 @@ fn generation_options_group_transformers_aligned_request_fields() {
     assert!(decoded
         .backend_extensions
         .contains_key("transformers:watermarking_config"));
+    assert_eq!(
+        decoded.requested_option_paths(),
+        vec![
+            "length.max_new_tokens",
+            "sampling.temperature",
+            "sampling.top_p",
+            "sampling.seed",
+            "stopping.stop_strings",
+            "stopping.eos_token_ids",
+            "cache.use_cache",
+            "cache.kv_cache_checkpoint_requested",
+            "backend_extensions.transformers:watermarking_config",
+        ]
+    );
 }
 
 #[test]

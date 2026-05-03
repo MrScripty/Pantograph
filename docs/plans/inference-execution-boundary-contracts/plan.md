@@ -1462,7 +1462,7 @@ execution semantics that backends can map locally.
   option reporting.
 - [x] Define precedence for model-provided generation defaults, workflow/node
   defaults, runtime presets, and request-level overrides.
-- [ ] Define a typed option-support report for every requested option:
+- [x] Define a typed option-support report for every requested option:
   honored, mapped, defaulted, ignored, unsupported, rejected, conflict,
   requires model support, or requires backend support.
 - [ ] Keep backend-native flags hidden behind adapter mapping, including
@@ -1511,6 +1511,12 @@ usage fields, cache-handle ids, and option diagnostics.
 OpenAI-compatible chat requests now map into typed execution requests at the
 adapter edge, and typed request validation rejects task/input mismatches and
 missing required payloads before backend execution.
+`GenerationOptions::requested_option_paths()` now provides the canonical list
+of requested option paths, and the PyTorch mapper test proves every requested
+path receives an `OptionCompatibilityDiagnostic`. PyTorch unsupported option
+behavior is covered for seed, stop strings, logprobs, token ids, and
+non-Transformers backend extensions; remaining backends still need equivalent
+coverage.
 
 ### Milestone 11: Canonical Workflow Node Migration
 
@@ -1909,6 +1915,10 @@ Update during implementation:
   OpenAI-chat edge mapper. Internal typed execution can now reject task/input
   mismatches, missing text inputs, empty embedding batches, and invalid rerank
   payloads before backend adapters see the request.
+- 2026-05-03: Added canonical requested-option path enumeration and PyTorch
+  coverage proving every requested generation option gets a typed compatibility
+  diagnostic. This closes the report contract while leaving equivalent
+  unsupported-option coverage for non-PyTorch backends open.
 
 ## Commit Cadence Notes
 

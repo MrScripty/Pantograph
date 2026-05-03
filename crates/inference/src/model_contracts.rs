@@ -499,6 +499,93 @@ pub struct GenerationOptions {
 }
 
 impl GenerationOptions {
+    /// Return canonical option paths for every explicitly requested option.
+    ///
+    /// Empty vectors and absent optional values are not requested. Backend
+    /// mappers can use this list to prove they emitted an option compatibility
+    /// diagnostic for every requested option they inspected.
+    #[must_use]
+    pub fn requested_option_paths(&self) -> Vec<String> {
+        let mut paths = Vec::new();
+        push_requested_option(
+            &mut paths,
+            "length.max_new_tokens",
+            self.length.max_new_tokens,
+        );
+        push_requested_option(
+            &mut paths,
+            "length.min_new_tokens",
+            self.length.min_new_tokens,
+        );
+        push_requested_option(&mut paths, "length.max_length", self.length.max_length);
+        push_requested_option(
+            &mut paths,
+            "sampling.temperature",
+            self.sampling.temperature,
+        );
+        push_requested_option(&mut paths, "sampling.top_p", self.sampling.top_p);
+        push_requested_option(&mut paths, "sampling.top_k", self.sampling.top_k);
+        push_requested_option(
+            &mut paths,
+            "sampling.repetition_penalty",
+            self.sampling.repetition_penalty,
+        );
+        push_requested_option(&mut paths, "sampling.seed", self.sampling.seed);
+        push_requested_option(&mut paths, "search.num_beams", self.search.num_beams);
+        push_requested_option(
+            &mut paths,
+            "search.num_return_sequences",
+            self.search.num_return_sequences,
+        );
+        push_requested_vec_option(
+            &mut paths,
+            "stopping.stop_strings",
+            &self.stopping.stop_strings,
+        );
+        push_requested_vec_option(
+            &mut paths,
+            "stopping.eos_token_ids",
+            &self.stopping.eos_token_ids,
+        );
+        push_requested_option(&mut paths, "cache.use_cache", self.cache.use_cache);
+        push_requested_option(
+            &mut paths,
+            "cache.kv_cache_checkpoint_requested",
+            self.cache.kv_cache_checkpoint_requested,
+        );
+        push_requested_option(
+            &mut paths,
+            "output.return_logprobs",
+            self.output.return_logprobs,
+        );
+        push_requested_option(
+            &mut paths,
+            "output.return_token_ids",
+            self.output.return_token_ids,
+        );
+        push_requested_option(
+            &mut paths,
+            "special_tokens.bos_token_id",
+            self.special_tokens.bos_token_id,
+        );
+        push_requested_option(
+            &mut paths,
+            "special_tokens.eos_token_id",
+            self.special_tokens.eos_token_id,
+        );
+        push_requested_option(
+            &mut paths,
+            "special_tokens.pad_token_id",
+            self.special_tokens.pad_token_id,
+        );
+        paths.extend(
+            self.backend_extensions
+                .keys()
+                .map(|key| format!("backend_extensions.{key}")),
+        );
+        paths
+    }
+
     /// Resolve generation options from layered defaults and request overrides.
     ///
     /// Precedence is model defaults, then workflow/node defaults, then runtime
@@ -822,6 +909,18 @@ fn apply_optional_option<T: Copy>(
             state,
             message: Some(format!("generation option resolved from {source:?}")),
         });
+    }
+}
+
+fn push_requested_option<T>(paths: &mut Vec<String>, option_path: &'static str, value: Option<T>) {
+    if value.is_some() {
+        paths.push(option_path.to_string());
+    }
+}
+
+fn push_requested_vec_option<T>(paths: &mut Vec<String>, option_path: &'static str, value: &[T]) {
+    if !value.is_empty() {
+        paths.push(option_path.to_string());
     }
 }
 

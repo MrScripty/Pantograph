@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::pytorch_worker_contract::{
     PyTorchTransformersLoadRequest, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
     PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
@@ -463,4 +465,18 @@ fn test_pytorch_generation_options_map_to_transformers_kwargs_and_diagnostics() 
         diagnostic.option_path == "output.return_logprobs"
             && diagnostic.state == OptionSupportState::Unsupported
     }));
+
+    let requested_paths: BTreeSet<_> = options.requested_option_paths().into_iter().collect();
+    let diagnostic_paths: BTreeSet<_> = mapping
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.option_path.clone())
+        .collect();
+    assert!(
+        requested_paths.is_subset(&diagnostic_paths),
+        "missing diagnostics for requested options: {:?}",
+        requested_paths
+            .difference(&diagnostic_paths)
+            .collect::<Vec<_>>()
+    );
 }
