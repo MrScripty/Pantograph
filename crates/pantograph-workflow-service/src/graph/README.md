@@ -144,11 +144,18 @@ for existing graph-edit callers.
 - Revision comparison and canonical definition fallbacks should use eager,
   explicit option/result helpers so graph-contract projection stays
   warning-clean without changing fallback semantics.
+- Saved `ollama-inference` nodes canonicalize to `llm-inference` with
+  explicit upgrade records and unresolved Pumas model-reference diagnostics.
+  Compatible response/stream edges are preserved; retired Ollama-only model,
+  model-ref, temperature, and token-limit ports are removed rather than kept as
+  invalid graph handles.
 
 ## Revisit Triggers
 - Graph edit payloads need streaming patches instead of whole-graph snapshots.
 - Persisted workflow files require schema migration beyond additive metadata.
 - Node-definition discovery needs pluggable registries instead of built-in inventory.
+- Canonical inference-node work introduces a richer model-reference port that
+  can preserve old backend-specific model edges without diagnostic removal.
 
 ## Dependencies
 **Internal:** `node-engine`, `workflow-nodes`, workflow service error types.

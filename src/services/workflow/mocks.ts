@@ -136,26 +136,6 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     execution_mode: 'stream',
   },
   {
-    node_type: 'ollama-inference',
-    category: 'processing',
-    label: 'Ollama Inference',
-    description: 'Run inference using local Ollama server',
-    io_binding_origin: 'integrated',
-    inputs: [
-      { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
-      { id: 'model', label: 'Model', data_type: 'string', required: true, multiple: false },
-      { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },
-      { id: 'temperature', label: 'Temperature', data_type: 'number', required: false, multiple: false },
-      { id: 'max_tokens', label: 'Max Tokens', data_type: 'number', required: false, multiple: false },
-    ],
-    outputs: [
-      { id: 'response', label: 'Response', data_type: 'string', required: true, multiple: false },
-      { id: 'model_used', label: 'Model Used', data_type: 'string', required: false, multiple: false },
-      { id: 'stream', label: 'Stream', data_type: 'stream', required: false, multiple: false },
-    ],
-    execution_mode: 'stream',
-  },
-  {
     node_type: 'llamacpp-inference',
     category: 'processing',
     label: 'LlamaCpp Inference',

@@ -139,7 +139,6 @@ pub(super) fn infer_engine(
         "diffusion-inference" => "pytorch".to_string(),
         "llamacpp-inference" => "llamacpp".to_string(),
         "reranker" => "llamacpp".to_string(),
-        "ollama-inference" => "ollama".to_string(),
         _ => {
             if model_type.unwrap_or_default().eq_ignore_ascii_case("audio") {
                 "stable_audio".to_string()

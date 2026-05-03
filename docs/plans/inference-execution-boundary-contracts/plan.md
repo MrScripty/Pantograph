@@ -1165,11 +1165,11 @@ entry points.
 - [x] Remove Ollama backend registration and public backend feature surface.
 - [x] Remove or quarantine managed Ollama runtime/platform code so it cannot be
   selected as an active backend.
-- [ ] Update user-facing and developer documentation to explain that Pantograph
+- [x] Update user-facing and developer documentation to explain that Pantograph
   does not wrap Ollama as a first-party runtime.
 - [x] Add first-slice tests proving stale Ollama workflow nodes fail with a
   clear migration error instead of contacting an Ollama daemon.
-- [ ] Add broader tests proving stale Ollama selections fail with a clear migration
+- [x] Add broader tests proving stale Ollama selections fail with a clear migration
   error or are mapped to a supported default according to the migration
   decision.
 
@@ -1191,8 +1191,13 @@ Tauri; stopped registering Ollama in the inference backend registry; and added
 registry/gateway checks for retired Ollama behavior. The third slice
 quarantined managed-runtime exposure by removing Ollama from supported runtime
 enumeration, rejecting direct Ollama command resolution, and preventing stale
-Ollama runtime ids from projecting selectable backend keys. Legacy state cleanup,
-user-setting migration, and saved-workflow structural migration remain pending.
+Ollama runtime ids from projecting selectable backend keys. The fourth slice
+added saved-workflow canonicalization for legacy `ollama-inference` nodes by
+migrating them to `llm-inference`, removing unsupported Ollama-only ports,
+recording append-only upgrade diagnostics, preserving compatible response/stream
+edges, and retaining unresolved Pumas model-reference metadata for user repair.
+Legacy persisted user-setting cleanup and final deletion of retired adapter files
+remain pending.
 
 ### Milestone 7: Strengthen Capability Facts
 
@@ -1379,7 +1384,7 @@ canonical inference shape instead of preserving backend-specific node contracts.
   model source, Pumas model reference, image/audio/video inputs, generation
   options, embedding options, rerank inputs, model refs, stream outputs, and KV
   cache handles.
-- [ ] Migrate old `ollama-inference` nodes structurally to canonical
+- [x] Migrate old `ollama-inference` nodes structurally to canonical
   chat/generation tasks without keeping Ollama execution support. If no
   replacement Pumas model reference is known, emit an unresolved model-reference
   diagnostic instead of retaining an Ollama node.

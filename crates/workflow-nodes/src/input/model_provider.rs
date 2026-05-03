@@ -2,7 +2,7 @@
 //!
 //! This task provides model information to inference nodes.
 //! It can be configured with a model name which is then passed
-//! to downstream inference nodes (like Ollama Inference).
+//! to downstream inference nodes.
 
 use async_trait::async_trait;
 use graph_flow::{Context, NextAction, Task, TaskResult};

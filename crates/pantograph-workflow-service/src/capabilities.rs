@@ -274,7 +274,6 @@ pub fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
 fn backend_key_for_node_type(node_type: &str) -> Option<&'static str> {
     match node_type {
         "llamacpp-inference" => Some("llama_cpp"),
-        "ollama-inference" => Some("ollama"),
         "pytorch-inference" => Some("pytorch"),
         _ => None,
     }
@@ -661,7 +660,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_required_backends_infers_runtime_specific_node_backends() {
+    fn extract_required_backends_infers_supported_runtime_specific_node_backends() {
         let nodes = vec![
             StoredGraphNode {
                 id: "torch".to_string(),
@@ -685,11 +684,7 @@ mod tests {
 
         assert_eq!(
             extract_required_backends(&nodes),
-            vec![
-                "llama_cpp".to_string(),
-                "ollama".to_string(),
-                "pytorch".to_string()
-            ]
+            vec!["llama_cpp".to_string(), "pytorch".to_string()]
         );
     }
 
