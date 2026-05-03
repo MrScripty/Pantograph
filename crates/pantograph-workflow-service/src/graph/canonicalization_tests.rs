@@ -683,6 +683,140 @@ fn canonicalize_workflow_graph_migrates_legacy_embedding_nodes() {
 }
 
 #[test]
+fn canonicalize_workflow_graph_migrates_legacy_reranker_nodes() {
+    let registry = NodeRegistry::new();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "query".to_string(),
+                node_type: "text-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 0.0 },
+                data: json!({ "text": "Which document is most relevant?" }),
+            },
+            GraphNode {
+                id: "documents".to_string(),
+                node_type: "text-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 100.0 },
+                data: json!({ "text": "[\"a\", \"b\"]" }),
+            },
+            GraphNode {
+                id: "reranker".to_string(),
+                node_type: "reranker".to_string(),
+                position: super::super::types::Position { x: 100.0, y: 0.0 },
+                data: json!({
+                    "model_path": "/models/reranker.gguf",
+                    "top_k": 2,
+                    "return_documents": true,
+                }),
+            },
+            GraphNode {
+                id: "results-output".to_string(),
+                node_type: "text-output".to_string(),
+                position: super::super::types::Position { x: 200.0, y: 0.0 },
+                data: json!({}),
+            },
+            GraphNode {
+                id: "top-document-output".to_string(),
+                node_type: "text-output".to_string(),
+                position: super::super::types::Position { x: 200.0, y: 100.0 },
+                data: json!({}),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "query-reranker-query".to_string(),
+                source: "query".to_string(),
+                source_handle: "text".to_string(),
+                target: "reranker".to_string(),
+                target_handle: "query".to_string(),
+            },
+            GraphEdge {
+                id: "documents-reranker-documents-json".to_string(),
+                source: "documents".to_string(),
+                source_handle: "text".to_string(),
+                target: "reranker".to_string(),
+                target_handle: "documents_json".to_string(),
+            },
+            GraphEdge {
+                id: "reranker-results-output-text".to_string(),
+                source: "reranker".to_string(),
+                source_handle: "results".to_string(),
+                target: "results-output".to_string(),
+                target_handle: "text".to_string(),
+            },
+            GraphEdge {
+                id: "reranker-top-document-output-text".to_string(),
+                source: "reranker".to_string(),
+                source_handle: "top_document".to_string(),
+                target: "top-document-output".to_string(),
+                target_handle: "text".to_string(),
+            },
+        ],
+        derived_graph: None,
+    };
+
+    let result = canonicalize_workflow_graph_with_migrations(graph, &registry);
+    let canonical = result.graph;
+    let migrated = canonical
+        .nodes
+        .iter()
+        .find(|node| node.id == "reranker")
+        .expect("migrated reranker node");
+
+    assert_eq!(migrated.node_type, "llm-inference");
+    assert_eq!(migrated.data["task_kind"], json!("rerank"));
+    assert_eq!(migrated.data["runtime_hint"], json!("llamacpp"));
+    assert_eq!(
+        migrated.data["pumas_model_ref"]["legacy_model_path"],
+        json!("/models/reranker.gguf")
+    );
+    assert_eq!(migrated.data["task_options"]["top_k"], json!(2));
+    assert_eq!(
+        migrated.data["task_options"]["return_documents"],
+        json!(true)
+    );
+    assert_eq!(
+        migrated.data["migration_diagnostics"][0]["code"],
+        json!("legacy_reranker_node")
+    );
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "query-reranker-query"
+            && edge.target == "reranker"
+            && edge.target_handle == "query"
+    }));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "documents-reranker-documents-json"
+            && edge.target == "reranker"
+            && edge.target_handle == "documents_json"
+    }));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "reranker-results-output-text"
+            && edge.source == "reranker"
+            && edge.source_handle == "results"
+    }));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "reranker-top-document-output-text"
+            && edge.source == "reranker"
+            && edge.source_handle == "top_document"
+    }));
+
+    assert_eq!(result.migration_records.len(), 1);
+    let record = &result.migration_records[0];
+    assert_eq!(record.node_type.as_str(), "reranker");
+    assert_eq!(record.outcome, ContractUpgradeOutcome::Upgraded);
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::NodeTypeChanged { from, to, .. }
+            if from.as_str() == "reranker" && to.as_str() == "llm-inference"
+    )));
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::PortRemoved { port_id, kind, .. }
+            if port_id.as_str() == "model_path" && *kind == PortKind::Input
+    )));
+}
+
+#[test]
 fn canonicalize_workflow_graph_hydrates_expand_settings_and_passthrough_edges() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {

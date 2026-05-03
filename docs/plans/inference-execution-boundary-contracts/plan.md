@@ -1569,7 +1569,7 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - [x] Migrate old embedding nodes to canonical inference with
   `task_kind = embedding`; remove public embedding-mode semantics from the
   graph contract while preserving embedding inputs/outputs.
-- [ ] Migrate reranker nodes to canonical inference or a canonical rerank task
+- [x] Migrate reranker nodes to canonical inference or a canonical rerank task
   shape without backend-specific request semantics.
 - [ ] Preserve graph topology, node ids where possible, edge ids, positions,
   labels, groups, output bindings, and user-authored settings.
@@ -1623,8 +1623,12 @@ right required input per task instead of making text generation semantics
 universal. Saved-workflow canonicalization now migrates legacy `embedding`
 nodes to `llm-inference` with `task_kind = embedding`, preserves text input,
 embedding output, and metadata output topology, and records unresolved Pumas
-model-reference diagnostics. Pumas-backed GGUF/HF resolution, mmproj-specific
-preservation, reranker, frontend/template, and validation slices remain open.
+model-reference diagnostics. Saved-workflow canonicalization now also migrates
+legacy `reranker` nodes to `llm-inference` with `task_kind = rerank`,
+preserves query/document/result/top-document topology, maps rerank options into
+canonical task options, and records unresolved Pumas model-reference
+diagnostics. Pumas-backed GGUF/HF resolution, mmproj-specific preservation,
+frontend/template, and validation slices remain open.
 
 ### Milestone 12: Prepare Native Candle Slice
 

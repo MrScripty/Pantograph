@@ -100,6 +100,12 @@ impl InferenceTask {
     pub const PORT_TASK_OPTIONS: &'static str = "task_options";
     /// Port ID for text input used by embedding/scoring tasks
     pub const PORT_TEXT: &'static str = "text";
+    /// Port ID for query input used by rerank tasks
+    pub const PORT_QUERY: &'static str = "query";
+    /// Port ID for structured candidate documents input
+    pub const PORT_DOCUMENTS: &'static str = "documents";
+    /// Port ID for string-encoded candidate documents input
+    pub const PORT_DOCUMENTS_JSON: &'static str = "documents_json";
     /// Port ID for prompt input
     pub const PORT_PROMPT: &'static str = "prompt";
     /// Port ID for audio input used by transcription tasks
@@ -114,6 +120,14 @@ impl InferenceTask {
     pub const PORT_KV_CACHE_IN: &'static str = "kv_cache_in";
     /// Port ID for response output
     pub const PORT_RESPONSE: &'static str = "response";
+    /// Port ID for structured rerank results output
+    pub const PORT_RESULTS: &'static str = "results";
+    /// Port ID for rerank score output
+    pub const PORT_SCORES: &'static str = "scores";
+    /// Port ID for top reranked document output
+    pub const PORT_TOP_DOCUMENT: &'static str = "top_document";
+    /// Port ID for top rerank score output
+    pub const PORT_TOP_SCORE: &'static str = "top_score";
     /// Port ID for embedding vector output
     pub const PORT_EMBEDDING: &'static str = "embedding";
     /// Port ID for task metadata output
@@ -175,6 +189,13 @@ impl TaskDescriptor for InferenceTask {
                     PortDataType::Json,
                 ),
                 PortMetadata::optional(Self::PORT_TEXT, "Text", PortDataType::String),
+                PortMetadata::optional(Self::PORT_QUERY, "Query", PortDataType::String),
+                PortMetadata::optional(Self::PORT_DOCUMENTS, "Documents", PortDataType::Json),
+                PortMetadata::optional(
+                    Self::PORT_DOCUMENTS_JSON,
+                    "Documents JSON",
+                    PortDataType::String,
+                ),
                 PortMetadata::optional(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
                 PortMetadata::optional(Self::PORT_AUDIO, "Audio", PortDataType::Audio),
                 PortMetadata::optional(
@@ -203,6 +224,14 @@ impl TaskDescriptor for InferenceTask {
             ],
             outputs: vec![
                 PortMetadata::optional(Self::PORT_RESPONSE, "Response", PortDataType::String),
+                PortMetadata::optional(Self::PORT_RESULTS, "Results", PortDataType::Json),
+                PortMetadata::optional(Self::PORT_SCORES, "Scores", PortDataType::Json),
+                PortMetadata::optional(
+                    Self::PORT_TOP_DOCUMENT,
+                    "Top Document",
+                    PortDataType::String,
+                ),
+                PortMetadata::optional(Self::PORT_TOP_SCORE, "Top Score", PortDataType::Number),
                 PortMetadata::optional(Self::PORT_EMBEDDING, "Embedding", PortDataType::Embedding),
                 PortMetadata::optional(Self::PORT_METADATA, "Metadata", PortDataType::Json),
                 PortMetadata::optional(Self::PORT_MODEL_REF, "Model Ref", PortDataType::Json),
@@ -471,6 +500,21 @@ mod tests {
         assert!(meta.inputs.iter().any(|p| p.id == InferenceTask::PORT_TEXT
             && p.data_type == PortDataType::String
             && !p.required));
+        assert!(meta.inputs.iter().any(|p| p.id == InferenceTask::PORT_QUERY
+            && p.data_type == PortDataType::String
+            && !p.required));
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_DOCUMENTS
+                && p.data_type == PortDataType::Json
+                && !p.required));
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_DOCUMENTS_JSON
+                && p.data_type == PortDataType::String
+                && !p.required));
         assert!(meta
             .inputs
             .iter()
@@ -501,6 +545,20 @@ mod tests {
             .outputs
             .iter()
             .any(|p| p.id == InferenceTask::PORT_MODEL_REF && p.data_type == PortDataType::Json));
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_RESULTS && p.data_type == PortDataType::Json));
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_SCORES && p.data_type == PortDataType::Json));
+        assert!(meta.outputs.iter().any(|p| {
+            p.id == InferenceTask::PORT_TOP_DOCUMENT && p.data_type == PortDataType::String
+        }));
+        assert!(meta.outputs.iter().any(|p| {
+            p.id == InferenceTask::PORT_TOP_SCORE && p.data_type == PortDataType::Number
+        }));
         assert!(meta.outputs.iter().any(|p| {
             p.id == InferenceTask::PORT_EMBEDDING && p.data_type == PortDataType::Embedding
         }));

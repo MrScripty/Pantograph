@@ -16,6 +16,7 @@ pub(super) enum LegacyNodeMigrationKind {
     LlamaCppInference,
     PyTorchInference,
     Embedding,
+    Reranker,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -333,6 +334,11 @@ pub(super) fn canonicalize_legacy_node_types(
                     node.node_type = "llm-inference".to_string();
                     migrate_embedding_node_data(&mut node.data);
                 }
+                "reranker" => {
+                    migrated_nodes.insert(node.id.clone(), LegacyNodeMigrationKind::Reranker);
+                    node.node_type = "llm-inference".to_string();
+                    migrate_reranker_node_data(&mut node.data);
+                }
                 _ => {}
             }
 
@@ -371,6 +377,19 @@ pub(super) fn canonicalize_legacy_node_types(
             }
             if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::Embedding)
                 && edge.target_handle == "model"
+            {
+                return None;
+            }
+            if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::Reranker)
+                && matches!(
+                    edge.target_handle.as_str(),
+                    "model_path" | "top_k" | "return_documents"
+                )
+            {
+                return None;
+            }
+            if migrated_nodes.get(&edge.source) == Some(&LegacyNodeMigrationKind::Reranker)
+                && matches!(edge.source_handle.as_str(), "model_path" | "model_ref")
             {
                 return None;
             }
@@ -426,6 +445,7 @@ pub(super) fn legacy_node_type_migration_records(
             LegacyNodeMigrationKind::LlamaCppInference => legacy_llamacpp_migration_record(node_id),
             LegacyNodeMigrationKind::PyTorchInference => legacy_pytorch_migration_record(node_id),
             LegacyNodeMigrationKind::Embedding => legacy_embedding_migration_record(node_id),
+            LegacyNodeMigrationKind::Reranker => legacy_reranker_migration_record(node_id),
         })
         .collect::<Vec<_>>();
     records.sort_by(|left, right| {
@@ -631,6 +651,57 @@ fn migrate_embedding_node_data(data: &mut serde_json::Value) {
                 "severity": "warning",
                 "message": "Migrated from dedicated embedding node to canonical llm-inference with task_kind=embedding. Dedicated embedding runtime residency is now backend-local rather than graph-visible.",
                 "legacy_model": legacy_model
+            }])
+        });
+}
+
+fn migrate_reranker_node_data(data: &mut serde_json::Value) {
+    let object = ensure_json_object(data);
+    let legacy_model_path = object.get("model_path").cloned();
+    let legacy_top_k = object.get("top_k").cloned();
+    let legacy_return_documents = object.get("return_documents").cloned();
+
+    object
+        .entry("task_kind".to_string())
+        .or_insert_with(|| json!("rerank"));
+    object
+        .entry("runtime_hint".to_string())
+        .or_insert_with(|| json!("llamacpp"));
+    object
+        .entry("pumas_model_ref".to_string())
+        .or_insert_with(|| {
+            json!({
+                "status": "unresolved",
+                "source": "legacy_reranker",
+                "legacy_model_path": legacy_model_path,
+                "message": "Resolve this legacy GGUF reranker model path through Pumas before running the canonical inference node."
+            })
+        });
+
+    let task_options = object
+        .entry("task_options".to_string())
+        .or_insert_with(|| json!({}));
+    if let Some(options) = task_options.as_object_mut() {
+        if let Some(value) = legacy_top_k.clone() {
+            options.entry("top_k".to_string()).or_insert(value);
+        }
+        if let Some(value) = legacy_return_documents.clone() {
+            options
+                .entry("return_documents".to_string())
+                .or_insert(value);
+        }
+    }
+
+    object
+        .entry("migration_diagnostics".to_string())
+        .or_insert_with(|| {
+            json!([{
+                "code": "legacy_reranker_node",
+                "severity": "warning",
+                "message": "Migrated from dedicated reranker node to canonical llm-inference with task_kind=rerank. Backend-specific reranker request options are now canonical task options.",
+                "legacy_model_path": legacy_model_path,
+                "legacy_top_k": legacy_top_k,
+                "legacy_return_documents": legacy_return_documents
             }])
         });
 }
@@ -880,6 +951,60 @@ fn legacy_embedding_migration_record(node_id: &str) -> Option<ContractUpgradeRec
             message: "embedding was migrated to canonical llm-inference with task_kind=embedding; legacy model evidence must resolve through Pumas before execution.".to_string(),
             node_id: Some(node_id),
             node_type: Some(NodeTypeId::try_from("embedding".to_string()).ok()?),
+            port_id: None,
+        }],
+    };
+    record.validate().ok()?;
+    Some(record)
+}
+
+fn legacy_reranker_migration_record(node_id: &str) -> Option<ContractUpgradeRecord> {
+    let node_id = NodeInstanceId::try_from(node_id.to_string()).ok()?;
+    let record = ContractUpgradeRecord {
+        node_type: NodeTypeId::try_from("reranker".to_string()).ok()?,
+        outcome: ContractUpgradeOutcome::Upgraded,
+        source_contract_version: Some("0.0.0".to_string()),
+        source_contract_digest: None,
+        target_contract_version: Some("1.0.0".to_string()),
+        target_contract_digest: None,
+        diagnostics_lineage: DiagnosticsLineagePolicy::RejectToAvoidSilentChange,
+        changes: vec![
+            ContractUpgradeChange::NodeTypeChanged {
+                node_id: node_id.clone(),
+                from: NodeTypeId::try_from("reranker".to_string()).ok()?,
+                to: NodeTypeId::try_from("llm-inference".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("model_path".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("top_k".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("return_documents".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Output,
+                port_id: PortId::try_from("model_path".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Output,
+                port_id: PortId::try_from("model_ref".to_string()).ok()?,
+            },
+        ],
+        diagnostics: vec![ContractUpgradeDiagnostic {
+            reason: ContractUpgradeRejectionReason::UnsupportedLegacyContract,
+            message: "reranker was migrated to canonical llm-inference with task_kind=rerank; legacy model path and task options must resolve through Pumas/inference validation before execution.".to_string(),
+            node_id: Some(node_id),
+            node_type: Some(NodeTypeId::try_from("reranker".to_string()).ok()?),
             port_id: None,
         }],
     };
