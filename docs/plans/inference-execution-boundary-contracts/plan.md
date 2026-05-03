@@ -1467,6 +1467,10 @@ bounded message.
 PyTorch now has a backend-local mapper from canonical `GenerationOptions` to
 Transformers-style generation kwargs plus per-option diagnostics for honored,
 mapped, and currently unsupported options.
+PyTorch/Transformers load envelopes now carry the typed `ResolvedModelSource`
+projected from Pumas package facts as an append-only worker payload field while
+retaining the older artifact fields for compatibility with existing worker
+fixtures.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

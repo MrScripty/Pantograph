@@ -569,7 +569,10 @@ fn normalize_modality_label(label: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model_contracts::{BackendHintLabel, SupportTier, TaskModalitySignature};
+    use crate::model_contracts::{
+        BackendHintLabel, SupportTier, TaskExecutionBehavior, TaskFamily, TaskModalitySignature,
+        TaskStreamingSupport,
+    };
     use crate::{
         BackendCapabilityFacts, BackendFeatureCapabilityFacts, BackendModelSourceCapabilityFacts,
         BackendTaskCapability,
@@ -584,7 +587,12 @@ mod tests {
                 vec![InferenceModality::Text],
             ),
             result_family: "text".to_string(),
+            task_family: TaskFamily::Generative,
+            execution_behavior: TaskExecutionBehavior::Generates,
+            streaming_support: TaskStreamingSupport::BackendDependent,
             support_tier: SupportTier::Stable,
+            required_components: Vec::new(),
+            upstream_task_ids: Vec::new(),
         }
     }
 

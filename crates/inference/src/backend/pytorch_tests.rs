@@ -9,7 +9,8 @@ use super::*;
 use crate::model_contracts::{
     CacheGenerationOptions, GenerationOptions, LengthGenerationOptions, ModelArtifactKind,
     OptionSupportState, OutputGenerationOptions, PumasModelRef, ResolvedModelPackageFacts,
-    SamplingGenerationOptions, SpecialTokenGenerationOptions, StoppingGenerationOptions,
+    ResolvedModelSourceKind, SamplingGenerationOptions, SpecialTokenGenerationOptions,
+    StoppingGenerationOptions,
 };
 
 #[test]
@@ -215,6 +216,7 @@ fn test_pytorch_worker_trust_policy_defaults_closed() {
         },
         artifact_kind: ModelArtifactKind::HfCompatibleDirectory,
         entry_path: "/models/no-custom-code".to_string(),
+        model_source: None,
         task_id: InferenceTaskId::TextGeneration,
         model_type_hint: None,
         device: None,
@@ -330,6 +332,20 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
         ModelArtifactKind::HfCompatibleDirectory
     );
     assert_eq!(envelope.payload.entry_path, "llm/example/tiny-transformers");
+    let model_source = envelope
+        .payload
+        .model_source
+        .as_ref()
+        .expect("model source should project from package facts");
+    assert_eq!(
+        model_source.source_kind,
+        ResolvedModelSourceKind::PumasResolved
+    );
+    assert_eq!(model_source.entry_path, envelope.payload.entry_path);
+    assert_eq!(
+        model_source.model_ref.as_ref(),
+        Some(&envelope.payload.model_ref)
+    );
     assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
     assert_eq!(envelope.payload.model_type_hint.as_deref(), Some("llama"));
     assert_eq!(envelope.payload.device.as_deref(), Some("cuda:0"));

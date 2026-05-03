@@ -4,6 +4,7 @@ use serde_json::Value;
 use crate::backend::BackendError;
 use crate::model_contracts::{
     InferenceTaskId, ModelArtifactKind, OptionCompatibilityDiagnostic, PumasModelRef,
+    ResolvedModelSource,
 };
 
 pub(super) const PYTORCH_WORKER_CONTRACT_VERSION: u32 = 1;
@@ -67,6 +68,8 @@ pub(super) struct PyTorchTransformersLoadRequest {
     pub model_ref: PumasModelRef,
     pub artifact_kind: ModelArtifactKind,
     pub entry_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_source: Option<ResolvedModelSource>,
     pub task_id: InferenceTaskId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_type_hint: Option<String>,

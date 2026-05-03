@@ -29,7 +29,8 @@ use super::{
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     GenerationOptions, InferenceModality, InferenceTaskId, ModelValidationState,
-    OptionCompatibilityDiagnostic, OptionSupportState, ResolvedModelPackageFacts, TaskEvidence,
+    OptionCompatibilityDiagnostic, OptionSupportState, ResolvedModelPackageFacts,
+    ResolvedModelSource, TaskEvidence,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
@@ -360,6 +361,7 @@ impl PyTorchBackend {
                 model_ref: package.model_ref.clone(),
                 artifact_kind: package.artifact.artifact_kind.clone(),
                 entry_path: package.artifact.entry_path.clone(),
+                model_source: Some(ResolvedModelSource::from_package_facts(package)),
                 task_id,
                 model_type_hint,
                 device: device.map(str::to_string),
