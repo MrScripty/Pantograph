@@ -1658,6 +1658,11 @@ emission from canonical embedding inference nodes instead of the retired
 Workflow-service graph memory-impact analysis now treats canonical
 `llm-inference` as the KV-capable node shape and keys model/runtime invalidation
 off canonical Pumas model-source and runtime-hint fields.
+Embedded-runtime model dependency descriptor inference no longer derives engines
+from retired PyTorch/llama.cpp/reranker node type names; canonical rerank model
+type evidence maps to llama.cpp, explicit backend keys still take precedence,
+and other canonical inference requests default through the existing backend
+fallback path.
 
 ### Milestone 12: Prepare Native Candle Slice
 

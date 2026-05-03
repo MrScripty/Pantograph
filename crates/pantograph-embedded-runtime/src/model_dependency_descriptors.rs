@@ -133,12 +133,15 @@ pub(super) fn infer_engine(
     if let Some(backend) = canonical_backend_key(backend_key) {
         return backend;
     }
+    if model_type
+        .unwrap_or_default()
+        .eq_ignore_ascii_case("reranker")
+    {
+        return "llamacpp".to_string();
+    }
     match node_type {
         "audio-generation" => "stable_audio".to_string(),
-        "pytorch-inference" => "pytorch".to_string(),
         "diffusion-inference" => "pytorch".to_string(),
-        "llamacpp-inference" => "llamacpp".to_string(),
-        "reranker" => "llamacpp".to_string(),
         _ => {
             if model_type.unwrap_or_default().eq_ignore_ascii_case("audio") {
                 "stable_audio".to_string()

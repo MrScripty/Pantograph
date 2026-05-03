@@ -129,7 +129,7 @@ async fn test_resolver_with_pumas(
 
 fn sample_request() -> ModelDependencyRequest {
     ModelDependencyRequest {
-        node_type: "pytorch-inference".to_string(),
+        node_type: "llm-inference".to_string(),
         model_path: "/tmp/model".to_string(),
         model_id: Some("model-id".to_string()),
         model_type: Some("diffusion".to_string()),
@@ -189,8 +189,8 @@ fn infer_engine_defaults_diffusion_node_to_pytorch() {
 }
 
 #[test]
-fn infer_engine_uses_llamacpp_for_reranker_node() {
-    let engine = descriptors::infer_engine(None, "reranker", Some("reranker"));
+fn infer_engine_uses_llamacpp_for_canonical_reranker_task() {
+    let engine = descriptors::infer_engine(None, "llm-inference", Some("reranker"));
     assert_eq!(engine, "llamacpp");
 }
 
@@ -338,7 +338,7 @@ async fn resolve_descriptor_uses_primary_file_for_library_owned_file_model() {
 
     let (resolver, api) = test_resolver_with_pumas(&temp_dir).await;
     let request = ModelDependencyRequest {
-        node_type: "pytorch-inference".to_string(),
+        node_type: "llm-inference".to_string(),
         model_path: model_dir.display().to_string(),
         model_id: Some("llm/imported/test-gguf".to_string()),
         model_type: Some("llm".to_string()),
@@ -408,7 +408,7 @@ async fn puma_lib_option_and_dependency_resolver_agree_on_primary_file_path() {
     assert_eq!(option_model_path, model_file.display().to_string());
 
     let request = ModelDependencyRequest {
-        node_type: "pytorch-inference".to_string(),
+        node_type: "llm-inference".to_string(),
         model_path: option_model_path.clone(),
         model_id: option
             .metadata
