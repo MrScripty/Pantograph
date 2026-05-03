@@ -1877,9 +1877,9 @@ drift back into inference.
 - Cross-layer acceptance check for any changed host-facing DTO projection.
 
 **Status:** In progress. Node-engine now consumes the typed inference boundary
-for non-streaming canonical `llm-inference` text/chat, embedding, and rerank
-execution, preserving streaming on the existing event path until token-stream
-contracts are migrated.
+for canonical `llm-inference` text/chat streaming and non-streaming execution,
+embedding, and rerank execution while preserving graph `TaskStream` event output
+as the host-visible streaming surface.
 
 ### Milestone 15: Diagnostics Ledger Integration
 

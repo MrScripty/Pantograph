@@ -256,6 +256,11 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - `InferenceGateway::execute_typed_with_lifecycle` records typed task
   validation and backend execution as lifecycle facts for host ledger adapters;
   the inference crate still does not import or write diagnostics-ledger events.
+- `InferenceGateway::stream_typed_text` and
+  `InferenceGateway::stream_typed_text_with_lifecycle` keep streaming
+  text/chat requests on the same canonical `InferenceExecutionRequest` boundary
+  as non-streaming execution while leaving token event shaping to host/node
+  layers.
 - `ImageGenerationRequest` reserves optional `init_image`, `mask_image`, and
   `strength` for later img2img/inpaint support.
 - `RerankRequest`, `RerankResult`, and `RerankResponse` are append-only

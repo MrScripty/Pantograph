@@ -175,12 +175,12 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Additive node inputs may be accepted for compatibility, but callers should
   prefer the canonical `pantograph-node-contracts` projections when
   constructing new graph-authoring workflows.
-- New non-streaming canonical `llm-inference` text/chat, embedding, and rerank
-  execution should pass through `inference::InferenceExecutionRequest` rather
-  than constructing backend-native request JSON or calling backend-specific
-  gateway helpers in node-engine. Streaming remains an event-shaping path until
-  token-stream contracts are migrated, but should still use the gateway stream
-  facade instead of direct node-engine HTTP transport.
+- Canonical `llm-inference` text/chat, embedding, and rerank execution should
+  pass through `inference::InferenceExecutionRequest` rather than constructing
+  backend-native request JSON or calling backend-specific gateway helpers in
+  node-engine. Streaming remains responsible for graph `TaskStream` event
+  shaping, but the request itself uses typed gateway stream methods instead of
+  direct node-engine HTTP transport.
 - Hosts that need durable typed inference diagnostics may provide
   `extension_keys::INFERENCE_LIFECYCLE_SINK`; node-engine only forwards bounded
   lifecycle facts and does not import or write the diagnostics ledger.
