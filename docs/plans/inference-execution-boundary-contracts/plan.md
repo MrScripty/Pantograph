@@ -497,10 +497,10 @@ reliability while keeping scheduling and workflow policy outside inference.
   generation defaults, chat template presence, tokenizer/processor facts,
   quantization facts, custom-code/security facts, dependency binding state, and
   provenance.
-- Pumas feasible execution candidate contracts, consumed as advisory durable
-  model-library facts that describe backend feasibility, dependency feasibility,
-  size/resource estimates, confidence/source, and exclusion reasons without
-  deciding live runtime placement.
+- Pantograph-owned technical-fit candidate projections derived from Pumas
+  package facts, Pumas dependency facts, backend capabilities, runtime
+  registry state, and workflow requirements. Pumas must not own candidate
+  derivation or exclusion semantics.
 - New strong task registry contract covering canonical task ids, task aliases,
   input/output modality signatures, result families, support tiers, processor
   requirements, backend compatibility hooks, and lifecycle expectations.
@@ -688,7 +688,7 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 | Inference or workflows treat raw paths as canonical model identity | High | Make Pumas model ids the preferred saved graph contract and resolve entry paths at execution/preflight time. |
 | Transformers becomes a competing model registry | High | Use Transformers as package/task vocabulary only; Pumas remains the canonical model source and artifact resolver. |
 | Pumas metadata and inference package facts drift | High | Add explicit Pumas-to-inference projection contracts and tests for model id, artifact kind, task id, modalities, backend hints, and dependency bindings. |
-| Pantograph treats Pumas feasible execution candidates as final runtime selection | High | Consume candidates as advisory durable facts only; keep live runtime selection, memory admission, loaded-state interpretation, and final backend choice in runtime registry/scheduler layers. |
+| Pantograph expects Pumas to derive technical-fit candidates | High | Keep Pumas as the package/dependency fact producer and derive candidate/exclusion semantics inside Pantograph from Pumas facts plus runtime registry and workflow context. |
 | Pantograph model-list views serve stale Pumas package facts | Medium | Cache details locally for responsiveness, but refresh by Pumas model-library update events or cursors for added, removed, modified, invalidated, or dependency-changed models. |
 | Pantograph depends on Pumas SQLite or `models.metadata_json` internals | High | Consume only versioned Pumas DTO/API outputs and fixture contracts; add model-list/preflight tests that do not inspect Pumas storage internals. |
 | Pantograph treats remote HF MLX/vLLM tags as installed-model compatibility | Medium | Treat remote search tags as discovery hints; installed compatibility requires resolved local Pumas package facts plus Pantograph inference/backend checks. |
@@ -742,18 +742,10 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   to the model/package contract fixture slice.
 - Revisit trigger: fix in a separate managed-dependency slice before treating
   full `cargo test -p inference` as green.
-- 2026-05-02: `cargo check -p pantograph-embedded-runtime --no-default-features`
-  is currently blocked in the external `pumas-library` dependency by missing
-  package-fact helper functions referenced from
-  `pumas-core/src/model_library/library.rs`, including
-  `package_selected_files`, `package_artifact_kind`,
-  `package_component_facts`, `transformers_package_evidence`,
-  `generation_default_facts`, `companion_artifacts`, and
-  `backend_hint_facts`.
-- Reason: this is upstream Pumas implementation drift discovered while checking
-  Pantograph's no-default feature matrix.
-- Revisit trigger: rerun the no-default embedded-runtime check after Pumas
-  package-fact helper implementations or gating are restored.
+- 2026-05-02: Earlier `cargo check -p pantograph-embedded-runtime
+  --no-default-features` failure from missing upstream Pumas package-fact
+  helpers has been resolved in Pumas. The remaining Pantograph work is
+  consumer-side alignment to the canonical Pumas DTO/API shape.
 
 ## Definition of Done
 
@@ -796,13 +788,12 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   presence, generation defaults, tokenizer/processor facts, chat template
   presence, companion artifacts, quantization facts, custom-code/security facts,
   and provenance.
-- Pantograph model/library pages cache Pumas model rows, package summaries,
-  selected detail facts, and feasible execution candidates during startup or
-  page population, then refresh affected entries from Pumas model-library
-  update events or cursors.
-- Pantograph consumes Pumas feasible execution candidates as advisory durable
-  model-library facts, not as final runtime selection, memory admission, or
-  loaded-runtime policy.
+- Pantograph model/library pages cache Pumas model rows, package summaries, and
+  selected detail facts during startup or page population, then refresh
+  affected entries from Pumas model-library update events or cursors.
+- Pantograph derives technical-fit candidates and exclusion diagnostics from
+  Pumas facts plus Pantograph backend/runtime/workflow context. Pumas does not
+  provide final runtime candidates.
 - Pantograph model-list and preflight tests prove code consumes versioned Pumas
   DTO/API outputs and fixtures without inspecting Pumas SQLite layout,
   `models.metadata_json`, or HF search-cache internals.
@@ -910,9 +901,9 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 **Status:** Partially implemented. First contract-only slice added
 `crates/inference/src/model_contracts.rs`, public re-exports, README contract
 docs, and crate-local executable fixtures/tests for package facts, task
-evidence, generation defaults, option diagnostics, lifecycle phases, advisory
-feasible execution candidates, compact `ModelExecutionDescriptor`, and Pumas
-model-library cache invalidation events.
+evidence, generation defaults, option diagnostics, lifecycle phases,
+Pantograph-local technical-fit candidate facts, compact
+`ModelExecutionDescriptor`, and Pumas model-library cache invalidation events.
 
 ### Milestone 2: Align Pumas as Canonical Model Source
 
@@ -926,20 +917,23 @@ Detailed Pumas-side work is split into
   source for model identity, artifact facts, task evidence, generation defaults,
   custom-code/security facts, backend hints, legacy reference resolution, and
   Pumas/Pantograph fixture expectations.
-- [x] Treat Pumas feasible execution candidates as advisory durable facts.
-  Pantograph may use them to seed model-list details, preflight diagnostics, and
-  technical-fit inputs, but runtime registry/scheduler remain responsible for
+- [ ] Define Pantograph-owned technical-fit candidate derivation from canonical
+  Pumas package facts, Pumas dependency facts, backend capabilities, runtime
+  registry state, and workflow requirements. Pumas supplies facts only;
+  Pantograph owns model/backend candidate projection, exclusion diagnostics,
   live runtime selection, loaded-state interpretation, memory admission, and
   final backend choice.
 - [ ] Keep the Pantograph inference plan focused on consuming Pumas package
   facts rather than specifying Pumas indexing, import, deduplication,
   migration, dependency binding, or storage implementation details.
-- [x] Define the Pantograph-side `PumasModelRef` and
-  `ResolvedModelPackageFacts` consumer contracts after the Pumas-side projection
-  shape is frozen.
+- [ ] Replace the initial Pantograph-side `PumasModelRef` and
+  `ResolvedModelPackageFacts` temporary consumer contracts with adapters or DTOs
+  that align to the canonical Pumas producer shape after the cross-repo
+  fixture gate completes.
 - [ ] Define Pantograph's model-list detail cache for Pumas model rows,
-  package-fact summaries, feasible candidates, and selected detail facts during
-  application startup or library-page population.
+  package-fact summaries, Pantograph-derived technical-fit summaries where
+  needed, and selected detail facts during application startup or library-page
+  population.
 - [ ] Subscribe to or poll Pumas model-library update events/cursors so
   Pantograph refreshes affected cached rows when models are added, removed, or
   modified, package facts are invalidated or regenerated, or dependency
@@ -973,10 +967,11 @@ Detailed Pumas-side work is split into
 - `git diff --check`.
 
 **Status:** Partially implemented. Pantograph now has crate-local package-fact
-contracts/fixtures and an embedded-runtime projection that converts feasible
-local package-fact candidates into existing `pumas_feasible` technical-fit
-candidates. Remote MLX/vLLM search tags do not project into executable
-candidates. Model-list cache and Pumas update-event consumption remain pending.
+contracts/fixtures and an embedded-runtime projection that converts
+Pantograph-derived local package-fact candidates into existing
+`pumas_feasible` technical-fit candidates. Remote MLX/vLLM search tags do not
+project into executable candidates. Model-list cache, canonical Pumas DTO
+alignment, and Pumas update-event consumption remain pending.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
@@ -1622,18 +1617,29 @@ Update during implementation:
   `ModelExecutionDescriptor` is treated as a current compact Pumas
   execution-facing summary, not a deprecated legacy contract. Pantograph should
   cache Pumas model-list/package-fact projections for UI responsiveness,
-  refresh them through Pumas model-library update events or cursors, and consume
-  Pumas feasible execution candidates only as advisory durable facts.
+  refresh them through Pumas model-library update events or cursors, and derive
+  technical-fit candidates inside Pantograph from Pumas facts plus
+  Pantograph-owned backend/runtime/workflow context.
 - 2026-05-02: Implemented the first contract-only slice in `crates/inference`.
   Added Transformers-aligned model/package/task/generation/lifecycle DTOs,
-  a compact Pumas `ModelExecutionDescriptor` mirror, advisory feasible
-  execution candidate facts, Pumas model-library change events, and named JSON
-  package-fact fixtures verified through public inference integration tests.
+  a compact Pumas `ModelExecutionDescriptor` mirror, initial Pantograph-local
+  technical-fit candidate facts, Pumas model-library change events, and named
+  JSON package-fact fixtures verified through public inference integration
+  tests.
 - 2026-05-02: Implemented the neighboring technical-fit projection slice in
-  `pantograph-embedded-runtime`. Feasible local Pumas package facts can now
+  `pantograph-embedded-runtime`. Pantograph-local package-fact candidates can
   become `pumas_feasible` runtime-registry candidates without synthesizing live
   runtime id, residency, warmup, queue, or memory-admission facts. Remote
   MLX/vLLM discovery hints stay out of executable candidate projection.
+- 2026-05-02: Follow-up Pumas/Pantograph boundary review moved feasible
+  execution candidate derivation out of the Pumas plan. Pumas remains the
+  producer of package facts, dependency facts, summaries, and update cursors;
+  Pantograph owns candidate derivation and technical-fit exclusion semantics.
+- 2026-05-03: Reviewed the updated plan against the current Pumas implementation.
+  Pumas now builds and exposes `list_model_library_updates_since`,
+  `model_package_facts_summary_snapshot`, and
+  `resolve_model_package_facts_summary`; Pantograph follow-up is consumption
+  and DTO alignment rather than waiting for those producer APIs.
 
 ## Commit Cadence Notes
 
@@ -1682,11 +1688,13 @@ Update during implementation:
   models and would need to keep raw paths as canonical model identity.
 - Inference must become the owner of Pumas model-library policy, indexing,
   import, deduplication, or dependency binding state.
-- Pumas feasible execution candidates start carrying final live runtime
-  selection, inference configuration, loaded-state interpretation, memory
-  admission, or scheduler policy.
-- Pumas cannot provide host-agnostic model-library update events or cursors
-  sufficient for Pantograph model-list cache invalidation.
+- Pantograph requires Pumas to derive feasible execution candidates,
+  technical-fit exclusions, final live runtime selection, inference
+  configuration, loaded-state interpretation, memory admission, or scheduler
+  policy.
+- Pumas host-agnostic model-library update events or cursors cannot satisfy
+  Pantograph model-list cache invalidation without Pantograph inspecting Pumas
+  storage internals.
 - Pantograph model-list or preflight code would need to inspect Pumas SQLite
   layout, `models.metadata_json`, or HF search-cache internals instead of
   versioned DTO/API output.
@@ -1807,15 +1815,16 @@ Update during implementation:
   `model_contracts.rs`, public exports, README updates, ten named package-fact
   fixtures, and `cargo test -p inference --test model_contracts`.
 - 2026-05-02: Embedded-runtime technical-fit slice implemented locally:
-  feasible package-fact candidates project to advisory `pumas_feasible`
-  runtime-registry candidates, while remote discovery hints project to none.
+  Pantograph-local package-fact candidates project to advisory
+  `pumas_feasible` runtime-registry candidates, while remote discovery hints
+  project to none.
 
 ### Deviations
 
 - Full `cargo test -p inference` is blocked by an unrelated managed
   redistributable path expectation mismatch recorded above.
-- Embedded-runtime no-default feature checking is blocked by upstream
-  `pumas-library` package-fact helper drift recorded above.
+- Earlier embedded-runtime no-default feature checking was unblocked after
+  Pumas restored package-fact helper support.
 
 ### Follow-Ups
 
@@ -1824,8 +1833,9 @@ Update during implementation:
 - Continue Milestone 1 by identifying raw fact fields versus policy-risk fields
   and deciding whether runtime facts extend `RuntimeLifecycleSnapshot` directly
   or use a new wrapper DTO.
-- Continue Milestone 2 with the Pantograph model-list detail cache and Pumas
-  update-event/cursor consumption once Pumas exposes the producer API.
+- Continue Milestone 2 with the Pantograph model-list detail cache and
+  consumption of Pumas' existing package-fact summary snapshot, single-summary,
+  and update-feed APIs.
 
 ### Verification Summary
 
@@ -1834,9 +1844,9 @@ Update during implementation:
   dead-code warning for `strip_managed_binary_spawn_error`.
 - `cargo check -p inference --all-features` passed.
 - `cargo test -p pantograph-embedded-runtime technical_fit` passed.
-- `cargo check -p pantograph-embedded-runtime --no-default-features` failed in
-  external `pumas-library` package-fact helper references; recorded as an
-  unrelated upstream/Pumas follow-up.
+- `cargo build -p pumas-library` passed in the Pumas Rust workspace.
+- `cargo check -p pantograph-embedded-runtime --no-default-features` passed
+  after the Pumas package-fact helper blocker was resolved upstream.
 - `cargo test -p inference` failed in
   `managed_redistributables::install_from_staging_validates_expected_files_before_finalizing`
   due to the unrelated managed-dependency path mismatch recorded above.
