@@ -1339,6 +1339,137 @@ pub struct ResolvedArtifactFacts {
     pub selected_files: Vec<String>,
 }
 
+/// Source kind for a backend-loadable model artifact.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResolvedModelSourceKind {
+    /// Source was resolved through Pumas and carries a stable model reference.
+    PumasResolved,
+    /// Direct local Hugging Face-compatible package directory for import/debug.
+    DirectHfCompatibleDirectory,
+    /// Direct Hugging Face repository id for backend-local download/cache use.
+    HuggingFaceRepo,
+    /// Direct local GGUF path for import/debug.
+    DirectGgufPath,
+    /// Direct local safetensors file for import/debug.
+    DirectSafetensorsPath,
+    /// Direct local diffusers bundle directory for import/debug.
+    DirectDiffusersBundle,
+    /// Direct local ONNX model path for import/debug.
+    DirectOnnxPath,
+    #[default]
+    Unknown,
+}
+
+/// Stable model source contract consumed by backend adapters.
+///
+/// This describes what should be loaded, where it came from, and what artifact
+/// class it represents. It does not choose a backend, scheduler policy, runtime
+/// residency, or admission behavior.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ResolvedModelSource {
+    pub source_contract_version: u32,
+    pub source_kind: ResolvedModelSourceKind,
+    pub artifact_kind: ModelArtifactKind,
+    pub entry_path: String,
+    pub storage_kind: ModelStorageKind,
+    pub validation_state: ModelValidationState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_ref: Option<PumasModelRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub companion_artifacts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<ModelPackageDiagnostic>,
+}
+
+impl ResolvedModelSource {
+    /// Build a backend-loadable source from canonical Pumas package facts.
+    #[must_use]
+    pub fn from_package_facts(facts: &ResolvedModelPackageFacts) -> Self {
+        Self {
+            source_contract_version: MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+            source_kind: ResolvedModelSourceKind::PumasResolved,
+            artifact_kind: facts.artifact.artifact_kind.clone(),
+            entry_path: facts.artifact.entry_path.clone(),
+            storage_kind: facts.artifact.storage_kind.clone(),
+            validation_state: facts.artifact.validation_state.clone(),
+            model_ref: Some(facts.model_ref.clone()),
+            repo_id: facts
+                .transformers
+                .as_ref()
+                .and_then(|evidence| evidence.source_repo_id.clone()),
+            revision: facts
+                .transformers
+                .as_ref()
+                .and_then(|evidence| evidence.source_revision.clone())
+                .or_else(|| facts.model_ref.revision.clone()),
+            selected_files: facts.artifact.selected_files.clone(),
+            companion_artifacts: facts.artifact.companion_artifacts.clone(),
+            diagnostics: facts.diagnostics.clone(),
+        }
+    }
+
+    /// Build a direct local source for debug/import compatibility paths.
+    #[must_use]
+    pub fn direct_local(
+        source_kind: ResolvedModelSourceKind,
+        artifact_kind: ModelArtifactKind,
+        entry_path: impl Into<String>,
+    ) -> Self {
+        Self {
+            source_contract_version: MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+            source_kind,
+            artifact_kind,
+            entry_path: entry_path.into(),
+            storage_kind: ModelStorageKind::ExternalReference,
+            validation_state: ModelValidationState::Unknown,
+            model_ref: None,
+            repo_id: None,
+            revision: None,
+            selected_files: Vec::new(),
+            companion_artifacts: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    /// Build a Hugging Face repo source for backend-local download/cache use.
+    #[must_use]
+    pub fn hugging_face_repo(
+        repo_id: impl Into<String>,
+        revision: Option<String>,
+        artifact_kind: ModelArtifactKind,
+    ) -> Self {
+        let repo_id = repo_id.into();
+        Self {
+            source_contract_version: MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+            source_kind: ResolvedModelSourceKind::HuggingFaceRepo,
+            artifact_kind,
+            entry_path: repo_id.clone(),
+            storage_kind: ModelStorageKind::ExternalReference,
+            validation_state: ModelValidationState::Unknown,
+            model_ref: None,
+            repo_id: Some(repo_id),
+            revision,
+            selected_files: Vec::new(),
+            companion_artifacts: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    /// True when this source came through the Pumas model identity boundary.
+    #[must_use]
+    pub fn is_pumas_resolved(&self) -> bool {
+        self.source_kind == ResolvedModelSourceKind::PumasResolved && self.model_ref.is_some()
+    }
+}
+
 /// Generic package-fact diagnostic.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

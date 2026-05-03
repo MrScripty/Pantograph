@@ -3,13 +3,14 @@ use std::collections::BTreeMap;
 use inference::{
     default_task_registry_entries, normalize_task_label, resolve_task_registry_entry,
     BackendHintLabel, GenerationOptionSource, GenerationOptions, InferenceLifecyclePhase,
-    InferenceModality, InferenceTaskId, ModelExecutionDescriptor, ModelExecutionStorageKind,
-    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
-    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
-    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
+    InferenceModality, InferenceTaskId, ModelArtifactKind, ModelExecutionDescriptor,
+    ModelExecutionStorageKind, ModelExecutionValidationState, ModelFactFamily,
+    ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+    ModelLibraryUpdateFeed, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
-    ResolvedModelPackageFacts, SupportTier, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry,
-    TaskStreamingSupport, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind, SupportTier,
+    TaskExecutionBehavior, TaskFamily, TaskRegistryEntry, TaskStreamingSupport,
+    MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
@@ -249,6 +250,48 @@ fn task_registry_entry_decodes_append_only_defaults() {
     assert_eq!(entry.streaming_support, TaskStreamingSupport::Unknown);
     assert!(entry.required_components.is_empty());
     assert!(entry.matches_label("feature-extraction"));
+}
+
+#[test]
+fn resolved_model_source_projects_from_pumas_package_facts() {
+    let facts: ResolvedModelPackageFacts = serde_json::from_str(PACKAGE_FACT_FIXTURES[0].1)
+        .expect("decode gguf text generation fixture");
+
+    let source = ResolvedModelSource::from_package_facts(&facts);
+
+    assert!(source.is_pumas_resolved());
+    assert_eq!(
+        source.source_contract_version,
+        MODEL_PACKAGE_FACTS_CONTRACT_VERSION
+    );
+    assert_eq!(source.source_kind, ResolvedModelSourceKind::PumasResolved);
+    assert_eq!(source.artifact_kind, facts.artifact.artifact_kind);
+    assert_eq!(source.entry_path, facts.artifact.entry_path);
+    assert_eq!(source.model_ref.as_ref(), Some(&facts.model_ref));
+    assert_eq!(source.storage_kind, facts.artifact.storage_kind);
+    assert_eq!(source.validation_state, facts.artifact.validation_state);
+}
+
+#[test]
+fn resolved_model_source_distinguishes_direct_sources_from_pumas_refs() {
+    let direct = ResolvedModelSource::direct_local(
+        ResolvedModelSourceKind::DirectGgufPath,
+        ModelArtifactKind::Gguf,
+        "/tmp/model.gguf",
+    );
+    assert!(!direct.is_pumas_resolved());
+    assert_eq!(direct.model_ref, None);
+    assert_eq!(direct.entry_path, "/tmp/model.gguf");
+
+    let repo = ResolvedModelSource::hugging_face_repo(
+        "org/model",
+        Some("main".to_string()),
+        ModelArtifactKind::HfCompatibleDirectory,
+    );
+    assert_eq!(repo.source_kind, ResolvedModelSourceKind::HuggingFaceRepo);
+    assert_eq!(repo.entry_path, "org/model");
+    assert_eq!(repo.repo_id.as_deref(), Some("org/model"));
+    assert_eq!(repo.revision.as_deref(), Some("main"));
 }
 
 #[test]

@@ -1094,6 +1094,10 @@ multimodal generation. The registry now exposes canonical task labels, alias
 normalization, modality signatures, task family, execution behavior, streaming
 support, component requirements, support tier, and upstream task ids as typed
 facts without making backend or scheduler decisions.
+The first resolved-model-source slice added a typed backend-load source
+contract that projects from Pumas package facts and distinguishes
+Pumas-resolved artifacts from direct local/Hugging Face debug or import sources
+without selecting a backend or runtime policy.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 

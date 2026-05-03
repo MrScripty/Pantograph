@@ -129,10 +129,11 @@ pub use model_contracts::{
     ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
     OutputGenerationOptions, PackageClassReference, PackageFactStatus, ProcessorComponentFacts,
     ProcessorComponentKind, PumasModelRef, ResolvedArtifactFacts, ResolvedModelPackageFacts,
-    ResolvedModelPackageFactsSummary, SamplingGenerationOptions, SearchGenerationOptions,
-    SpecialTokenGenerationOptions, StoppingGenerationOptions, SupportTier, TaskEvidence,
-    TaskExecutionBehavior, TaskFamily, TaskModalitySignature, TaskRegistryEntry,
-    TaskStreamingSupport, TransformersPackageEvidence, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    ResolvedModelPackageFactsSummary, ResolvedModelSource, ResolvedModelSourceKind,
+    SamplingGenerationOptions, SearchGenerationOptions, SpecialTokenGenerationOptions,
+    StoppingGenerationOptions, SupportTier, TaskEvidence, TaskExecutionBehavior, TaskFamily,
+    TaskModalitySignature, TaskRegistryEntry, TaskStreamingSupport, TransformersPackageEvidence,
+    MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
