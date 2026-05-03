@@ -18,6 +18,10 @@ struct MockHttpBackend;
 struct MockReusedBackend;
 struct MockImplicitLifecycleBackend;
 struct MockFailingBackend;
+struct MockFailAfterFirstStartBackend {
+    starts: usize,
+    ready: bool,
+}
 struct MockKvBackend;
 
 struct MockProcessHandle;
@@ -414,6 +418,83 @@ impl InferenceBackend for MockFailingBackend {
 }
 
 #[async_trait]
+impl InferenceBackend for MockFailAfterFirstStartBackend {
+    fn name(&self) -> &'static str {
+        "MockFailAfterFirstStart"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock backend that fails after the first successful start"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            external_connection: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        self.starts += 1;
+        if self.starts == 1 {
+            self.ready = true;
+            return Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_flaky_runtime".to_string()),
+            });
+        }
+
+        self.ready = false;
+        Err(BackendError::StartupFailed(
+            "mock restart failure".to_string(),
+        ))
+    }
+
+    fn stop(&mut self) {
+        self.ready = false;
+    }
+
+    fn is_ready(&self) -> bool {
+        self.ready
+    }
+
+    async fn health_check(&self) -> bool {
+        self.ready
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+    {
+        Ok(Box::pin(stream::empty()))
+    }
+
+    async fn embeddings(
+        &self,
+        _texts: Vec<String>,
+        _model: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Ok(Vec::new())
+    }
+
+    async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Ok(RerankResponse {
+            results: Vec::new(),
+            metadata: serde_json::Value::Null,
+        })
+    }
+}
+
+#[async_trait]
 impl InferenceBackend for MockKvBackend {
     fn name(&self) -> &'static str {
         "MockKv"
@@ -757,6 +838,71 @@ async fn test_runtime_lifecycle_snapshot_normalizes_start_failure_reason() {
     assert_eq!(
         stopped.last_error.as_deref(),
         Some("Startup failed: mock start failure")
+    );
+}
+
+#[tokio::test]
+async fn test_failed_restart_clears_active_runtime_config_and_attempted_modes() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockFailAfterFirstStartBackend {
+            starts: 0,
+            ready: false,
+        }),
+        "mock",
+    );
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+    let successful_config = BackendConfig {
+        model_path: Some(PathBuf::from("/models/previous.gguf")),
+        ..BackendConfig::default()
+    };
+    gateway
+        .start(&successful_config)
+        .await
+        .expect("initial start should succeed");
+    assert_eq!(
+        gateway
+            .restart_runtime_config()
+            .await
+            .and_then(|config| config.model_path),
+        Some(PathBuf::from("/models/previous.gguf"))
+    );
+
+    let failed_restart = gateway
+        .start(&BackendConfig {
+            external_url: Some("http://127.0.0.1:9999".to_string()),
+            ..BackendConfig::default()
+        })
+        .await;
+
+    assert!(failed_restart.is_err());
+    assert!(gateway.restart_runtime_config().await.is_none());
+    assert!(!gateway.is_embedding_mode().await);
+    assert!(!gateway.is_reranking_mode().await);
+    assert!(!gateway.is_external_mode().await);
+    assert_eq!(
+        gateway
+            .last_inference_config()
+            .await
+            .and_then(|config| config.model_path),
+        Some(PathBuf::from("/models/previous.gguf"))
+    );
+
+    let snapshot = gateway.runtime_lifecycle_snapshot().await;
+    assert_eq!(
+        snapshot.lifecycle_decision_reason.as_deref(),
+        Some("runtime_start_failed")
+    );
+    assert_eq!(
+        snapshot.last_error.as_deref(),
+        Some("Startup failed: mock restart failure")
+    );
+
+    let facts = gateway.mode_info().await.runtime_fact_snapshots();
+    assert_eq!(facts[0].readiness, RuntimeFactReadiness::Failed);
+    assert_eq!(
+        facts[0].last_backend_error.as_deref(),
+        Some("Startup failed: mock restart failure")
     );
 }
 

@@ -1313,7 +1313,9 @@ lease cleanup fixture that verifies startup-error cleanup kills the spawned
 process, removes the PID file, and returns the server to `none` mode. The
 twelfth slice fixed KV-cache `MemoryAndDisk` publication cleanup so failed disk
 writes roll back the memory entry instead of exposing a cache handle from a save
-that returned an error.
+that returned an error. The thirteenth slice tightened failed-restart cleanup in
+the gateway so failed starts clear active runtime config and attempted mode flags
+while preserving the previous successful inference config for restoration flows.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
@@ -1334,7 +1336,7 @@ publishing scheduler conclusions.
   without adding implementation commitments.
 - [x] Ensure facts are snapshots owned by inference and not mutable policy
   state owned by consumers.
-- [ ] Add stale-start/restart tests where existing gateway fixtures support
+- [x] Add stale-start/restart tests where existing gateway fixtures support
   them.
 
 **Verification:**
@@ -1351,8 +1353,8 @@ implemented in `crates/inference/src/types.rs`; stop cleanup and failed-start
 preservation are covered in gateway lifecycle tests, and llama.cpp startup-error
 process lease cleanup is covered in server tests. KV-cache `MemoryAndDisk`
 publication cleanup is covered in store tests. Remaining work covers
-preprocessing, streaming, backend execution, postprocessing cancellation/cleanup
-semantics and any additional gateway-supported stale-start or restart tests.
+preprocessing, streaming, backend execution, and postprocessing
+cancellation/cleanup semantics.
 
 ### Milestone 9: Bind PyTorch Through Transformers
 

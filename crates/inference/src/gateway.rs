@@ -447,6 +447,7 @@ impl InferenceGateway {
             let guard = self.spawner.read().await;
             guard.clone().ok_or(GatewayError::NoSpawner)?
         };
+        let previous_last_inference_config = self.last_inference_config.read().await.clone();
 
         // Track embedding mode
         {
@@ -540,6 +541,26 @@ impl InferenceGateway {
             }
             Err(error) => {
                 let completed_at_ms = unix_timestamp_ms();
+                {
+                    let mut current_runtime_config = self.current_runtime_config.write().await;
+                    *current_runtime_config = None;
+                }
+                {
+                    let mut mode = self.embedding_mode.write().await;
+                    *mode = false;
+                }
+                {
+                    let mut mode = self.reranking_mode.write().await;
+                    *mode = false;
+                }
+                {
+                    let mut mode = self.external_mode.write().await;
+                    *mode = false;
+                }
+                {
+                    let mut last_config = self.last_inference_config.write().await;
+                    *last_config = previous_last_inference_config;
+                }
                 let mut lifecycle = self.runtime_lifecycle.write().await;
                 lifecycle.runtime_id = Some(runtime_id);
                 lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
