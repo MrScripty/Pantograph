@@ -1610,7 +1610,12 @@ outputs. The `workflow-nodes` canonical `llm-inference` descriptor now exposes
 optional Pumas model reference, resolved model source, typed generation options,
 typed task options, model reference, diagnostics, and usage ports so migrations
 have a stable graph-visible target before backend execution uses every field.
-The broader canonical workflow-node migration remains open.
+Saved-workflow canonicalization now structurally migrates legacy
+`llamacpp-inference` nodes to `llm-inference`, rewrites compatible model-ref
+ports, preserves generation option values into canonical node data, and records
+unresolved Pumas model-reference diagnostics. Pumas-backed GGUF resolution,
+mmproj-specific preservation, PyTorch, embedding, reranker, frontend/template,
+and validation slices remain open.
 
 ### Milestone 12: Prepare Native Candle Slice
 

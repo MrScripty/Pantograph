@@ -5,7 +5,7 @@ use pantograph_node_contracts::{
     ContractUpgradeRecord, ContractUpgradeRejectionReason, DiagnosticsLineagePolicy,
     NodeInstanceId, NodeTypeId, PortId, PortKind,
 };
-use serde_json::json;
+use serde_json::{json, Map, Value};
 
 use super::super::types::WorkflowGraph;
 
@@ -13,6 +13,7 @@ use super::super::types::WorkflowGraph;
 pub(super) enum LegacyNodeMigrationKind {
     SystemPrompt,
     OllamaInference,
+    LlamaCppInference,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -311,6 +312,12 @@ pub(super) fn canonicalize_legacy_node_types(
                     node.node_type = "llm-inference".to_string();
                     migrate_ollama_node_data(&mut node.data);
                 }
+                "llamacpp-inference" => {
+                    migrated_nodes
+                        .insert(node.id.clone(), LegacyNodeMigrationKind::LlamaCppInference);
+                    node.node_type = "llm-inference".to_string();
+                    migrate_llamacpp_node_data(&mut node.data);
+                }
                 _ => {}
             }
 
@@ -334,6 +341,11 @@ pub(super) fn canonicalize_legacy_node_types(
             {
                 return None;
             }
+            if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::LlamaCppInference)
+                && matches!(edge.target_handle.as_str(), "temperature" | "max_tokens")
+            {
+                return None;
+            }
             Some(edge)
         })
         .map(|mut edge| {
@@ -346,6 +358,16 @@ pub(super) fn canonicalize_legacy_node_types(
                 && edge.target_handle == "prompt"
             {
                 edge.target_handle = "text".to_string();
+            }
+            if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::LlamaCppInference)
+                && edge.target_handle == "model_path"
+            {
+                edge.target_handle = "pumas_model_ref".to_string();
+            }
+            if migrated_nodes.get(&edge.source) == Some(&LegacyNodeMigrationKind::LlamaCppInference)
+                && edge.source_handle == "model_path"
+            {
+                edge.source_handle = "model_ref".to_string();
             }
             edge
         })
@@ -368,6 +390,7 @@ pub(super) fn legacy_node_type_migration_records(
         .filter_map(|(node_id, migration)| match migration {
             LegacyNodeMigrationKind::SystemPrompt => legacy_system_prompt_migration_record(node_id),
             LegacyNodeMigrationKind::OllamaInference => legacy_ollama_migration_record(node_id),
+            LegacyNodeMigrationKind::LlamaCppInference => legacy_llamacpp_migration_record(node_id),
         })
         .collect::<Vec<_>>();
     records.sort_by(|left, right| {
@@ -418,6 +441,64 @@ fn migrate_ollama_node_data(data: &mut serde_json::Value) {
                 "legacy_max_tokens": legacy_max_tokens
             }])
         });
+}
+
+fn migrate_llamacpp_node_data(data: &mut serde_json::Value) {
+    let object = ensure_json_object(data);
+    let legacy_model_path = object.get("model_path").cloned();
+    let legacy_temperature = object.get("temperature").cloned();
+    let legacy_max_tokens = object.get("max_tokens").cloned();
+
+    object
+        .entry("task_kind".to_string())
+        .or_insert_with(|| json!("text_generation"));
+    object
+        .entry("runtime_hint".to_string())
+        .or_insert_with(|| json!("llamacpp"));
+    object
+        .entry("pumas_model_ref".to_string())
+        .or_insert_with(|| {
+            json!({
+                "status": "unresolved",
+                "source": "legacy_llamacpp",
+                "legacy_model_path": legacy_model_path,
+                "message": "Resolve this legacy llama.cpp model path through Pumas before running the canonical inference node."
+            })
+        });
+
+    let generation_options = object
+        .entry("generation_options".to_string())
+        .or_insert_with(|| json!({}));
+    if let Some(options) = generation_options.as_object_mut() {
+        if let Some(value) = legacy_temperature.clone() {
+            options.entry("temperature".to_string()).or_insert(value);
+        }
+        if let Some(value) = legacy_max_tokens.clone() {
+            options.entry("max_new_tokens".to_string()).or_insert(value);
+        }
+    }
+
+    object
+        .entry("migration_diagnostics".to_string())
+        .or_insert_with(|| {
+            json!([{
+                "code": "legacy_llamacpp_inference_node",
+                "severity": "warning",
+                "message": "Migrated from llamacpp-inference to canonical llm-inference. The legacy model path was retained as unresolved Pumas model-reference evidence until Pumas resolves it.",
+                "legacy_model_path": legacy_model_path,
+                "legacy_temperature": legacy_temperature,
+                "legacy_max_tokens": legacy_max_tokens
+            }])
+        });
+}
+
+fn ensure_json_object(value: &mut Value) -> &mut Map<String, Value> {
+    if !value.is_object() {
+        *value = Value::Object(Map::new());
+    }
+    value
+        .as_object_mut()
+        .expect("value should be an object after normalization")
 }
 
 fn legacy_system_prompt_migration_record(node_id: &str) -> Option<ContractUpgradeRecord> {
@@ -496,6 +577,57 @@ fn legacy_ollama_migration_record(node_id: &str) -> Option<ContractUpgradeRecord
             message: "Ollama execution is retired; this node was migrated to llm-inference with an unresolved Pumas model reference diagnostic.".to_string(),
             node_id: Some(node_id),
             node_type: Some(NodeTypeId::try_from("ollama-inference".to_string()).ok()?),
+            port_id: None,
+        }],
+    };
+    record.validate().ok()?;
+    Some(record)
+}
+
+fn legacy_llamacpp_migration_record(node_id: &str) -> Option<ContractUpgradeRecord> {
+    let node_id = NodeInstanceId::try_from(node_id.to_string()).ok()?;
+    let record = ContractUpgradeRecord {
+        node_type: NodeTypeId::try_from("llamacpp-inference".to_string()).ok()?,
+        outcome: ContractUpgradeOutcome::Upgraded,
+        source_contract_version: Some("0.0.0".to_string()),
+        source_contract_digest: None,
+        target_contract_version: Some("1.0.0".to_string()),
+        target_contract_digest: None,
+        diagnostics_lineage: DiagnosticsLineagePolicy::RejectToAvoidSilentChange,
+        changes: vec![
+            ContractUpgradeChange::NodeTypeChanged {
+                node_id: node_id.clone(),
+                from: NodeTypeId::try_from("llamacpp-inference".to_string()).ok()?,
+                to: NodeTypeId::try_from("llm-inference".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortIdChanged {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                from: PortId::try_from("model_path".to_string()).ok()?,
+                to: PortId::try_from("pumas_model_ref".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("temperature".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("max_tokens".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortIdChanged {
+                node_id: node_id.clone(),
+                kind: PortKind::Output,
+                from: PortId::try_from("model_path".to_string()).ok()?,
+                to: PortId::try_from("model_ref".to_string()).ok()?,
+            },
+        ],
+        diagnostics: vec![ContractUpgradeDiagnostic {
+            reason: ContractUpgradeRejectionReason::UnsupportedLegacyContract,
+            message: "llamacpp-inference was migrated to canonical llm-inference; legacy model path evidence must resolve through Pumas before execution.".to_string(),
+            node_id: Some(node_id),
+            node_type: Some(NodeTypeId::try_from("llamacpp-inference".to_string()).ok()?),
             port_id: None,
         }],
     };

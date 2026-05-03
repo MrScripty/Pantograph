@@ -325,6 +325,143 @@ fn legacy_inference_port_mappings_are_deterministic_per_node() {
 }
 
 #[test]
+fn canonicalize_workflow_graph_migrates_legacy_llamacpp_nodes() {
+    let registry = NodeRegistry::new();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "model-path".to_string(),
+                node_type: "text-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 0.0 },
+                data: json!({ "text": "/models/example.gguf" }),
+            },
+            GraphNode {
+                id: "temperature".to_string(),
+                node_type: "number-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 100.0 },
+                data: json!({ "value": 0.4 }),
+            },
+            GraphNode {
+                id: "llamacpp".to_string(),
+                node_type: "llamacpp-inference".to_string(),
+                position: super::super::types::Position { x: 100.0, y: 0.0 },
+                data: json!({
+                    "model_path": "/models/example.gguf",
+                    "temperature": 0.4,
+                    "max_tokens": 96,
+                }),
+            },
+            GraphNode {
+                id: "output".to_string(),
+                node_type: "text-output".to_string(),
+                position: super::super::types::Position { x: 200.0, y: 0.0 },
+                data: json!({}),
+            },
+            GraphNode {
+                id: "model-ref-output".to_string(),
+                node_type: "text-output".to_string(),
+                position: super::super::types::Position { x: 200.0, y: 100.0 },
+                data: json!({}),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "model-path-llamacpp-model-path".to_string(),
+                source: "model-path".to_string(),
+                source_handle: "text".to_string(),
+                target: "llamacpp".to_string(),
+                target_handle: "model_path".to_string(),
+            },
+            GraphEdge {
+                id: "temperature-llamacpp-temperature".to_string(),
+                source: "temperature".to_string(),
+                source_handle: "value".to_string(),
+                target: "llamacpp".to_string(),
+                target_handle: "temperature".to_string(),
+            },
+            GraphEdge {
+                id: "llamacpp-response-output-text".to_string(),
+                source: "llamacpp".to_string(),
+                source_handle: "response".to_string(),
+                target: "output".to_string(),
+                target_handle: "text".to_string(),
+            },
+            GraphEdge {
+                id: "llamacpp-model-path-output-text".to_string(),
+                source: "llamacpp".to_string(),
+                source_handle: "model_path".to_string(),
+                target: "model-ref-output".to_string(),
+                target_handle: "text".to_string(),
+            },
+        ],
+        derived_graph: None,
+    };
+
+    let result = canonicalize_workflow_graph_with_migrations(graph, &registry);
+    let canonical = result.graph;
+    let migrated = canonical
+        .nodes
+        .iter()
+        .find(|node| node.id == "llamacpp")
+        .expect("migrated llama.cpp node");
+
+    assert_eq!(migrated.node_type, "llm-inference");
+    assert_eq!(migrated.data["task_kind"], json!("text_generation"));
+    assert_eq!(migrated.data["runtime_hint"], json!("llamacpp"));
+    assert_eq!(
+        migrated.data["pumas_model_ref"]["legacy_model_path"],
+        json!("/models/example.gguf")
+    );
+    assert_eq!(
+        migrated.data["generation_options"]["temperature"],
+        json!(0.4)
+    );
+    assert_eq!(
+        migrated.data["generation_options"]["max_new_tokens"],
+        json!(96)
+    );
+    assert_eq!(
+        migrated.data["migration_diagnostics"][0]["code"],
+        json!("legacy_llamacpp_inference_node")
+    );
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "model-path-llamacpp-model-path"
+            && edge.target == "llamacpp"
+            && edge.target_handle == "pumas_model_ref"
+    }));
+    assert!(!canonical
+        .edges
+        .iter()
+        .any(|edge| edge.target == "llamacpp" && edge.target_handle == "temperature"));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "llamacpp-model-path-output-text"
+            && edge.source == "llamacpp"
+            && edge.source_handle == "model_ref"
+    }));
+
+    assert_eq!(result.migration_records.len(), 1);
+    let record = &result.migration_records[0];
+    assert_eq!(record.node_type.as_str(), "llamacpp-inference");
+    assert_eq!(record.outcome, ContractUpgradeOutcome::Upgraded);
+    assert_eq!(
+        record.diagnostics_lineage,
+        DiagnosticsLineagePolicy::RejectToAvoidSilentChange
+    );
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::PortIdChanged { from, to, kind, .. }
+            if from.as_str() == "model_path"
+                && to.as_str() == "pumas_model_ref"
+                && *kind == PortKind::Input
+    )));
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::PortRemoved { port_id, kind, .. }
+            if port_id.as_str() == "temperature" && *kind == PortKind::Input
+    )));
+}
+
+#[test]
 fn canonicalize_workflow_graph_hydrates_expand_settings_and_passthrough_edges() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {
