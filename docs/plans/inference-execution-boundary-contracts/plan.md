@@ -1163,7 +1163,7 @@ and command resolution.
 - [x] Define which operations are common and which remain category-specific:
   runtime command resolution, media executable resolution, native artifact
   activation, lease acquisition/release, install/remove, and catalog refresh.
-- [ ] Define migration/import behavior for existing inference managed runtime
+- [x] Define migration/import behavior for existing inference managed runtime
   and managed redistributable state files.
 - [x] Document that inference consumes runtime executable facts from this
   boundary and media conversion consumes ffmpeg/OIIO/OCIO facts from the same
@@ -1190,6 +1190,22 @@ scheduler admission, runtime reservation, workflow policy, or frontend
 projection. Existing inference managers still own implementation and persisted
 state until a later adapter/migration slice defines import behavior and moves
 consumers behind the neutral boundary.
+
+**State migration/import behavior:** The neutral managed-dependency owner must
+preserve the existing app-data roots as import sources before it writes a new
+canonical state file. Runtime sidecar state imports from
+`third-party/managed-runtime/state.json` plus the legacy `runtimes/` fallback
+already used by managed runtime path resolution. Media tool/native artifact
+state imports from `third-party/managed-dependencies/state.json`; legacy
+install directories under `managed-dependencies/<id>/versions/<version>` remain
+read-only install-root fallbacks, but legacy `managed-dependencies/state.json`
+must be either imported by an explicit migration slice or rejected with a
+typed, user-visible unsupported-legacy-state diagnostic before the inference
+state owner is removed. Import must be idempotent: if the neutral state file
+already exists, it is authoritative and legacy files are read only for explicit
+repair/migration commands. Active leases must fail closed during migration:
+unknown, malformed, or stale lease records are not silently promoted to active
+neutral leases.
 
 ### Milestone 5: Migrate Binary and Media Dependency Ownership
 
