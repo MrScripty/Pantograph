@@ -60,6 +60,7 @@ impl WorkflowHost for ExampleHost {
                 ),
                 selected_version: None,
                 supports_external_connection: false,
+                backend_capability_facts: None,
                 backend_keys: vec!["example-backend".to_string()],
                 missing_files: Vec::new(),
                 unavailable_reason: None,

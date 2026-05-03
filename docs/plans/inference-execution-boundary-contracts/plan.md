@@ -1229,7 +1229,7 @@ to gate behavior without backend-name conditionals.
   rather than backend names, raw task strings, or graph-node type names.
 - [ ] Report preprocessing and postprocessing capability separately from model
   execution capability where component files or backend processors are missing.
-- [ ] Keep existing fields compatible until consumers migrate.
+- [x] Keep existing fields compatible until consumers migrate.
 - [ ] Add tests proving declared unsupported operations return explicit errors.
 
 **Verification:**
@@ -1244,9 +1244,12 @@ registry/list commands, Tauri status commands, and frontend badges. It added
 additive structured `BackendCapabilityFacts` with canonical task ids, modality
 signatures, component lifecycle facts, and task-support helpers while preserving
 the legacy boolean fields for existing consumers. Llama.cpp, Candle, and PyTorch
-now populate initial task/modality facts. Model/package-specific compatibility
-checks, option-support reports, KV-cache capability facts, and consumer
-migration remain pending.
+now populate initial task/modality facts. The second slice added workflow-owned
+runtime-capability fact DTOs, projected backend facts from `BackendInfo` into
+managed and host runtime capabilities, updated TypeScript workflow contracts,
+and verified runtime preflight behavior stays unchanged when typed facts are
+present. Model/package-specific compatibility checks, option-support reports,
+KV-cache capability facts, and broader consumer migration remain pending.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 

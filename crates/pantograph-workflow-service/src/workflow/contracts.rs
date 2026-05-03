@@ -171,12 +171,99 @@ pub struct WorkflowRuntimeCapability {
     pub selected_version: Option<String>,
     #[serde(default)]
     pub supports_external_connection: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_capability_facts: Option<WorkflowBackendCapabilityFacts>,
     #[serde(default)]
     pub backend_keys: Vec<String>,
     #[serde(default)]
     pub missing_files: Vec<String>,
     #[serde(default)]
     pub unavailable_reason: Option<String>,
+}
+
+/// Workflow-owned projection of backend capability facts.
+///
+/// These facts describe static backend support and must not encode scheduler
+/// admission, runtime placement, or queue policy.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowBackendCapabilityFacts {
+    #[serde(default)]
+    pub tasks: Vec<WorkflowBackendTaskCapability>,
+    #[serde(default)]
+    pub preprocessing: WorkflowBackendComponentCapability,
+    #[serde(default)]
+    pub postprocessing: WorkflowBackendComponentCapability,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowBackendTaskCapability {
+    pub task_id: WorkflowInferenceTaskId,
+    #[serde(default)]
+    pub support_tier: WorkflowSupportTier,
+    pub modality_signature: WorkflowTaskModalitySignature,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowTaskModalitySignature {
+    #[serde(default)]
+    pub inputs: Vec<WorkflowInferenceModality>,
+    #[serde(default)]
+    pub outputs: Vec<WorkflowInferenceModality>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowBackendComponentCapability {
+    #[default]
+    Unknown,
+    NotRequired,
+    BackendManaged,
+    RequiresPackageComponent,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSupportTier {
+    Stable,
+    Experimental,
+    Roadmap,
+    Unsupported,
+    #[default]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowInferenceModality {
+    Text,
+    Image,
+    Audio,
+    Video,
+    Embedding,
+    Tokens,
+    Json,
+    PointCloud,
+    Mesh,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowInferenceTaskId {
+    TextGeneration,
+    ChatCompletion,
+    Embedding,
+    Rerank,
+    ImageGeneration,
+    ImageUnderstanding,
+    AudioTranscription,
+    VideoUnderstanding,
+    MultimodalGeneration,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

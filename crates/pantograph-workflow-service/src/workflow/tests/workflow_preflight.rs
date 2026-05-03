@@ -178,6 +178,7 @@ async fn workflow_preflight_blocks_selected_technical_fit_runtime_when_capabilit
                 readiness_state: Some(WorkflowRuntimeReadinessState::Failed),
                 selected_version: Some("b8248".to_string()),
                 supports_external_connection: true,
+                backend_capability_facts: None,
                 backend_keys: vec!["llama_cpp".to_string()],
                 missing_files: Vec::new(),
                 unavailable_reason: Some("validation failed".to_string()),

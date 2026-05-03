@@ -392,6 +392,61 @@ export type WorkflowRuntimeInstallState =
 
 export type WorkflowRuntimeSourceKind = 'unknown' | 'managed' | 'system' | 'host';
 
+export type WorkflowInferenceModality =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'embedding'
+  | 'tokens'
+  | 'json'
+  | 'point_cloud'
+  | 'mesh'
+  | 'other';
+
+export type WorkflowInferenceTaskId =
+  | 'text_generation'
+  | 'chat_completion'
+  | 'embedding'
+  | 'rerank'
+  | 'image_generation'
+  | 'image_understanding'
+  | 'audio_transcription'
+  | 'video_understanding'
+  | 'multimodal_generation'
+  | 'unknown';
+
+export type WorkflowSupportTier =
+  | 'stable'
+  | 'experimental'
+  | 'roadmap'
+  | 'unsupported'
+  | 'unknown';
+
+export type WorkflowBackendComponentCapability =
+  | 'unknown'
+  | 'not_required'
+  | 'backend_managed'
+  | 'requires_package_component'
+  | 'unsupported';
+
+export interface WorkflowTaskModalitySignature {
+  inputs: WorkflowInferenceModality[];
+  outputs: WorkflowInferenceModality[];
+}
+
+export interface WorkflowBackendTaskCapability {
+  task_id: WorkflowInferenceTaskId;
+  support_tier: WorkflowSupportTier;
+  modality_signature: WorkflowTaskModalitySignature;
+}
+
+export interface WorkflowBackendCapabilityFacts {
+  tasks: WorkflowBackendTaskCapability[];
+  preprocessing: WorkflowBackendComponentCapability;
+  postprocessing: WorkflowBackendComponentCapability;
+}
+
 export interface WorkflowRuntimeCapability {
   runtime_id: string;
   display_name: string;
@@ -403,6 +458,7 @@ export interface WorkflowRuntimeCapability {
   source_kind: WorkflowRuntimeSourceKind;
   selected: boolean;
   supports_external_connection: boolean;
+  backend_capability_facts?: WorkflowBackendCapabilityFacts | null;
   backend_keys: string[];
   missing_files: string[];
   unavailable_reason?: string | null;

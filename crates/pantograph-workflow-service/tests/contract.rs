@@ -16,10 +16,12 @@ use pantograph_workflow_service::{
     WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
     WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
-    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
-    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
+    WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
+    WorkflowBackendTaskCapability, WorkflowCapabilitiesRequest, WorkflowCapabilityModel,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary, WorkflowHost,
+    WorkflowHostCapabilities, WorkflowInferenceModality, WorkflowInferenceTaskId,
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
     WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryAssetAccessRecordRequest,
     WorkflowLibraryAssetAccessRecordResponse, WorkflowLibraryUsageQueryRequest,
@@ -33,9 +35,10 @@ use pantograph_workflow_service::{
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
     WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
     WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
-    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowSupportTier, WorkflowTaskModalitySignature, WorkflowTraceNodeRecord,
+    WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
+    WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -86,6 +89,18 @@ impl WorkflowHost for ContractHost {
                 ),
                 selected_version: None,
                 supports_external_connection: true,
+                backend_capability_facts: Some(WorkflowBackendCapabilityFacts {
+                    tasks: vec![WorkflowBackendTaskCapability {
+                        task_id: WorkflowInferenceTaskId::Embedding,
+                        support_tier: WorkflowSupportTier::Stable,
+                        modality_signature: WorkflowTaskModalitySignature {
+                            inputs: vec![WorkflowInferenceModality::Text],
+                            outputs: vec![WorkflowInferenceModality::Embedding],
+                        },
+                    }],
+                    preprocessing: WorkflowBackendComponentCapability::RequiresPackageComponent,
+                    postprocessing: WorkflowBackendComponentCapability::NotRequired,
+                }),
                 backend_keys: vec!["llamacpp".to_string(), "llama.cpp".to_string()],
                 missing_files: Vec::new(),
                 unavailable_reason: None,
@@ -270,6 +285,18 @@ async fn workflow_capabilities_contract_snapshot() {
             "selected": true,
             "readiness_state": "ready",
             "supports_external_connection": true,
+            "backend_capability_facts": {
+                "tasks": [{
+                    "task_id": "embedding",
+                    "support_tier": "stable",
+                    "modality_signature": {
+                        "inputs": ["text"],
+                        "outputs": ["embedding"]
+                    }
+                }],
+                "preprocessing": "requires_package_component",
+                "postprocessing": "not_required"
+            },
             "backend_keys": ["llamacpp", "llama.cpp"],
             "missing_files": [],
             "unavailable_reason": null

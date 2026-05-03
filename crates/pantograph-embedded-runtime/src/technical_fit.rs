@@ -324,6 +324,7 @@ mod tests {
             readiness_state: Some(WorkflowRuntimeReadinessState::Ready),
             selected_version: None,
             supports_external_connection: false,
+            backend_capability_facts: None,
             backend_keys: vec!["llama_cpp".to_string(), "llama.cpp".to_string()],
             missing_files: Vec::new(),
             unavailable_reason: None,

@@ -248,6 +248,7 @@ async fn workflow_capabilities_include_injected_runtime_capabilities() {
         readiness_state: Some(pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready),
         selected_version: None,
         supports_external_connection: false,
+        backend_capability_facts: None,
         backend_keys: vec!["llama_cpp".to_string(), "llamacpp".to_string()],
         missing_files: Vec::new(),
         unavailable_reason: None,

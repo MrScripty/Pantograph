@@ -10,8 +10,11 @@ use pantograph_runtime_identity::{
     runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeReadinessState, WorkflowRuntimeSourceKind,
+    WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
+    WorkflowBackendTaskCapability, WorkflowCapabilitiesResponse, WorkflowInferenceModality,
+    WorkflowInferenceTaskId, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
+    WorkflowRuntimeReadinessState, WorkflowRuntimeSourceKind, WorkflowSupportTier,
+    WorkflowTaskModalitySignature,
 };
 
 pub fn managed_runtime_capabilities(
@@ -37,6 +40,10 @@ pub fn managed_runtime_capabilities(
                 readiness_state: Some(managed_runtime_readiness_state(runtime.readiness_state)),
                 selected_version: runtime.selection.selected_version.clone(),
                 supports_external_connection: runtime_supports_external_connection(
+                    available_backends,
+                    &backend_keys,
+                ),
+                backend_capability_facts: runtime_backend_capability_facts(
                     available_backends,
                     &backend_keys,
                 ),
@@ -76,6 +83,10 @@ pub fn managed_binary_runtime_capabilities(
                 readiness_state: Some(managed_runtime_readiness_state(status.readiness_state)),
                 selected_version: status.selected_version.clone(),
                 supports_external_connection: runtime_supports_external_connection(
+                    available_backends,
+                    &backend_keys,
+                ),
+                backend_capability_facts: runtime_backend_capability_facts(
                     available_backends,
                     &backend_keys,
                 ),
@@ -128,6 +139,7 @@ pub fn dedicated_embedding_runtime_capabilities(
         }),
         selected_version: None,
         supports_external_connection: false,
+        backend_capability_facts: None,
         backend_keys: backend_key_aliases("llama.cpp", "llama_cpp"),
         missing_files: Vec::new(),
         unavailable_reason: snapshot.last_error,
@@ -194,6 +206,7 @@ pub fn python_runtime_capabilities(
             }),
             selected_version: None,
             supports_external_connection: false,
+            backend_capability_facts: None,
             backend_keys,
             missing_files: Vec::new(),
             unavailable_reason: unavailable_reason.clone(),
@@ -310,6 +323,122 @@ fn runtime_supports_external_connection(
     })
 }
 
+fn runtime_backend_capability_facts(
+    available_backends: &[inference::BackendInfo],
+    backend_keys: &[String],
+) -> Option<WorkflowBackendCapabilityFacts> {
+    let normalized_backend_keys = backend_keys
+        .iter()
+        .map(|backend_key| inference::backend::canonical_backend_key(backend_key))
+        .collect::<std::collections::HashSet<_>>();
+
+    available_backends
+        .iter()
+        .find(|backend| normalized_backend_keys.contains(&backend.backend_key))
+        .map(|backend| project_backend_capability_facts(&backend.capabilities.facts))
+}
+
+fn project_backend_capability_facts(
+    facts: &inference::BackendCapabilityFacts,
+) -> WorkflowBackendCapabilityFacts {
+    WorkflowBackendCapabilityFacts {
+        tasks: facts
+            .tasks
+            .iter()
+            .map(|task| WorkflowBackendTaskCapability {
+                task_id: workflow_task_id(&task.task_id),
+                support_tier: workflow_support_tier(&task.support_tier),
+                modality_signature: WorkflowTaskModalitySignature {
+                    inputs: task
+                        .modality_signature
+                        .inputs
+                        .iter()
+                        .map(workflow_modality)
+                        .collect(),
+                    outputs: task
+                        .modality_signature
+                        .outputs
+                        .iter()
+                        .map(workflow_modality)
+                        .collect(),
+                },
+            })
+            .collect(),
+        preprocessing: workflow_component_capability(facts.preprocessing),
+        postprocessing: workflow_component_capability(facts.postprocessing),
+    }
+}
+
+fn workflow_component_capability(
+    capability: inference::BackendComponentCapability,
+) -> WorkflowBackendComponentCapability {
+    match capability {
+        inference::BackendComponentCapability::Unknown => {
+            WorkflowBackendComponentCapability::Unknown
+        }
+        inference::BackendComponentCapability::NotRequired => {
+            WorkflowBackendComponentCapability::NotRequired
+        }
+        inference::BackendComponentCapability::BackendManaged => {
+            WorkflowBackendComponentCapability::BackendManaged
+        }
+        inference::BackendComponentCapability::RequiresPackageComponent => {
+            WorkflowBackendComponentCapability::RequiresPackageComponent
+        }
+        inference::BackendComponentCapability::Unsupported => {
+            WorkflowBackendComponentCapability::Unsupported
+        }
+    }
+}
+
+fn workflow_support_tier(tier: &inference::SupportTier) -> WorkflowSupportTier {
+    match tier {
+        inference::SupportTier::Stable => WorkflowSupportTier::Stable,
+        inference::SupportTier::Experimental => WorkflowSupportTier::Experimental,
+        inference::SupportTier::Roadmap => WorkflowSupportTier::Roadmap,
+        inference::SupportTier::Unsupported => WorkflowSupportTier::Unsupported,
+        inference::SupportTier::Unknown => WorkflowSupportTier::Unknown,
+    }
+}
+
+fn workflow_modality(modality: &inference::InferenceModality) -> WorkflowInferenceModality {
+    match modality {
+        inference::InferenceModality::Text => WorkflowInferenceModality::Text,
+        inference::InferenceModality::Image => WorkflowInferenceModality::Image,
+        inference::InferenceModality::Audio => WorkflowInferenceModality::Audio,
+        inference::InferenceModality::Video => WorkflowInferenceModality::Video,
+        inference::InferenceModality::Embedding => WorkflowInferenceModality::Embedding,
+        inference::InferenceModality::Tokens => WorkflowInferenceModality::Tokens,
+        inference::InferenceModality::Json => WorkflowInferenceModality::Json,
+        inference::InferenceModality::PointCloud => WorkflowInferenceModality::PointCloud,
+        inference::InferenceModality::Mesh => WorkflowInferenceModality::Mesh,
+        inference::InferenceModality::Other => WorkflowInferenceModality::Other,
+    }
+}
+
+fn workflow_task_id(task_id: &inference::InferenceTaskId) -> WorkflowInferenceTaskId {
+    match task_id {
+        inference::InferenceTaskId::TextGeneration => WorkflowInferenceTaskId::TextGeneration,
+        inference::InferenceTaskId::ChatCompletion => WorkflowInferenceTaskId::ChatCompletion,
+        inference::InferenceTaskId::Embedding => WorkflowInferenceTaskId::Embedding,
+        inference::InferenceTaskId::Rerank => WorkflowInferenceTaskId::Rerank,
+        inference::InferenceTaskId::ImageGeneration => WorkflowInferenceTaskId::ImageGeneration,
+        inference::InferenceTaskId::ImageUnderstanding => {
+            WorkflowInferenceTaskId::ImageUnderstanding
+        }
+        inference::InferenceTaskId::AudioTranscription => {
+            WorkflowInferenceTaskId::AudioTranscription
+        }
+        inference::InferenceTaskId::VideoUnderstanding => {
+            WorkflowInferenceTaskId::VideoUnderstanding
+        }
+        inference::InferenceTaskId::MultimodalGeneration => {
+            WorkflowInferenceTaskId::MultimodalGeneration
+        }
+        inference::InferenceTaskId::Unknown => WorkflowInferenceTaskId::Unknown,
+    }
+}
+
 fn is_python_sidecar_backend(backend: &inference::BackendInfo) -> bool {
     backend.backend_key == "pytorch"
 }
@@ -344,6 +473,9 @@ fn host_runtime_capability(
         }),
         selected_version: None,
         supports_external_connection: backend.capabilities.external_connection,
+        backend_capability_facts: Some(project_backend_capability_facts(
+            &backend.capabilities.facts,
+        )),
         backend_keys,
         missing_files: Vec::new(),
         unavailable_reason: backend.unavailable_reason.clone(),
@@ -673,6 +805,13 @@ mod tests {
                 description: "In-process Candle inference".to_string(),
                 capabilities: BackendCapabilities {
                     external_connection: false,
+                    facts: inference::BackendCapabilityFacts::from_tasks(vec![
+                        inference::BackendTaskCapability::stable(
+                            inference::InferenceTaskId::Embedding,
+                            vec![inference::InferenceModality::Text],
+                            vec![inference::InferenceModality::Embedding],
+                        ),
+                    ]),
                     ..BackendCapabilities::default()
                 },
                 default_start_mode: BackendDefaultStartMode::Embedding,
@@ -697,6 +836,16 @@ mod tests {
         assert!(capability.selected);
         assert!(capability.backend_keys.contains(&"candle".to_string()));
         assert!(capability.backend_keys.contains(&"Candle".to_string()));
+        let facts = capability
+            .backend_capability_facts
+            .as_ref()
+            .expect("backend facts should be projected");
+        assert_eq!(facts.tasks.len(), 1);
+        assert_eq!(facts.tasks[0].task_id, WorkflowInferenceTaskId::Embedding);
+        assert_eq!(
+            facts.tasks[0].modality_signature.outputs,
+            vec![WorkflowInferenceModality::Embedding]
+        );
     }
 
     #[test]
@@ -727,6 +876,13 @@ mod tests {
                 description: "Managed llama.cpp runtime".to_string(),
                 capabilities: BackendCapabilities {
                     external_connection: true,
+                    facts: inference::BackendCapabilityFacts::from_tasks(vec![
+                        inference::BackendTaskCapability::stable(
+                            inference::InferenceTaskId::ChatCompletion,
+                            vec![inference::InferenceModality::Text],
+                            vec![inference::InferenceModality::Text],
+                        ),
+                    ]),
                     ..BackendCapabilities::default()
                 },
                 default_start_mode: BackendDefaultStartMode::Inference,
@@ -745,6 +901,14 @@ mod tests {
         assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::Managed);
         assert!(capability.selected);
         assert!(capability.supports_external_connection);
+        assert_eq!(
+            capability
+                .backend_capability_facts
+                .as_ref()
+                .and_then(|facts| facts.tasks.first())
+                .map(|task| task.task_id),
+            Some(WorkflowInferenceTaskId::ChatCompletion)
+        );
         assert_eq!(
             capability.install_state,
             WorkflowRuntimeInstallState::Installed
@@ -942,6 +1106,7 @@ mod tests {
                 ),
                 selected_version: None,
                 supports_external_connection: false,
+                backend_capability_facts: None,
                 backend_keys: vec!["torch".to_string()],
                 missing_files: Vec::new(),
                 unavailable_reason: None,
@@ -990,6 +1155,7 @@ mod tests {
                 ),
                 selected_version: None,
                 supports_external_connection: false,
+                backend_capability_facts: None,
                 backend_keys: vec!["ONNX Runtime".to_string()],
                 missing_files: Vec::new(),
                 unavailable_reason: None,
