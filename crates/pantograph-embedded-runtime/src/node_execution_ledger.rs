@@ -437,7 +437,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
         || event.usage.is_some()
         || event.cache_handle_id.is_some();
     if !has_bounded_diagnostics
-        || event.phase != inference::InferenceLifecyclePhase::BackendExecution
+        || !inference_diagnostic_phase_is_persistable(event)
         || event.kind != inference::InferenceRequestLifecycleEventKind::Completed
     {
         return None;
@@ -510,6 +510,20 @@ fn build_inference_diagnostic_event_ledger_append_request(
             },
         ),
     })
+}
+
+fn inference_diagnostic_phase_is_persistable(
+    event: &inference::InferenceRequestLifecycleEvent,
+) -> bool {
+    match event.phase {
+        inference::InferenceLifecyclePhase::TaskValidation => {
+            event.compatibility_report.is_some()
+                || !event.compatibility_issues.is_empty()
+                || !event.option_diagnostics.is_empty()
+        }
+        inference::InferenceLifecyclePhase::BackendExecution => true,
+        _ => false,
+    }
 }
 
 fn inference_usage_summary(usage: &inference::InferenceUsage) -> InferenceUsageDiagnosticSummary {

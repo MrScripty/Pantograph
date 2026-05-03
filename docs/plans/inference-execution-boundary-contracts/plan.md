@@ -2170,8 +2170,10 @@ inference write ledger events directly.
   producers wherever resolved model package facts and selected backend facts are
   available. The durable lifecycle-to-ledger mapping is complete and the typed
   gateway now emits summaries when `InferenceExecutionRequest` carries package
-  facts, but upstream graph/preflight paths still need to populate those facts
-  consistently for every executable task.
+  facts. Embedded-runtime now persists completed task-validation compatibility
+  summaries as durable inference diagnostic summaries as well as backend
+  execution summaries, but upstream graph/preflight paths still need to
+  populate package facts consistently for every executable task.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support.
@@ -2689,6 +2691,11 @@ Update during implementation:
   embedded-runtime lifecycle sink projection rules, and workflow-service
   `diagnostics_unavailable` semantics are now documented at the owning source
   boundaries.
+- 2026-05-03: Embedded-runtime now persists bounded task-validation
+  compatibility summaries from inference lifecycle events into
+  `inference.execution_diagnostic_observed` payloads, so typed gateway
+  compatibility reports emitted before backend execution are durable without
+  adding ledger dependencies to `crates/inference`.
 
 ## Commit Cadence Notes
 

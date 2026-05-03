@@ -351,6 +351,59 @@ fn inference_diagnostic_event_adapter_persists_compatibility_only_summary() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_persists_task_validation_compatibility_summary() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        177,
+    );
+    event.phase = inference::InferenceLifecyclePhase::TaskValidation;
+    event.compatibility_report = Some(inference::InferenceCompatibilityReportSummary {
+        status: "rejected".to_string(),
+        compatible: false,
+        task: "supported".to_string(),
+        model_source: "unsupported".to_string(),
+        preprocessing: "supported".to_string(),
+        postprocessing: "supported".to_string(),
+    });
+    event.compatibility_issues = vec![inference::InferenceCompatibilityIssueSummary {
+        kind: "unsupported_model_artifact".to_string(),
+        phase: inference::InferenceLifecyclePhase::ModelPackageResolution,
+        message: "backend does not declare support for this artifact".to_string(),
+        model_id: Some("pumas://models/tiny-transformers".to_string()),
+        path: Some("model.gguf".to_string()),
+    }];
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("task-validation compatibility summary should map");
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.lifecycle_phase.as_deref(), Some("task_validation"));
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
+            assert_eq!(payload.task_id, "text_generation");
+            assert_eq!(
+                payload
+                    .compatibility_report
+                    .as_ref()
+                    .map(|report| (report.status.as_str(), report.model_source.as_str())),
+                Some(("rejected", "unsupported"))
+            );
+            assert_eq!(payload.compatibility_issue_count, 1);
+            assert_eq!(
+                payload.compatibility_issues[0].phase,
+                "model_package_resolution"
+            );
+            assert_eq!(payload.option_diagnostics.len(), 0);
+            assert_eq!(payload.option_support_counts, Default::default());
+            assert!(payload.usage.is_none());
+            assert!(payload.cache_handle_id.is_none());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_diagnostic_event_adapter_persists_usage_and_cache_summary() {
     let context = context();
     let mut event = inference_lifecycle_event(
