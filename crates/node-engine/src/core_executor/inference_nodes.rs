@@ -535,10 +535,13 @@ pub(crate) fn build_rerank_execution_request(
     }
 
     let documents = parse_reranker_documents_input(inputs)?;
-    let top_n = read_positive_usize_aliases(inputs, &["top_n", "topN", "top_k", "topK"]);
-    let return_documents =
-        read_optional_input_bool_aliases(inputs, &["return_documents", "returnDocuments"])
-            .unwrap_or(true);
+    let top_n = read_positive_usize_with_task_options(inputs, &["top_n", "topN", "top_k", "topK"]);
+    let return_documents = read_bool_with_task_options(
+        inputs,
+        &["return_documents", "returnDocuments"],
+        "return_documents",
+    )
+    .unwrap_or(true);
     let model_ref = parse_pumas_model_ref(inputs);
     let model_name = read_rerank_model_name(inputs, model_ref.as_ref())?;
     let mut extra_settings = build_extra_settings(inputs);
@@ -614,6 +617,75 @@ fn read_positive_usize_aliases(
                 })
         })
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_positive_usize_with_task_options(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<usize> {
+    read_positive_usize_aliases(inputs, aliases)
+        .or_else(|| read_task_option_value_aliases(inputs, aliases).and_then(positive_usize_value))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_bool_with_task_options(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+    task_option_key: &str,
+) -> Option<bool> {
+    read_optional_input_bool_aliases(inputs, aliases)
+        .or_else(|| read_task_option_value(inputs, task_option_key).and_then(bool_value))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_task_option_value_aliases(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<serde_json::Value> {
+    aliases
+        .iter()
+        .find_map(|alias| read_task_option_value(inputs, alias))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_task_option_value(
+    inputs: &HashMap<String, serde_json::Value>,
+    key: &str,
+) -> Option<serde_json::Value> {
+    read_optional_input_value(inputs, "task_options").and_then(|task_options| {
+        task_options
+            .as_object()
+            .and_then(|options| options.get(key).cloned())
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn positive_usize_value(value: serde_json::Value) -> Option<usize> {
+    value
+        .as_u64()
+        .filter(|value| *value > 0)
+        .map(|value| value as usize)
+        .or_else(|| {
+            value
+                .as_i64()
+                .filter(|value| *value > 0)
+                .map(|value| value as usize)
+        })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn bool_value(value: serde_json::Value) -> Option<bool> {
+    if let Some(boolean) = value.as_bool() {
+        return Some(boolean);
+    }
+    value
+        .as_str()
+        .and_then(|s| match s.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => Some(true),
+            "false" | "0" | "no" | "off" => Some(false),
+            _ => None,
+        })
 }
 
 #[cfg(feature = "inference-nodes")]

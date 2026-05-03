@@ -1185,6 +1185,9 @@ canonical grouped `GenerationOptions` shape (`sampling.temperature` and
 `length.max_new_tokens`) instead of flat fields. Node-engine text-generation
 request construction still accepts the older flat migrated shape for
 compatibility, with grouped fields taking precedence.
+Node-engine rerank request construction now reads migrated canonical
+`task_options.top_k` and `task_options.return_documents` values, while
+connected/top-level runtime inputs keep precedence over saved task options.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2430,6 +2433,9 @@ Update during implementation:
 - 2026-05-03: Canonicalized legacy llama.cpp/PyTorch migration output for
   generation options into grouped `GenerationOptions` fields and kept
   node-engine tolerant of already-migrated flat option objects.
+- 2026-05-03: Added node-engine rerank request support for migrated
+  `task_options.top_k` and `task_options.return_documents`, preserving
+  connected/top-level input precedence over saved task options.
 
 ## Commit Cadence Notes
 

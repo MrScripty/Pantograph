@@ -614,6 +614,73 @@ fn test_build_rerank_execution_request_preserves_canonical_inputs() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_rerank_execution_request_reads_nested_task_options() {
+    let mut inputs = HashMap::new();
+    inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
+    inputs.insert("query".to_string(), serde_json::json!("search"));
+    inputs.insert(
+        "documents".to_string(),
+        serde_json::json!(["first", "second", "third"]),
+    );
+    inputs.insert(
+        "task_options".to_string(),
+        serde_json::json!({
+            "top_k": 2,
+            "return_documents": false
+        }),
+    );
+
+    let request =
+        build_rerank_execution_request(&inputs).expect("nested task options should build");
+
+    match request.input {
+        InferenceExecutionInput::Rerank {
+            top_n,
+            return_documents,
+            ..
+        } => {
+            assert_eq!(top_n, Some(2));
+            assert!(!return_documents);
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_rerank_execution_request_prefers_connected_options_over_task_options() {
+    let mut inputs = HashMap::new();
+    inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
+    inputs.insert("query".to_string(), serde_json::json!("search"));
+    inputs.insert("documents".to_string(), serde_json::json!(["first"]));
+    inputs.insert("top_k".to_string(), serde_json::json!(1));
+    inputs.insert("return_documents".to_string(), serde_json::json!(true));
+    inputs.insert(
+        "task_options".to_string(),
+        serde_json::json!({
+            "top_k": 3,
+            "return_documents": false
+        }),
+    );
+
+    let request = build_rerank_execution_request(&inputs)
+        .expect("connected rerank options should override saved task options");
+
+    match request.input {
+        InferenceExecutionInput::Rerank {
+            top_n,
+            return_documents,
+            ..
+        } => {
+            assert_eq!(top_n, Some(1));
+            assert!(return_documents);
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_rerank_execution_request_rejects_empty_query() {
     let mut inputs = HashMap::new();
     inputs.insert("query".to_string(), serde_json::json!("  "));
