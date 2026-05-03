@@ -1316,6 +1316,10 @@ writes roll back the memory entry instead of exposing a cache handle from a save
 that returned an error. The thirteenth slice tightened failed-restart cleanup in
 the gateway so failed starts clear active runtime config and attempted mode flags
 while preserving the previous successful inference config for restoration flows.
+The fourteenth slice added derived backend request-lifecycle facts that map
+existing preprocessing, backend execution, postprocessing, streaming, and
+KV-cache capability facts into explicit cancellation and cleanup semantics
+without changing backend execution methods.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
@@ -1365,6 +1369,8 @@ typed request cancellation token, cancellation reason, or cleanup event at the
 inference boundary. Milestone 8 should not be closed until the inference crate
 defines whether these lifecycle phases stay hidden inside backend adapters or
 become explicit request lifecycle facts/errors for diagnostics-ledger consumers.
+Derived `BackendRequestLifecycleFacts` now records the current static behavior;
+workflow-facing projection and any request-scoped event stream remain pending.
 
 ### Milestone 9: Bind PyTorch Through Transformers
 

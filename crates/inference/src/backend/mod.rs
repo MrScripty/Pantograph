@@ -27,8 +27,8 @@ use serde::{Deserialize, Serialize};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::managed_runtime::ManagedBinaryId;
 use crate::model_contracts::{
-    BackendHintLabel, InferenceModality, InferenceTaskId, ModelArtifactKind, SupportTier,
-    TaskModalitySignature,
+    BackendHintLabel, InferenceLifecyclePhase, InferenceModality, InferenceTaskId,
+    ModelArtifactKind, SupportTier, TaskModalitySignature,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
@@ -154,6 +154,145 @@ impl BackendCapabilityFacts {
                 )
         })
     }
+
+    /// Derive request lifecycle facts from static backend capability facts.
+    ///
+    /// These facts describe observable or adapter-owned cancellation/cleanup
+    /// behavior. They are not scheduler policy and do not decide whether a
+    /// runtime should be selected.
+    #[must_use]
+    pub fn request_lifecycle_facts(&self) -> BackendRequestLifecycleFacts {
+        BackendRequestLifecycleFacts {
+            phases: vec![
+                BackendRequestLifecyclePhaseFacts {
+                    phase: InferenceLifecyclePhase::ModelPackageResolution,
+                    component: BackendComponentCapability::NotRequired,
+                    cancellation: BackendRequestCancellationSemantics::NotApplicable,
+                    cleanup: BackendRequestCleanupSemantics::NotRequired,
+                },
+                BackendRequestLifecyclePhaseFacts {
+                    phase: InferenceLifecyclePhase::TaskValidation,
+                    component: BackendComponentCapability::NotRequired,
+                    cancellation: BackendRequestCancellationSemantics::NotApplicable,
+                    cleanup: BackendRequestCleanupSemantics::NotRequired,
+                },
+                BackendRequestLifecyclePhaseFacts::from_component_phase(
+                    InferenceLifecyclePhase::Preprocessing,
+                    self.preprocessing,
+                ),
+                BackendRequestLifecyclePhaseFacts {
+                    phase: InferenceLifecyclePhase::BackendExecution,
+                    component: BackendComponentCapability::BackendManaged,
+                    cancellation: if self.features.streaming == BackendFeatureSupport::Supported {
+                        BackendRequestCancellationSemantics::DropConsumer
+                    } else {
+                        BackendRequestCancellationSemantics::AdapterManaged
+                    },
+                    cleanup: if self.features.streaming == BackendFeatureSupport::Supported {
+                        BackendRequestCleanupSemantics::DropStream
+                    } else {
+                        BackendRequestCleanupSemantics::AdapterManaged
+                    },
+                },
+                BackendRequestLifecyclePhaseFacts::from_component_phase(
+                    InferenceLifecyclePhase::Postprocessing,
+                    self.postprocessing,
+                ),
+                BackendRequestLifecyclePhaseFacts {
+                    phase: InferenceLifecyclePhase::ResultProjection,
+                    component: BackendComponentCapability::NotRequired,
+                    cancellation: BackendRequestCancellationSemantics::NotApplicable,
+                    cleanup: BackendRequestCleanupSemantics::NotRequired,
+                },
+            ],
+            kv_cache_publication_cleanup: if self.features.kv_cache
+                == BackendFeatureSupport::Supported
+            {
+                BackendRequestCleanupSemantics::RollbackPublication
+            } else {
+                BackendRequestCleanupSemantics::NotApplicable
+            },
+        }
+    }
+}
+
+/// Static request lifecycle semantics derived from backend capability facts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendRequestLifecycleFacts {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phases: Vec<BackendRequestLifecyclePhaseFacts>,
+    #[serde(default)]
+    pub kv_cache_publication_cleanup: BackendRequestCleanupSemantics,
+}
+
+/// Cancellation and cleanup semantics for one inference lifecycle phase.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendRequestLifecyclePhaseFacts {
+    pub phase: InferenceLifecyclePhase,
+    pub component: BackendComponentCapability,
+    pub cancellation: BackendRequestCancellationSemantics,
+    pub cleanup: BackendRequestCleanupSemantics,
+}
+
+impl BackendRequestLifecyclePhaseFacts {
+    fn from_component_phase(
+        phase: InferenceLifecyclePhase,
+        component: BackendComponentCapability,
+    ) -> Self {
+        let (cancellation, cleanup) = match component {
+            BackendComponentCapability::NotRequired => (
+                BackendRequestCancellationSemantics::NotApplicable,
+                BackendRequestCleanupSemantics::NotRequired,
+            ),
+            BackendComponentCapability::BackendManaged
+            | BackendComponentCapability::RequiresPackageComponent => (
+                BackendRequestCancellationSemantics::AdapterManaged,
+                BackendRequestCleanupSemantics::AdapterManaged,
+            ),
+            BackendComponentCapability::Unsupported => (
+                BackendRequestCancellationSemantics::NotSupported,
+                BackendRequestCleanupSemantics::NotApplicable,
+            ),
+            BackendComponentCapability::Unknown => (
+                BackendRequestCancellationSemantics::Unknown,
+                BackendRequestCleanupSemantics::Unknown,
+            ),
+        };
+
+        Self {
+            phase,
+            component,
+            cancellation,
+            cleanup,
+        }
+    }
+}
+
+/// How cancellation is handled for a request lifecycle phase.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BackendRequestCancellationSemantics {
+    #[default]
+    Unknown,
+    NotApplicable,
+    NotSupported,
+    AdapterManaged,
+    DropConsumer,
+}
+
+/// How cleanup is handled for a request lifecycle phase or publication step.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BackendRequestCleanupSemantics {
+    #[default]
+    Unknown,
+    NotApplicable,
+    NotRequired,
+    AdapterManaged,
+    DropStream,
+    RollbackPublication,
 }
 
 /// Static model package sources a backend adapter can load.
@@ -374,6 +513,97 @@ mod capability_tests {
         assert_eq!(
             BackendFeatureSupport::from_legacy_bool(false),
             BackendFeatureSupport::Unsupported
+        );
+    }
+
+    #[test]
+    fn request_lifecycle_facts_derive_stream_and_kv_cleanup_semantics() {
+        let facts = BackendCapabilityFacts {
+            preprocessing: BackendComponentCapability::RequiresPackageComponent,
+            postprocessing: BackendComponentCapability::BackendManaged,
+            features: BackendFeatureCapabilityFacts {
+                streaming: BackendFeatureSupport::Supported,
+                kv_cache: BackendFeatureSupport::Supported,
+                ..BackendFeatureCapabilityFacts::default()
+            },
+            ..BackendCapabilityFacts::default()
+        };
+
+        let lifecycle = facts.request_lifecycle_facts();
+        let backend_execution = lifecycle
+            .phases
+            .iter()
+            .find(|phase| phase.phase == InferenceLifecyclePhase::BackendExecution)
+            .expect("backend execution phase");
+        let preprocessing = lifecycle
+            .phases
+            .iter()
+            .find(|phase| phase.phase == InferenceLifecyclePhase::Preprocessing)
+            .expect("preprocessing phase");
+
+        assert_eq!(
+            preprocessing.cancellation,
+            BackendRequestCancellationSemantics::AdapterManaged
+        );
+        assert_eq!(
+            backend_execution.cancellation,
+            BackendRequestCancellationSemantics::DropConsumer
+        );
+        assert_eq!(
+            backend_execution.cleanup,
+            BackendRequestCleanupSemantics::DropStream
+        );
+        assert_eq!(
+            lifecycle.kv_cache_publication_cleanup,
+            BackendRequestCleanupSemantics::RollbackPublication
+        );
+    }
+
+    #[test]
+    fn request_lifecycle_facts_mark_unsupported_component_semantics() {
+        let lifecycle = BackendCapabilityFacts {
+            preprocessing: BackendComponentCapability::Unsupported,
+            postprocessing: BackendComponentCapability::NotRequired,
+            features: BackendFeatureCapabilityFacts {
+                streaming: BackendFeatureSupport::Unsupported,
+                kv_cache: BackendFeatureSupport::Unsupported,
+                ..BackendFeatureCapabilityFacts::default()
+            },
+            ..BackendCapabilityFacts::default()
+        }
+        .request_lifecycle_facts();
+
+        let preprocessing = lifecycle
+            .phases
+            .iter()
+            .find(|phase| phase.phase == InferenceLifecyclePhase::Preprocessing)
+            .expect("preprocessing phase");
+        let postprocessing = lifecycle
+            .phases
+            .iter()
+            .find(|phase| phase.phase == InferenceLifecyclePhase::Postprocessing)
+            .expect("postprocessing phase");
+        let backend_execution = lifecycle
+            .phases
+            .iter()
+            .find(|phase| phase.phase == InferenceLifecyclePhase::BackendExecution)
+            .expect("backend execution phase");
+
+        assert_eq!(
+            preprocessing.cancellation,
+            BackendRequestCancellationSemantics::NotSupported
+        );
+        assert_eq!(
+            postprocessing.cleanup,
+            BackendRequestCleanupSemantics::NotRequired
+        );
+        assert_eq!(
+            backend_execution.cancellation,
+            BackendRequestCancellationSemantics::AdapterManaged
+        );
+        assert_eq!(
+            lifecycle.kv_cache_publication_cleanup,
+            BackendRequestCleanupSemantics::NotApplicable
         );
     }
 
