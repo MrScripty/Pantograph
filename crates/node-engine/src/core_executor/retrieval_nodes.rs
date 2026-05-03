@@ -79,6 +79,7 @@ pub(crate) fn parse_reranker_documents_input(
     ))
 }
 
+#[allow(dead_code)]
 pub(crate) async fn execute_reranker(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,

@@ -175,7 +175,7 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Additive node inputs may be accepted for compatibility, but callers should
   prefer the canonical `pantograph-node-contracts` projections when
   constructing new graph-authoring workflows.
-- New non-streaming canonical `llm-inference` text/chat and embedding
+- New non-streaming canonical `llm-inference` text/chat, embedding, and rerank
   execution should pass through `inference::InferenceExecutionRequest` rather
   than constructing backend-native request JSON or calling backend-specific
   gateway helpers in node-engine. Streaming remains an event-shaping path until

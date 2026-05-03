@@ -254,7 +254,7 @@ impl TaskExecutor for CoreTaskExecutor {
                         execute_embedding_inference(self.gateway.as_ref(), &canonical_inputs).await
                     }
                     Some(InferenceTaskId::Rerank) => {
-                        execute_reranker(self.gateway.as_ref(), &canonical_inputs).await
+                        execute_rerank_inference(self.gateway.as_ref(), &canonical_inputs).await
                     }
                     _ if preferred_backend.as_deref() == Some("llamacpp") => {
                         let resolved_model_ref = enforce_dependency_preflight(

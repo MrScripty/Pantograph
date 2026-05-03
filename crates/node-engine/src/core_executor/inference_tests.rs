@@ -12,7 +12,7 @@ use inference::{
     BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
     GenerationOptions, InferenceBackend, InferenceExecutionInput, InferenceTaskId,
     LengthGenerationOptions, ProcessSpawner, PumasModelRef, RerankRequest, RerankResponse,
-    SamplingGenerationOptions,
+    RerankResult, SamplingGenerationOptions,
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
@@ -229,6 +229,99 @@ fn test_build_embedding_execution_request_rejects_empty_text() {
 }
 
 #[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_rerank_execution_request_preserves_canonical_inputs() {
+    let mut inputs = HashMap::new();
+    inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
+    inputs.insert("query".to_string(), serde_json::json!("search"));
+    inputs.insert(
+        "documents".to_string(),
+        serde_json::json!([
+            "first",
+            {"text": "second"},
+            {"content": "third"}
+        ]),
+    );
+    inputs.insert("top_k".to_string(), serde_json::json!(2));
+    inputs.insert("return_documents".to_string(), serde_json::json!(false));
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
+    inputs.insert("gpu_layers".to_string(), serde_json::json!(12));
+    inputs.insert("temperature".to_string(), serde_json::json!(0.2));
+    inputs.insert(
+        "inference_settings".to_string(),
+        serde_json::json!([
+            {"key": "temperature"},
+            {"key": "gpu_layers"}
+        ]),
+    );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/reranker",
+            "selected_artifact_path": "/tmp/reranker.gguf"
+        }),
+    );
+
+    let request =
+        build_rerank_execution_request(&inputs).expect("canonical rerank request should build");
+
+    assert_eq!(request.task_id, InferenceTaskId::Rerank);
+    assert_eq!(request.model_name.as_deref(), Some("/tmp/reranker.gguf"));
+    assert_eq!(request.runtime_hint.as_deref(), Some("llamacpp"));
+    assert_eq!(
+        request.model_ref,
+        Some(PumasModelRef {
+            model_id: "pumas://models/reranker".to_string(),
+            revision: None,
+            selected_artifact_id: None,
+            selected_artifact_path: Some("/tmp/reranker.gguf".to_string()),
+            migration_diagnostics: Vec::new(),
+        })
+    );
+    match request.input {
+        InferenceExecutionInput::Rerank {
+            query,
+            documents,
+            top_n,
+            return_documents,
+        } => {
+            assert_eq!(query, "search");
+            assert_eq!(
+                documents,
+                vec![
+                    "first".to_string(),
+                    "second".to_string(),
+                    "third".to_string()
+                ]
+            );
+            assert_eq!(top_n, Some(2));
+            assert!(!return_documents);
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+    assert_eq!(request.extra_options["temperature"], serde_json::json!(0.2));
+    assert!(request.extra_options.get("gpu_layers").is_none());
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_rerank_execution_request_rejects_empty_query() {
+    let mut inputs = HashMap::new();
+    inputs.insert("query".to_string(), serde_json::json!("  "));
+    inputs.insert("documents".to_string(), serde_json::json!(["a"]));
+
+    let error = build_rerank_execution_request(&inputs)
+        .expect_err("empty rerank query should fail before backend execution");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Reranker query cannot be empty"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
 #[tokio::test]
 async fn test_canonical_llm_embedding_uses_typed_gateway_boundary() {
     let embedding_requests = Arc::new(Mutex::new(Vec::new()));
@@ -296,7 +389,14 @@ async fn test_canonical_llm_feature_extraction_alias_dispatches_to_embedding_han
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
-async fn test_canonical_llm_rerank_dispatches_to_reranker_handler() {
+async fn test_canonical_llm_rerank_uses_typed_gateway_boundary() {
+    let rerank_requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedRerankBackend {
+            rerank_requests: rerank_requests.clone(),
+        }),
+        "mock",
+    ));
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
@@ -305,6 +405,7 @@ async fn test_canonical_llm_rerank_dispatches_to_reranker_handler() {
     inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
     inputs.insert("query".to_string(), serde_json::json!("search"));
     inputs.insert("documents".to_string(), serde_json::json!(["a", "b"]));
+    inputs.insert("top_k".to_string(), serde_json::json!(1));
     inputs.insert(
         "pumas_model_ref".to_string(),
         serde_json::json!({
@@ -313,19 +414,26 @@ async fn test_canonical_llm_rerank_dispatches_to_reranker_handler() {
         }),
     );
 
-    let executor = CoreTaskExecutor::new();
+    let executor = CoreTaskExecutor::new().with_gateway(gateway);
     let context = graph_flow::Context::new();
     let extensions = ExecutorExtensions::new();
-    let err = executor
+    let outputs = executor
         .execute_task("llm-inference-1", inputs, &context, &extensions)
         .await
-        .expect_err("canonical rerank inference should route to reranker handler");
-    match err {
-        NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("InferenceGateway not configured"));
-        }
-        other => panic!("unexpected error variant: {other:?}"),
-    }
+        .expect("canonical rerank inference should use typed gateway");
+
+    assert_eq!(outputs.get("top_document"), Some(&serde_json::json!("b")));
+    assert_eq!(outputs.get("top_score"), Some(&serde_json::json!(0.9_f32)));
+    assert_eq!(outputs.get("scores"), Some(&serde_json::json!([0.9_f32])));
+    let captured = rerank_requests.lock().expect("rerank requests lock");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0].model, "/tmp/reranker.gguf");
+    assert_eq!(captured[0].query, "search");
+    assert_eq!(
+        captured[0].documents,
+        vec!["a".to_string(), "b".to_string()]
+    );
+    assert_eq!(captured[0].top_n, Some(1));
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -964,5 +1072,100 @@ impl InferenceBackend for MockTypedEmbeddingBackend {
         Err(BackendError::Inference(
             "rerank not supported by mock".to_string(),
         ))
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+struct MockTypedRerankBackend {
+    rerank_requests: Arc<Mutex<Vec<RerankRequest>>>,
+}
+
+#[cfg(feature = "inference-nodes")]
+#[async_trait]
+impl InferenceBackend for MockTypedRerankBackend {
+    fn name(&self) -> &'static str {
+        "mock-rerank"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock typed rerank backend"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            reranking: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> std::result::Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> std::result::Result<
+        Pin<
+            Box<
+                dyn futures_util::Stream<Item = std::result::Result<ChatChunk, BackendError>>
+                    + Send,
+            >,
+        >,
+        BackendError,
+    > {
+        Err(BackendError::Inference(
+            "chat not supported by mock".to_string(),
+        ))
+    }
+
+    async fn embeddings(
+        &self,
+        _texts: Vec<String>,
+        _model: &str,
+    ) -> std::result::Result<Vec<EmbeddingResult>, BackendError> {
+        Err(BackendError::Inference(
+            "embeddings not supported by mock".to_string(),
+        ))
+    }
+
+    async fn rerank(
+        &self,
+        request: RerankRequest,
+    ) -> std::result::Result<RerankResponse, BackendError> {
+        self.rerank_requests
+            .lock()
+            .expect("rerank requests lock")
+            .push(request.clone());
+        let result = RerankResult {
+            index: 1,
+            score: 0.9,
+            document: request.documents.get(1).cloned(),
+        };
+        Ok(RerankResponse {
+            results: vec![result]
+                .into_iter()
+                .take(request.top_n.unwrap_or(usize::MAX))
+                .collect(),
+            metadata: serde_json::Value::Null,
+        })
     }
 }

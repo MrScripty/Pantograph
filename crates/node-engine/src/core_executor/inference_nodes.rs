@@ -7,7 +7,10 @@ use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
 use crate::model_dependencies::ModelRefV2;
 
-use super::{build_extra_settings, read_optional_input_string_aliases, read_optional_input_value};
+use super::{
+    build_extra_settings, parse_reranker_documents_input, read_optional_input_bool_aliases,
+    read_optional_input_string_aliases, read_optional_input_value,
+};
 
 #[cfg(feature = "inference-nodes")]
 pub(crate) fn require_gateway(
@@ -377,6 +380,198 @@ pub(crate) fn build_embedding_execution_request(
         generation_options: None,
         extra_options: serde_json::Value::Null,
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) async fn execute_rerank_inference(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let gw = require_gateway(gateway)?;
+    let request = build_rerank_execution_request(inputs)?;
+    let output_model_ref = request.model_ref.clone();
+    let output_model = request
+        .model_name
+        .clone()
+        .or_else(|| {
+            output_model_ref
+                .as_ref()
+                .map(|model_ref| model_ref.model_id.clone())
+        })
+        .unwrap_or_default();
+    let result = gw.execute_typed(request).await.map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!("Typed rerank inference failed: {error}"))
+    })?;
+    let response = match result {
+        inference::InferenceExecutionResult::Rerank { response } => response,
+        other => {
+            return Err(NodeEngineError::ExecutionFailed(format!(
+                "Typed rerank inference returned unexpected result: {other:?}"
+            )));
+        }
+    };
+
+    let scores = response
+        .results
+        .iter()
+        .map(|result| serde_json::json!(result.score))
+        .collect::<Vec<_>>();
+    let top_document = response
+        .results
+        .first()
+        .and_then(|result| result.document.clone());
+    let top_score = response.results.first().map(|result| result.score);
+
+    let mut outputs = HashMap::new();
+    outputs.insert(
+        "results".to_string(),
+        serde_json::to_value(&response.results).unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert("scores".to_string(), serde_json::json!(scores));
+    outputs.insert(
+        "model_path".to_string(),
+        serde_json::json!(output_model.clone()),
+    );
+    outputs.insert(
+        "model_ref".to_string(),
+        serde_json::json!({
+            "contractVersion": 2,
+            "engine": "typed",
+            "modelId": output_model,
+            "modelPath": output_model,
+            "pumasModelRef": output_model_ref,
+            "taskTypePrimary": "reranking"
+        }),
+    );
+    outputs.insert(
+        "top_document".to_string(),
+        top_document
+            .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert(
+        "top_score".to_string(),
+        top_score
+            .map(|value| serde_json::json!(value))
+            .unwrap_or(serde_json::Value::Null),
+    );
+    Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) fn build_rerank_execution_request(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<inference::InferenceExecutionRequest> {
+    let query = inputs
+        .get("query")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing query input".to_string()))?;
+    if query.trim().is_empty() {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Reranker query cannot be empty".to_string(),
+        ));
+    }
+
+    let documents = parse_reranker_documents_input(inputs)?;
+    let top_n = read_positive_usize_aliases(inputs, &["top_n", "topN", "top_k", "topK"]);
+    let return_documents =
+        read_optional_input_bool_aliases(inputs, &["return_documents", "returnDocuments"])
+            .unwrap_or(true);
+    let model_ref = parse_pumas_model_ref(inputs);
+    let model_name = read_rerank_model_name(inputs, model_ref.as_ref())?;
+    let mut extra_settings = build_extra_settings(inputs);
+    extra_settings.remove("gpu_layers");
+    extra_settings.remove("context_length");
+
+    Ok(inference::InferenceExecutionRequest {
+        request_id: None,
+        task_id: inference::InferenceTaskId::Rerank,
+        model_ref,
+        model_name,
+        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
+        input: inference::InferenceExecutionInput::Rerank {
+            query: query.to_string(),
+            documents,
+            top_n,
+            return_documents,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Object(extra_settings.into_iter().collect()),
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_positive_usize_aliases(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<usize> {
+    aliases.iter().find_map(|alias| {
+        inputs.get(*alias).and_then(|value| {
+            value
+                .as_u64()
+                .filter(|value| *value > 0)
+                .map(|value| value as usize)
+                .or_else(|| {
+                    value
+                        .as_i64()
+                        .filter(|value| *value > 0)
+                        .map(|value| value as usize)
+                })
+        })
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_rerank_model_name(
+    inputs: &HashMap<String, serde_json::Value>,
+    model_ref: Option<&inference::PumasModelRef>,
+) -> Result<Option<String>> {
+    if let Some(model) = read_optional_input_string_aliases(
+        inputs,
+        &["model", "model_name", "modelName", "model_id", "modelId"],
+    )
+    .filter(|model| !model.trim().is_empty())
+    {
+        return Ok(Some(model));
+    }
+
+    if let Some(model_path) =
+        read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
+            .filter(|model_path| !model_path.trim().is_empty())
+    {
+        return resolve_gguf_path(&model_path).map(Some);
+    }
+
+    if let Some(model_ref_value) = inputs
+        .get("pumas_model_ref")
+        .or_else(|| inputs.get("model_ref"))
+    {
+        if let Some(path) = read_string_aliases_from_value(
+            model_ref_value,
+            &[
+                "selected_artifact_path",
+                "selectedArtifactPath",
+                "model_path",
+                "modelPath",
+                "entry_path",
+                "entryPath",
+            ],
+        )
+        .filter(|path| !path.trim().is_empty())
+        {
+            return resolve_gguf_path(&path).map(Some);
+        }
+    }
+
+    Ok(model_ref.map(|model_ref| model_ref.model_id.clone()))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_string_aliases_from_value(value: &serde_json::Value, aliases: &[&str]) -> Option<String> {
+    aliases
+        .iter()
+        .find_map(|alias| value.get(*alias).and_then(|value| value.as_str()))
+        .map(str::to_string)
 }
 
 #[cfg(feature = "inference-nodes")]
