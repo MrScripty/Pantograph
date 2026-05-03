@@ -7325,6 +7325,7 @@ name = "pantograph-media-conversion"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "pantograph-managed-dependencies",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

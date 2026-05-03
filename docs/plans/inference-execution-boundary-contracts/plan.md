@@ -1258,6 +1258,11 @@ runtime sidecars out and using stable dependency keys such as `opencolorio` for
 media/native dependencies. Legacy UniFFI managed-media action methods still
 return redistributable-shaped compatibility JSON until install, activation, and
 lease ownership move.
+`pantograph-media-conversion` now has an explicit key bridge between
+`ManagedMediaDependencyId` and neutral `ManagedDependencyKey`, and it rejects
+runtime sidecar keys as non-media-conversion dependencies. This freezes the
+stable media/native key mapping without moving lease ownership or command
+execution into inference.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`

@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 async-trait.workspace = true
+pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

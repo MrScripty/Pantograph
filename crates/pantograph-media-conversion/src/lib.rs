@@ -10,6 +10,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use pantograph_managed_dependencies::{
+    ManagedDependencyKey, MediaToolDependencyId, NativeArtifactDependencyId,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
@@ -54,6 +57,8 @@ pub enum MediaConversionError {
         dependency_id: ManagedMediaDependencyId,
         reason: String,
     },
+    #[error("managed dependency key {key} is not a media conversion dependency")]
+    UnsupportedManagedDependencyKey { key: String },
     #[error("converter process failed with status {status_code:?}: {stderr_summary}")]
     ProcessFailed {
         status_code: Option<i32>,
@@ -164,6 +169,43 @@ impl fmt::Display for ManagedMediaDependencyId {
             Self::OpenColorIo => "opencolorio",
         };
         f.write_str(value)
+    }
+}
+
+impl From<ManagedMediaDependencyId> for ManagedDependencyKey {
+    fn from(value: ManagedMediaDependencyId) -> Self {
+        match value {
+            ManagedMediaDependencyId::Ffmpeg => Self::MediaTool(MediaToolDependencyId::Ffmpeg),
+            ManagedMediaDependencyId::Ocioconvert => {
+                Self::MediaTool(MediaToolDependencyId::Ocioconvert)
+            }
+            ManagedMediaDependencyId::Oiiotool => Self::MediaTool(MediaToolDependencyId::Oiiotool),
+            ManagedMediaDependencyId::OpenColorIo => {
+                Self::NativeArtifact(NativeArtifactDependencyId::OpenColorIo)
+            }
+        }
+    }
+}
+
+impl TryFrom<ManagedDependencyKey> for ManagedMediaDependencyId {
+    type Error = MediaConversionError;
+
+    fn try_from(value: ManagedDependencyKey) -> Result<Self, Self::Error> {
+        match value {
+            ManagedDependencyKey::MediaTool(MediaToolDependencyId::Ffmpeg) => Ok(Self::Ffmpeg),
+            ManagedDependencyKey::MediaTool(MediaToolDependencyId::Ocioconvert) => {
+                Ok(Self::Ocioconvert)
+            }
+            ManagedDependencyKey::MediaTool(MediaToolDependencyId::Oiiotool) => Ok(Self::Oiiotool),
+            ManagedDependencyKey::NativeArtifact(NativeArtifactDependencyId::OpenColorIo) => {
+                Ok(Self::OpenColorIo)
+            }
+            ManagedDependencyKey::RuntimeSidecar(_) => {
+                Err(MediaConversionError::UnsupportedManagedDependencyKey {
+                    key: value.stable_key().to_string(),
+                })
+            }
+        }
     }
 }
 
@@ -1025,6 +1067,7 @@ fn bounded_stderr_summary(stderr: &[u8]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pantograph_managed_dependencies::RuntimeSidecarDependencyId;
     use std::future::Future;
     use std::sync::Mutex;
     use std::task::{Context, Poll, Wake, Waker};
@@ -1676,5 +1719,37 @@ mod tests {
             block_on(cancel_executor.convert(request(None))),
             Err(MediaConversionError::Cancelled)
         ));
+    }
+
+    #[test]
+    fn managed_media_dependency_ids_round_trip_through_neutral_keys() {
+        for dependency_id in [
+            ManagedMediaDependencyId::Ffmpeg,
+            ManagedMediaDependencyId::Ocioconvert,
+            ManagedMediaDependencyId::Oiiotool,
+            ManagedMediaDependencyId::OpenColorIo,
+        ] {
+            let key = ManagedDependencyKey::from(dependency_id);
+            assert_eq!(key.stable_key(), dependency_id.to_string());
+            assert_eq!(
+                ManagedMediaDependencyId::try_from(key).expect("round trip dependency id"),
+                dependency_id
+            );
+        }
+    }
+
+    #[test]
+    fn runtime_sidecars_are_not_media_conversion_dependencies() {
+        let error = ManagedMediaDependencyId::try_from(ManagedDependencyKey::RuntimeSidecar(
+            RuntimeSidecarDependencyId::LlamaCpp,
+        ))
+        .expect_err("runtime sidecars are not media conversion dependencies");
+
+        match error {
+            MediaConversionError::UnsupportedManagedDependencyKey { key } => {
+                assert_eq!(key, "llama_cpp");
+            }
+            other => panic!("expected unsupported key error, got {other:?}"),
+        }
     }
 }
