@@ -255,16 +255,23 @@ fn text_generation_task_id(
         )));
     };
 
-    match entry.task_id {
-        inference::InferenceTaskId::TextGeneration | inference::InferenceTaskId::ChatCompletion => {
-            Ok(entry.task_id)
-        }
-        task_id => Err(NodeEngineError::ExecutionFailed(format!(
+    if task_entry_accepts_text_generation_input(&entry) {
+        Ok(entry.task_id)
+    } else {
+        Err(NodeEngineError::ExecutionFailed(format!(
             "task_kind '{}' resolves to '{}' and cannot be executed by the text generation node",
             task_label,
-            task_id.canonical_label()
-        ))),
+            entry.task_id.canonical_label()
+        )))
     }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn task_entry_accepts_text_generation_input(entry: &inference::TaskRegistryEntry) -> bool {
+    entry.request_contract().is_some_and(|contract| {
+        contract.execution_supported
+            && contract.input_kind == inference::InferenceExecutionInputKind::TextGeneration
+    })
 }
 
 #[cfg(feature = "inference-nodes")]

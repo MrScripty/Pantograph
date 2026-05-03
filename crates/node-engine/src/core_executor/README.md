@@ -87,6 +87,9 @@ stable public facade and dispatch owner.
   or become a new inference path.
 - Gateway-backed inference handlers stay in `inference_nodes.rs`; PyTorch and
   audio Python-worker handlers remain separate feature families.
+- Canonical `llm-inference` task/request compatibility checks should consume
+  inference task registry request contracts instead of hard-coded backend names
+  or raw task labels.
 - Llama.cpp completion execution stays in `llamacpp_nodes.rs`; reranking and
   embedding execution stay in `retrieval_nodes.rs`.
 - PyTorch Python-worker execution stays in `pytorch_nodes.rs`; Stable Audio

@@ -185,6 +185,25 @@ fn test_build_text_generation_execution_request_rejects_non_text_task_kind() {
 }
 
 #[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_text_generation_execution_request_rejects_image_generation_task_contract() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("draw a diagram"));
+    inputs.insert("task_kind".to_string(), serde_json::json!("text-to-image"));
+
+    let error = build_text_generation_execution_request(&inputs)
+        .expect_err("image generation task contract should not become text generation");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("cannot be executed by the text generation node"));
+            assert!(message.contains("image_generation"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
 #[tokio::test]
 async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() {
     let requests = Arc::new(Mutex::new(Vec::new()));
