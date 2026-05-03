@@ -53,7 +53,10 @@ from worker_runtime import (
     _resolve_torch_dtype,
 )
 from worker_transformers import apply_compatibility_shims
-from worker_contract import load_transformers_model_kwargs_from_envelope
+from worker_contract import (
+    generate_text_kwargs_from_envelope,
+    load_transformers_model_kwargs_from_envelope,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pantograph.pytorch")
@@ -239,6 +242,54 @@ def load_transformers_model_from_envelope(envelope):
     if not kwargs.get("model_path"):
         raise ValueError("PyTorch worker load envelope missing payload.entry_path")
     return load_model(**kwargs)
+
+
+def generate_text_from_envelope(envelope):
+    """Generate text from the Rust worker envelope contract."""
+    request_id = "unknown"
+    try:
+        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+        if isinstance(decoded, dict):
+            request_id = str(decoded.get("request_id") or request_id)
+        kwargs = generate_text_kwargs_from_envelope(decoded)
+        text = generate(**kwargs)
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": {"text": text},
+        })
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "invalid_request",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_invalid_generate_text_request",
+            },
+        })
+    except RuntimeError as exc:
+        message = str(exc)
+        kind = "runtime_unavailable" if "No model loaded" in message else "generation_failed"
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": kind,
+                "message": message,
+                "canonical_code": "pytorch_worker_generate_text_failed",
+            },
+        })
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "internal",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_generate_text_internal",
+            },
+        })
 
 
 def load_model(

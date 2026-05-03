@@ -15,10 +15,12 @@ use async_trait::async_trait;
 use futures_util::Stream;
 use pyo3::prelude::*;
 use serde_json::{Map, Value};
+use uuid::Uuid;
 
 use self::pytorch_worker_contract::{
-    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
-    PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope, PyTorchWorkerOperation,
+    PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchTransformersLoadRequest,
+    PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy,
+    PyTorchWorkerEnvelope, PyTorchWorkerOperation, PyTorchWorkerResponse,
     PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
@@ -484,6 +486,29 @@ impl PyTorchBackend {
         Ok(())
     }
 
+    fn validate_generate_text_envelope(
+        envelope: &PyTorchWorkerEnvelope<PyTorchGenerateTextRequest>,
+    ) -> Result<(), BackendError> {
+        if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+            return Err(BackendError::Config(format!(
+                "Unsupported PyTorch worker generate_text envelope contract version {}",
+                envelope.contract_version
+            )));
+        }
+        if envelope.operation != PyTorchWorkerOperation::GenerateText {
+            return Err(BackendError::Config(format!(
+                "Unexpected PyTorch worker operation {:?} for text generation",
+                envelope.operation
+            )));
+        }
+        if envelope.payload.prompt.trim().is_empty() {
+            return Err(BackendError::Config(
+                "PyTorch worker generate_text envelope requires a prompt".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     #[cfg(test)]
     fn transformers_load_args_from_request(
         request: &PyTorchTransformersLoadRequest,
@@ -863,31 +888,58 @@ impl PyTorchBackend {
         top_p: f64,
         masked_prompt_json: Option<String>,
     ) -> Result<String, BackendError> {
+        let envelope = PyTorchWorkerEnvelope::new(
+            format!("pytorch-generate-text-{}", Uuid::new_v4().simple()),
+            PyTorchWorkerOperation::GenerateText,
+            PyTorchGenerateTextRequest {
+                prompt,
+                system_prompt,
+                max_tokens,
+                temperature,
+                top_p,
+                masked_prompt_json,
+                transformers_kwargs: Default::default(),
+            },
+        );
+        Self::validate_generate_text_envelope(&envelope)?;
+        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+            BackendError::Config(format!(
+                "Failed to encode PyTorch worker generate_text envelope: {error}"
+            ))
+        })?;
+
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<String, BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     BackendError::Inference(format!("Failed to get worker module: {}", e))
                 })?;
 
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("prompt", &prompt).unwrap();
-                if let Some(ref sys) = system_prompt {
-                    kwargs.set_item("system_prompt", sys).unwrap();
-                }
-                kwargs.set_item("max_tokens", max_tokens).unwrap();
-                kwargs.set_item("temperature", temperature).unwrap();
-                kwargs.set_item("top_p", top_p).unwrap();
-                if let Some(ref mpj) = masked_prompt_json {
-                    kwargs.set_item("masked_prompt_json", mpj).unwrap();
-                }
-
                 let result = worker
-                    .call_method("generate", (), Some(&kwargs))
-                    .map_err(|e| BackendError::Inference(format!("Generation failed: {}", e)))?;
+                    .call_method1("generate_text_from_envelope", (envelope_json,))
+                    .map_err(|e| {
+                        BackendError::Inference(format!(
+                            "PyTorch worker generate_text envelope failed: {}",
+                            e
+                        ))
+                    })?;
 
-                result.extract::<String>().map_err(|e| {
-                    BackendError::Inference(format!("Failed to extract result: {}", e))
-                })
+                let response_json = result.extract::<String>().map_err(|e| {
+                    BackendError::Inference(format!(
+                        "Failed to extract PyTorch worker generate_text response: {}",
+                        e
+                    ))
+                })?;
+                let response: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
+                    serde_json::from_str(&response_json).map_err(|e| {
+                        BackendError::Inference(format!(
+                            "Failed to decode PyTorch worker generate_text response: {}",
+                            e
+                        ))
+                    })?;
+                match response {
+                    PyTorchWorkerResponse::Ok(success) => Ok(success.result.text),
+                    PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
+                }
             })
         })
         .await

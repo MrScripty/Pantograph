@@ -1,9 +1,10 @@
 use std::collections::BTreeSet;
 
 use super::pytorch_worker_contract::{
-    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy,
-    PyTorchWorkerEnvelope, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
-    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchTransformersLoadRequest,
+    PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
+    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -212,6 +213,84 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
     );
     assert!(envelope.payload.trust_policy.code_revision.is_none());
     assert!(envelope.payload.trust_policy.accepted_sources.is_empty());
+}
+
+#[test]
+fn test_pytorch_worker_generate_text_envelope_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/generate_text_request.json");
+    let envelope: PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> =
+        serde_json::from_str(fixture).expect("decode worker generate fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-generate-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::GenerateText);
+    assert_eq!(
+        envelope.payload.prompt,
+        "Explain why bounded diagnostics matter."
+    );
+    assert_eq!(
+        envelope.payload.system_prompt.as_deref(),
+        Some("Be concise.")
+    );
+    assert_eq!(envelope.payload.max_tokens, 64);
+    assert_eq!(
+        envelope.payload.transformers_kwargs["top_k"],
+        serde_json::json!(40)
+    );
+
+    PyTorchBackend::validate_generate_text_envelope(&envelope)
+        .expect("generate_text fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_generate_text_response_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/generate_text_response.json");
+    let response: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
+        serde_json::from_str(fixture).expect("decode worker generate response fixture");
+
+    match response {
+        PyTorchWorkerResponse::Ok(success) => {
+            assert_eq!(success.request_id, "req-generate-001");
+            assert!(success.result.text.contains("Bounded diagnostics"));
+            assert!(success.option_diagnostics.is_empty());
+        }
+        other => panic!("expected worker success response, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_generate_text_envelope_rejects_wrong_operation() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/generate_text_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> =
+        serde_json::from_str(fixture).expect("decode worker generate fixture");
+    envelope.operation = PyTorchWorkerOperation::LoadTransformersModel;
+
+    match PyTorchBackend::validate_generate_text_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("LoadTransformersModel"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_generate_text_envelope_rejects_wrong_contract_version() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/generate_text_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> =
+        serde_json::from_str(fixture).expect("decode worker generate fixture");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match PyTorchBackend::validate_generate_text_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("generate_text envelope contract version"));
+        }
+        other => panic!("expected wrong-version config error, got {other:?}"),
+    }
 }
 
 #[test]

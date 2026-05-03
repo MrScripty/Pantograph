@@ -1,0 +1,7 @@
+{
+  "status": "ok",
+  "request_id": "req-generate-001",
+  "result": {
+    "text": "Bounded diagnostics preserve useful execution facts without storing prompt or result bodies."
+  }
+}

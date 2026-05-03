@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -140,6 +142,27 @@ impl From<ModelLoadSecurityPolicy> for PyTorchTransformersTrustPolicy {
             code_revision: policy.code_revision,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchGenerateTextRequest {
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+    pub max_tokens: i64,
+    pub temperature: f64,
+    pub top_p: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub masked_prompt_json: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub transformers_kwargs: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchGenerateTextResult {
+    pub text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

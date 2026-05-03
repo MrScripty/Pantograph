@@ -1700,6 +1700,13 @@ The torch-free Python `worker_contract.py` module now owns pure envelope
 validation/projection helpers so malformed contract version, operation,
 payload, and trust-policy shapes can be tested without importing torch or
 Transformers.
+The PyTorch non-streaming generation path now sends a typed `generate_text`
+worker envelope instead of ad hoc PyO3 keyword arguments. Python validates the
+envelope through `worker_contract.py`, adapts it to the existing backend-local
+`generate` implementation, and returns the Rust worker response envelope so
+generation failures normalize through `PyTorchWorkerFailure` with request
+correlation. Streaming generation and full typed `GenerationOptions` threading
+remain follow-up slices.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 
