@@ -1,15 +1,15 @@
 use std::collections::BTreeMap;
 
 use inference::{
-    default_task_registry_entries, normalize_task_label, resolve_task_registry_entry,
-    BackendHintLabel, GenerationOptionSource, GenerationOptions, InferenceLifecyclePhase,
-    InferenceModality, InferenceTaskId, ModelArtifactKind, ModelExecutionDescriptor,
-    ModelExecutionStorageKind, ModelExecutionValidationState, ModelFactFamily,
-    ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+    default_task_registry_entries, normalize_modality_label, normalize_task_label,
+    resolve_task_registry_entry, BackendHintLabel, GenerationOptionSource, GenerationOptions,
+    InferenceLifecyclePhase, InferenceModality, InferenceTaskId, ModelArtifactKind,
+    ModelExecutionDescriptor, ModelExecutionStorageKind, ModelExecutionValidationState,
+    ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
     ModelLibraryUpdateFeed, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
     ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind, SupportTier,
-    TaskExecutionBehavior, TaskFamily, TaskRegistryEntry, TaskStreamingSupport,
+    TaskEvidence, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry, TaskStreamingSupport,
     MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
@@ -215,6 +215,7 @@ fn task_registry_labels_normalize_without_leaking_backend_policy() {
         normalize_task_label("Automatic Speech Recognition"),
         "automatic_speech_recognition"
     );
+    assert_eq!(normalize_modality_label("Point Cloud"), "point_cloud");
 
     let audio = resolve_task_registry_entry("automatic-speech-recognition")
         .expect("audio transcription alias");
@@ -228,6 +229,32 @@ fn task_registry_labels_normalize_without_leaking_backend_policy() {
     let video = resolve_task_registry_entry("video-text-to-text").expect("video roadmap task");
     assert_eq!(video.task_id, InferenceTaskId::VideoUnderstanding);
     assert_eq!(video.support_tier, SupportTier::Roadmap);
+}
+
+#[test]
+fn task_registry_matches_package_task_and_modality_evidence() {
+    let text_generation = resolve_task_registry_entry("text-generation")
+        .expect("text generation task should be seeded");
+
+    assert!(text_generation.matches_task_evidence(&TaskEvidence {
+        pipeline_tag: Some("causal-lm".to_string()),
+        task_type_primary: Some("text-generation".to_string()),
+        input_modalities: vec!["text".to_string()],
+        output_modalities: vec!["text".to_string()],
+    }));
+    assert!(text_generation.matches_modality_evidence(&TaskEvidence {
+        input_modalities: vec!["Text".to_string()],
+        output_modalities: vec!["text".to_string()],
+        ..TaskEvidence::default()
+    }));
+    assert!(!text_generation.matches_task_evidence(&TaskEvidence {
+        pipeline_tag: Some("feature-extraction".to_string()),
+        ..TaskEvidence::default()
+    }));
+    assert!(!text_generation.matches_modality_evidence(&TaskEvidence {
+        input_modalities: vec!["image".to_string()],
+        ..TaskEvidence::default()
+    }));
 }
 
 #[test]

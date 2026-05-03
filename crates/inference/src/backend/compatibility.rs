@@ -6,10 +6,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model_contracts::{
-    CacheGenerationOptions, InferenceLifecyclePhase, InferenceModality, InferenceTaskId,
-    ModelArtifactKind, ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
-    PackageFactStatus, ProcessorComponentKind, ResolvedModelPackageFacts, TaskEvidence,
-    TaskRegistryEntry,
+    CacheGenerationOptions, InferenceLifecyclePhase, InferenceTaskId, ModelArtifactKind,
+    ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus,
+    ProcessorComponentKind, ResolvedModelPackageFacts, TaskRegistryEntry,
 };
 
 use super::{BackendCapabilities, BackendComponentCapability, BackendFeatureSupport};
@@ -180,8 +179,12 @@ impl BackendCapabilities {
             return BackendCompatibilityStatus::Unsupported;
         }
 
-        if !task_evidence_matches_registry_entry(&request.package_facts.task, request.task)
-            || !task_modalities_match_registry_entry(&request.package_facts.task, request.task)
+        if !request
+            .task
+            .matches_task_evidence(&request.package_facts.task)
+            || !request
+                .task
+                .matches_modality_evidence(&request.package_facts.task)
         {
             issues.push(compatibility_issue(
                 request,
@@ -426,34 +429,6 @@ fn push_feature_option_diagnostic(
     });
 }
 
-fn task_evidence_matches_registry_entry(evidence: &TaskEvidence, task: &TaskRegistryEntry) -> bool {
-    let mut labels = Vec::with_capacity(task.aliases.len() + 1);
-    labels.push(canonical_task_label(&task.task_id));
-    labels.extend(task.aliases.iter().map(|alias| normalize_task_label(alias)));
-
-    [
-        evidence.task_type_primary.as_ref(),
-        evidence.pipeline_tag.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .all(|label| labels.contains(&normalize_task_label(label)))
-}
-
-fn task_modalities_match_registry_entry(evidence: &TaskEvidence, task: &TaskRegistryEntry) -> bool {
-    evidence.input_modalities.iter().all(|modality| {
-        task.modality_signature
-            .inputs
-            .iter()
-            .any(|supported| normalize_modality_label(modality) == modality_label(supported))
-    }) && evidence.output_modalities.iter().all(|modality| {
-        task.modality_signature
-            .outputs
-            .iter()
-            .any(|supported| normalize_modality_label(modality) == modality_label(supported))
-    })
-}
-
 fn package_components_available_for_task(
     package: &ResolvedModelPackageFacts,
     task: &TaskRegistryEntry,
@@ -527,51 +502,12 @@ fn component_family_available(
     present
 }
 
-fn canonical_task_label(task_id: &InferenceTaskId) -> String {
-    match task_id {
-        InferenceTaskId::TextGeneration => "text_generation",
-        InferenceTaskId::ChatCompletion => "chat_completion",
-        InferenceTaskId::Embedding => "embedding",
-        InferenceTaskId::Rerank => "rerank",
-        InferenceTaskId::ImageGeneration => "image_generation",
-        InferenceTaskId::ImageUnderstanding => "image_understanding",
-        InferenceTaskId::AudioTranscription => "audio_transcription",
-        InferenceTaskId::VideoUnderstanding => "video_understanding",
-        InferenceTaskId::MultimodalGeneration => "multimodal_generation",
-        InferenceTaskId::Unknown => "unknown",
-    }
-    .to_string()
-}
-
-fn normalize_task_label(label: &str) -> String {
-    label.trim().to_ascii_lowercase().replace('-', "_")
-}
-
-fn modality_label(modality: &InferenceModality) -> &'static str {
-    match modality {
-        InferenceModality::Text => "text",
-        InferenceModality::Image => "image",
-        InferenceModality::Audio => "audio",
-        InferenceModality::Video => "video",
-        InferenceModality::Embedding => "embedding",
-        InferenceModality::Tokens => "tokens",
-        InferenceModality::Json => "json",
-        InferenceModality::PointCloud => "point_cloud",
-        InferenceModality::Mesh => "mesh",
-        InferenceModality::Other => "other",
-    }
-}
-
-fn normalize_modality_label(label: &str) -> String {
-    label.trim().to_ascii_lowercase().replace('-', "_")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model_contracts::{
-        BackendHintLabel, SupportTier, TaskExecutionBehavior, TaskFamily, TaskModalitySignature,
-        TaskStreamingSupport,
+        BackendHintLabel, InferenceModality, SupportTier, TaskExecutionBehavior, TaskFamily,
+        TaskModalitySignature, TaskStreamingSupport,
     };
     use crate::{
         BackendCapabilityFacts, BackendFeatureCapabilityFacts, BackendModelSourceCapabilityFacts,

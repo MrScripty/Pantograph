@@ -1098,6 +1098,9 @@ The first resolved-model-source slice added a typed backend-load source
 contract that projects from Pumas package facts and distinguishes
 Pumas-resolved artifacts from direct local/Hugging Face debug or import sources
 without selecting a backend or runtime policy.
+Task-evidence and modality-evidence matching now live on `TaskRegistryEntry`,
+so backend compatibility checks consume the canonical registry validation path
+instead of duplicating task-label and modality normalization locally.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 

@@ -142,6 +142,25 @@ pub enum InferenceModality {
     Other,
 }
 
+impl InferenceModality {
+    /// Stable snake_case label used for modality evidence matching.
+    #[must_use]
+    pub fn canonical_label(&self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Image => "image",
+            Self::Audio => "audio",
+            Self::Video => "video",
+            Self::Embedding => "embedding",
+            Self::Tokens => "tokens",
+            Self::Json => "json",
+            Self::PointCloud => "point_cloud",
+            Self::Mesh => "mesh",
+            Self::Other => "other",
+        }
+    }
+}
+
 /// Canonical inference task id.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -296,6 +315,42 @@ impl TaskRegistryEntry {
                 .upstream_task_ids
                 .iter()
                 .any(|alias| normalize_task_label(alias) == normalized)
+    }
+
+    /// Return true when discovered task labels match this registry entry.
+    ///
+    /// Empty evidence is treated as inconclusive rather than incompatible so
+    /// older sparse package-fact rows can be validated by neighboring model and
+    /// component facts.
+    #[must_use]
+    pub fn matches_task_evidence(&self, evidence: &TaskEvidence) -> bool {
+        [
+            evidence.task_type_primary.as_ref(),
+            evidence.pipeline_tag.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .all(|label| self.matches_label(label))
+    }
+
+    /// Return true when discovered input/output modalities fit this registry
+    /// entry's declared modality signature.
+    ///
+    /// Empty modality evidence is treated as inconclusive for compatibility with
+    /// older package-fact rows.
+    #[must_use]
+    pub fn matches_modality_evidence(&self, evidence: &TaskEvidence) -> bool {
+        evidence.input_modalities.iter().all(|modality| {
+            self.modality_signature
+                .inputs
+                .iter()
+                .any(|supported| normalize_modality_label(modality) == supported.canonical_label())
+        }) && evidence.output_modalities.iter().all(|modality| {
+            self.modality_signature
+                .outputs
+                .iter()
+                .any(|supported| normalize_modality_label(modality) == supported.canonical_label())
+        })
     }
 }
 
@@ -490,6 +545,23 @@ pub fn resolve_task_registry_entry(value: &str) -> Option<TaskRegistryEntry> {
 /// Normalize a task label for registry alias matching.
 #[must_use]
 pub fn normalize_task_label(value: &str) -> String {
+    let mut normalized = String::new();
+    let mut last_was_separator = false;
+    for ch in value.trim().chars() {
+        if ch.is_ascii_alphanumeric() {
+            normalized.push(ch.to_ascii_lowercase());
+            last_was_separator = false;
+        } else if !last_was_separator {
+            normalized.push('_');
+            last_was_separator = true;
+        }
+    }
+    normalized.trim_matches('_').to_string()
+}
+
+/// Normalize a modality label for registry evidence matching.
+#[must_use]
+pub fn normalize_modality_label(value: &str) -> String {
     let mut normalized = String::new();
     let mut last_was_separator = false;
     for ch in value.trim().chars() {
