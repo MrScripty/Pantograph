@@ -1184,7 +1184,14 @@ and command resolution.
   append-only DTOs.
 - `git diff --check`.
 
-**Status:** Not started.
+**Status:** Boundary inventory started. The first implementation slice should
+introduce an adapter facade or neutral crate boundary over the existing
+inference managers before moving source files, because managed dependency
+consumers currently span inference, UniFFI runtime APIs, embedded runtime
+manager views, workflow artifact conversion, and media conversion. Runtime
+sidecar facts, media tool facts, and native artifact activation facts should be
+typed common DTOs with category-specific operations; scheduler admission,
+reservation, residency, and workflow policy remain outside this boundary.
 
 ### Milestone 5: Migrate Binary and Media Dependency Ownership
 
@@ -1192,7 +1199,7 @@ and command resolution.
 runtime launch behavior and media conversion readiness facts.
 
 **Tasks:**
-- [ ] Inventory current uses of `managed_runtime`, `managed_redistributables`,
+- [x] Inventory current uses of `managed_runtime`, `managed_redistributables`,
   `managed_binaries`, and `managed_media_dependencies`.
 - [ ] Move or adapt runtime sidecar management so inference resolves llama.cpp
   commands through the neutral managed-dependency boundary.
@@ -1217,7 +1224,20 @@ runtime launch behavior and media conversion readiness facts.
   by touched files.
 - `git diff --check`.
 
-**Status:** Not started.
+**Status:** Inventory complete. The current implementation still keeps the
+authoritative runtime and redistributable managers in `crates/inference`:
+`managed_runtime/` owns llama.cpp sidecar catalog, install state, job state,
+and command resolution; `managed_redistributables/` owns media dependency
+catalog, install state, activation, selection, lease, removal, and status
+records; `managed_media_dependencies.rs` owns ffmpeg/OIIO/OCIO media
+conversion lease projections and OpenColorIO activation validation; and
+`managed_binaries.rs` is an aggregate facade over runtime and redistributable
+status/command facts. `pantograph-media-conversion` already owns conversion
+planning and media dependency identifiers, while `pantograph-uniffi`,
+`pantograph-embedded-runtime`, `pantograph-workflow-service`, and inference
+tests still consume inference-owned managed dependency APIs. This confirms the
+migration target must add a neutral dependency boundary or adapter facade before
+moving command resolution, status DTOs, and media leases out of inference.
 
 ### Milestone 6: Retire Ollama Backend Surface
 
