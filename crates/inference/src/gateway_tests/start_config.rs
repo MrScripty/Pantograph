@@ -13,7 +13,6 @@ async fn test_build_inference_start_config_rejects_retired_ollama_backend() {
     let error = gateway
         .build_inference_start_config(InferenceStartRequest {
             external_url: None,
-            ollama_model_name: Some("llava:13b".to_string()),
             ..InferenceStartRequest::default()
         })
         .await

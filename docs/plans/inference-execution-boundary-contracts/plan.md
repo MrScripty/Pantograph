@@ -1980,6 +1980,9 @@ The llama.cpp and PyTorch node-engine handlers now derive emitted
 `model_ref.task_type_primary` from canonical `llm-inference` semantics, and
 node-engine preflight coverage now exercises canonical runtime hints instead of
 retired backend node names.
+Inference gateway start request DTOs no longer expose Ollama model-name fields;
+retired Ollama gateway/backend checks now trigger only from the active backend
+identity, not from a request shape that suggests Ollama remains configurable.
 Embedded-runtime edit-session embedding fixtures, synthetic KV-cache memory
 fixtures, and node-engine KV-cache session/preparation fixtures now use
 canonical `llm-inference` node data instead of retired embedding or llama.cpp
@@ -2518,6 +2521,9 @@ Update during implementation:
   inference/Puma-Lib descriptors so local frontend tests and mock backends use
   Pumas model-reference, task/runtime hint, diagnostics, and dependency ports
   instead of the old raw-path-only shape.
+- 2026-05-03: Removed unused Ollama model-name fields from inference gateway
+  start request DTOs and clarified node-engine comments around retired direct
+  backend nodes.
 
 ## Commit Cadence Notes
 

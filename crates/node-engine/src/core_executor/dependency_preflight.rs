@@ -776,5 +776,5 @@ fn dependency_preflight_unix_timestamp_ms() -> u64 {
 }
 
 // ---------------------------------------------------------------------------
-// Ollama (pure HTTP, no gateway needed)
+// Retired direct-backend inference nodes
 // ---------------------------------------------------------------------------

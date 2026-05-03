@@ -242,7 +242,7 @@ impl TaskExecutor for CoreTaskExecutor {
             "human-input" => execute_human_input(&inputs),
             "tool-executor" => execute_tool_executor(&inputs),
 
-            // Pure HTTP inference
+            // Retired inference nodes
             "ollama-inference" => execute_ollama_inference(&inputs).await,
 
             // Gateway-backed inference nodes (require `inference-nodes` feature)

@@ -61,7 +61,6 @@ pub struct InferenceStartRequest {
     pub external_url: Option<String>,
     pub file_model_path: Option<PathBuf>,
     pub mmproj_path: Option<PathBuf>,
-    pub ollama_model_name: Option<String>,
     pub device: Option<String>,
     pub gpu_layers: Option<i32>,
 }
@@ -71,7 +70,6 @@ pub struct InferenceStartRequest {
 pub struct EmbeddingStartRequest {
     pub gguf_model_path: Option<PathBuf>,
     pub candle_model_path: Option<PathBuf>,
-    pub ollama_model_name: Option<String>,
     pub device: Option<String>,
     pub gpu_layers: Option<i32>,
 }
