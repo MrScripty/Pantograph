@@ -271,9 +271,11 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - `InferenceGateway::execute_typed_with_lifecycle` records typed task
   validation and backend execution as lifecycle facts for host ledger adapters;
   the inference crate still does not import or write diagnostics-ledger events.
-  Completed backend-execution events may include bounded option compatibility
-  diagnostics and the canonical task id so host adapters can persist support
-  summaries without seeing backend-local payloads.
+  Completed task-validation events may include bounded backend/model
+  compatibility summaries when the typed request carries resolved Pumas package
+  facts, and completed backend-execution events may include bounded option
+  compatibility diagnostics and the canonical task id so host adapters can
+  persist support summaries without seeing backend-local payloads.
 - `InferenceGateway::stream_typed_text` and
   `InferenceGateway::stream_typed_text_with_lifecycle` keep streaming
   text/chat requests on the same canonical `InferenceExecutionRequest` boundary

@@ -10,7 +10,8 @@ use tokio::sync::mpsc;
 use crate::backend::BackendStartOutcome;
 use crate::model_contracts::{
     GenerationOptions, InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions,
-    OptionSupportState, SamplingGenerationOptions, StoppingGenerationOptions,
+    OptionSupportState, ResolvedModelPackageFacts, SamplingGenerationOptions,
+    StoppingGenerationOptions,
 };
 use crate::types::{
     ImageGenerationRequest, InferenceExecutionInput, InferenceExecutionRequest,
@@ -814,6 +815,7 @@ async fn test_execute_typed_forwards_image_generation_to_active_backend() {
         model_ref: None,
         model_name: Some("mock-image".to_string()),
         runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
         input: InferenceExecutionInput::ImageGeneration {
             request: ImageGenerationRequest {
                 model: "mock-image".to_string(),
@@ -860,6 +862,7 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
         model_ref: None,
         model_name: Some("mock-text".to_string()),
         runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
             system_prompt: None,
@@ -931,6 +934,58 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
 }
 
 #[tokio::test]
+async fn test_execute_typed_with_lifecycle_reports_package_compatibility() {
+    let fixture = include_str!(
+        "../tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("package facts fixture");
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-text-compatibility".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: Some(package_facts.model_ref.clone()),
+        model_name: Some("mock-text".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: Some(package_facts),
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: false,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed request should execute");
+
+    let events = sink.events();
+    let validation_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("task validation completion event");
+    let compatibility_report = validation_completed
+        .compatibility_report
+        .as_ref()
+        .expect("compatibility report");
+    assert_eq!(compatibility_report.status, "rejected");
+    assert!(!compatibility_report.compatible);
+    assert!(!validation_completed.compatibility_issues.is_empty());
+    assert!(validation_completed
+        .compatibility_issues
+        .iter()
+        .all(|issue| issue.model_id.as_deref() == Some("llm/llama/tiny-gguf")));
+}
+
+#[tokio::test]
 async fn test_execute_typed_validates_before_backend_execution() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
     let request = InferenceExecutionRequest {
@@ -939,6 +994,7 @@ async fn test_execute_typed_validates_before_backend_execution() {
         model_ref: None,
         model_name: Some("mock-image".to_string()),
         runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
         input: InferenceExecutionInput::ImageGeneration {
             request: ImageGenerationRequest {
                 model: "mock-image".to_string(),
@@ -977,6 +1033,7 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
         model_ref: None,
         model_name: Some("mock-image".to_string()),
         runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
         input: InferenceExecutionInput::ImageGeneration {
             request: ImageGenerationRequest {
                 model: "mock-image".to_string(),
@@ -1049,6 +1106,7 @@ async fn test_execute_typed_with_lifecycle_records_validation_failure_without_ba
         model_ref: None,
         model_name: Some("mock-image".to_string()),
         runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
         input: InferenceExecutionInput::ImageGeneration {
             request: ImageGenerationRequest {
                 model: "mock-image".to_string(),
@@ -1171,6 +1229,7 @@ async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_ph
         model_ref: None,
         model_name: Some("typed-model".to_string()),
         runtime_hint: None,
+        resolved_model_package_facts: None,
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
             system_prompt: None,

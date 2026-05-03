@@ -21,7 +21,8 @@ use inference::{
     GenerationOptions, InferenceBackend, InferenceExecutionInput, InferenceLifecyclePhase,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, InferenceTaskId, LengthGenerationOptions, ProcessSpawner,
-    PumasModelRef, RerankRequest, RerankResponse, RerankResult, SamplingGenerationOptions,
+    PumasModelRef, RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts,
+    SamplingGenerationOptions,
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
@@ -154,6 +155,33 @@ fn test_build_text_generation_execution_request_uses_resolved_model_source_ref()
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
         })
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_text_generation_execution_request_forwards_package_facts() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let request = build_text_generation_execution_request(&inputs)
+        .expect("package facts should be forwarded to typed request");
+
+    assert_eq!(
+        request
+            .resolved_model_package_facts
+            .as_ref()
+            .map(|facts| facts.model_ref.model_id.as_str()),
+        Some("llm/llama/tiny-gguf")
     );
 }
 

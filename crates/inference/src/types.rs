@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::model_contracts::{
     resolve_task_registry_entry, GenerationOptions, InferenceExecutionInputKind,
     InferenceExecutionResultKind, InferenceLifecyclePhase, InferenceTaskId,
-    OptionCompatibilityDiagnostic, PumasModelRef,
+    OptionCompatibilityDiagnostic, PumasModelRef, ResolvedModelPackageFacts,
 };
 
 /// Chat message with multimodal content support
@@ -65,6 +65,8 @@ pub struct InferenceExecutionRequest {
     pub model_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_model_package_facts: Option<ResolvedModelPackageFacts>,
     pub input: InferenceExecutionInput,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation_options: Option<GenerationOptions>,
@@ -107,6 +109,7 @@ impl InferenceExecutionRequest {
             model_ref: None,
             model_name: Some(request.model),
             runtime_hint: None,
+            resolved_model_package_facts: None,
             input: InferenceExecutionInput::TextGeneration {
                 prompt: None,
                 system_prompt: None,
@@ -947,6 +950,7 @@ mod tests {
             }),
             model_name: None,
             runtime_hint: Some("pytorch".to_string()),
+            resolved_model_package_facts: None,
             input: InferenceExecutionInput::TextGeneration {
                 prompt: Some("Hello".to_string()),
                 system_prompt: Some("Be brief".to_string()),
@@ -1041,6 +1045,7 @@ mod tests {
             model_ref: None,
             model_name: Some("tiny".to_string()),
             runtime_hint: None,
+            resolved_model_package_facts: None,
             input: InferenceExecutionInput::TextGeneration {
                 prompt: Some("Hi".to_string()),
                 system_prompt: None,
@@ -1071,6 +1076,7 @@ mod tests {
             model_ref: None,
             model_name: Some("tiny-audio".to_string()),
             runtime_hint: None,
+            resolved_model_package_facts: None,
             input: InferenceExecutionInput::TextGeneration {
                 prompt: Some("transcribe".to_string()),
                 system_prompt: None,

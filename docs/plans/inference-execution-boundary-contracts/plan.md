@@ -2168,9 +2168,10 @@ inference write ledger events directly.
   model/backend unavailable reasons.
 - [ ] Emit `BackendCompatibilityReport` summaries from execution/preflight
   producers wherever resolved model package facts and selected backend facts are
-  available. The durable lifecycle-to-ledger mapping is complete, but most
-  typed execution paths still only emit option diagnostics until their
-  preflight/package-facts checks attach the new compatibility summary fields.
+  available. The durable lifecycle-to-ledger mapping is complete and the typed
+  gateway now emits summaries when `InferenceExecutionRequest` carries package
+  facts, but upstream graph/preflight paths still need to populate those facts
+  consistently for every executable task.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support.
@@ -2614,6 +2615,12 @@ Update during implementation:
   post-preflight selected runtime id when technical-fit has chosen a concrete
   runtime, instead of continuing to infer runtime identity only from required
   backend strings.
+- 2026-05-03: Added the first execution producer for lifecycle-carried
+  compatibility summaries. `InferenceExecutionRequest` can now carry resolved
+  Pumas package facts, node-engine forwards those facts from canonical
+  inference inputs, and typed gateway lifecycle task-validation completion
+  emits backend/model compatibility summaries without importing the diagnostics
+  ledger or moving compatibility derivation into node-engine.
 
 ## Commit Cadence Notes
 

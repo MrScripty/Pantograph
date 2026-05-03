@@ -181,6 +181,10 @@ use node_engine::core_executor::CoreNodeExecutor;
   node-engine. Streaming remains responsible for graph `TaskStream` event
   shaping, but the request itself uses typed gateway stream methods instead of
   direct node-engine HTTP transport.
+- When canonical inference inputs include resolved Pumas package facts,
+  node-engine forwards them on the typed request so inference can emit
+  backend/model compatibility summaries. Node-engine must not derive those
+  summaries locally.
 - Hosts that need durable typed inference diagnostics may provide
   `extension_keys::INFERENCE_LIFECYCLE_SINK`; node-engine only forwards bounded
   lifecycle facts and does not import or write the diagnostics ledger.

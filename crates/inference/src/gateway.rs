@@ -15,23 +15,28 @@ use pantograph_runtime_identity::canonical_runtime_id;
 use tokio::sync::RwLock;
 
 use crate::backend::{
-    canonical_backend_key, BackendCapabilities, BackendConfig, BackendError, BackendInfo,
-    BackendRegistry, ChatChunk, EmbeddingResult, InferenceBackend,
+    canonical_backend_key, BackendCapabilities, BackendCompatibilityOptions,
+    BackendCompatibilityRequest, BackendConfig, BackendError, BackendInfo, BackendRegistry,
+    ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
-    GenerationOptions, InferenceLifecyclePhase, OptionCompatibilityDiagnostic, OptionSupportState,
+    resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase,
+    OptionCompatibilityDiagnostic, OptionSupportState,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{
     ChatMessage, ChatRequest, ContentPart, ImageGenerationRequest, ImageGenerationResult,
+    InferenceCompatibilityIssueSummary, InferenceCompatibilityReportSummary,
     InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionRequest,
     InferenceExecutionRequestValidationError, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, RerankRequest, RerankResponse, RuntimeLifecycleSnapshot,
     ServerModeInfo,
 };
+
+const MAX_LIFECYCLE_COMPATIBILITY_ISSUES: usize = 32;
 
 #[cfg(feature = "backend-llamacpp")]
 use crate::backend::LlamaCppBackend;
@@ -888,7 +893,10 @@ impl InferenceGateway {
             return result;
         }
 
-        record_non_streaming_lifecycle_phase_result(
+        let compatibility_diagnostics = self
+            .compatibility_diagnostics_for_request(&request, backend_key.as_deref())
+            .await;
+        record_non_streaming_lifecycle_phase_result_with_diagnostics(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
             request_id.clone(),
@@ -898,6 +906,9 @@ impl InferenceGateway {
             runtime_instance_id.clone(),
             model_id.clone(),
             &Ok(()),
+            compatibility_diagnostics.option_diagnostics,
+            compatibility_diagnostics.compatibility_report,
+            compatibility_diagnostics.compatibility_issues,
         );
         let request_json = typed_text_generation_stream_request_json(request)?;
         self.chat_completion_stream_with_lifecycle_for_task(
@@ -1118,7 +1129,10 @@ impl InferenceGateway {
             return result;
         }
 
-        record_non_streaming_lifecycle_phase_result(
+        let compatibility_diagnostics = self
+            .compatibility_diagnostics_for_request(&request, backend_key.as_deref())
+            .await;
+        record_non_streaming_lifecycle_phase_result_with_diagnostics(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
             request_id.clone(),
@@ -1128,6 +1142,9 @@ impl InferenceGateway {
             runtime_instance_id.clone(),
             model_id.clone(),
             &Ok(()),
+            compatibility_diagnostics.option_diagnostics,
+            compatibility_diagnostics.compatibility_report,
+            compatibility_diagnostics.compatibility_issues,
         );
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
@@ -1261,6 +1278,56 @@ impl InferenceGateway {
         let backend_key = Some(canonical_backend_key(&self.current_backend_name().await));
         (backend_key, runtime_id, runtime_instance_id)
     }
+
+    async fn compatibility_diagnostics_for_request(
+        &self,
+        request: &InferenceExecutionRequest,
+        backend_key: Option<&str>,
+    ) -> InferenceLifecycleCompatibilityDiagnostics {
+        let Some(package_facts) = request.resolved_model_package_facts.as_ref() else {
+            return InferenceLifecycleCompatibilityDiagnostics::default();
+        };
+        let Some(task) = resolve_task_registry_entry(request.task_id.canonical_label()) else {
+            return InferenceLifecycleCompatibilityDiagnostics::default();
+        };
+
+        let capabilities = self.backend.read().await.capabilities();
+        let compatibility_options = BackendCompatibilityOptions {
+            streaming: typed_request_is_streaming(request),
+            cache: request
+                .generation_options
+                .as_ref()
+                .map(|options| options.cache.clone())
+                .unwrap_or_default(),
+            ..BackendCompatibilityOptions::default()
+        };
+        let report = capabilities.check_model_compatibility(
+            backend_key,
+            BackendCompatibilityRequest::new(&task, package_facts)
+                .with_options(compatibility_options),
+        );
+
+        InferenceLifecycleCompatibilityDiagnostics {
+            option_diagnostics: report.option_diagnostics.clone(),
+            compatibility_report: Some(report.to_inference_compatibility_report_summary()),
+            compatibility_issues: report
+                .to_inference_compatibility_issue_summaries(MAX_LIFECYCLE_COMPATIBILITY_ISSUES),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct InferenceLifecycleCompatibilityDiagnostics {
+    compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+}
+
+fn typed_request_is_streaming(request: &InferenceExecutionRequest) -> bool {
+    matches!(
+        &request.input,
+        InferenceExecutionInput::TextGeneration { stream: true, .. }
+    )
 }
 
 struct LifecycleStream {
@@ -1613,6 +1680,39 @@ fn record_inference_lifecycle_phase_event_with_option_diagnostics(
     detail: Option<String>,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
 ) {
+    record_inference_lifecycle_phase_event_with_diagnostics(
+        sink,
+        phase,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        kind,
+        detail,
+        option_diagnostics,
+        None,
+        Vec::new(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_inference_lifecycle_phase_event_with_diagnostics(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    kind: InferenceRequestLifecycleEventKind,
+    detail: Option<String>,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+) {
     sink.record(InferenceRequestLifecycleEvent {
         request_id,
         phase,
@@ -1624,8 +1724,8 @@ fn record_inference_lifecycle_phase_event_with_option_diagnostics(
         runtime_instance_id,
         model_id,
         detail,
-        compatibility_report: None,
-        compatibility_issues: Vec::new(),
+        compatibility_report,
+        compatibility_issues,
         option_diagnostics,
     });
 }
@@ -1719,8 +1819,39 @@ fn record_non_streaming_lifecycle_phase_result_with_option_diagnostics<T>(
     result: &Result<T, GatewayError>,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
 ) {
+    record_non_streaming_lifecycle_phase_result_with_diagnostics(
+        sink,
+        phase,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        result,
+        option_diagnostics,
+        None,
+        Vec::new(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_non_streaming_lifecycle_phase_result_with_diagnostics<T>(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    result: &Result<T, GatewayError>,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+) {
     match result {
-        Ok(_) => record_inference_lifecycle_phase_event_with_option_diagnostics(
+        Ok(_) => record_inference_lifecycle_phase_event_with_diagnostics(
             sink,
             phase.clone(),
             request_id.clone(),
@@ -1732,6 +1863,8 @@ fn record_non_streaming_lifecycle_phase_result_with_option_diagnostics<T>(
             InferenceRequestLifecycleEventKind::Completed,
             None,
             option_diagnostics,
+            compatibility_report,
+            compatibility_issues,
         ),
         Err(error) => record_inference_lifecycle_phase_event(
             sink,
