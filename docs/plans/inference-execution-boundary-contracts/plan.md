@@ -2202,7 +2202,11 @@ inference write ledger events directly.
   lifecycle, and inference lifecycle summaries where the direct causal event is
   known.
 - [ ] Ensure ledger append failure returns or projects `diagnostics_unavailable`
-  while preserving the original inference/preflight/execution error.
+  while preserving the original inference/preflight/execution error. Failed
+  inference lifecycle detail is now sanitized and bounded before node-status
+  diagnostic projection so oversized backend text does not itself cause a
+  secondary ledger append failure; workflow-service append-failure projection
+  remains open.
 - [ ] Keep prompts, chat messages, raw media, generated content, embeddings,
   token arrays, logits, tensors, Python kwargs, backend CLI flags, full local
   paths where stable ids exist, and unbounded stderr/stdout out of ledger
@@ -2655,6 +2659,11 @@ Update during implementation:
   execution events without storing prompt, output, token-array, tensor, or raw
   artifact payloads. Backend-specific usage producers, KV checkpoint ids, and
   artifact refs remain follow-up work.
+- 2026-05-03: Failed inference lifecycle detail is now sanitized and capped
+  before it is copied into `node.execution_status` diagnostics, reducing the
+  chance that secondary diagnostic appends fail because a backend surfaced
+  oversized or control-character-heavy error text. The original execution
+  error path remains separate from this bounded diagnostic copy.
 
 ## Commit Cadence Notes
 

@@ -2,15 +2,16 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 
 use pantograph_diagnostics_ledger::{
-    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
-    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerError,
-    DiagnosticsLedgerRepository, ExecutionGuaranteeLevel,
+    sanitize_diagnostic_error_text, DiagnosticEventAppendRequest, DiagnosticEventPayload,
+    DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
+    DiagnosticsLedgerError, DiagnosticsLedgerRepository, ExecutionGuaranteeLevel,
     InferenceCompatibilityIssueDiagnosticSummary, InferenceCompatibilityReportDiagnosticSummary,
     InferenceExecutionDiagnosticObservedPayload, InferenceOptionDiagnosticSummary,
     InferenceOptionSupportCounts, InferenceUsageDiagnosticSummary, LicenseSnapshot, ModelIdentity,
     ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
     NodeExecutionStatusPayload, RetentionClass, UsageEventStatus, UsageLineage,
-    MAX_INFERENCE_COMPATIBILITY_ISSUES, MAX_INFERENCE_OPTION_DIAGNOSTICS,
+    MAX_DIAGNOSTIC_ERROR_TEXT_LEN, MAX_INFERENCE_COMPATIBILITY_ISSUES,
+    MAX_INFERENCE_OPTION_DIAGNOSTICS,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
@@ -412,11 +413,18 @@ fn build_inference_lifecycle_event_ledger_append_request(
             },
             completed_at_ms: if terminal { Some(occurred_at_ms) } else { None },
             duration_ms,
-            error: event.detail.clone(),
+            error: event
+                .detail
+                .as_deref()
+                .map(sanitize_inference_lifecycle_error_detail),
             task_id: event.task_id.clone(),
             selected_backend_key: event.backend_key.clone(),
         }),
     })
+}
+
+fn sanitize_inference_lifecycle_error_detail(value: &str) -> String {
+    sanitize_diagnostic_error_text(value, MAX_DIAGNOSTIC_ERROR_TEXT_LEN)
 }
 
 fn build_inference_diagnostic_event_ledger_append_request(

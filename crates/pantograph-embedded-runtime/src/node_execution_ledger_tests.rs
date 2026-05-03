@@ -162,6 +162,27 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
 }
 
 #[test]
+fn inference_lifecycle_event_adapter_bounds_failed_node_status_error() {
+    let context = context();
+    let mut event =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Failed, 125);
+    event.detail = Some(format!("backend failed\n{}", "x".repeat(8_192)));
+
+    let request = inference_lifecycle_event_ledger_append_request(&context, &event)
+        .expect("failed lifecycle event should map to bounded ledger request");
+
+    match request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            let error = payload.error.expect("bounded error detail");
+            assert!(error.starts_with("backend failed "));
+            assert!(!error.contains('\n'));
+            assert!(error.len() <= pantograph_diagnostics_ledger::MAX_DIAGNOSTIC_ERROR_TEXT_LEN);
+        }
+        other => panic!("expected node execution status payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
     let context = context();
     let event = inference::InferenceRequestLifecycleEvent {
