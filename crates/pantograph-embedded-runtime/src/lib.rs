@@ -66,6 +66,7 @@ pub use node_execution_diagnostics::{
     NodeExecutionDiagnosticEventKind, NodeExecutionDiagnosticsRecorder,
 };
 pub use node_execution_ledger::{
+    inference_diagnostic_event_ledger_append_request,
     inference_lifecycle_event_ledger_append_request, InferenceLifecycleLedgerRecorder,
     InferenceLifecycleWorkflowLedgerSink, ManagedModelUsageSubmission,
     RuntimeLedgerSubmissionError, SubmittedModelUsageEvent,

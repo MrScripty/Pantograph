@@ -4,9 +4,11 @@ use std::sync::Mutex;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerError,
-    DiagnosticsLedgerRepository, ExecutionGuaranteeLevel, LicenseSnapshot, ModelIdentity,
-    ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
-    NodeExecutionStatusPayload, RetentionClass, UsageEventStatus, UsageLineage,
+    DiagnosticsLedgerRepository, ExecutionGuaranteeLevel,
+    InferenceExecutionDiagnosticObservedPayload, InferenceOptionDiagnosticSummary,
+    InferenceOptionSupportCounts, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
+    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
+    RetentionClass, UsageEventStatus, UsageLineage, MAX_INFERENCE_OPTION_DIAGNOSTICS,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
@@ -56,6 +58,16 @@ pub fn inference_lifecycle_event_ledger_append_request(
         &InferenceLifecycleLedgerAppendContext::from_node_execution_context(context),
         event,
         None,
+    )
+}
+
+pub fn inference_diagnostic_event_ledger_append_request(
+    context: &NodeExecutionContext,
+    event: &inference::InferenceRequestLifecycleEvent,
+) -> Option<DiagnosticEventAppendRequest> {
+    build_inference_diagnostic_event_ledger_append_request(
+        &InferenceLifecycleLedgerAppendContext::from_node_execution_context(context),
+        event,
     )
 }
 
@@ -181,6 +193,17 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
             .workflow_diagnostic_event_record(request)
         {
             log::warn!("failed to record inference lifecycle diagnostic event: {error}");
+        }
+
+        if let Some(request) =
+            build_inference_diagnostic_event_ledger_append_request(&context, &event)
+        {
+            if let Err(error) = self
+                .workflow_service
+                .workflow_diagnostic_event_record(request)
+            {
+                log::warn!("failed to record inference option diagnostic event: {error}");
+            }
         }
     }
 }
@@ -379,6 +402,121 @@ fn build_inference_lifecycle_event_ledger_append_request(
             selected_backend_key: event.backend_key.clone(),
         }),
     })
+}
+
+fn build_inference_diagnostic_event_ledger_append_request(
+    context: &InferenceLifecycleLedgerAppendContext<'_>,
+    event: &inference::InferenceRequestLifecycleEvent,
+) -> Option<DiagnosticEventAppendRequest> {
+    if event.option_diagnostics.is_empty()
+        || event.phase != inference::InferenceLifecyclePhase::BackendExecution
+        || event.kind != inference::InferenceRequestLifecycleEventKind::Completed
+    {
+        return None;
+    }
+    let occurred_at_ms = i64::try_from(event.occurred_at_ms).unwrap_or(i64::MAX);
+
+    Some(DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: event.runtime_instance_id.clone(),
+        occurred_at_ms,
+        workflow_run_id: Some(context.workflow_run_id.clone()),
+        workflow_id: Some(context.workflow_id.clone()),
+        workflow_version_id: None,
+        workflow_semantic_version: None,
+        node_id: Some(context.node_id.to_string()),
+        node_type: Some(context.node_type.to_string()),
+        node_version: context.node_version.cloned(),
+        runtime_id: event
+            .runtime_id
+            .clone()
+            .or_else(|| event.backend_key.clone()),
+        runtime_version: None,
+        model_id: event.model_id.clone(),
+        model_version: None,
+        client_id: context.client_id.cloned(),
+        client_session_id: context.client_session_id.cloned(),
+        bucket_id: context.bucket_id.cloned(),
+        scheduler_policy_id: None,
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
+            InferenceExecutionDiagnosticObservedPayload {
+                request_id: event
+                    .request_id
+                    .clone()
+                    .unwrap_or_else(|| context.node_id.to_string()),
+                task_id: event
+                    .task_id
+                    .clone()
+                    .unwrap_or_else(|| inference_lifecycle_phase_key(&event.phase).to_string()),
+                selected_backend_key: event.backend_key.clone(),
+                selected_backend_family: event.backend_key.clone(),
+                option_support_counts: option_support_counts(&event.option_diagnostics),
+                option_diagnostics: event
+                    .option_diagnostics
+                    .iter()
+                    .take(MAX_INFERENCE_OPTION_DIAGNOSTICS)
+                    .map(option_diagnostic_summary)
+                    .collect(),
+            },
+        ),
+    })
+}
+
+fn option_support_counts(
+    diagnostics: &[inference::OptionCompatibilityDiagnostic],
+) -> InferenceOptionSupportCounts {
+    let mut counts = InferenceOptionSupportCounts::default();
+    for diagnostic in diagnostics {
+        match diagnostic.state {
+            inference::OptionSupportState::Honored => counts.honored += 1,
+            inference::OptionSupportState::Mapped => counts.mapped += 1,
+            inference::OptionSupportState::Defaulted => counts.defaulted += 1,
+            inference::OptionSupportState::Ignored => counts.ignored += 1,
+            inference::OptionSupportState::Unsupported => counts.unsupported += 1,
+            inference::OptionSupportState::Rejected => counts.rejected += 1,
+            inference::OptionSupportState::Conflict => counts.conflict += 1,
+            inference::OptionSupportState::ModelUnavailable => counts.model_unavailable += 1,
+            inference::OptionSupportState::BackendUnavailable => counts.backend_unavailable += 1,
+            inference::OptionSupportState::RequiresModelSupport => {
+                counts.requires_model_support += 1;
+            }
+            inference::OptionSupportState::RequiresBackendSupport => {
+                counts.requires_backend_support += 1;
+            }
+        }
+    }
+    counts
+}
+
+fn option_diagnostic_summary(
+    diagnostic: &inference::OptionCompatibilityDiagnostic,
+) -> InferenceOptionDiagnosticSummary {
+    InferenceOptionDiagnosticSummary {
+        option_path: diagnostic.option_path.clone(),
+        state: option_support_state_label(diagnostic.state).to_string(),
+        backend_key: diagnostic.backend_key.clone(),
+        message: diagnostic.message.clone(),
+    }
+}
+
+fn option_support_state_label(state: inference::OptionSupportState) -> &'static str {
+    match state {
+        inference::OptionSupportState::Honored => "honored",
+        inference::OptionSupportState::Mapped => "mapped",
+        inference::OptionSupportState::Defaulted => "defaulted",
+        inference::OptionSupportState::Ignored => "ignored",
+        inference::OptionSupportState::Unsupported => "unsupported",
+        inference::OptionSupportState::Rejected => "rejected",
+        inference::OptionSupportState::Conflict => "conflict",
+        inference::OptionSupportState::ModelUnavailable => "model_unavailable",
+        inference::OptionSupportState::BackendUnavailable => "backend_unavailable",
+        inference::OptionSupportState::RequiresModelSupport => "requires_model_support",
+        inference::OptionSupportState::RequiresBackendSupport => "requires_backend_support",
+    }
 }
 
 impl ManagedModelUsageSubmission {

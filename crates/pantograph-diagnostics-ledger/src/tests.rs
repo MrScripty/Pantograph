@@ -9,14 +9,15 @@ use crate::{
     DiagnosticErrorSeverity, DiagnosticEventAppendRequest, DiagnosticEventKind,
     DiagnosticEventPayload, DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, DiagnosticsLedgerError, DiagnosticsLedgerRepository,
-    DiagnosticsQuery, ExecutionGuaranteeLevel, IoArtifactAccessMode, IoArtifactFormatMetadata,
-    IoArtifactLifecycleState, IoArtifactObservedPayload, IoArtifactPayloadKind,
-    IoArtifactProjectionQuery, IoArtifactRetentionState, IoArtifactRetentionSummaryQuery,
-    IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation,
-    LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
-    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
-    NodeStatusProjectionQuery, OutputMeasurementUnavailableReason, OutputModality,
-    ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
+    DiagnosticsQuery, ExecutionGuaranteeLevel, InferenceExecutionDiagnosticObservedPayload,
+    InferenceOptionDiagnosticSummary, InferenceOptionSupportCounts, IoArtifactAccessMode,
+    IoArtifactFormatMetadata, IoArtifactLifecycleState, IoArtifactObservedPayload,
+    IoArtifactPayloadKind, IoArtifactProjectionQuery, IoArtifactRetentionState,
+    IoArtifactRetentionSummaryQuery, IoArtifactRole, LibraryAssetAccessedPayload,
+    LibraryAssetCacheStatus, LibraryAssetOperation, LibraryUsageProjectionQuery, LicenseSnapshot,
+    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
+    NodeExecutionStatusPayload, NodeStatusProjectionQuery, OutputMeasurementUnavailableReason,
+    OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
     PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
     RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
@@ -33,10 +34,11 @@ use crate::{
     WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
     WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
     IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
-    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MILLIS_PER_DAY,
-    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
-    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+    MAX_INFERENCE_OPTION_DIAGNOSTICS, MILLIS_PER_DAY, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -833,6 +835,76 @@ fn diagnostic_event_ledger_projects_selected_backend_key_on_node_status() {
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0].runtime_id.as_deref(), Some("pytorch.transformers"));
     assert_eq!(nodes[0].selected_backend_key.as_deref(), Some("pytorch"));
+}
+
+#[test]
+fn diagnostic_event_ledger_appends_inference_execution_diagnostic_summary() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let event = sample_inference_execution_diagnostic_event();
+
+    let record = ledger
+        .append_diagnostic_event(event)
+        .expect("inference diagnostic event");
+
+    assert_eq!(
+        record.event_kind,
+        DiagnosticEventKind::InferenceExecutionDiagnosticObserved
+    );
+    let records = ledger
+        .diagnostic_events_after(0, 10)
+        .expect("diagnostic event query succeeds");
+    let payload: DiagnosticEventPayload =
+        serde_json::from_str(&records[0].payload_json).expect("payload decodes");
+    match payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.request_id, "req-a");
+            assert_eq!(payload.task_id, "text_generation");
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(payload.option_support_counts.mapped, 1);
+            assert_eq!(payload.option_support_counts.unsupported, 1);
+            assert_eq!(payload.option_diagnostics.len(), 2);
+            assert_eq!(
+                payload.option_diagnostics[0].option_path,
+                "sampling.temperature"
+            );
+            assert_eq!(payload.option_diagnostics[0].state, "mapped");
+        }
+        other => panic!("expected inference diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn diagnostic_event_ledger_validates_inference_execution_diagnostic_scope_and_bounds() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut missing_node = sample_inference_execution_diagnostic_event();
+    missing_node.node_id = None;
+    let result = ledger.append_diagnostic_event(missing_node);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::MissingField { field: "node_id" })
+    ));
+
+    let mut too_many_diagnostics = sample_inference_execution_diagnostic_event();
+    if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) =
+        &mut too_many_diagnostics.payload
+    {
+        payload.option_diagnostics = (0..=MAX_INFERENCE_OPTION_DIAGNOSTICS)
+            .map(|index| InferenceOptionDiagnosticSummary {
+                option_path: format!("sampling.option_{index}"),
+                state: "mapped".to_string(),
+                backend_key: Some("pytorch".to_string()),
+                message: None,
+            })
+            .collect();
+    }
+    let result = ledger.append_diagnostic_event(too_many_diagnostics);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::FieldTooLong {
+            field: "option_diagnostics",
+            ..
+        })
+    ));
 }
 
 #[test]
@@ -3965,6 +4037,60 @@ fn sample_node_status_event(
             error: None,
             selected_backend_key: None,
         }),
+    }
+}
+
+fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: Some("python-runtime:pytorch:1".to_string()),
+        occurred_at_ms: 1_250,
+        workflow_run_id: Some(WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: Some("llm-node".to_string()),
+        node_type: Some("llm-inference".to_string()),
+        node_version: Some("1.0.0".to_string()),
+        runtime_id: Some("pytorch.transformers".to_string()),
+        runtime_version: None,
+        model_id: Some("pumas://models/tiny-transformers".to_string()),
+        model_version: None,
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: None,
+        retention_policy_id: Some("retention_default".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
+            InferenceExecutionDiagnosticObservedPayload {
+                request_id: "req-a".to_string(),
+                task_id: "text_generation".to_string(),
+                selected_backend_key: Some("pytorch".to_string()),
+                selected_backend_family: Some("pytorch".to_string()),
+                option_support_counts: InferenceOptionSupportCounts {
+                    mapped: 1,
+                    unsupported: 1,
+                    ..InferenceOptionSupportCounts::default()
+                },
+                option_diagnostics: vec![
+                    InferenceOptionDiagnosticSummary {
+                        option_path: "sampling.temperature".to_string(),
+                        state: "mapped".to_string(),
+                        backend_key: Some("pytorch".to_string()),
+                        message: Some("mapped to backend temperature".to_string()),
+                    },
+                    InferenceOptionDiagnosticSummary {
+                        option_path: "stopping.stop_strings".to_string(),
+                        state: "unsupported".to_string(),
+                        backend_key: Some("pytorch".to_string()),
+                        message: Some("not mapped by this backend boundary".to_string()),
+                    },
+                ],
+            },
+        ),
     }
 }
 

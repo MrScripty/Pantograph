@@ -67,6 +67,12 @@ append-only audit boundary for scheduler, run, node execution, I/O, Library,
 runtime, and retention facts. The scheduler timeline, run-list, run-detail,
 I/O artifact, and node-status projections are durable materialized read models
 advanced from the event ledger by cursor.
+Inference option-support summaries use
+`inference.execution_diagnostic_observed` events. These rows are bounded
+system metadata for request id, task id, selected backend, support-state counts,
+and per-option compatibility summaries; they must not carry prompt text,
+messages, generated content, tensors, token arrays, Python kwargs, or raw backend
+process output.
 I/O artifact projection queries can filter producer and consumer node
 endpoints directly; callers should not scan projection pages client-side to
 answer node-produced or node-consumed artifact questions.

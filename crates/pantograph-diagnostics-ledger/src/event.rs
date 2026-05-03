@@ -23,6 +23,7 @@ pub const NODE_STATUS_PROJECTION_VERSION: i64 = 3;
 pub const MAX_DIAGNOSTIC_ERROR_TEXT_LEN: usize = 4_096;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT: usize = 8;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
+pub const MAX_INFERENCE_OPTION_DIAGNOSTICS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -43,6 +44,7 @@ pub enum DiagnosticEventKind {
     RetentionPolicyChanged,
     RuntimeCapabilityObserved,
     NodeExecutionStatus,
+    InferenceExecutionDiagnosticObserved,
     DiagnosticErrorOccurred,
 }
 
@@ -65,6 +67,7 @@ impl DiagnosticEventKind {
             Self::RetentionPolicyChanged => "retention.policy_changed",
             Self::RuntimeCapabilityObserved => "runtime.capability_observed",
             Self::NodeExecutionStatus => "node.execution_status",
+            Self::InferenceExecutionDiagnosticObserved => "inference.execution_diagnostic_observed",
             Self::DiagnosticErrorOccurred => "diagnostic.error_occurred",
         }
     }
@@ -87,6 +90,9 @@ impl DiagnosticEventKind {
             "retention.policy_changed" => Ok(Self::RetentionPolicyChanged),
             "runtime.capability_observed" => Ok(Self::RuntimeCapabilityObserved),
             "node.execution_status" => Ok(Self::NodeExecutionStatus),
+            "inference.execution_diagnostic_observed" => {
+                Ok(Self::InferenceExecutionDiagnosticObserved)
+            }
             "diagnostic.error_occurred" => Ok(Self::DiagnosticErrorOccurred),
             _ => Err(DiagnosticsLedgerError::UnsupportedEventKind {
                 event_kind: value.to_string(),
@@ -251,6 +257,7 @@ pub enum DiagnosticEventPayload {
     RetentionPolicyChanged(RetentionPolicyChangedPayload),
     RuntimeCapabilityObserved(RuntimeCapabilityObservedPayload),
     NodeExecutionStatus(NodeExecutionStatusPayload),
+    InferenceExecutionDiagnosticObserved(InferenceExecutionDiagnosticObservedPayload),
     DiagnosticErrorOccurred(DiagnosticErrorOccurredPayload),
 }
 
@@ -279,6 +286,9 @@ impl DiagnosticEventPayload {
             Self::RetentionPolicyChanged(_) => DiagnosticEventKind::RetentionPolicyChanged,
             Self::RuntimeCapabilityObserved(_) => DiagnosticEventKind::RuntimeCapabilityObserved,
             Self::NodeExecutionStatus(_) => DiagnosticEventKind::NodeExecutionStatus,
+            Self::InferenceExecutionDiagnosticObserved(_) => {
+                DiagnosticEventKind::InferenceExecutionDiagnosticObserved
+            }
             Self::DiagnosticErrorOccurred(_) => DiagnosticEventKind::DiagnosticErrorOccurred,
         }
     }
@@ -301,6 +311,7 @@ impl DiagnosticEventPayload {
             Self::RetentionPolicyChanged(payload) => payload.validate(),
             Self::RuntimeCapabilityObserved(payload) => payload.validate(),
             Self::NodeExecutionStatus(payload) => payload.validate(),
+            Self::InferenceExecutionDiagnosticObserved(payload) => payload.validate(),
             Self::DiagnosticErrorOccurred(payload) => payload.validate(),
         }
     }
@@ -1286,6 +1297,99 @@ impl NodeExecutionStatusPayload {
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceExecutionDiagnosticObservedPayload {
+    pub request_id: String,
+    pub task_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_backend_family: Option<String>,
+    #[serde(default)]
+    pub option_support_counts: InferenceOptionSupportCounts,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub option_diagnostics: Vec<InferenceOptionDiagnosticSummary>,
+}
+
+impl InferenceExecutionDiagnosticObservedPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("request_id", &self.request_id, MAX_ID_LEN)?;
+        validate_required_text("task_id", &self.task_id, MAX_ID_LEN)?;
+        validate_optional_text(
+            "selected_backend_key",
+            self.selected_backend_key.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_backend_family",
+            self.selected_backend_family.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        if self.option_diagnostics.len() > MAX_INFERENCE_OPTION_DIAGNOSTICS {
+            return Err(DiagnosticsLedgerError::FieldTooLong {
+                field: "option_diagnostics",
+                max_len: MAX_INFERENCE_OPTION_DIAGNOSTICS,
+            });
+        }
+        for diagnostic in &self.option_diagnostics {
+            diagnostic.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceOptionSupportCounts {
+    #[serde(default)]
+    pub honored: u32,
+    #[serde(default)]
+    pub mapped: u32,
+    #[serde(default)]
+    pub defaulted: u32,
+    #[serde(default)]
+    pub ignored: u32,
+    #[serde(default)]
+    pub unsupported: u32,
+    #[serde(default)]
+    pub rejected: u32,
+    #[serde(default)]
+    pub conflict: u32,
+    #[serde(default)]
+    pub model_unavailable: u32,
+    #[serde(default)]
+    pub backend_unavailable: u32,
+    #[serde(default)]
+    pub requires_model_support: u32,
+    #[serde(default)]
+    pub requires_backend_support: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceOptionDiagnosticSummary {
+    pub option_path: String,
+    pub state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+impl InferenceOptionDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("option_path", &self.option_path, MAX_ID_LEN)?;
+        validate_required_text("option_support_state", &self.state, MAX_ID_LEN)?;
+        validate_optional_text("backend_key", self.backend_key.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "option_diagnostic_message",
+            self.message.as_deref(),
+            MAX_JSON_LEN,
+        )
     }
 }
 
@@ -2293,7 +2397,8 @@ fn validate_event_scope(
         | DiagnosticEventKind::RunSnapshotAccepted
         | DiagnosticEventKind::IoArtifactObserved
         | DiagnosticEventKind::RetentionArtifactStateChanged
-        | DiagnosticEventKind::NodeExecutionStatus => {
+        | DiagnosticEventKind::NodeExecutionStatus
+        | DiagnosticEventKind::InferenceExecutionDiagnosticObserved => {
             if request.workflow_run_id.is_none() {
                 return Err(DiagnosticsLedgerError::MissingField {
                     field: "workflow_run_id",
@@ -2311,8 +2416,11 @@ fn validate_event_scope(
                     field: "retention_policy_id",
                 });
             }
-            if request.payload.event_kind() == DiagnosticEventKind::NodeExecutionStatus
-                && request.node_id.is_none()
+            if matches!(
+                request.payload.event_kind(),
+                DiagnosticEventKind::NodeExecutionStatus
+                    | DiagnosticEventKind::InferenceExecutionDiagnosticObserved
+            ) && request.node_id.is_none()
             {
                 return Err(DiagnosticsLedgerError::MissingField { field: "node_id" });
             }
@@ -2447,6 +2555,12 @@ fn validate_event_source(
         DiagnosticEventKind::NodeExecutionStatus => matches!(
             source_component,
             DiagnosticEventSourceComponent::NodeExecution | DiagnosticEventSourceComponent::Runtime
+        ),
+        DiagnosticEventKind::InferenceExecutionDiagnosticObserved => matches!(
+            source_component,
+            DiagnosticEventSourceComponent::NodeExecution
+                | DiagnosticEventSourceComponent::Runtime
+                | DiagnosticEventSourceComponent::WorkflowService
         ),
         DiagnosticEventKind::DiagnosticErrorOccurred => matches!(
             source_component,

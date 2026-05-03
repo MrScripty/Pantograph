@@ -2162,9 +2162,13 @@ inference write ledger events directly.
   accepted/rejected/degraded status, missing components, unsupported
   backend/task pairs, custom-code/trust blockers, and model/backend unavailable
   reasons.
-- [ ] Map generation/task option support summaries into durable bounded
+- [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support.
+- [ ] Map non-generation task option support summaries into durable bounded
+  metadata for embedding, rerank, image/video/audio, and KV-cache task options
+  after those task option diagnostics are emitted by the corresponding typed
+  execution paths.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup.
@@ -2249,6 +2253,15 @@ one-off conversions.
   lifecycle facts. This keeps backend choice durable even when runtime ids such
   as `pytorch.transformers` are distinct from backend keys. Generation option
   support summaries remain a separate follow-up event/projection slice.
+- 2026-05-03: Generation option diagnostics ledger slice added append-only
+  `inference.execution_diagnostic_observed` ledger events with bounded
+  option-support counts and per-option summaries. `InferenceRequestLifecycleEvent`
+  now carries canonical task ids and bounded option diagnostics, while
+  embedded-runtime maps completed backend-execution lifecycle facts into durable
+  metadata without importing the diagnostics ledger into `crates/inference` or
+  storing prompt/result bodies. Remaining task-option diagnostics for embedding,
+  rerank, image/video/audio, and KV-cache task options stay open until those
+  typed paths emit compatibility reports.
 
 ## Execution Notes
 

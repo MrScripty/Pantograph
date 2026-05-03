@@ -768,6 +768,7 @@ impl InferenceGateway {
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
+            None,
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -781,6 +782,7 @@ impl InferenceGateway {
                 stream,
                 lifecycle_sink,
                 request_id,
+                None,
                 backend_key,
                 runtime_id,
                 runtime_instance_id,
@@ -790,6 +792,7 @@ impl InferenceGateway {
                 record_inference_lifecycle_event(
                     lifecycle_sink.as_ref(),
                     request_id.clone(),
+                    None,
                     backend_key.clone(),
                     runtime_id.clone(),
                     runtime_instance_id.clone(),
@@ -800,6 +803,7 @@ impl InferenceGateway {
                 record_inference_lifecycle_event(
                     lifecycle_sink.as_ref(),
                     request_id,
+                    None,
                     backend_key,
                     runtime_id,
                     runtime_instance_id,
@@ -836,10 +840,12 @@ impl InferenceGateway {
         let (backend_key, runtime_id, runtime_instance_id) = self.lifecycle_event_context().await;
         let request_id = request.request_id.clone();
         let model_id = non_empty_model_id(&typed_request_model_name(&request));
+        let task_id = Some(request.task_id.canonical_label().to_string());
         record_inference_lifecycle_phase_event(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
             request_id.clone(),
+            task_id.clone(),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -855,6 +861,7 @@ impl InferenceGateway {
                 lifecycle_sink.as_ref(),
                 InferenceLifecyclePhase::TaskValidation,
                 request_id,
+                task_id,
                 backend_key,
                 runtime_id,
                 runtime_instance_id,
@@ -868,10 +875,11 @@ impl InferenceGateway {
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
             request_id.clone(),
-            backend_key,
-            runtime_id,
-            runtime_instance_id,
-            model_id,
+            task_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            model_id.clone(),
             &Ok(()),
         );
         let request_json = typed_text_generation_stream_request_json(request)?;
@@ -908,6 +916,7 @@ impl InferenceGateway {
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
+            Some("embedding".to_string()),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -920,6 +929,7 @@ impl InferenceGateway {
         record_non_streaming_lifecycle_result(
             lifecycle_sink.as_ref(),
             request_id,
+            Some("embedding".to_string()),
             backend_key,
             runtime_id,
             runtime_instance_id,
@@ -950,6 +960,7 @@ impl InferenceGateway {
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
+            Some("rerank".to_string()),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -962,6 +973,7 @@ impl InferenceGateway {
         record_non_streaming_lifecycle_result(
             lifecycle_sink.as_ref(),
             request_id,
+            Some("rerank".to_string()),
             backend_key,
             runtime_id,
             runtime_instance_id,
@@ -998,6 +1010,7 @@ impl InferenceGateway {
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
+            Some("image_generation".to_string()),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -1010,6 +1023,7 @@ impl InferenceGateway {
         record_non_streaming_lifecycle_result(
             lifecycle_sink.as_ref(),
             request_id,
+            Some("image_generation".to_string()),
             backend_key,
             runtime_id,
             runtime_instance_id,
@@ -1051,10 +1065,12 @@ impl InferenceGateway {
         let (backend_key, runtime_id, runtime_instance_id) = self.lifecycle_event_context().await;
         let request_id = request.request_id.clone();
         let model_id = non_empty_model_id(&typed_request_model_name(&request));
+        let task_id = Some(request.task_id.canonical_label().to_string());
         record_inference_lifecycle_phase_event(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
             request_id.clone(),
+            task_id.clone(),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -1070,6 +1086,7 @@ impl InferenceGateway {
                 lifecycle_sink.as_ref(),
                 InferenceLifecyclePhase::TaskValidation,
                 request_id,
+                task_id,
                 backend_key,
                 runtime_id,
                 runtime_instance_id,
@@ -1083,6 +1100,7 @@ impl InferenceGateway {
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
             request_id.clone(),
+            task_id.clone(),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -1092,6 +1110,7 @@ impl InferenceGateway {
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
+            task_id.clone(),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -1100,14 +1119,17 @@ impl InferenceGateway {
             None,
         );
         let result = self.execute_typed_validated(request).await;
-        record_non_streaming_lifecycle_result(
+        let option_diagnostics = option_diagnostics_from_execution_result(&result);
+        record_non_streaming_lifecycle_result_with_option_diagnostics(
             lifecycle_sink.as_ref(),
             request_id,
+            task_id,
             backend_key,
             runtime_id,
             runtime_instance_id,
             model_id,
             &result,
+            option_diagnostics,
         );
         result
     }
@@ -1223,6 +1245,7 @@ struct LifecycleStream {
     inner: Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
     lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     request_id: Option<String>,
+    task_id: Option<String>,
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
@@ -1235,6 +1258,7 @@ impl LifecycleStream {
         inner: Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
         request_id: Option<String>,
+        task_id: Option<String>,
         backend_key: Option<String>,
         runtime_id: Option<String>,
         runtime_instance_id: Option<String>,
@@ -1244,6 +1268,7 @@ impl LifecycleStream {
             inner,
             lifecycle_sink,
             request_id,
+            task_id,
             backend_key,
             runtime_id,
             runtime_instance_id,
@@ -1256,6 +1281,7 @@ impl LifecycleStream {
         record_inference_lifecycle_event(
             self.lifecycle_sink.as_ref(),
             self.request_id.clone(),
+            self.task_id.clone(),
             self.backend_key.clone(),
             self.runtime_id.clone(),
             self.runtime_instance_id.clone(),
@@ -1502,6 +1528,7 @@ fn typed_text_generation_stream_request_json(
 fn record_inference_lifecycle_event(
     sink: &dyn InferenceRequestLifecycleEventSink,
     request_id: Option<String>,
+    task_id: Option<String>,
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
@@ -1513,6 +1540,7 @@ fn record_inference_lifecycle_event(
         sink,
         InferenceLifecyclePhase::BackendExecution,
         request_id,
+        task_id,
         backend_key,
         runtime_id,
         runtime_instance_id,
@@ -1526,6 +1554,7 @@ fn record_inference_lifecycle_phase_event(
     sink: &dyn InferenceRequestLifecycleEventSink,
     phase: InferenceLifecyclePhase,
     request_id: Option<String>,
+    task_id: Option<String>,
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
@@ -1533,16 +1562,47 @@ fn record_inference_lifecycle_phase_event(
     kind: InferenceRequestLifecycleEventKind,
     detail: Option<String>,
 ) {
+    record_inference_lifecycle_phase_event_with_option_diagnostics(
+        sink,
+        phase,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        kind,
+        detail,
+        Vec::new(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_inference_lifecycle_phase_event_with_option_diagnostics(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    kind: InferenceRequestLifecycleEventKind,
+    detail: Option<String>,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+) {
     sink.record(InferenceRequestLifecycleEvent {
         request_id,
         phase,
         kind,
         occurred_at_ms: unix_timestamp_ms(),
+        task_id,
         backend_key,
         runtime_id,
         runtime_instance_id,
         model_id,
         detail,
+        option_diagnostics,
     });
 }
 
@@ -1550,21 +1610,49 @@ fn record_inference_lifecycle_phase_event(
 fn record_non_streaming_lifecycle_result<T>(
     sink: &dyn InferenceRequestLifecycleEventSink,
     request_id: Option<String>,
+    task_id: Option<String>,
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
 ) {
-    record_non_streaming_lifecycle_phase_result(
+    record_non_streaming_lifecycle_result_with_option_diagnostics(
         sink,
-        InferenceLifecyclePhase::BackendExecution,
         request_id,
+        task_id,
         backend_key,
         runtime_id,
         runtime_instance_id,
         model_id,
         result,
+        Vec::new(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_non_streaming_lifecycle_result_with_option_diagnostics<T>(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    result: &Result<T, GatewayError>,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+) {
+    record_non_streaming_lifecycle_phase_result_with_option_diagnostics(
+        sink,
+        InferenceLifecyclePhase::BackendExecution,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        result,
+        option_diagnostics,
     );
 }
 
@@ -1573,28 +1661,59 @@ fn record_non_streaming_lifecycle_phase_result<T>(
     sink: &dyn InferenceRequestLifecycleEventSink,
     phase: InferenceLifecyclePhase,
     request_id: Option<String>,
+    task_id: Option<String>,
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
 ) {
+    record_non_streaming_lifecycle_phase_result_with_option_diagnostics(
+        sink,
+        phase,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        result,
+        Vec::new(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_non_streaming_lifecycle_phase_result_with_option_diagnostics<T>(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    result: &Result<T, GatewayError>,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+) {
     match result {
-        Ok(_) => record_inference_lifecycle_phase_event(
+        Ok(_) => record_inference_lifecycle_phase_event_with_option_diagnostics(
             sink,
             phase.clone(),
             request_id.clone(),
+            task_id.clone(),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Completed,
             None,
+            option_diagnostics,
         ),
         Err(error) => record_inference_lifecycle_phase_event(
             sink,
             phase.clone(),
             request_id.clone(),
+            task_id.clone(),
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
@@ -1608,6 +1727,7 @@ fn record_non_streaming_lifecycle_phase_result<T>(
         sink,
         phase,
         request_id,
+        task_id,
         backend_key,
         runtime_id,
         runtime_instance_id,
@@ -1615,6 +1735,17 @@ fn record_non_streaming_lifecycle_phase_result<T>(
         InferenceRequestLifecycleEventKind::CleanupCompleted,
         None,
     );
+}
+
+fn option_diagnostics_from_execution_result(
+    result: &Result<InferenceExecutionResult, GatewayError>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    match result {
+        Ok(InferenceExecutionResult::TextGeneration {
+            option_diagnostics, ..
+        }) => option_diagnostics.clone(),
+        _ => Vec::new(),
+    }
 }
 
 fn unix_timestamp_ms() -> u64 {

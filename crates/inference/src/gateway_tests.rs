@@ -853,6 +853,7 @@ async fn test_execute_typed_forwards_image_generation_to_active_backend() {
 #[tokio::test]
 async fn test_execute_typed_text_reports_generation_option_diagnostics() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
     let request = InferenceExecutionRequest {
         request_id: Some("typed-text-1".to_string()),
         task_id: InferenceTaskId::TextGeneration,
@@ -885,7 +886,7 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
     };
 
     let result = gateway
-        .execute_typed(request)
+        .execute_typed_with_lifecycle(request, sink.clone())
         .await
         .expect("typed text request should execute");
 
@@ -909,6 +910,24 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
         }
         other => panic!("expected text generation result, got {other:?}"),
     }
+
+    let events = sink.events();
+    let completed_backend_event = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("completed backend event");
+    assert_eq!(
+        completed_backend_event.task_id.as_deref(),
+        Some("text_generation")
+    );
+    assert!(completed_backend_event
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.option_path == "sampling.seed"
+            && diagnostic.state == OptionSupportState::Unsupported));
 }
 
 #[tokio::test]
@@ -989,6 +1008,7 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
     assert_eq!(events.len(), 6);
     assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
     assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[0].task_id.as_deref(), Some("image_generation"));
     assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
     assert_eq!(
         events[1].kind,
@@ -1001,6 +1021,7 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
     );
     assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[3].task_id.as_deref(), Some("image_generation"));
     assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(
         events[4].kind,

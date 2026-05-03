@@ -14,6 +14,7 @@ use pantograph_runtime_attribution::{
 use pantograph_workflow_service::{WorkflowNodeStatusQueryRequest, WorkflowService};
 
 use crate::{
+    inference_diagnostic_event_ledger_append_request,
     inference_lifecycle_event_ledger_append_request, InferenceLifecycleLedgerRecorder,
     InferenceLifecycleWorkflowLedgerSink, ManagedCapabilityKind, ManagedCapabilityRoute,
     ManagedModelUsageSubmission, ModelExecutionCapability, NodeCancellationToken,
@@ -120,11 +121,13 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         phase: inference::InferenceLifecyclePhase::BackendExecution,
         kind: inference::InferenceRequestLifecycleEventKind::Failed,
         occurred_at_ms: 123,
+        task_id: Some("text_generation".to_string()),
         backend_key: Some("pytorch".to_string()),
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail: Some("backend failed".to_string()),
+        option_diagnostics: Vec::new(),
     };
 
     let request = inference_lifecycle_event_ledger_append_request(&context, &event)
@@ -161,14 +164,65 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         phase: inference::InferenceLifecyclePhase::BackendExecution,
         kind: inference::InferenceRequestLifecycleEventKind::CleanupCompleted,
         occurred_at_ms: 124,
+        task_id: Some("text_generation".to_string()),
         backend_key: Some("pytorch".to_string()),
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail: None,
+        option_diagnostics: Vec::new(),
     };
 
     assert!(inference_lifecycle_event_ledger_append_request(&context, &event).is_none());
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_builds_option_support_summary() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.option_diagnostics = vec![
+        inference::OptionCompatibilityDiagnostic {
+            option_path: "sampling.temperature".to_string(),
+            state: inference::OptionSupportState::Mapped,
+            backend_key: Some("pytorch".to_string()),
+            message: Some("mapped to backend temperature".to_string()),
+        },
+        inference::OptionCompatibilityDiagnostic {
+            option_path: "stopping.stop_strings".to_string(),
+            state: inference::OptionSupportState::Unsupported,
+            backend_key: Some("pytorch".to_string()),
+            message: Some("not mapped by this backend boundary".to_string()),
+        },
+    ];
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("completed backend lifecycle with option diagnostics should map");
+
+    assert_eq!(request.node_id.as_deref(), Some("node-a"));
+    assert_eq!(request.runtime_id.as_deref(), Some("pytorch.transformers"));
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.request_id, "req-a");
+            assert_eq!(payload.task_id, "text_generation");
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(payload.option_support_counts.mapped, 1);
+            assert_eq!(payload.option_support_counts.unsupported, 1);
+            assert_eq!(payload.option_diagnostics.len(), 2);
+            assert_eq!(
+                payload.option_diagnostics[0].option_path,
+                "sampling.temperature"
+            );
+            assert_eq!(payload.option_diagnostics[0].state, "mapped");
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
 }
 
 #[test]
@@ -343,11 +397,13 @@ fn inference_lifecycle_event(
         phase: inference::InferenceLifecyclePhase::BackendExecution,
         kind,
         occurred_at_ms,
+        task_id: Some("text_generation".to_string()),
         backend_key: Some("pytorch".to_string()),
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail,
+        option_diagnostics: Vec::new(),
     }
 }
 

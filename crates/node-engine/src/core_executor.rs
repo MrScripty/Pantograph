@@ -470,11 +470,13 @@ fn record_task_validation_failure_lifecycle(
             phase: InferenceLifecyclePhase::TaskValidation,
             kind,
             occurred_at_ms: unix_timestamp_ms(),
+            task_id: Some(task_label.to_string()),
             backend_key: backend_key.clone(),
             runtime_id: runtime_id.clone(),
             runtime_instance_id: None,
             model_id: model_id.clone(),
             detail,
+            option_diagnostics: Vec::new(),
         });
     }
 }

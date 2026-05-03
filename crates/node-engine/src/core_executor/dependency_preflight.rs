@@ -750,11 +750,13 @@ fn record_dependency_preflight_failure_lifecycle(
             phase: InferenceLifecyclePhase::ModelPackageResolution,
             kind,
             occurred_at_ms: dependency_preflight_unix_timestamp_ms(),
+            task_id: Some(context.task_label.clone()),
             backend_key: context.backend_key.clone(),
             runtime_id: runtime_id.clone(),
             runtime_instance_id: None,
             model_id: context.model_id.clone(),
             detail,
+            option_diagnostics: Vec::new(),
         });
     }
 }

@@ -478,6 +478,8 @@ pub struct InferenceRequestLifecycleEvent {
     pub kind: InferenceRequestLifecycleEventKind,
     pub occurred_at_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_id: Option<String>,
@@ -487,6 +489,8 @@ pub struct InferenceRequestLifecycleEvent {
     pub model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
 }
 
 /// Synchronous sink for request lifecycle facts.
@@ -1093,11 +1097,13 @@ mod tests {
             phase: InferenceLifecyclePhase::BackendExecution,
             kind: InferenceRequestLifecycleEventKind::CleanupCompleted,
             occurred_at_ms: 42,
+            task_id: Some("text_generation".to_string()),
             backend_key: Some("llama_cpp".to_string()),
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-main-1".to_string()),
             model_id: Some("pumas://models/tiny-llama".to_string()),
             detail: Some("stream dropped by consumer".to_string()),
+            option_diagnostics: Vec::new(),
         };
 
         let encoded = serde_json::to_value(&event).unwrap();
@@ -1111,6 +1117,7 @@ mod tests {
             serde_json::json!("pumas://models/tiny-llama")
         );
         assert_eq!(encoded["runtime_id"], serde_json::json!("llama.cpp"));
+        assert_eq!(encoded["task_id"], serde_json::json!("text_generation"));
         assert_eq!(decoded, event);
     }
 
