@@ -1952,6 +1952,12 @@ one-off conversions.
   embedded-runtime ledger adapter to prefer that canonical runtime id while
   retaining backend key as separate backend context. This records the
   backend-versus-runtime distinction without a diagnostics-ledger schema change.
+- 2026-05-03: Typed execution diagnostics follow-up added
+  `InferenceGateway::execute_typed_with_lifecycle`, which emits task-validation
+  and backend-execution lifecycle facts around canonical typed requests. This
+  gives host ledger adapters bounded request id, backend, runtime, model, phase,
+  terminal status, and cleanup facts without making `crates/inference` import or
+  write the diagnostics ledger.
 
 ## Execution Notes
 
@@ -2135,6 +2141,10 @@ Update during implementation:
   `sampling.top_p` and `sampling.top_k` travel with `max_new_tokens` and
   `temperature` through `ChatRequest` and `InferenceGateway::execute_typed`
   instead of being dropped at the OpenAI-compatible adapter edge.
+- 2026-05-03: Added `InferenceGateway::execute_typed_with_lifecycle` so typed
+  request validation and backend execution emit separate lifecycle phases for
+  diagnostics-ledger adapters while preserving inference as a fact producer
+  rather than a ledger writer.
 
 ## Commit Cadence Notes
 

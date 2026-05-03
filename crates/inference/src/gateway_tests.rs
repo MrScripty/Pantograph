@@ -8,7 +8,7 @@ use futures_util::{stream, StreamExt};
 use tokio::sync::mpsc;
 
 use crate::backend::BackendStartOutcome;
-use crate::model_contracts::InferenceTaskId;
+use crate::model_contracts::{InferenceLifecyclePhase, InferenceTaskId};
 use crate::types::{
     ImageGenerationRequest, InferenceExecutionInput, InferenceExecutionRequest,
     InferenceExecutionResult, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
@@ -882,6 +882,136 @@ async fn test_execute_typed_validates_before_backend_execution() {
         Err(GatewayError::Validation(_)) => {}
         other => panic!("expected validation error, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn test_execute_typed_with_lifecycle_records_validation_and_backend_completion() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-image-lifecycle".to_string()),
+        task_id: InferenceTaskId::ImageGeneration,
+        model_ref: None,
+        model_name: Some("mock-image".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        input: InferenceExecutionInput::ImageGeneration {
+            request: ImageGenerationRequest {
+                model: "mock-image".to_string(),
+                prompt: "typed prompt".to_string(),
+                negative_prompt: None,
+                width: None,
+                height: None,
+                num_inference_steps: None,
+                guidance_scale: None,
+                seed: None,
+                scheduler: None,
+                num_images_per_prompt: None,
+                init_image: None,
+                mask_image: None,
+                strength: None,
+                extra_options: serde_json::Value::Null,
+            },
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed request should execute");
+
+    let events = sink.events();
+    assert_eq!(events.len(), 6);
+    assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[2].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(
+        events[4].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[5].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(
+        events[5].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert!(events.iter().all(|event| {
+        event.request_id.as_deref() == Some("typed-image-lifecycle")
+            && event.backend_key.as_deref() == Some("mock")
+            && event.model_id.as_deref() == Some("mock-image")
+    }));
+}
+
+#[tokio::test]
+async fn test_execute_typed_with_lifecycle_records_validation_failure_without_backend_phase() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-invalid".to_string()),
+        task_id: InferenceTaskId::Embedding,
+        model_ref: None,
+        model_name: Some("mock-image".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        input: InferenceExecutionInput::ImageGeneration {
+            request: ImageGenerationRequest {
+                model: "mock-image".to_string(),
+                prompt: "typed prompt".to_string(),
+                negative_prompt: None,
+                width: None,
+                height: None,
+                num_inference_steps: None,
+                guidance_scale: None,
+                seed: None,
+                scheduler: None,
+                num_images_per_prompt: None,
+                init_image: None,
+                mask_image: None,
+                strength: None,
+                extra_options: serde_json::Value::Null,
+            },
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let error = gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect_err("typed validation should fail");
+
+    assert!(matches!(
+        error,
+        GatewayError::Validation(
+            crate::types::InferenceExecutionRequestValidationError::TaskInputMismatch { .. }
+        )
+    ));
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert!(events
+        .iter()
+        .all(|event| event.phase == InferenceLifecyclePhase::TaskValidation));
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert!(events[1]
+        .detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("does not match input type image_generation")));
 }
 
 #[tokio::test]

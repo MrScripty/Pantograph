@@ -968,6 +968,87 @@ impl InferenceGateway {
         request: InferenceExecutionRequest,
     ) -> Result<InferenceExecutionResult, GatewayError> {
         request.validate()?;
+        self.execute_typed_validated(request).await
+    }
+
+    /// Execute a typed request and emit request-scoped lifecycle facts.
+    ///
+    /// Task validation and backend execution are recorded as separate lifecycle
+    /// phases so ledger consumers can distinguish malformed typed requests from
+    /// backend/runtime failures without importing diagnostics-ledger here.
+    pub async fn execute_typed_with_lifecycle(
+        &self,
+        request: InferenceExecutionRequest,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    ) -> Result<InferenceExecutionResult, GatewayError> {
+        let (backend_key, runtime_id, runtime_instance_id) = self.lifecycle_event_context().await;
+        let request_id = request.request_id.clone();
+        let model_id = non_empty_model_id(&typed_request_model_name(&request));
+        record_inference_lifecycle_phase_event(
+            lifecycle_sink.as_ref(),
+            InferenceLifecyclePhase::TaskValidation,
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            model_id.clone(),
+            InferenceRequestLifecycleEventKind::Started,
+            None,
+        );
+
+        let validation_result = request.validate().map_err(GatewayError::Validation);
+        if let Err(error) = validation_result {
+            let result = Err(error);
+            record_non_streaming_lifecycle_phase_result(
+                lifecycle_sink.as_ref(),
+                InferenceLifecyclePhase::TaskValidation,
+                request_id,
+                backend_key,
+                runtime_id,
+                runtime_instance_id,
+                model_id,
+                &result,
+            );
+            return result;
+        }
+
+        record_non_streaming_lifecycle_phase_result(
+            lifecycle_sink.as_ref(),
+            InferenceLifecyclePhase::TaskValidation,
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            model_id.clone(),
+            &Ok(()),
+        );
+        record_inference_lifecycle_event(
+            lifecycle_sink.as_ref(),
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            model_id.clone(),
+            InferenceRequestLifecycleEventKind::Started,
+            None,
+        );
+        let result = self.execute_typed_validated(request).await;
+        record_non_streaming_lifecycle_result(
+            lifecycle_sink.as_ref(),
+            request_id,
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            model_id,
+            &result,
+        );
+        result
+    }
+
+    async fn execute_typed_validated(
+        &self,
+        request: InferenceExecutionRequest,
+    ) -> Result<InferenceExecutionResult, GatewayError> {
         let model = typed_request_model_name(&request);
 
         match request.input {
@@ -1243,9 +1324,33 @@ fn record_inference_lifecycle_event(
     kind: InferenceRequestLifecycleEventKind,
     detail: Option<String>,
 ) {
+    record_inference_lifecycle_phase_event(
+        sink,
+        InferenceLifecyclePhase::BackendExecution,
+        request_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        kind,
+        detail,
+    );
+}
+
+fn record_inference_lifecycle_phase_event(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    request_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    kind: InferenceRequestLifecycleEventKind,
+    detail: Option<String>,
+) {
     sink.record(InferenceRequestLifecycleEvent {
         request_id,
-        phase: InferenceLifecyclePhase::BackendExecution,
+        phase,
         kind,
         occurred_at_ms: unix_timestamp_ms(),
         backend_key,
@@ -1256,6 +1361,7 @@ fn record_inference_lifecycle_event(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn record_non_streaming_lifecycle_result<T>(
     sink: &dyn InferenceRequestLifecycleEventSink,
     request_id: Option<String>,
@@ -1265,9 +1371,33 @@ fn record_non_streaming_lifecycle_result<T>(
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
 ) {
+    record_non_streaming_lifecycle_phase_result(
+        sink,
+        InferenceLifecyclePhase::BackendExecution,
+        request_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        result,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_non_streaming_lifecycle_phase_result<T>(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    request_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+    result: &Result<T, GatewayError>,
+) {
     match result {
-        Ok(_) => record_inference_lifecycle_event(
+        Ok(_) => record_inference_lifecycle_phase_event(
             sink,
+            phase.clone(),
             request_id.clone(),
             backend_key.clone(),
             runtime_id.clone(),
@@ -1276,8 +1406,9 @@ fn record_non_streaming_lifecycle_result<T>(
             InferenceRequestLifecycleEventKind::Completed,
             None,
         ),
-        Err(error) => record_inference_lifecycle_event(
+        Err(error) => record_inference_lifecycle_phase_event(
             sink,
+            phase.clone(),
             request_id.clone(),
             backend_key.clone(),
             runtime_id.clone(),
@@ -1288,8 +1419,9 @@ fn record_non_streaming_lifecycle_result<T>(
         ),
     }
 
-    record_inference_lifecycle_event(
+    record_inference_lifecycle_phase_event(
         sink,
+        phase,
         request_id,
         backend_key,
         runtime_id,

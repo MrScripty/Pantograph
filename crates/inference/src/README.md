@@ -253,6 +253,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - Gateway lifecycle and capability payloads are backend-owned runtime facts; a
   higher Pantograph policy layer may interpret them, but this crate must not
   publish scheduler-policy conclusions as if they were raw backend facts.
+- `InferenceGateway::execute_typed_with_lifecycle` records typed task
+  validation and backend execution as lifecycle facts for host ledger adapters;
+  the inference crate still does not import or write diagnostics-ledger events.
 - `ImageGenerationRequest` reserves optional `init_image`, `mask_image`, and
   `strength` for later img2img/inpaint support.
 - `RerankRequest`, `RerankResult`, and `RerankResponse` are append-only
