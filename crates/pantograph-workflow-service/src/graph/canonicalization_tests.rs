@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use pantograph_node_contracts::{
     ContractUpgradeChange, ContractUpgradeOutcome, DiagnosticsLineagePolicy, PortKind,
 };
@@ -5,6 +7,7 @@ use serde_json::json;
 
 use super::super::registry::NodeRegistry;
 use super::super::types::{GraphEdge, GraphNode, WorkflowGraph};
+use super::legacy_migration::{legacy_inference_node_migration_specs, LegacyInferencePortAction};
 use super::{canonicalize_workflow_graph, canonicalize_workflow_graph_with_migrations};
 
 #[test]
@@ -191,6 +194,134 @@ fn canonicalize_workflow_graph_migrates_legacy_ollama_nodes() {
         .diagnostics
         .iter()
         .any(|diagnostic| diagnostic.message.contains("Ollama execution is retired")));
+
+    let ollama_spec = legacy_inference_node_migration_specs()
+        .iter()
+        .find(|spec| spec.legacy_node_type == "ollama-inference")
+        .expect("ollama migration spec");
+    assert_eq!(
+        ollama_spec.task_kind.as_str(),
+        migrated.data["task_kind"].as_str().expect("task kind")
+    );
+    assert_eq!(
+        ollama_spec.runtime_hint.as_str(),
+        migrated.data["runtime_hint"]
+            .as_str()
+            .expect("runtime hint")
+    );
+    assert_eq!(
+        ollama_spec.diagnostic_code,
+        migrated.data["migration_diagnostics"][0]["code"]
+            .as_str()
+            .expect("diagnostic code")
+    );
+}
+
+#[test]
+fn legacy_inference_migration_inventory_covers_planned_node_types() {
+    let specs = legacy_inference_node_migration_specs();
+    let node_types = specs
+        .iter()
+        .map(|spec| spec.legacy_node_type)
+        .collect::<HashSet<_>>();
+
+    for expected in [
+        "ollama-inference",
+        "llamacpp-inference",
+        "pytorch-inference",
+        "embedding",
+        "reranker",
+        "llm-inference",
+    ] {
+        assert!(
+            node_types.contains(expected),
+            "missing migration inventory for {expected}"
+        );
+    }
+}
+
+#[test]
+fn legacy_inference_migration_inventory_defines_canonical_data_fields() {
+    for spec in legacy_inference_node_migration_specs() {
+        assert_eq!(spec.canonical_node_type, "llm-inference");
+        assert!(spec.node_data_fields.contains(&"task_kind"));
+        assert!(spec.node_data_fields.contains(&"pumas_model_ref"));
+        assert!(spec.node_data_fields.contains(&"resolved_model_source"));
+        assert!(spec.node_data_fields.contains(&"runtime_hint"));
+        assert!(spec.node_data_fields.contains(&"generation_options"));
+        assert!(spec.node_data_fields.contains(&"task_options"));
+        assert!(spec.node_data_fields.contains(&"migration_diagnostics"));
+        assert!(
+            !spec.diagnostic_code.trim().is_empty(),
+            "{} must define migration diagnostics",
+            spec.legacy_node_type
+        );
+    }
+}
+
+#[test]
+fn legacy_inference_migration_inventory_maps_model_sources_and_task_options() {
+    let specs = legacy_inference_node_migration_specs();
+    let model_source_nodes = [
+        "ollama-inference",
+        "llamacpp-inference",
+        "pytorch-inference",
+        "embedding",
+        "reranker",
+    ];
+
+    for node_type in model_source_nodes {
+        let spec = specs
+            .iter()
+            .find(|spec| spec.legacy_node_type == node_type)
+            .expect("migration spec");
+        assert!(
+            spec.ports.iter().any(|port| matches!(
+                port.action,
+                LegacyInferencePortAction::PromoteToNodeData { field_path }
+                    if field_path == "pumas_model_ref"
+            )),
+            "{node_type} must map legacy model source ports to pumas_model_ref"
+        );
+    }
+
+    let embedding = specs
+        .iter()
+        .find(|spec| spec.legacy_node_type == "embedding")
+        .expect("embedding spec");
+    assert_eq!(embedding.task_kind.as_str(), "embedding");
+    assert!(embedding.ports.iter().any(|port| {
+        port.legacy_port_id == "embedding"
+            && matches!(port.action, LegacyInferencePortAction::Preserve)
+    }));
+
+    let reranker = specs
+        .iter()
+        .find(|spec| spec.legacy_node_type == "reranker")
+        .expect("reranker spec");
+    assert_eq!(reranker.task_kind.as_str(), "rerank");
+    assert!(reranker.ports.iter().any(|port| matches!(
+        port.action,
+        LegacyInferencePortAction::PromoteToNodeData { field_path }
+            if field_path == "task_options.top_k"
+    )));
+}
+
+#[test]
+fn legacy_inference_port_mappings_are_deterministic_per_node() {
+    for spec in legacy_inference_node_migration_specs() {
+        let mut seen = HashSet::new();
+        for port in spec.ports {
+            let key = (port.direction, port.legacy_port_id);
+            assert!(
+                seen.insert(key),
+                "{} has duplicate migration mapping for {:?} {}",
+                spec.legacy_node_type,
+                port.direction,
+                port.legacy_port_id
+            );
+        }
+    }
 }
 
 #[test]

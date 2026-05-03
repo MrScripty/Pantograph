@@ -1547,11 +1547,11 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - [ ] Define executable migration fixtures for old and new saved workflow
   shapes, including expected diagnostics and default semantics when fields are
   omitted.
-- [ ] Inventory old graph-visible inference node types and related ports,
+- [x] Inventory old graph-visible inference node types and related ports,
   including `ollama-inference`, `llamacpp-inference`, `pytorch-inference`,
   generic `inference`, `embedding`, `reranker`, model provider, unload model,
   KV ports, and embedding-mode fields.
-- [ ] Define old-to-new port mappings for prompt/messages, system prompt,
+- [x] Define old-to-new port mappings for prompt/messages, system prompt,
   model source, Pumas model reference, image/audio/video inputs, generation
   options, embedding options, rerank inputs, model refs, stream outputs, and KV
   cache handles.
@@ -1599,8 +1599,14 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - `git diff --check`.
 
 **Status:** In progress. Ollama inference nodes have structural migration
-coverage from an earlier slice. The broader canonical workflow-node migration
-remains open.
+coverage from an earlier slice. The workflow-service canonicalization boundary
+now has an executable legacy inference-node migration inventory covering
+`ollama-inference`, `llamacpp-inference`, `pytorch-inference`, `embedding`,
+`reranker`, and the existing generic `llm-inference` shape, including
+canonical node-data fields, task-kind/runtime-hint semantics, migration
+diagnostic codes, and old-to-new port actions for model sources, generation
+options, task options, KV-cache handles, streams, embedding outputs, and rerank
+outputs. The broader canonical workflow-node migration remains open.
 
 ### Milestone 12: Prepare Native Candle Slice
 
