@@ -4,7 +4,11 @@ use super::pytorch_worker_contract::{
     PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
-use crate::model_contracts::{ModelArtifactKind, PumasModelRef, ResolvedModelPackageFacts};
+use crate::model_contracts::{
+    CacheGenerationOptions, GenerationOptions, LengthGenerationOptions, ModelArtifactKind,
+    OptionSupportState, OutputGenerationOptions, PumasModelRef, ResolvedModelPackageFacts,
+    SamplingGenerationOptions, SpecialTokenGenerationOptions, StoppingGenerationOptions,
+};
 
 #[test]
 fn test_backend_name() {
@@ -386,4 +390,77 @@ fn test_pytorch_load_envelope_rejects_unsupported_artifact_kind() {
         }
         other => panic!("expected unsupported artifact config error, got {other:?}"),
     }
+}
+
+#[test]
+fn test_pytorch_generation_options_map_to_transformers_kwargs_and_diagnostics() {
+    let options = GenerationOptions {
+        length: LengthGenerationOptions {
+            max_new_tokens: Some(128),
+            ..Default::default()
+        },
+        sampling: SamplingGenerationOptions {
+            temperature: Some(0.6),
+            top_p: Some(0.9),
+            seed: Some(42),
+            ..Default::default()
+        },
+        stopping: StoppingGenerationOptions {
+            stop_strings: vec!["END".to_string()],
+            eos_token_ids: vec![2, 32000],
+        },
+        cache: CacheGenerationOptions {
+            use_cache: Some(true),
+            kv_cache_checkpoint_requested: Some(true),
+        },
+        output: OutputGenerationOptions {
+            return_logprobs: Some(true),
+            ..Default::default()
+        },
+        special_tokens: SpecialTokenGenerationOptions {
+            pad_token_id: Some(0),
+            ..Default::default()
+        },
+        backend_extensions: [(
+            "transformers:renormalize_logits".to_string(),
+            serde_json::json!(true),
+        )]
+        .into_iter()
+        .collect(),
+        ..Default::default()
+    };
+
+    let mapping = PyTorchBackend::transformers_generation_option_mapping(&options);
+
+    assert_eq!(mapping.kwargs["max_new_tokens"], serde_json::json!(128));
+    let temperature = mapping.kwargs["temperature"]
+        .as_f64()
+        .expect("temperature is numeric");
+    assert!((temperature - 0.6).abs() < 0.000_001);
+    assert_eq!(mapping.kwargs["use_cache"], serde_json::json!(true));
+    assert_eq!(mapping.kwargs["pad_token_id"], serde_json::json!(0));
+    assert_eq!(
+        mapping.kwargs["eos_token_id"],
+        serde_json::json!([2, 32000])
+    );
+    assert_eq!(
+        mapping.kwargs["renormalize_logits"],
+        serde_json::json!(true)
+    );
+    assert!(mapping.diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "sampling.seed"
+            && diagnostic.state == OptionSupportState::Unsupported
+    }));
+    assert!(mapping.diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "stopping.eos_token_ids"
+            && diagnostic.state == OptionSupportState::Mapped
+    }));
+    assert!(mapping.diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "cache.kv_cache_checkpoint_requested"
+            && diagnostic.state == OptionSupportState::Mapped
+    }));
+    assert!(mapping.diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "output.return_logprobs"
+            && diagnostic.state == OptionSupportState::Unsupported
+    }));
 }

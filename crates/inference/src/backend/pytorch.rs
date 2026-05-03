@@ -14,6 +14,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures_util::Stream;
 use pyo3::prelude::*;
+use serde_json::{Map, Value};
 
 use self::pytorch_worker_contract::{
     PyTorchTransformersLoadRequest, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
@@ -27,8 +28,8 @@ use super::{
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
-    InferenceModality, InferenceTaskId, ModelValidationState, ResolvedModelPackageFacts,
-    TaskEvidence,
+    GenerationOptions, InferenceModality, InferenceTaskId, ModelValidationState,
+    OptionCompatibilityDiagnostic, OptionSupportState, ResolvedModelPackageFacts, TaskEvidence,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
@@ -65,6 +66,12 @@ pub struct PyTorchLiveKvInfo {
     pub model_path: String,
     pub model_type: String,
     pub device: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct PyTorchGenerationOptionMapping {
+    kwargs: Map<String, Value>,
+    diagnostics: Vec<OptionCompatibilityDiagnostic>,
 }
 
 pub fn kv_cache_runtime_fingerprint_for_live_kv(
@@ -382,6 +389,225 @@ impl PyTorchBackend {
         Err(BackendError::Config(
             "PyTorch/Transformers load requires text-generation or chat task evidence".to_string(),
         ))
+    }
+
+    #[allow(dead_code)]
+    fn transformers_generation_option_mapping(
+        options: &GenerationOptions,
+    ) -> PyTorchGenerationOptionMapping {
+        let mut kwargs = Map::new();
+        let mut diagnostics = Vec::new();
+
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "length.max_new_tokens",
+            "max_new_tokens",
+            options.length.max_new_tokens,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "length.min_new_tokens",
+            "min_new_tokens",
+            options.length.min_new_tokens,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "length.max_length",
+            "max_length",
+            options.length.max_length,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "sampling.temperature",
+            "temperature",
+            options.sampling.temperature,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "sampling.top_p",
+            "top_p",
+            options.sampling.top_p,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "sampling.top_k",
+            "top_k",
+            options.sampling.top_k,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "sampling.repetition_penalty",
+            "repetition_penalty",
+            options.sampling.repetition_penalty,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "search.num_beams",
+            "num_beams",
+            options.search.num_beams,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "search.num_return_sequences",
+            "num_return_sequences",
+            options.search.num_return_sequences,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "cache.use_cache",
+            "use_cache",
+            options.cache.use_cache,
+            OptionSupportState::Honored,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "special_tokens.bos_token_id",
+            "bos_token_id",
+            options.special_tokens.bos_token_id,
+            OptionSupportState::Mapped,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "special_tokens.eos_token_id",
+            "eos_token_id",
+            options.special_tokens.eos_token_id,
+            OptionSupportState::Mapped,
+        );
+        Self::map_generation_option(
+            &mut kwargs,
+            &mut diagnostics,
+            "special_tokens.pad_token_id",
+            "pad_token_id",
+            options.special_tokens.pad_token_id,
+            OptionSupportState::Mapped,
+        );
+
+        if let Some(seed) = options.sampling.seed {
+            diagnostics.push(Self::generation_option_diagnostic(
+                "sampling.seed",
+                OptionSupportState::Unsupported,
+                Some(format!(
+                    "PyTorch/Transformers seed handling is not wired into the worker yet ({seed})"
+                )),
+            ));
+        }
+        if !options.stopping.stop_strings.is_empty() {
+            diagnostics.push(Self::generation_option_diagnostic(
+                "stopping.stop_strings",
+                OptionSupportState::Unsupported,
+                Some("stop string criteria are not wired into the PyTorch worker yet".to_string()),
+            ));
+        }
+        if !options.stopping.eos_token_ids.is_empty() {
+            kwargs.insert(
+                "eos_token_id".to_string(),
+                serde_json::json!(options.stopping.eos_token_ids),
+            );
+            diagnostics.push(Self::generation_option_diagnostic(
+                "stopping.eos_token_ids",
+                OptionSupportState::Mapped,
+                Some("mapped to Transformers eos_token_id".to_string()),
+            ));
+        }
+        if options.cache.kv_cache_checkpoint_requested == Some(true) {
+            diagnostics.push(Self::generation_option_diagnostic(
+                "cache.kv_cache_checkpoint_requested",
+                OptionSupportState::Mapped,
+                Some(
+                    "handled by Pantograph KV-cache publication outside GenerationConfig"
+                        .to_string(),
+                ),
+            ));
+        }
+        if options.output.return_logprobs == Some(true) {
+            diagnostics.push(Self::generation_option_diagnostic(
+                "output.return_logprobs",
+                OptionSupportState::Unsupported,
+                Some("logprob output is not exposed by the PyTorch worker yet".to_string()),
+            ));
+        }
+        if options.output.return_token_ids == Some(true) {
+            diagnostics.push(Self::generation_option_diagnostic(
+                "output.return_token_ids",
+                OptionSupportState::Unsupported,
+                Some("token-id output is not exposed by the PyTorch worker yet".to_string()),
+            ));
+        }
+        for (key, value) in &options.backend_extensions {
+            if let Some(transformers_key) = key.strip_prefix("transformers:") {
+                kwargs.insert(transformers_key.to_string(), value.clone());
+                diagnostics.push(Self::generation_option_diagnostic(
+                    format!("backend_extensions.{key}"),
+                    OptionSupportState::Mapped,
+                    Some(format!(
+                        "mapped to Transformers extension key {transformers_key}"
+                    )),
+                ));
+            } else {
+                diagnostics.push(Self::generation_option_diagnostic(
+                    format!("backend_extensions.{key}"),
+                    OptionSupportState::Unsupported,
+                    Some("backend extension is not scoped to Transformers".to_string()),
+                ));
+            }
+        }
+
+        PyTorchGenerationOptionMapping {
+            kwargs,
+            diagnostics,
+        }
+    }
+
+    fn map_generation_option<T: serde::Serialize>(
+        kwargs: &mut Map<String, Value>,
+        diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
+        option_path: &'static str,
+        transformers_key: &'static str,
+        value: Option<T>,
+        state: OptionSupportState,
+    ) {
+        if let Some(value) = value {
+            kwargs.insert(transformers_key.to_string(), serde_json::json!(value));
+            diagnostics.push(Self::generation_option_diagnostic(
+                option_path,
+                state,
+                Some(format!("mapped to Transformers {transformers_key}")),
+            ));
+        }
+    }
+
+    fn generation_option_diagnostic(
+        option_path: impl Into<String>,
+        state: OptionSupportState,
+        message: Option<String>,
+    ) -> OptionCompatibilityDiagnostic {
+        OptionCompatibilityDiagnostic {
+            option_path: option_path.into(),
+            state,
+            backend_key: Some("pytorch".to_string()),
+            message,
+        }
     }
 
     async fn load_model_with_trust_policy(

@@ -1398,7 +1398,7 @@ using Python Transformers behind the boundary for broad HF-compatible support.
 - [ ] Map Pumas-resolved Rust model-source and task contracts to `AutoModel`,
   `AutoTokenizer`, processors, chat templates, and generation config inside the
   Python worker.
-- [ ] Map Rust generation option groups to Transformers generation inputs and
+- [x] Map Rust generation option groups to Transformers generation inputs and
   return per-option compatibility diagnostics instead of accepting arbitrary
   Python kwargs as the public contract.
 - [ ] Map Rust task registry entries to Transformers pipeline/model loading
@@ -1441,6 +1441,9 @@ validation before invoking Python.
 Typed worker failures now normalize into Pantograph `BackendError` categories
 with request correlation and canonical worker error codes preserved in the
 bounded message.
+PyTorch now has a backend-local mapper from canonical `GenerationOptions` to
+Transformers-style generation kwargs plus per-option diagnostics for honored,
+mapped, and currently unsupported options.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 
@@ -1453,7 +1456,7 @@ execution semantics that backends can map locally.
 - [x] Split generation options into explicit groups such as length, sampling,
   search/beam behavior, stopping, cache, output details, special tokens,
   assistant/speculative generation where planned, and backend-scoped extensions.
-- [ ] Align generation options with Transformers `GenerationConfig` concepts,
+- [x] Align generation options with Transformers `GenerationConfig` concepts,
   including max/new token distinction, sampling/search strategy, stop strings,
   cache preference, logits/output controls, and backend-specific unsupported
   option reporting.
@@ -1569,7 +1572,8 @@ canonical inference shape instead of preserving backend-specific node contracts.
 **Status:** In progress. `GenerationOptions` now aggregates the existing
 length, sampling, search, stopping, cache, output, and special-token groups
 with backend-scoped extension values. Sampling includes a typed seed field.
-Backend-specific mapping and precedence/default resolution remain open.
+PyTorch has an initial Transformers kwargs mapper with diagnostics for honored,
+mapped, and unsupported options. Precedence/default resolution remains open.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -1875,6 +1879,10 @@ Update during implementation:
   extension groups. Sampling now includes an explicit seed field so typed
   generation requests cover the option families needed by Transformers,
   llama.cpp, vLLM, MLX, and Candle mappings.
+- 2026-05-03: Added the first PyTorch/Transformers generation option mapper.
+  It projects canonical generation groups into bounded Transformers-style
+  kwargs and emits per-option diagnostics for honored, mapped, unsupported, and
+  backend-extension cases without changing live generation behavior yet.
 
 ## Commit Cadence Notes
 
