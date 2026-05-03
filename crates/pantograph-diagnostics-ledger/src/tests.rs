@@ -798,6 +798,44 @@ fn diagnostic_event_ledger_replays_legacy_node_failed_status() {
 }
 
 #[test]
+fn diagnostic_event_ledger_projects_selected_backend_key_on_node_status() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut event = sample_node_status_event(
+        "workflow_run_alpha",
+        "llm-node",
+        NodeExecutionProjectionStatus::Completed,
+        1_200,
+    );
+    event.runtime_id = Some("pytorch.transformers".to_string());
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut event.payload {
+        payload.selected_backend_key = Some("pytorch".to_string());
+    }
+
+    ledger
+        .append_diagnostic_event(event)
+        .expect("node status event");
+    ledger
+        .drain_node_status_projection(500)
+        .expect("node status projection drains");
+
+    let nodes = ledger
+        .query_node_status_projection(NodeStatusProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: Some("llm-node".to_string()),
+            status: Some(NodeExecutionProjectionStatus::Completed),
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("node status query succeeds");
+
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].runtime_id.as_deref(), Some("pytorch.transformers"));
+    assert_eq!(nodes[0].selected_backend_key.as_deref(), Some("pytorch"));
+}
+
+#[test]
 fn diagnostic_event_ledger_validates_error_scope_source_and_text() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
 
@@ -3925,6 +3963,7 @@ fn sample_node_status_event(
                 .then_some(started_at_ms + 100),
             duration_ms: (status == NodeExecutionProjectionStatus::Completed).then_some(100),
             error: None,
+            selected_backend_key: None,
         }),
     }
 }

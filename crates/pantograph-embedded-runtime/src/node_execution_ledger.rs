@@ -376,6 +376,7 @@ fn build_inference_lifecycle_event_ledger_append_request(
             completed_at_ms: if terminal { Some(occurred_at_ms) } else { None },
             duration_ms,
             error: event.detail.clone(),
+            selected_backend_key: event.backend_key.clone(),
         }),
     })
 }

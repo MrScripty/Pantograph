@@ -19,7 +19,7 @@ pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 5;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
-pub const NODE_STATUS_PROJECTION_VERSION: i64 = 2;
+pub const NODE_STATUS_PROJECTION_VERSION: i64 = 3;
 pub const MAX_DIAGNOSTIC_ERROR_TEXT_LEN: usize = 4_096;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT: usize = 8;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
@@ -1264,11 +1264,18 @@ pub struct NodeExecutionStatusPayload {
     pub completed_at_ms: Option<i64>,
     pub duration_ms: Option<u64>,
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_backend_key: Option<String>,
 }
 
 impl NodeExecutionStatusPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_optional_text("error", self.error.as_deref(), MAX_JSON_LEN)?;
+        validate_optional_text(
+            "selected_backend_key",
+            self.selected_backend_key.as_deref(),
+            MAX_ID_LEN,
+        )?;
         if let (Some(started_at_ms), Some(completed_at_ms)) =
             (self.started_at_ms, self.completed_at_ms)
         {
@@ -2117,6 +2124,7 @@ pub struct NodeStatusProjectionRecord {
     pub node_version: Option<String>,
     pub runtime_id: Option<String>,
     pub runtime_version: Option<String>,
+    pub selected_backend_key: Option<String>,
     pub model_id: Option<String>,
     pub model_version: Option<String>,
     pub status: NodeExecutionProjectionStatus,

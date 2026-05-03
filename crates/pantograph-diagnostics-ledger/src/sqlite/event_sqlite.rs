@@ -1032,7 +1032,7 @@ pub(super) fn query_node_status_projection(
     let mut stmt = ledger.conn.prepare(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, node_id, node_type, node_version, runtime_id,
-                runtime_version, model_id, model_version, status, started_at_ms,
+                runtime_version, selected_backend_key, model_id, model_version, status, started_at_ms,
                 completed_at_ms, duration_ms, error, error_event_id, error_severity,
                 error_phase, error_code, last_event_seq, last_updated_at_ms
          FROM node_status_projection
@@ -1944,6 +1944,7 @@ fn apply_node_status_projection_event(
         error_severity,
         error_phase,
         error_code,
+        selected_backend_key,
     ) = match &payload {
         DiagnosticEventPayload::NodeExecutionStatus(payload) => (
             payload.status,
@@ -1955,6 +1956,7 @@ fn apply_node_status_projection_event(
             None,
             None,
             None,
+            payload.selected_backend_key.clone(),
         ),
         DiagnosticEventPayload::DiagnosticErrorOccurred(payload)
             if payload.scope == crate::event::DiagnosticErrorScopeKind::Node
@@ -1970,6 +1972,7 @@ fn apply_node_status_projection_event(
                 Some(payload.severity),
                 Some(payload.phase.clone()),
                 Some(payload.code.clone()),
+                None,
             )
         }
         _ => return Ok(()),
@@ -1996,11 +1999,11 @@ fn apply_node_status_projection_event(
         "INSERT INTO node_status_projection
             (workflow_run_id, workflow_id, workflow_version_id,
              workflow_semantic_version, node_id, node_type, node_version, runtime_id,
-             runtime_version, model_id, model_version, status, started_at_ms,
+             runtime_version, selected_backend_key, model_id, model_version, status, started_at_ms,
              completed_at_ms, duration_ms, error, error_event_id, error_severity,
              error_phase, error_code, last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
+                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
          ON CONFLICT(workflow_run_id, node_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = excluded.workflow_version_id,
@@ -2009,6 +2012,7 @@ fn apply_node_status_projection_event(
             node_version = COALESCE(excluded.node_version, node_status_projection.node_version),
             runtime_id = COALESCE(excluded.runtime_id, node_status_projection.runtime_id),
             runtime_version = COALESCE(excluded.runtime_version, node_status_projection.runtime_version),
+            selected_backend_key = COALESCE(excluded.selected_backend_key, node_status_projection.selected_backend_key),
             model_id = COALESCE(excluded.model_id, node_status_projection.model_id),
             model_version = COALESCE(excluded.model_version, node_status_projection.model_version),
             status = excluded.status,
@@ -2035,6 +2039,7 @@ fn apply_node_status_projection_event(
             event.node_version.as_deref(),
             event.runtime_id.as_deref(),
             event.runtime_version.as_deref(),
+            selected_backend_key.as_deref(),
             event.model_id.as_deref(),
             event.model_version.as_deref(),
             status.as_db(),
@@ -3128,24 +3133,25 @@ fn node_status_projection_from_row(row: &Row<'_>) -> rusqlite::Result<NodeStatus
         node_version: row.get(6)?,
         runtime_id: row.get(7)?,
         runtime_version: row.get(8)?,
-        model_id: row.get(9)?,
-        model_version: row.get(10)?,
+        selected_backend_key: row.get(9)?,
+        model_id: row.get(10)?,
+        model_version: row.get(11)?,
         status: row
-            .get::<_, String>(11)
+            .get::<_, String>(12)
             .and_then(parse_node_execution_projection_status)?,
-        started_at_ms: row.get(12)?,
-        completed_at_ms: row.get(13)?,
-        duration_ms: row.get::<_, Option<i64>>(14)?.map(i64_to_u64_saturating),
-        error: row.get(15)?,
-        error_event_id: row.get(16)?,
+        started_at_ms: row.get(13)?,
+        completed_at_ms: row.get(14)?,
+        duration_ms: row.get::<_, Option<i64>>(15)?.map(i64_to_u64_saturating),
+        error: row.get(16)?,
+        error_event_id: row.get(17)?,
         error_severity: row
-            .get::<_, Option<String>>(17)?
+            .get::<_, Option<String>>(18)?
             .map(parse_diagnostic_error_severity)
             .transpose()?,
-        error_phase: row.get(18)?,
-        error_code: row.get(19)?,
-        last_event_seq: row.get(20)?,
-        last_updated_at_ms: row.get(21)?,
+        error_phase: row.get(19)?,
+        error_code: row.get(20)?,
+        last_event_seq: row.get(21)?,
+        last_updated_at_ms: row.get(22)?,
     })
 }
 

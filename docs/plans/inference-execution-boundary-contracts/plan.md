@@ -2144,7 +2144,7 @@ inference write ledger events directly.
 **Tasks:**
 - [ ] Map selected backend/runtime facts to existing scheduler admission,
   reservation, run-list, and run-detail projection fields where sufficient.
-- [ ] Decide whether the diagnostics ledger needs an additive
+- [x] Decide whether the diagnostics ledger needs an additive
   `selected_backend_key` or `selected_backend_family` field when
   `selected_runtime_id` does not clearly identify llama.cpp,
   Transformers/PyTorch, Candle, vLLM, or MLX.
@@ -2235,6 +2235,13 @@ one-off conversions.
   workflow-service diagnostic append helper, preserving selected backend,
   runtime id, runtime instance, model id, lifecycle phase status, and duration
   without giving inference or node-engine a diagnostics-ledger dependency.
+- 2026-05-03: Selected-backend diagnostics slice added an additive
+  `selected_backend_key` field to node execution status payloads and the
+  queryable `node_status_projection`, with projection-version rebuild semantics
+  and embedded-runtime lifecycle adapter population from backend-owned
+  lifecycle facts. This keeps backend choice durable even when runtime ids such
+  as `pytorch.transformers` are distinct from backend keys. Generation option
+  support summaries remain a separate follow-up event/projection slice.
 
 ## Execution Notes
 
