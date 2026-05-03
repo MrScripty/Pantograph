@@ -435,6 +435,9 @@ reliability while keeping scheduling and workflow policy outside inference.
 - `crates/inference/src/managed_media_dependencies.rs`: current media
   dependency lease planning that should move to the media conversion or neutral
   managed-dependency boundary.
+- `crates/pantograph-managed-dependencies/`: neutral managed dependency
+  contract crate for runtime sidecars, media tools, native artifacts, status,
+  leases, activation facts, command facts, and operation scopes.
 - `crates/inference/src/gateway.rs`: public inference facade and lifecycle
   forwarding.
 - `crates/inference/src/types.rs`: machine-consumed request and response DTOs.
@@ -1150,29 +1153,29 @@ runtime binaries, media tools, native artifacts, status, leases, activation,
 and command resolution.
 
 **Tasks:**
-- [ ] Define the target crate/module boundary for managed dependencies, such as
+- [x] Define the target crate/module boundary for managed dependencies, such as
   `pantograph-managed-dependencies`, including whether the first slice extracts
   code or introduces an adapter facade over existing inference modules.
-- [ ] Define dependency ownership explicitly so runtime sidecar dependencies,
+- [x] Define dependency ownership explicitly so runtime sidecar dependencies,
   media tool dependencies, and native artifact dependencies are declared by the
   crate/package that owns their execution or command resolution.
 - [ ] For any new dependency or native artifact, record why in-house code is
   insufficient, transitive dependency cost, license/security notes, platform
   support, and feature-gating behavior.
-- [ ] Define typed dependency categories for runtime sidecars, media tools, and
+- [x] Define typed dependency categories for runtime sidecars, media tools, and
   native artifacts without making those categories scheduler-loadable runtime
   policy.
-- [ ] Define common status, install state, selected/default/active version,
+- [x] Define common status, install state, selected/default/active version,
   expected-file, missing-file, lease, activation, and resolved-command DTOs.
-- [ ] Define which operations are common and which remain category-specific:
+- [x] Define which operations are common and which remain category-specific:
   runtime command resolution, media executable resolution, native artifact
   activation, lease acquisition/release, install/remove, and catalog refresh.
 - [ ] Define migration/import behavior for existing inference managed runtime
   and managed redistributable state files.
-- [ ] Document that inference consumes runtime executable facts from this
+- [x] Document that inference consumes runtime executable facts from this
   boundary and media conversion consumes ffmpeg/OIIO/OCIO facts from the same
   boundary.
-- [ ] Keep scheduler admission, runtime reservation, runtime retention, and
+- [x] Keep scheduler admission, runtime reservation, runtime retention, and
   workflow policy out of the managed-dependency owner.
 
 **Verification:**
@@ -1184,14 +1187,16 @@ and command resolution.
   append-only DTOs.
 - `git diff --check`.
 
-**Status:** Boundary inventory started. The first implementation slice should
-introduce an adapter facade or neutral crate boundary over the existing
-inference managers before moving source files, because managed dependency
-consumers currently span inference, UniFFI runtime APIs, embedded runtime
-manager views, workflow artifact conversion, and media conversion. Runtime
-sidecar facts, media tool facts, and native artifact activation facts should be
-typed common DTOs with category-specific operations; scheduler admission,
-reservation, residency, and workflow policy remain outside this boundary.
+**Status:** Contract boundary established. `pantograph-managed-dependencies`
+now owns the neutral managed dependency DTO surface for runtime sidecars, media
+tools, native artifacts, status/readiness/install state, selected/default/active
+version state, expected and missing files, leases, native artifact activation,
+resolved command facts, and operation scopes. The crate is contract-only and
+documents that it must not perform installs, downloads, process spawning,
+scheduler admission, runtime reservation, workflow policy, or frontend
+projection. Existing inference managers still own implementation and persisted
+state until a later adapter/migration slice defines import behavior and moves
+consumers behind the neutral boundary.
 
 ### Milestone 5: Migrate Binary and Media Dependency Ownership
 

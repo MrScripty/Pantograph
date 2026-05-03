@@ -1,0 +1,18 @@
+[package]
+name = "pantograph-managed-dependencies"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Neutral managed dependency contracts for Pantograph runtime sidecars, media tools, and native artifacts"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -7312,6 +7312,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-managed-dependencies"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "pantograph-media-conversion"
 version = "0.1.0"
 dependencies = [
