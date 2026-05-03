@@ -1217,12 +1217,14 @@ to gate behavior without backend-name conditionals.
 - [x] Audit existing `BackendCapabilities` fields and consumers.
 - [ ] Split static backend capabilities from runtime/model-specific capability
   facts if one struct cannot honestly represent both.
-- [ ] Add typed capability enums or nested structs for modality, streaming,
+- [x] Add typed capability enums or nested structs for modality, streaming,
   embeddings, reranking, image generation, external connection, device
   selection, and KV-cache support.
   - [x] First slice added canonical task ids, modality signatures, and
-    component lifecycle facts; streaming, device, external-connection, and
-    KV-cache structured facts remain pending.
+    component lifecycle facts.
+  - [x] Second slice added structured feature facts for streaming, device
+    selection, external-connection, and KV-cache support while task ids cover
+    embeddings, reranking, image generation, and other execution semantics.
 - [ ] Add capability checks that answer whether each backend can consume a
   given Pumas-resolved model source, task request, and option set.
 - [ ] Make capability checks consume task registry entries and package facts
@@ -1248,8 +1250,12 @@ now populate initial task/modality facts. The second slice added workflow-owned
 runtime-capability fact DTOs, projected backend facts from `BackendInfo` into
 managed and host runtime capabilities, updated TypeScript workflow contracts,
 and verified runtime preflight behavior stays unchanged when typed facts are
-present. Model/package-specific compatibility checks, option-support reports,
-KV-cache capability facts, and broader consumer migration remain pending.
+present. The third slice added structured static feature facts for streaming,
+device selection, external connection, and KV-cache support; populated the facts
+for Llama.cpp, Candle, and PyTorch; projected them through workflow runtime
+capabilities; and updated the TypeScript workflow contract. Model/package-
+specific compatibility checks, option-support reports, and broader consumer
+migration remain pending.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 

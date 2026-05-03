@@ -17,6 +17,10 @@ fn test_capabilities() {
     assert!(!caps.tool_calling);
     assert!(caps.supports_task(InferenceTaskId::TextGeneration));
     assert!(!caps.supports_task(InferenceTaskId::Embedding));
+    assert_eq!(
+        caps.facts.features.kv_cache,
+        BackendFeatureSupport::Supported
+    );
 }
 
 #[test]

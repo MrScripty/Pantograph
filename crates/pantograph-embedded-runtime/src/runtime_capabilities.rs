@@ -11,6 +11,7 @@ use pantograph_runtime_identity::{
 };
 use pantograph_workflow_service::{
     WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
+    WorkflowBackendFeatureCapabilityFacts, WorkflowBackendFeatureSupport,
     WorkflowBackendTaskCapability, WorkflowCapabilitiesResponse, WorkflowInferenceModality,
     WorkflowInferenceTaskId, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
     WorkflowRuntimeReadinessState, WorkflowRuntimeSourceKind, WorkflowSupportTier,
@@ -366,6 +367,22 @@ fn project_backend_capability_facts(
             .collect(),
         preprocessing: workflow_component_capability(facts.preprocessing),
         postprocessing: workflow_component_capability(facts.postprocessing),
+        features: WorkflowBackendFeatureCapabilityFacts {
+            streaming: workflow_feature_support(facts.features.streaming),
+            device_selection: workflow_feature_support(facts.features.device_selection),
+            external_connection: workflow_feature_support(facts.features.external_connection),
+            kv_cache: workflow_feature_support(facts.features.kv_cache),
+        },
+    }
+}
+
+fn workflow_feature_support(
+    support: inference::BackendFeatureSupport,
+) -> WorkflowBackendFeatureSupport {
+    match support {
+        inference::BackendFeatureSupport::Supported => WorkflowBackendFeatureSupport::Supported,
+        inference::BackendFeatureSupport::Unsupported => WorkflowBackendFeatureSupport::Unsupported,
+        inference::BackendFeatureSupport::Unknown => WorkflowBackendFeatureSupport::Unknown,
     }
 }
 
@@ -805,13 +822,21 @@ mod tests {
                 description: "In-process Candle inference".to_string(),
                 capabilities: BackendCapabilities {
                     external_connection: false,
-                    facts: inference::BackendCapabilityFacts::from_tasks(vec![
-                        inference::BackendTaskCapability::stable(
+                    facts: inference::BackendCapabilityFacts {
+                        tasks: vec![inference::BackendTaskCapability::stable(
                             inference::InferenceTaskId::Embedding,
                             vec![inference::InferenceModality::Text],
                             vec![inference::InferenceModality::Embedding],
-                        ),
-                    ]),
+                        )],
+                        preprocessing: inference::BackendComponentCapability::NotRequired,
+                        postprocessing: inference::BackendComponentCapability::NotRequired,
+                        features: inference::BackendFeatureCapabilityFacts {
+                            streaming: inference::BackendFeatureSupport::Unsupported,
+                            device_selection: inference::BackendFeatureSupport::Unsupported,
+                            external_connection: inference::BackendFeatureSupport::Unsupported,
+                            kv_cache: inference::BackendFeatureSupport::Unsupported,
+                        },
+                    },
                     ..BackendCapabilities::default()
                 },
                 default_start_mode: BackendDefaultStartMode::Embedding,
@@ -846,6 +871,10 @@ mod tests {
             facts.tasks[0].modality_signature.outputs,
             vec![WorkflowInferenceModality::Embedding]
         );
+        assert_eq!(
+            facts.features.kv_cache,
+            WorkflowBackendFeatureSupport::Unsupported
+        );
     }
 
     #[test]
@@ -876,13 +905,23 @@ mod tests {
                 description: "Managed llama.cpp runtime".to_string(),
                 capabilities: BackendCapabilities {
                     external_connection: true,
-                    facts: inference::BackendCapabilityFacts::from_tasks(vec![
-                        inference::BackendTaskCapability::stable(
+                    facts: inference::BackendCapabilityFacts {
+                        tasks: vec![inference::BackendTaskCapability::stable(
                             inference::InferenceTaskId::ChatCompletion,
                             vec![inference::InferenceModality::Text],
                             vec![inference::InferenceModality::Text],
-                        ),
-                    ]),
+                        )],
+                        preprocessing:
+                            inference::BackendComponentCapability::RequiresPackageComponent,
+                        postprocessing:
+                            inference::BackendComponentCapability::RequiresPackageComponent,
+                        features: inference::BackendFeatureCapabilityFacts {
+                            streaming: inference::BackendFeatureSupport::Supported,
+                            device_selection: inference::BackendFeatureSupport::Supported,
+                            external_connection: inference::BackendFeatureSupport::Supported,
+                            kv_cache: inference::BackendFeatureSupport::Supported,
+                        },
+                    },
                     ..BackendCapabilities::default()
                 },
                 default_start_mode: BackendDefaultStartMode::Inference,
@@ -908,6 +947,18 @@ mod tests {
                 .and_then(|facts| facts.tasks.first())
                 .map(|task| task.task_id),
             Some(WorkflowInferenceTaskId::ChatCompletion)
+        );
+        let facts = capability
+            .backend_capability_facts
+            .as_ref()
+            .expect("backend facts should be projected");
+        assert_eq!(
+            facts.features.external_connection,
+            WorkflowBackendFeatureSupport::Supported
+        );
+        assert_eq!(
+            facts.features.kv_cache,
+            WorkflowBackendFeatureSupport::Supported
         );
         assert_eq!(
             capability.install_state,

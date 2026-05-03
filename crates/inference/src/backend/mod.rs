@@ -115,6 +115,9 @@ pub struct BackendCapabilityFacts {
     /// resolved package components, is unsupported, or is not needed.
     #[serde(default)]
     pub postprocessing: BackendComponentCapability,
+    /// Static support facts for cross-cutting execution features.
+    #[serde(default)]
+    pub features: BackendFeatureCapabilityFacts,
 }
 
 impl BackendCapabilityFacts {
@@ -125,6 +128,7 @@ impl BackendCapabilityFacts {
             tasks,
             preprocessing: BackendComponentCapability::Unknown,
             postprocessing: BackendComponentCapability::Unknown,
+            features: BackendFeatureCapabilityFacts::default(),
         }
     }
 
@@ -139,6 +143,41 @@ impl BackendCapabilityFacts {
                     SupportTier::Roadmap | SupportTier::Unsupported | SupportTier::Unknown
                 )
         })
+    }
+}
+
+/// Static backend support facts for execution features that cut across tasks.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendFeatureCapabilityFacts {
+    #[serde(default)]
+    pub streaming: BackendFeatureSupport,
+    #[serde(default)]
+    pub device_selection: BackendFeatureSupport,
+    #[serde(default)]
+    pub external_connection: BackendFeatureSupport,
+    #[serde(default)]
+    pub kv_cache: BackendFeatureSupport,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BackendFeatureSupport {
+    Supported,
+    Unsupported,
+    #[default]
+    Unknown,
+}
+
+impl BackendFeatureSupport {
+    /// Convert a legacy capability boolean into a structured support state.
+    #[must_use]
+    pub fn from_legacy_bool(supported: bool) -> Self {
+        if supported {
+            Self::Supported
+        } else {
+            Self::Unsupported
+        }
     }
 }
 
@@ -219,6 +258,10 @@ mod capability_tests {
 
         assert!(capabilities.vision);
         assert!(capabilities.facts.tasks.is_empty());
+        assert_eq!(
+            capabilities.facts.features.streaming,
+            BackendFeatureSupport::Unknown
+        );
         assert!(!capabilities.supports_task(InferenceTaskId::Embedding));
     }
 
@@ -235,6 +278,18 @@ mod capability_tests {
 
         assert!(capabilities.supports_task(InferenceTaskId::Embedding));
         assert!(!capabilities.supports_task(InferenceTaskId::Rerank));
+    }
+
+    #[test]
+    fn backend_feature_support_maps_legacy_booleans() {
+        assert_eq!(
+            BackendFeatureSupport::from_legacy_bool(true),
+            BackendFeatureSupport::Supported
+        );
+        assert_eq!(
+            BackendFeatureSupport::from_legacy_bool(false),
+            BackendFeatureSupport::Unsupported
+        );
     }
 }
 

@@ -12,8 +12,8 @@ use futures_util::Stream;
 
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
-    BackendError, BackendStartOutcome, BackendTaskCapability, ChatChunk, EmbeddingResult,
-    InferenceBackend,
+    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport, BackendStartOutcome,
+    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
@@ -81,6 +81,12 @@ impl LlamaCppBackend {
                 ],
                 preprocessing: BackendComponentCapability::RequiresPackageComponent,
                 postprocessing: BackendComponentCapability::BackendManaged,
+                features: BackendFeatureCapabilityFacts {
+                    streaming: BackendFeatureSupport::Supported,
+                    device_selection: BackendFeatureSupport::Supported,
+                    external_connection: BackendFeatureSupport::Supported,
+                    kv_cache: BackendFeatureSupport::Supported,
+                },
             },
         }
     }
@@ -530,6 +536,10 @@ mod tests {
         assert!(caps.supports_task(InferenceTaskId::ChatCompletion));
         assert!(caps.supports_task(InferenceTaskId::Embedding));
         assert!(caps.supports_task(InferenceTaskId::Rerank));
+        assert_eq!(
+            caps.facts.features.kv_cache,
+            BackendFeatureSupport::Supported
+        );
     }
 
     #[test]

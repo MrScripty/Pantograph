@@ -194,6 +194,8 @@ pub struct WorkflowBackendCapabilityFacts {
     pub preprocessing: WorkflowBackendComponentCapability,
     #[serde(default)]
     pub postprocessing: WorkflowBackendComponentCapability,
+    #[serde(default)]
+    pub features: WorkflowBackendFeatureCapabilityFacts,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -203,6 +205,28 @@ pub struct WorkflowBackendTaskCapability {
     #[serde(default)]
     pub support_tier: WorkflowSupportTier,
     pub modality_signature: WorkflowTaskModalitySignature,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowBackendFeatureCapabilityFacts {
+    #[serde(default)]
+    pub streaming: WorkflowBackendFeatureSupport,
+    #[serde(default)]
+    pub device_selection: WorkflowBackendFeatureSupport,
+    #[serde(default)]
+    pub external_connection: WorkflowBackendFeatureSupport,
+    #[serde(default)]
+    pub kv_cache: WorkflowBackendFeatureSupport,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowBackendFeatureSupport {
+    Supported,
+    Unsupported,
+    #[default]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

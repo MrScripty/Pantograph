@@ -17,6 +17,7 @@ use pantograph_workflow_service::{
     WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
     WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
+    WorkflowBackendFeatureCapabilityFacts, WorkflowBackendFeatureSupport,
     WorkflowBackendTaskCapability, WorkflowCapabilitiesRequest, WorkflowCapabilityModel,
     WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionRunRequest,
@@ -100,6 +101,12 @@ impl WorkflowHost for ContractHost {
                     }],
                     preprocessing: WorkflowBackendComponentCapability::RequiresPackageComponent,
                     postprocessing: WorkflowBackendComponentCapability::NotRequired,
+                    features: WorkflowBackendFeatureCapabilityFacts {
+                        streaming: WorkflowBackendFeatureSupport::Supported,
+                        device_selection: WorkflowBackendFeatureSupport::Supported,
+                        external_connection: WorkflowBackendFeatureSupport::Supported,
+                        kv_cache: WorkflowBackendFeatureSupport::Supported,
+                    },
                 }),
                 backend_keys: vec!["llamacpp".to_string(), "llama.cpp".to_string()],
                 missing_files: Vec::new(),
@@ -295,7 +302,13 @@ async fn workflow_capabilities_contract_snapshot() {
                     }
                 }],
                 "preprocessing": "requires_package_component",
-                "postprocessing": "not_required"
+                "postprocessing": "not_required",
+                "features": {
+                    "streaming": "supported",
+                    "device_selection": "supported",
+                    "external_connection": "supported",
+                    "kv_cache": "supported"
+                }
             },
             "backend_keys": ["llamacpp", "llama.cpp"],
             "missing_files": [],

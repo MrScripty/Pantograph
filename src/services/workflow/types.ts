@@ -441,10 +441,23 @@ export interface WorkflowBackendTaskCapability {
   modality_signature: WorkflowTaskModalitySignature;
 }
 
+export type WorkflowBackendFeatureSupport =
+  | 'supported'
+  | 'unsupported'
+  | 'unknown';
+
+export interface WorkflowBackendFeatureCapabilityFacts {
+  streaming: WorkflowBackendFeatureSupport;
+  device_selection: WorkflowBackendFeatureSupport;
+  external_connection: WorkflowBackendFeatureSupport;
+  kv_cache: WorkflowBackendFeatureSupport;
+}
+
 export interface WorkflowBackendCapabilityFacts {
   tasks: WorkflowBackendTaskCapability[];
   preprocessing: WorkflowBackendComponentCapability;
   postprocessing: WorkflowBackendComponentCapability;
+  features: WorkflowBackendFeatureCapabilityFacts;
 }
 
 export interface WorkflowRuntimeCapability {

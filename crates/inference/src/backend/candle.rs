@@ -11,8 +11,8 @@ use futures_util::Stream;
 
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
-    BackendError, BackendStartOutcome, BackendTaskCapability, ChatChunk, EmbeddingResult,
-    InferenceBackend,
+    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport, BackendStartOutcome,
+    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
@@ -61,6 +61,12 @@ impl CandleBackend {
                 )],
                 preprocessing: BackendComponentCapability::RequiresPackageComponent,
                 postprocessing: BackendComponentCapability::NotRequired,
+                features: BackendFeatureCapabilityFacts {
+                    streaming: BackendFeatureSupport::Unsupported,
+                    device_selection: BackendFeatureSupport::Unsupported,
+                    external_connection: BackendFeatureSupport::Unsupported,
+                    kv_cache: BackendFeatureSupport::Unsupported,
+                },
             },
         }
     }
@@ -245,6 +251,10 @@ mod tests {
         assert!(!caps.streaming);
         assert!(caps.supports_task(InferenceTaskId::Embedding));
         assert!(!caps.supports_task(InferenceTaskId::TextGeneration));
+        assert_eq!(
+            caps.facts.features.kv_cache,
+            BackendFeatureSupport::Unsupported
+        );
     }
 
     #[test]

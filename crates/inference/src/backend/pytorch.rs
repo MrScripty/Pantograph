@@ -17,8 +17,8 @@ use pyo3::prelude::*;
 
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
-    BackendError, BackendStartOutcome, BackendTaskCapability, ChatChunk, EmbeddingResult,
-    InferenceBackend,
+    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport, BackendStartOutcome,
+    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
@@ -191,6 +191,12 @@ impl PyTorchBackend {
                 )],
                 preprocessing: BackendComponentCapability::RequiresPackageComponent,
                 postprocessing: BackendComponentCapability::BackendManaged,
+                features: BackendFeatureCapabilityFacts {
+                    streaming: BackendFeatureSupport::Supported,
+                    device_selection: BackendFeatureSupport::Supported,
+                    external_connection: BackendFeatureSupport::Unsupported,
+                    kv_cache: BackendFeatureSupport::Supported,
+                },
             },
         }
     }
