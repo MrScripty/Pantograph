@@ -8,8 +8,9 @@ use super::pytorch_worker_contract::{
 use super::*;
 use crate::model_contracts::{
     CacheGenerationOptions, GenerationOptions, LengthGenerationOptions, ModelArtifactKind,
-    OptionSupportState, OutputGenerationOptions, ProcessorComponentKind, PumasModelRef,
-    ResolvedModelPackageFacts, ResolvedModelSourceKind, SamplingGenerationOptions,
+    ModelAuthTokenSource, ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy,
+    ModelRemoteCodePolicy, OptionSupportState, OutputGenerationOptions, ProcessorComponentKind,
+    PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSourceKind, SamplingGenerationOptions,
     SpecialTokenGenerationOptions, StoppingGenerationOptions, TaskEvidence,
 };
 
@@ -205,6 +206,12 @@ fn test_pytorch_worker_trust_policy_defaults_closed() {
     assert!(!default_policy.allow_remote_code);
     assert!(default_policy.accepted_sources.is_empty());
     assert!(default_policy.decision_id.is_none());
+    assert!(default_policy.local_files_only);
+    assert_eq!(default_policy.auth_token_source, ModelAuthTokenSource::None);
+    assert_eq!(
+        default_policy.cache_policy,
+        ModelLoadCachePolicy::BackendDefault
+    );
 
     let request = PyTorchTransformersLoadRequest {
         model_ref: PumasModelRef {
@@ -238,6 +245,40 @@ fn test_pytorch_worker_trust_policy_defaults_closed() {
     assert!(encoded["payload"]["trust_policy"]
         .get("accepted_sources")
         .is_none());
+    assert_eq!(
+        encoded["payload"]["trust_policy"]["local_files_only"],
+        serde_json::json!(true)
+    );
+}
+
+#[test]
+fn test_pytorch_worker_trust_policy_maps_public_load_security_policy() {
+    let policy = ModelLoadSecurityPolicy {
+        trust_remote_code: ModelRemoteCodePolicy::Allow,
+        network: ModelLoadNetworkPolicy::AllowNetwork,
+        cache: ModelLoadCachePolicy::BypassCache,
+        auth_token_source: ModelAuthTokenSource::Environment,
+        revision: Some("weights-rev".to_string()),
+        code_revision: Some("code-rev".to_string()),
+        decision_id: Some("trust-001".to_string()),
+        accepted_code_sources: vec!["configuration_tiny.py".to_string()],
+    };
+
+    let trust_policy = PyTorchTransformersTrustPolicy::from(policy);
+
+    assert!(trust_policy.allow_remote_code);
+    assert!(!trust_policy.local_files_only);
+    assert_eq!(trust_policy.cache_policy, ModelLoadCachePolicy::BypassCache);
+    assert_eq!(
+        trust_policy.auth_token_source,
+        ModelAuthTokenSource::Environment
+    );
+    assert_eq!(trust_policy.revision.as_deref(), Some("weights-rev"));
+    assert_eq!(trust_policy.code_revision.as_deref(), Some("code-rev"));
+    assert_eq!(
+        trust_policy.accepted_sources,
+        vec!["configuration_tiny.py".to_string()]
+    );
 }
 
 #[test]
@@ -309,6 +350,11 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
         allow_remote_code: true,
         accepted_sources: vec!["configuration_tiny.py".to_string()],
         decision_id: Some("trust-001".to_string()),
+        local_files_only: true,
+        cache_policy: ModelLoadCachePolicy::BackendDefault,
+        auth_token_source: ModelAuthTokenSource::None,
+        revision: Some("abc123".to_string()),
+        code_revision: None,
     };
 
     let envelope = PyTorchBackend::transformers_load_envelope_from_package(
@@ -368,6 +414,11 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
     assert_eq!(
         envelope.payload.trust_policy.decision_id.as_deref(),
         Some("trust-001")
+    );
+    assert!(envelope.payload.trust_policy.local_files_only);
+    assert_eq!(
+        envelope.payload.trust_policy.revision.as_deref(),
+        Some("abc123")
     );
     assert_eq!(
         envelope

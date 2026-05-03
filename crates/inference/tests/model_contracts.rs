@@ -7,7 +7,8 @@ use inference::{
     InferenceTaskId, ModelArtifactKind, ModelExecutionDescriptor, ModelExecutionStorageKind,
     ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
     ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
-    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
+    ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy,
+    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy,
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
     ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind, SupportTier,
     TaskEvidence, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry,
@@ -434,6 +435,44 @@ fn generation_defaults_preserve_raw_pumas_defaults() {
             .and_then(serde_json::Value::as_u64),
         Some(128)
     );
+}
+
+#[test]
+fn model_load_security_policy_defaults_closed_and_local() {
+    let policy = ModelLoadSecurityPolicy::default();
+
+    assert_eq!(policy.trust_remote_code, ModelRemoteCodePolicy::Deny);
+    assert_eq!(policy.network, ModelLoadNetworkPolicy::LocalOnly);
+    assert_eq!(policy.cache, ModelLoadCachePolicy::BackendDefault);
+    assert!(!policy.allow_remote_code());
+    assert!(policy.local_files_only());
+
+    let encoded = serde_json::to_value(&policy).expect("encode policy");
+    assert_eq!(encoded["trust_remote_code"], serde_json::json!("deny"));
+    assert_eq!(encoded["network"], serde_json::json!("local_only"));
+    assert!(encoded.get("token").is_none());
+}
+
+#[test]
+fn model_load_security_policy_preserves_revision_without_secret_tokens() {
+    let raw = serde_json::json!({
+        "trust_remote_code": "allow",
+        "network": "allow_network",
+        "cache": "bypass_cache",
+        "auth_token_source": "environment",
+        "revision": "weights-rev",
+        "code_revision": "code-rev",
+        "decision_id": "trust-001",
+        "accepted_code_sources": ["configuration_tiny.py"]
+    });
+
+    let policy: ModelLoadSecurityPolicy = serde_json::from_value(raw).expect("decode policy");
+
+    assert!(policy.allow_remote_code());
+    assert!(!policy.local_files_only());
+    assert_eq!(policy.cache, ModelLoadCachePolicy::BypassCache);
+    assert_eq!(policy.revision.as_deref(), Some("weights-rev"));
+    assert_eq!(policy.code_revision.as_deref(), Some("code-rev"));
 }
 
 #[test]

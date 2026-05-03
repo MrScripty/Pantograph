@@ -922,6 +922,83 @@ pub struct GenerationDefaultFacts {
     pub diagnostics: Vec<ModelPackageDiagnostic>,
 }
 
+/// Explicit remote-code trust decision for model loading.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelRemoteCodePolicy {
+    #[default]
+    Deny,
+    Allow,
+}
+
+/// Whether model loading may contact a remote registry or must use local files.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelLoadNetworkPolicy {
+    #[default]
+    LocalOnly,
+    AllowNetwork,
+}
+
+/// Cache policy requested at a model-loading boundary.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelLoadCachePolicy {
+    #[default]
+    BackendDefault,
+    UseCache,
+    BypassCache,
+}
+
+/// Source class for model-registry authentication, never the token itself.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelAuthTokenSource {
+    #[default]
+    None,
+    Environment,
+    HostProvided,
+    HuggingFaceCache,
+}
+
+/// Stable security policy for loading model packages.
+///
+/// This contract is owned by Rust and can be mapped to Transformers/PyTorch,
+/// vLLM, MLX, Candle, or llama.cpp adapters. It records policy decisions and
+/// token source classes without carrying secret token values.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ModelLoadSecurityPolicy {
+    #[serde(default)]
+    pub trust_remote_code: ModelRemoteCodePolicy,
+    #[serde(default)]
+    pub network: ModelLoadNetworkPolicy,
+    #[serde(default)]
+    pub cache: ModelLoadCachePolicy,
+    #[serde(default)]
+    pub auth_token_source: ModelAuthTokenSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepted_code_sources: Vec<String>,
+}
+
+impl ModelLoadSecurityPolicy {
+    #[must_use]
+    pub fn allow_remote_code(&self) -> bool {
+        self.trust_remote_code == ModelRemoteCodePolicy::Allow
+    }
+
+    #[must_use]
+    pub fn local_files_only(&self) -> bool {
+        self.network == ModelLoadNetworkPolicy::LocalOnly
+    }
+}
+
 /// Length-related generation options.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]

@@ -238,6 +238,10 @@ def load_model(
     model_type=None,
     trust_remote_code=False,
     trust_policy_decision_id=None,
+    local_files_only=True,
+    revision=None,
+    code_revision=None,
+    cache_policy="backend_default",
 ):
     """Load a model + tokenizer into module globals.
 
@@ -248,6 +252,10 @@ def load_model(
                     If None, auto-detected from config.json.
         trust_remote_code: Explicit custom-code policy decision. Defaults closed.
         trust_policy_decision_id: Optional Rust-side policy record id for logs.
+        local_files_only: Whether Transformers must avoid registry/network access.
+        revision: Optional model revision passed to Transformers.
+        code_revision: Optional remote-code revision passed to Transformers.
+        cache_policy: Rust-owned cache policy label for logs and future mapping.
 
     Returns:
         Dict with model_path, model_type, device.
@@ -270,6 +278,8 @@ def load_model(
     resolved_device = _resolve_device(device)
     detected_type = model_type or _detect_model_type(path)
     trust_remote_code = bool(trust_remote_code)
+    local_files_only = bool(local_files_only)
+    force_download = cache_policy == "bypass_cache" and not local_files_only
 
     if _transformers_package_requires_remote_code(path) and not trust_remote_code:
         raise RuntimeError(
@@ -277,15 +287,26 @@ def load_model(
         )
 
     logger.info(
-        "Loading %s model from %s onto %s (trust_remote_code=%s, trust_policy_decision_id=%s)",
+        "Loading %s model from %s onto %s (trust_remote_code=%s, local_files_only=%s, revision=%s, code_revision=%s, cache_policy=%s, trust_policy_decision_id=%s)",
         detected_type,
         model_path,
         resolved_device,
         trust_remote_code,
+        local_files_only,
+        revision,
+        code_revision,
+        cache_policy,
         trust_policy_decision_id,
     )
 
-    tokenizer = AutoTokenizer.from_pretrained(str(path), trust_remote_code=trust_remote_code)
+    tokenizer = AutoTokenizer.from_pretrained(
+        str(path),
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        revision=revision,
+        code_revision=code_revision,
+        force_download=force_download,
+    )
     # Some local model exports ship chat_template.jinja without wiring it into
     # tokenizer_config.json. Load it explicitly so apply_chat_template works.
     if not getattr(tokenizer, "chat_template", None):
@@ -302,6 +323,10 @@ def load_model(
         torch_dtype="auto",
         device_map=str(resolved_device),
         trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        revision=revision,
+        code_revision=code_revision,
+        force_download=force_download,
         low_cpu_mem_usage=True,
     )
     model.eval()

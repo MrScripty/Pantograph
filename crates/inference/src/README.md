@@ -134,6 +134,11 @@ real media conversion process execution stays in the neutral
 - `ModelExecutionDescriptor` remains a compact Pumas execution summary. Rich
   artifact kind, tokenizer/processor, generation default, custom-code, backend
   hint, and package diagnostic evidence belongs in `ResolvedModelPackageFacts`.
+- `ModelLoadSecurityPolicy` is the public Rust-owned model loading trust
+  contract. It records remote-code, local/offline, cache, auth-token source,
+  revision, code-revision, decision id, and accepted custom-code source policy
+  without carrying secret token values. Backend-local trust structs must adapt
+  from this contract instead of inventing independent policy fields.
 - Remote MLX/vLLM search tags are discovery hints only; installed-model
   compatibility must use resolved local package facts plus backend checks.
 - Embeddings are normal task evidence in `model_contracts.rs`; dedicated

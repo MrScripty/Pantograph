@@ -93,6 +93,16 @@ pub fn kv_cache_model_fingerprint_for_live_kv(info: &PyTorchLiveKvInfo) -> Model
     })
 }
 
+fn pytorch_cache_policy_label(
+    policy: crate::model_contracts::ModelLoadCachePolicy,
+) -> &'static str {
+    match policy {
+        crate::model_contracts::ModelLoadCachePolicy::BackendDefault => "backend_default",
+        crate::model_contracts::ModelLoadCachePolicy::UseCache => "use_cache",
+        crate::model_contracts::ModelLoadCachePolicy::BypassCache => "bypass_cache",
+    }
+}
+
 pub fn kv_cache_runtime_fingerprint_for_loaded_model(
     loaded: &LoadedModelInfo,
 ) -> KvCacheRuntimeFingerprint {
@@ -636,6 +646,10 @@ impl PyTorchBackend {
         let model_type = model_type.map(|s| s.to_string());
         let allow_remote_code = trust_policy.allow_remote_code;
         let trust_policy_decision_id = trust_policy.decision_id.clone();
+        let local_files_only = trust_policy.local_files_only;
+        let revision = trust_policy.revision.clone();
+        let code_revision = trust_policy.code_revision.clone();
+        let cache_policy = trust_policy.cache_policy;
 
         let info = tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
@@ -652,10 +666,22 @@ impl PyTorchBackend {
                 kwargs
                     .set_item("trust_remote_code", allow_remote_code)
                     .unwrap();
+                kwargs
+                    .set_item("local_files_only", local_files_only)
+                    .unwrap();
+                kwargs
+                    .set_item("cache_policy", pytorch_cache_policy_label(cache_policy))
+                    .unwrap();
                 if let Some(ref decision_id) = trust_policy_decision_id {
                     kwargs
                         .set_item("trust_policy_decision_id", decision_id)
                         .unwrap();
+                }
+                if let Some(ref revision) = revision {
+                    kwargs.set_item("revision", revision).unwrap();
+                }
+                if let Some(ref code_revision) = code_revision {
+                    kwargs.set_item("code_revision", code_revision).unwrap();
                 }
 
                 let result = worker

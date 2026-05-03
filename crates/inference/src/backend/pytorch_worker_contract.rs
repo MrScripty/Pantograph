@@ -3,8 +3,9 @@ use serde_json::Value;
 
 use crate::backend::BackendError;
 use crate::model_contracts::{
-    InferenceTaskId, ModelArtifactKind, OptionCompatibilityDiagnostic, ProcessorComponentKind,
-    PumasModelRef, ResolvedModelSource,
+    InferenceTaskId, ModelArtifactKind, ModelAuthTokenSource, ModelLoadCachePolicy,
+    ModelLoadNetworkPolicy, ModelLoadSecurityPolicy, ModelRemoteCodePolicy,
+    OptionCompatibilityDiagnostic, ProcessorComponentKind, PumasModelRef, ResolvedModelSource,
 };
 
 pub(super) const PYTORCH_WORKER_CONTRACT_VERSION: u32 = 1;
@@ -99,7 +100,7 @@ pub(super) enum PyTorchTransformersModelLoader {
     CausalLm,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchTransformersTrustPolicy {
     #[serde(default)]
@@ -108,6 +109,37 @@ pub(super) struct PyTorchTransformersTrustPolicy {
     pub accepted_sources: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_id: Option<String>,
+    #[serde(default)]
+    pub local_files_only: bool,
+    #[serde(default)]
+    pub cache_policy: ModelLoadCachePolicy,
+    #[serde(default)]
+    pub auth_token_source: ModelAuthTokenSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_revision: Option<String>,
+}
+
+impl Default for PyTorchTransformersTrustPolicy {
+    fn default() -> Self {
+        ModelLoadSecurityPolicy::default().into()
+    }
+}
+
+impl From<ModelLoadSecurityPolicy> for PyTorchTransformersTrustPolicy {
+    fn from(policy: ModelLoadSecurityPolicy) -> Self {
+        Self {
+            allow_remote_code: policy.trust_remote_code == ModelRemoteCodePolicy::Allow,
+            accepted_sources: policy.accepted_code_sources,
+            decision_id: policy.decision_id,
+            local_files_only: policy.network == ModelLoadNetworkPolicy::LocalOnly,
+            cache_policy: policy.cache,
+            auth_token_source: policy.auth_token_source,
+            revision: policy.revision,
+            code_revision: policy.code_revision,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -1051,7 +1051,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   normalized Pumas modality/task signatures for routing and validation.
 - [x] Define task alias handling for common upstream aliases while preventing
   raw unvalidated task strings from reaching backend execution.
-- [ ] Define explicit security policy fields for `trust_remote_code`,
+- [x] Define explicit security policy fields for `trust_remote_code`,
   custom-code requirements, local-only/offline loading, cache use, auth-token
   source, revision, and code revision.
 - [x] Define public versus hidden lifecycle fields for task execution:
@@ -1108,6 +1108,13 @@ evidence into a validated registry entry or a bounded
 labels, conflicting upstream labels, and modality mismatches. PyTorch/
 Transformers load profiling now consumes this parsed task entry rather than
 walking raw task strings locally.
+The model-loading boundary now exposes `ModelLoadSecurityPolicy` as the public
+Rust-owned trust contract for remote-code permission, local/offline loading,
+cache policy, auth-token source class, weight revision, code revision, decision
+id, and accepted custom-code sources. PyTorch/Transformers adapts its
+backend-local trust envelope from this public policy and passes local-file,
+revision, code-revision, and cache-policy facts to the embedded worker without
+exposing secret token values.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
