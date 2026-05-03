@@ -8,7 +8,10 @@ use futures_util::{stream, StreamExt};
 use tokio::sync::mpsc;
 
 use crate::backend::BackendStartOutcome;
-use crate::model_contracts::{InferenceLifecyclePhase, InferenceTaskId};
+use crate::model_contracts::{
+    GenerationOptions, InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions,
+    OptionSupportState, SamplingGenerationOptions, StoppingGenerationOptions,
+};
 use crate::types::{
     ImageGenerationRequest, InferenceExecutionInput, InferenceExecutionRequest,
     InferenceExecutionResult, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
@@ -844,6 +847,67 @@ async fn test_execute_typed_forwards_image_generation_to_active_backend() {
             assert_eq!(result.seed_used, Some(7));
         }
         other => panic!("expected image generation result, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_execute_typed_text_reports_generation_option_diagnostics() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-text-1".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: None,
+        model_name: Some("mock-text".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: false,
+        },
+        generation_options: Some(GenerationOptions {
+            length: LengthGenerationOptions {
+                max_new_tokens: Some(16),
+                ..LengthGenerationOptions::default()
+            },
+            sampling: SamplingGenerationOptions {
+                temperature: Some(0.25),
+                seed: Some(42),
+                ..SamplingGenerationOptions::default()
+            },
+            stopping: StoppingGenerationOptions {
+                stop_strings: vec!["END".to_string()],
+                ..StoppingGenerationOptions::default()
+            },
+            ..GenerationOptions::default()
+        }),
+        extra_options: serde_json::Value::Null,
+    };
+
+    let result = gateway
+        .execute_typed(request)
+        .await
+        .expect("typed text request should execute");
+
+    match result {
+        InferenceExecutionResult::TextGeneration {
+            option_diagnostics, ..
+        } => {
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "length.max_new_tokens"
+                    && diagnostic.state == OptionSupportState::Mapped
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "sampling.seed"
+                    && diagnostic.state == OptionSupportState::Unsupported
+            }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "stopping.stop_strings"
+                    && diagnostic.state == OptionSupportState::Unsupported
+            }));
+        }
+        other => panic!("expected text generation result, got {other:?}"),
     }
 }
 

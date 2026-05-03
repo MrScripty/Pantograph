@@ -1763,6 +1763,11 @@ Node-engine non-streaming canonical `llm-inference` text/chat execution now
 builds `InferenceExecutionRequest` from prompt, context, task kind, runtime
 hint, Pumas model reference, and grouped generation options, then executes
 through `InferenceGateway::execute_typed`.
+The typed text/chat gateway path now returns per-option compatibility
+diagnostics for mapped chat request fields and unsupported typed generation
+options, and node-engine projects those diagnostics onto the canonical
+non-streaming `llm-inference` output without exposing backend-native request
+objects.
 Node-engine generic streaming text/chat execution now also routes through the
 gateway streaming facade instead of posting directly over HTTP from node-engine,
 preserving graph `TaskStream` event shape while making backend/lifecycle facts
@@ -2171,6 +2176,10 @@ Update during implementation:
   `sampling.top_p` and `sampling.top_k` travel with `max_new_tokens` and
   `temperature` through `ChatRequest` and `InferenceGateway::execute_typed`
   instead of being dropped at the OpenAI-compatible adapter edge.
+- 2026-05-03: Added typed text/chat gateway option compatibility diagnostics
+  for mapped chat fields and unsupported canonical generation options, then
+  projected them through node-engine canonical non-streaming `llm-inference`
+  outputs as bounded metadata.
 - 2026-05-03: Added `InferenceGateway::execute_typed_with_lifecycle` so typed
   request validation and backend execution emit separate lifecycle phases for
   diagnostics-ledger adapters while preserving inference as a fact producer

@@ -20,7 +20,9 @@ use crate::backend::{
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
-use crate::model_contracts::{GenerationOptions, InferenceLifecyclePhase};
+use crate::model_contracts::{
+    GenerationOptions, InferenceLifecyclePhase, OptionCompatibilityDiagnostic, OptionSupportState,
+};
 use crate::process::ProcessSpawner;
 use crate::types::{
     ChatMessage, ChatRequest, ContentPart, ImageGenerationRequest, ImageGenerationResult,
@@ -1125,6 +1127,10 @@ impl InferenceGateway {
                 messages,
                 stream,
             } => {
+                let option_diagnostics = typed_text_generation_option_diagnostics(
+                    request.generation_options.as_ref(),
+                    Some(&canonical_backend_key(&self.current_backend_name().await)),
+                );
                 let chat_request = typed_text_generation_to_chat_request(
                     model,
                     prompt,
@@ -1153,7 +1159,7 @@ impl InferenceGateway {
                     text,
                     usage: None,
                     cache_handle_id: None,
-                    option_diagnostics: Vec::new(),
+                    option_diagnostics,
                 })
             }
             InferenceExecutionInput::Embedding { texts } => {
@@ -1379,6 +1385,86 @@ fn typed_text_generation_to_chat_request(
         top_p: generation_options.and_then(|options| options.sampling.top_p),
         top_k: generation_options.and_then(|options| options.sampling.top_k),
     }
+}
+
+fn typed_text_generation_option_diagnostics(
+    generation_options: Option<&GenerationOptions>,
+    backend_key: Option<&str>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    let Some(options) = generation_options else {
+        return Vec::new();
+    };
+
+    let mut diagnostics = Vec::new();
+    let mut mapped_paths = Vec::new();
+    push_chat_option_diagnostic(
+        &mut diagnostics,
+        &mut mapped_paths,
+        backend_key,
+        "length.max_new_tokens",
+        options.length.max_new_tokens.is_some(),
+        "mapped to chat max_tokens",
+    );
+    push_chat_option_diagnostic(
+        &mut diagnostics,
+        &mut mapped_paths,
+        backend_key,
+        "sampling.temperature",
+        options.sampling.temperature.is_some(),
+        "mapped to chat temperature",
+    );
+    push_chat_option_diagnostic(
+        &mut diagnostics,
+        &mut mapped_paths,
+        backend_key,
+        "sampling.top_p",
+        options.sampling.top_p.is_some(),
+        "mapped to chat top_p",
+    );
+    push_chat_option_diagnostic(
+        &mut diagnostics,
+        &mut mapped_paths,
+        backend_key,
+        "sampling.top_k",
+        options.sampling.top_k.is_some(),
+        "mapped to chat top_k",
+    );
+
+    for path in options.requested_option_paths() {
+        if mapped_paths.iter().any(|mapped| mapped == &path) {
+            continue;
+        }
+        diagnostics.push(OptionCompatibilityDiagnostic {
+            option_path: path,
+            state: OptionSupportState::Unsupported,
+            backend_key: backend_key.map(ToOwned::to_owned),
+            message: Some(
+                "typed text gateway does not map this option through the chat boundary".to_string(),
+            ),
+        });
+    }
+
+    diagnostics
+}
+
+fn push_chat_option_diagnostic(
+    diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
+    mapped_paths: &mut Vec<&'static str>,
+    backend_key: Option<&str>,
+    option_path: &'static str,
+    requested: bool,
+    message: &'static str,
+) {
+    if !requested {
+        return;
+    }
+    mapped_paths.push(option_path);
+    diagnostics.push(OptionCompatibilityDiagnostic {
+        option_path: option_path.to_string(),
+        state: OptionSupportState::Mapped,
+        backend_key: backend_key.map(ToOwned::to_owned),
+        message: Some(message.to_string()),
+    });
 }
 
 fn typed_text_generation_stream_request_json(

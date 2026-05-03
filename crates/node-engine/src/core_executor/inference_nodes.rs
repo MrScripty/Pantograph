@@ -122,8 +122,12 @@ pub(crate) async fn execute_llm_inference(
             .map_err(|error| {
                 NodeEngineError::ExecutionFailed(format!("Typed LLM inference failed: {error}"))
             })?;
-        let response = match result {
-            inference::InferenceExecutionResult::TextGeneration { text, .. } => text,
+        let (response, option_diagnostics) = match result {
+            inference::InferenceExecutionResult::TextGeneration {
+                text,
+                option_diagnostics,
+                ..
+            } => (text, option_diagnostics),
             other => {
                 return Err(NodeEngineError::ExecutionFailed(format!(
                     "Typed LLM inference returned unexpected result: {other:?}"
@@ -134,6 +138,10 @@ pub(crate) async fn execute_llm_inference(
         let mut outputs = HashMap::new();
         outputs.insert("response".to_string(), serde_json::json!(response));
         outputs.insert("stream".to_string(), serde_json::Value::Null);
+        outputs.insert(
+            "diagnostics".to_string(),
+            serde_json::to_value(option_diagnostics).unwrap_or(serde_json::Value::Null),
+        );
         return Ok(outputs);
     }
 

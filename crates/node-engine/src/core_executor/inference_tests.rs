@@ -132,8 +132,10 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
             "sampling": {
                 "temperature": 0.2,
                 "top_p": 0.8,
-                "top_k": 40
-            }
+                "top_k": 40,
+                "seed": 42
+            },
+            "stopping": {"stop_strings": ["END"]}
         }),
     );
 
@@ -162,6 +164,17 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
     assert_eq!(captured[0]["temperature"], serde_json::json!(0.2));
     assert_eq!(captured[0]["top_p"], serde_json::json!(0.8));
     assert_eq!(captured[0]["top_k"], serde_json::json!(40));
+    let diagnostics = outputs["diagnostics"]
+        .as_array()
+        .expect("diagnostics output should be an array");
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic["option_path"] == serde_json::json!("sampling.seed")
+            && diagnostic["state"] == serde_json::json!("unsupported")
+    }));
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic["option_path"] == serde_json::json!("length.max_new_tokens")
+            && diagnostic["state"] == serde_json::json!("mapped")
+    }));
 }
 
 #[cfg(feature = "inference-nodes")]
