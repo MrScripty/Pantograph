@@ -1702,6 +1702,10 @@ Direct node-engine execution of retired `embedding`, `reranker`,
 canonical migration error, while canonical `llm-inference` with an explicit
 PyTorch/Transformers hint dispatches through the PyTorch dependency preflight
 and handler when that feature is compiled.
+The llama.cpp and PyTorch node-engine handlers now derive emitted
+`model_ref.task_type_primary` from canonical `llm-inference` semantics, and
+node-engine preflight coverage now exercises canonical runtime hints instead of
+retired backend node names.
 
 ### Milestone 12: Prepare Native Candle Slice
 

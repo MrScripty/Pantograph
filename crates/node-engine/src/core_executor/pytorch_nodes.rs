@@ -412,7 +412,7 @@ pub(crate) async fn execute_pytorch_inference(
 
     let mut outputs = HashMap::new();
     outputs.insert("response".to_string(), serde_json::json!(response_text));
-    let task_type_primary = infer_task_type_primary("pytorch-inference", inputs);
+    let task_type_primary = infer_task_type_primary("llm-inference", inputs);
     let model_ref = build_model_ref_v2(
         resolved_model_ref,
         "pytorch",

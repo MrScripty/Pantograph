@@ -135,27 +135,29 @@ async fn test_canonical_llm_pytorch_hint_dispatches_to_dependency_preflight() {
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[tokio::test]
-async fn test_dependency_preflight_skips_llamacpp() {
-    let inputs = HashMap::new();
+async fn test_dependency_preflight_skips_canonical_llamacpp() {
+    let mut inputs = HashMap::new();
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
     let extensions = ExecutorExtensions::new();
-    let resolved = enforce_dependency_preflight("llamacpp-inference", &inputs, &extensions)
+    let resolved = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
         .await
-        .expect("llamacpp preflight should be skipped");
+        .expect("canonical llama.cpp preflight should be skipped");
     assert!(resolved.is_none());
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[tokio::test]
-async fn test_dependency_preflight_blocks_pytorch_without_resolver() {
+async fn test_dependency_preflight_blocks_canonical_pytorch_without_resolver() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "model_path".to_string(),
         serde_json::json!("/tmp/model.gguf"),
     );
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("pytorch"));
     let extensions = ExecutorExtensions::new();
-    let err = enforce_dependency_preflight("pytorch-inference", &inputs, &extensions)
+    let err = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
         .await
-        .expect_err("pytorch preflight should require resolver");
+        .expect_err("canonical PyTorch preflight should require resolver");
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("dependency resolver is not configured"));
@@ -204,7 +206,7 @@ fn test_build_model_dependency_request_uses_canonical_backend_key() {
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("onnx-runtime"));
 
-    let request = build_model_dependency_request("pytorch-inference", "/tmp/model", &inputs);
+    let request = build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("onnx-runtime"));
 }
 

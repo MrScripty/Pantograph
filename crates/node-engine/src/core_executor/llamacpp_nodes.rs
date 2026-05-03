@@ -214,7 +214,7 @@ pub(crate) async fn execute_llamacpp_inference(
     let mut outputs = HashMap::new();
     outputs.insert("response".to_string(), serde_json::json!(response_text));
     outputs.insert("model_path".to_string(), serde_json::json!(model_path));
-    let task_type_primary = infer_task_type_primary("llamacpp-inference", inputs);
+    let task_type_primary = infer_task_type_primary("llm-inference", inputs);
     let model_ref = build_model_ref_v2(
         resolved_model_ref,
         "llamacpp",
