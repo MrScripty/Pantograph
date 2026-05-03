@@ -1,4 +1,5 @@
 use pantograph_diagnostics_ledger::IoArtifactRetentionState;
+use pantograph_managed_dependencies::{ManagedDependencyCategory, ManagedDependencyStatus};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -292,6 +293,25 @@ pub struct ArtifactFormatDependencyVersions {
 }
 
 impl ArtifactFormatDependencyVersions {
+    pub fn from_managed_dependency_statuses(statuses: &[ManagedDependencyStatus]) -> Self {
+        Self {
+            dependencies: statuses
+                .iter()
+                .filter(|status| {
+                    matches!(
+                        status.category,
+                        ManagedDependencyCategory::MediaTool
+                            | ManagedDependencyCategory::NativeArtifact
+                    )
+                })
+                .map(|status| ArtifactFormatDependencyVersion {
+                    dependency_id: status.key.stable_key().to_string(),
+                    active_version: status.selection.active_version.clone(),
+                })
+                .collect(),
+        }
+    }
+
     pub fn active_version(&self, dependency_id: &str) -> Option<String> {
         self.dependencies
             .iter()

@@ -1,13 +1,20 @@
+use pantograph_managed_dependencies::{
+    ManagedDependencyCategory, ManagedDependencyInstallState, ManagedDependencyKey,
+    ManagedDependencyReadinessState, ManagedDependencySelectionState, ManagedDependencyStatus,
+    ManagedDependencyVersionStatus, MediaToolDependencyId, NativeArtifactDependencyId,
+    RuntimeSidecarDependencyId,
+};
 use pantograph_workflow_service::{
     ArtifactAccessMode, ArtifactAttribution, ArtifactBodyTransport,
     ArtifactConsumeAcknowledgementRequest, ArtifactConsumeAcknowledgementResponse,
     ArtifactConversionDependency, ArtifactConversionStatus, ArtifactDescriptor,
     ArtifactDescriptorQueryRequest, ArtifactDescriptorQueryResponse, ArtifactFormatCapabilities,
-    ArtifactFormatMetadata, ArtifactFormatSettings, ArtifactLifecycleState, ArtifactPayloadKind,
-    ArtifactPolicy, ArtifactReadRequest, ArtifactReadResponse, ArtifactStreamChunkRecord,
-    ArtifactStreamReadRequest, ArtifactStreamReadResponse, IoArtifactRetentionState,
-    ManagedRedistributableCategory, ManagedRedistributableReadinessState,
-    ManagedRedistributableStatus, ManagedRedistributableStatusQueryResponse, MediaFormatOption,
+    ArtifactFormatDependencyVersions, ArtifactFormatMetadata, ArtifactFormatSettings,
+    ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest,
+    ArtifactReadResponse, ArtifactStreamChunkRecord, ArtifactStreamReadRequest,
+    ArtifactStreamReadResponse, IoArtifactRetentionState, ManagedRedistributableCategory,
+    ManagedRedistributableReadinessState, ManagedRedistributableStatus,
+    ManagedRedistributableStatusQueryResponse, MediaFormatOption,
 };
 
 #[test]
@@ -429,6 +436,76 @@ fn media_capabilities_and_managed_redistributables_are_typed() {
             ]
         })
     );
+}
+
+#[test]
+fn artifact_format_dependency_versions_project_from_neutral_statuses() {
+    let versions = ArtifactFormatDependencyVersions::from_managed_dependency_statuses(&[
+        neutral_status(
+            ManagedDependencyKey::RuntimeSidecar(RuntimeSidecarDependencyId::LlamaCpp),
+            ManagedDependencyCategory::RuntimeSidecar,
+            Some("b4240"),
+        ),
+        neutral_status(
+            ManagedDependencyKey::MediaTool(MediaToolDependencyId::Ocioconvert),
+            ManagedDependencyCategory::MediaTool,
+            Some("2.5.18"),
+        ),
+        neutral_status(
+            ManagedDependencyKey::NativeArtifact(NativeArtifactDependencyId::OpenColorIo),
+            ManagedDependencyCategory::NativeArtifact,
+            Some("2.4.2"),
+        ),
+        neutral_status(
+            ManagedDependencyKey::MediaTool(MediaToolDependencyId::Ffmpeg),
+            ManagedDependencyCategory::MediaTool,
+            None,
+        ),
+    ]);
+
+    assert_eq!(versions.active_version("llama_cpp"), None);
+    assert_eq!(
+        versions.active_version("ocioconvert"),
+        Some("2.5.18".to_string())
+    );
+    assert_eq!(
+        versions.active_version("opencolorio"),
+        Some("2.4.2".to_string())
+    );
+    assert_eq!(versions.active_version("ffmpeg"), None);
+}
+
+fn neutral_status(
+    key: ManagedDependencyKey,
+    category: ManagedDependencyCategory,
+    active_version: Option<&str>,
+) -> ManagedDependencyStatus {
+    ManagedDependencyStatus {
+        key,
+        display_name: key.display_name().to_string(),
+        category,
+        install_state: ManagedDependencyInstallState::Installed,
+        readiness_state: ManagedDependencyReadinessState::Ready,
+        available: true,
+        missing_files: Vec::new(),
+        selection: ManagedDependencySelectionState {
+            selected_version: active_version.map(str::to_string),
+            active_version: active_version.map(str::to_string),
+            default_version: None,
+        },
+        versions: vec![ManagedDependencyVersionStatus {
+            version: active_version.map(str::to_string),
+            platform_key: "test-platform".to_string(),
+            install_root: Some("/tmp/pantograph-test".to_string()),
+            expected_files: Vec::new(),
+            missing_files: Vec::new(),
+            install_state: ManagedDependencyInstallState::Installed,
+            readiness_state: ManagedDependencyReadinessState::Ready,
+            selected: active_version.is_some(),
+            active: active_version.is_some(),
+        }],
+        unavailable_reason: None,
+    }
 }
 
 #[test]

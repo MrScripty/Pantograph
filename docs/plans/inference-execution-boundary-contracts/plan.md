@@ -1251,6 +1251,13 @@ redistributable shape. Runtime sidecar command resolution is also exposed
 through `resolve_managed_dependency_command(ManagedDependencyKey::RuntimeSidecar(..))`;
 media tool command resolution and native artifact activation explicitly reject
 there so conversion execution remains owned by media conversion.
+Artifact-format dependency-version synchronization now derives from neutral
+`ManagedDependencyStatus` values through
+`ArtifactFormatDependencyVersions::from_managed_dependency_statuses`, filtering
+runtime sidecars out and using stable dependency keys such as `opencolorio` for
+media/native dependencies. Legacy UniFFI managed-media action methods still
+return redistributable-shaped compatibility JSON until install, activation, and
+lease ownership move.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`

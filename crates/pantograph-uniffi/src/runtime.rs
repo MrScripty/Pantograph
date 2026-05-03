@@ -5,12 +5,11 @@ use node_engine::ExecutorExtensions;
 use pantograph_embedded_runtime::{EmbeddedRuntime, EmbeddedRuntimeConfig};
 use pantograph_workflow_service::{
     ArtifactConsumeAcknowledgementRequest, ArtifactDescriptorQueryRequest,
-    ArtifactFormatDependencyVersion, ArtifactFormatDependencyVersions,
-    ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsUpdateRequest, ArtifactPolicy,
-    ArtifactReadRequest, ArtifactStore, BucketCreateRequest, BucketDeleteRequest,
-    ClientRegistrationRequest, ClientSessionOpenRequest, ClientSessionResumeRequest,
-    NodeRegistry as WorkflowNodeRegistry, WorkflowCapabilitiesRequest, WorkflowErrorCode,
-    WorkflowErrorEnvelope, WorkflowExecutionSessionCloseRequest,
+    ArtifactFormatDependencyVersions, ArtifactFormatSettingsQueryRequest,
+    ArtifactFormatSettingsUpdateRequest, ArtifactPolicy, ArtifactReadRequest, ArtifactStore,
+    BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
+    ClientSessionResumeRequest, NodeRegistry as WorkflowNodeRegistry, WorkflowCapabilitiesRequest,
+    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowExecutionSessionCloseRequest,
     WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionKeepAliveRequest,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueListRequest,
     WorkflowExecutionSessionQueuePushFrontRequest,
@@ -994,16 +993,11 @@ fn sync_artifact_format_dependency_versions(
     app_data_dir: &std::path::Path,
     workflow_service: &WorkflowService,
 ) -> Result<(), WorkflowServiceError> {
-    let statuses = inference::list_managed_redistributable_statuses(app_data_dir);
-    workflow_service.set_artifact_format_dependency_versions(ArtifactFormatDependencyVersions {
-        dependencies: statuses
-            .iter()
-            .map(|status| ArtifactFormatDependencyVersion {
-                dependency_id: status.id.key().to_string(),
-                active_version: status.selection.active_version.clone(),
-            })
-            .collect(),
-    })
+    let statuses = inference::list_all_managed_dependency_statuses(app_data_dir)
+        .map_err(WorkflowServiceError::InvalidRequest)?;
+    workflow_service.set_artifact_format_dependency_versions(
+        ArtifactFormatDependencyVersions::from_managed_dependency_statuses(&statuses),
+    )
 }
 
 fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
