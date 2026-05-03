@@ -101,11 +101,7 @@ pub(crate) fn resolve_inference_setting_runtime_value(
 }
 
 #[cfg_attr(
-    not(any(
-        feature = "inference-nodes",
-        feature = "pytorch-nodes",
-        feature = "audio-nodes"
-    )),
+    not(any(feature = "inference-nodes", feature = "pytorch-nodes")),
     allow(dead_code)
 )]
 pub(crate) fn build_extra_settings(

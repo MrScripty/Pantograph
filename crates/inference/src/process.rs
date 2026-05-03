@@ -42,6 +42,7 @@ pub fn managed_binary_spawn_error(message: impl AsRef<str>) -> String {
     )
 }
 
+#[cfg_attr(not(feature = "backend-llamacpp"), allow(dead_code))]
 pub(crate) fn strip_managed_binary_spawn_error(message: &str) -> Option<String> {
     message
         .strip_prefix(MANAGED_BINARY_SPAWN_ERROR_PREFIX)
