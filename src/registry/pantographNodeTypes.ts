@@ -14,7 +14,6 @@ import NumberInputNode from '../components/nodes/workflow/NumberInputNode.svelte
 import BooleanInputNode from '../components/nodes/workflow/BooleanInputNode.svelte';
 import VectorInputNode from '../components/nodes/workflow/VectorInputNode.svelte';
 import LLMInferenceNode from '../components/nodes/workflow/LLMInferenceNode.svelte';
-import OllamaInferenceNode from '../components/nodes/workflow/OllamaInferenceNode.svelte';
 import LlamaCppInferenceNode from '../components/nodes/workflow/LlamaCppInferenceNode.svelte';
 import EmbeddingNode from '../components/nodes/workflow/EmbeddingNode.svelte';
 import RerankerNode from '../components/nodes/workflow/RerankerNode.svelte';
@@ -49,7 +48,6 @@ const SPECIALIZED_NODES: Record<string, Component<Record<string, unknown>>> = {
   'boolean-input': BooleanInputNode,
   'vector-input': VectorInputNode,
   'llm-inference': LLMInferenceNode,
-  'ollama-inference': OllamaInferenceNode,
   'llamacpp-inference': LlamaCppInferenceNode,
   'embedding': EmbeddingNode,
   'reranker': RerankerNode,

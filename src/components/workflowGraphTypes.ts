@@ -25,7 +25,6 @@ import MaskedTextInputNode from './nodes/workflow/MaskedTextInputNode.svelte';
 import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
 import NodeGroupNode from './nodes/workflow/NodeGroupNode.svelte';
 import NumberInputNode from './nodes/workflow/NumberInputNode.svelte';
-import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
 import OnnxInferenceNode from './nodes/workflow/OnnxInferenceNode.svelte';
 import PointCloudOutputNode from './nodes/workflow/PointCloudOutputNode.svelte';
 import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
@@ -48,7 +47,6 @@ export const workflowNodeTypes: NodeTypes = {
   'selection-input': SelectionInputNode,
   'vector-input': VectorInputNode,
   'llm-inference': LLMInferenceNode,
-  'ollama-inference': OllamaInferenceNode,
   'llamacpp-inference': LlamaCppInferenceNode,
   embedding: EmbeddingNode,
   reranker: RerankerNode,

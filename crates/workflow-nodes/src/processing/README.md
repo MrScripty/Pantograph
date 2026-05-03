@@ -17,7 +17,7 @@ adapters such as the Python runtime.
 | `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |
 | `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
-| `ollama_inference.rs` | Declares the graph-visible local Ollama inference contract and reads only response fields consumed by node outputs. |
+| `ollama_inference.rs` | Preserves the retired Ollama inference descriptor for migration reference only; it is not registered as a graph-visible node. |
 | `vision_analysis.rs` | Declares image-to-text style vision analysis contracts. |
 
 ## Problem
@@ -66,9 +66,9 @@ instead of hiding behind generic JSON ports.
   source schema.
 - Reranker outputs must preserve stable ranked-result fields so saved workflows
   and templates can consume them without endpoint-specific parsing logic.
-- Ollama inference output mapping consumes the response text and model echo
-  only; unneeded `/api/generate` fields stay ignored by serde rather than being
-  stored as dead response state.
+- The retired Ollama descriptor must not be submitted to the workflow-node
+  inventory. Saved workflows migrate to the canonical inference shape instead
+  of keeping Ollama as a supported graph node.
 - JSON-filter configuration defaults remain the derived empty-path/empty-default
   contract so descriptor consumers and task construction share one default
   shape.
@@ -91,10 +91,10 @@ host executors that consume these descriptors.
 
 ## Related ADRs
 - None identified as of 2026-04-21.
-- Reason: the Ollama response cleanup preserves the existing processing-node
-  contract and does not introduce a new architectural boundary.
-- Revisit trigger: processing nodes start owning runtime-specific response
-  state or shared endpoint integration policy.
+- Reason: Ollama retirement preserves a migration reference while preventing
+  new graph-visible Ollama usage.
+- Revisit trigger: saved workflow migration no longer needs the old descriptor
+  shape as a local reference.
 
 ## Usage Examples
 ```rust

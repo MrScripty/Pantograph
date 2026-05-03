@@ -746,6 +746,16 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   --no-default-features` failure from missing upstream Pumas package-fact
   helpers has been resolved in Pumas. The remaining Pantograph work is
   consumer-side alignment to the canonical Pumas DTO/API shape.
+- 2026-05-03: `cargo check -p node-engine --all-features` completed for the
+  Ollama graph-node retirement slice, but the dependency build surfaced an
+  existing `crates/inference/src/process.rs` dead-code warning for
+  `strip_managed_binary_spawn_error`.
+- Reason: this warning is in the inference process helper surface and is
+  unrelated to hiding the retired Ollama graph node or stale-node executor
+  guard.
+- Revisit trigger: address in the backend feature cleanup slice or the next
+  inference warning-baseline cleanup before requiring warning-free all-feature
+  dependency checks.
 
 ## Definition of Done
 
@@ -1136,17 +1146,22 @@ feature flags, runtime selectors, managed runtime state assumptions, or UI
 entry points.
 
 **Tasks:**
-- [ ] Inventory every `backend-ollama`, `OllamaBackend`, Ollama managed
+- [x] Inventory every `backend-ollama`, `OllamaBackend`, Ollama managed
   dependency/runtime id, registry, gateway, managed runtime, node-engine,
   Tauri, frontend, README, and test reference.
 - [ ] Decide the migration behavior for existing user settings, saved workflows,
   and managed runtime state that reference Ollama.
+- [x] Remove graph-visible `ollama-inference` entry points from the
+  workflow-node inventory and frontend node maps while preserving a stale-node
+  migration guard.
 - [ ] Remove Ollama backend registration and public backend feature surface.
 - [ ] Remove or quarantine managed Ollama runtime/platform code so it cannot be
   selected as an active backend.
 - [ ] Update user-facing and developer documentation to explain that Pantograph
   does not wrap Ollama as a first-party runtime.
-- [ ] Add tests proving stale Ollama selections fail with a clear migration
+- [x] Add first-slice tests proving stale Ollama workflow nodes fail with a
+  clear migration error instead of contacting an Ollama daemon.
+- [ ] Add broader tests proving stale Ollama selections fail with a clear migration
   error or are mapped to a supported default according to the migration
   decision.
 
@@ -1158,7 +1173,13 @@ entry points.
 - `cargo check -p inference --all-features`.
 - Relevant consumer tests selected by touched files.
 
-**Status:** Not started.
+**Status:** Partially implemented. The first Ollama retirement slice removed
+the graph-visible `ollama-inference` registration from Rust workflow-node
+inventory and frontend node maps, changed node-engine stale `ollama-inference`
+execution to return a migration-focused error without contacting Ollama, and
+updated touched source READMEs. Broader backend feature removal, managed
+runtime cleanup, user-setting migration, and saved-workflow structural
+migration remain pending.
 
 ### Milestone 7: Strengthen Capability Facts
 

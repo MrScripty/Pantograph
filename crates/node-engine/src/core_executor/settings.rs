@@ -100,6 +100,14 @@ pub(crate) fn resolve_inference_setting_runtime_value(
     normalized
 }
 
+#[cfg_attr(
+    not(any(
+        feature = "inference-nodes",
+        feature = "pytorch-nodes",
+        feature = "audio-nodes"
+    )),
+    allow(dead_code)
+)]
 pub(crate) fn build_extra_settings(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> HashMap<String, serde_json::Value> {

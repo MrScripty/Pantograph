@@ -19,6 +19,11 @@ use crate::extensions::ExecutorExtensions;
 
 #[cfg(feature = "audio-nodes")]
 mod audio_nodes;
+#[cfg(any(
+    feature = "inference-nodes",
+    feature = "pytorch-nodes",
+    feature = "audio-nodes"
+))]
 mod dependency_preflight;
 mod file_io;
 #[cfg(feature = "inference-nodes")]
@@ -38,6 +43,11 @@ mod retrieval_nodes;
 mod settings;
 #[cfg(feature = "audio-nodes")]
 pub(crate) use audio_nodes::*;
+#[cfg(any(
+    feature = "inference-nodes",
+    feature = "pytorch-nodes",
+    feature = "audio-nodes"
+))]
 pub(crate) use dependency_preflight::*;
 pub(crate) use file_io::*;
 #[cfg(feature = "inference-nodes")]
@@ -151,7 +161,7 @@ impl Default for CoreTaskExecutor {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Ollama HTTP inference handler
+// Retired Ollama inference handler
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------

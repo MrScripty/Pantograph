@@ -1,7 +1,9 @@
-//! Ollama Inference Task
+//! Retired Ollama Inference Task
 //!
-//! This task sends a prompt to an Ollama server and returns the response.
-//! The model is specified via an input port (typically from a Model Provider node).
+//! Pantograph no longer registers `ollama-inference` as a graph-visible node.
+//! The descriptor remains in this module only as a migration reference for old
+//! saved workflows while canonical inference nodes replace backend-specific
+//! workflow shapes.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, NextAction, Task, TaskResult};
@@ -117,8 +119,6 @@ impl TaskDescriptor for OllamaInferenceTask {
         }
     }
 }
-
-inventory::submit!(node_engine::DescriptorFn(OllamaInferenceTask::descriptor));
 
 #[async_trait]
 impl Task for OllamaInferenceTask {

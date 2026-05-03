@@ -12,7 +12,6 @@
   import SelectionInputNode from './nodes/workflow/SelectionInputNode.svelte';
   import VectorInputNode from './nodes/workflow/VectorInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
-  import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
   import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
   import EmbeddingNode from './nodes/workflow/EmbeddingNode.svelte';
   import RerankerNode from './nodes/workflow/RerankerNode.svelte';
@@ -49,7 +48,6 @@
     'selection-input': SelectionInputNode,
     'vector-input': VectorInputNode,
     'llm-inference': LLMInferenceNode,
-    'ollama-inference': OllamaInferenceNode,
     'llamacpp-inference': LlamaCppInferenceNode,
     'embedding': EmbeddingNode,
     'reranker': RerankerNode,

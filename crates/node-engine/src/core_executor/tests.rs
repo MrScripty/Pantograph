@@ -125,6 +125,17 @@ fn test_text_output() {
     assert_eq!(result["text"], "output text");
 }
 
+#[tokio::test]
+async fn test_ollama_inference_is_retired() {
+    let inputs = HashMap::new();
+    let error = execute_ollama_inference(&inputs).await.unwrap_err();
+    let message = error.to_string();
+
+    assert!(message.contains("Ollama is no longer supported"));
+    assert!(message.contains("canonical inference node"));
+    assert!(message.contains("Pumas model reference"));
+}
+
 #[test]
 fn test_conditional_true() {
     let mut inputs = HashMap::new();

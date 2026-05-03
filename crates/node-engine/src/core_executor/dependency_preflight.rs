@@ -155,7 +155,7 @@ pub(crate) fn infer_backend_key(node_type: &str) -> Option<String> {
         "diffusion-inference" => None,
         "llamacpp-inference" => Some("llamacpp".to_string()),
         "reranker" => Some("llamacpp".to_string()),
-        "ollama-inference" => Some("ollama".to_string()),
+        "ollama-inference" => None,
         "onnx-inference" => Some("onnx-runtime".to_string()),
         _ => Some("pytorch".to_string()),
     }

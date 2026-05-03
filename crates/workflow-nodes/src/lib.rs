@@ -46,14 +46,14 @@ mod tests {
         #[cfg(feature = "desktop")]
         assert_eq!(
             all.len(),
-            45,
-            "Expected 45 built-in nodes with desktop feature"
+            44,
+            "Expected 44 built-in nodes with desktop feature"
         );
         #[cfg(not(feature = "desktop"))]
         assert_eq!(
             all.len(),
-            42,
-            "Expected 42 built-in nodes without desktop feature"
+            41,
+            "Expected 41 built-in nodes without desktop feature"
         );
 
         // Spot-check known types
@@ -85,6 +85,10 @@ mod tests {
         assert!(registry.has_node_type("masked-text-input"));
         assert!(registry.has_node_type("expand-settings"));
         assert!(registry.has_node_type("dependency-environment"));
+        assert!(
+            !registry.has_node_type("ollama-inference"),
+            "Ollama is retired as a first-party graph-visible node"
+        );
 
         #[cfg(feature = "desktop")]
         assert!(registry.has_node_type("point-cloud-output"));
