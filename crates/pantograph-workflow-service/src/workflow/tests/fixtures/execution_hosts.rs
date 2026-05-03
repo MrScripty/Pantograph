@@ -81,6 +81,11 @@ pub(in crate::workflow::tests) struct FailingRunSnapshotHost {
     pub(in crate::workflow::tests) inner: MockWorkflowHost,
 }
 
+pub(in crate::workflow::tests) struct FailingRunWithPoisonedDiagnosticsHost {
+    pub(in crate::workflow::tests) inner: MockWorkflowHost,
+    pub(in crate::workflow::tests) diagnostics_ledger: Arc<Mutex<SqliteDiagnosticsLedger>>,
+}
+
 impl RecordingRuntimeHost {
     pub(in crate::workflow::tests) fn new(
         retention_hints: Arc<Mutex<Vec<WorkflowExecutionSessionRetentionHint>>>,
@@ -122,6 +127,27 @@ impl FailingRunSnapshotHost {
         Self {
             inner: MockWorkflowHost::new(8, 1024),
         }
+    }
+}
+
+impl FailingRunWithPoisonedDiagnosticsHost {
+    pub(in crate::workflow::tests) fn new(
+        diagnostics_ledger: Arc<Mutex<SqliteDiagnosticsLedger>>,
+    ) -> Self {
+        Self {
+            inner: MockWorkflowHost::new(8, 1024),
+            diagnostics_ledger,
+        }
+    }
+
+    fn poison_diagnostics_ledger(&self) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = self
+                .diagnostics_ledger
+                .lock()
+                .expect("diagnostics ledger lock should be available before poisoning");
+            panic!("poison diagnostics ledger for test");
+        }));
     }
 }
 
@@ -420,5 +446,53 @@ impl WorkflowHost for FailingRunSnapshotHost {
         self.inner
             .run_workflow(workflow_id, inputs, output_targets, run_options, run_handle)
             .await
+    }
+}
+
+#[async_trait]
+impl WorkflowHost for FailingRunWithPoisonedDiagnosticsHost {
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        self.inner.validate_workflow(workflow_id).await
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        self.inner.workflow_graph_fingerprint(workflow_id).await
+    }
+
+    async fn workflow_graph(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        self.inner.workflow_graph(workflow_id).await
+    }
+
+    async fn workflow_capabilities(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        self.inner.workflow_capabilities(workflow_id).await
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        self.inner.runtime_capabilities().await
+    }
+
+    async fn run_workflow(
+        &self,
+        _workflow_id: &str,
+        _inputs: &[WorkflowPortBinding],
+        _output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: WorkflowRunOptions,
+        _run_handle: WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        self.poison_diagnostics_ledger();
+        Err(WorkflowServiceError::InvalidRequest(
+            "workflow execution failed".to_string(),
+        ))
     }
 }

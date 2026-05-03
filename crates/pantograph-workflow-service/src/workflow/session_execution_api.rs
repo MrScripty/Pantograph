@@ -38,14 +38,14 @@ use super::validation::{
 use super::{
     ArtifactAccessMode, ArtifactConversionStatus, ArtifactDescriptor, ArtifactLifecycleState,
     ArtifactPayloadKind, AttributionRepository, WorkflowCapabilityModel,
-    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
-    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint,
-    WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason, WorkflowService,
-    WorkflowServiceError,
+    WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionAttributedCreateRequest,
+    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
+    WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeRequirements,
+    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -531,13 +531,22 @@ impl WorkflowService {
             let mut store = self.session_store_guard()?;
             store.finish_run(&session_id, &workflow_run_id)?
         };
-        self.record_run_terminal_event_if_configured(
+        if let Err(record_error) = self.record_run_terminal_event_if_configured(
             &session,
             run_snapshot.as_ref(),
             &workflow_run_id,
             Some(&queued_workflow_semantic_version),
             &run_result,
-        )?;
+        ) {
+            if let Err(error) = run_result {
+                return Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
+                    workflow_run_id: Some(workflow_run_id),
+                    diagnostic_event_id: None,
+                    diagnostics_unavailable: Some(record_error.message().to_string()),
+                }));
+            }
+            return Err(record_error);
+        }
         self.record_scheduler_reservation_event_if_configured(
             &session,
             run_snapshot.as_ref(),

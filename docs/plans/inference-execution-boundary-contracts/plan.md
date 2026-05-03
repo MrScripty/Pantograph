@@ -2206,7 +2206,9 @@ inference write ledger events directly.
   inference lifecycle detail is now sanitized and bounded before node-status
   diagnostic projection so oversized backend text does not itself cause a
   secondary ledger append failure; workflow-service append-failure projection
-  remains open.
+  now preserves the original workflow-run error and attaches
+  `diagnostics_unavailable` when node execution, output validation, artifact
+  conversion, or terminal diagnostic append fails.
 - [ ] Keep prompts, chat messages, raw media, generated content, embeddings,
   token arrays, logits, tensors, Python kwargs, backend CLI flags, full local
   paths where stable ids exist, and unbounded stderr/stdout out of ledger
@@ -2670,6 +2672,12 @@ Update during implementation:
   diagnostics proving raw-looking prompt, result, and tensor markers in
   lifecycle detail are not serialized into durable inference diagnostic summary
   payloads.
+- 2026-05-03: Workflow-run error paths now preserve the original workflow
+  execution, timeout, output-validation, and artifact-conversion errors when
+  their diagnostic record append fails, attaching `diagnostics_unavailable`
+  instead of replacing the run failure with a diagnostics failure. The
+  workflow-session terminal append path has the same preservation behavior for
+  already-failed run results.
 
 ## Commit Cadence Notes
 
