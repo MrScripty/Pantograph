@@ -1883,8 +1883,11 @@ model-reference diagnostics. Saved-workflow canonicalization now also migrates
 legacy `reranker` nodes to `llm-inference` with `task_kind = rerank`,
 preserves query/document/result/top-document topology, maps rerank options into
 canonical task options, and records unresolved Pumas model-reference
-diagnostics. Pumas-backed GGUF/HF resolution, mmproj-specific preservation,
-frontend/template, and validation slices remain open. Rust workflow-node
+diagnostics. Legacy llama.cpp migration now preserves `mmproj_path` evidence in
+unresolved Pumas model-reference diagnostics, and node-engine canonical input
+hydration carries resolved `.mmproj` companion artifacts into llama.cpp runtime
+startup/matching. Pumas-backed GGUF/HF resolution, frontend/template, and
+validation slices remain open. Rust workflow-node
 inventory no longer registers retired `llamacpp-inference`,
 `pytorch-inference`, `embedding`, or `reranker` node descriptors as
 graph-visible built-ins; the descriptor structs remain only as migration
@@ -2503,6 +2506,10 @@ Update during implementation:
   generic `llm-inference` flat generation settings, moving them into grouped
   `generation_options` and removing stale flat option edges without changing
   node identity or prompt/response topology.
+- 2026-05-03: Preserved llama.cpp multimodal `.mmproj` evidence across
+  saved-workflow migration and node-engine canonical model-source hydration, so
+  llama.cpp runtime matching/startup distinguishes text GGUF from VLM GGUF plus
+  companion projection artifacts.
 
 ## Commit Cadence Notes
 

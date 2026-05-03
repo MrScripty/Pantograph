@@ -1445,6 +1445,37 @@ fn test_inputs_with_model_path_uses_resolved_model_source_entry_path() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_inputs_with_model_path_preserves_resolved_mmproj_companion() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_with_companion_artifacts(
+            "pumas://models/tiny-vlm-gguf",
+            "/models/tiny-vlm/model.gguf",
+            vec![
+                "/models/tiny-vlm/readme.txt",
+                "/models/tiny-vlm/mmproj-model-f16.mmproj",
+            ],
+        ),
+    );
+
+    let canonical =
+        inputs_with_model_path_from_ref(&inputs).expect("resolved model source should parse");
+
+    assert_eq!(
+        canonical.get("model_path").and_then(|value| value.as_str()),
+        Some("/models/tiny-vlm/model.gguf")
+    );
+    assert_eq!(
+        canonical
+            .get("mmproj_path")
+            .and_then(|value| value.as_str()),
+        Some("/models/tiny-vlm/mmproj-model-f16.mmproj")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_inputs_with_model_path_rejects_malformed_resolved_model_source() {
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -1731,6 +1762,17 @@ fn resolved_model_source_with_artifact_kind(
             "model_id": model_id
         }
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn resolved_model_source_with_companion_artifacts(
+    model_id: &str,
+    entry_path: &str,
+    companion_artifacts: Vec<&str>,
+) -> serde_json::Value {
+    let mut value = resolved_model_source_value(model_id, entry_path);
+    value["companion_artifacts"] = serde_json::json!(companion_artifacts);
+    value
 }
 
 #[cfg(feature = "inference-nodes")]

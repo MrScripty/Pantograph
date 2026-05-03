@@ -125,6 +125,7 @@ const OLLAMA_PORTS: &[LegacyInferencePortMigration] = &[
 #[cfg(test)]
 const LLAMACPP_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_data("model_path", "pumas_model_ref"),
+    legacy_input_data("mmproj_path", "pumas_model_ref"),
     legacy_input_preserve("prompt"),
     legacy_input_preserve("system_prompt"),
     legacy_input_data("temperature", "generation_options.sampling.temperature"),
@@ -390,7 +391,10 @@ pub(super) fn canonicalize_legacy_node_types(
                 return None;
             }
             if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::LlamaCppInference)
-                && matches!(edge.target_handle.as_str(), "temperature" | "max_tokens")
+                && matches!(
+                    edge.target_handle.as_str(),
+                    "mmproj_path" | "temperature" | "max_tokens"
+                )
             {
                 return None;
             }
@@ -536,6 +540,7 @@ fn migrate_ollama_node_data(data: &mut serde_json::Value) {
 fn migrate_llamacpp_node_data(data: &mut serde_json::Value) {
     let object = ensure_json_object(data);
     let legacy_model_path = object.get("model_path").cloned();
+    let legacy_mmproj_path = object.get("mmproj_path").cloned();
     let legacy_temperature = object.get("temperature").cloned();
     let legacy_max_tokens = object.get("max_tokens").cloned();
 
@@ -552,6 +557,7 @@ fn migrate_llamacpp_node_data(data: &mut serde_json::Value) {
                 "status": "unresolved",
                 "source": "legacy_llamacpp",
                 "legacy_model_path": legacy_model_path,
+                "legacy_mmproj_path": legacy_mmproj_path,
                 "message": "Resolve this legacy llama.cpp model path through Pumas before running the canonical inference node."
             })
         });
@@ -576,6 +582,7 @@ fn migrate_llamacpp_node_data(data: &mut serde_json::Value) {
                 "severity": "warning",
                 "message": "Migrated from llamacpp-inference to canonical llm-inference. The legacy model path was retained as unresolved Pumas model-reference evidence until Pumas resolves it.",
                 "legacy_model_path": legacy_model_path,
+                "legacy_mmproj_path": legacy_mmproj_path,
                 "legacy_temperature": legacy_temperature,
                 "legacy_max_tokens": legacy_max_tokens
             }])
@@ -939,6 +946,11 @@ fn legacy_llamacpp_migration_record(node_id: &str) -> Option<ContractUpgradeReco
                 kind: PortKind::Input,
                 from: PortId::try_from("model_path".to_string()).ok()?,
                 to: PortId::try_from("pumas_model_ref".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("mmproj_path".to_string()).ok()?,
             },
             ContractUpgradeChange::PortRemoved {
                 node_id: node_id.clone(),

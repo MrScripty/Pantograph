@@ -42,6 +42,12 @@ pub(crate) async fn execute_llamacpp_inference(
         })?;
 
     let model_path = resolve_gguf_path(model_path_raw)?;
+    let mmproj_path = inputs
+        .get("mmproj_path")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
     let system_prompt = inputs.get("system_prompt").and_then(|s| s.as_str());
     let generation_parameters = llama_cpp_request_generation_parameters(inputs)?;
 
@@ -50,9 +56,10 @@ pub(crate) async fn execute_llamacpp_inference(
 
     // Ensure the gateway is running the model requested by this node. A ready
     // llama.cpp gateway may still be serving a previous workflow's model.
-    if !llamacpp_gateway_matches_requested_model(gw, &model_path).await {
+    if !llamacpp_gateway_matches_requested_model(gw, &model_path, mmproj_path.as_deref()).await {
         let mut config = inference::BackendConfig {
             model_path: Some(PathBuf::from(&model_path)),
+            mmproj_path: mmproj_path.as_ref().map(PathBuf::from),
             device: Some("auto".to_string()),
             gpu_layers: Some(-1),
             embedding_mode: false,
@@ -291,7 +298,11 @@ fn llama_cpp_request_generation_parameters(
     Ok(parameters)
 }
 
-async fn llamacpp_gateway_matches_requested_model(gw: &InferenceGateway, model_path: &str) -> bool {
+async fn llamacpp_gateway_matches_requested_model(
+    gw: &InferenceGateway,
+    model_path: &str,
+    mmproj_path: Option<&str>,
+) -> bool {
     if !gw.is_ready().await || gw.is_embedding_mode().await || gw.is_reranking_mode().await {
         return false;
     }
@@ -306,7 +317,17 @@ async fn llamacpp_gateway_matches_requested_model(gw: &InferenceGateway, model_p
         return false;
     };
 
-    paths_refer_to_same_file(active_model_path, Path::new(model_path))
+    if !paths_refer_to_same_file(active_model_path, Path::new(model_path)) {
+        return false;
+    }
+
+    match (config.mmproj_path.as_deref(), mmproj_path) {
+        (None, None) => true,
+        (Some(active_mmproj_path), Some(requested_mmproj_path)) => {
+            paths_refer_to_same_file(active_mmproj_path, Path::new(requested_mmproj_path))
+        }
+        _ => false,
+    }
 }
 
 fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
@@ -543,10 +564,12 @@ mod tests {
             .expect("start mock backend");
 
         assert!(
-            llamacpp_gateway_matches_requested_model(&gateway, &model_a.to_string_lossy()).await
+            llamacpp_gateway_matches_requested_model(&gateway, &model_a.to_string_lossy(), None)
+                .await
         );
         assert!(
-            !llamacpp_gateway_matches_requested_model(&gateway, &model_b.to_string_lossy()).await
+            !llamacpp_gateway_matches_requested_model(&gateway, &model_b.to_string_lossy(), None)
+                .await
         );
 
         let _ = std::fs::remove_file(model_a);
@@ -571,9 +594,55 @@ mod tests {
             .expect("start mock backend");
 
         assert!(
-            !llamacpp_gateway_matches_requested_model(&gateway, &model.to_string_lossy()).await
+            !llamacpp_gateway_matches_requested_model(&gateway, &model.to_string_lossy(), None)
+                .await
         );
 
         let _ = std::fs::remove_file(model);
+    }
+
+    #[tokio::test]
+    async fn gateway_match_requires_active_mmproj_path_when_requested() {
+        let model = unique_model_path("vision-model");
+        let mmproj_a = unique_model_path("vision-mmproj-a");
+        let mmproj_b = unique_model_path("vision-mmproj-b");
+        let gateway = InferenceGateway::with_backend(
+            Box::new(MockReadyBackend { ready: false }),
+            "llama.cpp",
+        );
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&BackendConfig {
+                model_path: Some(model.clone()),
+                mmproj_path: Some(mmproj_a.clone()),
+                ..BackendConfig::default()
+            })
+            .await
+            .expect("start mock backend");
+
+        assert!(
+            llamacpp_gateway_matches_requested_model(
+                &gateway,
+                &model.to_string_lossy(),
+                Some(&mmproj_a.to_string_lossy())
+            )
+            .await
+        );
+        assert!(
+            !llamacpp_gateway_matches_requested_model(
+                &gateway,
+                &model.to_string_lossy(),
+                Some(&mmproj_b.to_string_lossy())
+            )
+            .await
+        );
+        assert!(
+            !llamacpp_gateway_matches_requested_model(&gateway, &model.to_string_lossy(), None)
+                .await
+        );
+
+        let _ = std::fs::remove_file(model);
+        let _ = std::fs::remove_file(mmproj_a);
+        let _ = std::fs::remove_file(mmproj_b);
     }
 }

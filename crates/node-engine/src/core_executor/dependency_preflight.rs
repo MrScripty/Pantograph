@@ -391,6 +391,15 @@ pub(crate) fn inputs_with_model_path_from_ref(
             canonical_inputs.insert("model_path".to_string(), serde_json::json!(model_path));
         }
     }
+    if canonical_inputs
+        .get("mmproj_path")
+        .and_then(|value| value.as_str())
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        if let Some(mmproj_path) = read_mmproj_path_from_inputs(inputs) {
+            canonical_inputs.insert("mmproj_path".to_string(), serde_json::json!(mmproj_path));
+        }
+    }
     Ok(canonical_inputs)
 }
 
@@ -453,6 +462,35 @@ fn read_model_path_from_inputs(inputs: &HashMap<String, serde_json::Value>) -> O
 }
 
 #[cfg(feature = "inference-nodes")]
+fn read_mmproj_path_from_inputs(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
+    read_optional_input_string_aliases(
+        inputs,
+        &[
+            "mmproj_path",
+            "mmprojPath",
+            "selected_mmproj_path",
+            "selectedMmprojPath",
+        ],
+    )
+    .or_else(|| read_resolved_model_source_mmproj_path(inputs))
+    .or_else(|| {
+        inputs.get("pumas_model_ref").and_then(|model_ref| {
+            read_optional_string_aliases_from_value(
+                model_ref,
+                &[
+                    "mmproj_path",
+                    "mmprojPath",
+                    "selected_mmproj_path",
+                    "selectedMmprojPath",
+                    "legacy_mmproj_path",
+                    "legacyMmprojPath",
+                ],
+            )
+        })
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
 fn read_resolved_model_source_from_inputs(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<Option<inference::ResolvedModelSource>> {
@@ -489,6 +527,21 @@ fn read_resolved_model_source_entry_path(
         .map(|source| source.entry_path)
 }
 
+#[cfg(feature = "inference-nodes")]
+fn read_resolved_model_source_mmproj_path(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    read_resolved_model_source_from_inputs(inputs)
+        .ok()
+        .flatten()
+        .and_then(|source| {
+            source
+                .companion_artifacts
+                .into_iter()
+                .find(|path| path_has_extension(path, "mmproj"))
+        })
+}
+
 #[cfg(not(feature = "inference-nodes"))]
 fn read_resolved_model_source_entry_path(
     _inputs: &HashMap<String, serde_json::Value>,
@@ -506,6 +559,14 @@ fn read_resolved_model_source_model_id(
         .and_then(|source| source.model_ref)
         .map(|model_ref| model_ref.model_id)
         .filter(|model_id| !model_id.trim().is_empty())
+}
+
+#[cfg(feature = "inference-nodes")]
+fn path_has_extension(path: &str, extension: &str) -> bool {
+    std::path::Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(extension))
 }
 
 #[cfg(not(feature = "inference-nodes"))]
