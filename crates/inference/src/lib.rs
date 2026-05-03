@@ -117,6 +117,7 @@ pub use managed_runtime::{
 pub use model_contracts::{
     AssetValidationError, BackendHintFact, BackendHintFacts, BackendHintLabel, BackendHintSource,
     CacheGenerationOptions, ComponentState, CustomCodeFacts, GenerationDefaultFacts,
+    GenerationOptionResolutionDiagnostic, GenerationOptionResolutionReport, GenerationOptionSource,
     GenerationOptions, InferenceLifecyclePhase, InferenceModality, InferenceTaskId,
     LengthGenerationOptions, ModelArtifactKind, ModelComponentFacts, ModelExecutionDescriptor,
     ModelExecutionStorageKind, ModelExecutionValidationState, ModelFactFamily,

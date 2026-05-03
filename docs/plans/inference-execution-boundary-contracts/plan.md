@@ -1460,7 +1460,7 @@ execution semantics that backends can map locally.
   including max/new token distinction, sampling/search strategy, stop strings,
   cache preference, logits/output controls, and backend-specific unsupported
   option reporting.
-- [ ] Define precedence for model-provided generation defaults, workflow/node
+- [x] Define precedence for model-provided generation defaults, workflow/node
   defaults, runtime presets, and request-level overrides.
 - [ ] Define a typed option-support report for every requested option:
   honored, mapped, defaulted, ignored, unsupported, rejected, conflict,
@@ -1495,7 +1495,15 @@ execution semantics that backends can map locally.
 - Existing llama.cpp/PyTorch request tests continue to pass.
 - `cargo test -p inference`.
 
-**Status:** Not started.
+**Status:** In progress. `GenerationOptions` now aggregates the existing
+length, sampling, search, stopping, cache, output, and special-token groups
+with backend-scoped extension values. Sampling includes a typed seed field.
+PyTorch has an initial Transformers kwargs mapper with diagnostics for honored,
+mapped, and unsupported options. Generation option precedence is now explicit:
+model defaults, then workflow/node defaults, then runtime preset, then request
+overrides. Resolution diagnostics identify the source layer for each resolved
+option. `OptionSupportState` now includes conflict and model/backend support
+requirement variants for later backend compatibility reports.
 
 ### Milestone 11: Canonical Workflow Node Migration
 
@@ -1569,11 +1577,9 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - Relevant frontend typecheck/tests if node registry or renderer DTOs change.
 - `git diff --check`.
 
-**Status:** In progress. `GenerationOptions` now aggregates the existing
-length, sampling, search, stopping, cache, output, and special-token groups
-with backend-scoped extension values. Sampling includes a typed seed field.
-PyTorch has an initial Transformers kwargs mapper with diagnostics for honored,
-mapped, and unsupported options. Precedence/default resolution remains open.
+**Status:** In progress. Ollama inference nodes have structural migration
+coverage from an earlier slice. The broader canonical workflow-node migration
+remains open.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -1883,6 +1889,11 @@ Update during implementation:
   It projects canonical generation groups into bounded Transformers-style
   kwargs and emits per-option diagnostics for honored, mapped, unsupported, and
   backend-extension cases without changing live generation behavior yet.
+- 2026-05-03: Added canonical generation option precedence resolution:
+  model-provided defaults, workflow/node defaults, runtime presets, and
+  request-level overrides resolve in that order. The resolver emits typed source
+  diagnostics and extends option support states with conflict and model/backend
+  support requirement variants for later compatibility reports.
 
 ## Commit Cadence Notes
 

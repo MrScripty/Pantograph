@@ -498,6 +498,285 @@ pub struct GenerationOptions {
     pub backend_extensions: BTreeMap<String, Value>,
 }
 
+impl GenerationOptions {
+    /// Resolve generation options from layered defaults and request overrides.
+    ///
+    /// Precedence is model defaults, then workflow/node defaults, then runtime
+    /// preset, then request overrides. Missing fields do not override earlier
+    /// layers. The returned diagnostics identify the layer that supplied each
+    /// resolved option value; they do not make backend support decisions.
+    #[must_use]
+    pub fn resolve_precedence(
+        model_defaults: Option<&Value>,
+        workflow_defaults: Option<&Self>,
+        runtime_preset: Option<&Self>,
+        request_overrides: Option<&Self>,
+    ) -> GenerationOptionResolutionReport {
+        let mut options = GenerationOptions::default();
+        let mut diagnostics = Vec::new();
+
+        if let Some(defaults) = model_defaults {
+            let parsed = Self::from_generation_defaults_value(defaults);
+            options.apply_layer(
+                &parsed,
+                GenerationOptionSource::ModelDefaults,
+                OptionSupportState::Defaulted,
+                &mut diagnostics,
+            );
+        }
+        if let Some(defaults) = workflow_defaults {
+            options.apply_layer(
+                defaults,
+                GenerationOptionSource::WorkflowDefaults,
+                OptionSupportState::Defaulted,
+                &mut diagnostics,
+            );
+        }
+        if let Some(preset) = runtime_preset {
+            options.apply_layer(
+                preset,
+                GenerationOptionSource::RuntimePreset,
+                OptionSupportState::Defaulted,
+                &mut diagnostics,
+            );
+        }
+        if let Some(overrides) = request_overrides {
+            options.apply_layer(
+                overrides,
+                GenerationOptionSource::RequestOverride,
+                OptionSupportState::Honored,
+                &mut diagnostics,
+            );
+        }
+
+        GenerationOptionResolutionReport {
+            options,
+            diagnostics,
+        }
+    }
+
+    fn apply_layer(
+        &mut self,
+        layer: &Self,
+        source: GenerationOptionSource,
+        state: OptionSupportState,
+        diagnostics: &mut Vec<GenerationOptionResolutionDiagnostic>,
+    ) {
+        apply_optional_option(
+            &mut self.length.max_new_tokens,
+            layer.length.max_new_tokens,
+            "length.max_new_tokens",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.length.min_new_tokens,
+            layer.length.min_new_tokens,
+            "length.min_new_tokens",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.length.max_length,
+            layer.length.max_length,
+            "length.max_length",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.sampling.temperature,
+            layer.sampling.temperature,
+            "sampling.temperature",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.sampling.top_p,
+            layer.sampling.top_p,
+            "sampling.top_p",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.sampling.top_k,
+            layer.sampling.top_k,
+            "sampling.top_k",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.sampling.repetition_penalty,
+            layer.sampling.repetition_penalty,
+            "sampling.repetition_penalty",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.sampling.seed,
+            layer.sampling.seed,
+            "sampling.seed",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.search.num_beams,
+            layer.search.num_beams,
+            "search.num_beams",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.search.num_return_sequences,
+            layer.search.num_return_sequences,
+            "search.num_return_sequences",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_vec_option(
+            &mut self.stopping.stop_strings,
+            &layer.stopping.stop_strings,
+            "stopping.stop_strings",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_vec_option(
+            &mut self.stopping.eos_token_ids,
+            &layer.stopping.eos_token_ids,
+            "stopping.eos_token_ids",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.cache.use_cache,
+            layer.cache.use_cache,
+            "cache.use_cache",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.cache.kv_cache_checkpoint_requested,
+            layer.cache.kv_cache_checkpoint_requested,
+            "cache.kv_cache_checkpoint_requested",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.output.return_logprobs,
+            layer.output.return_logprobs,
+            "output.return_logprobs",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.output.return_token_ids,
+            layer.output.return_token_ids,
+            "output.return_token_ids",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.special_tokens.bos_token_id,
+            layer.special_tokens.bos_token_id,
+            "special_tokens.bos_token_id",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.special_tokens.eos_token_id,
+            layer.special_tokens.eos_token_id,
+            "special_tokens.eos_token_id",
+            source,
+            state,
+            diagnostics,
+        );
+        apply_optional_option(
+            &mut self.special_tokens.pad_token_id,
+            layer.special_tokens.pad_token_id,
+            "special_tokens.pad_token_id",
+            source,
+            state,
+            diagnostics,
+        );
+        for (key, value) in &layer.backend_extensions {
+            self.backend_extensions.insert(key.clone(), value.clone());
+            diagnostics.push(GenerationOptionResolutionDiagnostic {
+                option_path: format!("backend_extensions.{key}"),
+                source,
+                state,
+                message: Some(format!("generation option resolved from {source:?}")),
+            });
+        }
+    }
+
+    fn from_generation_defaults_value(defaults: &Value) -> Self {
+        let mut options = Self::default();
+        options.length.max_new_tokens = read_u32(defaults, "max_new_tokens");
+        options.length.min_new_tokens = read_u32(defaults, "min_new_tokens");
+        options.length.max_length = read_u32(defaults, "max_length");
+        options.sampling.temperature = read_f32(defaults, "temperature");
+        options.sampling.top_p = read_f32(defaults, "top_p");
+        options.sampling.top_k = read_u32(defaults, "top_k");
+        options.sampling.repetition_penalty = read_f32(defaults, "repetition_penalty");
+        options.sampling.seed = read_u64(defaults, "seed");
+        options.search.num_beams = read_u32(defaults, "num_beams");
+        options.search.num_return_sequences = read_u32(defaults, "num_return_sequences");
+        options.stopping.stop_strings = read_string_array(defaults, "stop_strings");
+        options.stopping.eos_token_ids = read_u32_array(defaults, "eos_token_ids");
+        options.cache.use_cache = read_bool(defaults, "use_cache");
+        options.special_tokens.bos_token_id = read_u32(defaults, "bos_token_id");
+        options.special_tokens.eos_token_id = read_u32(defaults, "eos_token_id");
+        options.special_tokens.pad_token_id = read_u32(defaults, "pad_token_id");
+        options
+    }
+}
+
+/// Source layer that supplied a resolved generation option value.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GenerationOptionSource {
+    ModelDefaults,
+    WorkflowDefaults,
+    RuntimePreset,
+    RequestOverride,
+}
+
+/// One resolved generation option source decision.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct GenerationOptionResolutionDiagnostic {
+    pub option_path: String,
+    pub source: GenerationOptionSource,
+    pub state: OptionSupportState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Resolved generation options plus bounded source diagnostics.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct GenerationOptionResolutionReport {
+    pub options: GenerationOptions,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<GenerationOptionResolutionDiagnostic>,
+}
+
 /// Backend support result for a requested generation option.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -511,7 +790,7 @@ pub struct OptionCompatibilityDiagnostic {
 }
 
 /// Support state for a generation option at a backend boundary.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum OptionSupportState {
     Honored,
@@ -520,8 +799,93 @@ pub enum OptionSupportState {
     Ignored,
     Unsupported,
     Rejected,
+    Conflict,
     ModelUnavailable,
     BackendUnavailable,
+    RequiresModelSupport,
+    RequiresBackendSupport,
+}
+
+fn apply_optional_option<T: Copy>(
+    target: &mut Option<T>,
+    value: Option<T>,
+    option_path: &'static str,
+    source: GenerationOptionSource,
+    state: OptionSupportState,
+    diagnostics: &mut Vec<GenerationOptionResolutionDiagnostic>,
+) {
+    if let Some(value) = value {
+        *target = Some(value);
+        diagnostics.push(GenerationOptionResolutionDiagnostic {
+            option_path: option_path.to_string(),
+            source,
+            state,
+            message: Some(format!("generation option resolved from {source:?}")),
+        });
+    }
+}
+
+fn apply_vec_option<T: Clone>(
+    target: &mut Vec<T>,
+    value: &[T],
+    option_path: &'static str,
+    source: GenerationOptionSource,
+    state: OptionSupportState,
+    diagnostics: &mut Vec<GenerationOptionResolutionDiagnostic>,
+) {
+    if !value.is_empty() {
+        *target = value.to_vec();
+        diagnostics.push(GenerationOptionResolutionDiagnostic {
+            option_path: option_path.to_string(),
+            source,
+            state,
+            message: Some(format!("generation option resolved from {source:?}")),
+        });
+    }
+}
+
+fn read_u32(value: &Value, key: &str) -> Option<u32> {
+    value
+        .get(key)
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+}
+
+fn read_u64(value: &Value, key: &str) -> Option<u64> {
+    value.get(key).and_then(Value::as_u64)
+}
+
+fn read_f32(value: &Value, key: &str) -> Option<f32> {
+    value
+        .get(key)
+        .and_then(Value::as_f64)
+        .map(|value| value as f32)
+}
+
+fn read_bool(value: &Value, key: &str) -> Option<bool> {
+    value.get(key).and_then(Value::as_bool)
+}
+
+fn read_string_array(value: &Value, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn read_u32_array(value: &Value, key: &str) -> Vec<u32> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_u64)
+        .filter_map(|value| u32::try_from(value).ok())
+        .collect()
 }
 
 /// Security and trust facts discovered from a package.

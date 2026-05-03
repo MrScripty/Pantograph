@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use inference::{
-    BackendHintLabel, GenerationOptions, InferenceLifecyclePhase, ModelExecutionDescriptor,
-    ModelExecutionStorageKind, ModelExecutionValidationState, ModelFactFamily,
-    ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+    BackendHintLabel, GenerationOptionSource, GenerationOptions, InferenceLifecyclePhase,
+    ModelExecutionDescriptor, ModelExecutionStorageKind, ModelExecutionValidationState,
+    ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
     ModelLibraryUpdateFeed, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus,
     ResolvedModelPackageFacts, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
@@ -226,6 +226,76 @@ fn generation_options_group_transformers_aligned_request_fields() {
     assert!(decoded
         .backend_extensions
         .contains_key("transformers:watermarking_config"));
+}
+
+#[test]
+fn generation_option_precedence_resolves_model_workflow_runtime_and_request_layers() {
+    let model_defaults = serde_json::json!({
+        "max_new_tokens": 128,
+        "temperature": 0.7,
+        "top_p": 0.95,
+        "eos_token_ids": [2],
+        "use_cache": true
+    });
+    let workflow_defaults = GenerationOptions {
+        length: inference::LengthGenerationOptions {
+            max_new_tokens: Some(256),
+            ..Default::default()
+        },
+        sampling: inference::SamplingGenerationOptions {
+            top_p: Some(0.9),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let runtime_preset = GenerationOptions {
+        sampling: inference::SamplingGenerationOptions {
+            temperature: Some(0.5),
+            ..Default::default()
+        },
+        stopping: inference::StoppingGenerationOptions {
+            stop_strings: vec!["STOP".to_string()],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let request_overrides = GenerationOptions {
+        sampling: inference::SamplingGenerationOptions {
+            temperature: Some(0.2),
+            seed: Some(42),
+            ..Default::default()
+        },
+        cache: inference::CacheGenerationOptions {
+            use_cache: Some(false),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let report = GenerationOptions::resolve_precedence(
+        Some(&model_defaults),
+        Some(&workflow_defaults),
+        Some(&runtime_preset),
+        Some(&request_overrides),
+    );
+
+    assert_eq!(report.options.length.max_new_tokens, Some(256));
+    assert_eq!(report.options.sampling.top_p, Some(0.9));
+    assert_eq!(report.options.sampling.temperature, Some(0.2));
+    assert_eq!(report.options.sampling.seed, Some(42));
+    assert_eq!(report.options.cache.use_cache, Some(false));
+    assert_eq!(report.options.stopping.eos_token_ids, vec![2]);
+    assert_eq!(report.options.stopping.stop_strings, vec!["STOP"]);
+    assert!(report.diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "sampling.temperature"
+            && diagnostic.source == GenerationOptionSource::RequestOverride
+            && diagnostic.state == OptionSupportState::Honored
+    }));
+    assert!(report.diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "length.max_new_tokens"
+            && diagnostic.source == GenerationOptionSource::WorkflowDefaults
+            && diagnostic.state == OptionSupportState::Defaulted
+    }));
 }
 
 #[test]
