@@ -1,5 +1,6 @@
+use std::ffi::OsString;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +9,9 @@ use crate::{
     ManagedBinaryInstallState, ManagedRedistributableCategory, ManagedRedistributableId,
     ManagedRedistributableInstallState, ManagedRedistributableReadiness, ManagedRuntimeJobStatus,
     ManagedRuntimeReadinessState, ResolvedCommand,
+};
+use pantograph_managed_dependencies::{
+    ManagedDependencyKey, ResolvedManagedDependencyCommand, RuntimeSidecarDependencyId,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -218,16 +222,50 @@ pub fn resolve_managed_binary_command(
         });
     }
 
-    crate::resolve_binary_command(app_data_dir, id, args).map_err(|source| {
-        let install_root = selected_install_root(&status);
-        ManagedBinaryFacadeError::RuntimeCommandResolution {
-            key: status.key,
-            display_name: status.display_name,
-            selected_version: status.selected_version,
-            install_root,
-            source,
-        }
-    })
+    let key = managed_runtime_dependency_key(id).ok_or_else(|| {
+        ManagedBinaryFacadeError::RuntimeStatus(format!(
+            "managed runtime '{}' does not have a neutral dependency key",
+            id.key()
+        ))
+    })?;
+
+    crate::resolve_managed_dependency_command(app_data_dir, key, args)
+        .map(resolved_command_from_dependency_command)
+        .map_err(|source| {
+            let install_root = selected_install_root(&status);
+            ManagedBinaryFacadeError::RuntimeCommandResolution {
+                key: status.key,
+                display_name: status.display_name,
+                selected_version: status.selected_version,
+                install_root,
+                source,
+            }
+        })
+}
+
+fn managed_runtime_dependency_key(id: ManagedBinaryId) -> Option<ManagedDependencyKey> {
+    match id {
+        ManagedBinaryId::LlamaCpp => Some(ManagedDependencyKey::RuntimeSidecar(
+            RuntimeSidecarDependencyId::LlamaCpp,
+        )),
+        ManagedBinaryId::Ollama => None,
+    }
+}
+
+fn resolved_command_from_dependency_command(
+    command: ResolvedManagedDependencyCommand,
+) -> ResolvedCommand {
+    ResolvedCommand {
+        executable_path: PathBuf::from(command.executable_path),
+        working_directory: PathBuf::from(command.working_directory),
+        args: command.args.into_iter().map(OsString::from).collect(),
+        env_overrides: command
+            .env_overrides
+            .into_iter()
+            .map(|(key, value)| (OsString::from(key), OsString::from(value)))
+            .collect(),
+        pid_file: command.pid_file.map(PathBuf::from),
+    }
 }
 
 fn runtime_status(snapshot: crate::ManagedRuntimeSnapshot) -> ManagedBinaryStatus {

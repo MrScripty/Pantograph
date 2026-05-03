@@ -1199,7 +1199,7 @@ runtime launch behavior and media conversion readiness facts.
 **Tasks:**
 - [x] Inventory current uses of `managed_runtime`, `managed_redistributables`,
   `managed_binaries`, and `managed_media_dependencies`.
-- [ ] Move or adapt runtime sidecar management so inference resolves llama.cpp
+- [x] Move or adapt runtime sidecar management so inference resolves llama.cpp
   commands through the neutral managed-dependency boundary.
 - [ ] Move or adapt ffmpeg, oiiotool, ocioconvert, and OpenColorIO dependency
   status/lease behavior out of inference and into the neutral
@@ -1263,6 +1263,9 @@ lease ownership move.
 runtime sidecar keys as non-media-conversion dependencies. This freezes the
 stable media/native key mapping without moving lease ownership or command
 execution into inference.
+The legacy managed-binary facade now resolves llama.cpp launch commands through
+the neutral `resolve_managed_dependency_command` path and converts the result
+back to its existing `ResolvedCommand` compatibility shape.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`
