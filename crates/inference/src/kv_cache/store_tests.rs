@@ -305,6 +305,54 @@ async fn test_load_for_execution_requires_runtime_fingerprint() {
 }
 
 #[tokio::test]
+async fn test_memory_and_disk_save_rolls_back_memory_when_disk_write_fails() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let blocked_disk_root = temp.path().join("not-a-directory");
+    std::fs::write(&blocked_disk_root, "blocking file").expect("write blocking file");
+    let store = KvCacheStore::new(blocked_disk_root, StoragePolicy::MemoryAndDisk);
+
+    let error = store
+        .save(make_entry("llama-7b", "abc"), None)
+        .await
+        .expect_err("disk write should fail");
+
+    assert!(
+        matches!(error, KvCacheError::Storage { .. }),
+        "expected storage error, got {error:?}"
+    );
+    assert!(
+        store.memory.list().await.expect("memory list").is_empty(),
+        "failed MemoryAndDisk saves must not publish executable cache entries to memory"
+    );
+}
+
+#[tokio::test]
+async fn test_save_to_rolls_back_memory_when_override_disk_write_fails() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let blocked_disk_root = temp.path().join("not-a-directory");
+    std::fs::write(&blocked_disk_root, "blocking file").expect("write blocking file");
+    let store = KvCacheStore::memory_only();
+
+    let error = store
+        .save_to(
+            make_entry("llama-7b", "abc"),
+            blocked_disk_root,
+            Some(StoragePolicy::MemoryAndDisk),
+        )
+        .await
+        .expect_err("override disk write should fail");
+
+    assert!(
+        matches!(error, KvCacheError::Storage { .. }),
+        "expected storage error, got {error:?}"
+    );
+    assert!(
+        store.memory.list().await.expect("memory list").is_empty(),
+        "failed save_to MemoryAndDisk saves must not publish cache entries to memory"
+    );
+}
+
+#[tokio::test]
 async fn test_prune_to_max_entries_evicts_oldest_entries() {
     let store = KvCacheStore::memory_only();
     let oldest = KvCacheEntry {

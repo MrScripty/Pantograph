@@ -104,7 +104,10 @@ impl KvCacheStore {
             StoragePolicy::MemoryAndDisk => {
                 self.memory.save(&entry).await?;
                 let disk = DiskStorage::new(cache_dir);
-                disk.save(&entry).await?;
+                if let Err(error) = disk.save(&entry).await {
+                    let _ = self.memory.delete(&entry.metadata.cache_id).await;
+                    return Err(error);
+                }
             }
         }
 
@@ -134,8 +137,12 @@ impl KvCacheStore {
             StoragePolicy::MemoryAndDisk => {
                 self.memory.save(entry).await?;
                 if let Some(ref disk) = self.disk {
-                    disk.save(entry).await?;
+                    if let Err(error) = disk.save(entry).await {
+                        let _ = self.memory.delete(&entry.metadata.cache_id).await;
+                        return Err(error);
+                    }
                 } else {
+                    let _ = self.memory.delete(&entry.metadata.cache_id).await;
                     return Err(KvCacheError::InvalidData {
                         message: "disk storage not configured but MemoryAndDisk policy requested"
                             .to_string(),
