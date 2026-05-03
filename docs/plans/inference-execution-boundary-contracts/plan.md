@@ -1204,6 +1204,10 @@ preflight execution, returning a task-contract error that cites
 The canonical llama.cpp execution path now derives request generation
 parameters from grouped `generation_options` first, while retaining legacy
 top-level `max_tokens` and `temperature` inputs as fallback compatibility.
+Node-engine dependency preflight coverage now includes a positive
+HF-compatible Transformers/PyTorch fixture proving Pumas-resolved model-source
+identity, entry path, task semantics, and the canonical PyTorch backend key
+reach the host dependency resolver before execution.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2473,6 +2477,9 @@ Update during implementation:
 - 2026-05-03: Added a mixed saved-workflow migration fixture that keeps legacy
   llama.cpp, embedding, and reranker node topology and output bindings stable
   after canonical `llm-inference` migration.
+- 2026-05-03: Added a positive node-engine dependency preflight fixture for
+  HF-compatible Transformers/PyTorch model sources, proving canonical runtime
+  hints and Pumas model-source identity reach the host resolver.
 
 ## Commit Cadence Notes
 

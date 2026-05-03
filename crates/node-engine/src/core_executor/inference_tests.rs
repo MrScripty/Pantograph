@@ -1,6 +1,14 @@
 use super::super::*;
 #[cfg(feature = "inference-nodes")]
 use crate::engine::TaskExecutor;
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+use crate::extension_keys;
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+use crate::model_dependencies::{
+    DependencyState, DependencyValidationState, ModelDependencyInstallResult,
+    ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
+    ModelDependencyStatus, ModelRefV2,
+};
 #[cfg(feature = "inference-nodes")]
 use async_trait::async_trait;
 #[cfg(feature = "inference-nodes")]
@@ -1062,6 +1070,147 @@ async fn test_dependency_preflight_blocks_canonical_pytorch_without_resolver() {
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+struct CapturingDependencyResolver {
+    captured_requests: Arc<Mutex<Vec<ModelDependencyRequest>>>,
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[async_trait]
+impl ModelDependencyResolver for CapturingDependencyResolver {
+    async fn resolve_model_dependency_requirements(
+        &self,
+        request: ModelDependencyRequest,
+    ) -> std::result::Result<ModelDependencyRequirements, String> {
+        self.captured_requests
+            .lock()
+            .expect("captured dependency requests lock")
+            .push(request.clone());
+        Ok(model_dependency_requirements_for_request(&request))
+    }
+
+    async fn check_dependencies(
+        &self,
+        request: ModelDependencyRequest,
+    ) -> std::result::Result<ModelDependencyStatus, String> {
+        let requirements = model_dependency_requirements_for_request(&request);
+        Ok(ModelDependencyStatus {
+            state: DependencyState::Ready,
+            code: None,
+            message: None,
+            requirements,
+            bindings: Vec::new(),
+            checked_at: None,
+        })
+    }
+
+    async fn install_dependencies(
+        &self,
+        request: ModelDependencyRequest,
+    ) -> std::result::Result<ModelDependencyInstallResult, String> {
+        Ok(ModelDependencyInstallResult {
+            state: DependencyState::Ready,
+            code: None,
+            message: None,
+            requirements: model_dependency_requirements_for_request(&request),
+            bindings: Vec::new(),
+            installed_at: None,
+        })
+    }
+
+    async fn resolve_model_ref(
+        &self,
+        request: ModelDependencyRequest,
+        _requirements: Option<ModelDependencyRequirements>,
+    ) -> std::result::Result<Option<ModelRefV2>, String> {
+        Ok(Some(ModelRefV2 {
+            contract_version: 2,
+            engine: request.backend_key.unwrap_or_else(|| "pytorch".to_string()),
+            model_id: request
+                .model_id
+                .unwrap_or_else(|| request.model_path.clone()),
+            model_path: request.model_path,
+            task_type_primary: request
+                .task_type_primary
+                .unwrap_or_else(|| "text-generation".to_string()),
+            dependency_bindings: Vec::new(),
+            dependency_requirements_id: Some("requirements.pytorch.hf".to_string()),
+        }))
+    }
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+fn model_dependency_requirements_for_request(
+    request: &ModelDependencyRequest,
+) -> ModelDependencyRequirements {
+    ModelDependencyRequirements {
+        model_id: request
+            .model_id
+            .clone()
+            .unwrap_or_else(|| request.model_path.clone()),
+        platform_key: "linux-x86_64".to_string(),
+        backend_key: request.backend_key.clone(),
+        dependency_contract_version: 1,
+        validation_state: DependencyValidationState::Resolved,
+        validation_errors: Vec::new(),
+        bindings: Vec::new(),
+        selected_binding_ids: request.selected_binding_ids.clone(),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_dependency_preflight_maps_hf_transformers_source_to_pytorch_request() {
+    let captured_requests = Arc::new(Mutex::new(Vec::new()));
+    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(CapturingDependencyResolver {
+        captured_requests: captured_requests.clone(),
+    });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
+
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "runtime_hint".to_string(),
+        serde_json::json!("transformers_pytorch"),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("text-generation"),
+    );
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_with_artifact_kind(
+            "pumas://models/tiny-hf",
+            "/models/tiny-hf",
+            "hf_compatible_directory",
+        ),
+    );
+
+    let resolved = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
+        .await
+        .expect("HF-compatible Transformers/PyTorch preflight should resolve")
+        .expect("resolver should return a model_ref");
+
+    assert_eq!(resolved.engine, "pytorch");
+    assert_eq!(resolved.model_id, "pumas://models/tiny-hf");
+    assert_eq!(resolved.model_path, "/models/tiny-hf");
+    assert_eq!(resolved.task_type_primary, "text-generation");
+
+    let requests = captured_requests
+        .lock()
+        .expect("captured dependency requests lock");
+    assert_eq!(requests.len(), 1);
+    let request = &requests[0];
+    assert_eq!(request.node_type, "llm-inference");
+    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
+    assert_eq!(request.model_id.as_deref(), Some("pumas://models/tiny-hf"));
+    assert_eq!(request.model_path, "/models/tiny-hf");
+    assert_eq!(
+        request.task_type_primary.as_deref(),
+        Some("text-generation")
+    );
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[test]
 fn test_canonical_backend_key_normalizes_common_aliases() {
     assert_eq!(
@@ -1418,10 +1567,19 @@ fn test_parse_reranker_documents_input_accepts_json_string_alias() {
 
 #[cfg(feature = "inference-nodes")]
 fn resolved_model_source_value(model_id: &str, entry_path: &str) -> serde_json::Value {
+    resolved_model_source_with_artifact_kind(model_id, entry_path, "gguf")
+}
+
+#[cfg(feature = "inference-nodes")]
+fn resolved_model_source_with_artifact_kind(
+    model_id: &str,
+    entry_path: &str,
+    artifact_kind: &str,
+) -> serde_json::Value {
     serde_json::json!({
         "source_contract_version": 1,
         "source_kind": "pumas_resolved",
-        "artifact_kind": "gguf",
+        "artifact_kind": artifact_kind,
         "entry_path": entry_path,
         "storage_kind": "library_owned",
         "validation_state": "valid",
