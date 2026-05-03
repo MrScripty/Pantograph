@@ -137,10 +137,11 @@ pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
 pub use types::{
     ChatMessage, ChatRequest, ContentPart, Delta, EncodedImage, ImageGenerationRequest,
-    ImageGenerationResult, ImageUrlData, InferenceRequestLifecycleEvent,
-    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink, MaskedPrompt,
-    PromptSegment, RerankRequest, RerankResponse, RerankResult, RuntimeLifecycleSnapshot,
-    ServerModeInfo, StreamChoice, StreamChunk, StreamEvent,
+    ImageGenerationResult, ImageUrlData, InferenceEmbeddingResult, InferenceExecutionInput,
+    InferenceExecutionRequest, InferenceExecutionResult, InferenceRequestLifecycleEvent,
+    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink, InferenceUsage,
+    MaskedPrompt, PromptSegment, RerankRequest, RerankResponse, RerankResult,
+    RuntimeLifecycleSnapshot, ServerModeInfo, StreamChoice, StreamChunk, StreamEvent,
 };
 
 #[cfg(feature = "std-process")]

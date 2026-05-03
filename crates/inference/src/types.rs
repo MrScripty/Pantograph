@@ -3,17 +3,20 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::model_contracts::InferenceLifecyclePhase;
+use crate::model_contracts::{
+    GenerationOptions, InferenceLifecyclePhase, InferenceTaskId, OptionCompatibilityDiagnostic,
+    PumasModelRef,
+};
 
 /// Chat message with multimodal content support
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ChatMessage {
     pub role: String,
     pub content: Vec<ContentPart>,
 }
 
 /// Content part - text or image
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum ContentPart {
     #[serde(rename = "text")]
@@ -23,13 +26,13 @@ pub enum ContentPart {
 }
 
 /// Image URL data
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ImageUrlData {
     pub url: String,
 }
 
 /// Chat completion request (OpenAI-compatible)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChatRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
@@ -38,6 +41,107 @@ pub struct ChatRequest {
     pub max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
+}
+
+/// Canonical task execution request consumed by future typed backend paths.
+///
+/// This DTO is independent of OpenAI-compatible transport JSON. Backend
+/// adapters may still translate it to OpenAI, Transformers, llama.cpp, vLLM, or
+/// other native request shapes internally.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceExecutionRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub task_id: InferenceTaskId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_ref: Option<PumasModelRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_hint: Option<String>,
+    pub input: InferenceExecutionInput,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation_options: Option<GenerationOptions>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub extra_options: Value,
+}
+
+/// Canonical task input payloads, separated from backend transport formats.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "input_type", rename_all = "snake_case")]
+pub enum InferenceExecutionInput {
+    TextGeneration {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prompt: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        system_prompt: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        messages: Vec<ChatMessage>,
+        #[serde(default)]
+        stream: bool,
+    },
+    Embedding {
+        texts: Vec<String>,
+    },
+    Rerank {
+        query: String,
+        documents: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_n: Option<usize>,
+        #[serde(default)]
+        return_documents: bool,
+    },
+    ImageGeneration {
+        request: ImageGenerationRequest,
+    },
+}
+
+/// Canonical task execution result emitted by future typed backend paths.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "result_type", rename_all = "snake_case")]
+pub enum InferenceExecutionResult {
+    TextGeneration {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<InferenceUsage>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache_handle_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    },
+    Embedding {
+        embeddings: Vec<InferenceEmbeddingResult>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<InferenceUsage>,
+    },
+    Rerank {
+        response: RerankResponse,
+    },
+    ImageGeneration {
+        result: ImageGenerationResult,
+    },
+}
+
+/// Token or item usage attached to a typed execution result when available.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceUsage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_tokens: Option<u32>,
+}
+
+/// Typed embedding item for canonical execution results.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceEmbeddingResult {
+    pub vector: Vec<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Option<usize>,
 }
 
 /// Base64-encoded image payload used across image-generation requests/results.
@@ -624,6 +728,80 @@ mod tests {
             decoded.metadata["scheduler"],
             serde_json::json!("flow_match_euler")
         );
+    }
+
+    #[test]
+    fn typed_execution_request_serde_uses_task_and_input_contracts() {
+        let request = InferenceExecutionRequest {
+            request_id: Some("req-typed-1".to_string()),
+            task_id: InferenceTaskId::TextGeneration,
+            model_ref: Some(PumasModelRef {
+                model_id: "pumas://models/tiny".to_string(),
+                revision: Some("rev-1".to_string()),
+                selected_artifact_id: Some("main".to_string()),
+                selected_artifact_path: None,
+                migration_diagnostics: Vec::new(),
+            }),
+            runtime_hint: Some("pytorch".to_string()),
+            input: InferenceExecutionInput::TextGeneration {
+                prompt: Some("Hello".to_string()),
+                system_prompt: Some("Be brief".to_string()),
+                messages: Vec::new(),
+                stream: true,
+            },
+            generation_options: Some(GenerationOptions {
+                length: crate::model_contracts::LengthGenerationOptions {
+                    max_new_tokens: Some(64),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
+            extra_options: Value::Null,
+        };
+
+        let encoded = serde_json::to_value(&request).unwrap();
+        let decoded: InferenceExecutionRequest = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["task_id"], serde_json::json!("text_generation"));
+        assert_eq!(
+            encoded["input"]["input_type"],
+            serde_json::json!("text_generation")
+        );
+        assert_eq!(
+            encoded["generation_options"]["length"]["max_new_tokens"],
+            serde_json::json!(64)
+        );
+        assert_eq!(decoded, request);
+    }
+
+    #[test]
+    fn typed_execution_result_serde_keeps_diagnostics_and_usage() {
+        let result = InferenceExecutionResult::TextGeneration {
+            text: "Done".to_string(),
+            usage: Some(InferenceUsage {
+                prompt_tokens: Some(4),
+                completion_tokens: Some(2),
+                total_tokens: Some(6),
+            }),
+            cache_handle_id: Some("kv-1".to_string()),
+            option_diagnostics: vec![OptionCompatibilityDiagnostic {
+                option_path: "sampling.temperature".to_string(),
+                state: crate::model_contracts::OptionSupportState::Honored,
+                backend_key: Some("pytorch".to_string()),
+                message: Some("mapped to Transformers temperature".to_string()),
+            }],
+        };
+
+        let encoded = serde_json::to_value(&result).unwrap();
+        let decoded: InferenceExecutionResult = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["result_type"], serde_json::json!("text_generation"));
+        assert_eq!(encoded["usage"]["total_tokens"], serde_json::json!(6));
+        assert_eq!(
+            encoded["option_diagnostics"][0]["state"],
+            serde_json::json!("honored")
+        );
+        assert_eq!(decoded, result);
     }
 
     #[test]

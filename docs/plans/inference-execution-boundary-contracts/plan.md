@@ -1468,16 +1468,16 @@ execution semantics that backends can map locally.
 - [ ] Keep backend-native flags hidden behind adapter mapping, including
   llama.cpp CLI/API names, Transformers/PyTorch kwargs, vLLM server/request
   options, MLX-specific names, and Candle-native execution knobs.
-- [ ] Define typed execution request/result shapes for chat/generation,
+- [x] Define typed execution request/result shapes for chat/generation,
   embeddings, rerank, and image generation while preserving current DTOs.
-- [ ] Define task-specific result schemas for text generation/chat,
+- [x] Define task-specific result schemas for text generation/chat,
   embeddings/feature extraction, rerank/scoring, and multimodal results,
   including optional usage, score, logprob, cache-handle, and diagnostic
   sections where supported.
 - [ ] Keep OpenAI-compatible JSON mapping at the backend or adapter edge.
 - [ ] Add validation at the boundary so internal code consumes parsed,
   validated values rather than raw JSON.
-- [ ] Add serialization and deserialization coverage for changed cross-language
+- [x] Add serialization and deserialization coverage for changed cross-language
   DTOs, including enum casing and optional field defaults.
 - [ ] Record backend-specific unsupported option behavior.
 - [ ] Add public Rust API documentation requirements for new fallible parsing,
@@ -1504,6 +1504,10 @@ model defaults, then workflow/node defaults, then runtime preset, then request
 overrides. Resolution diagnostics identify the source layer for each resolved
 option. `OptionSupportState` now includes conflict and model/backend support
 requirement variants for later backend compatibility reports.
+Typed execution request/result DTOs now cover text generation/chat, embeddings,
+rerank, and image generation while preserving the existing OpenAI-compatible
+and task-specific DTOs. Serde coverage proves stable task/input/result casing,
+usage fields, cache-handle ids, and option diagnostics.
 
 ### Milestone 11: Canonical Workflow Node Migration
 
@@ -1894,6 +1898,10 @@ Update during implementation:
   request-level overrides resolve in that order. The resolver emits typed source
   diagnostics and extends option support states with conflict and model/backend
   support requirement variants for later compatibility reports.
+- 2026-05-03: Added canonical typed execution request/result DTOs for text
+  generation/chat, embeddings, rerank, and image generation. The new contracts
+  preserve current DTOs, keep OpenAI-compatible JSON as an edge mapping, and
+  include result usage, cache handle ids, and option diagnostics.
 
 ## Commit Cadence Notes
 
