@@ -453,10 +453,36 @@ export interface WorkflowBackendFeatureCapabilityFacts {
   kv_cache: WorkflowBackendFeatureSupport;
 }
 
+export type WorkflowModelArtifactKind =
+  | 'gguf'
+  | 'hf_compatible_directory'
+  | 'safetensors'
+  | 'diffusers_bundle'
+  | 'onnx'
+  | 'adapter'
+  | 'shard'
+  | 'unknown';
+
+export type WorkflowBackendHintLabel =
+  | 'transformers'
+  | 'llama.cpp'
+  | 'vllm'
+  | 'mlx'
+  | 'candle'
+  | 'diffusers'
+  | 'onnx-runtime';
+
+export interface WorkflowBackendModelSourceCapabilityFacts {
+  artifact_kinds: WorkflowModelArtifactKind[];
+  backend_hints: WorkflowBackendHintLabel[];
+  custom_code: WorkflowBackendFeatureSupport;
+}
+
 export interface WorkflowBackendCapabilityFacts {
   tasks: WorkflowBackendTaskCapability[];
   preprocessing: WorkflowBackendComponentCapability;
   postprocessing: WorkflowBackendComponentCapability;
+  model_sources: WorkflowBackendModelSourceCapabilityFacts;
   features: WorkflowBackendFeatureCapabilityFacts;
 }
 

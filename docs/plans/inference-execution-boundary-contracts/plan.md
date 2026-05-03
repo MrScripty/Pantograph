@@ -1245,6 +1245,9 @@ to gate behavior without backend-name conditionals.
   - [x] The inference-local compatibility API consumes canonical task registry
     entries and resolved package facts; broader workflow/runtime consumers
     still need migration.
+  - [x] Workflow runtime capability projection now exposes backend model-source
+    facts so downstream consumers can inspect artifact kinds, backend hints, and
+    custom-code support without backend-name conditionals.
 - [x] Report preprocessing and postprocessing capability separately from model
   execution capability where component files or backend processors are missing.
 - [x] Keep existing fields compatible until consumers migrate.
@@ -1285,7 +1288,11 @@ live embedded host technical-fit path to fetch Pumas package facts for required
 models when the Pumas API extension is available, decode them through the shared
 JSON contract into inference package facts, and use the report-aware candidate
 constructor with the gateway's available backend facts. Workflow-service preflight
-can now consume the improved host decision through its existing path.
+can now consume the improved host decision through its existing path. The
+seventh slice projected backend model-source capability facts into workflow-owned
+runtime capability DTOs and TypeScript contracts so graph/preflight consumers
+can inspect artifact-kind, backend-hint, and custom-code support without
+depending on inference crate internals.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 

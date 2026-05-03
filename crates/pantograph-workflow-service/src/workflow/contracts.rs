@@ -195,6 +195,8 @@ pub struct WorkflowBackendCapabilityFacts {
     #[serde(default)]
     pub postprocessing: WorkflowBackendComponentCapability,
     #[serde(default)]
+    pub model_sources: WorkflowBackendModelSourceCapabilityFacts,
+    #[serde(default)]
     pub features: WorkflowBackendFeatureCapabilityFacts,
 }
 
@@ -227,6 +229,43 @@ pub enum WorkflowBackendFeatureSupport {
     Unsupported,
     #[default]
     Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowBackendModelSourceCapabilityFacts {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_kinds: Vec<WorkflowModelArtifactKind>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub backend_hints: Vec<WorkflowBackendHintLabel>,
+    #[serde(default)]
+    pub custom_code: WorkflowBackendFeatureSupport,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowModelArtifactKind {
+    Gguf,
+    HfCompatibleDirectory,
+    Safetensors,
+    DiffusersBundle,
+    Onnx,
+    Adapter,
+    Shard,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkflowBackendHintLabel {
+    Transformers,
+    #[serde(rename = "llama.cpp")]
+    LlamaCpp,
+    Vllm,
+    Mlx,
+    Candle,
+    Diffusers,
+    OnnxRuntime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

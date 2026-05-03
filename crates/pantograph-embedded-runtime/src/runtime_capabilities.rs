@@ -11,9 +11,10 @@ use pantograph_runtime_identity::{
 };
 use pantograph_workflow_service::{
     WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
-    WorkflowBackendFeatureCapabilityFacts, WorkflowBackendFeatureSupport,
-    WorkflowBackendTaskCapability, WorkflowCapabilitiesResponse, WorkflowInferenceModality,
-    WorkflowInferenceTaskId, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
+    WorkflowBackendFeatureCapabilityFacts, WorkflowBackendFeatureSupport, WorkflowBackendHintLabel,
+    WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendTaskCapability,
+    WorkflowCapabilitiesResponse, WorkflowInferenceModality, WorkflowInferenceTaskId,
+    WorkflowModelArtifactKind, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
     WorkflowRuntimeReadinessState, WorkflowRuntimeSourceKind, WorkflowSupportTier,
     WorkflowTaskModalitySignature,
 };
@@ -367,12 +368,58 @@ fn project_backend_capability_facts(
             .collect(),
         preprocessing: workflow_component_capability(facts.preprocessing),
         postprocessing: workflow_component_capability(facts.postprocessing),
+        model_sources: WorkflowBackendModelSourceCapabilityFacts {
+            artifact_kinds: facts
+                .model_sources
+                .artifact_kinds
+                .iter()
+                .map(workflow_model_artifact_kind)
+                .collect(),
+            backend_hints: facts
+                .model_sources
+                .backend_hints
+                .iter()
+                .map(workflow_backend_hint_label)
+                .collect(),
+            custom_code: workflow_feature_support(facts.model_sources.custom_code),
+        },
         features: WorkflowBackendFeatureCapabilityFacts {
             streaming: workflow_feature_support(facts.features.streaming),
             device_selection: workflow_feature_support(facts.features.device_selection),
             external_connection: workflow_feature_support(facts.features.external_connection),
             kv_cache: workflow_feature_support(facts.features.kv_cache),
         },
+    }
+}
+
+fn workflow_model_artifact_kind(
+    artifact_kind: &inference::ModelArtifactKind,
+) -> WorkflowModelArtifactKind {
+    match artifact_kind {
+        inference::ModelArtifactKind::Gguf => WorkflowModelArtifactKind::Gguf,
+        inference::ModelArtifactKind::HfCompatibleDirectory => {
+            WorkflowModelArtifactKind::HfCompatibleDirectory
+        }
+        inference::ModelArtifactKind::Safetensors => WorkflowModelArtifactKind::Safetensors,
+        inference::ModelArtifactKind::DiffusersBundle => WorkflowModelArtifactKind::DiffusersBundle,
+        inference::ModelArtifactKind::Onnx => WorkflowModelArtifactKind::Onnx,
+        inference::ModelArtifactKind::Adapter => WorkflowModelArtifactKind::Adapter,
+        inference::ModelArtifactKind::Shard => WorkflowModelArtifactKind::Shard,
+        inference::ModelArtifactKind::Unknown => WorkflowModelArtifactKind::Unknown,
+    }
+}
+
+fn workflow_backend_hint_label(
+    backend_hint: &inference::BackendHintLabel,
+) -> WorkflowBackendHintLabel {
+    match backend_hint {
+        inference::BackendHintLabel::Transformers => WorkflowBackendHintLabel::Transformers,
+        inference::BackendHintLabel::LlamaCpp => WorkflowBackendHintLabel::LlamaCpp,
+        inference::BackendHintLabel::Vllm => WorkflowBackendHintLabel::Vllm,
+        inference::BackendHintLabel::Mlx => WorkflowBackendHintLabel::Mlx,
+        inference::BackendHintLabel::Candle => WorkflowBackendHintLabel::Candle,
+        inference::BackendHintLabel::Diffusers => WorkflowBackendHintLabel::Diffusers,
+        inference::BackendHintLabel::OnnxRuntime => WorkflowBackendHintLabel::OnnxRuntime,
     }
 }
 
@@ -830,7 +877,13 @@ mod tests {
                         )],
                         preprocessing: inference::BackendComponentCapability::NotRequired,
                         postprocessing: inference::BackendComponentCapability::NotRequired,
-                        model_sources: inference::BackendModelSourceCapabilityFacts::default(),
+                        model_sources: inference::BackendModelSourceCapabilityFacts {
+                            artifact_kinds: vec![
+                                inference::ModelArtifactKind::HfCompatibleDirectory,
+                            ],
+                            backend_hints: vec![inference::BackendHintLabel::Candle],
+                            custom_code: inference::BackendFeatureSupport::Unsupported,
+                        },
                         features: inference::BackendFeatureCapabilityFacts {
                             streaming: inference::BackendFeatureSupport::Unsupported,
                             device_selection: inference::BackendFeatureSupport::Unsupported,
@@ -876,6 +929,10 @@ mod tests {
             facts.features.kv_cache,
             WorkflowBackendFeatureSupport::Unsupported
         );
+        assert_eq!(
+            facts.model_sources.artifact_kinds,
+            vec![WorkflowModelArtifactKind::HfCompatibleDirectory]
+        );
     }
 
     #[test]
@@ -916,7 +973,11 @@ mod tests {
                             inference::BackendComponentCapability::RequiresPackageComponent,
                         postprocessing:
                             inference::BackendComponentCapability::RequiresPackageComponent,
-                        model_sources: inference::BackendModelSourceCapabilityFacts::default(),
+                        model_sources: inference::BackendModelSourceCapabilityFacts {
+                            artifact_kinds: vec![inference::ModelArtifactKind::Gguf],
+                            backend_hints: vec![inference::BackendHintLabel::LlamaCpp],
+                            custom_code: inference::BackendFeatureSupport::Unsupported,
+                        },
                         features: inference::BackendFeatureCapabilityFacts {
                             streaming: inference::BackendFeatureSupport::Supported,
                             device_selection: inference::BackendFeatureSupport::Supported,
@@ -961,6 +1022,10 @@ mod tests {
         assert_eq!(
             facts.features.kv_cache,
             WorkflowBackendFeatureSupport::Supported
+        );
+        assert_eq!(
+            facts.model_sources.backend_hints,
+            vec![WorkflowBackendHintLabel::LlamaCpp]
         );
         assert_eq!(
             capability.install_state,
