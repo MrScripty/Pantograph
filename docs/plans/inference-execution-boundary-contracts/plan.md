@@ -1753,6 +1753,13 @@ builds `InferenceExecutionRequest` from prompt, context, task kind, runtime
 hint, Pumas model reference, and grouped generation options, then executes
 through `InferenceGateway::execute_typed`; the streaming SSE path remains
 unchanged until token-stream contracts migrate.
+Node-engine canonical `llm-inference` embedding execution now also builds an
+`InferenceExecutionRequest` from text, runtime hint, model alias, and Pumas
+model reference, then executes through `InferenceGateway::execute_typed` while
+preserving the graph-visible embedding output shape.
+The old llama.cpp-only embedding helper is now retained only as a compatibility
+surface and should be removed or folded into typed gateway execution once no
+direct tests or stale callers depend on it.
 The `unload-model` node no longer contains a live Ollama HTTP unload path:
 Ollama `model_ref` inputs now fail locally with a canonical/Pumas migration
 message, and supported-engine diagnostics no longer list Ollama.
@@ -1853,8 +1860,9 @@ drift back into inference.
 - Cross-layer acceptance check for any changed host-facing DTO projection.
 
 **Status:** In progress. Node-engine now consumes the typed inference boundary
-for non-streaming canonical `llm-inference` text/chat execution, preserving
-streaming on the existing event path until token-stream contracts are migrated.
+for non-streaming canonical `llm-inference` text/chat and embedding execution,
+preserving streaming on the existing event path until token-stream contracts are
+migrated.
 
 ### Milestone 15: Diagnostics Ledger Integration
 

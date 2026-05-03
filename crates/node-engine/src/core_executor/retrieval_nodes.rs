@@ -220,6 +220,7 @@ pub(crate) async fn execute_reranker(
     Ok(outputs)
 }
 
+#[allow(dead_code)]
 pub(crate) async fn execute_embedding(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
@@ -313,6 +314,7 @@ pub(crate) async fn execute_embedding(
     Ok(outputs)
 }
 
+#[allow(dead_code)]
 pub(crate) fn is_llamacpp_backend_name(backend_name: &str) -> bool {
     canonical_backend_key(Some(backend_name)).as_deref() == Some("llamacpp")
 }

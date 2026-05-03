@@ -172,8 +172,72 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
 }
 
 #[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_embedding_execution_request_preserves_canonical_inputs() {
+    let mut inputs = HashMap::new();
+    inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));
+    inputs.insert("text".to_string(), serde_json::json!("hello"));
+    inputs.insert("model".to_string(), serde_json::json!("embed-model"));
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/embed",
+            "revision": "rev-1"
+        }),
+    );
+
+    let request = build_embedding_execution_request(&inputs)
+        .expect("canonical embedding request should build");
+
+    assert_eq!(request.task_id, InferenceTaskId::Embedding);
+    assert_eq!(request.model_name.as_deref(), Some("embed-model"));
+    assert_eq!(request.runtime_hint.as_deref(), Some("llamacpp"));
+    assert_eq!(
+        request.model_ref,
+        Some(PumasModelRef {
+            model_id: "pumas://models/embed".to_string(),
+            revision: Some("rev-1".to_string()),
+            selected_artifact_id: None,
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        })
+    );
+    match request.input {
+        InferenceExecutionInput::Embedding { texts } => {
+            assert_eq!(texts, vec!["hello".to_string()]);
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_embedding_execution_request_rejects_empty_text() {
+    let mut inputs = HashMap::new();
+    inputs.insert("text".to_string(), serde_json::json!("  "));
+
+    let error = build_embedding_execution_request(&inputs)
+        .expect_err("empty embedding text should fail before backend execution");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Embedding input text cannot be empty"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
 #[tokio::test]
-async fn test_canonical_llm_embedding_dispatches_to_embedding_handler() {
+async fn test_canonical_llm_embedding_uses_typed_gateway_boundary() {
+    let embedding_requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedEmbeddingBackend {
+            embedding_requests: embedding_requests.clone(),
+        }),
+        "mock",
+    ));
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
@@ -181,20 +245,24 @@ async fn test_canonical_llm_embedding_dispatches_to_embedding_handler() {
     );
     inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));
     inputs.insert("text".to_string(), serde_json::json!("hello"));
+    inputs.insert("model".to_string(), serde_json::json!("embed-model"));
 
-    let executor = CoreTaskExecutor::new();
+    let executor = CoreTaskExecutor::new().with_gateway(gateway);
     let context = graph_flow::Context::new();
     let extensions = ExecutorExtensions::new();
-    let err = executor
+    let outputs = executor
         .execute_task("llm-inference-1", inputs, &context, &extensions)
         .await
-        .expect_err("canonical embedding inference should route to embedding handler");
-    match err {
-        NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("InferenceGateway not configured"));
-        }
-        other => panic!("unexpected error variant: {other:?}"),
-    }
+        .expect("canonical embedding inference should use typed gateway");
+
+    assert_eq!(
+        outputs.get("embedding"),
+        Some(&serde_json::json!([0.25, 0.5, 0.75]))
+    );
+    let captured = embedding_requests.lock().expect("embedding requests lock");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0].0, vec!["hello".to_string()]);
+    assert_eq!(captured[0].1, "embed-model");
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -800,6 +868,93 @@ impl InferenceBackend for MockTypedTextBackend {
         Err(BackendError::Inference(
             "embeddings not supported by mock".to_string(),
         ))
+    }
+
+    async fn rerank(
+        &self,
+        _request: RerankRequest,
+    ) -> std::result::Result<RerankResponse, BackendError> {
+        Err(BackendError::Inference(
+            "rerank not supported by mock".to_string(),
+        ))
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+struct MockTypedEmbeddingBackend {
+    embedding_requests: Arc<Mutex<Vec<(Vec<String>, String)>>>,
+}
+
+#[cfg(feature = "inference-nodes")]
+#[async_trait]
+impl InferenceBackend for MockTypedEmbeddingBackend {
+    fn name(&self) -> &'static str {
+        "mock-embedding"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock typed embedding backend"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            embeddings: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> std::result::Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> std::result::Result<
+        Pin<
+            Box<
+                dyn futures_util::Stream<Item = std::result::Result<ChatChunk, BackendError>>
+                    + Send,
+            >,
+        >,
+        BackendError,
+    > {
+        Err(BackendError::Inference(
+            "chat not supported by mock".to_string(),
+        ))
+    }
+
+    async fn embeddings(
+        &self,
+        texts: Vec<String>,
+        model: &str,
+    ) -> std::result::Result<Vec<EmbeddingResult>, BackendError> {
+        self.embedding_requests
+            .lock()
+            .expect("embedding requests lock")
+            .push((texts, model.to_string()));
+        Ok(vec![EmbeddingResult {
+            vector: vec![0.25, 0.5, 0.75],
+            token_count: 3,
+        }])
     }
 
     async fn rerank(

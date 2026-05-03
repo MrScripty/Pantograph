@@ -175,10 +175,11 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Additive node inputs may be accepted for compatibility, but callers should
   prefer the canonical `pantograph-node-contracts` projections when
   constructing new graph-authoring workflows.
-- New non-streaming canonical `llm-inference` text/chat execution should pass
-  through `inference::InferenceExecutionRequest` rather than constructing
-  backend-native request JSON in node-engine. Streaming remains an event-shaping
-  path until token-stream contracts are migrated.
+- New non-streaming canonical `llm-inference` text/chat and embedding
+  execution should pass through `inference::InferenceExecutionRequest` rather
+  than constructing backend-native request JSON or calling backend-specific
+  gateway helpers in node-engine. Streaming remains an event-shaping path until
+  token-stream contracts are migrated.
 
 ## Structured Producer Contract
 - Built-in node descriptors, canonical contract projection, and execution

@@ -293,6 +293,93 @@ fn parse_pumas_model_ref(
 }
 
 #[cfg(feature = "inference-nodes")]
+pub(crate) async fn execute_embedding_inference(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let gw = require_gateway(gateway)?;
+    let request = build_embedding_execution_request(inputs)?;
+    let model_name = request.model_name.clone();
+    let start = std::time::Instant::now();
+    let result = gw.execute_typed(request).await.map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!("Typed embedding inference failed: {error}"))
+    })?;
+    let embeddings = match result {
+        inference::InferenceExecutionResult::Embedding { embeddings, .. } => embeddings,
+        other => {
+            return Err(NodeEngineError::ExecutionFailed(format!(
+                "Typed embedding inference returned unexpected result: {other:?}"
+            )));
+        }
+    };
+    let embedding = embeddings.first().ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "Typed embedding inference returned no vectors for input text".to_string(),
+        )
+    })?;
+    if embedding.vector.is_empty() {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Typed embedding inference returned an empty vector".to_string(),
+        ));
+    }
+    if embedding.vector.iter().any(|value| !value.is_finite()) {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Typed embedding inference returned invalid vector values".to_string(),
+        ));
+    }
+
+    let mut outputs = HashMap::new();
+    outputs.insert("embedding".to_string(), serde_json::json!(embedding.vector));
+    let emit_metadata =
+        super::read_optional_input_bool_aliases(inputs, &["emit_metadata", "emitMetadata"])
+            .unwrap_or(false);
+    if emit_metadata {
+        outputs.insert(
+            "metadata".to_string(),
+            serde_json::json!({
+                "model": model_name.unwrap_or_else(|| "default".to_string()),
+                "vector_length": embedding.vector.len(),
+                "duration_ms": start.elapsed().as_millis(),
+            }),
+        );
+    }
+
+    Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) fn build_embedding_execution_request(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<inference::InferenceExecutionRequest> {
+    let text = inputs
+        .get("text")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing text input".to_string()))?;
+    if text.trim().is_empty() {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Embedding input text cannot be empty".to_string(),
+        ));
+    }
+
+    Ok(inference::InferenceExecutionRequest {
+        request_id: None,
+        task_id: inference::InferenceTaskId::Embedding,
+        model_ref: parse_pumas_model_ref(inputs),
+        model_name: read_optional_input_string_aliases(
+            inputs,
+            &["model", "model_name", "modelName", "model_id", "modelId"],
+        )
+        .filter(|model| !model.trim().is_empty()),
+        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
+        input: inference::InferenceExecutionInput::Embedding {
+            texts: vec![text.to_string()],
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
 pub(crate) async fn execute_vision_analysis(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,

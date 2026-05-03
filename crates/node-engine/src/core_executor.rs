@@ -251,7 +251,7 @@ impl TaskExecutor for CoreTaskExecutor {
                 let preferred_backend = preferred_backend_key("llm-inference", &canonical_inputs);
                 match canonical_inference_task_id(&canonical_inputs).as_ref() {
                     Some(InferenceTaskId::Embedding) => {
-                        execute_embedding(self.gateway.as_ref(), &canonical_inputs).await
+                        execute_embedding_inference(self.gateway.as_ref(), &canonical_inputs).await
                     }
                     Some(InferenceTaskId::Rerank) => {
                         execute_reranker(self.gateway.as_ref(), &canonical_inputs).await
