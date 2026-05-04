@@ -186,6 +186,10 @@ use node_engine::core_executor::CoreNodeExecutor;
   backend/model compatibility summaries. Malformed package-facts payloads are
   execution input errors, not silently omitted optional facts. Node-engine must
   not derive those summaries locally.
+- Workflow dependency input resolution carries package-facts context from
+  `puma-lib` model-reference edges into canonical inference inputs, so existing
+  Pumas model-ref connections can benefit from package-facts diagnostics without
+  requiring a separate saved-workflow edge.
 - Hosts that need durable typed inference diagnostics may provide
   `extension_keys::INFERENCE_LIFECYCLE_SINK`; node-engine only forwards bounded
   lifecycle facts and does not import or write the diagnostics ledger.

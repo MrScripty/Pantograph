@@ -2479,6 +2479,10 @@ Update during implementation:
   contracts now expose `resolved_model_package_facts` as an optional JSON input
   with model-reference payload semantics, completing the graph-visible edge
   between `puma-lib` package-fact output and node-engine typed request parsing.
+- 2026-05-03: Node-engine dependency input resolution now carries
+  `resolved_model_package_facts` through existing `puma-lib` model-reference
+  edges as bounded model context, so saved workflows that already connect
+  `pumas_model_ref` can reach package-facts validation without a new edge.
 - 2026-05-03: Added typed PyTorch worker failure normalization into
   Pantograph `BackendError` categories, preserving request ids and canonical
   worker error codes without exposing raw Python exception payloads.
