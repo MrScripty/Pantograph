@@ -1639,6 +1639,91 @@ mod tests {
     }
 
     #[test]
+    fn typed_image_generation_result_serde_keeps_option_diagnostics() {
+        let result = InferenceExecutionResult::ImageGeneration {
+            result: ImageGenerationResult {
+                images: vec![EncodedImage {
+                    data_base64: "aW1hZ2U=".to_string(),
+                    mime_type: "image/png".to_string(),
+                    width: Some(512),
+                    height: Some(512),
+                }],
+                seed_used: Some(42),
+                metadata: serde_json::json!({
+                    "backend": "diffusers"
+                }),
+            },
+            option_diagnostics: vec![OptionCompatibilityDiagnostic {
+                option_path: "image.num_inference_steps".to_string(),
+                state: crate::model_contracts::OptionSupportState::Honored,
+                backend_key: Some("diffusers".to_string()),
+                message: Some("forwarded to image generation backend".to_string()),
+            }],
+        };
+
+        let encoded = serde_json::to_value(&result).unwrap();
+        let decoded: InferenceExecutionResult = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(
+            encoded["result_type"],
+            serde_json::json!("image_generation")
+        );
+        assert_eq!(
+            encoded["option_diagnostics"][0]["option_path"],
+            serde_json::json!("image.num_inference_steps")
+        );
+        assert_eq!(
+            encoded["option_diagnostics"][0]["state"],
+            serde_json::json!("honored")
+        );
+        assert_eq!(
+            decoded.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::ImageGeneration
+        );
+        assert_eq!(decoded, result);
+    }
+
+    #[test]
+    fn typed_audio_result_serde_keeps_option_diagnostics() {
+        let result = InferenceExecutionResult::AudioTranscription {
+            result: AudioTranscriptionResult {
+                text: "transcribed text".to_string(),
+                language: Some("en".to_string()),
+                duration_seconds: Some(1.0),
+                segments: Vec::new(),
+                metadata: Value::Null,
+            },
+            option_diagnostics: vec![OptionCompatibilityDiagnostic {
+                option_path: "audio_transcription.language".to_string(),
+                state: crate::model_contracts::OptionSupportState::Honored,
+                backend_key: Some("mock".to_string()),
+                message: Some("language hint forwarded".to_string()),
+            }],
+        };
+
+        let encoded = serde_json::to_value(&result).unwrap();
+        let decoded: InferenceExecutionResult = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(
+            encoded["result_type"],
+            serde_json::json!("audio_transcription")
+        );
+        assert_eq!(
+            encoded["option_diagnostics"][0]["option_path"],
+            serde_json::json!("audio_transcription.language")
+        );
+        assert_eq!(
+            encoded["option_diagnostics"][0]["backend_key"],
+            serde_json::json!("mock")
+        );
+        assert_eq!(
+            decoded.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::AudioTranscription
+        );
+        assert_eq!(decoded, result);
+    }
+
+    #[test]
     fn typed_audio_result_option_diagnostics_accessor_matches_contract() {
         let result = InferenceExecutionResult::AudioTranscription {
             result: AudioTranscriptionResult {

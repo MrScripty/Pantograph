@@ -2376,7 +2376,9 @@ inference write ledger events directly.
   contract coverage freezing the embedding/rerank result fields for generated
   bindings and host consumers. Result diagnostic extraction now goes through
   the canonical typed result accessor and covers audio transcription result
-  diagnostics as well as text, embedding, rerank, and image. Video and KV-cache
+  diagnostics as well as text, embedding, rerank, and image. Serde contract
+  coverage now freezes image-generation and audio-transcription result
+  diagnostics alongside embedding/rerank diagnostics. Video and KV-cache
   task-specific options remain open.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
