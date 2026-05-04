@@ -1084,11 +1084,12 @@ be explained without asking Pumas to own candidate derivation or scheduler
 selection. Continued model-list review found one remaining consumer-boundary
 gap: `workflow-nodes` still uses Pumas record metadata as a fallback for
 fields that are not yet present in the package-summary DTO, including
-`custom_code_sources`, `review_reasons`, dependency-binding display data, and
-inference-settings fallback inputs. Runtime-facing backend hints and
-`requires_custom_code` now prefer Pumas summary DTO facts when available, but
-the remaining fallback fields need either summary/detail DTO coverage or
-bounded omission before the "no metadata internals" verification item can close.
+dependency-binding display data and inference-settings fallback inputs.
+Runtime-facing backend hints, `requires_custom_code`, bounded review reasons
+from summary diagnostic codes, and bounded custom-code source omission now
+prefer Pumas summary DTO facts when available, but the remaining fallback
+fields need either summary/detail DTO coverage or bounded omission before the
+"no metadata internals" verification item can close.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
@@ -3475,6 +3476,11 @@ Update during implementation:
   facts over raw record metadata whenever summaries are available. Remaining
   metadata fallbacks are recorded under Milestone 2 as consumer-boundary gaps
   until Pumas exposes equivalent summary/detail facts or Pantograph omits them.
+- 2026-05-04: Tightened the same model-list option boundary for review/custom
+  code display facts: summary diagnostic codes now populate bounded
+  `review_reasons`, and raw record `custom_code_sources` are omitted whenever a
+  package-summary DTO is available because Pumas does not expose source-level
+  details through that summary contract yet.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

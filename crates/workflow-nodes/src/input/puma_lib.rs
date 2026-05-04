@@ -206,6 +206,39 @@ mod options_provider {
             .map(|summary| serde_json::Value::Bool(summary.requires_custom_code))
     }
 
+    pub(crate) fn custom_code_sources_for_option_metadata(
+        summary_result: Option<&ModelPackageFactsSummaryResult>,
+        record: &pumas_library::ModelRecord,
+    ) -> serde_json::Value {
+        if package_summary_result(summary_result).is_some() {
+            return serde_json::Value::Array(Vec::new());
+        }
+        record
+            .metadata
+            .get("custom_code_sources")
+            .cloned()
+            .unwrap_or(serde_json::Value::Array(Vec::new()))
+    }
+
+    pub(crate) fn review_reasons_for_option_metadata(
+        summary_result: Option<&ModelPackageFactsSummaryResult>,
+        record: &pumas_library::ModelRecord,
+    ) -> serde_json::Value {
+        if let Some(summary) = package_summary_result(summary_result) {
+            return serde_json::to_value(&summary.diagnostic_codes)
+                .unwrap_or(serde_json::Value::Array(Vec::new()));
+        }
+        record
+            .metadata
+            .get("review_reasons")
+            .cloned()
+            .unwrap_or_else(|| {
+                metadata_string(record, &["review_reason", "reviewReason"])
+                    .map(|reason| serde_json::json!([reason]))
+                    .unwrap_or_else(|| serde_json::Value::Array(Vec::new()))
+            })
+    }
+
     pub(crate) fn task_type_primary_from_descriptor_or_record(
         execution_descriptor: Option<&ModelExecutionDescriptor>,
         record: &pumas_library::ModelRecord,
@@ -459,20 +492,9 @@ mod options_provider {
                 let requires_custom_code = requires_custom_code_from_summary(summary_result)
                     .or_else(|| m.metadata.get("requires_custom_code").cloned())
                     .unwrap_or(serde_json::Value::Bool(false));
-                let custom_code_sources = m
-                    .metadata
-                    .get("custom_code_sources")
-                    .cloned()
-                    .unwrap_or(serde_json::Value::Array(Vec::new()));
-                let review_reasons =
-                    m.metadata
-                        .get("review_reasons")
-                        .cloned()
-                        .unwrap_or_else(|| {
-                            metadata_string(m, &["review_reason", "reviewReason"])
-                                .map(|reason| serde_json::json!([reason]))
-                                .unwrap_or_else(|| serde_json::Value::Array(Vec::new()))
-                        });
+                let custom_code_sources =
+                    custom_code_sources_for_option_metadata(summary_result, m);
+                let review_reasons = review_reasons_for_option_metadata(summary_result, m);
                 let execution_path = execution_descriptor
                     .as_ref()
                     .map(|descriptor| descriptor.entry_path.clone())
@@ -614,8 +636,9 @@ mod tests {
 #[cfg(all(test, feature = "model-library"))]
 mod model_library_tests {
     use super::options_provider::{
-        load_package_facts_summary_cache, requires_custom_code_from_summary,
-        resolve_execution_descriptor, runtime_engine_hints_from_summary,
+        custom_code_sources_for_option_metadata, load_package_facts_summary_cache,
+        requires_custom_code_from_summary, resolve_execution_descriptor,
+        review_reasons_for_option_metadata, runtime_engine_hints_from_summary,
         task_type_primary_from_descriptor_or_record, PackageFactsSummaryCache,
     };
     use pumas_library::models::{
@@ -887,6 +910,37 @@ mod model_library_tests {
         let requires_custom_code = requires_custom_code_from_summary(Some(&summary));
 
         assert_eq!(requires_custom_code, Some(serde_json::json!(false)));
+    }
+
+    #[test]
+    fn test_option_metadata_uses_package_summary_diagnostics_as_review_reasons() {
+        let mut summary = package_summary_result("llm/imported/test-model", "cached");
+        summary.summary.as_mut().unwrap().diagnostic_codes = vec![
+            "missing_tokenizer".to_string(),
+            "custom_code_required".to_string(),
+        ];
+        let record = model_record_with_metadata(serde_json::json!({
+            "review_reasons": ["stale-record-review"]
+        }));
+
+        let review_reasons = review_reasons_for_option_metadata(Some(&summary), &record);
+
+        assert_eq!(
+            review_reasons,
+            serde_json::json!(["missing_tokenizer", "custom_code_required"])
+        );
+    }
+
+    #[test]
+    fn test_option_metadata_omits_raw_custom_code_sources_when_summary_exists() {
+        let summary = package_summary_result("llm/imported/test-model", "cached");
+        let record = model_record_with_metadata(serde_json::json!({
+            "custom_code_sources": ["metadata.json:trust_remote_code"]
+        }));
+
+        let custom_code_sources = custom_code_sources_for_option_metadata(Some(&summary), &record);
+
+        assert_eq!(custom_code_sources, serde_json::json!([]));
     }
 
     #[tokio::test]
