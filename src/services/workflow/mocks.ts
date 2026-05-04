@@ -84,6 +84,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     outputs: [
       { id: 'model_path', label: 'Model Path', data_type: 'string', required: false, multiple: false },
       { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false },
+      { id: 'resolved_model_package_facts', label: 'Resolved Model Package Facts', data_type: 'json', required: false, multiple: false },
       { id: 'model_id', label: 'Model ID', data_type: 'string', required: false, multiple: false },
       { id: 'model_type', label: 'Model Type', data_type: 'string', required: false, multiple: false },
       { id: 'task_type_primary', label: 'Task Type', data_type: 'string', required: false, multiple: false },
@@ -139,6 +140,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
       { id: 'runtime_hint', label: 'Runtime Hint', data_type: 'string', required: false, multiple: false },
       { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false },
       { id: 'resolved_model_source', label: 'Resolved Model Source', data_type: 'json', required: false, multiple: false },
+      { id: 'resolved_model_package_facts', label: 'Resolved Model Package Facts', data_type: 'json', required: false, multiple: false },
       { id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false },
       { id: 'query', label: 'Query', data_type: 'string', required: false, multiple: false },
       { id: 'documents', label: 'Documents', data_type: 'json', required: false, multiple: false },

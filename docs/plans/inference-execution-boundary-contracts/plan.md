@@ -2487,6 +2487,9 @@ Update during implementation:
   `resolved_model_package_facts` as part of the canonical `llm-inference` graph
   data field set, keeping saved-workflow migration tests aligned with the
   package-facts edge contract.
+- 2026-05-03: Frontend and svelte-graph mock node definitions now mirror the
+  backend `puma-lib` package-facts output and canonical `llm-inference`
+  package-facts input so mock-backed UI tests expose the same graph contract.
 - 2026-05-03: Added typed PyTorch worker failure normalization into
   Pantograph `BackendError` categories, preserving request ids and canonical
   worker error codes without exposing raw Python exception payloads.

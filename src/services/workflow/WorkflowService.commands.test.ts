@@ -76,10 +76,12 @@ test('mock node definitions expose canonical Pumas inference ports', () => {
   assert.ok(pumaLib);
   assert.ok(llmInference);
   assert.ok(pumaLib.outputs.some((port) => port.id === 'pumas_model_ref'));
+  assert.ok(pumaLib.outputs.some((port) => port.id === 'resolved_model_package_facts'));
   assert.ok(pumaLib.outputs.some((port) => port.id === 'dependency_requirements'));
   assert.ok(llmInference.inputs.some((port) => port.id === 'task_kind'));
   assert.ok(llmInference.inputs.some((port) => port.id === 'runtime_hint'));
   assert.ok(llmInference.inputs.some((port) => port.id === 'resolved_model_source'));
+  assert.ok(llmInference.inputs.some((port) => port.id === 'resolved_model_package_facts'));
   assert.ok(llmInference.outputs.some((port) => port.id === 'diagnostics'));
 });
 
