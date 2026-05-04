@@ -114,7 +114,7 @@ workflow_nodes::setup_extensions(&mut extensions).await;
 - Inference descriptors publish graph-authoring task and port payload metadata
   for canonical request/result families. The current `llm-inference`
   projection derives task fields from `inference::model_contracts`, then
-  annotates text/chat, embedding, rerank, and contract-only audio transcription
+  annotates text/chat, embedding, rerank, and executable audio transcription
   payloads without changing frontend rendering, scheduler policy, or runtime
   backend selection.
 - Canonical `llm-inference` declares `task_kind` and `runtime_hint` as

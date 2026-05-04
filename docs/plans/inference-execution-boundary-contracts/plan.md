@@ -2955,6 +2955,10 @@ Update during implementation:
   backend-execution events carry canonical `audio_transcription` task ids,
   selected model ids, bounded extra-option diagnostics, and no raw audio
   payloads.
+- 2026-05-04: Fixed workflow-node contract drift found during continued
+  implementation: canonical `llm-inference` task metadata now mirrors the
+  inference task registry's executable `audio_transcription` contract instead
+  of retaining stale contract-only wording/assertions.
 - 2026-05-03: Follow-up issue discovered during focused embedded-runtime
   validation: `node-engine` still emits a dead-code warning for
   `enforce_dependency_preflight_with_lifecycle` when compiled without the

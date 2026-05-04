@@ -667,10 +667,11 @@ mod tests {
             task.task_id == ContractInferenceTaskId::AudioTranscription
                 && task.input_kind == ContractInferenceExecutionInputKind::AudioTranscription
                 && task.result_kind == ContractInferenceExecutionResultKind::AudioTranscription
-                && !task.execution_supported
+                && task.execution_supported
         }));
-        let registry_embedding = default_task_registry_entries()
-            .into_iter()
+        let registry_entries = default_task_registry_entries();
+        let registry_embedding = registry_entries
+            .iter()
             .find(|entry| entry.task_id == InferenceTaskId::Embedding)
             .and_then(|entry| entry.request_contract())
             .expect("embedding registry contract");
@@ -686,6 +687,24 @@ mod tests {
         assert_eq!(
             projected_embedding.streaming_support,
             contract_streaming_support(registry_embedding.streaming_support)
+        );
+        let registry_audio = registry_entries
+            .iter()
+            .find(|entry| entry.task_id == InferenceTaskId::AudioTranscription)
+            .and_then(|entry| entry.request_contract())
+            .expect("audio transcription registry contract");
+        let projected_audio = llm
+            .inference_tasks
+            .iter()
+            .find(|task| task.task_id == ContractInferenceTaskId::AudioTranscription)
+            .expect("projected audio transcription contract");
+        assert_eq!(
+            projected_audio.execution_supported,
+            registry_audio.execution_supported
+        );
+        assert_eq!(
+            projected_audio.streaming_support,
+            contract_streaming_support(registry_audio.streaming_support)
         );
 
         let prompt = llm
