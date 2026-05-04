@@ -71,6 +71,20 @@ pub enum CandleLoadDevice {
     Cuda { index: usize },
 }
 
+/// Candle resources loaded from a staged embedding load plan.
+///
+/// This is still backend-local staging: it validates concrete Candle inputs and
+/// loads weight tensors, but it does not construct an executable model module,
+/// start a runtime, or make scheduling/residency decisions.
+#[cfg(feature = "backend-candle")]
+#[derive(Debug)]
+pub struct CandleEmbeddingLoadResources {
+    pub device: candle_core::Device,
+    pub dtype: candle_core::DType,
+    pub tokenizer: tokenizers::Tokenizer,
+    pub tensors: std::collections::HashMap<String, candle_core::Tensor>,
+}
+
 impl CandleBackend {
     /// Create a new Candle backend
     pub fn new() -> Self {
@@ -290,6 +304,47 @@ impl CandleBackend {
             architecture: transformers.architectures.first().cloned(),
         })
     }
+
+    /// Load concrete Candle resources from a staged embedding load plan.
+    ///
+    /// The resource probe intentionally remains separate from backend
+    /// availability and runtime startup. It proves that the plan can be
+    /// consumed by Candle/tokenizers APIs without advertising executable model
+    /// support before a model module and execution path exist.
+    #[cfg(feature = "backend-candle")]
+    pub fn embedding_load_resources_from_plan(
+        plan: &CandleEmbeddingLoadPlan,
+    ) -> Result<CandleEmbeddingLoadResources, BackendError> {
+        let device = candle_device_from_load_plan(plan.device)?;
+        let dtype = candle_core_dtype_from_load_plan(plan.dtype);
+        let tokenizer =
+            tokenizers::Tokenizer::from_file(&plan.tokenizer_path).map_err(|error| {
+                BackendError::Config(format!(
+                    "Candle tokenizer load failed for {}: {error}",
+                    plan.tokenizer_path.display()
+                ))
+            })?;
+        let tensors =
+            candle_core::safetensors::load(&plan.safetensors_path, &device).map_err(|error| {
+                BackendError::Config(format!(
+                    "Candle safetensors load failed for {}: {error}",
+                    plan.safetensors_path.display()
+                ))
+            })?;
+        if tensors.is_empty() {
+            return Err(BackendError::Config(format!(
+                "Candle safetensors file contains no tensors: {}",
+                plan.safetensors_path.display()
+            )));
+        }
+
+        Ok(CandleEmbeddingLoadResources {
+            device,
+            dtype,
+            tokenizer,
+            tensors,
+        })
+    }
 }
 
 fn has_present_component(
@@ -416,6 +471,29 @@ fn candle_device_from_hint(device_hint: Option<&str>) -> Result<CandleLoadDevice
     Err(BackendError::Config(format!(
         "Candle staged embedding loader does not support device hint '{device_hint}'"
     )))
+}
+
+#[cfg(feature = "backend-candle")]
+fn candle_core_dtype_from_load_plan(dtype: CandleLoadDType) -> candle_core::DType {
+    match dtype {
+        CandleLoadDType::F32 => candle_core::DType::F32,
+        CandleLoadDType::F16 => candle_core::DType::F16,
+        CandleLoadDType::BF16 => candle_core::DType::BF16,
+    }
+}
+
+#[cfg(feature = "backend-candle")]
+fn candle_device_from_load_plan(
+    device: CandleLoadDevice,
+) -> Result<candle_core::Device, BackendError> {
+    match device {
+        CandleLoadDevice::Auto | CandleLoadDevice::Cpu => Ok(candle_core::Device::Cpu),
+        CandleLoadDevice::Cuda { index } => candle_core::Device::new_cuda(index).map_err(|error| {
+            BackendError::Config(format!(
+                "Candle CUDA device {index} could not be initialized: {error}"
+            ))
+        }),
+    }
 }
 
 impl Default for CandleBackend {
@@ -574,6 +652,41 @@ mod tests {
             .expect("safetensors fixture should write");
     }
 
+    #[cfg(feature = "backend-candle")]
+    fn write_valid_candle_resource_files(model_dir: &Path) {
+        use std::collections::HashMap;
+
+        fs::write(model_dir.join("config.json"), "{}").expect("config fixture should write");
+
+        let vocab = HashMap::from([
+            ("[UNK]".to_string(), 0),
+            ("hello".to_string(), 1),
+            ("world".to_string(), 2),
+        ]);
+        let word_level = tokenizers::models::wordlevel::WordLevel::builder()
+            .vocab(vocab)
+            .unk_token("[UNK]".to_string())
+            .build()
+            .expect("word-level tokenizer fixture should build");
+        let tokenizer = tokenizers::Tokenizer::new(word_level);
+        tokenizer
+            .save(model_dir.join("tokenizer.json"), false)
+            .expect("tokenizer fixture should save");
+
+        let tensor = candle_core::Tensor::from_slice(
+            &[0.0f32, 1.0, 2.0, 3.0],
+            (2, 2),
+            &candle_core::Device::Cpu,
+        )
+        .expect("tensor fixture should build");
+        tensor
+            .save_safetensors(
+                "embeddings.word_embeddings.weight",
+                model_dir.join("model.safetensors"),
+            )
+            .expect("safetensors fixture should save");
+    }
+
     #[test]
     fn test_backend_name() {
         let backend = CandleBackend::new();
@@ -659,6 +772,74 @@ mod tests {
             plan.source.artifact_kind,
             ModelArtifactKind::HfCompatibleDirectory
         );
+    }
+
+    #[cfg(feature = "backend-candle")]
+    #[test]
+    fn embedding_load_resources_loads_tokenizer_safetensors_dtype_and_cpu_device() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        write_valid_candle_resource_files(temp.path());
+        let package = package_fixture_with_entry_path(
+            include_str!(
+                "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+            ),
+            temp.path(),
+        );
+        let plan = CandleBackend::embedding_load_plan_from_package(&package, Some("cpu"))
+            .expect("Candle package facts should resolve to a load plan");
+
+        let resources = CandleBackend::embedding_load_resources_from_plan(&plan)
+            .expect("Candle resources should load from valid staged plan");
+
+        assert!(matches!(resources.device, candle_core::Device::Cpu));
+        assert_eq!(resources.dtype, candle_core::DType::F32);
+        assert_eq!(resources.tokenizer.get_vocab_size(false), 3);
+        assert_eq!(resources.tensors.len(), 1);
+        assert!(resources
+            .tensors
+            .contains_key("embeddings.word_embeddings.weight"));
+    }
+
+    #[cfg(feature = "backend-candle")]
+    #[test]
+    fn embedding_load_resources_rejects_invalid_tokenizer_or_safetensors() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        write_valid_candle_resource_files(temp.path());
+        fs::write(temp.path().join("tokenizer.json"), "{}")
+            .expect("invalid tokenizer fixture should write");
+        let package = package_fixture_with_entry_path(
+            include_str!(
+                "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+            ),
+            temp.path(),
+        );
+        let plan = CandleBackend::embedding_load_plan_from_package(&package, Some("cpu"))
+            .expect("Candle package facts should resolve to a load plan");
+
+        let error = CandleBackend::embedding_load_resources_from_plan(&plan)
+            .expect_err("Candle resources should reject invalid tokenizer files");
+
+        assert!(error.to_string().contains("tokenizer load failed"));
+
+        write_valid_candle_resource_files(temp.path());
+        fs::write(
+            temp.path().join("model.safetensors"),
+            b"not a safetensors file",
+        )
+        .expect("invalid safetensors fixture should write");
+        let package = package_fixture_with_entry_path(
+            include_str!(
+                "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+            ),
+            temp.path(),
+        );
+        let plan = CandleBackend::embedding_load_plan_from_package(&package, Some("cpu"))
+            .expect("Candle package facts should resolve to a load plan");
+
+        let error = CandleBackend::embedding_load_resources_from_plan(&plan)
+            .expect_err("Candle resources should reject invalid safetensors files");
+
+        assert!(error.to_string().contains("safetensors load failed"));
     }
 
     #[test]

@@ -2258,7 +2258,7 @@ without broad scheduler or Transformers duplication.
   explicit unsupported capability behavior.
 - [x] Map selected Pumas-resolved HF-compatible safetensors/config/tokenizer
   packages through the Rust model-source contract.
-- [ ] Use Candle safetensors, tokenizer, device, dtype, and model loading
+- [x] Use Candle safetensors, tokenizer, device, dtype, and model loading
   patterns without creating a general model scheduler.
 - [x] Keep feature-gated Candle dependencies optional and documented.
 - [x] Document Candle dependency cost, feature behavior, supported platforms,
@@ -2285,8 +2285,10 @@ Candle unavailable because executable safetensors/tokenizer model loading is
 not implemented yet; this prevents runtime selection from treating a staged
 backend as executable. A backend-local load plan now resolves Pumas package
 facts into concrete local config, tokenizer, safetensors, dtype, model-type, and
-device-hint facts, but it still stops before constructing Candle tensors,
-tokenizers, or model modules.
+device-hint facts. The next resource-probe slice consumes that plan through
+real Candle/tokenizers APIs and loads tokenizer plus safetensors tensor
+resources, but it still stops before constructing Candle model modules,
+runtime residency, or executable inference paths.
 
 Update during implementation:
 - 2026-05-03: Candle backend availability now fails closed behind
@@ -2308,6 +2310,11 @@ Update during implementation:
   bfloat16 dtype facts, accepts only the first `bert` embedding model family,
   and parses CPU/CUDA device hints without advertising executable Candle
   loading or adding scheduler/runtime residency policy.
+- 2026-05-04: Added a feature-gated Candle embedding resource probe that maps
+  staged dtype/device facts into Candle types, parses `tokenizer.json` through
+  `tokenizers`, loads safetensors weights through Candle, rejects invalid
+  tokenizer/safetensors files, and keeps backend availability closed until an
+  actual model module and execution path exist.
 
 ### Milestone 13: Evaluate vLLM and MLX Roadmap Boundaries
 
