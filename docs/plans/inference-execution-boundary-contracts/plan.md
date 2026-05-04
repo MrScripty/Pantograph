@@ -1496,9 +1496,11 @@ does not currently serialize the same way as `pantograph-media-conversion`'s
 spellings across surfaces (`open_color_io` serde, `opencolorio` key/display
 paths), so the migration needs an explicit compatibility decision before moving
 DTO ownership. Current install directory fallback covers legacy version
-directories, but state loading does not import legacy
-`managed-dependencies/state.json`; decide whether the neutral owner imports that
-state or explicitly treats it as unsupported.
+directories, and the neutral redistributable state loader now imports legacy
+`managed-dependencies/state.json` only when the canonical
+`third-party/managed-dependencies/state.json` file is absent. Imported legacy
+state normalizes schema version `0` and clears active leases so stale process
+ownership is not promoted to neutral leases.
 
 ### Milestone 6: Retire Ollama Backend Surface
 

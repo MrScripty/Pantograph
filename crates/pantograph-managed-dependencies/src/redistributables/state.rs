@@ -5,16 +5,30 @@ use super::contracts::{
     ManagedRedistributableId, ManagedRedistributablePersistedDependency,
     ManagedRedistributablePersistedState, ManagedRedistributableSelection,
 };
-use super::paths::{managed_redistributables_dir, redistributables_state_path, temp_state_path};
+use super::paths::{
+    legacy_redistributables_state_path, managed_redistributables_dir, redistributables_state_path,
+    temp_state_path,
+};
 
 pub fn load_managed_redistributable_state(
     app_data_dir: &Path,
 ) -> Result<ManagedRedistributablePersistedState, String> {
     let path = redistributables_state_path(app_data_dir);
-    if !path.exists() {
-        return Ok(ManagedRedistributablePersistedState::default());
+    if path.exists() {
+        return load_state_file(&path);
     }
 
+    let legacy_path = legacy_redistributables_state_path(app_data_dir);
+    if legacy_path.exists() {
+        let mut state = load_state_file(&legacy_path)?;
+        clear_imported_legacy_leases(&mut state);
+        return Ok(state);
+    }
+
+    Ok(ManagedRedistributablePersistedState::default())
+}
+
+fn load_state_file(path: &Path) -> Result<ManagedRedistributablePersistedState, String> {
     let contents = fs::read_to_string(&path).map_err(|e| {
         format!(
             "Failed to read managed redistributable state {:?}: {}",
@@ -33,6 +47,12 @@ pub fn load_managed_redistributable_state(
     }
 
     Ok(state)
+}
+
+fn clear_imported_legacy_leases(state: &mut ManagedRedistributablePersistedState) {
+    for dependency in &mut state.dependencies {
+        dependency.active_leases.clear();
+    }
 }
 
 pub fn save_managed_redistributable_state(
@@ -116,5 +136,145 @@ pub(crate) fn clear_selection_version(selection: &mut Option<String>, version: &
         .is_some_and(|selected| selected == version)
     {
         *selection = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::paths::{legacy_redistributables_state_path, redistributables_state_path};
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn load_managed_redistributable_state_imports_legacy_state_when_canonical_missing() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let legacy_path = legacy_redistributables_state_path(temp_dir.path());
+        std::fs::create_dir_all(legacy_path.parent().expect("legacy state parent"))
+            .expect("create legacy state dir");
+        std::fs::write(
+            &legacy_path,
+            json!({
+                "schema_version": 0,
+                "dependencies": [{
+                    "id": "ffmpeg",
+                    "selection": {
+                        "selected_version": "n7.1.1",
+                        "active_version": "n7.1.1",
+                        "default_version": "n7.1.1"
+                    }
+                }]
+            })
+            .to_string(),
+        )
+        .expect("write legacy state");
+
+        let state =
+            load_managed_redistributable_state(temp_dir.path()).expect("load imported state");
+
+        assert_eq!(
+            state.schema_version,
+            ManagedRedistributablePersistedState::default().schema_version
+        );
+        assert_eq!(state.dependencies.len(), 1);
+        assert_eq!(state.dependencies[0].id, ManagedRedistributableId::Ffmpeg);
+        assert_eq!(
+            state.dependencies[0].selection.selected_version.as_deref(),
+            Some("n7.1.1")
+        );
+    }
+
+    #[test]
+    fn load_managed_redistributable_state_prefers_canonical_state_over_legacy() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let canonical_path = redistributables_state_path(temp_dir.path());
+        let legacy_path = legacy_redistributables_state_path(temp_dir.path());
+        std::fs::create_dir_all(canonical_path.parent().expect("canonical state parent"))
+            .expect("create canonical state dir");
+        std::fs::create_dir_all(legacy_path.parent().expect("legacy state parent"))
+            .expect("create legacy state dir");
+        std::fs::write(
+            &canonical_path,
+            json!({
+                "schema_version": 1,
+                "dependencies": [{
+                    "id": "ocioconvert",
+                    "selection": {
+                        "selected_version": "2.4.2",
+                        "active_version": "2.4.2",
+                        "default_version": "2.4.2"
+                    }
+                }]
+            })
+            .to_string(),
+        )
+        .expect("write canonical state");
+        std::fs::write(
+            &legacy_path,
+            json!({
+                "schema_version": 1,
+                "dependencies": [{
+                    "id": "ffmpeg",
+                    "selection": {
+                        "selected_version": "n7.1.1",
+                        "active_version": "n7.1.1",
+                        "default_version": "n7.1.1"
+                    }
+                }]
+            })
+            .to_string(),
+        )
+        .expect("write legacy state");
+
+        let state =
+            load_managed_redistributable_state(temp_dir.path()).expect("load canonical state");
+
+        assert_eq!(state.dependencies.len(), 1);
+        assert_eq!(
+            state.dependencies[0].id,
+            ManagedRedistributableId::Ocioconvert
+        );
+        assert_eq!(
+            state.dependencies[0].selection.selected_version.as_deref(),
+            Some("2.4.2")
+        );
+    }
+
+    #[test]
+    fn load_managed_redistributable_state_drops_legacy_active_leases() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let legacy_path = legacy_redistributables_state_path(temp_dir.path());
+        std::fs::create_dir_all(legacy_path.parent().expect("legacy state parent"))
+            .expect("create legacy state dir");
+        std::fs::write(
+            &legacy_path,
+            json!({
+                "schema_version": 1,
+                "dependencies": [{
+                    "id": "ffmpeg",
+                    "selection": {
+                        "selected_version": "n7.1.1",
+                        "active_version": "n7.1.1",
+                        "default_version": "n7.1.1"
+                    },
+                    "active_leases": [{
+                        "id": "legacy-lease",
+                        "version": "n7.1.1",
+                        "holder": "legacy-process",
+                        "acquired_at_ms": 1
+                    }]
+                }]
+            })
+            .to_string(),
+        )
+        .expect("write legacy state");
+
+        let state =
+            load_managed_redistributable_state(temp_dir.path()).expect("load imported state");
+
+        assert!(state.dependencies[0].active_leases.is_empty());
+        assert_eq!(
+            state.dependencies[0].selection.active_version.as_deref(),
+            Some("n7.1.1")
+        );
     }
 }

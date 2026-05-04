@@ -42,6 +42,10 @@ pub(crate) fn redistributables_state_path(app_data_dir: &Path) -> PathBuf {
     managed_redistributables_dir(app_data_dir).join(MANAGED_REDISTRIBUTABLES_STATE_FILE)
 }
 
+pub(crate) fn legacy_redistributables_state_path(app_data_dir: &Path) -> PathBuf {
+    legacy_managed_redistributables_dir(app_data_dir).join(MANAGED_REDISTRIBUTABLES_STATE_FILE)
+}
+
 pub(crate) fn temp_state_path(path: &Path) -> PathBuf {
     let mut temp_name = path
         .file_name()
