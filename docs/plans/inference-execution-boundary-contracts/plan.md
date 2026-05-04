@@ -2330,6 +2330,10 @@ inference write ledger events directly.
   bounded compatibility summary computed during task validation, so downstream
   ledger adapters can persist selected-backend compatibility facts from the
   actual execution phase as well as validation.
+  Typed streaming backend-execution terminal events now carry the same bounded
+  compatibility summary through the private lifecycle stream wrapper, keeping
+  public chat streaming lifecycle calls diagnostic-free unless a typed request
+  supplied package facts.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support. Canonical

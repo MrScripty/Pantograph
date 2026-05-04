@@ -769,16 +769,21 @@ impl InferenceGateway {
             request_id,
             None,
             lifecycle_sink,
+            None,
+            Vec::new(),
         )
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn chat_completion_stream_with_lifecycle_for_task(
         &self,
         request_json: String,
         request_id: Option<String>,
         task_id: Option<String>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+        compatibility_report: Option<InferenceCompatibilityReportSummary>,
+        compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
     {
         let backend_key = Some(canonical_backend_key(&self.current_backend_name().await));
@@ -809,10 +814,13 @@ impl InferenceGateway {
                 runtime_id,
                 runtime_instance_id,
                 model_id,
+                compatibility_report,
+                compatibility_issues,
             ))),
             Err(error) => {
-                record_inference_lifecycle_event(
+                record_inference_lifecycle_phase_event_with_diagnostics(
                     lifecycle_sink.as_ref(),
+                    InferenceLifecyclePhase::BackendExecution,
                     request_id.clone(),
                     task_id.clone(),
                     backend_key.clone(),
@@ -821,6 +829,9 @@ impl InferenceGateway {
                     model_id.clone(),
                     InferenceRequestLifecycleEventKind::Failed,
                     Some(error.to_string()),
+                    Vec::new(),
+                    compatibility_report,
+                    compatibility_issues,
                 );
                 record_inference_lifecycle_event(
                     lifecycle_sink.as_ref(),
@@ -916,6 +927,8 @@ impl InferenceGateway {
             request_id,
             task_id,
             lifecycle_sink,
+            compatibility_diagnostics.compatibility_report,
+            compatibility_diagnostics.compatibility_issues,
         )
         .await
     }
@@ -1388,10 +1401,13 @@ struct LifecycleStream {
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     model_id: Option<String>,
+    compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     finished: bool,
 }
 
 impl LifecycleStream {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         inner: Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
@@ -1401,6 +1417,8 @@ impl LifecycleStream {
         runtime_id: Option<String>,
         runtime_instance_id: Option<String>,
         model_id: Option<String>,
+        compatibility_report: Option<InferenceCompatibilityReportSummary>,
+        compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     ) -> Self {
         Self {
             inner,
@@ -1411,6 +1429,8 @@ impl LifecycleStream {
             runtime_id,
             runtime_instance_id,
             model_id,
+            compatibility_report,
+            compatibility_issues,
             finished: false,
         }
     }
@@ -1429,12 +1449,30 @@ impl LifecycleStream {
         );
     }
 
+    fn record_terminal(&self, kind: InferenceRequestLifecycleEventKind, detail: Option<String>) {
+        record_inference_lifecycle_phase_event_with_diagnostics(
+            self.lifecycle_sink.as_ref(),
+            InferenceLifecyclePhase::BackendExecution,
+            self.request_id.clone(),
+            self.task_id.clone(),
+            self.backend_key.clone(),
+            self.runtime_id.clone(),
+            self.runtime_instance_id.clone(),
+            self.model_id.clone(),
+            kind,
+            detail,
+            Vec::new(),
+            self.compatibility_report.clone(),
+            self.compatibility_issues.clone(),
+        );
+    }
+
     fn finish(&mut self, kind: InferenceRequestLifecycleEventKind, detail: Option<String>) {
         if self.finished {
             return;
         }
 
-        self.record(kind, detail);
+        self.record_terminal(kind, detail);
         self.record(InferenceRequestLifecycleEventKind::CleanupCompleted, None);
         self.finished = true;
     }

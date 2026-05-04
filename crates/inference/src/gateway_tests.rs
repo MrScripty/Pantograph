@@ -1610,14 +1610,19 @@ async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_ph
         "mock",
     );
     let sink = Arc::new(RecordingLifecycleSink::default());
+    let fixture = include_str!(
+        "../tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("package facts fixture");
 
     let request = InferenceExecutionRequest {
         request_id: Some("req-typed-stream".to_string()),
         task_id: InferenceTaskId::TextGeneration,
-        model_ref: None,
+        model_ref: Some(package_facts.model_ref.clone()),
         model_name: Some("typed-model".to_string()),
         runtime_hint: None,
-        resolved_model_package_facts: None,
+        resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
             system_prompt: None,
@@ -1650,6 +1655,13 @@ async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_ph
         events[1].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
+    let validation_compatibility_report = events[1]
+        .compatibility_report
+        .as_ref()
+        .expect("task validation compatibility report");
+    assert_eq!(validation_compatibility_report.status, "rejected");
+    assert!(!validation_compatibility_report.compatible);
+    assert!(!events[1].compatibility_issues.is_empty());
     assert_eq!(events[2].phase, InferenceLifecyclePhase::TaskValidation);
     assert_eq!(
         events[2].kind,
@@ -1662,6 +1674,13 @@ async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_ph
         events[4].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
+    let backend_compatibility_report = events[4]
+        .compatibility_report
+        .as_ref()
+        .expect("backend execution compatibility report");
+    assert_eq!(backend_compatibility_report.status, "rejected");
+    assert!(!backend_compatibility_report.compatible);
+    assert!(!events[4].compatibility_issues.is_empty());
     assert_eq!(events[5].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(
         events[5].kind,
