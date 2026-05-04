@@ -7,12 +7,12 @@ use inference::{
     InferenceTaskId, ModelArtifactKind, ModelExecutionDescriptor, ModelExecutionStorageKind,
     ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
     ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
-    ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy,
+    ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy, ModelPackageDiagnostic,
     ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy,
-    OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
-    ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind, SupportTier,
-    TaskEvidence, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry,
-    TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
+    ModelStorageKind, ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
+    PackageFactStatus, ProcessorComponentKind, PumasModelRef, ResolvedModelPackageFacts,
+    ResolvedModelSource, ResolvedModelSourceKind, SupportTier, TaskEvidence, TaskExecutionBehavior,
+    TaskFamily, TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
     MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
@@ -386,6 +386,7 @@ fn resolved_model_source_projects_from_pumas_package_facts() {
     let source = ResolvedModelSource::from_package_facts(&facts);
 
     assert!(source.is_pumas_resolved());
+    assert!(source.validate_for_backend_load().is_ok());
     assert_eq!(
         source.source_contract_version,
         MODEL_PACKAGE_FACTS_CONTRACT_VERSION
@@ -418,6 +419,87 @@ fn resolved_model_source_distinguishes_direct_sources_from_pumas_refs() {
     assert_eq!(repo.entry_path, "org/model");
     assert_eq!(repo.repo_id.as_deref(), Some("org/model"));
     assert_eq!(repo.revision.as_deref(), Some("main"));
+    assert!(repo.validate_for_backend_load().is_ok());
+}
+
+#[test]
+fn resolved_model_source_rejects_invalid_backend_load_states() {
+    let mut source = ResolvedModelSource {
+        source_contract_version: MODEL_PACKAGE_FACTS_CONTRACT_VERSION + 1,
+        source_kind: ResolvedModelSourceKind::PumasResolved,
+        artifact_kind: ModelArtifactKind::Unknown,
+        entry_path: "   ".to_string(),
+        storage_kind: ModelStorageKind::LibraryOwned,
+        validation_state: ModelValidationState::Invalid,
+        model_ref: None,
+        repo_id: None,
+        revision: None,
+        selected_files: Vec::new(),
+        companion_artifacts: Vec::new(),
+        diagnostics: Vec::new(),
+    };
+
+    let diagnostics = source
+        .validate_for_backend_load()
+        .expect_err("invalid Pumas source should report diagnostics");
+    assert_diagnostic_code(&diagnostics, "model_source_contract_version_mismatch");
+    assert_diagnostic_code(&diagnostics, "model_source_missing_entry_path");
+    assert_diagnostic_code(&diagnostics, "pumas_resolved_source_missing_model_ref");
+    assert_diagnostic_code(&diagnostics, "model_source_artifact_kind_unknown");
+    assert_diagnostic_code(&diagnostics, "model_source_artifact_invalid");
+
+    source.source_contract_version = MODEL_PACKAGE_FACTS_CONTRACT_VERSION;
+    source.source_kind = ResolvedModelSourceKind::DirectGgufPath;
+    source.artifact_kind = ModelArtifactKind::Gguf;
+    source.entry_path = "/models/model.gguf".to_string();
+    source.validation_state = ModelValidationState::Valid;
+    source.model_ref = Some(PumasModelRef {
+        model_id: "library-model".to_string(),
+        revision: None,
+        selected_artifact_id: None,
+        selected_artifact_path: None,
+        migration_diagnostics: Vec::new(),
+    });
+
+    let diagnostics = source
+        .validate_for_backend_load()
+        .expect_err("direct source with Pumas ref should report diagnostic");
+    assert_diagnostic_code(&diagnostics, "direct_source_has_pumas_model_ref");
+}
+
+#[test]
+fn resolved_model_source_wire_shape_defaults_optional_collections() {
+    let raw = serde_json::json!({
+        "source_contract_version": MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+        "source_kind": "hugging_face_repo",
+        "artifact_kind": "hf_compatible_directory",
+        "entry_path": "org/model",
+        "storage_kind": "external_reference",
+        "validation_state": "unknown",
+        "repo_id": "org/model",
+        "future_additive_field": {
+            "ignored": true
+        }
+    });
+
+    let source: ResolvedModelSource = serde_json::from_value(raw).expect("decode source");
+
+    assert_eq!(source.source_kind, ResolvedModelSourceKind::HuggingFaceRepo);
+    assert_eq!(source.repo_id.as_deref(), Some("org/model"));
+    assert!(source.model_ref.is_none());
+    assert!(source.selected_files.is_empty());
+    assert!(source.companion_artifacts.is_empty());
+    assert!(source.diagnostics.is_empty());
+    assert!(source.validate_for_backend_load().is_ok());
+}
+
+fn assert_diagnostic_code(diagnostics: &[ModelPackageDiagnostic], expected: &str) {
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == expected),
+        "expected diagnostic code {expected}, got {diagnostics:?}"
+    );
 }
 
 #[test]

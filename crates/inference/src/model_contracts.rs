@@ -1980,6 +1980,96 @@ impl ResolvedModelSource {
     pub fn is_pumas_resolved(&self) -> bool {
         self.source_kind == ResolvedModelSourceKind::PumasResolved && self.model_ref.is_some()
     }
+
+    /// Validate the source before it is handed to a backend adapter.
+    ///
+    /// This enforces model-source shape invariants without selecting a backend
+    /// or deciding runtime placement.
+    #[must_use]
+    pub fn validate_for_backend_load(&self) -> Result<(), Vec<ModelPackageDiagnostic>> {
+        let mut diagnostics = Vec::new();
+
+        if self.source_contract_version != MODEL_PACKAGE_FACTS_CONTRACT_VERSION {
+            diagnostics.push(ModelPackageDiagnostic {
+                code: "model_source_contract_version_mismatch".to_string(),
+                message: format!(
+                    "resolved model source contract version {} does not match supported version {}",
+                    self.source_contract_version, MODEL_PACKAGE_FACTS_CONTRACT_VERSION
+                ),
+                path: Some("source_contract_version".to_string()),
+            });
+        }
+
+        if self.entry_path.trim().is_empty() {
+            diagnostics.push(ModelPackageDiagnostic {
+                code: "model_source_missing_entry_path".to_string(),
+                message: "resolved model source must include a non-empty entry path".to_string(),
+                path: Some("entry_path".to_string()),
+            });
+        }
+
+        if self.source_kind == ResolvedModelSourceKind::PumasResolved && self.model_ref.is_none() {
+            diagnostics.push(ModelPackageDiagnostic {
+                code: "pumas_resolved_source_missing_model_ref".to_string(),
+                message: "Pumas-resolved model sources must carry the canonical model reference"
+                    .to_string(),
+                path: Some("model_ref".to_string()),
+            });
+        }
+
+        if self.source_kind != ResolvedModelSourceKind::PumasResolved && self.model_ref.is_some() {
+            diagnostics.push(ModelPackageDiagnostic {
+                code: "direct_source_has_pumas_model_ref".to_string(),
+                message: "direct model sources must not carry a Pumas model reference".to_string(),
+                path: Some("model_ref".to_string()),
+            });
+        }
+
+        if self.source_kind == ResolvedModelSourceKind::HuggingFaceRepo
+            && self
+                .repo_id
+                .as_deref()
+                .is_none_or(|repo_id| repo_id.trim().is_empty())
+        {
+            diagnostics.push(ModelPackageDiagnostic {
+                code: "hugging_face_repo_source_missing_repo_id".to_string(),
+                message: "Hugging Face repository sources must carry a repository id".to_string(),
+                path: Some("repo_id".to_string()),
+            });
+        }
+
+        if self.source_kind == ResolvedModelSourceKind::Unknown {
+            diagnostics.push(ModelPackageDiagnostic {
+                code: "model_source_kind_unknown".to_string(),
+                message: "resolved model source kind must be known before backend loading"
+                    .to_string(),
+                path: Some("source_kind".to_string()),
+            });
+        }
+
+        if self.artifact_kind == ModelArtifactKind::Unknown {
+            diagnostics.push(ModelPackageDiagnostic {
+                code: "model_source_artifact_kind_unknown".to_string(),
+                message: "resolved model source artifact kind must be known before backend loading"
+                    .to_string(),
+                path: Some("artifact_kind".to_string()),
+            });
+        }
+
+        if self.validation_state == ModelValidationState::Invalid {
+            diagnostics.push(ModelPackageDiagnostic {
+                code: "model_source_artifact_invalid".to_string(),
+                message: "invalid model artifacts cannot be handed to backend loading".to_string(),
+                path: Some("validation_state".to_string()),
+            });
+        }
+
+        if diagnostics.is_empty() {
+            Ok(())
+        } else {
+            Err(diagnostics)
+        }
+    }
 }
 
 /// Generic package-fact diagnostic.

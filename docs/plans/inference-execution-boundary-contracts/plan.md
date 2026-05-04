@@ -1091,7 +1091,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
 - Review against `RUST-API-STANDARDS.md` parse-once and typed public contract
   requirements.
 - Review against `ARCHITECTURE-PATTERNS.md` immutable contract guidance.
-- Unit tests for model source parsing and invalid-state rejection once code is
+- [x] Unit tests for model source parsing and invalid-state rejection once code is
   added.
 - [x] Unit tests or fixtures for task registry alias normalization, unsupported task
   diagnostics, modality mismatch diagnostics, and missing processor/component
@@ -1115,6 +1115,12 @@ The first resolved-model-source slice added a typed backend-load source
 contract that projects from Pumas package facts and distinguishes
 Pumas-resolved artifacts from direct local/Hugging Face debug or import sources
 without selecting a backend or runtime policy.
+Resolved model sources now expose `validate_for_backend_load()` so adapters and
+saved-workflow migrations can reject malformed Pumas-resolved sources, direct
+sources that incorrectly carry Pumas identity, unknown source/artifact kinds,
+empty entry paths, invalid artifacts, and Hugging Face repo sources without a
+repo id before backend loading. Contract tests also freeze omitted optional
+collection defaults and additive unknown-field behavior for this DTO.
 Task-evidence and modality-evidence matching now live on `TaskRegistryEntry`,
 so backend compatibility checks consume the canonical registry validation path
 instead of duplicating task-label and modality normalization locally.
