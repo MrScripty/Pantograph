@@ -1,0 +1,75 @@
+{
+  "package_facts_contract_version": 1,
+  "model_ref": {
+    "model_id": "audio/whisper/tiny-asr",
+    "selected_artifact_id": "hf-main",
+    "selected_artifact_path": "audio/whisper/tiny-asr"
+  },
+  "artifact": {
+    "artifact_kind": "hf_compatible_directory",
+    "entry_path": "audio/whisper/tiny-asr",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "config.json",
+      "preprocessor_config.json",
+      "model.safetensors"
+    ]
+  },
+  "components": [
+    {
+      "kind": "config",
+      "status": "present",
+      "relative_path": "config.json"
+    },
+    {
+      "kind": "audio_feature_extractor",
+      "status": "present",
+      "relative_path": "preprocessor_config.json"
+    },
+    {
+      "kind": "weights",
+      "status": "present",
+      "relative_path": "model.safetensors"
+    }
+  ],
+  "transformers": {
+    "config_status": "present",
+    "config_model_type": "whisper",
+    "architectures": [
+      "WhisperForConditionalGeneration"
+    ],
+    "processor_class": "WhisperProcessor",
+    "generation_config_status": "present",
+    "selected_files": [
+      "config.json",
+      "preprocessor_config.json",
+      "model.safetensors"
+    ]
+  },
+  "task": {
+    "pipeline_tag": "automatic-speech-recognition",
+    "task_type_primary": "audio_transcription",
+    "input_modalities": [
+      "audio"
+    ],
+    "output_modalities": [
+      "text"
+    ]
+  },
+  "generation_defaults": {
+    "status": "present",
+    "source_path": "generation_config.json"
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "transformers"
+    ],
+    "raw": [
+      "transformers"
+    ]
+  }
+}

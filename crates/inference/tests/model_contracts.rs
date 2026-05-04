@@ -50,6 +50,10 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
         include_str!("fixtures/inference_package_facts/hf_multimodal_processor_package_facts.json"),
     ),
     (
+        "hf_audio_transcription_package_facts.json",
+        include_str!("fixtures/inference_package_facts/hf_audio_transcription_package_facts.json"),
+    ),
+    (
         "safetensors_package_facts.json",
         include_str!("fixtures/inference_package_facts/safetensors_package_facts.json"),
     ),
@@ -213,6 +217,10 @@ fn package_fact_fixtures_resolve_task_evidence_through_registry() {
         (
             "hf_multimodal_processor_package_facts.json",
             InferenceTaskId::ImageUnderstanding,
+        ),
+        (
+            "hf_audio_transcription_package_facts.json",
+            InferenceTaskId::AudioTranscription,
         ),
         ("safetensors_package_facts.json", InferenceTaskId::Embedding),
         (

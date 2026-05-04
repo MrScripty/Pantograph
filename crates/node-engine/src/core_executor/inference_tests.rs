@@ -1395,6 +1395,41 @@ fn test_build_audio_transcription_execution_request_preserves_canonical_inputs()
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_audio_transcription_execution_request_forwards_package_facts() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/hf_audio_transcription_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("audio package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("audio_transcription"),
+    );
+    inputs.insert(
+        "audio".to_string(),
+        serde_json::json!("artifact-read://audio.wav"),
+    );
+    inputs.insert("model_name".to_string(), serde_json::json!("whisper-tiny"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let request = build_audio_transcription_execution_request(&inputs)
+        .expect("audio package facts should be forwarded to typed request");
+
+    assert_eq!(
+        request
+            .resolved_model_package_facts
+            .as_ref()
+            .map(|facts| facts.model_ref.model_id.as_str()),
+        Some("audio/whisper/tiny-asr")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_audio_transcription_execution_request_accepts_artifact_ref() {
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -1508,6 +1543,99 @@ async fn test_canonical_llm_audio_transcription_uses_typed_gateway_boundary() {
             .map(|audio| audio.data_base64.as_str()),
         Some("UklGRg==")
     );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_audio_transcription_with_package_facts_emits_compatibility_lifecycle() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/hf_audio_transcription_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("audio package facts fixture");
+    let audio_requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedAudioTranscriptionBackend {
+            audio_requests: audio_requests.clone(),
+        }),
+        "mock-audio",
+    ));
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("audio_transcription"),
+    );
+    inputs.insert("audio".to_string(), serde_json::json!("UklGRg=="));
+    inputs.insert("model_name".to_string(), serde_json::json!("whisper-tiny"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let executor = CoreTaskExecutor::new()
+        .with_gateway(gateway)
+        .with_execution_id("exec-a".to_string());
+    let outputs = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect("audio package facts should execute through typed lifecycle");
+
+    assert_eq!(outputs.get("text"), Some(&serde_json::json!("hello audio")));
+    assert_eq!(audio_requests.lock().expect("audio requests lock").len(), 1);
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert!(
+        events.iter().any(|event| {
+            event.phase == InferenceLifecyclePhase::ModelPackageResolution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+                && event.model_id.as_deref() == Some("audio/whisper/tiny-asr")
+        }),
+        "audio execution should emit model-package resolution lifecycle for package facts"
+    );
+    let validation_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("task validation completion");
+    assert_eq!(
+        validation_completed.model_id.as_deref(),
+        Some("audio/whisper/tiny-asr")
+    );
+    assert!(validation_completed.compatibility_report.is_some());
+
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion");
+    assert_eq!(
+        backend_completed.model_id.as_deref(),
+        Some("audio/whisper/tiny-asr")
+    );
+    assert!(backend_completed.compatibility_report.is_some());
 }
 
 #[cfg(feature = "inference-nodes")]
