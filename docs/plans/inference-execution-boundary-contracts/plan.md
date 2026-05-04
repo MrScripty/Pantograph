@@ -1778,6 +1778,9 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   PyTorch model-load worker transport failures now also route through the typed
   worker failure shape with the load request id and canonical
   `pytorch_worker_model_load_failed` code.
+  PyTorch audio-transcription worker lookup and ASR invocation failures now
+  retain a generated request id and canonical
+  `pytorch_worker_audio_transcription_failed` code.
   Non-streaming PyTorch generate-text worker transport failures now also retain
   the generated request id and canonical `pytorch_worker_generate_text_failed`
   code instead of returning raw Python bridge errors.

@@ -572,6 +572,21 @@ impl PyTorchBackend {
         .into_backend_error()
     }
 
+    fn audio_transcription_worker_failure_from_message(
+        request_id: &str,
+        message: String,
+    ) -> BackendError {
+        PyTorchWorkerFailure {
+            request_id: request_id.to_string(),
+            error: PyTorchWorkerError {
+                kind: PyTorchWorkerErrorKind::GenerationFailed,
+                message,
+                canonical_code: Some("pytorch_worker_audio_transcription_failed".to_string()),
+            },
+        }
+        .into_backend_error()
+    }
+
     fn generate_text_from_worker_response(response_json: &str) -> Result<String, BackendError> {
         let response: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
             serde_json::from_str(response_json).map_err(|error| {
@@ -1526,11 +1541,15 @@ impl InferenceBackend for PyTorchBackend {
         let prompt = request.prompt.clone();
         let task = request.task.clone();
         let chunk_length_s = request.chunk_length_s;
+        let request_id = format!("pytorch-audio-transcription-{}", Uuid::new_v4().simple());
 
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<AudioTranscriptionResult, BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                    Self::audio_transcription_worker_failure_from_message(
+                        &request_id,
+                        format!("Failed to get worker module: {}", e),
+                    )
                 })?;
                 let kwargs = pyo3::types::PyDict::new(py);
                 kwargs.set_item("model_path", model_path).unwrap();
@@ -1552,7 +1571,10 @@ impl InferenceBackend for PyTorchBackend {
                 let result = worker
                     .call_method("transcribe_audio", (), Some(&kwargs))
                     .map_err(|e| {
-                        BackendError::Inference(format!("PyTorch audio transcription failed: {e}"))
+                        Self::audio_transcription_worker_failure_from_message(
+                            &request_id,
+                            format!("PyTorch audio transcription failed: {e}"),
+                        )
                     })?;
                 Ok(AudioTranscriptionResult {
                     text: result

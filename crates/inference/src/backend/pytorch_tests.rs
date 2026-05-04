@@ -1045,6 +1045,21 @@ fn test_pytorch_audio_transcription_accepts_encoded_audio() {
 }
 
 #[test]
+fn test_pytorch_worker_audio_transcription_transport_error_normalizes_to_backend_error() {
+    match PyTorchBackend::audio_transcription_worker_failure_from_message(
+        "req-audio-transport",
+        "PyTorch audio transcription failed: ASR pipeline failed.".to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_audio_transcription_failed"));
+            assert!(message.contains("req-audio-transport"));
+            assert!(message.contains("ASR pipeline failed"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_envelope_rejects_missing_required_fields() {
     let fixture = include_str!(
         "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"
