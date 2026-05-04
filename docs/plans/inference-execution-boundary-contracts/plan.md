@@ -2158,23 +2158,23 @@ Update during implementation:
 implementation beyond the cleaned execution boundary.
 
 **Tasks:**
-- [ ] Evaluate vLLM as an external or managed HTTP runtime candidate and record
+- [x] Evaluate vLLM as an external or managed HTTP runtime candidate and record
   which facts inference can observe directly.
-- [ ] Record dependency, process, platform, network binding, security, and
+- [x] Record dependency, process, platform, network binding, security, and
   feature-gating implications for vLLM before accepting implementation work.
-- [ ] Map the new Pumas-resolved Rust model-source/task contracts to likely vLLM
+- [x] Map the new Pumas-resolved Rust model-source/task contracts to likely vLLM
   startup and request inputs without implementing the backend.
-- [ ] Identify vLLM-specific behavior that must remain outside inference, such
+- [x] Identify vLLM-specific behavior that must remain outside inference, such
   as request admission, batching policy, model residency policy, and serving
   cluster orchestration.
-- [ ] Define a candidate vLLM capability/fact mapping without implementing the
+- [x] Define a candidate vLLM capability/fact mapping without implementing the
   backend.
-- [ ] Record MLX as a macOS-only candidate and list platform feature gates,
+- [x] Record MLX as a macOS-only candidate and list platform feature gates,
   verification requirements, likely first task family, and how HF-compatible
   packages would flow through the same Rust contracts.
-- [ ] Record cross-platform build expectations for non-macOS targets before any
+- [x] Record cross-platform build expectations for non-macOS targets before any
   MLX feature or dependency is introduced.
-- [ ] Add follow-up plan or ADR trigger criteria for accepting vLLM or MLX as
+- [x] Add follow-up plan or ADR trigger criteria for accepting vLLM or MLX as
   implementation work.
 
 **Verification:**
@@ -2184,11 +2184,42 @@ implementation beyond the cleaned execution boundary.
 - No code verification required unless implementation is pulled into scope by a
   re-plan.
 
-**Status:** In progress. Runtime identity now recognizes `vllm` and `mlx` as
-stable roadmap runtime ids and display labels so diagnostics, capability
-matching, and future registry observations can name them consistently without
-registering executable backends, managed binaries, scheduler policy, or platform
-dependencies.
+**Status:** Implemented as a roadmap-boundary slice. Runtime identity now
+recognizes `vllm` and `mlx` as stable roadmap runtime ids and display labels so
+diagnostics, capability matching, and future registry observations can name them
+consistently without registering executable backends, managed binaries,
+scheduler policy, or platform dependencies.
+
+vLLM remains a candidate external or managed HTTP runtime, not an in-process
+model library. The inference crate may eventually observe static backend
+capabilities, server endpoint identity, supported task families, accepted model
+source kinds, served-model identity, health/readiness, bounded load/startup
+errors, and request option support. It must not own vLLM admission control,
+continuous batching policy, queue policy, model residency policy, eviction,
+cluster placement, replica selection, or serving topology. A future vLLM slice
+must consume Pumas-resolved HF-compatible package facts and canonical task
+requests, then map them at the adapter edge into vLLM server startup/request
+inputs. Remote Pumas/HF `vllm` tags remain discovery hints until local package
+facts and Pantograph backend checks produce executable compatibility reports.
+
+The candidate vLLM capability shape is: text/chat generation first, embeddings
+only if the selected vLLM deployment advertises them, streaming when exposed by
+the HTTP endpoint, OpenAI-compatible request/response projection at the adapter
+edge, no GGUF execution path, no scheduler ownership, and no managed binary
+installation until the neutral managed-runtime/binary source-of-truth can own
+the process artifact. vLLM implementation requires a follow-up ADR or
+implementation plan that records dependency/process ownership, local versus
+remote network binding, authentication/TLS requirements, model-source mapping,
+feature gates, diagnostics-ledger projection fields, and validation fixtures.
+
+MLX remains a macOS-only roadmap candidate. A future MLX backend must be
+feature-gated behind macOS build/runtime checks, compile and test as absent on
+non-macOS targets, and start with a narrow HF-compatible package slice that
+flows through the same Pumas-resolved model-source, task registry, generation
+option, and diagnostics contracts. MLX must not become a required dependency
+for Linux or Windows builds, and MLX search tags from Pumas remain discovery
+hints rather than installed-model compatibility facts until local package facts
+and backend capability checks prove execution support.
 
 ### Milestone 14: Consumer Migration and Guardrails
 
