@@ -2524,8 +2524,9 @@ inference write ledger events directly.
   lifecycle, and inference lifecycle summaries where the direct causal event is
   known. Run terminal projection now carries `canonical_error_event_id` into
   run-list and run-detail `latest_error_event_id` without duplicating the
-  detailed error payload or incrementing error counters; node and scheduler
-  model lifecycle links remain open.
+  detailed error payload or incrementing error counters. Scheduler model
+  lifecycle failed transitions now do the same when they carry
+  `canonical_error_event_id`; node lifecycle links remain open.
 - [ ] Ensure ledger append failure returns or projects `diagnostics_unavailable`
   while preserving the original inference/preflight/execution error. Failed
   inference lifecycle detail is now sanitized and bounded before node-status

@@ -2174,6 +2174,9 @@ fn apply_run_list_projection_event(
     if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) = &payload {
         return apply_run_list_projection_inference_diagnostic_facts(tx, event, payload);
     }
+    if let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &payload {
+        return apply_run_list_projection_model_lifecycle_error_facts(tx, event, payload);
+    }
     let status = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
@@ -2394,6 +2397,51 @@ fn apply_run_list_projection_inference_diagnostic_facts(
     Ok(())
 }
 
+fn apply_run_list_projection_model_lifecycle_error_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &crate::event::SchedulerModelLifecycleChangedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    let payload = DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload.clone());
+    let error_facts = error_projection_facts(event, &payload);
+    if error_facts.latest_error_event_id.is_none() {
+        return Ok(());
+    }
+    tx.execute(
+        "UPDATE run_list_projection
+         SET latest_error_event_id = COALESCE(?1, latest_error_event_id),
+             latest_error_severity = COALESCE(?2, latest_error_severity),
+             latest_error_phase = COALESCE(?3, latest_error_phase),
+             latest_error_code = COALESCE(?4, latest_error_code),
+             latest_error_message = COALESCE(?5, latest_error_message),
+             fatal_error_event_id = COALESCE(?6, fatal_error_event_id),
+             error_count = error_count + ?7,
+             warning_count = warning_count + ?8,
+             last_event_seq = ?9,
+             last_updated_at_ms = ?10
+         WHERE workflow_run_id = ?11",
+        params![
+            error_facts.latest_error_event_id.as_deref(),
+            error_facts
+                .latest_error_severity
+                .map(DiagnosticErrorSeverity::as_db),
+            error_facts.latest_error_phase.as_deref(),
+            error_facts.latest_error_code.as_deref(),
+            error_facts.latest_error_message.as_deref(),
+            error_facts.fatal_error_event_id.as_deref(),
+            error_facts.error_increment,
+            error_facts.warning_increment,
+            event.event_seq,
+            event.occurred_at_ms,
+            workflow_run_id.as_str(),
+        ],
+    )?;
+    Ok(())
+}
+
 struct SchedulerProjectionFacts {
     queue_position: Option<u32>,
     priority: Option<i32>,
@@ -2437,6 +2485,24 @@ fn error_projection_facts(
         DiagnosticEventPayload::RunTerminal(payload)
             if payload.status != crate::event::RunTerminalStatus::Completed
                 && payload.canonical_error_event_id.is_some() =>
+        {
+            ErrorProjectionFacts {
+                latest_error_event_id: payload.canonical_error_event_id.clone(),
+                latest_error_severity: None,
+                latest_error_phase: None,
+                latest_error_code: None,
+                latest_error_message: payload.error.clone(),
+                fatal_error_event_id: None,
+                error_increment: 0,
+                warning_increment: 0,
+            }
+        }
+        DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload)
+            if matches!(
+                payload.transition,
+                crate::event::SchedulerModelLifecycleTransition::LoadFailed
+                    | crate::event::SchedulerModelLifecycleTransition::UnloadFailed
+            ) && payload.canonical_error_event_id.is_some() =>
         {
             ErrorProjectionFacts {
                 latest_error_event_id: payload.canonical_error_event_id.clone(),
@@ -2581,6 +2647,9 @@ fn apply_run_detail_projection_event(
     }
     if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) = &payload {
         return apply_run_detail_projection_inference_diagnostic_facts(tx, event, payload);
+    }
+    if let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &payload {
+        return apply_run_detail_projection_model_lifecycle_error_facts(tx, event, payload);
     }
     let status = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
@@ -2840,6 +2909,51 @@ fn apply_run_detail_projection_inference_diagnostic_facts(
             event.model_id.as_deref(),
             Some(payload.task_id.as_str()),
             payload.selected_device_id.as_deref(),
+            event.event_seq,
+            event.occurred_at_ms,
+            workflow_run_id.as_str(),
+        ],
+    )?;
+    Ok(())
+}
+
+fn apply_run_detail_projection_model_lifecycle_error_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &crate::event::SchedulerModelLifecycleChangedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    let payload = DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload.clone());
+    let error_facts = error_projection_facts(event, &payload);
+    if error_facts.latest_error_event_id.is_none() {
+        return Ok(());
+    }
+    tx.execute(
+        "UPDATE run_detail_projection
+         SET latest_error_event_id = COALESCE(?1, latest_error_event_id),
+             latest_error_severity = COALESCE(?2, latest_error_severity),
+             latest_error_phase = COALESCE(?3, latest_error_phase),
+             latest_error_code = COALESCE(?4, latest_error_code),
+             latest_error_message = COALESCE(?5, latest_error_message),
+             fatal_error_event_id = COALESCE(?6, fatal_error_event_id),
+             error_count = error_count + ?7,
+             warning_count = warning_count + ?8,
+             last_event_seq = ?9,
+             last_updated_at_ms = ?10
+         WHERE workflow_run_id = ?11",
+        params![
+            error_facts.latest_error_event_id.as_deref(),
+            error_facts
+                .latest_error_severity
+                .map(DiagnosticErrorSeverity::as_db),
+            error_facts.latest_error_phase.as_deref(),
+            error_facts.latest_error_code.as_deref(),
+            error_facts.latest_error_message.as_deref(),
+            error_facts.fatal_error_event_id.as_deref(),
+            error_facts.error_increment,
+            error_facts.warning_increment,
             event.event_seq,
             event.occurred_at_ms,
             workflow_run_id.as_str(),

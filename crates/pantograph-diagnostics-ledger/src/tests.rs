@@ -786,6 +786,71 @@ fn run_terminal_projects_canonical_error_link_without_counting_new_error() {
 }
 
 #[test]
+fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event");
+    ledger
+        .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
+        .expect("run started event");
+    let mut lifecycle = sample_scheduler_model_lifecycle_event("workflow_run_alpha");
+    lifecycle.payload = DiagnosticEventPayload::SchedulerModelLifecycleChanged(
+        SchedulerModelLifecycleChangedPayload {
+            transition: SchedulerModelLifecycleTransition::LoadFailed,
+            cache_state: Some(SchedulerModelCacheState::Failed),
+            reason: Some("model load failed".to_string()),
+            duration_ms: Some(42),
+            error: Some("runtime model load failed after diagnostic error".to_string()),
+            canonical_error_event_id: Some("diagnostic-error-model-alpha".to_string()),
+        },
+    );
+    ledger
+        .append_diagnostic_event(lifecycle)
+        .expect("model lifecycle event appends");
+
+    ledger
+        .drain_run_list_projection(500)
+        .expect("run list projection drains");
+    ledger
+        .drain_run_detail_projection(500)
+        .expect("run detail projection drains");
+
+    let runs = ledger
+        .query_run_list_projection(RunListProjectionQuery::default())
+        .expect("run list query succeeds");
+    assert_eq!(runs.len(), 1);
+    let run = &runs[0];
+    assert_eq!(
+        run.latest_error_event_id.as_deref(),
+        Some("diagnostic-error-model-alpha")
+    );
+    assert_eq!(
+        run.latest_error_message.as_deref(),
+        Some("runtime model load failed after diagnostic error")
+    );
+    assert_eq!(run.latest_error_severity, None);
+    assert_eq!(run.latest_error_phase, None);
+    assert_eq!(run.latest_error_code, None);
+    assert_eq!(run.fatal_error_event_id, None);
+    assert_eq!(run.error_count, 0);
+    assert_eq!(run.warning_count, 0);
+
+    let detail = ledger
+        .query_run_detail_projection(RunDetailProjectionQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+        })
+        .expect("run detail query succeeds")
+        .expect("run detail exists");
+    assert_eq!(
+        detail.latest_error_event_id.as_deref(),
+        Some("diagnostic-error-model-alpha")
+    );
+    assert_eq!(detail.error_count, 0);
+    assert_eq!(detail.warning_count, 0);
+}
+
+#[test]
 fn diagnostic_event_ledger_projects_node_fatal_error_as_failed_node() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let mut event = sample_diagnostic_error_event("workflow_run_alpha");
