@@ -890,6 +890,64 @@ fn inference_lifecycle_workflow_sink_records_cancelled_node_status_to_workflow_l
 }
 
 #[test]
+fn inference_lifecycle_workflow_sink_records_failed_node_status_to_workflow_ledger() {
+    let service =
+        std::sync::Arc::new(WorkflowService::with_ephemeral_diagnostics_ledger().expect("service"));
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![node_engine::GraphNode {
+            id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        }],
+        edges: Vec::new(),
+        groups: Vec::new(),
+    };
+    let sink = InferenceLifecycleWorkflowLedgerSink::try_new(
+        service.clone(),
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+    )
+    .expect("sink");
+
+    let mut started =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Started, 100);
+    started.request_id = Some("run-a:node-a:LLM".to_string());
+    inference::InferenceRequestLifecycleEventSink::record(&sink, started);
+
+    let mut failed =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Failed, 175);
+    failed.request_id = Some("run-a:node-a:LLM".to_string());
+    failed.detail = Some("backend failed".to_string());
+    inference::InferenceRequestLifecycleEventSink::record(&sink, failed);
+
+    let response = service
+        .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            projection_batch_size: Some(10),
+            ..WorkflowNodeStatusQueryRequest::default()
+        })
+        .expect("node status query");
+
+    assert_eq!(response.nodes.len(), 1);
+    assert_eq!(
+        response.nodes[0].status,
+        NodeExecutionProjectionStatus::Failed
+    );
+    assert_eq!(response.nodes[0].duration_ms, Some(75));
+    assert_eq!(
+        response.nodes[0].selected_backend_key.as_deref(),
+        Some("pytorch")
+    );
+    assert_eq!(response.nodes[0].error.as_deref(), Some("backend failed"));
+}
+
+#[test]
 fn inference_lifecycle_workflow_sink_records_node_status_to_workflow_ledger() {
     let service =
         std::sync::Arc::new(WorkflowService::with_ephemeral_diagnostics_ledger().expect("service"));

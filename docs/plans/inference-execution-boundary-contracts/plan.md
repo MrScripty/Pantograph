@@ -2410,7 +2410,10 @@ one-off conversions.
   embedded-runtime ledger adapter so failed lifecycle events with a matched
   start can persist bounded `inference.execution_diagnostic_observed` duration
   summaries while keeping failure detail in the node-status/error path instead
-  of copying it into inference diagnostic payloads.
+  of copying it into inference diagnostic payloads. A follow-up acceptance test
+  now proves the host-owned workflow sink records failed node-status lifecycle
+  facts through `WorkflowService` with selected backend context and terminal
+  duration.
 - 2026-05-04: Capacity-rebalance unload diagnostics follow-up preserved the
   original runtime unload error when recording the scheduler model lifecycle or
   runtime-load admission diagnostics is unavailable, matching the post-run
