@@ -1722,9 +1722,9 @@ event boundary for Milestone 8.
 using Python Transformers behind the boundary for broad HF-compatible support.
 
 **Tasks:**
-- [ ] Replace direct/ad hoc PyTorch model loading paths with a clear
+- [x] Replace direct/ad hoc PyTorch model loading paths with a clear
   Transformers-backed model load path where compatible.
-- [ ] Map Pumas-resolved Rust model-source and task contracts to `AutoModel`,
+- [x] Map Pumas-resolved Rust model-source and task contracts to `AutoModel`,
   `AutoTokenizer`, processors, chat templates, and generation config inside the
   Python worker.
 - [x] Map Rust generation option groups to Transformers generation inputs and
@@ -1762,11 +1762,22 @@ correlation, init/shutdown operations, cancellation metadata, trust policy
 defaults, response/error DTOs, and JSON fixtures for load and error envelopes.
 The PyTorch worker now defaults `trust_remote_code` closed and rejects
 Transformers packages that declare custom code unless Rust passes an explicit
-trust-policy opt-in. Worker behavior still needs to move from ad hoc Python
-method calls to the full envelope contract. Rust can now derive a
-Transformers load envelope from Pumas package facts with contract-version,
-artifact-kind, task-evidence, generation-default, and custom-code trust
-validation before invoking Python.
+trust-policy opt-in. Direct and Pumas-resolved model loading now use the typed
+worker envelope for compatible load paths. Remaining work is to preserve
+dLLM/Sherry local behavior as documented backend-local support and normalize
+remaining Python/Transformers errors into typed backend/runtime facts.
+
+Update during implementation:
+- 2026-05-04: PyTorch direct local model loading now builds the same
+  `load_transformers_model` worker envelope as Pumas-resolved package loading,
+  representing the direct path as `DirectHfCompatibleDirectory` import/debug
+  source rather than a Pumas-owned model. The Python worker remains the
+  adapter-local owner of `AutoModelForCausalLM`, `AutoTokenizer`,
+  `AutoModelForSpeechSeq2Seq`, `AutoProcessor`, chat template repair, and
+  generation-config behavior behind validated task-profile loader labels.
+- 2026-05-04: Rust can now derive a Transformers load envelope from Pumas
+  package facts with contract-version, artifact-kind, task-evidence,
+  generation-default, and custom-code trust validation before invoking Python.
 Typed worker failures now normalize into Pantograph `BackendError` categories
 with request correlation and canonical worker error codes preserved in the
 bounded message.

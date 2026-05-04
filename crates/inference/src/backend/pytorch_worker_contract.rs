@@ -68,7 +68,8 @@ pub(super) struct PyTorchWorkerCancellation {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchTransformersLoadRequest {
-    pub model_ref: PumasModelRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_ref: Option<PumasModelRef>,
     pub artifact_kind: ModelArtifactKind,
     pub entry_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

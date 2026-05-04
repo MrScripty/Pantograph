@@ -198,8 +198,12 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
         PyTorchWorkerOperation::LoadTransformersModel
     );
     assert_eq!(
-        envelope.payload.model_ref.model_id,
-        "pumas://models/tiny-causal"
+        envelope
+            .payload
+            .model_ref
+            .as_ref()
+            .map(|value| value.model_id.as_str()),
+        Some("pumas://models/tiny-causal")
     );
     assert_eq!(
         envelope.payload.artifact_kind,
@@ -217,7 +221,7 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
     );
     assert_eq!(
         model_source.model_ref.as_ref(),
-        Some(&envelope.payload.model_ref)
+        envelope.payload.model_ref.as_ref()
     );
     assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
     let task_profile = envelope
@@ -604,13 +608,13 @@ fn test_pytorch_worker_trust_policy_defaults_closed() {
     );
 
     let request = PyTorchTransformersLoadRequest {
-        model_ref: PumasModelRef {
+        model_ref: Some(PumasModelRef {
             model_id: "pumas://models/no-custom-code".to_string(),
             revision: None,
             selected_artifact_id: None,
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
-        },
+        }),
         artifact_kind: ModelArtifactKind::HfCompatibleDirectory,
         entry_path: "/models/no-custom-code".to_string(),
         model_source: None,
@@ -880,8 +884,12 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
         PyTorchWorkerOperation::LoadTransformersModel
     );
     assert_eq!(
-        envelope.payload.model_ref.model_id,
-        "llm/example/tiny-transformers"
+        envelope
+            .payload
+            .model_ref
+            .as_ref()
+            .map(|value| value.model_id.as_str()),
+        Some("llm/example/tiny-transformers")
     );
     assert_eq!(
         envelope.payload.artifact_kind,
@@ -900,7 +908,7 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
     assert_eq!(model_source.entry_path, envelope.payload.entry_path);
     assert_eq!(
         model_source.model_ref.as_ref(),
-        Some(&envelope.payload.model_ref)
+        envelope.payload.model_ref.as_ref()
     );
     assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
     let task_profile = envelope
@@ -986,6 +994,54 @@ fn test_pytorch_transformers_load_args_use_worker_envelope_payload() {
     );
     assert_eq!(args.trust_policy.revision.as_deref(), Some("weights-rev"));
     assert_eq!(args.trust_policy.code_revision.as_deref(), Some("code-rev"));
+}
+
+#[test]
+fn test_pytorch_direct_load_envelope_uses_transformers_contract() {
+    let envelope = PyTorchBackend::transformers_load_envelope_from_direct_path(
+        "req-direct-load",
+        "/models/direct-hf",
+        Some("cpu"),
+        Some("dllm"),
+        PyTorchTransformersTrustPolicy::default(),
+    );
+
+    PyTorchBackend::validate_transformers_load_envelope(&envelope)
+        .expect("direct load envelope should validate");
+    assert_eq!(envelope.request_id, "req-direct-load");
+    assert_eq!(
+        envelope.operation,
+        PyTorchWorkerOperation::LoadTransformersModel
+    );
+    assert!(envelope.payload.model_ref.is_none());
+    assert_eq!(
+        envelope.payload.artifact_kind,
+        ModelArtifactKind::HfCompatibleDirectory
+    );
+    assert_eq!(envelope.payload.entry_path, "/models/direct-hf");
+    assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
+    assert_eq!(envelope.payload.model_type_hint.as_deref(), Some("dllm"));
+    assert_eq!(envelope.payload.device.as_deref(), Some("cpu"));
+    let model_source = envelope
+        .payload
+        .model_source
+        .as_ref()
+        .expect("direct load envelope should carry a model source");
+    assert_eq!(
+        model_source.source_kind,
+        ResolvedModelSourceKind::DirectHfCompatibleDirectory
+    );
+    assert!(model_source.model_ref.is_none());
+    assert!(model_source.validate_for_backend_load().is_ok());
+    let task_profile = envelope
+        .payload
+        .task_profile
+        .as_ref()
+        .expect("direct load envelope should carry a task profile");
+    assert_eq!(
+        task_profile.loader,
+        PyTorchTransformersModelLoader::CausalLm
+    );
 }
 
 #[test]

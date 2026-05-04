@@ -35,8 +35,8 @@ use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry_from_evidence, GenerationOptions, InferenceModality,
     InferenceTaskId, ModelLoadSecurityPolicy, ModelValidationState, OptionCompatibilityDiagnostic,
-    OptionSupportState, ResolvedModelPackageFacts, ResolvedModelSource, TaskEvidence,
-    TaskRegistryEntry,
+    OptionSupportState, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
+    TaskEvidence, TaskRegistryEntry,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{
@@ -110,16 +110,6 @@ pub fn kv_cache_model_fingerprint_for_live_kv(info: &PyTorchLiveKvInfo) -> Model
         model_type: info.model_type.clone(),
         device: info.device.clone(),
     })
-}
-
-fn pytorch_cache_policy_label(
-    policy: crate::model_contracts::ModelLoadCachePolicy,
-) -> &'static str {
-    match policy {
-        crate::model_contracts::ModelLoadCachePolicy::BackendDefault => "backend_default",
-        crate::model_contracts::ModelLoadCachePolicy::UseCache => "use_cache",
-        crate::model_contracts::ModelLoadCachePolicy::BypassCache => "bypass_cache",
-    }
 }
 
 pub fn kv_cache_runtime_fingerprint_for_loaded_model(
@@ -412,7 +402,7 @@ impl PyTorchBackend {
             request_id,
             PyTorchWorkerOperation::LoadTransformersModel,
             PyTorchTransformersLoadRequest {
-                model_ref: package.model_ref.clone(),
+                model_ref: Some(package.model_ref.clone()),
                 artifact_kind: package.artifact.artifact_kind.clone(),
                 entry_path: package.artifact.entry_path.clone(),
                 model_source: Some(ResolvedModelSource::from_package_facts(package)),
@@ -424,6 +414,41 @@ impl PyTorchBackend {
                 generation_defaults,
             },
         ))
+    }
+
+    fn transformers_load_envelope_from_direct_path(
+        request_id: impl Into<String>,
+        model_path: impl Into<String>,
+        device: Option<&str>,
+        model_type: Option<&str>,
+        trust_policy: PyTorchTransformersTrustPolicy,
+    ) -> PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest> {
+        let model_path = model_path.into();
+        PyTorchWorkerEnvelope::new(
+            request_id,
+            PyTorchWorkerOperation::LoadTransformersModel,
+            PyTorchTransformersLoadRequest {
+                model_ref: None,
+                artifact_kind: ModelArtifactKind::HfCompatibleDirectory,
+                entry_path: model_path.clone(),
+                model_source: Some(ResolvedModelSource::direct_local(
+                    ResolvedModelSourceKind::DirectHfCompatibleDirectory,
+                    ModelArtifactKind::HfCompatibleDirectory,
+                    model_path,
+                )),
+                task_id: InferenceTaskId::TextGeneration,
+                task_profile: Some(PyTorchTransformersTaskProfile {
+                    task_id: InferenceTaskId::TextGeneration,
+                    canonical_task_label: "text_generation".to_string(),
+                    loader: PyTorchTransformersModelLoader::CausalLm,
+                    required_components: vec![],
+                }),
+                model_type_hint: model_type.map(str::to_string),
+                device: device.map(str::to_string),
+                trust_policy,
+                generation_defaults: None,
+            },
+        )
     }
 
     async fn load_transformers_envelope(
@@ -942,80 +967,14 @@ impl PyTorchBackend {
         model_type: Option<&str>,
         trust_policy: PyTorchTransformersTrustPolicy,
     ) -> Result<LoadedModelInfo, BackendError> {
-        let model_path = model_path.to_string();
-        let device = device.to_string();
-        let model_type = model_type.map(|s| s.to_string());
-        let allow_remote_code = trust_policy.allow_remote_code;
-        let trust_policy_decision_id = trust_policy.decision_id.clone();
-        let local_files_only = trust_policy.local_files_only;
-        let revision = trust_policy.revision.clone();
-        let code_revision = trust_policy.code_revision.clone();
-        let cache_policy = trust_policy.cache_policy;
-
-        let info = tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
-                let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    BackendError::StartupFailed(format!("Failed to load worker module: {}", e))
-                })?;
-
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("model_path", &model_path).unwrap();
-                kwargs.set_item("device", &device).unwrap();
-                if let Some(ref mt) = model_type {
-                    kwargs.set_item("model_type", mt).unwrap();
-                }
-                kwargs
-                    .set_item("trust_remote_code", allow_remote_code)
-                    .unwrap();
-                kwargs
-                    .set_item("local_files_only", local_files_only)
-                    .unwrap();
-                kwargs
-                    .set_item("cache_policy", pytorch_cache_policy_label(cache_policy))
-                    .unwrap();
-                if let Some(ref decision_id) = trust_policy_decision_id {
-                    kwargs
-                        .set_item("trust_policy_decision_id", decision_id)
-                        .unwrap();
-                }
-                if let Some(ref revision) = revision {
-                    kwargs.set_item("revision", revision).unwrap();
-                }
-                if let Some(ref code_revision) = code_revision {
-                    kwargs.set_item("code_revision", code_revision).unwrap();
-                }
-
-                let result = worker
-                    .call_method("load_model", (), Some(&kwargs))
-                    .map_err(|e| BackendError::Inference(format!("Model load failed: {}", e)))?;
-
-                let info = LoadedModelInfo {
-                    model_path: result
-                        .get_item("model_path")
-                        .ok()
-                        .and_then(|v| v.extract::<String>().ok())
-                        .unwrap_or_default(),
-                    model_type: result
-                        .get_item("model_type")
-                        .ok()
-                        .and_then(|v| v.extract::<String>().ok())
-                        .unwrap_or_else(|| "text-generation".to_string()),
-                    device: result
-                        .get_item("device")
-                        .ok()
-                        .and_then(|v| v.extract::<String>().ok())
-                        .unwrap_or_else(|| "cpu".to_string()),
-                };
-
-                Ok(info)
-            })
-        })
-        .await
-        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))??;
-
-        self.loaded_model = Some(info.clone());
-        self.ready = true;
-        Ok(info)
+        let envelope = Self::transformers_load_envelope_from_direct_path(
+            format!("pytorch-direct-load-{}", Uuid::new_v4().simple()),
+            model_path,
+            Some(device),
+            model_type,
+            trust_policy,
+        );
+        self.load_transformers_envelope(envelope).await
     }
 
     /// Unload the current model and free GPU memory.
