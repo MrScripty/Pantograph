@@ -236,6 +236,35 @@ mod options_provider {
         }
     }
 
+    async fn poll_package_facts_summary_updates(
+        api: &Arc<pumas_library::PumasApi>,
+        cache: &mut PackageFactsSummaryCache,
+        limit: usize,
+    ) {
+        if let Some(cursor) = cache.cursor.clone() {
+            if let Ok(feed) = api
+                .list_model_library_updates_since(Some(&cursor), limit)
+                .await
+            {
+                cache.apply_update_feed(&feed);
+            }
+        }
+    }
+
+    async fn resolve_missing_package_facts_summaries(
+        api: &Arc<pumas_library::PumasApi>,
+        records: &[pumas_library::ModelRecord],
+        cache: &mut PackageFactsSummaryCache,
+    ) {
+        for record in records {
+            if cache.needs_resolution(&record.id) {
+                if let Ok(summary) = api.resolve_model_package_facts_summary(&record.id).await {
+                    cache.insert_summary(summary);
+                }
+            }
+        }
+    }
+
     pub(crate) async fn load_package_facts_summary_cache(
         api: &Arc<pumas_library::PumasApi>,
         records: &[pumas_library::ModelRecord],
@@ -264,22 +293,10 @@ mod options_provider {
             }
         }
 
-        if let Some(cursor) = cache.cursor.clone() {
-            if let Ok(feed) = api
-                .list_model_library_updates_since(Some(&cursor), limit)
-                .await
-            {
-                cache.apply_update_feed(&feed);
-            }
-        }
-
-        for record in records {
-            if cache.needs_resolution(&record.id) {
-                if let Ok(summary) = api.resolve_model_package_facts_summary(&record.id).await {
-                    cache.insert_summary(summary);
-                }
-            }
-        }
+        poll_package_facts_summary_updates(api, &mut cache, limit).await;
+        resolve_missing_package_facts_summaries(api, records, &mut cache).await;
+        poll_package_facts_summary_updates(api, &mut cache, limit).await;
+        resolve_missing_package_facts_summaries(api, records, &mut cache).await;
 
         cache
     }
@@ -878,6 +895,74 @@ mod model_library_tests {
         assert_eq!(
             cache.summaries.get("model-a").map(|summary| summary.status),
             Some(ModelPackageFactsSummaryStatus::Regenerated)
+        );
+    }
+
+    #[test]
+    fn test_package_facts_summary_cache_invalidates_regenerated_rows_from_later_feed() {
+        let mut cache = PackageFactsSummaryCache {
+            cursor: Some("model-library-updates:2".to_string()),
+            summaries: HashMap::from([
+                (
+                    "model-a".to_string(),
+                    package_summary_result("model-a", "regenerated"),
+                ),
+                (
+                    "model-b".to_string(),
+                    package_summary_result("model-b", "regenerated"),
+                ),
+            ]),
+        };
+        let feed = ModelLibraryUpdateFeed {
+            cursor: "model-library-updates:3".to_string(),
+            events: vec![ModelLibraryUpdateEvent {
+                cursor: "model-library-updates:3".to_string(),
+                model_id: "model-a".to_string(),
+                change_kind: ModelLibraryChangeKind::PackageFactsModified,
+                fact_family: ModelFactFamily::PackageFacts,
+                refresh_scope: ModelLibraryRefreshScope::SummaryAndDetail,
+                selected_artifact_id: Some("main".to_string()),
+                producer_revision: Some("rev-3".to_string()),
+            }],
+            stale_cursor: false,
+            snapshot_required: false,
+        };
+
+        cache.apply_update_feed(&feed);
+
+        assert_eq!(cache.cursor.as_deref(), Some("model-library-updates:3"));
+        assert!(
+            cache.needs_resolution("model-a"),
+            "post-regeneration update feeds must invalidate changed summaries"
+        );
+        assert!(
+            !cache.needs_resolution("model-b"),
+            "unaffected regenerated rows should remain usable"
+        );
+    }
+
+    #[test]
+    fn test_package_facts_summary_cache_keeps_regenerated_rows_when_later_feed_is_empty() {
+        let mut cache = PackageFactsSummaryCache {
+            cursor: Some("model-library-updates:2".to_string()),
+            summaries: HashMap::from([(
+                "model-a".to_string(),
+                package_summary_result("model-a", "regenerated"),
+            )]),
+        };
+        let feed = ModelLibraryUpdateFeed {
+            cursor: "model-library-updates:2".to_string(),
+            events: Vec::new(),
+            stale_cursor: false,
+            snapshot_required: false,
+        };
+
+        cache.apply_update_feed(&feed);
+
+        assert_eq!(cache.cursor.as_deref(), Some("model-library-updates:2"));
+        assert!(
+            !cache.needs_resolution("model-a"),
+            "empty post-regeneration feeds should not discard fresh summaries"
         );
     }
 

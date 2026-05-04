@@ -1060,7 +1060,11 @@ internals. Snapshot/update/regeneration coverage now freezes the cache sequence
 that invalidates modified summary rows after the snapshot cursor and repopulates
 them through summary resolution instead of serving stale rows. A longer-lived
 application startup cache loop is still pending before the event-consumption
-task is complete. Backend-checked Pumas package-fact
+task is complete. `puma-lib` now also polls the update cursor after bounded
+summary regeneration, so updates that arrive during sparse-row regeneration
+invalidate only affected rows instead of letting a page serve newly stale
+summary details, then refills those affected rows against the newest cursor.
+Backend-checked Pumas package-fact
 candidate projection now preserves bounded compatibility report and issue
 summaries on `RuntimeTechnicalFitCandidate` so rejected/degraded candidates can
 be explained without asking Pumas to own candidate derivation or scheduler
@@ -3050,6 +3054,11 @@ Update during implementation:
   inference lifecycle events and durable inference diagnostic payloads, with
   run-list/run-detail projection into the existing selected-network-node
   columns.
+- 2026-05-04: Tightened `puma-lib` package-facts summary cache population so
+  it polls Pumas update cursors after bounded summary regeneration as well as
+  after the startup/page snapshot, closing the stale window for updates that
+  arrive while sparse summary rows are regenerated and refilling affected page
+  rows against the newest cursor.
 - 2026-05-04: Fixed a workflow-service issue found during full validation:
   edge-insert preview for canonical `llm-inference` could choose text-compatible
   configuration/context ports before the primary `prompt` port after
