@@ -1024,6 +1024,9 @@ or execution sees them. Backend compatibility now treats a present diffusers
 `model_index` component as valid image-generation preprocessing evidence for
 Pumas-resolved diffusers bundles, so the fixture shape can pass compatibility
 without inventing a generic image-processor fact.
+Backend compatibility coverage also verifies the standalone safetensors and
+ONNX embedding package-fact fixtures match declared backend source capabilities
+and required tokenizer preprocessing through the same factual report path.
 Inference now exposes Pumas-aligned update feed and package-fact summary
 snapshot DTOs. Model-list cache and update-event consumption remain pending.
 The `puma-lib` model-list option cache now has a bounded

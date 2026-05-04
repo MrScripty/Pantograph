@@ -640,6 +640,24 @@ mod tests {
         }
     }
 
+    fn embedding_task() -> TaskRegistryEntry {
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::Embedding,
+            aliases: vec!["feature-extraction".to_string()],
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Text],
+                vec![InferenceModality::Embedding],
+            ),
+            result_family: "embedding_vector".to_string(),
+            task_family: TaskFamily::Embedding,
+            execution_behavior: TaskExecutionBehavior::ExtractsFeatures,
+            streaming_support: TaskStreamingSupport::Unsupported,
+            support_tier: SupportTier::Stable,
+            required_components: Vec::new(),
+            upstream_task_ids: vec!["feature-extraction".to_string()],
+        }
+    }
+
     fn backend_for_text_generation() -> BackendCapabilities {
         BackendCapabilities {
             facts: BackendCapabilityFacts {
@@ -664,6 +682,30 @@ mod tests {
                     external_connection: BackendFeatureSupport::Unsupported,
                     kv_cache: BackendFeatureSupport::Supported,
                 },
+            },
+            ..BackendCapabilities::default()
+        }
+    }
+
+    fn backend_for_embedding_source(
+        artifact_kind: ModelArtifactKind,
+        backend_hint: BackendHintLabel,
+    ) -> BackendCapabilities {
+        BackendCapabilities {
+            facts: BackendCapabilityFacts {
+                tasks: vec![BackendTaskCapability::stable(
+                    InferenceTaskId::Embedding,
+                    vec![InferenceModality::Text],
+                    vec![InferenceModality::Embedding],
+                )],
+                preprocessing: BackendComponentCapability::RequiresPackageComponent,
+                postprocessing: BackendComponentCapability::BackendManaged,
+                model_sources: BackendModelSourceCapabilityFacts {
+                    artifact_kinds: vec![artifact_kind],
+                    backend_hints: vec![backend_hint],
+                    custom_code: BackendFeatureSupport::Unsupported,
+                },
+                features: BackendFeatureCapabilityFacts::default(),
             },
             ..BackendCapabilities::default()
         }
@@ -765,6 +807,43 @@ mod tests {
         assert_eq!(report.model_source, BackendCompatibilityStatus::Supported);
         assert_eq!(report.preprocessing, BackendCompatibilityStatus::Supported);
         assert!(report.issues.is_empty());
+    }
+
+    #[test]
+    fn safetensors_and_onnx_embedding_fixtures_match_declared_backend_sources() {
+        let task = embedding_task();
+
+        for (raw, artifact_kind, backend_hint, backend_key) in [
+            (
+                include_str!(
+                    "../../tests/fixtures/inference_package_facts/safetensors_package_facts.json"
+                ),
+                ModelArtifactKind::Safetensors,
+                BackendHintLabel::Candle,
+                "candle",
+            ),
+            (
+                include_str!(
+                    "../../tests/fixtures/inference_package_facts/onnx_package_facts.json"
+                ),
+                ModelArtifactKind::Onnx,
+                BackendHintLabel::OnnxRuntime,
+                "onnxruntime",
+            ),
+        ] {
+            let package = fixture(raw);
+            let report = backend_for_embedding_source(artifact_kind, backend_hint)
+                .check_model_compatibility(
+                    Some(backend_key),
+                    BackendCompatibilityRequest::new(&task, &package),
+                );
+
+            assert!(report.compatible, "unexpected issues: {:?}", report.issues);
+            assert_eq!(report.task, BackendCompatibilityStatus::Supported);
+            assert_eq!(report.model_source, BackendCompatibilityStatus::Supported);
+            assert_eq!(report.preprocessing, BackendCompatibilityStatus::Supported);
+            assert!(report.issues.is_empty());
+        }
     }
 
     #[test]
