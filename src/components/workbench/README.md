@@ -141,6 +141,10 @@ transient UI state without becoming backend scheduler policy.
 - I/O artifact descriptor rendering may display backend-provided conversion
   status, command id, conversion id, and dependency lease attribution, but it
   must not infer conversion state from media type or payload availability.
+- I/O artifact descriptor rendering may display projected runtime, selected
+  backend, and model identifiers when the diagnostics projection supplies those
+  facts, but it must not derive model/backend identity from artifact labels,
+  payload handles, or media type.
 - I/O Inspector node grouping and endpoint filters must use producer and
   consumer projection fields. Components may send backend producer/consumer
   filters, but must not infer endpoint ownership from raw payload JSON.

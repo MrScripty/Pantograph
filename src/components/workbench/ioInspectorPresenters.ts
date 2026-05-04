@@ -391,6 +391,11 @@ export function buildIoArtifactDescriptorMetadataRows(
     | 'access_modes'
     | 'read_handle'
     | 'stream_handle'
+    | 'runtime_id'
+    | 'runtime_version'
+    | 'selected_backend_key'
+    | 'model_id'
+    | 'model_version'
     | 'format'
   >,
 ): IoArtifactDescriptorMetadataRow[] {
@@ -417,6 +422,21 @@ export function buildIoArtifactDescriptorMetadataRows(
   }
   if (artifact.stream_handle) {
     rows.push({ label: 'Stream Handle', value: artifact.stream_handle, mono: true });
+  }
+  if (artifact.runtime_id) {
+    rows.push({ label: 'Runtime', value: artifact.runtime_id, mono: true });
+  }
+  if (artifact.runtime_version) {
+    rows.push({ label: 'Runtime Version', value: artifact.runtime_version, mono: true });
+  }
+  if (artifact.selected_backend_key) {
+    rows.push({ label: 'Backend', value: artifact.selected_backend_key, mono: true });
+  }
+  if (artifact.model_id) {
+    rows.push({ label: 'Model', value: artifact.model_id, mono: true });
+  }
+  if (artifact.model_version) {
+    rows.push({ label: 'Model Version', value: artifact.model_version, mono: true });
   }
 
   const format = artifact.format;

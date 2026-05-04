@@ -2229,8 +2229,10 @@ inference write ledger events directly.
   usage/cache fields, durable inference diagnostic summaries, node-derived
   run-list/run-detail selected backend/model/task rollups, embedded-runtime
   lifecycle sink projection rules, and workflow-service
-  `diagnostics_unavailable` behavior; frontend/API docs still need a separate
-  review if public TypeScript or UI surfaces change.
+  `diagnostics_unavailable` behavior. Frontend TypeScript contracts and I/O
+  Inspector presenter docs now cover projected runtime/backend/model artifact
+  context; broader UI/API documentation remains open as additional surfaces
+  change.
 
 **Verification:**
 - `cargo test -p pantograph-diagnostics-ledger` for new event/projection fields,
@@ -2720,6 +2722,10 @@ Update during implementation:
   `event_seq` at or before the artifact event. Workflow-service artifact events
   remain payload-boundary facts and do not pre-enrich model identity from a
   latest-node projection that could drift after later executions.
+- 2026-05-03: Frontend diagnostics types and I/O Inspector presenter rows now
+  expose projected runtime, selected backend, and model identifiers for
+  artifacts when those facts are present, while keeping missing facts out of the
+  compact descriptor view.
 
 ## Commit Cadence Notes
 

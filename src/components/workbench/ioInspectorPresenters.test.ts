@@ -182,6 +182,11 @@ test('artifact descriptor labels and rows tolerate absent optional projection fi
       access_modes: undefined,
       read_handle: null,
       stream_handle: null,
+      runtime_id: null,
+      runtime_version: null,
+      selected_backend_key: null,
+      model_id: null,
+      model_version: null,
       format: null,
     }),
     [
@@ -199,6 +204,11 @@ test('artifact descriptor rows expose handle and format metadata without payload
     access_modes: ['read', 'download'],
     read_handle: 'artifact-read://artifact-run-1-image',
     stream_handle: null,
+    runtime_id: 'runtime-transformers',
+    runtime_version: '0.1.0',
+    selected_backend_key: 'vllm',
+    model_id: 'pumas://models/image-alpha',
+    model_version: 'rev-a',
     format: {
       format_id: 'jpg',
       media_type: 'image/jpeg',
@@ -229,6 +239,9 @@ test('artifact descriptor rows expose handle and format metadata without payload
   assert.equal(rows.find((row) => row.label === 'Lifecycle')?.value, 'Retained');
   assert.equal(rows.find((row) => row.label === 'Access')?.value, 'Read, Download');
   assert.equal(rows.find((row) => row.label === 'Read Handle')?.value, 'artifact-read://artifact-run-1-image');
+  assert.equal(rows.find((row) => row.label === 'Runtime')?.value, 'runtime-transformers');
+  assert.equal(rows.find((row) => row.label === 'Backend')?.value, 'vllm');
+  assert.equal(rows.find((row) => row.label === 'Model')?.value, 'pumas://models/image-alpha');
   assert.equal(rows.find((row) => row.label === 'Format')?.value, 'jpg');
   assert.equal(rows.find((row) => row.label === 'Format Media')?.value, 'image/jpeg');
   assert.equal(rows.find((row) => row.label === 'Quality')?.value, '75%');
