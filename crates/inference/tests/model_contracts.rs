@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use inference::{
     default_task_registry_entries, normalize_modality_label, normalize_task_label,
@@ -384,6 +384,107 @@ fn default_task_registry_seeds_transformers_aligned_vertical_slices() {
         resolve_task_registry_entry("text-reranking").expect("rerank alias should resolve");
     assert_eq!(rerank.task_id, InferenceTaskId::Rerank);
     assert_eq!(rerank.execution_behavior, TaskExecutionBehavior::Scores);
+}
+
+#[test]
+fn default_task_registry_entries_have_complete_public_contract_shape() {
+    let mut canonical_task_ids = BTreeSet::new();
+
+    for entry in default_task_registry_entries() {
+        assert!(
+            canonical_task_ids.insert(entry.canonical_label().to_string()),
+            "duplicate task registry entry for {}",
+            entry.canonical_label()
+        );
+        assert_ne!(
+            entry.task_id,
+            InferenceTaskId::Unknown,
+            "registry entries must expose typed task ids"
+        );
+        assert_ne!(
+            entry.task_family,
+            TaskFamily::Unknown,
+            "task {} should classify its task family",
+            entry.canonical_label()
+        );
+        assert_ne!(
+            entry.execution_behavior,
+            TaskExecutionBehavior::Unknown,
+            "task {} should classify its execution behavior",
+            entry.canonical_label()
+        );
+        assert_ne!(
+            entry.streaming_support,
+            TaskStreamingSupport::Unknown,
+            "task {} should define streaming support",
+            entry.canonical_label()
+        );
+        assert_ne!(
+            entry.support_tier,
+            SupportTier::Unknown,
+            "task {} should define support tier",
+            entry.canonical_label()
+        );
+        assert!(
+            !entry.modality_signature.inputs.is_empty(),
+            "task {} should declare input modalities",
+            entry.canonical_label()
+        );
+        assert!(
+            !entry.modality_signature.outputs.is_empty(),
+            "task {} should declare output modalities",
+            entry.canonical_label()
+        );
+        assert!(
+            !entry.result_family.trim().is_empty(),
+            "task {} should declare a result family",
+            entry.canonical_label()
+        );
+
+        for label in entry
+            .aliases
+            .iter()
+            .map(String::as_str)
+            .chain(entry.upstream_task_ids.iter().map(String::as_str))
+            .chain(std::iter::once(entry.canonical_label()))
+        {
+            let normalized = normalize_task_label(label);
+            assert!(
+                !normalized.is_empty(),
+                "task {} should not expose blank labels",
+                entry.canonical_label()
+            );
+            for forbidden in [
+                "admission",
+                "reservation",
+                "priority",
+                "eviction",
+                "scheduler",
+                "selected_best_backend",
+            ] {
+                assert!(
+                    !normalized.contains(forbidden),
+                    "task {} label '{}' leaks scheduler/runtime policy language",
+                    entry.canonical_label(),
+                    label
+                );
+            }
+        }
+
+        let contract = entry.request_contract().unwrap_or_else(|| {
+            panic!(
+                "task {} should publish a request contract",
+                entry.canonical_label()
+            )
+        });
+        assert_eq!(contract.task_id, entry.task_id);
+        assert_eq!(contract.streaming_support, entry.streaming_support);
+        assert_eq!(
+            contract.required_input_modalities,
+            entry.modality_signature.inputs
+        );
+        assert_eq!(contract.output_modalities, entry.modality_signature.outputs);
+    }
 }
 
 #[test]

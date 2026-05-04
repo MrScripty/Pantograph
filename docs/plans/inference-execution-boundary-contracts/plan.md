@@ -1057,7 +1057,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
 - [ ] Define task request contracts aligned with Transformers task semantics
   for text generation/chat, embeddings, rerank, image/depth/audio/video-ready
   extensions, and multimodal payloads.
-- [ ] Define the strong task registry shape, including canonical task id,
+- [x] Define the strong task registry shape, including canonical task id,
   aliases, task family, input modalities, output modalities, result schema,
   processor/component requirements, streaming support, generative/scoring
   behavior, default lifecycle phases, support tier, and backend compatibility
@@ -1174,6 +1174,11 @@ rule that payload compatibility comes from the registry contract rather than
 backend names or raw task strings. Neighboring consumer-migration slices should
 continue moving graph/runtime consumers to the exported contract before marking
 the broader task request/registry tasks complete.
+Executable task-registry invariant coverage now freezes the complete public
+shape for every seeded task entry: unique canonical ids, known family,
+execution-behavior, streaming, and support-tier classifications, non-empty
+modality/result facts, a typed request contract, and labels that avoid
+scheduler/runtime policy language.
 Typed execution request validation now rejects whitespace-only text prompts,
 blank embedding items, blank rerank queries, and blank rerank documents at the
 contract boundary, with indexed validation errors for list payloads so
