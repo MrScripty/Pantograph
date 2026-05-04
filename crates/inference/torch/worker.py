@@ -359,6 +359,58 @@ def generate_text_stream_from_envelope(envelope):
     return generate_tokens(**kwargs)
 
 
+def generate_text_stream_setup_from_envelope(envelope):
+    """Validate streaming generation setup and return a worker response JSON."""
+    request_id = "unknown"
+    try:
+        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+        if isinstance(decoded, dict):
+            request_id = str(decoded.get("request_id") or request_id)
+        generate_text_kwargs_from_envelope(
+            decoded,
+            expected_operation=GENERATE_TEXT_STREAM_OPERATION,
+        )
+        if _model is None:
+            raise RuntimeError("No model loaded. Call load_model() first.")
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": {"ready": True},
+        })
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "invalid_request",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_invalid_generate_text_stream_request",
+            },
+        })
+    except RuntimeError as exc:
+        message = str(exc)
+        kind = "runtime_unavailable" if "No model loaded" in message else "generation_failed"
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": kind,
+                "message": message,
+                "canonical_code": "pytorch_worker_generate_text_stream_failed",
+            },
+        })
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "internal",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_generate_text_stream_internal",
+            },
+        })
+
+
 def load_model(
     model_path,
     device="auto",

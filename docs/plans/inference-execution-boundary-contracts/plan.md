@@ -1761,6 +1761,10 @@ worker response shape as generation requests. Rust decodes load success and
 failure envelopes, preserves request ids and canonical worker error codes, and
 normalizes worker load failures through the existing `BackendError` mapping
 instead of surfacing raw PyO3 exception text.
+PyTorch streaming generation now runs a structured worker setup probe before
+iterating the Python generator, so invalid stream envelopes and missing-model
+setup failures normalize through `PyTorchWorkerFailure` with request ids and
+canonical error codes like load and non-streaming generation failures.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

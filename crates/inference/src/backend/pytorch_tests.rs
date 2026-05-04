@@ -593,6 +593,40 @@ fn test_pytorch_worker_load_error_response_normalizes_to_backend_error() {
 }
 
 #[test]
+fn test_pytorch_worker_stream_setup_error_response_normalizes_to_backend_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-stream-no-model",
+        "error": {
+            "kind": "runtime_unavailable",
+            "message": "No model loaded. Call load_model() first.",
+            "canonical_code": "pytorch_worker_generate_text_stream_failed"
+        }
+    });
+
+    match PyTorchBackend::stream_setup_from_worker_response(&response.to_string()) {
+        Err(BackendError::NotRunning(message)) => {
+            assert!(message.contains("pytorch_worker_generate_text_stream_failed"));
+            assert!(message.contains("req-stream-no-model"));
+            assert!(message.contains("No model loaded"));
+        }
+        other => panic!("expected NotRunning error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_stream_setup_success_response_decodes() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-stream-ready",
+        "result": {"ready": true}
+    });
+
+    PyTorchBackend::stream_setup_from_worker_response(&response.to_string())
+        .expect("stream setup success should decode");
+}
+
+#[test]
 fn test_pytorch_audio_transcription_requires_encoded_audio() {
     let request = AudioTranscriptionRequest {
         model: "openai/whisper-tiny".to_string(),

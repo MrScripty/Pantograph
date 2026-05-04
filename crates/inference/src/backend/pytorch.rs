@@ -477,6 +477,19 @@ impl PyTorchBackend {
         }
     }
 
+    fn stream_setup_from_worker_response(response_json: &str) -> Result<(), BackendError> {
+        let response: PyTorchWorkerResponse<Value> =
+            serde_json::from_str(response_json).map_err(|error| {
+                BackendError::Inference(format!(
+                    "Failed to decode PyTorch worker stream setup response: {error}"
+                ))
+            })?;
+        match response {
+            PyTorchWorkerResponse::Ok(_) => Ok(()),
+            PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
+        }
+    }
+
     fn validate_transformers_load_envelope(
         envelope: &PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
     ) -> Result<(), BackendError> {
@@ -1179,6 +1192,27 @@ impl PyTorchBackend {
                         return;
                     }
                 };
+
+                let setup_response_json = match worker
+                    .call_method1(
+                        "generate_text_stream_setup_from_envelope",
+                        (&envelope_json,),
+                    )
+                    .and_then(|result| result.extract::<String>())
+                {
+                    Ok(response_json) => response_json,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(BackendError::Inference(format!(
+                            "PyTorch worker generate_text_stream setup failed: {}",
+                            e
+                        ))));
+                        return;
+                    }
+                };
+                if let Err(error) = Self::stream_setup_from_worker_response(&setup_response_json) {
+                    let _ = tx.blocking_send(Err(error));
+                    return;
+                }
 
                 let generator = match worker
                     .call_method1("generate_text_stream_from_envelope", (envelope_json,))
