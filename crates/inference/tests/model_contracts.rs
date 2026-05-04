@@ -144,6 +144,48 @@ fn package_fact_fixtures_cover_safetensors_diffusers_and_onnx_artifact_kinds() {
 }
 
 #[test]
+fn package_fact_fixtures_resolve_task_evidence_through_registry() {
+    for (fixture_name, expected_task_id) in [
+        (
+            "gguf_text_generation_package_facts.json",
+            InferenceTaskId::TextGeneration,
+        ),
+        (
+            "gguf_embedding_package_facts.json",
+            InferenceTaskId::Embedding,
+        ),
+        (
+            "hf_transformers_text_generation_package_facts.json",
+            InferenceTaskId::TextGeneration,
+        ),
+        (
+            "hf_multimodal_processor_package_facts.json",
+            InferenceTaskId::ImageUnderstanding,
+        ),
+        ("safetensors_package_facts.json", InferenceTaskId::Embedding),
+        (
+            "diffusers_bundle_package_facts.json",
+            InferenceTaskId::ImageGeneration,
+        ),
+        ("onnx_package_facts.json", InferenceTaskId::Embedding),
+    ] {
+        let raw = PACKAGE_FACT_FIXTURES
+            .iter()
+            .find_map(|(name, raw)| (*name == fixture_name).then_some(*raw))
+            .unwrap_or_else(|| panic!("fixture {fixture_name} should be registered"));
+        let facts: ResolvedModelPackageFacts =
+            serde_json::from_str(raw).expect("decode package facts fixture");
+        let entry = resolve_task_registry_entry_from_evidence(&facts.task)
+            .unwrap_or_else(|error| panic!("fixture {fixture_name} should resolve: {error:?}"));
+
+        assert_eq!(
+            entry.task_id, expected_task_id,
+            "fixture {fixture_name} should resolve to the expected canonical task"
+        );
+    }
+}
+
+#[test]
 fn compact_model_execution_descriptor_stays_smaller_than_package_facts() {
     let raw = serde_json::json!({
         "execution_contract_version": 1,
