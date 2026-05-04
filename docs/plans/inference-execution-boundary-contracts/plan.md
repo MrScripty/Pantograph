@@ -1108,7 +1108,11 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   embeddings, rerank, image generation, image understanding,
   audio transcription, video understanding, and multimodal generation,
   including input/result kind, execution support, streaming support, and
-  required/output modalities.
+  required/output modalities. Node-engine now has an executable
+  `image_generation` request-construction slice for canonical `llm-inference`,
+  including direct and `task_options` image controls, Pumas package-facts
+  forwarding, and typed gateway projection without diagnostic prompt/image
+  payload leakage.
 - [x] Define the strong task registry shape, including canonical task id,
   aliases, task family, input modalities, output modalities, result schema,
   processor/component requirements, streaming support, generative/scoring
@@ -2480,7 +2484,10 @@ drift back into inference.
   Node-engine canonical `llm-inference` rerank execution now projects typed
   option diagnostics onto the existing `diagnostics` graph output like text,
   embedding, and audio paths, without copying query or document payloads into
-  diagnostic metadata.
+  diagnostic metadata. Node-engine canonical `llm-inference` image-generation
+  execution now routes through the same typed gateway boundary, projects
+  generated image results plus bounded metadata/diagnostics onto existing graph
+  outputs, and keeps prompt text plus generated image bytes out of diagnostics.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
@@ -2523,6 +2530,12 @@ PyTorch direct local loads and Pumas-resolved loads share the backend-local
 `load_transformers_model` worker envelope, that direct paths remain
 import/debug sources rather than Pumas model refs, and that Candle staged
 resource probes do not imply executable runtime availability.
+2026-05-04 update: node-engine canonical `llm-inference` image generation now
+uses typed `InferenceExecutionRequest::ImageGeneration` instead of falling back
+to backend-name dispatch. The slice proves Pumas model refs, Pumas package
+facts, direct image controls, and nested `task_options` image controls map into
+the typed gateway while bounded graph diagnostics omit prompt text and encoded
+image payloads.
 
 ### Milestone 15: Diagnostics Ledger Integration
 
@@ -3392,6 +3405,12 @@ Update during implementation:
   inputs through typed gateway execution, and task-validation plus
   backend-execution lifecycle events carry compatibility summaries with the
   package-derived embedding model id.
+- 2026-05-04: Node-engine canonical image-generation execution now routes
+  `llm-inference` `task_kind = image_generation` through the typed gateway.
+  The slice parses direct and nested image-generation options, falls back to
+  resolved Pumas package facts for model identity, projects generated images
+  through existing graph outputs, and verifies diagnostics do not include
+  prompt text or encoded image bytes.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are

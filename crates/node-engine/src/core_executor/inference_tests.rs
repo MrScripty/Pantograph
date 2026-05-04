@@ -19,8 +19,9 @@ use inference::backend::BackendStartOutcome;
 use inference::{
     AudioTranscriptionRequest, AudioTranscriptionResult, AudioTranscriptionSegment,
     BackendCapabilities, BackendConfig, BackendError, CacheGenerationOptions, ChatChunk,
-    EmbeddingResult, GenerationOptions, InferenceBackend, InferenceExecutionInput,
-    InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    EmbeddingResult, EncodedImage, GenerationOptions, ImageGenerationRequest,
+    ImageGenerationResult, InferenceBackend, InferenceExecutionInput, InferenceLifecyclePhase,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, InferenceTaskId, LengthGenerationOptions, ProcessSpawner,
     PumasModelRef, RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts,
     SamplingGenerationOptions,
@@ -1191,6 +1192,182 @@ fn test_build_rerank_execution_request_rejects_malformed_package_facts() {
         }
         other => panic!("unexpected input variant: {other:?}"),
     }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_image_generation_execution_request_preserves_canonical_inputs() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("image_generation"),
+    );
+    inputs.insert(
+        "prompt".to_string(),
+        serde_json::json!("paint a quiet lake"),
+    );
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("pytorch"));
+    inputs.insert(
+        "task_options".to_string(),
+        serde_json::json!({
+            "negative_prompt": "blur",
+            "width": 512,
+            "height": 384,
+            "num_inference_steps": 12,
+            "guidance_scale": 7.5,
+            "seed": 42,
+            "scheduler": "euler",
+            "num_images_per_prompt": 2
+        }),
+    );
+    inputs.insert("strength".to_string(), serde_json::json!(0.35));
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/tiny-diffusion",
+            "selected_artifact_path": "/models/tiny-diffusion"
+        }),
+    );
+
+    let request = build_image_generation_execution_request(&inputs)
+        .expect("canonical image generation request should build");
+
+    assert_eq!(request.task_id, InferenceTaskId::ImageGeneration);
+    assert_eq!(
+        request.model_name.as_deref(),
+        Some("/models/tiny-diffusion")
+    );
+    assert_eq!(request.runtime_hint.as_deref(), Some("pytorch"));
+    assert_eq!(
+        request.model_ref,
+        Some(PumasModelRef {
+            model_id: "pumas://models/tiny-diffusion".to_string(),
+            revision: None,
+            selected_artifact_id: None,
+            selected_artifact_path: Some("/models/tiny-diffusion".to_string()),
+            migration_diagnostics: Vec::new(),
+        })
+    );
+    match request.input {
+        InferenceExecutionInput::ImageGeneration { request } => {
+            assert_eq!(request.model, "/models/tiny-diffusion");
+            assert_eq!(request.prompt, "paint a quiet lake");
+            assert_eq!(request.negative_prompt.as_deref(), Some("blur"));
+            assert_eq!(request.width, Some(512));
+            assert_eq!(request.height, Some(384));
+            assert_eq!(request.num_inference_steps, Some(12));
+            assert_eq!(request.guidance_scale, Some(7.5));
+            assert_eq!(request.seed, Some(42));
+            assert_eq!(request.scheduler.as_deref(), Some("euler"));
+            assert_eq!(request.num_images_per_prompt, Some(2));
+            assert_eq!(request.strength, Some(0.35));
+            assert_eq!(request.extra_options, serde_json::json!({}));
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_image_generation_execution_request_forwards_package_facts() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/diffusers_bundle_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("image package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("paint"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let request = build_image_generation_execution_request(&inputs)
+        .expect("image package facts should be forwarded to typed request");
+
+    assert_eq!(
+        request
+            .resolved_model_package_facts
+            .as_ref()
+            .map(|facts| facts.model_ref.model_id.as_str()),
+        Some("image/example/tiny-diffusers")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_image_generation_uses_typed_gateway_boundary() {
+    let image_requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedImageGenerationBackend {
+            image_requests: image_requests.clone(),
+        }),
+        "mock",
+    ));
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("image_generation"),
+    );
+    inputs.insert(
+        "prompt".to_string(),
+        serde_json::json!("paint a quiet lake SECRET_PROMPT"),
+    );
+    inputs.insert(
+        "task_options".to_string(),
+        serde_json::json!({
+            "negative_prompt": "blur",
+            "width": 512,
+            "height": 384,
+            "num_inference_steps": 12,
+            "guidance_scale": 7.5,
+            "seed": 42,
+            "scheduler": "euler",
+            "num_images_per_prompt": 1
+        }),
+    );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/tiny-diffusion",
+            "selected_artifact_path": "/models/tiny-diffusion"
+        }),
+    );
+
+    let executor = CoreTaskExecutor::new().with_gateway(gateway);
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let outputs = executor
+        .execute_task("llm-inference-1", inputs, &context, &extensions)
+        .await
+        .expect("canonical image generation inference should use typed gateway");
+
+    assert_eq!(outputs["results"]["images"][0]["mime_type"], "image/png");
+    assert_eq!(outputs["results"]["images"][0]["width"], 512);
+    assert_eq!(outputs["metadata"]["seed_used"], 42);
+    assert_eq!(outputs["metadata"]["image_count"], 1);
+    let bounded_outputs = serde_json::to_string(&serde_json::json!({
+        "metadata": outputs.get("metadata"),
+        "diagnostics": outputs.get("diagnostics"),
+    }))
+    .expect("bounded outputs serialize");
+    assert!(!bounded_outputs.contains("SECRET_PROMPT"));
+    assert!(!bounded_outputs.contains("aW1hZ2U="));
+
+    let captured = image_requests.lock().expect("image requests lock");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0].model, "/models/tiny-diffusion");
+    assert_eq!(captured[0].negative_prompt.as_deref(), Some("blur"));
+    assert_eq!(captured[0].width, Some(512));
+    assert_eq!(captured[0].height, Some(384));
+    assert_eq!(captured[0].num_inference_steps, Some(12));
+    assert_eq!(captured[0].guidance_scale, Some(7.5));
+    assert_eq!(captured[0].seed, Some(42));
+    assert_eq!(captured[0].scheduler.as_deref(), Some("euler"));
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -3015,6 +3192,108 @@ impl InferenceBackend for MockTypedRerankBackend {
                 .take(request.top_n.unwrap_or(usize::MAX))
                 .collect(),
             metadata: serde_json::Value::Null,
+        })
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+struct MockTypedImageGenerationBackend {
+    image_requests: Arc<Mutex<Vec<ImageGenerationRequest>>>,
+}
+
+#[cfg(feature = "inference-nodes")]
+#[async_trait]
+impl InferenceBackend for MockTypedImageGenerationBackend {
+    fn name(&self) -> &'static str {
+        "mock-image"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock typed image generation backend"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            image_generation: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> std::result::Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> std::result::Result<
+        Pin<
+            Box<
+                dyn futures_util::Stream<Item = std::result::Result<ChatChunk, BackendError>>
+                    + Send,
+            >,
+        >,
+        BackendError,
+    > {
+        Err(BackendError::Inference(
+            "chat not supported by mock".to_string(),
+        ))
+    }
+
+    async fn embeddings(
+        &self,
+        _texts: Vec<String>,
+        _model: &str,
+    ) -> std::result::Result<Vec<EmbeddingResult>, BackendError> {
+        Err(BackendError::Inference(
+            "embeddings not supported by mock".to_string(),
+        ))
+    }
+
+    async fn rerank(
+        &self,
+        _request: RerankRequest,
+    ) -> std::result::Result<RerankResponse, BackendError> {
+        Err(BackendError::Inference(
+            "rerank not supported by mock".to_string(),
+        ))
+    }
+
+    async fn generate_image(
+        &self,
+        request: ImageGenerationRequest,
+    ) -> std::result::Result<ImageGenerationResult, BackendError> {
+        self.image_requests
+            .lock()
+            .expect("image requests lock")
+            .push(request.clone());
+        Ok(ImageGenerationResult {
+            images: vec![EncodedImage {
+                data_base64: "aW1hZ2U=".to_string(),
+                mime_type: "image/png".to_string(),
+                width: request.width,
+                height: request.height,
+            }],
+            seed_used: request.seed,
+            metadata: serde_json::json!({"scheduler": request.scheduler}),
         })
     }
 }

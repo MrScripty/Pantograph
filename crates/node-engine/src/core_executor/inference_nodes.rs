@@ -732,6 +732,128 @@ pub(crate) async fn execute_audio_transcription_inference(
 }
 
 #[cfg(feature = "inference-nodes")]
+pub(crate) async fn execute_image_generation_inference(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+    extensions: &ExecutorExtensions,
+    task_id: &str,
+    execution_id: &str,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let gw = require_gateway(gateway)?;
+    let mut request = build_image_generation_execution_request(inputs)?;
+    assign_typed_request_id(&mut request, task_id, execution_id);
+    let expected_result_kind = expected_typed_result_kind(&request)?;
+    let result = execute_typed_gateway(gw, request, extensions)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Typed image generation failed: {error}"))
+        })?;
+    ensure_typed_result_kind(&result, expected_result_kind, "Typed image generation")?;
+    let (image_result, option_diagnostics) = match result {
+        inference::InferenceExecutionResult::ImageGeneration {
+            result,
+            option_diagnostics,
+        } => (result, option_diagnostics),
+        other => {
+            return Err(NodeEngineError::ExecutionFailed(format!(
+                "Typed image generation returned unexpected result: {other:?}"
+            )));
+        }
+    };
+
+    let mut outputs = HashMap::new();
+    outputs.insert(
+        "results".to_string(),
+        serde_json::to_value(&image_result).unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert(
+        "metadata".to_string(),
+        serde_json::json!({
+            "seed_used": image_result.seed_used,
+            "image_count": image_result.images.len(),
+            "backend_metadata": image_result.metadata,
+        }),
+    );
+    outputs.insert(
+        "diagnostics".to_string(),
+        serde_json::to_value(option_diagnostics).unwrap_or(serde_json::Value::Null),
+    );
+    Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) fn build_image_generation_execution_request(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<inference::InferenceExecutionRequest> {
+    let prompt = inputs
+        .get("prompt")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?;
+    if prompt.trim().is_empty() {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Image generation prompt cannot be empty".to_string(),
+        ));
+    }
+
+    let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
+    let model_ref = parse_pumas_model_ref(inputs).or_else(|| {
+        resolved_model_package_facts
+            .as_ref()
+            .map(|facts| facts.model_ref.clone())
+    });
+    let model = read_image_generation_model_name(inputs, model_ref.as_ref())?
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing image model input".to_string()))?;
+    let mut extra_options = build_extra_settings(inputs);
+    remove_image_generation_first_class_options(&mut extra_options);
+
+    Ok(inference::InferenceExecutionRequest {
+        request_id: None,
+        task_id: inference::InferenceTaskId::ImageGeneration,
+        model_ref,
+        model_name: Some(model.clone()),
+        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
+        resolved_model_package_facts,
+        input: inference::InferenceExecutionInput::ImageGeneration {
+            request: inference::ImageGenerationRequest {
+                model,
+                prompt: prompt.to_string(),
+                negative_prompt: read_string_with_task_options(
+                    inputs,
+                    &["negative_prompt", "negativePrompt"],
+                ),
+                width: read_positive_u32_with_task_options(inputs, &["width"]),
+                height: read_positive_u32_with_task_options(inputs, &["height"]),
+                num_inference_steps: read_positive_u32_with_task_options(
+                    inputs,
+                    &["num_inference_steps", "numInferenceSteps", "steps"],
+                ),
+                guidance_scale: read_positive_f32_with_task_options(
+                    inputs,
+                    &["guidance_scale", "guidanceScale", "cfg_scale", "cfgScale"],
+                ),
+                seed: read_u64_with_task_options(inputs, &["seed"]),
+                scheduler: read_string_with_task_options(inputs, &["scheduler"]),
+                num_images_per_prompt: read_positive_u32_with_task_options(
+                    inputs,
+                    &[
+                        "num_images_per_prompt",
+                        "numImagesPerPrompt",
+                        "num_images",
+                        "numImages",
+                    ],
+                ),
+                init_image: None,
+                mask_image: None,
+                strength: read_positive_f32_with_task_options(inputs, &["strength"]),
+                extra_options: serde_json::Value::Object(extra_options.into_iter().collect()),
+            },
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
 pub(crate) fn build_audio_transcription_execution_request(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<inference::InferenceExecutionRequest> {
@@ -862,6 +984,80 @@ fn read_audio_model_name(
 }
 
 #[cfg(feature = "inference-nodes")]
+fn read_image_generation_model_name(
+    inputs: &HashMap<String, serde_json::Value>,
+    model_ref: Option<&inference::PumasModelRef>,
+) -> Result<Option<String>> {
+    if let Some(model) = read_optional_input_string_aliases(
+        inputs,
+        &["model", "model_name", "modelName", "model_id", "modelId"],
+    )
+    .filter(|model| !model.trim().is_empty())
+    {
+        return Ok(Some(model));
+    }
+
+    if let Some(model_path) =
+        read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
+            .filter(|model_path| !model_path.trim().is_empty())
+    {
+        return Ok(Some(model_path));
+    }
+
+    if let Some(model_ref_value) = inputs
+        .get("pumas_model_ref")
+        .or_else(|| inputs.get("model_ref"))
+    {
+        if let Some(path) = read_string_aliases_from_value(
+            model_ref_value,
+            &[
+                "selected_artifact_path",
+                "selectedArtifactPath",
+                "model_path",
+                "modelPath",
+                "entry_path",
+                "entryPath",
+            ],
+        )
+        .filter(|path| !path.trim().is_empty())
+        {
+            return Ok(Some(path));
+        }
+    }
+
+    Ok(model_ref.map(|model_ref| model_ref.model_id.clone()))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn remove_image_generation_first_class_options(
+    extra_options: &mut HashMap<String, serde_json::Value>,
+) {
+    for key in [
+        "prompt",
+        "negative_prompt",
+        "negativePrompt",
+        "width",
+        "height",
+        "num_inference_steps",
+        "numInferenceSteps",
+        "steps",
+        "guidance_scale",
+        "guidanceScale",
+        "cfg_scale",
+        "cfgScale",
+        "seed",
+        "scheduler",
+        "num_images_per_prompt",
+        "numImagesPerPrompt",
+        "num_images",
+        "numImages",
+        "strength",
+    ] {
+        extra_options.remove(key);
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
 fn read_string_aliases_from_object(
     object: &serde_json::Map<String, serde_json::Value>,
     aliases: &[&str],
@@ -906,6 +1102,15 @@ fn read_positive_f32_aliases(
                 })
         })
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_positive_f32_with_task_options(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<f32> {
+    read_positive_f32_aliases(inputs, aliases)
+        .or_else(|| read_task_option_value_aliases(inputs, aliases).and_then(positive_f32_value))
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -972,6 +1177,42 @@ fn read_positive_usize_with_task_options(
 }
 
 #[cfg(feature = "inference-nodes")]
+fn read_positive_u32_with_task_options(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<u32> {
+    aliases
+        .iter()
+        .find_map(|alias| read_optional_input_value(inputs, alias).and_then(positive_u32_value))
+        .or_else(|| read_task_option_value_aliases(inputs, aliases).and_then(positive_u32_value))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_u64_with_task_options(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<u64> {
+    aliases
+        .iter()
+        .find_map(|alias| read_optional_input_value(inputs, alias).and_then(u64_value))
+        .or_else(|| read_task_option_value_aliases(inputs, aliases).and_then(u64_value))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_string_with_task_options(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<String> {
+    read_optional_input_string_aliases(inputs, aliases)
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            read_task_option_value_aliases(inputs, aliases)
+                .and_then(|value| value.as_str().map(str::to_string))
+                .filter(|value| !value.trim().is_empty())
+        })
+}
+
+#[cfg(feature = "inference-nodes")]
 fn read_bool_with_task_options(
     inputs: &HashMap<String, serde_json::Value>,
     aliases: &[&str],
@@ -1015,6 +1256,41 @@ fn positive_usize_value(value: serde_json::Value) -> Option<usize> {
                 .filter(|value| *value > 0)
                 .map(|value| value as usize)
         })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn positive_u32_value(value: serde_json::Value) -> Option<u32> {
+    value
+        .as_u64()
+        .filter(|value| *value > 0)
+        .and_then(|value| u32::try_from(value).ok())
+        .or_else(|| {
+            value
+                .as_i64()
+                .filter(|value| *value > 0)
+                .and_then(|value| u32::try_from(value).ok())
+        })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn positive_f32_value(value: serde_json::Value) -> Option<f32> {
+    value
+        .as_f64()
+        .filter(|value| *value > 0.0 && value.is_finite())
+        .map(|value| value as f32)
+        .or_else(|| {
+            value
+                .as_i64()
+                .filter(|value| *value > 0)
+                .map(|value| value as f32)
+        })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn u64_value(value: serde_json::Value) -> Option<u64> {
+    value
+        .as_u64()
+        .or_else(|| value.as_i64().and_then(|value| u64::try_from(value).ok()))
 }
 
 #[cfg(feature = "inference-nodes")]
