@@ -156,6 +156,7 @@ export interface IoArtifactProjectionRecord {
   node_version?: string | null;
   runtime_id?: string | null;
   runtime_version?: string | null;
+  selected_backend_key?: string | null;
   model_id?: string | null;
   model_version?: string | null;
   artifact_id: string;
@@ -363,6 +364,7 @@ export interface WorkflowIoArtifactQueryRequest {
   retention_state?: IoArtifactRetentionState | null;
   retention_policy_id?: string | null;
   runtime_id?: string | null;
+  selected_backend_key?: string | null;
   model_id?: string | null;
   after_event_seq?: number | null;
   limit?: number | null;

@@ -213,6 +213,11 @@ with a ledger/storage failure.
   conversion id, conversion status, conversion command id, and per-conversion
   dependency lease attribution in format metadata when producers provide those
   typed fields.
+- I/O artifact projection may derive runtime, model, and selected-backend
+  context from the latest producer-node execution status event at or before the
+  artifact observation when the artifact event envelope does not already carry
+  those facts. The projection must not infer runtime/model identity from
+  artifact payloads, graph topology, or retention metadata.
 - `io_artifact_projection.retention_state` is a typed retention summary.
   Consumers must not infer expired, deleted, external, truncated, or too-large
   payload states from `payload_ref` alone.

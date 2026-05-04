@@ -246,6 +246,8 @@ pub struct WorkflowIoArtifactQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_event_seq: Option<i64>,
@@ -1236,6 +1238,7 @@ impl WorkflowIoArtifactQueryRequest {
             retention_state: self.retention_state,
             retention_policy_id: self.retention_policy_id,
             runtime_id: self.runtime_id,
+            selected_backend_key: self.selected_backend_key,
             model_id: self.model_id,
             after_event_seq: self.after_event_seq,
             limit: self.limit.unwrap_or(100).max(1),
@@ -1257,6 +1260,7 @@ fn io_artifact_retention_summary_query(
         media_type: query.media_type.clone(),
         retention_policy_id: query.retention_policy_id.clone(),
         runtime_id: query.runtime_id.clone(),
+        selected_backend_key: query.selected_backend_key.clone(),
         model_id: query.model_id.clone(),
     }
 }

@@ -1795,6 +1795,7 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             retention_state: None,
             retention_policy_id: None,
             runtime_id: None,
+            selected_backend_key: None,
             model_id: None,
             after_event_seq: None,
             limit: 10,
@@ -1854,6 +1855,7 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             retention_state: None,
             retention_policy_id: None,
             runtime_id: None,
+            selected_backend_key: None,
             model_id: None,
             after_event_seq: None,
             limit: 10,
@@ -1874,6 +1876,7 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             retention_state: Some(IoArtifactRetentionState::Retained),
             retention_policy_id: Some("retention_default".to_string()),
             runtime_id: Some("runtime_alpha".to_string()),
+            selected_backend_key: None,
             model_id: None,
             after_event_seq: Some(input_event.event_seq),
             limit: 10,
@@ -1895,6 +1898,7 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             retention_state: Some(IoArtifactRetentionState::Retained),
             retention_policy_id: Some("retention_default".to_string()),
             runtime_id: None,
+            selected_backend_key: None,
             model_id: None,
             after_event_seq: None,
             limit: 10,
@@ -1920,12 +1924,148 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             retention_state: None,
             retention_policy_id: None,
             runtime_id: None,
+            selected_backend_key: None,
             model_id: None,
             after_event_seq: None,
             limit: 10,
         })
         .expect("io artifact projection loads after idempotent drain");
     assert_eq!(after_idempotent.len(), 2);
+}
+
+#[test]
+fn io_artifact_projection_inherits_producer_execution_context() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_node_status_event_with_inference_context(
+            "workflow_run_alpha",
+            "node_image",
+            NodeExecutionProjectionStatus::Completed,
+            1_100,
+            "runtime_transformers",
+            "vllm",
+            "pumas://models/image-alpha",
+        ))
+        .expect("producer status appends");
+    let mut artifact = sample_io_artifact_event(
+        "workflow_run_alpha",
+        "node_image",
+        "node_output",
+        "artifact_image",
+    );
+    artifact.runtime_id = None;
+    artifact.runtime_version = None;
+    artifact.model_id = None;
+    artifact.model_version = None;
+    ledger
+        .append_diagnostic_event(artifact)
+        .expect("artifact event appends");
+
+    ledger
+        .drain_io_artifact_projection(10)
+        .expect("io artifact projection drains");
+    let records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: None,
+            producer_node_id: Some("node_image".to_string()),
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: Some("runtime_transformers".to_string()),
+            selected_backend_key: Some("vllm".to_string()),
+            model_id: Some("pumas://models/image-alpha".to_string()),
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("inherited artifact context loads");
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        records[0].runtime_id.as_deref(),
+        Some("runtime_transformers")
+    );
+    assert_eq!(records[0].runtime_version.as_deref(), Some("0.1.0"));
+    assert_eq!(records[0].selected_backend_key.as_deref(), Some("vllm"));
+    assert_eq!(
+        records[0].model_id.as_deref(),
+        Some("pumas://models/image-alpha")
+    );
+    assert_eq!(records[0].model_version.as_deref(), Some("1.0.0"));
+}
+
+#[test]
+fn io_artifact_projection_uses_producer_context_at_or_before_artifact_event() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_node_status_event_with_inference_context(
+            "workflow_run_alpha",
+            "node_image",
+            NodeExecutionProjectionStatus::Completed,
+            1_100,
+            "runtime_transformers",
+            "vllm",
+            "pumas://models/image-alpha",
+        ))
+        .expect("first producer status appends");
+    let mut artifact = sample_io_artifact_event(
+        "workflow_run_alpha",
+        "node_image",
+        "node_output",
+        "artifact_image",
+    );
+    artifact.runtime_id = None;
+    artifact.runtime_version = None;
+    artifact.model_id = None;
+    artifact.model_version = None;
+    ledger
+        .append_diagnostic_event(artifact)
+        .expect("artifact event appends");
+    ledger
+        .append_diagnostic_event(sample_node_status_event_with_inference_context(
+            "workflow_run_alpha",
+            "node_image",
+            NodeExecutionProjectionStatus::Completed,
+            1_300,
+            "runtime_transformers",
+            "mlx",
+            "pumas://models/image-beta",
+        ))
+        .expect("later producer status appends");
+
+    ledger
+        .drain_io_artifact_projection(10)
+        .expect("io artifact projection drains");
+    let records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: None,
+            producer_node_id: Some("node_image".to_string()),
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("artifact projection loads");
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].selected_backend_key.as_deref(), Some("vllm"));
+    assert_eq!(
+        records[0].model_id.as_deref(),
+        Some("pumas://models/image-alpha")
+    );
 }
 
 #[test]
@@ -1966,6 +2106,7 @@ fn io_artifact_projection_applies_retention_state_changes() {
             retention_state: None,
             retention_policy_id: None,
             runtime_id: None,
+            selected_backend_key: None,
             model_id: None,
             after_event_seq: None,
             limit: 10,
@@ -1997,6 +2138,7 @@ fn io_artifact_projection_applies_retention_state_changes() {
             media_type: None,
             retention_policy_id: Some("retention_default".to_string()),
             runtime_id: None,
+            selected_backend_key: None,
             model_id: None,
         })
         .expect("io artifact retention summary loads");
@@ -2023,6 +2165,7 @@ fn io_artifact_projection_applies_retention_state_changes() {
             retention_state: Some(IoArtifactRetentionState::Expired),
             retention_policy_id: Some("retention_default".to_string()),
             runtime_id: None,
+            selected_backend_key: None,
             model_id: None,
             after_event_seq: None,
             limit: 10,
@@ -2656,6 +2799,7 @@ fn current_schema_repairs_missing_io_artifact_metadata_columns() {
         "read_handle",
         "stream_handle",
         "format_json",
+        "selected_backend_key",
     ] {
         assert!(sqlite_column_exists(
             &conn,
@@ -2864,6 +3008,7 @@ fn current_schema_repairs_all_drifted_projection_tables() {
             "node_version",
             "runtime_id",
             "runtime_version",
+            "selected_backend_key",
             "model_id",
             "model_version",
             "producer_node_id",
@@ -3401,6 +3546,7 @@ fn apply_artifact_retention_policy_expires_projected_payload_references() {
             retention_state: Some(IoArtifactRetentionState::Expired),
             retention_policy_id: Some("standard-local-v1".to_string()),
             runtime_id: None,
+            selected_backend_key: None,
             model_id: None,
             after_event_seq: None,
             limit: 10,
@@ -4118,6 +4264,26 @@ fn sample_node_status_event(
             selected_backend_key: None,
         }),
     }
+}
+
+fn sample_node_status_event_with_inference_context(
+    workflow_run_id: &str,
+    node_id: &str,
+    status: NodeExecutionProjectionStatus,
+    started_at_ms: i64,
+    runtime_id: &str,
+    selected_backend_key: &str,
+    model_id: &str,
+) -> DiagnosticEventAppendRequest {
+    let mut request = sample_node_status_event(workflow_run_id, node_id, status, started_at_ms);
+    request.runtime_id = Some(runtime_id.to_string());
+    request.runtime_version = Some("0.1.0".to_string());
+    request.model_id = Some(model_id.to_string());
+    request.model_version = Some("1.0.0".to_string());
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut request.payload {
+        payload.selected_backend_key = Some(selected_backend_key.to_string());
+    }
+    request
 }
 
 fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest {

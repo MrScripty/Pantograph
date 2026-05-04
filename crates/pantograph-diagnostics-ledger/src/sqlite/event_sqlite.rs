@@ -829,8 +829,8 @@ pub(super) fn query_io_artifact_projection(
     let mut stmt = ledger.conn.prepare(
         "SELECT event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
                 workflow_id, workflow_version_id, workflow_semantic_version, node_id,
-                node_type, node_version, runtime_id, runtime_version, model_id,
-                model_version, artifact_id, artifact_role, producer_node_id,
+                node_type, node_version, runtime_id, runtime_version,
+                selected_backend_key, model_id, model_version, artifact_id, artifact_role, producer_node_id,
                 producer_port_id, consumer_node_id, consumer_port_id, media_type,
                 size_bytes, content_hash, payload_ref, retention_state,
                 retention_reason, retention_policy_id, payload_kind, lifecycle_state,
@@ -845,10 +845,11 @@ pub(super) fn query_io_artifact_projection(
            AND (?7 IS NULL OR retention_state = ?7)
            AND (?8 IS NULL OR retention_policy_id = ?8)
            AND (?9 IS NULL OR runtime_id = ?9)
-           AND (?10 IS NULL OR model_id = ?10)
-           AND event_seq > ?11
+           AND (?10 IS NULL OR selected_backend_key = ?10)
+           AND (?11 IS NULL OR model_id = ?11)
+           AND event_seq > ?12
          ORDER BY event_seq
-         LIMIT ?12",
+         LIMIT ?13",
     )?;
     let rows = stmt.query_map(
         params![
@@ -861,6 +862,7 @@ pub(super) fn query_io_artifact_projection(
             query.retention_state.map(IoArtifactRetentionState::as_db),
             query.retention_policy_id.as_deref(),
             query.runtime_id.as_deref(),
+            query.selected_backend_key.as_deref(),
             query.model_id.as_deref(),
             query.after_event_seq.unwrap_or(0),
             query.limit,
@@ -887,7 +889,8 @@ pub(super) fn query_io_artifact_retention_summary(
            AND (?6 IS NULL OR media_type = ?6)
            AND (?7 IS NULL OR retention_policy_id = ?7)
            AND (?8 IS NULL OR runtime_id = ?8)
-           AND (?9 IS NULL OR model_id = ?9)
+           AND (?9 IS NULL OR selected_backend_key = ?9)
+           AND (?10 IS NULL OR model_id = ?10)
          GROUP BY retention_state
          ORDER BY retention_state",
     )?;
@@ -901,6 +904,7 @@ pub(super) fn query_io_artifact_retention_summary(
             query.media_type.as_deref(),
             query.retention_policy_id.as_deref(),
             query.runtime_id.as_deref(),
+            query.selected_backend_key.as_deref(),
             query.model_id.as_deref(),
         ],
         io_artifact_retention_summary_from_row,
@@ -923,8 +927,8 @@ pub(super) fn query_expirable_io_artifact_projection(
     let mut stmt = ledger.conn.prepare(
         "SELECT event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
                 workflow_id, workflow_version_id, workflow_semantic_version, node_id,
-                node_type, node_version, runtime_id, runtime_version, model_id,
-                model_version, artifact_id, artifact_role, producer_node_id,
+                node_type, node_version, runtime_id, runtime_version,
+                selected_backend_key, model_id, model_version, artifact_id, artifact_role, producer_node_id,
                 producer_port_id, consumer_node_id, consumer_port_id, media_type,
                 size_bytes, content_hash, payload_ref, retention_state,
                 retention_reason, retention_policy_id, payload_kind, lifecycle_state,
@@ -1776,24 +1780,91 @@ fn scheduler_queue_control_detail(payload: &SchedulerQueueControlPayload) -> Opt
     (!parts.is_empty()).then(|| parts.join("; "))
 }
 
+#[derive(Debug, Clone)]
+struct ProducerNodeExecutionContext {
+    runtime_id: Option<String>,
+    runtime_version: Option<String>,
+    selected_backend_key: Option<String>,
+    model_id: Option<String>,
+    model_version: Option<String>,
+}
+
+fn latest_producer_node_execution_context(
+    tx: &rusqlite::Transaction<'_>,
+    workflow_run_id: &WorkflowRunId,
+    producer_node_id: Option<&str>,
+    event_seq: i64,
+) -> Result<Option<ProducerNodeExecutionContext>, DiagnosticsLedgerError> {
+    let Some(producer_node_id) = producer_node_id else {
+        return Ok(None);
+    };
+    let mut stmt = tx.prepare(
+        "SELECT event_seq, event_id, event_kind, schema_version, source_component,
+                source_instance_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
+                workflow_id, workflow_version_id, workflow_semantic_version, node_id,
+                node_type, node_version, runtime_id, runtime_version, model_id,
+                model_version, client_id, client_session_id, bucket_id, scheduler_policy_id,
+                retention_policy_id, privacy_class, event_retention_class, payload_hash,
+                payload_size_bytes, payload_ref, payload_json
+         FROM diagnostic_events
+         WHERE workflow_run_id = ?1
+           AND node_id = ?2
+           AND event_seq <= ?3
+           AND event_kind = 'node.execution_status'
+         ORDER BY event_seq DESC
+         LIMIT 1",
+    )?;
+    let context = stmt
+        .query_row(
+            params![workflow_run_id.as_str(), producer_node_id, event_seq],
+            diagnostic_event_from_row,
+        )
+        .optional()?
+        .and_then(|record| {
+            let payload: DiagnosticEventPayload =
+                serde_json::from_str(&record.payload_json).ok()?;
+            let DiagnosticEventPayload::NodeExecutionStatus(payload) = payload else {
+                return None;
+            };
+            Some(ProducerNodeExecutionContext {
+                runtime_id: record.runtime_id,
+                runtime_version: record.runtime_version,
+                selected_backend_key: payload.selected_backend_key,
+                model_id: record.model_id,
+                model_version: record.model_version,
+            })
+        });
+    Ok(context)
+}
+
 fn io_artifact_projection_record_from_event(
+    tx: &rusqlite::Transaction<'_>,
     event: &DiagnosticEventRecord,
 ) -> Result<Option<IoArtifactProjectionRecord>, DiagnosticsLedgerError> {
     let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
     let DiagnosticEventPayload::IoArtifactObserved(payload) = payload else {
         return Ok(None);
     };
+    let workflow_run_id =
+        event
+            .workflow_run_id
+            .clone()
+            .ok_or(DiagnosticsLedgerError::MissingField {
+                field: "workflow_run_id",
+            })?;
+    let producer_context = latest_producer_node_execution_context(
+        tx,
+        &workflow_run_id,
+        payload.producer_node_id.as_deref(),
+        event.event_seq,
+    )?;
 
     Ok(Some(IoArtifactProjectionRecord {
         event_seq: event.event_seq,
         event_id: event.event_id.clone(),
         occurred_at_ms: event.occurred_at_ms,
         recorded_at_ms: event.recorded_at_ms,
-        workflow_run_id: event.workflow_run_id.clone().ok_or(
-            DiagnosticsLedgerError::MissingField {
-                field: "workflow_run_id",
-            },
-        )?,
+        workflow_run_id,
         workflow_id: event
             .workflow_id
             .clone()
@@ -1805,10 +1876,29 @@ fn io_artifact_projection_record_from_event(
         node_id: event.node_id.clone(),
         node_type: event.node_type.clone(),
         node_version: event.node_version.clone(),
-        runtime_id: event.runtime_id.clone(),
-        runtime_version: event.runtime_version.clone(),
-        model_id: event.model_id.clone(),
-        model_version: event.model_version.clone(),
+        runtime_id: event.runtime_id.clone().or_else(|| {
+            producer_context
+                .as_ref()
+                .and_then(|context| context.runtime_id.clone())
+        }),
+        runtime_version: event.runtime_version.clone().or_else(|| {
+            producer_context
+                .as_ref()
+                .and_then(|context| context.runtime_version.clone())
+        }),
+        selected_backend_key: producer_context
+            .as_ref()
+            .and_then(|context| context.selected_backend_key.clone()),
+        model_id: event.model_id.clone().or_else(|| {
+            producer_context
+                .as_ref()
+                .and_then(|context| context.model_id.clone())
+        }),
+        model_version: event.model_version.clone().or_else(|| {
+            producer_context
+                .as_ref()
+                .and_then(|context| context.model_version.clone())
+        }),
         artifact_id: payload.artifact_id,
         artifact_role: payload.artifact_role.as_db().to_string(),
         producer_node_id: payload.producer_node_id,
@@ -1840,7 +1930,7 @@ fn apply_io_artifact_projection_event(
     let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
     match payload {
         DiagnosticEventPayload::IoArtifactObserved(_) => {
-            if let Some(record) = io_artifact_projection_record_from_event(event)? {
+            if let Some(record) = io_artifact_projection_record_from_event(tx, event)? {
                 insert_io_artifact_projection(tx, &record)?;
             }
         }
@@ -2821,15 +2911,15 @@ fn insert_io_artifact_projection(
         "INSERT INTO io_artifact_projection
             (event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
              workflow_id, workflow_version_id, workflow_semantic_version, node_id,
-             node_type, node_version, runtime_id, runtime_version, model_id,
-             model_version, artifact_id, artifact_role, producer_node_id,
+             node_type, node_version, runtime_id, runtime_version,
+             selected_backend_key, model_id, model_version, artifact_id, artifact_role, producer_node_id,
              producer_port_id, consumer_node_id, consumer_port_id, media_type,
              size_bytes, content_hash, payload_ref, retention_state,
              retention_reason, retention_policy_id, payload_kind, lifecycle_state,
              access_modes_json, read_handle, stream_handle, format_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
                  ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24,
-                 ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34)",
+                 ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35)",
         params![
             record.event_seq,
             record.event_id.as_str(),
@@ -2847,6 +2937,7 @@ fn insert_io_artifact_projection(
             record.node_version.as_deref(),
             record.runtime_id.as_deref(),
             record.runtime_version.as_deref(),
+            record.selected_backend_key.as_deref(),
             record.model_id.as_deref(),
             record.model_version.as_deref(),
             record.artifact_id.as_str(),
@@ -3145,45 +3236,46 @@ fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifact
         node_version: row.get(10)?,
         runtime_id: row.get(11)?,
         runtime_version: row.get(12)?,
-        model_id: row.get(13)?,
-        model_version: row.get(14)?,
-        artifact_id: row.get(15)?,
-        artifact_role: row.get(16)?,
-        producer_node_id: row.get(17)?,
-        producer_port_id: row.get(18)?,
-        consumer_node_id: row.get(19)?,
-        consumer_port_id: row.get(20)?,
-        media_type: row.get(21)?,
+        selected_backend_key: row.get(13)?,
+        model_id: row.get(14)?,
+        model_version: row.get(15)?,
+        artifact_id: row.get(16)?,
+        artifact_role: row.get(17)?,
+        producer_node_id: row.get(18)?,
+        producer_port_id: row.get(19)?,
+        consumer_node_id: row.get(20)?,
+        consumer_port_id: row.get(21)?,
+        media_type: row.get(22)?,
         size_bytes: row
-            .get::<_, Option<i64>>(22)?
+            .get::<_, Option<i64>>(23)?
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
-        content_hash: row.get(23)?,
-        payload_ref: row.get(24)?,
-        retention_state: row.get::<_, String>(25).and_then(|value| {
+        content_hash: row.get(24)?,
+        payload_ref: row.get(25)?,
+        retention_state: row.get::<_, String>(26).and_then(|value| {
             IoArtifactRetentionState::from_db(&value).map_err(sqlite_conversion_error)
         })?,
-        retention_reason: row.get(26)?,
-        retention_policy_id: row.get(27)?,
+        retention_reason: row.get(27)?,
+        retention_policy_id: row.get(28)?,
         payload_kind: row
-            .get::<_, Option<String>>(28)?
+            .get::<_, Option<String>>(29)?
             .map(|value| IoArtifactPayloadKind::from_db(&value))
             .transpose()
             .map_err(sqlite_conversion_error)?,
         lifecycle_state: row
-            .get::<_, Option<String>>(29)?
+            .get::<_, Option<String>>(30)?
             .map(|value| IoArtifactLifecycleState::from_db(&value))
             .transpose()
             .map_err(sqlite_conversion_error)?,
         access_modes: row
-            .get::<_, Option<String>>(30)?
+            .get::<_, Option<String>>(31)?
             .map(|value| serde_json::from_str(&value))
             .transpose()
             .map_err(sqlite_conversion_error)?
             .unwrap_or_default(),
-        read_handle: row.get(31)?,
-        stream_handle: row.get(32)?,
+        read_handle: row.get(32)?,
+        stream_handle: row.get(33)?,
         format: row
-            .get::<_, Option<String>>(33)?
+            .get::<_, Option<String>>(34)?
             .map(|value| serde_json::from_str(&value))
             .transpose()
             .map_err(sqlite_conversion_error)?,

@@ -15,7 +15,7 @@ pub const RUN_LIST_PROJECTION_VERSION: i64 = 7;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
 pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 6;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
-pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 5;
+pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 6;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
@@ -2245,6 +2245,7 @@ pub struct IoArtifactProjectionQuery {
     pub retention_state: Option<IoArtifactRetentionState>,
     pub retention_policy_id: Option<String>,
     pub runtime_id: Option<String>,
+    pub selected_backend_key: Option<String>,
     pub model_id: Option<String>,
     pub after_event_seq: Option<i64>,
     pub limit: u32,
@@ -2282,6 +2283,11 @@ impl IoArtifactProjectionQuery {
             MAX_ID_LEN,
         )?;
         validate_optional_text("runtime_id", self.runtime_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "selected_backend_key",
+            self.selected_backend_key.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text("model_id", self.model_id.as_deref(), MAX_ID_LEN)
     }
 }
@@ -2296,6 +2302,7 @@ pub struct IoArtifactRetentionSummaryQuery {
     pub media_type: Option<String>,
     pub retention_policy_id: Option<String>,
     pub runtime_id: Option<String>,
+    pub selected_backend_key: Option<String>,
     pub model_id: Option<String>,
 }
 
@@ -2320,6 +2327,11 @@ impl IoArtifactRetentionSummaryQuery {
             MAX_ID_LEN,
         )?;
         validate_optional_text("runtime_id", self.runtime_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "selected_backend_key",
+            self.selected_backend_key.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text("model_id", self.model_id.as_deref(), MAX_ID_LEN)
     }
 }
@@ -2345,6 +2357,7 @@ pub struct IoArtifactProjectionRecord {
     pub node_version: Option<String>,
     pub runtime_id: Option<String>,
     pub runtime_version: Option<String>,
+    pub selected_backend_key: Option<String>,
     pub model_id: Option<String>,
     pub model_version: Option<String>,
     pub artifact_id: String,

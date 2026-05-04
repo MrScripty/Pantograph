@@ -545,6 +545,7 @@ test('queryIoArtifacts preserves endpoint filters and retention summaries', asyn
         node_version: '1.0.0',
         runtime_id: 'runtime-a',
         runtime_version: '0.1.0',
+        selected_backend_key: 'vllm',
         model_id: 'model-a',
         model_version: null,
         artifact_id: 'artifact-a',
@@ -585,7 +586,7 @@ test('queryIoArtifacts preserves endpoint filters and retention summaries', asyn
     ],
     projection_state: {
       projection_name: 'io_artifact',
-      projection_version: 4,
+      projection_version: 6,
       last_applied_event_seq: 13,
       status: 'current',
       rebuilt_at_ms: null,
@@ -604,6 +605,7 @@ test('queryIoArtifacts preserves endpoint filters and retention summaries', asyn
       producer_node_id: 'node-a',
       consumer_node_id: null,
       retention_state: 'retained',
+      selected_backend_key: 'vllm',
       limit: 25,
     });
 
@@ -617,6 +619,7 @@ test('queryIoArtifacts preserves endpoint filters and retention summaries', asyn
             producer_node_id: 'node-a',
             consumer_node_id: null,
             retention_state: 'retained',
+            selected_backend_key: 'vllm',
             limit: 25,
           },
         },

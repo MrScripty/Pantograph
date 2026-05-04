@@ -2198,7 +2198,10 @@ inference write ledger events directly.
   cache-handle ids. Host-owned workflow event sinks now persist structured
   KV-cache progress references for action, outcome, cache id, backend key, reuse
   source, token count, and reason without cache bytes/fingerprints/temp paths;
-  artifact refs and additional backend producers remain open.
+  I/O artifact projection now exposes selected-backend context and derives
+  missing runtime/model/backend facts only from the latest raw producer-node
+  execution status event at or before the artifact observation. Additional
+  backend producers remain open.
 - [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
@@ -2711,6 +2714,12 @@ Update during implementation:
   sink into request-scoped workflow, warm workflow-session, data-graph, and
   edit-session execution paths while keeping cache bytes, fingerprints, and temp
   paths out of durable diagnostics.
+- 2026-05-03: I/O artifact projection now exposes `selected_backend_key` and
+  fills missing runtime/model/backend context from the latest raw
+  `node.execution_status` event for the same workflow run and producer node with
+  `event_seq` at or before the artifact event. Workflow-service artifact events
+  remain payload-boundary facts and do not pre-enrich model identity from a
+  latest-node projection that could drift after later executions.
 
 ## Commit Cadence Notes
 
