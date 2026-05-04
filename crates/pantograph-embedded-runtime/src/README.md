@@ -123,6 +123,10 @@ capability and execution facts, and this crate may emit reservation lifecycle
 signals into that registry when a host injects one. Registry ownership still
 belongs to a higher Pantograph application-layer coordinator rather than to this
 embedded-runtime crate.
+The Python runtime bridge accepts canonical, Hugging Face, and legacy ASR task
+labels (`audio_transcription`, `automatic-speech-recognition`, and
+`audio-to-text`) at the PyTorch branch edge so dependency projection and saved
+workflow migration do not need separate label-specific execution branches.
 Pumas package-fact backend hints are projected into `pumas_package_facts`
 technical-fit candidates only after Pantograph validates the local package-fact
 shape; remote search tags and unavailable candidates remain

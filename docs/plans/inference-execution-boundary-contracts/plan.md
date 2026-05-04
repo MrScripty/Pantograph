@@ -1842,6 +1842,10 @@ Audio transcription now has stable typed input/result DTOs, serde coverage,
 and validation that requires either encoded audio or a host-owned audio
 artifact reference, but `audio_transcription` remains contract-only until a
 later PyTorch/Transformers execution slice wires the gateway and backend path.
+The embedded Python runtime bridge now recognizes canonical
+`audio_transcription`, Hugging Face `automatic-speech-recognition`, and legacy
+`audio-to-text` labels at a single PyTorch ASR branch so future gateway work
+does not inherit another task-label drift point.
 
 ### Milestone 11: Canonical Workflow Node Migration
 

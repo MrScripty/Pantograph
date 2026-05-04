@@ -16,6 +16,14 @@ import pathlib
 import traceback
 from typing import Any, Callable, Dict
 
+ASR_TASK_LABELS = {
+    "audio-to-text",
+    "audio_transcription",
+    "audio-transcription",
+    "automatic-speech-recognition",
+    "automatic_speech_recognition",
+}
+
 
 def _load_module(module_name: str, module_path: str):
     spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -152,6 +160,11 @@ def _fallback_model_ref(engine: str, model_path: str, task_type_primary: str) ->
     }
 
 
+def _is_audio_transcription_task(task_type_primary: str) -> bool:
+    normalized = task_type_primary.strip().lower()
+    return normalized in ASR_TASK_LABELS
+
+
 def _run_pytorch(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, Any]:
     worker = _load_module("pantograph_torch_worker_process", torch_worker_path)
 
@@ -160,7 +173,7 @@ def _run_pytorch(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, An
         task_type_primary = "text-generation"
     task_type_primary = task_type_primary.strip()
 
-    if task_type_primary == "audio-to-text":
+    if _is_audio_transcription_task(task_type_primary):
         model_path = inputs.get("model_path")
         if not isinstance(model_path, str) or not model_path.strip():
             raise RuntimeError("Missing model_path input. Connect a Puma-Lib node.")
