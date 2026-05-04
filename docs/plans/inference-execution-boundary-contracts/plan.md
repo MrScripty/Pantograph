@@ -2353,7 +2353,7 @@ drift back into inference.
 - [ ] Update generated bindings, host-language types, or shared schemas in the
   same implementation slice as native DTO changes when those bindings are
   public contract surface.
-- [ ] Add tests proving scheduler/runtime-registry policy remains outside
+- [x] Add tests proving scheduler/runtime-registry policy remains outside
   inference.
 - [ ] Update source READMEs and any ADR links affected by boundary changes.
 - [ ] Record any deferred consumer migrations in this plan.
@@ -2371,7 +2371,11 @@ drift back into inference.
 **Status:** In progress. Node-engine now consumes the typed inference boundary
 for canonical `llm-inference` text/chat streaming and non-streaming execution,
 embedding, and rerank execution while preserving graph `TaskStream` event output
-as the host-visible streaming surface.
+as the host-visible streaming surface. Inference contract fixture coverage now
+asserts representative request, result, lifecycle, capability, compatibility,
+Pumas update/snapshot, model-source, and load-security wire shapes avoid
+scheduler-policy terminology such as admission, reservation, priority,
+eviction, scheduler-policy, and selected-best-backend.
 
 ### Milestone 15: Diagnostics Ledger Integration
 

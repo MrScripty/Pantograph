@@ -3,20 +3,21 @@ use std::collections::{BTreeMap, BTreeSet};
 use inference::{
     default_task_registry_entries, normalize_modality_label, normalize_task_label,
     resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, BackendCapabilityFacts,
-    BackendHintLabel, BackendTaskCapability, GenerationOptionSource, GenerationOptions,
-    InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionRequest,
-    InferenceExecutionResult, InferenceLifecyclePhase, InferenceModality,
-    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind, InferenceTaskId,
-    InferenceUsage, ModelArtifactKind, ModelExecutionDescriptor, ModelExecutionStorageKind,
-    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
-    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
-    ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy, ModelPackageDiagnostic,
-    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy,
-    ModelStorageKind, ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
-    PackageFactStatus, ProcessorComponentKind, PumasModelRef, ResolvedModelPackageFacts,
-    ResolvedModelSource, ResolvedModelSourceKind, RuntimeLifecycleSnapshot, SupportTier,
-    TaskEvidence, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry,
-    TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
+    BackendCompatibilityIssue, BackendCompatibilityIssueKind, BackendCompatibilityReport,
+    BackendCompatibilityStatus, BackendHintLabel, BackendTaskCapability, GenerationOptionSource,
+    GenerationOptions, InferenceEmbeddingResult, InferenceExecutionInput,
+    InferenceExecutionRequest, InferenceExecutionResult, InferenceLifecyclePhase,
+    InferenceModality, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceTaskId, InferenceUsage, ModelArtifactKind, ModelExecutionDescriptor,
+    ModelExecutionStorageKind, ModelExecutionValidationState, ModelFactFamily,
+    ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+    ModelLibraryUpdateFeed, ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy,
+    ModelPackageDiagnostic, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummarySnapshotItem,
+    ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy, ModelStorageKind, ModelValidationState,
+    OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
+    PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
+    RuntimeLifecycleSnapshot, SupportTier, TaskEvidence, TaskExecutionBehavior, TaskFamily,
+    TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
     MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
@@ -375,6 +376,49 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
         }),
         option_diagnostics: Vec::new(),
     };
+    let compatibility_report = BackendCompatibilityReport {
+        compatible: false,
+        task: BackendCompatibilityStatus::Supported,
+        model_source: BackendCompatibilityStatus::Supported,
+        preprocessing: BackendCompatibilityStatus::Unsupported,
+        postprocessing: BackendCompatibilityStatus::Supported,
+        option_diagnostics: vec![OptionCompatibilityDiagnostic {
+            option_path: "cache.use_cache".to_string(),
+            state: OptionSupportState::RequiresBackendSupport,
+            backend_key: Some("llama_cpp".to_string()),
+            message: Some("cache reuse requires backend/runtime support".to_string()),
+        }],
+        issues: vec![BackendCompatibilityIssue {
+            kind: BackendCompatibilityIssueKind::MissingPreprocessingComponent,
+            phase: InferenceLifecyclePhase::Preprocessing,
+            message: "tokenizer component is missing".to_string(),
+            model_id: Some("pumas://models/tiny".to_string()),
+            path: Some("tokenizer.json".to_string()),
+        }],
+    };
+    let update_feed = ModelLibraryUpdateFeed {
+        cursor: "model-library-updates:43".to_string(),
+        stale_cursor: false,
+        snapshot_required: false,
+        events: vec![ModelLibraryUpdateEvent {
+            cursor: "model-library-updates:43".to_string(),
+            model_id: "pumas://models/tiny".to_string(),
+            change_kind: ModelLibraryChangeKind::PackageFactsModified,
+            fact_family: ModelFactFamily::PackageFacts,
+            refresh_scope: ModelLibraryRefreshScope::SummaryAndDetail,
+            selected_artifact_id: Some("gguf".to_string()),
+            producer_revision: Some("rev-42".to_string()),
+        }],
+    };
+    let summary_snapshot = ModelPackageFactsSummarySnapshot {
+        cursor: "model-library-updates:43".to_string(),
+        items: vec![ModelPackageFactsSummarySnapshotItem {
+            model_id: "pumas://models/tiny".to_string(),
+            status: ModelPackageFactsSummaryStatus::Missing,
+            summary: None,
+        }],
+    };
+    let load_security_policy = ModelLoadSecurityPolicy::default();
 
     for (name, value) in [
         (
@@ -404,6 +448,22 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
         (
             "inference_execution_embedding_result",
             serde_json::to_value(typed_embedding_result).expect("encode typed embedding result"),
+        ),
+        (
+            "backend_compatibility_report",
+            serde_json::to_value(compatibility_report).expect("encode compatibility report"),
+        ),
+        (
+            "model_library_update_feed",
+            serde_json::to_value(update_feed).expect("encode update feed"),
+        ),
+        (
+            "model_package_facts_summary_snapshot",
+            serde_json::to_value(summary_snapshot).expect("encode summary snapshot"),
+        ),
+        (
+            "model_load_security_policy",
+            serde_json::to_value(load_security_policy).expect("encode load security policy"),
         ),
     ] {
         assert_json_keys_avoid_scheduler_policy_language(name, &value);
