@@ -27,6 +27,14 @@
       }
     },
     "task_id": "text_generation",
+    "task_profile": {
+      "task_id": "text_generation",
+      "canonical_task_label": "text_generation",
+      "loader": "causal_lm",
+      "required_components": [
+        "tokenizer"
+      ]
+    },
     "model_type_hint": "text-generation",
     "device": "cuda:0",
     "trust_policy": {

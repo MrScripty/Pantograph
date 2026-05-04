@@ -1765,6 +1765,10 @@ PyTorch streaming generation now runs a structured worker setup probe before
 iterating the Python generator, so invalid stream envelopes and missing-model
 setup failures normalize through `PyTorchWorkerFailure` with request ids and
 canonical error codes like load and non-streaming generation failures.
+The canonical PyTorch/Transformers load-request fixture now includes the
+backend-local task profile, freezing the Rust-to-worker loader family and
+required processor-component projection alongside the package-facts mapper
+tests.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

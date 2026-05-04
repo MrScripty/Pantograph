@@ -212,6 +212,20 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
         Some(&envelope.payload.model_ref)
     );
     assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
+    let task_profile = envelope
+        .payload
+        .task_profile
+        .as_ref()
+        .expect("load fixture should carry a canonical task profile");
+    assert_eq!(task_profile.task_id, InferenceTaskId::TextGeneration);
+    assert_eq!(task_profile.canonical_task_label, "text_generation");
+    assert_eq!(
+        task_profile.loader,
+        PyTorchTransformersModelLoader::CausalLm
+    );
+    assert!(task_profile
+        .required_components
+        .contains(&ProcessorComponentKind::Tokenizer));
     assert_eq!(envelope.payload.device.as_deref(), Some("cuda:0"));
     assert!(!envelope.payload.trust_policy.allow_remote_code);
     assert!(envelope.payload.trust_policy.local_files_only);
