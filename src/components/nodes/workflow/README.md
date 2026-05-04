@@ -42,6 +42,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `AudioGenerationNode.svelte` | Shows execution and dependency status for Stable Audio generation nodes. |
 | `RerankerNode.svelte` | Retired specialized renderer retained only for saved-workflow migration reference; new rerank workflows render through `LLMInferenceNode.svelte`. |
 | `GenericNode.svelte` | Fallback renderer for workflow node types that do not need specialized UI. |
+| `inferencePayloadDisplay.ts` | Projects backend-neutral inference payload role metadata into compact task, diagnostics, usage, model-fact, and option display rows for canonical inference nodes. |
 
 ## Problem
 Workflow execution mixes durable node configuration with transient runtime data
@@ -85,6 +86,11 @@ instead of the text-only PyTorch or llama.cpp generation nodes.
 the effective value currently flowing through each setting, while
 override-capable handles come from the shared node definition supplied by the
 workflow stores.
+`LLMInferenceNode.svelte` displays canonical inference task and payload-role
+facts through `inferencePayloadDisplay.ts`, which reads only backend-neutral
+`inference_payloads` metadata from the node definition and does not render
+backend keys, runtime ids, scheduler policy, raw paths, prompts, or result
+bodies.
 `DependencyEnvironmentNode.svelte` keeps UI state and backend actions in the
 component, while dependency contracts and pure override state helpers live in
 `dependencyEnvironmentTypes.ts`, `dependencyEnvironmentActions.ts`,
@@ -148,6 +154,9 @@ and finality metadata in runtime data while the component reads bytes lazily wit
   fetch referenced stream bytes on demand.
 - Specialized node components must mirror canonical backend-owned port names so
   template graphs and execution bindings do not depend on UI-local aliases.
+- `LLMInferenceNode.svelte` must keep task and diagnostics display derived from
+  `inference_payloads` role metadata only; it must not inspect backend runtime
+  internals or infer scheduler/runtime selection.
 - `PumaLibNode.svelte` must keep its shared model-option cache in a Svelte 5
   `module` script so the component avoids deprecated module-script syntax while
   preserving one cache per bundled module instance.

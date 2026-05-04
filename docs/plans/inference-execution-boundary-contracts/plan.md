@@ -2042,7 +2042,7 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - [x] Store canonical task registry ids and typed generation/task options in
   the canonical node shape rather than backend node names, embedding-mode flags,
   or backend-specific parameter bags.
-- [ ] Define how node validation displays task registry, package-fact,
+- [x] Define how node validation displays task registry, package-fact,
   lifecycle, and option-compatibility diagnostics without exposing backend
   internals. The canonical `llm-inference` contract now exposes `diagnostics`
   and `metadata` output payloads as backend-neutral task diagnostics roles for
@@ -2051,7 +2051,11 @@ canonical inference shape instead of preserving backend-specific node contracts.
   language. Workflow-service node definitions and frontend/shared TypeScript
   port DTOs now preserve those `inference_payloads`, giving UI/node-validation
   consumers the canonical role metadata without reaching into backend internals.
-  UI display wiring remains open.
+  UI display wiring now routes through a pure frontend presenter that reads
+  only backend-neutral `inference_payloads` metadata and renders compact task,
+  model-fact, option, diagnostics, and usage rows on the canonical LLM
+  inference node without exposing backend/runtime/scheduler internals or raw
+  payload bodies.
 - [x] Define saved-workflow schema versioning and append-only migration records
   for the canonical inference node shape.
 - [x] Define executable migration fixtures for old and new saved workflow

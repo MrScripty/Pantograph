@@ -2,6 +2,7 @@
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import { nodeExecutionStates } from '../../../stores/workflowStore';
+  import { buildInferencePayloadDisplay } from './inferencePayloadDisplay';
 
   interface Props {
     id: string;
@@ -21,6 +22,7 @@
   let executionState = $derived(executionInfo?.state || 'idle');
   let modelName = $derived(data.modelName || 'Local LLM');
   let streamContent = $derived(data.streamContent || '');
+  let inferenceDisplay = $derived(buildInferencePayloadDisplay(data.definition));
 
   let statusColor = $derived(
     {
@@ -65,6 +67,25 @@
           <span class="text-neutral-400">Model:</span>
           <span class="text-neutral-200 font-mono text-[10px]">{modelName}</span>
         </div>
+        {#if inferenceDisplay}
+          <div class="space-y-1 border-t border-neutral-800 pt-2">
+            {#if inferenceDisplay.tasks.length > 0}
+              <div class="flex flex-wrap gap-1">
+                {#each inferenceDisplay.tasks as task (task)}
+                  <span class="rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-300">
+                    {task}
+                  </span>
+                {/each}
+              </div>
+            {/if}
+            {#each inferenceDisplay.rows as row (row.label)}
+              <div class="flex justify-between gap-2 text-[10px]">
+                <span class="text-neutral-500">{row.label}:</span>
+                <span class="truncate text-right text-neutral-300">{row.value}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
         {#if streamContent}
           <div class="p-2 bg-neutral-900 rounded text-xs text-neutral-300 max-h-20 overflow-y-auto">
             {streamContent}
