@@ -424,6 +424,99 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_persists_image_generation_bounded_lifecycle_summary() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.task_id = Some("image_generation".to_string());
+    event.model_id = Some("image/example/tiny-diffusers".to_string());
+    event.runtime_id = Some("pytorch.diffusers".to_string());
+    event.backend_key = Some("pytorch".to_string());
+    event.resolved_artifact_kind = Some("diffusers_bundle".to_string());
+    event.detail = Some(
+        "SECRET_PROMPT image prompt SECRET_IMAGE_BYTES aW1hZ2U= BACKEND_FLAG --model /tmp/private/diffusers"
+            .to_string(),
+    );
+    event.option_diagnostics = vec![
+        inference::OptionCompatibilityDiagnostic {
+            option_path: "image_generation.width".to_string(),
+            state: inference::OptionSupportState::Honored,
+            backend_key: Some("pytorch".to_string()),
+            message: Some("width honored for SECRET_PROMPT".to_string()),
+        },
+        inference::OptionCompatibilityDiagnostic {
+            option_path: "image_generation.scheduler".to_string(),
+            state: inference::OptionSupportState::Mapped,
+            backend_key: Some("pytorch".to_string()),
+            message: Some("mapped scheduler without storing aW1hZ2U=".to_string()),
+        },
+    ];
+    event.compatibility_report = Some(inference::InferenceCompatibilityReportSummary {
+        status: "accepted".to_string(),
+        compatible: true,
+        task: "supported".to_string(),
+        model_source: "supported".to_string(),
+        preprocessing: "supported".to_string(),
+        postprocessing: "supported".to_string(),
+    });
+    event.compatibility_issues = vec![inference::InferenceCompatibilityIssueSummary {
+        kind: "optional_component_missing".to_string(),
+        phase: inference::InferenceLifecyclePhase::Preprocessing,
+        message: "optional safety checker not present".to_string(),
+        model_id: Some("image/example/tiny-diffusers".to_string()),
+        path: Some("safety_checker/model.safetensors".to_string()),
+    }];
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("image-generation lifecycle diagnostics should map");
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("SECRET_PROMPT"));
+    assert!(!payload_json.contains("SECRET_IMAGE_BYTES"));
+    assert!(!payload_json.contains("aW1hZ2U="));
+    assert!(!payload_json.contains("BACKEND_FLAG"));
+    assert!(!payload_json.contains("/tmp/private/diffusers"));
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.task_id, "image_generation");
+            assert_eq!(
+                payload.lifecycle_phase.as_deref(),
+                Some("backend_execution")
+            );
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(
+                payload.selected_backend_family.as_deref(),
+                Some("transformers_pytorch")
+            );
+            assert_eq!(
+                payload.resolved_artifact_kind.as_deref(),
+                Some("diffusers_bundle")
+            );
+            assert_eq!(
+                payload
+                    .compatibility_report
+                    .as_ref()
+                    .map(|report| (report.status.as_str(), report.task.as_str())),
+                Some(("accepted", "supported"))
+            );
+            assert_eq!(payload.compatibility_issue_count, 1);
+            assert_eq!(payload.compatibility_issues[0].phase, "preprocessing");
+            assert_eq!(payload.option_support_counts.honored, 1);
+            assert_eq!(payload.option_support_counts.mapped, 1);
+            assert_eq!(payload.option_diagnostics.len(), 2);
+            assert!(payload
+                .option_diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.message.is_none()));
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_diagnostic_event_adapter_omits_absolute_issue_path_when_model_id_is_stable() {
     let context = context();
     let mut event = inference_lifecycle_event(

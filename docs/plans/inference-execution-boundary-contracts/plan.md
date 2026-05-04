@@ -2675,7 +2675,11 @@ inference write ledger events directly.
   producer coverage now applies to typed embedding, rerank, image generation,
   and audio transcription requests, giving ledger adapters coverage for those
   Transformers-aligned boundaries without storing prompts, raw media,
-  embeddings, documents, or generated content.
+  embeddings, documents, or generated content. Embedded-runtime ledger adapter
+  coverage now also proves image-generation backend-execution lifecycle
+  summaries persist bounded task/backend/artifact/compatibility/option facts
+  while omitting prompt text, encoded image bytes, backend flags, and local
+  paths.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -3427,6 +3431,11 @@ Update during implementation:
   for executable canonical image-generation so the documented consumer and
   producer boundaries match the typed gateway implementation and descriptor
   payload metadata.
+- 2026-05-04: Embedded-runtime ledger adapter coverage now persists bounded
+  image-generation backend-execution lifecycle summaries, including task id,
+  backend family, artifact kind, compatibility summary, and option support
+  counts, while excluding prompt text, encoded image bytes, backend flags, and
+  local paths.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are
