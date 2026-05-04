@@ -148,6 +148,8 @@ transient UI state without becoming backend scheduler policy.
 - I/O Inspector node grouping and endpoint filters must use producer and
   consumer projection fields. Components may send backend producer/consumer
   filters, but must not infer endpoint ownership from raw payload JSON.
+- I/O Inspector selected-backend filtering must pass `selected_backend_key` to
+  the backend projection query instead of filtering client-side artifact rows.
 - Library active-run highlighting must use explicit projection facts, not
   inferred workflow or asset name matches.
 - Run graph snapshots are read-only projection views. Switching to the current

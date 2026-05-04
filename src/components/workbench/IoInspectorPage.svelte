@@ -80,6 +80,7 @@
   let artifactConsumeMessages = $state<Record<string, string>>({});
   let endpointFilterMode = $state<'all' | 'producer' | 'consumer'>('all');
   let endpointNodeFilter = $state('');
+  let selectedBackendFilter = $state('');
   let artifactRequestSerial = 0;
   let workflowInputArtifacts = $derived(artifacts.filter(isWorkflowInputArtifact));
   let workflowOutputArtifacts = $derived(artifacts.filter(isWorkflowOutputArtifact));
@@ -107,6 +108,7 @@
     runId = activeRunId(),
     filterMode = endpointFilterMode,
     filterNodeValue = endpointNodeFilter.trim(),
+    backendFilterValue = selectedBackendFilter.trim(),
   ): Promise<void> {
     const requestSerial = ++artifactRequestSerial;
     artifactError = null;
@@ -123,6 +125,10 @@
       }
       if (filterNodeId.length > 0 && filterMode === 'consumer') {
         request.consumer_node_id = filterNodeId;
+      }
+      const selectedBackendKey = backendFilterValue.trim();
+      if (selectedBackendKey.length > 0) {
+        request.selected_backend_key = selectedBackendKey;
       }
 
       const response = await workflowService.queryIoArtifacts(request);
@@ -391,7 +397,8 @@
     const runId = activeRunId();
     const filterMode = endpointFilterMode;
     const filterNodeValue = endpointNodeFilter.trim();
-    void refreshArtifacts(runId, filterMode, filterNodeValue);
+    const backendFilterValue = selectedBackendFilter.trim();
+    void refreshArtifacts(runId, filterMode, filterNodeValue, backendFilterValue);
   });
 
   onMount(() => {
@@ -484,6 +491,18 @@
             disabled={endpointFilterMode === 'all'}
             placeholder="node-id"
             class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+          />
+        </div>
+        <div class="min-w-[12rem] flex-1">
+          <label for="io-selected-backend-filter" class="mb-2 block text-xs uppercase tracking-[0.18em] text-neutral-500">
+            Backend
+          </label>
+          <input
+            id="io-selected-backend-filter"
+            type="text"
+            bind:value={selectedBackendFilter}
+            placeholder="vllm"
+            class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
           />
         </div>
       </div>
@@ -823,6 +842,12 @@
                   <dt class="text-neutral-500">Runtime</dt>
                   <dd class="mt-0.5 truncate text-neutral-200" title={artifact.runtime_id ?? ''}>
                     {formatIoArtifactDetailValue(artifact.runtime_id)}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-neutral-500">Backend</dt>
+                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.selected_backend_key ?? ''}>
+                    {formatIoArtifactDetailValue(artifact.selected_backend_key)}
                   </dd>
                 </div>
                 <div>

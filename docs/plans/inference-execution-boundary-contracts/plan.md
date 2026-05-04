@@ -2726,6 +2726,9 @@ Update during implementation:
   expose projected runtime, selected backend, and model identifiers for
   artifacts when those facts are present, while keeping missing facts out of the
   compact descriptor view.
+- 2026-05-03: I/O Inspector page filters can now pass `selected_backend_key`
+  through the workflow projection service and artifact detail rows display the
+  selected backend alongside runtime/model projection facts.
 
 ## Commit Cadence Notes
 
