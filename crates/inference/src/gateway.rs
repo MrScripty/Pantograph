@@ -2441,18 +2441,7 @@ fn option_diagnostics_from_execution_result(
     result: &Result<InferenceExecutionResult, GatewayError>,
 ) -> Vec<OptionCompatibilityDiagnostic> {
     match result {
-        Ok(InferenceExecutionResult::TextGeneration {
-            option_diagnostics, ..
-        })
-        | Ok(InferenceExecutionResult::Embedding {
-            option_diagnostics, ..
-        })
-        | Ok(InferenceExecutionResult::Rerank {
-            option_diagnostics, ..
-        })
-        | Ok(InferenceExecutionResult::ImageGeneration {
-            option_diagnostics, ..
-        }) => option_diagnostics.clone(),
+        Ok(result) => result.option_diagnostics().to_vec(),
         _ => Vec::new(),
     }
 }

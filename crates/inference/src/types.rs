@@ -335,6 +335,27 @@ impl InferenceExecutionResult {
             Self::AudioTranscription { .. } => InferenceExecutionResultKind::AudioTranscription,
         }
     }
+
+    #[must_use]
+    pub fn option_diagnostics(&self) -> &[OptionCompatibilityDiagnostic] {
+        match self {
+            Self::TextGeneration {
+                option_diagnostics, ..
+            }
+            | Self::Embedding {
+                option_diagnostics, ..
+            }
+            | Self::Rerank {
+                option_diagnostics, ..
+            }
+            | Self::ImageGeneration {
+                option_diagnostics, ..
+            }
+            | Self::AudioTranscription {
+                option_diagnostics, ..
+            } => option_diagnostics,
+        }
+    }
 }
 
 /// Token or item usage attached to a typed execution result when available.
@@ -1592,6 +1613,35 @@ mod tests {
             crate::model_contracts::InferenceExecutionResultKind::Rerank
         );
         assert_eq!(decoded, result);
+    }
+
+    #[test]
+    fn typed_audio_result_option_diagnostics_accessor_matches_contract() {
+        let result = InferenceExecutionResult::AudioTranscription {
+            result: AudioTranscriptionResult {
+                text: "transcribed text".to_string(),
+                language: Some("en".to_string()),
+                duration_seconds: Some(1.0),
+                segments: Vec::new(),
+                metadata: Value::Null,
+            },
+            option_diagnostics: vec![OptionCompatibilityDiagnostic {
+                option_path: "audio_transcription.language".to_string(),
+                state: crate::model_contracts::OptionSupportState::Honored,
+                backend_key: Some("mock".to_string()),
+                message: Some("language hint forwarded".to_string()),
+            }],
+        };
+
+        assert_eq!(result.option_diagnostics().len(), 1);
+        assert_eq!(
+            result.option_diagnostics()[0].option_path,
+            "audio_transcription.language"
+        );
+        assert_eq!(
+            result.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::AudioTranscription
+        );
     }
 
     #[test]
