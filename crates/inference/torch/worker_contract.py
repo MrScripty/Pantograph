@@ -7,6 +7,12 @@ LOAD_TRANSFORMERS_MODEL_OPERATION = "load_transformers_model"
 GENERATE_TEXT_OPERATION = "generate_text"
 GENERATE_TEXT_STREAM_OPERATION = "generate_text_stream"
 ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k"}
+CAUSAL_LM_LOADER = "causal_lm"
+AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
+SUPPORTED_TRANSFORMERS_LOADERS = {
+    CAUSAL_LM_LOADER,
+    AUTOMATIC_SPEECH_RECOGNITION_LOADER,
+}
 
 
 def load_transformers_model_kwargs_from_envelope(envelope):
@@ -32,10 +38,20 @@ def load_transformers_model_kwargs_from_envelope(envelope):
     if not isinstance(trust_policy, dict):
         raise ValueError("PyTorch worker load trust_policy must be an object")
 
+    task_profile = payload.get("task_profile")
+    if task_profile is None:
+        task_profile = {}
+    if not isinstance(task_profile, dict):
+        raise ValueError("PyTorch worker load task_profile must be an object")
+    loader = task_profile.get("loader") or CAUSAL_LM_LOADER
+    if loader not in SUPPORTED_TRANSFORMERS_LOADERS:
+        raise ValueError(f"Unsupported PyTorch worker Transformers loader: {loader}")
+
     return {
         "model_path": payload.get("entry_path"),
         "device": payload.get("device") or "auto",
         "model_type": payload.get("model_type_hint"),
+        "loader": loader,
         "trust_remote_code": bool(trust_policy.get("allow_remote_code", False)),
         "trust_policy_decision_id": trust_policy.get("decision_id"),
         "local_files_only": bool(trust_policy.get("local_files_only", True)),

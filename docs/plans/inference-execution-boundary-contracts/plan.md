@@ -1730,7 +1730,7 @@ using Python Transformers behind the boundary for broad HF-compatible support.
 - [x] Map Rust generation option groups to Transformers generation inputs and
   return per-option compatibility diagnostics instead of accepting arbitrary
   Python kwargs as the public contract.
-- [ ] Map Rust task registry entries to Transformers pipeline/model loading
+- [x] Map Rust task registry entries to Transformers pipeline/model loading
   behavior inside the worker while keeping upstream Python task names as
   adapter-local implementation details after validation.
 - [x] Make `trust_remote_code` and custom-code loading explicit inputs from the
@@ -1787,7 +1787,15 @@ yet have a PyTorch loader instead of matching raw task strings ad hoc.
 PyTorch static backend capability facts now advertise audio transcription
 alongside text generation, and the backend-local Transformers task profile maps
 canonical `audio_transcription` / `automatic-speech-recognition` evidence to an
-ASR loader family without changing live Python loading behavior.
+ASR loader family. The Python worker now validates the Rust-derived task
+profile loader, dispatches causal-LM profiles to `AutoModelForCausalLM` and ASR
+profiles to the existing `pipeline("automatic-speech-recognition")` path, and
+preserves the Rust trust policy/local-files/revision/cache facts during both
+load paths instead of switching on raw upstream task strings.
+Broader PyTorch-feature validation exposed a stale worker-contract fixture that
+still passed `use_cache` as a raw `transformers_kwargs` field after the
+generation envelope allowlist was narrowed to `top_k`; the fixture now matches
+the typed Rust/Python validation contract.
 The Rust package-derived load envelope now reaches the PyTorch backend load
 edge through `load_transformers_package`: package facts build and validate the
 worker envelope, then Rust sends that envelope to a backend-local Python

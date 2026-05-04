@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::ffi::CString;
 
 use super::pytorch_worker_contract::{
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchTransformersLoadRequest,
@@ -15,6 +16,13 @@ use crate::model_contracts::{
     SpecialTokenGenerationOptions, StoppingGenerationOptions, TaskEvidence,
 };
 use crate::types::{AudioTranscriptionRequest, EncodedAudio};
+
+fn load_worker_contract_module<'py>(py: Python<'py>) -> Bound<'py, pyo3::types::PyModule> {
+    let source = CString::new(include_str!("../../torch/worker_contract.py"))
+        .expect("worker contract source should not contain nul bytes");
+    pyo3::types::PyModule::from_code(py, &source, c"worker_contract.py", c"worker_contract")
+        .expect("worker_contract module should load")
+}
 
 #[test]
 fn test_backend_name() {
@@ -246,6 +254,91 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
 
     PyTorchBackend::validate_transformers_load_envelope(&envelope)
         .expect("load fixture should validate");
+}
+
+#[test]
+fn test_python_worker_contract_projects_task_profile_loader() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let envelope = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-asr-load",
+            "operation": "load_transformers_model",
+            "payload": {
+                "model_ref": {"model_id": "asr/example/tiny"},
+                "artifact_kind": "hf_compatible_directory",
+                "entry_path": "/models/asr",
+                "task_id": "audio_transcription",
+                "task_profile": {
+                    "task_id": "audio_transcription",
+                    "canonical_task_label": "audio_transcription",
+                    "loader": "automatic_speech_recognition",
+                    "required_components": ["audio_feature_extractor", "tokenizer"]
+                },
+                "trust_policy": {
+                    "allow_remote_code": false,
+                    "local_files_only": true,
+                    "cache_policy": "backend_default",
+                    "auth_token_source": "none"
+                }
+            }
+        });
+
+        let kwargs = module
+            .call_method1(
+                "load_transformers_model_kwargs_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect("worker contract should project load kwargs");
+        let loader = kwargs
+            .get_item("loader")
+            .expect("loader key should be readable")
+            .extract::<String>()
+            .expect("loader should be a string");
+
+        assert_eq!(loader, "automatic_speech_recognition");
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_unsupported_task_profile_loader() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let envelope = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-load",
+            "operation": "load_transformers_model",
+            "payload": {
+                "model_ref": {"model_id": "vision/example/tiny"},
+                "artifact_kind": "hf_compatible_directory",
+                "entry_path": "/models/vision",
+                "task_id": "image_understanding",
+                "task_profile": {
+                    "task_id": "image_understanding",
+                    "canonical_task_label": "image_understanding",
+                    "loader": "image_to_text",
+                    "required_components": ["image_processor", "tokenizer"]
+                },
+                "trust_policy": {
+                    "allow_remote_code": false,
+                    "local_files_only": true,
+                    "cache_policy": "backend_default",
+                    "auth_token_source": "none"
+                }
+            }
+        });
+
+        let error = module
+            .call_method1(
+                "load_transformers_model_kwargs_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect_err("unsupported loaders should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unsupported PyTorch worker Transformers loader: image_to_text"));
+    });
 }
 
 #[test]

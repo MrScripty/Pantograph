@@ -12,8 +12,7 @@
     "temperature": 0.2,
     "top_p": 0.95,
     "transformers_kwargs": {
-      "top_k": 40,
-      "use_cache": true
+      "top_k": 40
     }
   }
 }

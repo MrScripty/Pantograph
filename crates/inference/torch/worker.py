@@ -54,6 +54,8 @@ from worker_runtime import (
 )
 from worker_transformers import apply_compatibility_shims
 from worker_contract import (
+    AUTOMATIC_SPEECH_RECOGNITION_LOADER,
+    CAUSAL_LM_LOADER,
     GENERATE_TEXT_STREAM_OPERATION,
     generate_text_kwargs_from_envelope,
     load_transformers_model_kwargs_from_envelope,
@@ -247,7 +249,19 @@ def load_transformers_model_from_envelope(envelope):
         kwargs = load_transformers_model_kwargs_from_envelope(decoded)
         if not kwargs.get("model_path"):
             raise ValueError("PyTorch worker load envelope missing payload.entry_path")
-        info = load_model(**kwargs)
+        loader = kwargs.pop("loader", CAUSAL_LM_LOADER)
+        if loader == CAUSAL_LM_LOADER:
+            info = load_model(**kwargs)
+        elif loader == AUTOMATIC_SPEECH_RECOGNITION_LOADER:
+            kwargs.pop("model_type", None)
+            info = load_asr_model_with_policy(**kwargs)
+            info = {
+                "model_path": info.get("model_path"),
+                "model_type": "audio_transcription",
+                "device": info.get("device"),
+            }
+        else:
+            raise ValueError(f"Unsupported PyTorch worker Transformers loader: {loader}")
         return json.dumps({
             "status": "ok",
             "request_id": request_id,
@@ -876,6 +890,25 @@ def _attach_diffusion_preview_callback(call_kwargs, total_steps, emit_stream):
 
 def load_asr_model(model_path, device="auto", chunk_length_s=None):
     """Load a speech-to-text pipeline into module globals for process-backed use."""
+    return load_asr_model_with_policy(
+        model_path,
+        device=device,
+        chunk_length_s=chunk_length_s,
+    )
+
+
+def load_asr_model_with_policy(
+    model_path,
+    device="auto",
+    chunk_length_s=None,
+    trust_remote_code=False,
+    trust_policy_decision_id=None,
+    local_files_only=True,
+    revision=None,
+    code_revision=None,
+    cache_policy="backend_default",
+):
+    """Load a speech-to-text pipeline with the Rust-owned Transformers policy."""
     global _asr_pipeline, _asr_device, _asr_model_path
 
     path = _resolve_model_directory(model_path)
@@ -898,16 +931,46 @@ def load_asr_model(model_path, device="auto", chunk_length_s=None):
 
     resolved_device = _resolve_device(device)
     torch_dtype = torch.float16 if resolved_device.type == "cuda" else torch.float32
+    trust_remote_code = bool(trust_remote_code)
+    local_files_only = bool(local_files_only)
+    force_download = cache_policy == "bypass_cache" and not local_files_only
 
-    logger.info("Loading ASR pipeline from %s onto %s", path, resolved_device)
+    if _transformers_package_requires_remote_code(path) and not trust_remote_code:
+        raise RuntimeError(
+            "Model package requires custom Transformers code but trust policy is closed."
+        )
+
+    logger.info(
+        "Loading ASR pipeline from %s onto %s (trust_remote_code=%s, local_files_only=%s, revision=%s, code_revision=%s, cache_policy=%s, trust_policy_decision_id=%s)",
+        path,
+        resolved_device,
+        trust_remote_code,
+        local_files_only,
+        revision,
+        code_revision,
+        cache_policy,
+        trust_policy_decision_id,
+    )
 
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
         str(path),
         torch_dtype=torch_dtype,
         low_cpu_mem_usage=True,
         use_safetensors=True,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        revision=revision,
+        code_revision=code_revision,
+        force_download=force_download,
     )
-    processor = AutoProcessor.from_pretrained(str(path))
+    processor = AutoProcessor.from_pretrained(
+        str(path),
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        revision=revision,
+        code_revision=code_revision,
+        force_download=force_download,
+    )
 
     if resolved_device.type != "cpu":
         model.to(resolved_device)
