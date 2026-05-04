@@ -102,7 +102,7 @@ async fn start_gateway() -> Result<(), Box<dyn std::error::Error>> {
 | Feature | Default | Contract |
 | ------- | ------- | -------- |
 | `backend-llamacpp` | Yes | llama.cpp sidecar and GGUF support. |
-| `backend-candle` | No | In-process Candle inference; pulls CUDA-oriented dependencies. |
+| `backend-candle` | No | Staged in-process Candle embedding backend; pulls CUDA-oriented dependencies but reports unavailable until executable model loading exists. |
 | `backend-pytorch` | No | In-process PyTorch/PyO3 backend support. |
 | `std-process` | No | Standard-library process spawner for non-Tauri hosts. |
 

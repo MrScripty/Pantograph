@@ -80,13 +80,15 @@ impl CandleBackend {
 
     /// Check if Candle/CUDA is available on the system
     pub fn check_availability() -> (bool, Option<String>) {
-        // Check for CUDA at runtime
-        // This is a placeholder - actual check would need CUDA bindings
         #[cfg(feature = "backend-candle")]
         {
-            // For now, assume CUDA is available if the feature is enabled
-            // A real implementation would check for CUDA runtime
-            (true, None)
+            (
+                false,
+                Some(
+                    "Candle backend is staged but executable model loading is not implemented"
+                        .to_string(),
+                ),
+            )
         }
 
         #[cfg(not(feature = "backend-candle"))]
@@ -124,15 +126,8 @@ impl InferenceBackend for CandleBackend {
         _config: &BackendConfig,
         _spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError> {
-        // Candle runs in-process, so we don't need the spawner
-        // The actual implementation would:
-        // 1. Load the model from config.model_path or config.model_id
-        // 2. Start a local Axum HTTP server
-        // 3. Return the server URL
-
-        // Placeholder: just mark as not ready since we don't have the actual implementation
         Err(BackendError::StartupFailed(
-            "Candle backend not yet implemented in inference library. Use the app's native Candle support.".to_string()
+            "Candle backend is staged for embedding-only support, but executable model loading is not implemented".to_string()
         ))
     }
 
@@ -269,5 +264,16 @@ mod tests {
         let backend = CandleBackend::new();
         assert!(!backend.is_ready());
         assert!(backend.base_url().is_none());
+    }
+
+    #[cfg(feature = "backend-candle")]
+    #[test]
+    fn test_staged_backend_reports_unavailable_until_loader_exists() {
+        let (available, reason) = CandleBackend::check_availability();
+
+        assert!(!available);
+        assert!(reason
+            .as_deref()
+            .is_some_and(|value| value.contains("executable model loading is not implemented")));
     }
 }

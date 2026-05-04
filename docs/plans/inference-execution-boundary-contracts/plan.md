@@ -2052,19 +2052,19 @@ message, and supported-engine diagnostics no longer list Ollama.
 without broad scheduler or Transformers duplication.
 
 **Tasks:**
-- [ ] Choose one initial Candle task family, preferably embeddings, with a
+- [x] Choose one initial Candle task family, preferably embeddings, with a
   documented model format and tokenizer requirement.
-- [ ] Add backend-local Candle model load facts, resolved device facts, and
+- [x] Add backend-local Candle model load facts, resolved device facts, and
   explicit unsupported capability behavior.
 - [ ] Map selected Pumas-resolved HF-compatible safetensors/config/tokenizer
   packages through the Rust model-source contract.
 - [ ] Use Candle safetensors, tokenizer, device, dtype, and model loading
   patterns without creating a general model scheduler.
-- [ ] Keep feature-gated Candle dependencies optional and documented.
-- [ ] Document Candle dependency cost, feature behavior, supported platforms,
+- [x] Keep feature-gated Candle dependencies optional and documented.
+- [x] Document Candle dependency cost, feature behavior, supported platforms,
   model-family limitation, and why the selected dependency set is justified for
   the first slice.
-- [ ] Add tests that compile with and without the Candle feature.
+- [x] Add tests that compile with and without the Candle feature.
 
 **Verification:**
 - `cargo check -p inference --features backend-candle`.
@@ -2074,7 +2074,22 @@ without broad scheduler or Transformers duplication.
   unless explicitly marked as ignored/integration.
 - README feature contract review.
 
-**Status:** Not started.
+**Status:** In progress.
+
+The first Candle staging slice keeps embeddings as the only advertised task
+family for HF-compatible local package directories and records unsupported
+streaming, external-connection, custom-code, device-selection, and KV-cache
+facts. The `backend-candle` feature remains optional and compiles, but the
+registry reports Candle unavailable because executable safetensors/tokenizer
+model loading is not implemented yet; this prevents runtime selection from
+treating a staged backend as executable while the model-source mapper remains
+open.
+
+Update during implementation:
+- 2026-05-03: Candle backend availability now fails closed behind
+  `backend-candle` until executable model loading exists. Registry and backend
+  tests cover the staged embedding-only capability facts and unavailable state,
+  while README feature docs call out the CUDA-oriented optional dependency cost.
 
 ### Milestone 13: Evaluate vLLM and MLX Roadmap Boundaries
 

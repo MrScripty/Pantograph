@@ -250,4 +250,26 @@ mod tests {
         assert!(registry.is_available("PyTorch"));
         assert!(registry.is_available("pytorch"));
     }
+
+    #[cfg(feature = "backend-candle")]
+    #[test]
+    fn test_registry_marks_staged_candle_unavailable() {
+        let registry = BackendRegistry::new();
+        let candle = registry
+            .list()
+            .into_iter()
+            .find(|backend| backend.backend_key == "candle")
+            .expect("candle backend info should be registered behind feature");
+
+        assert!(!candle.available);
+        assert!(candle
+            .unavailable_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("executable model loading is not implemented")));
+        assert_eq!(
+            candle.default_start_mode,
+            BackendDefaultStartMode::Embedding
+        );
+        assert!(candle.capabilities.embeddings);
+    }
 }
