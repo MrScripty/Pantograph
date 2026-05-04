@@ -96,6 +96,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
 ## Structured Producer Contract
 - Stable fields: node ids, categories, ports, labels, task metadata, and output
   shapes are consumed by workflow service, UI projections, and saved graphs.
+- The `puma-lib` descriptor exposes `pumas_model_ref` and
+  `resolved_model_package_facts` as optional JSON outputs so canonical
+  inference nodes can receive Pumas identity and package facts through graph
+  dataflow rather than scraping model-list option metadata.
 - Defaults: optional metadata must have documented default behavior.
 - Enums and labels: node categories and port data types carry execution
   semantics.

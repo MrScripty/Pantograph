@@ -71,6 +71,20 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
             .and_then(|value| value.get("model_path")),
         Some(&serde_json::json!(bundle_root.display().to_string()))
     );
+    assert_eq!(
+        outputs
+            .get("resolved_model_package_facts")
+            .and_then(|value| value.get("model_ref"))
+            .and_then(|value| value.get("model_id")),
+        Some(&serde_json::json!("diffusion/imported/test-bundle"))
+    );
+    assert_eq!(
+        outputs
+            .get("resolved_model_package_facts")
+            .and_then(|value| value.get("artifact"))
+            .and_then(|value| value.get("entry_path")),
+        Some(&serde_json::json!(bundle_root.display().to_string()))
+    );
 }
 
 #[tokio::test]

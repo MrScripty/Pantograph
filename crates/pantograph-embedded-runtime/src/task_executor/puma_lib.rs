@@ -117,6 +117,7 @@ impl TauriTaskExecutor {
             &["recommended_backend", "recommendedBackend"],
         );
         let mut resolved_from_pumas = false;
+        let mut resolved_model_package_facts = None;
 
         if let Some(api) = extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
         {
@@ -196,6 +197,28 @@ impl TauriTaskExecutor {
                             );
                         }
                     }
+
+                    match api.resolve_model_package_facts(&model.id).await {
+                        Ok(package_facts) => match serde_json::to_value(&package_facts) {
+                            Ok(value) => {
+                                resolved_model_package_facts = Some(value);
+                            }
+                            Err(error) => {
+                                log::warn!(
+                                    "Puma-Lib package-facts serialization failed for '{}': {}",
+                                    model.id,
+                                    error
+                                );
+                            }
+                        },
+                        Err(error) => {
+                            log::warn!(
+                                "Puma-Lib package-facts lookup failed for '{}': {}",
+                                model.id,
+                                error
+                            );
+                        }
+                    }
                 }
                 Ok(None) => {
                     if let Some(model_id) = requested_model_id.as_deref() {
@@ -260,6 +283,12 @@ impl TauriTaskExecutor {
             "pumas_model_ref".to_string(),
             serde_json::Value::Object(pumas_model_ref),
         );
+        if let Some(resolved_model_package_facts) = resolved_model_package_facts {
+            outputs.insert(
+                "resolved_model_package_facts".to_string(),
+                resolved_model_package_facts,
+            );
+        }
         Self::insert_puma_lib_output_string(&mut outputs, "model_id", model_id);
         Self::insert_puma_lib_output_string(&mut outputs, "model_type", model_type);
         Self::insert_puma_lib_output_string(&mut outputs, "task_type_primary", task_type_primary);

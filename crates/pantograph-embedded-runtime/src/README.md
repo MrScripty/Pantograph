@@ -89,6 +89,10 @@ Pumas-specific dependency resolution.
   technical-fit candidates from those facts plus runtime/workflow context;
   runtime id, residency, warmup, admission, and final selection state must still
   come from the runtime registry or workflow scheduler layers.
+- `puma-lib` execution should emit canonical Pumas model refs and resolved
+  package-facts JSON when the Pumas API is available so downstream canonical
+  inference nodes can validate and forward those facts without scraping option
+  metadata.
 - Keep dependency preflight deterministic because it can block workflow
   execution before node runtime starts.
 - App-global runtime residency, admission, retention, and eviction policy must

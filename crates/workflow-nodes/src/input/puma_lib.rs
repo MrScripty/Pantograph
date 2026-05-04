@@ -17,6 +17,7 @@ use node_engine::{
 
 const PORT_MODEL_PATH: &str = "model_path";
 const PORT_PUMAS_MODEL_REF: &str = "pumas_model_ref";
+const PORT_RESOLVED_MODEL_PACKAGE_FACTS: &str = "resolved_model_package_facts";
 const PORT_MODEL_ID: &str = "model_id";
 const PORT_MODEL_TYPE: &str = "model_type";
 const PORT_TASK_TYPE_PRIMARY: &str = "task_type_primary";
@@ -58,6 +59,11 @@ impl TaskDescriptor for PumaLibTask {
             outputs: vec![
                 PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::optional(PORT_PUMAS_MODEL_REF, "Pumas Model Ref", PortDataType::Json),
+                PortMetadata::optional(
+                    PORT_RESOLVED_MODEL_PACKAGE_FACTS,
+                    "Resolved Model Package Facts",
+                    PortDataType::Json,
+                ),
                 PortMetadata::optional(PORT_MODEL_ID, "Model ID", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_TYPE, "Model Type", PortDataType::String),
                 PortMetadata::optional(PORT_TASK_TYPE_PRIMARY, "Task Type", PortDataType::String),
@@ -480,12 +486,18 @@ mod tests {
         let meta = PumaLibTask::descriptor();
 
         assert!(meta.inputs.is_empty());
-        assert_eq!(meta.outputs.len(), 13);
+        assert_eq!(meta.outputs.len(), 14);
 
         assert!(meta.outputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.outputs.iter().any(|p| p.id == "pumas_model_ref"
             && p.data_type == PortDataType::Json
             && !p.required));
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == "resolved_model_package_facts"
+                && p.data_type == PortDataType::Json
+                && !p.required));
         assert!(meta.outputs.iter().any(|p| p.id == "model_id"));
         assert!(meta.outputs.iter().any(|p| p.id == "model_type"));
         assert!(meta.outputs.iter().any(|p| p.id == "task_type_primary"));
