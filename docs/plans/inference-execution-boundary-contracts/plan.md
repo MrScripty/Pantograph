@@ -2353,8 +2353,11 @@ inference write ledger events directly.
   now emit bounded option support for extra options, rerank controls, and
   first-class image request settings. Audio transcription diagnostics now cover
   first-class language, prompt, task, and chunk-length request settings without
-  copying prompt text or audio payload values into lifecycle events. Video and
-  KV-cache task-specific options remain open.
+  copying prompt text or audio payload values into lifecycle events. Typed
+  non-generation option diagnostics now appear on task-validation completion as
+  well as backend-execution completion so node validation views can surface the
+  same bounded option facts before execution. Video and KV-cache task-specific
+  options remain open.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup. Diagnostic-observed

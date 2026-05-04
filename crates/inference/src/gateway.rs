@@ -1162,6 +1162,10 @@ impl InferenceGateway {
             .await;
         let request_option_diagnostics =
             typed_non_generation_option_diagnostics(&request, backend_key.as_deref());
+        let mut validation_option_diagnostics =
+            compatibility_diagnostics.option_diagnostics.clone();
+        validation_option_diagnostics.extend(request_option_diagnostics.clone());
+        dedupe_option_diagnostics(&mut validation_option_diagnostics);
         record_non_streaming_lifecycle_phase_result_with_diagnostics(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
@@ -1172,7 +1176,7 @@ impl InferenceGateway {
             runtime_instance_id.clone(),
             model_id.clone(),
             &Ok(()),
-            compatibility_diagnostics.option_diagnostics.clone(),
+            validation_option_diagnostics,
             compatibility_diagnostics.compatibility_report.clone(),
             compatibility_diagnostics.compatibility_issues.clone(),
         );

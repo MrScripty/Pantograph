@@ -1452,6 +1452,37 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
 
     let events = sink.events();
     assert_eq!(events.len(), 6);
+    let validation_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("task validation completion event should be recorded");
+    assert!(validation_completed
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| {
+            diagnostic.option_path == "audio_transcription.language"
+                && diagnostic.state == OptionSupportState::Honored
+                && diagnostic.backend_key.as_deref() == Some("mock")
+        }));
+    assert!(validation_completed
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| {
+            diagnostic.option_path == "audio_transcription.prompt"
+                && diagnostic.state == OptionSupportState::Honored
+                && diagnostic.backend_key.as_deref() == Some("mock")
+        }));
+    assert!(validation_completed
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| {
+            diagnostic.option_path == "audio_transcription.extra_options.return_timestamps"
+                && diagnostic.state == OptionSupportState::Mapped
+                && diagnostic.backend_key.as_deref() == Some("mock")
+        }));
     let backend_completed = events
         .iter()
         .find(|event| {
