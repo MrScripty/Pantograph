@@ -1174,6 +1174,10 @@ rule that payload compatibility comes from the registry contract rather than
 backend names or raw task strings. Neighboring consumer-migration slices should
 continue moving graph/runtime consumers to the exported contract before marking
 the broader task request/registry tasks complete.
+Typed request serde coverage now freezes the stable wire shape for current
+executable text, embedding, rerank, image-generation, and audio-transcription
+inputs, including tagged `input_type` payloads and append-only `extra_options`
+where backend-local options are still needed.
 Executable task-registry invariant coverage now freezes the complete public
 shape for every seeded task entry: unique canonical ids, known family,
 execution-behavior, streaming, and support-tier classifications, non-empty

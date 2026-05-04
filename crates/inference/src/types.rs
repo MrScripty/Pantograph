@@ -1215,6 +1215,122 @@ mod tests {
     }
 
     #[test]
+    fn typed_execution_embedding_request_serde_uses_stable_contract() {
+        let request = InferenceExecutionRequest {
+            request_id: Some("req-embedding-1".to_string()),
+            task_id: InferenceTaskId::Embedding,
+            model_ref: None,
+            model_name: Some("sentence-transformers/tiny".to_string()),
+            runtime_hint: Some("candle".to_string()),
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::Embedding {
+                texts: vec!["first".to_string(), "second".to_string()],
+            },
+            generation_options: None,
+            extra_options: serde_json::json!({
+                "normalize": true
+            }),
+        };
+
+        let encoded = serde_json::to_value(&request).unwrap();
+        let decoded: InferenceExecutionRequest = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["task_id"], serde_json::json!("embedding"));
+        assert_eq!(
+            encoded["input"]["input_type"],
+            serde_json::json!("embedding")
+        );
+        assert_eq!(encoded["input"]["texts"][1], serde_json::json!("second"));
+        assert_eq!(
+            encoded["extra_options"]["normalize"],
+            serde_json::json!(true)
+        );
+        assert_eq!(decoded, request);
+    }
+
+    #[test]
+    fn typed_execution_rerank_request_serde_uses_stable_contract() {
+        let request = InferenceExecutionRequest {
+            request_id: Some("req-rerank-1".to_string()),
+            task_id: InferenceTaskId::Rerank,
+            model_ref: None,
+            model_name: Some("reranker/tiny".to_string()),
+            runtime_hint: Some("pytorch".to_string()),
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::Rerank {
+                query: "needle".to_string(),
+                documents: vec!["hay".to_string(), "needle document".to_string()],
+                top_n: Some(1),
+                return_documents: true,
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+
+        let encoded = serde_json::to_value(&request).unwrap();
+        let decoded: InferenceExecutionRequest = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["task_id"], serde_json::json!("rerank"));
+        assert_eq!(encoded["input"]["input_type"], serde_json::json!("rerank"));
+        assert_eq!(encoded["input"]["top_n"], serde_json::json!(1));
+        assert_eq!(
+            encoded["input"]["return_documents"],
+            serde_json::json!(true)
+        );
+        assert_eq!(decoded, request);
+    }
+
+    #[test]
+    fn typed_execution_image_generation_request_serde_uses_stable_contract() {
+        let request = InferenceExecutionRequest {
+            request_id: Some("req-image-1".to_string()),
+            task_id: InferenceTaskId::ImageGeneration,
+            model_ref: None,
+            model_name: Some("diffusers/tiny".to_string()),
+            runtime_hint: Some("diffusers".to_string()),
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::ImageGeneration {
+                request: ImageGenerationRequest {
+                    model: "diffusers/tiny".to_string(),
+                    prompt: "calm lake".to_string(),
+                    negative_prompt: Some("low quality".to_string()),
+                    width: Some(512),
+                    height: Some(512),
+                    num_inference_steps: Some(20),
+                    guidance_scale: Some(7.5),
+                    seed: Some(42),
+                    scheduler: Some("euler".to_string()),
+                    num_images_per_prompt: Some(2),
+                    init_image: None,
+                    mask_image: None,
+                    strength: None,
+                    extra_options: Value::Null,
+                },
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+
+        let encoded = serde_json::to_value(&request).unwrap();
+        let decoded: InferenceExecutionRequest = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["task_id"], serde_json::json!("image_generation"));
+        assert_eq!(
+            encoded["input"]["input_type"],
+            serde_json::json!("image_generation")
+        );
+        assert_eq!(
+            encoded["input"]["request"]["num_inference_steps"],
+            serde_json::json!(20)
+        );
+        assert_eq!(
+            encoded["input"]["request"]["scheduler"],
+            serde_json::json!("euler")
+        );
+        assert_eq!(decoded, request);
+    }
+
+    #[test]
     fn typed_execution_audio_transcription_serde_uses_stable_contract() {
         let request = InferenceExecutionRequest {
             request_id: Some("req-audio-1".to_string()),
