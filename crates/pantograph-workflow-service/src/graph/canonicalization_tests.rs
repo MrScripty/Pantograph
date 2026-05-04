@@ -247,6 +247,9 @@ fn legacy_inference_migration_inventory_defines_canonical_data_fields() {
         assert!(spec.node_data_fields.contains(&"task_kind"));
         assert!(spec.node_data_fields.contains(&"pumas_model_ref"));
         assert!(spec.node_data_fields.contains(&"resolved_model_source"));
+        assert!(spec
+            .node_data_fields
+            .contains(&"resolved_model_package_facts"));
         assert!(spec.node_data_fields.contains(&"runtime_hint"));
         assert!(spec.node_data_fields.contains(&"generation_options"));
         assert!(spec.node_data_fields.contains(&"task_options"));

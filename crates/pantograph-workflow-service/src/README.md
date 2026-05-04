@@ -244,6 +244,10 @@ use pantograph_workflow_service::{
   observable behavior where clients display or compare sequences.
 - Compatibility: saved workflows, frontend stores, and binding consumers may
   depend on serialized field names and semantics across releases.
+- Canonical inference migration inventory tracks `task_kind`, `pumas_model_ref`,
+  `resolved_model_source`, `resolved_model_package_facts`, runtime hints, typed
+  options, and migration diagnostics as the stable graph data fields for
+  migrated `llm-inference` nodes.
 - Regeneration/migration: response-shape changes must update Tauri wire
   contracts, frontend stores, binding wrappers, examples, and contract tests in
   the same slice.

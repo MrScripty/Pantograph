@@ -2483,6 +2483,10 @@ Update during implementation:
   `resolved_model_package_facts` through existing `puma-lib` model-reference
   edges as bounded model context, so saved workflows that already connect
   `pumas_model_ref` can reach package-facts validation without a new edge.
+- 2026-05-03: Workflow-service legacy inference migration inventory now treats
+  `resolved_model_package_facts` as part of the canonical `llm-inference` graph
+  data field set, keeping saved-workflow migration tests aligned with the
+  package-facts edge contract.
 - 2026-05-03: Added typed PyTorch worker failure normalization into
   Pantograph `BackendError` categories, preserving request ids and canonical
   worker error codes without exposing raw Python exception payloads.

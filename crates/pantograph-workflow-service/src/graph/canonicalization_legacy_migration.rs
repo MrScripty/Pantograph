@@ -102,6 +102,7 @@ const CANONICAL_INFERENCE_NODE_DATA_FIELDS: &[&str] = &[
     "task_kind",
     "pumas_model_ref",
     "resolved_model_source",
+    "resolved_model_package_facts",
     "runtime_hint",
     "generation_options",
     "task_options",
