@@ -1835,6 +1835,75 @@ fn test_canonical_inference_input_kind_uses_task_request_contract() {
     );
 }
 
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_video_understanding_rejects_contract_only_with_lifecycle() {
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(extension_keys::INFERENCE_LIFECYCLE_SINK, lifecycle_sink);
+
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("video_understanding"),
+    );
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("vllm"));
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/video-understanding"
+        }),
+    );
+
+    let executor = CoreTaskExecutor::new().with_execution_id("exec-a".to_string());
+    let err = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect_err("contract-only video task should fail before backend execution");
+
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("video_understanding"));
+            assert!(message.contains("execution_supported=false"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 3);
+    assert!(events.iter().all(|event| {
+        event.phase == InferenceLifecyclePhase::TaskValidation
+            && event.request_id.as_deref() == Some("exec-a:llm-inference-1:video_understanding")
+            && event.task_id.as_deref() == Some("video_understanding")
+            && event.backend_key.as_deref() == Some("vllm")
+            && event.runtime_id.as_deref() == Some("vllm")
+            && event.model_id.as_deref() == Some("pumas://models/video-understanding")
+    }));
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
+    assert!(events[1]
+        .detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("execution_supported=false")));
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+}
+
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[test]
 fn test_build_model_dependency_request_maps_canonical_rerank_task() {

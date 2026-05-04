@@ -169,6 +169,53 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
 }
 
 #[test]
+fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure() {
+    let context = context();
+    let event = inference::InferenceRequestLifecycleEvent {
+        request_id: Some("exec-a:llm-inference-1:video_understanding".to_string()),
+        phase: inference::InferenceLifecyclePhase::TaskValidation,
+        kind: inference::InferenceRequestLifecycleEventKind::Failed,
+        occurred_at_ms: 126,
+        task_id: Some("video_understanding".to_string()),
+        backend_key: Some("vllm".to_string()),
+        runtime_id: Some("vllm".to_string()),
+        runtime_instance_id: None,
+        model_id: Some("pumas://models/video-understanding".to_string()),
+        usage: None,
+        cache_handle_id: None,
+        detail: Some(
+            "Canonical inference task 'video_understanding' is contract-only at this execution boundary: task request contract has execution_supported=false for input kind 'video_understanding'."
+                .to_string(),
+        ),
+        compatibility_report: None,
+        compatibility_issues: Vec::new(),
+        option_diagnostics: Vec::new(),
+    };
+
+    let request = inference_lifecycle_event_ledger_append_request(&context, &event)
+        .expect("contract-only task validation failure should map to ledger request");
+
+    assert_eq!(request.runtime_id.as_deref(), Some("vllm"));
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("pumas://models/video-understanding")
+    );
+    match request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            assert_eq!(payload.status, NodeExecutionProjectionStatus::Failed);
+            assert_eq!(payload.completed_at_ms, Some(126));
+            assert_eq!(payload.task_id.as_deref(), Some("video_understanding"));
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("vllm"));
+            assert!(payload
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("execution_supported=false")));
+        }
+        other => panic!("expected node execution status payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_lifecycle_event_adapter_bounds_failed_node_status_error() {
     let context = context();
     let mut event =

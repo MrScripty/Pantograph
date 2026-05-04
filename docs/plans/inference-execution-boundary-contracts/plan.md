@@ -2898,8 +2898,8 @@ Update during implementation:
   connected/top-level input precedence over saved task options.
 - 2026-05-03: Added contract-only audio transcription task and port payload
   metadata to the canonical `llm-inference` descriptor projection, preserving
-  the registry's non-executable status while documenting the audio/response
-  shape for graph consumers.
+  the then-current registry status while documenting the audio/response shape
+  for graph consumers.
 - 2026-05-03: Extended node-engine typed request construction to recover the
   canonical Pumas model identity from `resolved_model_source.model_ref`, so
   resolved model-source facts can carry identity into typed backend requests
@@ -2925,6 +2925,11 @@ Update during implementation:
 - 2026-05-03: Routed contract-only canonical inference task failures through
   the existing host-owned lifecycle diagnostics sink as bounded
   task-validation failed facts when a sink is installed.
+- 2026-05-04: Added executable coverage for the contract-only
+  `video_understanding` path, proving node-engine emits task-validation
+  started/failed/cleanup lifecycle facts before backend execution and the
+  embedded-runtime ledger adapter persists the bounded failed task diagnostic
+  with selected backend, model, and task context.
 - 2026-05-03: Threaded stable task/execution context into canonical PyTorch
   dependency preflight and emits host-owned model-package-resolution lifecycle
   failure facts when preflight blocks execution.
