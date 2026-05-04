@@ -8,7 +8,7 @@ versioned with the app and reviewable as structured artifacts.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `gguf-reranker-workflow.json` | Minimal local reranking starter that wires `puma-lib`, query/document text inputs, the dedicated reranker node, and text output for GGUF reranker models such as `Qwen3-Reranker-4B-GGUF`. |
+| `gguf-reranker-workflow.json` | Minimal local reranking starter that wires `puma-lib`, query/document text inputs, canonical `llm-inference` with `task_kind = rerank`, and text output for GGUF reranker models such as `Qwen3-Reranker-4B-GGUF`. |
 | `svelte-code-agent.json` | Multi-graph agent workflow template used to scaffold Svelte code-generation flows. |
 | `tiny-sd-turbo-text-to-image.json` | Minimal local text-to-image starter that wires `puma-lib`, direct diffusion inference, and image output for imported bundles such as tiny-sd-turbo. |
 

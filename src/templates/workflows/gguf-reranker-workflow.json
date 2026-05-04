@@ -137,19 +137,26 @@
         {
           "id": "e4",
           "source": "model",
+          "source_handle": "resolved_model_package_facts",
+          "target": "reranker",
+          "target_handle": "resolved_model_package_facts"
+        },
+        {
+          "id": "e5",
+          "source": "model",
           "source_handle": "inference_settings",
           "target": "reranker",
           "target_handle": "inference_settings"
         },
         {
-          "id": "e5",
+          "id": "e6",
           "source": "reranker",
           "source_handle": "top_document",
           "target": "top-document",
           "target_handle": "text"
         },
         {
-          "id": "e6",
+          "id": "e7",
           "source": "reranker",
           "source_handle": "results",
           "target": "results",
