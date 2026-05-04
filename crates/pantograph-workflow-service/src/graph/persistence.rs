@@ -5,6 +5,8 @@ use node_engine::resolve_path_within_root;
 
 use crate::workflow::{WorkflowIdentity, WorkflowServiceError};
 
+use super::canonicalization::canonicalize_workflow_graph;
+use super::registry::NodeRegistry;
 use super::types::{WorkflowFile, WorkflowGraph, WorkflowGraphMetadata};
 
 const PUMA_LIB_DERIVED_DATA_KEYS: &[&str] = &[
@@ -62,6 +64,13 @@ fn sanitize_workflow_graph_persistence_state(graph: &mut WorkflowGraph) {
             sanitize_puma_lib_node_data(&mut node.data);
         }
     }
+}
+
+fn canonicalize_workflow_graph_for_persistence(graph: WorkflowGraph) -> WorkflowGraph {
+    let mut graph = canonicalize_workflow_graph(graph, &NodeRegistry::new());
+    sanitize_workflow_graph_persistence_state(&mut graph);
+    graph.refresh_derived_graph();
+    graph
 }
 
 pub trait WorkflowGraphStore: Send + Sync {
@@ -199,9 +208,7 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
         graph: WorkflowGraph,
     ) -> Result<String, WorkflowServiceError> {
         let workflows_dir = self.workflows_dir()?;
-        let mut graph = graph;
-        sanitize_workflow_graph_persistence_state(&mut graph);
-        graph.refresh_derived_graph();
+        let graph = canonicalize_workflow_graph_for_persistence(graph);
 
         let safe_name = workflow_identity_file_stem(&name)?;
         let file_path = workflows_dir.join(format!("{}.json", safe_name));
@@ -250,8 +257,7 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
             workflow.metadata.id = Some(stem.to_string());
         }
-        sanitize_workflow_graph_persistence_state(&mut workflow.graph);
-        workflow.graph.refresh_derived_graph();
+        workflow.graph = canonicalize_workflow_graph_for_persistence(workflow.graph);
         Ok(workflow)
     }
 

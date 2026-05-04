@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::workflow::WorkflowServiceError;
 
 use super::persistence::{FileSystemWorkflowGraphStore, WorkflowGraphStore};
-use super::types::{GraphNode, Position, WorkflowFile, WorkflowGraph};
+use super::types::{GraphEdge, GraphNode, Position, WorkflowFile, WorkflowGraph};
 
 fn sample_puma_lib_data() -> serde_json::Value {
     serde_json::json!({
@@ -37,6 +37,52 @@ fn puma_lib_graph(data: serde_json::Value) -> WorkflowGraph {
             data,
         }],
         edges: Vec::new(),
+        derived_graph: None,
+    }
+}
+
+fn legacy_llamacpp_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                position: Position { x: -100.0, y: 5.0 },
+                data: serde_json::json!({"text": "hello"}),
+            },
+            GraphNode {
+                id: "llama".to_string(),
+                node_type: "llamacpp-inference".to_string(),
+                position: Position { x: 42.0, y: 24.0 },
+                data: serde_json::json!({
+                    "model_path": "/models/chat.gguf",
+                    "mmproj_path": "/models/mmproj.gguf",
+                    "prompt": "hello"
+                }),
+            },
+            GraphNode {
+                id: "output".to_string(),
+                node_type: "text-output".to_string(),
+                position: Position { x: 200.0, y: 5.0 },
+                data: serde_json::json!({}),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "prompt-llama-prompt".to_string(),
+                source: "prompt".to_string(),
+                source_handle: "text".to_string(),
+                target: "llama".to_string(),
+                target_handle: "prompt".to_string(),
+            },
+            GraphEdge {
+                id: "llama-output-response".to_string(),
+                source: "llama".to_string(),
+                source_handle: "response".to_string(),
+                target: "output".to_string(),
+                target_handle: "text".to_string(),
+            },
+        ],
         derived_graph: None,
     }
 }
@@ -216,6 +262,96 @@ fn save_workflow_strips_puma_lib_derived_data_with_model_identity() {
     assert!(!data.contains_key("dependency_requirements"));
     assert!(!data.contains_key("inference_settings"));
     assert!(!data.contains_key("recommended_backend"));
+}
+
+#[test]
+fn save_workflow_canonicalizes_retired_inference_nodes_before_serializing() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+
+    let path = store
+        .save_workflow("legacy-llama".to_string(), legacy_llamacpp_graph())
+        .expect("save workflow");
+    let saved = fs::read_to_string(path).expect("read saved workflow");
+    let workflow: WorkflowFile = serde_json::from_str(&saved).expect("parse saved workflow");
+    let node = workflow
+        .graph
+        .nodes
+        .iter()
+        .find(|node| node.id == "llama")
+        .expect("migrated node");
+
+    assert_eq!(node.node_type, "llm-inference");
+    assert_eq!(node.position, Position { x: 42.0, y: 24.0 });
+    assert_eq!(node.data["task_kind"], serde_json::json!("text_generation"));
+    assert_eq!(node.data["runtime_hint"], serde_json::json!("llamacpp"));
+    assert_eq!(
+        node.data["pumas_model_ref"]["legacy_model_path"],
+        serde_json::json!("/models/chat.gguf")
+    );
+    assert_eq!(
+        node.data["pumas_model_ref"]["legacy_mmproj_path"],
+        serde_json::json!("/models/mmproj.gguf")
+    );
+    assert_eq!(
+        node.data["migration_diagnostics"][0]["code"],
+        serde_json::json!("legacy_llamacpp_inference_node")
+    );
+    assert!(workflow
+        .graph
+        .edges
+        .iter()
+        .any(|edge| edge.id == "prompt-llama-prompt"
+            && edge.target == "llama"
+            && edge.target_handle == "prompt"));
+    assert!(workflow
+        .graph
+        .derived_graph
+        .as_ref()
+        .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
+}
+
+#[test]
+fn load_workflow_canonicalizes_retired_inference_nodes_before_returning() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+    let workflow = WorkflowFile::new("legacy-llama".to_string(), legacy_llamacpp_graph());
+    write_workflow(temp.path(), "legacy-llama.json", &workflow);
+
+    let loaded = store
+        .load_workflow(".pantograph/workflows/legacy-llama.json".to_string())
+        .expect("load workflow");
+    let node = loaded
+        .graph
+        .nodes
+        .iter()
+        .find(|node| node.id == "llama")
+        .expect("migrated node");
+
+    assert_eq!(loaded.metadata.id.as_deref(), Some("legacy-llama"));
+    assert_eq!(node.node_type, "llm-inference");
+    assert_eq!(node.data["task_kind"], serde_json::json!("text_generation"));
+    assert_eq!(node.data["runtime_hint"], serde_json::json!("llamacpp"));
+    assert_eq!(
+        node.data["pumas_model_ref"]["legacy_model_path"],
+        serde_json::json!("/models/chat.gguf")
+    );
+    assert_eq!(
+        node.data["migration_diagnostics"][0]["code"],
+        serde_json::json!("legacy_llamacpp_inference_node")
+    );
+    assert!(loaded
+        .graph
+        .edges
+        .iter()
+        .any(|edge| edge.id == "llama-output-response"
+            && edge.source == "llama"
+            && edge.source_handle == "response"));
+    assert!(loaded
+        .graph
+        .derived_graph
+        .as_ref()
+        .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
 }
 
 #[test]
