@@ -135,6 +135,9 @@ for existing graph-edit callers.
   versions can use the same stable id.
 - Filesystem workflow load path validation is tested at `FileSystemWorkflowGraphStore`;
   transport adapters must not keep parallel path-boundary implementations.
+- Persisted workflow files carry append-only `contract_upgrades` records for
+  canonicalization migrations. Save/load may add newly observed migration
+  records, but must not drop existing records when the graph is rewritten.
 - Dynamic `node.data.definition` overlays may add or override ports for a
   specific node instance through backend-owned effective contracts, but they
   must not invalidate the registry node type or silently remove unrelated

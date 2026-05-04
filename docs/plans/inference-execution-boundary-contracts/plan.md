@@ -1934,7 +1934,7 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - [ ] Define how node validation displays task registry, package-fact,
   lifecycle, and option-compatibility diagnostics without exposing backend
   internals.
-- [ ] Define saved-workflow schema versioning and append-only migration records
+- [x] Define saved-workflow schema versioning and append-only migration records
   for the canonical inference node shape.
 - [x] Define executable migration fixtures for old and new saved workflow
   shapes, including expected diagnostics and default semantics when fields are
@@ -2123,6 +2123,10 @@ retired backend node names.
 Inference gateway start request DTOs no longer expose Ollama model-name fields;
 retired Ollama gateway/backend checks now trigger only from the active backend
 identity, not from a request shape that suggests Ollama remains configurable.
+Persisted workflow files now carry append-only `contract_upgrades` records, and
+filesystem save/load canonicalization appends legacy inference migration records
+without duplicating existing records. This makes saved workflow migration
+diagnostics durable while keeping the graph shape canonical.
 Embedded-runtime edit-session embedding fixtures, synthetic KV-cache memory
 fixtures, and node-engine KV-cache session/preparation fixtures now use
 canonical `llm-inference` node data instead of retired embedding or llama.cpp

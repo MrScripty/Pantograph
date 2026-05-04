@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use pantograph_node_contracts::ContractUpgradeRecord;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -533,6 +534,8 @@ pub struct WorkflowFile {
     pub version: String,
     pub metadata: WorkflowGraphMetadata,
     pub graph: WorkflowGraph,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contract_upgrades: Vec<ContractUpgradeRecord>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
 }
@@ -553,6 +556,7 @@ impl WorkflowFile {
                 orchestration_id: None,
             },
             graph,
+            contract_upgrades: Vec::new(),
             viewport: None,
         }
     }

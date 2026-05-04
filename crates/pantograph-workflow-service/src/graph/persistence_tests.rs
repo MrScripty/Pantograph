@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::Path;
 
+use pantograph_node_contracts::ContractUpgradeOutcome;
+
 use crate::workflow::WorkflowServiceError;
 
 use super::persistence::{FileSystemWorkflowGraphStore, WorkflowGraphStore};
@@ -381,6 +383,15 @@ fn save_workflow_canonicalizes_retired_inference_nodes_before_serializing() {
         .derived_graph
         .as_ref()
         .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
+    assert_eq!(workflow.contract_upgrades.len(), 1);
+    assert_eq!(
+        workflow.contract_upgrades[0].node_type.as_str(),
+        "llamacpp-inference"
+    );
+    assert_eq!(
+        workflow.contract_upgrades[0].outcome,
+        ContractUpgradeOutcome::Upgraded
+    );
 }
 
 #[test]
@@ -441,6 +452,14 @@ fn save_workflow_canonicalizes_mixed_embedding_and_rerank_nodes_before_serializi
             && edge.source == "rerank"
             && edge.source_handle == "results"
     }));
+    assert_eq!(workflow.contract_upgrades.len(), 2);
+    let upgraded_node_types = workflow
+        .contract_upgrades
+        .iter()
+        .map(|record| record.node_type.as_str())
+        .collect::<Vec<_>>();
+    assert!(upgraded_node_types.contains(&"embedding"));
+    assert!(upgraded_node_types.contains(&"reranker"));
 }
 
 #[test]
@@ -484,6 +503,39 @@ fn load_workflow_canonicalizes_retired_inference_nodes_before_returning() {
         .derived_graph
         .as_ref()
         .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
+    assert_eq!(loaded.contract_upgrades.len(), 1);
+    assert_eq!(
+        loaded.contract_upgrades[0].node_type.as_str(),
+        "llamacpp-inference"
+    );
+}
+
+#[test]
+fn save_workflow_appends_migration_records_without_duplicating_existing_records() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+
+    let path = store
+        .save_workflow("legacy-llama".to_string(), legacy_llamacpp_graph())
+        .expect("save workflow");
+    let first_saved = fs::read_to_string(&path).expect("read first workflow");
+    let first_workflow: WorkflowFile =
+        serde_json::from_str(&first_saved).expect("parse first workflow");
+    assert_eq!(first_workflow.contract_upgrades.len(), 1);
+
+    let second_path = store
+        .save_workflow("legacy-llama".to_string(), legacy_llamacpp_graph())
+        .expect("save workflow again");
+    assert_eq!(second_path, path);
+    let second_saved = fs::read_to_string(second_path).expect("read second workflow");
+    let second_workflow: WorkflowFile =
+        serde_json::from_str(&second_saved).expect("parse second workflow");
+
+    assert_eq!(second_workflow.contract_upgrades.len(), 1);
+    assert_eq!(
+        second_workflow.contract_upgrades[0].node_type.as_str(),
+        "llamacpp-inference"
+    );
 }
 
 #[test]

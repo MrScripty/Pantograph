@@ -2,10 +2,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use node_engine::resolve_path_within_root;
+use pantograph_node_contracts::ContractUpgradeRecord;
 
 use crate::workflow::{WorkflowIdentity, WorkflowServiceError};
 
-use super::canonicalization::canonicalize_workflow_graph;
+use super::canonicalization::{
+    canonicalize_workflow_graph_with_migrations, WorkflowGraphCanonicalizationResult,
+};
 use super::registry::NodeRegistry;
 use super::types::{WorkflowFile, WorkflowGraph, WorkflowGraphMetadata};
 
@@ -66,11 +69,24 @@ fn sanitize_workflow_graph_persistence_state(graph: &mut WorkflowGraph) {
     }
 }
 
-fn canonicalize_workflow_graph_for_persistence(graph: WorkflowGraph) -> WorkflowGraph {
-    let mut graph = canonicalize_workflow_graph(graph, &NodeRegistry::new());
-    sanitize_workflow_graph_persistence_state(&mut graph);
-    graph.refresh_derived_graph();
-    graph
+fn append_contract_upgrade_records(
+    records: &mut Vec<ContractUpgradeRecord>,
+    new_records: Vec<ContractUpgradeRecord>,
+) {
+    for record in new_records {
+        if !records.contains(&record) {
+            records.push(record);
+        }
+    }
+}
+
+fn canonicalize_workflow_graph_for_persistence(
+    graph: WorkflowGraph,
+) -> WorkflowGraphCanonicalizationResult {
+    let mut result = canonicalize_workflow_graph_with_migrations(graph, &NodeRegistry::new());
+    sanitize_workflow_graph_persistence_state(&mut result.graph);
+    result.graph.refresh_derived_graph();
+    result
 }
 
 pub trait WorkflowGraphStore: Send + Sync {
@@ -208,7 +224,9 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
         graph: WorkflowGraph,
     ) -> Result<String, WorkflowServiceError> {
         let workflows_dir = self.workflows_dir()?;
-        let graph = canonicalize_workflow_graph_for_persistence(graph);
+        let canonicalized = canonicalize_workflow_graph_for_persistence(graph);
+        let graph = canonicalized.graph;
+        let migration_records = canonicalized.migration_records;
 
         let safe_name = workflow_identity_file_stem(&name)?;
         let file_path = workflows_dir.join(format!("{}.json", safe_name));
@@ -224,9 +242,12 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
             existing.metadata.name = name;
             existing.metadata.modified = chrono::Utc::now().to_rfc3339();
             existing.graph = graph;
+            append_contract_upgrade_records(&mut existing.contract_upgrades, migration_records);
             existing
         } else {
-            WorkflowFile::new(name, graph)
+            let mut workflow = WorkflowFile::new(name, graph);
+            append_contract_upgrade_records(&mut workflow.contract_upgrades, migration_records);
+            workflow
         };
 
         let json = serde_json::to_string_pretty(&workflow_file).map_err(|e| {
@@ -257,7 +278,12 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
                 .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
             workflow.metadata.id = Some(stem.to_string());
         }
-        workflow.graph = canonicalize_workflow_graph_for_persistence(workflow.graph);
+        let canonicalized = canonicalize_workflow_graph_for_persistence(workflow.graph);
+        workflow.graph = canonicalized.graph;
+        append_contract_upgrade_records(
+            &mut workflow.contract_upgrades,
+            canonicalized.migration_records,
+        );
         Ok(workflow)
     }
 
