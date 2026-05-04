@@ -15,7 +15,7 @@ isolated here.
 | `registry.rs` | Compile-time backend registration and backend discovery helpers. |
 | `llamacpp.rs` | llama.cpp backend adapter for chat, embeddings, and sidecar reranking. |
 | `llamacpp_support.rs` | Shared llama.cpp request parsing, rerank response normalization, sidecar start helpers, and KV-cache fingerprint helpers used by `llamacpp.rs`. |
-| `candle.rs` | Candle backend placeholder and capability declaration. |
+| `candle.rs` | Feature-gated Candle backend staging for embedding-only HF-compatible safetensors package facts, including capability declaration, package-source mapping, and local load-plan validation while executable model loading remains disabled. |
 | `pytorch.rs` | PyTorch backend implementation used for HuggingFace-style runtimes. |
 | `pytorch_worker.rs` | Embedded PyTorch worker loader, sibling-module registration, and Python result extraction helpers used by `pytorch.rs`. |
 | `pytorch_worker_contract.rs` | Backend-local Rust/Python worker envelope, Transformers load request, trust policy, and response/error DTOs used to migrate PyTorch behind the canonical inference contracts. |
@@ -65,6 +65,10 @@ the llama.cpp adapter can switch into a dedicated reranking mode when needed.
 - Registry entries and backend implementations must stay in sync.
 - If a backend needs a distinct process mode for reranking, that requirement
   must surface through config and readiness checks instead of hidden fallback.
+- Feature-gated Candle support must remain unavailable for runtime selection
+  until executable model loading exists. Its current load-plan helpers are
+  factual validation of Pumas package files, dtype, model type, and device hints,
+  not runtime admission, residency, or scheduling policy.
 
 ## Revisit Triggers
 
@@ -128,6 +132,11 @@ fn create_backend() {
   sidecar start error mapping, and KV-cache fingerprint helpers stay in
   `llamacpp_support.rs` so
   `llamacpp.rs` remains focused on the backend facade and trait methods.
+- Candle embedding load plans may validate local HF-compatible package
+  directories for config, tokenizer, safetensors weights, dtype, first supported
+  model family, and CPU/CUDA device hints, but must continue to fail closed as
+  unavailable until the backend constructs real Candle tokenizers, tensors, and
+  model modules.
 - PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt
   extraction, and system prompt tests stay in `pytorch_tests.rs` so
   `pytorch.rs` remains focused on production adapter behavior.

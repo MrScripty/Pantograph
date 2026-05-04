@@ -2409,6 +2409,10 @@ asserts representative request, result, lifecycle, capability, compatibility,
 Pumas update/snapshot, model-source, and load-security wire shapes avoid
 scheduler-policy terminology such as admission, reservation, priority,
 eviction, scheduler-policy, and selected-best-backend.
+2026-05-04 update: inference source READMEs now document the staged Candle
+package-source/load-plan contract, the unavailable-until-executable guardrail,
+and the boundary that keeps Candle package validation separate from runtime
+selection, residency, and scheduling policy.
 
 ### Milestone 15: Diagnostics Ledger Integration
 

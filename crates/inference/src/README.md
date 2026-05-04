@@ -147,6 +147,11 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   compatibility must use resolved local package facts plus backend checks.
 - Embeddings are normal task evidence in `model_contracts.rs`; dedicated
   embedding runtime state remains a backend-local residency strategy.
+- Candle embedding support is staged behind the optional `backend-candle`
+  feature. Its package-source and load-plan helpers consume Pumas package facts
+  for HF-compatible safetensors/config/tokenizer directories, but the backend
+  remains unavailable for runtime selection until executable Candle model
+  loading is implemented.
 - Audio transcription now has stable typed request/result DTOs and executable
   typed gateway dispatch. The backend trait exposes a speech-to-text method
   that fails closed by default, while implemented backends opt into the typed
