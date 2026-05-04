@@ -691,6 +691,101 @@ async fn test_canonical_llm_text_with_package_facts_emits_compatibility_lifecycl
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_canonical_llm_streaming_with_package_facts_emits_compatibility_lifecycle() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("text package facts fixture");
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedTextBackend {
+            requests: requests.clone(),
+        }),
+        "mock",
+    ));
+    let event_sink = Arc::new(crate::events::VecEventSink::new());
+    let event_sink_trait: Arc<dyn crate::events::EventSink> = event_sink.clone();
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("model_name".to_string(), serde_json::json!("typed-model"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let outputs = execute_llm_inference(
+        Some(&gateway),
+        &inputs,
+        "llm-inference-1",
+        Some(&event_sink_trait),
+        "exec-a",
+        &extensions,
+    )
+    .await
+    .expect("streaming text package facts should execute through typed lifecycle");
+
+    assert_eq!(
+        outputs.get("response").and_then(|value| value.as_str()),
+        Some("typed response")
+    );
+    assert_eq!(requests.lock().expect("requests lock").len(), 1);
+    let stream_events = event_sink.events();
+    assert_eq!(stream_events.len(), 1);
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 9);
+    let validation_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("task validation completion");
+    assert_eq!(
+        validation_completed.model_id.as_deref(),
+        Some("llm/llama/tiny-gguf")
+    );
+    assert!(validation_completed.compatibility_report.is_some());
+    assert!(validation_completed
+        .compatibility_issues
+        .iter()
+        .all(|issue| issue.model_id.as_deref() == Some("llm/llama/tiny-gguf")));
+
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion");
+    assert_eq!(
+        backend_completed.model_id.as_deref(),
+        Some("llm/llama/tiny-gguf")
+    );
+    assert!(backend_completed.compatibility_report.is_some());
+    assert!(backend_completed
+        .compatibility_issues
+        .iter()
+        .all(|issue| issue.model_id.as_deref() == Some("llm/llama/tiny-gguf")));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_canonical_llm_text_rejects_package_task_mismatch_before_backend() {
     let fixture = include_str!(
         "../../../inference/tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json"

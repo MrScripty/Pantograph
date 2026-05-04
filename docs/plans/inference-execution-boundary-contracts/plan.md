@@ -2498,7 +2498,10 @@ inference write ledger events directly.
   compatibility summary through the private lifecycle stream wrapper, keeping
   public chat streaming lifecycle calls diagnostic-free unless a typed request
   supplied package facts. Coverage includes completed and failed typed stream
-  terminal events while cleanup remains diagnostic-free.
+  terminal events while cleanup remains diagnostic-free. Node-engine
+  graph-visible `llm-inference` streaming execution now has package-facts
+  lifecycle coverage proving task-validation and backend-execution terminal
+  events carry the bounded compatibility summary and stable model id.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support. Canonical
