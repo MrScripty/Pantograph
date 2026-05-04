@@ -99,11 +99,13 @@ helpers own restart-visible workflow run summaries.
 - Run-list facet reads group `run_list_projection` rows and must not replay
   `diagnostic_events` or depend on client-side page limits for comparison
   counts.
-- Run-list rows persist scheduler-selected runtime, device, network-node,
-  client, client-session, bucket, and workflow execution-session scope fields
-  from typed lifecycle events so Scheduler and Diagnostics pages can display
-  ownership, placement, and future queue-control context without querying raw
-  events.
+- Run-list rows persist selected runtime, device, network-node, client,
+  client-session, bucket, and workflow execution-session scope fields from
+  typed lifecycle and bounded inference diagnostic events so Scheduler and
+  Diagnostics pages can display ownership, placement, and future queue-control
+  context without querying raw events. Scheduler events remain authoritative
+  for scheduler-owned placement; inference diagnostic events only backfill
+  observed backend/runtime/device facts when those fields are otherwise absent.
 - Run-list and run-detail rows persist typed scheduler model-cache posture from
   scheduler estimate and model lifecycle events so page/API consumers do not
   parse estimate payload JSON to display cache state.

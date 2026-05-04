@@ -2548,8 +2548,10 @@ inference write ledger events directly.
   lifecycle sink projection rules, bounded resolved artifact kind diagnostics,
   and workflow-service `diagnostics_unavailable` behavior. Frontend TypeScript
   contracts and I/O Inspector presenter docs now cover projected
-  runtime/backend/model artifact context; broader UI/API documentation remains
-  open as additional surfaces change.
+  runtime/backend/model artifact context. Inference, embedded-runtime, and
+  diagnostics-ledger SQLite READMEs now document selected-device lifecycle and
+  projection behavior; broader UI/API documentation remains open as additional
+  surfaces change.
 
 **Verification:**
 - `cargo test -p pantograph-diagnostics-ledger` for new event/projection fields,

@@ -296,7 +296,8 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   options plus the canonical task id so host adapters can persist support
   summaries without seeing backend-local payloads. Model package resolution
   lifecycle facts may carry the bounded resolved artifact kind derived from
-  Pumas package facts. Lifecycle facts may also carry bounded usage counts and
+  Pumas package facts. Lifecycle facts may also carry explicit non-`auto`
+  selected device ids from backend start config, bounded usage counts, and
   backend-local cache-handle ids when typed execution results provide them.
   Embedding execution aggregates backend
   embedding item token counts into bounded prompt/total usage summaries without
