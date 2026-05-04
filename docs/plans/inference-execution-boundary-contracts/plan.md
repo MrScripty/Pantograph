@@ -1707,6 +1707,9 @@ PyTorch/Transformers load envelopes now carry the typed `ResolvedModelSource`
 projected from Pumas package facts as an append-only worker payload field while
 retaining the older artifact fields for compatibility with existing worker
 fixtures.
+Load-envelope validation now runs
+`ResolvedModelSource::validate_for_backend_load()` when that source is present,
+so malformed Pumas-resolved sources are rejected before Python worker loading.
 PyTorch/Transformers load envelopes also include a backend-local task profile
 derived from the canonical task registry, mapping validated text/chat tasks to
 the current causal-LM loader and rejecting registry-resolved tasks that do not

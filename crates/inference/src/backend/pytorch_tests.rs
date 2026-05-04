@@ -195,6 +195,20 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
         envelope.payload.artifact_kind,
         ModelArtifactKind::HfCompatibleDirectory
     );
+    let model_source = envelope
+        .payload
+        .model_source
+        .as_ref()
+        .expect("load fixture should carry resolved model source");
+    assert!(model_source.validate_for_backend_load().is_ok());
+    assert_eq!(
+        model_source.source_kind,
+        ResolvedModelSourceKind::PumasResolved
+    );
+    assert_eq!(
+        model_source.model_ref.as_ref(),
+        Some(&envelope.payload.model_ref)
+    );
     assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
     assert_eq!(envelope.payload.device.as_deref(), Some("cuda:0"));
     assert!(!envelope.payload.trust_policy.allow_remote_code);
@@ -213,6 +227,9 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
     );
     assert!(envelope.payload.trust_policy.code_revision.is_none());
     assert!(envelope.payload.trust_policy.accepted_sources.is_empty());
+
+    PyTorchBackend::validate_transformers_load_envelope(&envelope)
+        .expect("load fixture should validate");
 }
 
 #[test]
@@ -743,6 +760,45 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_wrong_operation() 
             assert!(message.contains("InitWorker"));
         }
         other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_transformers_load_envelope_validation_rejects_invalid_model_source() {
+    let fixture = include_str!(
+        "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("decode package facts fixture");
+    let mut envelope = PyTorchBackend::transformers_load_envelope_from_package(
+        "req-pumas-load",
+        &facts,
+        Some("cpu"),
+        PyTorchTransformersTrustPolicy {
+            allow_remote_code: true,
+            accepted_sources: vec!["configuration_tiny.py".to_string()],
+            decision_id: None,
+            local_files_only: true,
+            cache_policy: ModelLoadCachePolicy::BackendDefault,
+            auth_token_source: ModelAuthTokenSource::None,
+            revision: None,
+            code_revision: None,
+        },
+    )
+    .expect("map package facts to worker envelope");
+    envelope
+        .payload
+        .model_source
+        .as_mut()
+        .expect("model source")
+        .model_ref = None;
+
+    match PyTorchBackend::validate_transformers_load_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Invalid PyTorch worker resolved model source"));
+            assert!(message.contains("pumas_resolved_source_missing_model_ref"));
+        }
+        other => panic!("expected invalid model source config error, got {other:?}"),
     }
 }
 

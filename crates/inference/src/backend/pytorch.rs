@@ -484,6 +484,18 @@ impl PyTorchBackend {
                 envelope.operation
             )));
         }
+        if let Some(model_source) = &envelope.payload.model_source {
+            if let Err(diagnostics) = model_source.validate_for_backend_load() {
+                let codes = diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.code.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(BackendError::Config(format!(
+                    "Invalid PyTorch worker resolved model source: {codes}"
+                )));
+            }
+        }
         Ok(())
     }
 

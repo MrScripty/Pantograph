@@ -13,6 +13,19 @@
     },
     "artifact_kind": "hf_compatible_directory",
     "entry_path": "/models/tiny-causal",
+    "model_source": {
+      "source_contract_version": 1,
+      "source_kind": "pumas_resolved",
+      "artifact_kind": "hf_compatible_directory",
+      "entry_path": "/models/tiny-causal",
+      "storage_kind": "library_owned",
+      "validation_state": "valid",
+      "model_ref": {
+        "model_id": "pumas://models/tiny-causal",
+        "revision": "rev-1",
+        "selected_artifact_id": "hf-main"
+      }
+    },
     "task_id": "text_generation",
     "model_type_hint": "text-generation",
     "device": "cuda:0",
