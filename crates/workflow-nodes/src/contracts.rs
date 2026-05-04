@@ -785,6 +785,39 @@ mod tests {
     }
 
     #[test]
+    fn llm_inference_contract_exposes_backend_neutral_diagnostics_payloads() {
+        let contracts = builtin_node_contracts().expect("canonical contracts");
+        let llm = contracts
+            .iter()
+            .find(|contract| contract.node_type.as_str() == "llm-inference")
+            .expect("llm contract");
+        let expected_tasks = llm_supported_task_ids().to_vec();
+
+        for output_id in ["diagnostics", "metadata"] {
+            let port = llm.output(&port_id(output_id).expect("diagnostics port id"));
+            let port = port.expect("diagnostics output port");
+            let projected_tasks = port
+                .inference_payloads
+                .iter()
+                .map(|payload| payload.task_id)
+                .collect::<Vec<_>>();
+
+            assert_eq!(projected_tasks, expected_tasks);
+            assert!(port.inference_payloads.iter().all(|payload| {
+                payload.role == InferencePortPayloadRole::Diagnostics
+                    && payload.input_kind.is_none()
+                    && payload.result_kind.is_none()
+            }));
+            let serialized =
+                serde_json::to_string(&port.inference_payloads).expect("payload serialization");
+            assert!(!serialized.contains("backend_key"));
+            assert!(!serialized.contains("runtime_id"));
+            assert!(!serialized.contains("scheduler"));
+            assert!(!serialized.contains("reservation"));
+        }
+    }
+
+    #[test]
     fn projection_preserves_extended_engine_value_types() {
         let metadata = node_engine::TaskMetadata {
             node_type: "extended-types".to_string(),

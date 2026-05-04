@@ -2001,7 +2001,11 @@ canonical inference shape instead of preserving backend-specific node contracts.
   or backend-specific parameter bags.
 - [ ] Define how node validation displays task registry, package-fact,
   lifecycle, and option-compatibility diagnostics without exposing backend
-  internals.
+  internals. The canonical `llm-inference` contract now exposes `diagnostics`
+  and `metadata` output payloads as backend-neutral task diagnostics roles for
+  every supported task, with contract coverage proving those payload markers do
+  not surface backend keys, runtime ids, scheduler language, or reservation
+  language. UI/node-validation display wiring remains open.
 - [x] Define saved-workflow schema versioning and append-only migration records
   for the canonical inference node shape.
 - [x] Define executable migration fixtures for old and new saved workflow
