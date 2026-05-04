@@ -1,0 +1,18 @@
+{
+  "contract_version": 1,
+  "request_id": "req-generate-stream-001",
+  "operation": "generate_text_stream",
+  "cancellation": {
+    "drop_stream_cancels": true
+  },
+  "payload": {
+    "prompt": "Stream a short answer about adapters.",
+    "system_prompt": "Use plain language.",
+    "max_tokens": 32,
+    "temperature": 0.3,
+    "top_p": 0.9,
+    "transformers_kwargs": {
+      "top_k": 20
+    }
+  }
+}

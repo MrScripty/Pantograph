@@ -244,6 +244,34 @@ fn test_pytorch_worker_generate_text_envelope_decodes_fixture() {
 }
 
 #[test]
+fn test_pytorch_worker_generate_text_stream_envelope_decodes_fixture() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/generate_text_stream_request.json"
+    );
+    let envelope: PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> =
+        serde_json::from_str(fixture).expect("decode worker stream fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-generate-stream-001");
+    assert_eq!(
+        envelope.operation,
+        PyTorchWorkerOperation::GenerateTextStream
+    );
+    assert!(envelope.cancellation.drop_stream_cancels);
+    assert_eq!(
+        envelope.payload.prompt,
+        "Stream a short answer about adapters."
+    );
+    assert_eq!(
+        envelope.payload.transformers_kwargs["top_k"],
+        serde_json::json!(20)
+    );
+
+    PyTorchBackend::validate_generate_text_stream_envelope(&envelope)
+        .expect("generate_text_stream fixture should validate");
+}
+
+#[test]
 fn test_pytorch_worker_generate_text_response_decodes_fixture() {
     let fixture =
         include_str!("../../tests/fixtures/pytorch_worker_contract/generate_text_response.json");
@@ -257,6 +285,24 @@ fn test_pytorch_worker_generate_text_response_decodes_fixture() {
             assert!(success.option_diagnostics.is_empty());
         }
         other => panic!("expected worker success response, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_generate_text_stream_envelope_rejects_wrong_operation() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/generate_text_stream_request.json"
+    );
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> =
+        serde_json::from_str(fixture).expect("decode worker stream fixture");
+    envelope.operation = PyTorchWorkerOperation::GenerateText;
+
+    match PyTorchBackend::validate_generate_text_stream_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("GenerateText"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
     }
 }
 

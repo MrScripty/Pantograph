@@ -5,6 +5,7 @@ import json
 WORKER_CONTRACT_VERSION = 1
 LOAD_TRANSFORMERS_MODEL_OPERATION = "load_transformers_model"
 GENERATE_TEXT_OPERATION = "generate_text"
+GENERATE_TEXT_STREAM_OPERATION = "generate_text_stream"
 
 
 def load_transformers_model_kwargs_from_envelope(envelope):
@@ -43,7 +44,7 @@ def load_transformers_model_kwargs_from_envelope(envelope):
     }
 
 
-def generate_text_kwargs_from_envelope(envelope):
+def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEXT_OPERATION):
     """Validate a Rust worker envelope and project it to generate kwargs."""
     if isinstance(envelope, str):
         envelope = json.loads(envelope)
@@ -53,8 +54,10 @@ def generate_text_kwargs_from_envelope(envelope):
     if contract_version != WORKER_CONTRACT_VERSION:
         raise ValueError(f"Unsupported PyTorch worker contract_version: {contract_version}")
     operation = envelope.get("operation")
-    if operation != GENERATE_TEXT_OPERATION:
-        raise ValueError(f"Unexpected PyTorch worker operation for generate_text: {operation}")
+    if operation != expected_operation:
+        raise ValueError(
+            f"Unexpected PyTorch worker operation for {expected_operation}: {operation}"
+        )
 
     payload = envelope.get("payload")
     if not isinstance(payload, dict):

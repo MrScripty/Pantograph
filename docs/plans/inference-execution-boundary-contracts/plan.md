@@ -1711,6 +1711,10 @@ envelope through `worker_contract.py`, adapts it to the existing backend-local
 generation failures normalize through `PyTorchWorkerFailure` with request
 correlation. Streaming generation and full typed `GenerationOptions` threading
 remain follow-up slices.
+The PyTorch streaming generation path now sends the same typed
+`PyTorchGenerateTextRequest` payload through a `generate_text_stream` worker
+envelope before delegating to the existing Python `generate_tokens` generator,
+keeping streaming-specific Python kwargs behind the backend adapter boundary.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

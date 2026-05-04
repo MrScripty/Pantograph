@@ -54,6 +54,7 @@ from worker_runtime import (
 )
 from worker_transformers import apply_compatibility_shims
 from worker_contract import (
+    GENERATE_TEXT_STREAM_OPERATION,
     generate_text_kwargs_from_envelope,
     load_transformers_model_kwargs_from_envelope,
 )
@@ -290,6 +291,15 @@ def generate_text_from_envelope(envelope):
                 "canonical_code": "pytorch_worker_generate_text_internal",
             },
         })
+
+
+def generate_text_stream_from_envelope(envelope):
+    """Stream text generation from the Rust worker envelope contract."""
+    kwargs = generate_text_kwargs_from_envelope(
+        envelope,
+        expected_operation=GENERATE_TEXT_STREAM_OPERATION,
+    )
+    return generate_tokens(**kwargs)
 
 
 def load_model(

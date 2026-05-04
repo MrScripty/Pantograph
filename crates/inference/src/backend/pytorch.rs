@@ -489,13 +489,32 @@ impl PyTorchBackend {
     fn validate_generate_text_envelope(
         envelope: &PyTorchWorkerEnvelope<PyTorchGenerateTextRequest>,
     ) -> Result<(), BackendError> {
+        Self::validate_generate_text_envelope_operation(
+            envelope,
+            PyTorchWorkerOperation::GenerateText,
+        )
+    }
+
+    fn validate_generate_text_stream_envelope(
+        envelope: &PyTorchWorkerEnvelope<PyTorchGenerateTextRequest>,
+    ) -> Result<(), BackendError> {
+        Self::validate_generate_text_envelope_operation(
+            envelope,
+            PyTorchWorkerOperation::GenerateTextStream,
+        )
+    }
+
+    fn validate_generate_text_envelope_operation(
+        envelope: &PyTorchWorkerEnvelope<PyTorchGenerateTextRequest>,
+        expected_operation: PyTorchWorkerOperation,
+    ) -> Result<(), BackendError> {
         if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
             return Err(BackendError::Config(format!(
                 "Unsupported PyTorch worker generate_text envelope contract version {}",
                 envelope.contract_version
             )));
         }
-        if envelope.operation != PyTorchWorkerOperation::GenerateText {
+        if envelope.operation != expected_operation {
             return Err(BackendError::Config(format!(
                 "Unexpected PyTorch worker operation {:?} for text generation",
                 envelope.operation
@@ -961,6 +980,34 @@ impl PyTorchBackend {
         masked_prompt_json: Option<String>,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatChunk, BackendError>>(32);
+        let envelope = PyTorchWorkerEnvelope::new(
+            format!("pytorch-generate-text-stream-{}", Uuid::new_v4().simple()),
+            PyTorchWorkerOperation::GenerateTextStream,
+            PyTorchGenerateTextRequest {
+                prompt,
+                system_prompt,
+                max_tokens,
+                temperature,
+                top_p,
+                masked_prompt_json,
+                transformers_kwargs: Default::default(),
+            },
+        );
+
+        if let Err(error) = Self::validate_generate_text_stream_envelope(&envelope) {
+            let _ = tx.try_send(Err(error));
+            return Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+        }
+
+        let envelope_json = match serde_json::to_string(&envelope) {
+            Ok(envelope_json) => envelope_json,
+            Err(error) => {
+                let _ = tx.try_send(Err(BackendError::Config(format!(
+                    "Failed to encode PyTorch worker generate_text_stream envelope: {error}"
+                ))));
+                return Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+            }
+        };
 
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| {
@@ -975,23 +1022,13 @@ impl PyTorchBackend {
                     }
                 };
 
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("prompt", &prompt).unwrap();
-                if let Some(ref sys) = system_prompt {
-                    kwargs.set_item("system_prompt", sys).unwrap();
-                }
-                kwargs.set_item("max_tokens", max_tokens).unwrap();
-                kwargs.set_item("temperature", temperature).unwrap();
-                kwargs.set_item("top_p", top_p).unwrap();
-                if let Some(ref mpj) = masked_prompt_json {
-                    kwargs.set_item("masked_prompt_json", mpj).unwrap();
-                }
-
-                let generator = match worker.call_method("generate_tokens", (), Some(&kwargs)) {
+                let generator = match worker
+                    .call_method1("generate_text_stream_from_envelope", (envelope_json,))
+                {
                     Ok(g) => g,
                     Err(e) => {
                         let _ = tx.blocking_send(Err(BackendError::Inference(format!(
-                            "Failed to create generator: {}",
+                            "PyTorch worker generate_text_stream envelope failed: {}",
                             e
                         ))));
                         return;
