@@ -1081,7 +1081,14 @@ Backend-checked Pumas package-fact
 candidate projection now preserves bounded compatibility report and issue
 summaries on `RuntimeTechnicalFitCandidate` so rejected/degraded candidates can
 be explained without asking Pumas to own candidate derivation or scheduler
-selection.
+selection. Continued model-list review found one remaining consumer-boundary
+gap: `workflow-nodes` still uses Pumas record metadata as a fallback for
+fields that are not yet present in the package-summary DTO, including
+`custom_code_sources`, `review_reasons`, dependency-binding display data, and
+inference-settings fallback inputs. Runtime-facing backend hints and
+`requires_custom_code` now prefer Pumas summary DTO facts when available, but
+the remaining fallback fields need either summary/detail DTO coverage or
+bounded omission before the "no metadata internals" verification item can close.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
@@ -3457,6 +3464,11 @@ Update during implementation:
   authoritative. The provider now matches embedded-runtime dependency
   descriptor semantics by falling back to record task metadata only when the
   descriptor task is missing or `unknown`.
+- 2026-05-04: Tightened `puma-lib` model-list option metadata so runtime-engine
+  hints and the `requires_custom_code` flag prefer Pumas package-summary DTO
+  facts over raw record metadata whenever summaries are available. Remaining
+  metadata fallbacks are recorded under Milestone 2 as consumer-boundary gaps
+  until Pumas exposes equivalent summary/detail facts or Pantograph omits them.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are

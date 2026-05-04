@@ -180,6 +180,32 @@ mod options_provider {
             .find_map(|k| obj.get(*k).and_then(|v| v.as_str()).map(|s| s.to_string()))
     }
 
+    fn package_summary_result(
+        summary_result: Option<&ModelPackageFactsSummaryResult>,
+    ) -> Option<&pumas_library::models::ResolvedModelPackageFactsSummary> {
+        summary_result.and_then(|result| result.summary.as_ref())
+    }
+
+    pub(crate) fn runtime_engine_hints_from_summary(
+        summary_result: Option<&ModelPackageFactsSummaryResult>,
+    ) -> Option<serde_json::Value> {
+        let summary = package_summary_result(summary_result)?;
+        if !summary.backend_hints.accepted.is_empty() {
+            return serde_json::to_value(&summary.backend_hints.accepted).ok();
+        }
+        if !summary.backend_hints.raw.is_empty() {
+            return serde_json::to_value(&summary.backend_hints.raw).ok();
+        }
+        None
+    }
+
+    pub(crate) fn requires_custom_code_from_summary(
+        summary_result: Option<&ModelPackageFactsSummaryResult>,
+    ) -> Option<serde_json::Value> {
+        package_summary_result(summary_result)
+            .map(|summary| serde_json::Value::Bool(summary.requires_custom_code))
+    }
+
     pub(crate) fn task_type_primary_from_descriptor_or_record(
         execution_descriptor: Option<&ModelExecutionDescriptor>,
         record: &pumas_library::ModelRecord,
@@ -384,6 +410,18 @@ mod options_provider {
 
             let mut options = Vec::with_capacity(records.len());
             for m in &records {
+                let summary_result = summary_cache.summaries.get(&m.id);
+                let package_facts_summary = summary_result.and_then(|result| {
+                    result
+                        .summary
+                        .as_ref()
+                        .and_then(|summary| serde_json::to_value(summary).ok())
+                });
+                let package_facts_summary_status = summary_result.and_then(|result| {
+                    serde_json::to_value(result.status)
+                        .ok()
+                        .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                });
                 // Prefer the Pumas execution descriptor whenever the record can
                 // resolve one so runtime-facing paths come from the executable
                 // contract rather than projected metadata.
@@ -411,16 +449,15 @@ mod options_provider {
                         serde_json::to_value(&descriptor.runtime_engine_hints)
                             .unwrap_or(serde_json::Value::Array(Vec::new()))
                     })
+                    .or_else(|| runtime_engine_hints_from_summary(summary_result))
                     .unwrap_or_else(|| {
                         m.metadata
                             .get("runtime_engine_hints")
                             .cloned()
                             .unwrap_or(serde_json::Value::Array(Vec::new()))
                     });
-                let requires_custom_code = m
-                    .metadata
-                    .get("requires_custom_code")
-                    .cloned()
+                let requires_custom_code = requires_custom_code_from_summary(summary_result)
+                    .or_else(|| m.metadata.get("requires_custom_code").cloned())
                     .unwrap_or(serde_json::Value::Bool(false));
                 let custom_code_sources = m
                     .metadata
@@ -440,18 +477,6 @@ mod options_provider {
                     .as_ref()
                     .map(|descriptor| descriptor.entry_path.clone())
                     .unwrap_or_else(|| m.path.clone());
-                let package_facts_summary = summary_cache.summaries.get(&m.id).and_then(|result| {
-                    result
-                        .summary
-                        .as_ref()
-                        .and_then(|summary| serde_json::to_value(summary).ok())
-                });
-                let package_facts_summary_status =
-                    summary_cache.summaries.get(&m.id).and_then(|result| {
-                        serde_json::to_value(result.status)
-                            .ok()
-                            .and_then(|value| value.as_str().map(ToOwned::to_owned))
-                    });
 
                 options.push(PortOption {
                     value: serde_json::json!(execution_path),
@@ -589,7 +614,8 @@ mod tests {
 #[cfg(all(test, feature = "model-library"))]
 mod model_library_tests {
     use super::options_provider::{
-        load_package_facts_summary_cache, resolve_execution_descriptor,
+        load_package_facts_summary_cache, requires_custom_code_from_summary,
+        resolve_execution_descriptor, runtime_engine_hints_from_summary,
         task_type_primary_from_descriptor_or_record, PackageFactsSummaryCache,
     };
     use pumas_library::models::{
@@ -843,6 +869,24 @@ mod model_library_tests {
         let task_type = task_type_primary_from_descriptor_or_record(Some(&descriptor), &record);
 
         assert_eq!(task_type, "text-generation");
+    }
+
+    #[test]
+    fn test_option_metadata_uses_package_summary_backend_hints() {
+        let summary = package_summary_result("llm/imported/test-model", "cached");
+
+        let hints = runtime_engine_hints_from_summary(Some(&summary));
+
+        assert_eq!(hints, Some(serde_json::json!(["llama.cpp"])));
+    }
+
+    #[test]
+    fn test_option_metadata_uses_package_summary_custom_code_flag() {
+        let summary = package_summary_result("llm/imported/test-model", "cached");
+
+        let requires_custom_code = requires_custom_code_from_summary(Some(&summary));
+
+        assert_eq!(requires_custom_code, Some(serde_json::json!(false)));
     }
 
     #[tokio::test]
