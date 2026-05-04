@@ -908,6 +908,21 @@ fn test_pytorch_worker_load_error_response_normalizes_to_backend_error() {
 }
 
 #[test]
+fn test_pytorch_worker_load_transport_error_normalizes_to_backend_error() {
+    match PyTorchBackend::load_worker_failure_from_message(
+        "req-load-transport",
+        "Transformers envelope model load failed: Python bridge failed.".to_string(),
+    ) {
+        BackendError::StartupFailed(message) => {
+            assert!(message.contains("pytorch_worker_model_load_failed"));
+            assert!(message.contains("req-load-transport"));
+            assert!(message.contains("Python bridge failed"));
+        }
+        other => panic!("expected StartupFailed error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_stream_setup_error_response_normalizes_to_backend_error() {
     let response = serde_json::json!({
         "status": "error",

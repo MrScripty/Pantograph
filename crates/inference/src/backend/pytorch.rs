@@ -456,6 +456,7 @@ impl PyTorchBackend {
         envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
     ) -> Result<LoadedModelInfo, BackendError> {
         Self::validate_transformers_load_envelope(&envelope)?;
+        let request_id = envelope.request_id.clone();
         let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
             BackendError::Config(format!(
                 "Failed to encode PyTorch worker load envelope: {error}"
@@ -465,17 +466,20 @@ impl PyTorchBackend {
         let info = tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    BackendError::StartupFailed(format!("Failed to load worker module: {}", e))
+                    Self::load_worker_failure_from_message(
+                        &request_id,
+                        format!("Failed to load worker module: {}", e),
+                    )
                 })?;
 
                 let response_json = worker
                     .call_method1("load_transformers_model_from_envelope", (envelope_json,))
                     .and_then(|result| result.extract::<String>())
                     .map_err(|e| {
-                        BackendError::Inference(format!(
-                            "Transformers envelope model load failed: {}",
-                            e
-                        ))
+                        Self::load_worker_failure_from_message(
+                            &request_id,
+                            format!("Transformers envelope model load failed: {}", e),
+                        )
                     })?;
 
                 Self::load_info_from_worker_response(&response_json)
@@ -515,6 +519,18 @@ impl PyTorchBackend {
             PyTorchWorkerResponse::Ok(_) => Ok(()),
             PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
         }
+    }
+
+    fn load_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
+        PyTorchWorkerFailure {
+            request_id: request_id.to_string(),
+            error: PyTorchWorkerError {
+                kind: PyTorchWorkerErrorKind::ModelLoadFailed,
+                message,
+                canonical_code: Some("pytorch_worker_model_load_failed".to_string()),
+            },
+        }
+        .into_backend_error()
     }
 
     fn stream_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
