@@ -2415,9 +2415,13 @@ inference write ledger events directly.
   run-detail selected runtime, backend, model, and task rollups from typed event
   fields. Inference lifecycle events and durable diagnostic payloads now carry
   bounded `resolved_artifact_kind` metadata from Pumas package facts without
-  parsing backend-specific payload details. Remaining follow-up:
-  execution-observed device/network node facts need explicit producer DTO
-  fields before they can be projected.
+  parsing backend-specific payload details. Inference lifecycle events now also
+  carry explicit non-`auto` selected device ids from backend start config;
+  embedded-runtime copies them into
+  `InferenceExecutionDiagnosticObserved.selected_device_id`, and run-list/detail
+  projections persist them in the existing selected-device columns. Remaining
+  follow-up: execution-observed network node facts need an explicit producer DTO
+  field before they can be projected.
 - [x] Map lifecycle-carried inference compatibility summaries into durable
   bounded metadata: accepted/rejected/degraded status dimensions, missing
   components, unsupported backend/task pairs, custom-code/trust blockers, and
@@ -2613,6 +2617,11 @@ one-off conversions.
   raw `selected_backend_key`, so durable diagnostics distinguish families such
   as `transformers_pytorch` and `llama_cpp` without making runtime id parsing a
   UI or query-consumer responsibility.
+- 2026-05-04: Selected-device diagnostics slice added
+  `selected_device_id` to inference lifecycle events and durable inference
+  diagnostic observations. The gateway derives it only from explicit backend
+  start config device values, omits `auto`, and the diagnostics-ledger projects
+  it into the existing run-list and run-detail selected-device columns.
 - 2026-05-03: Generation option diagnostics ledger slice added append-only
   `inference.execution_diagnostic_observed` ledger events with bounded
   option-support counts and per-option summaries. `InferenceRequestLifecycleEvent`

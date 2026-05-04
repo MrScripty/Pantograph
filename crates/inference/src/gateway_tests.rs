@@ -1462,6 +1462,66 @@ async fn test_execute_typed_validates_before_backend_execution() {
 }
 
 #[tokio::test]
+async fn test_lifecycle_events_carry_explicit_selected_device() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway
+        .start(&BackendConfig {
+            device: Some("cuda:0".to_string()),
+            ..BackendConfig::default()
+        })
+        .await
+        .expect("gateway should start with explicit device");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    gateway
+        .embeddings_with_lifecycle(
+            vec!["alpha".to_string()],
+            "mock-embedding",
+            Some("embedding-device".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("embedding request should execute");
+
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert!(events
+        .iter()
+        .all(|event| event.selected_device_id.as_deref() == Some("cuda:0")));
+}
+
+#[tokio::test]
+async fn test_lifecycle_events_do_not_report_auto_as_selected_device() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway
+        .start(&BackendConfig {
+            device: Some("auto".to_string()),
+            ..BackendConfig::default()
+        })
+        .await
+        .expect("gateway should start with auto device");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    gateway
+        .embeddings_with_lifecycle(
+            vec!["alpha".to_string()],
+            "mock-embedding",
+            Some("embedding-device-auto".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("embedding request should execute");
+
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert!(events
+        .iter()
+        .all(|event| event.selected_device_id.is_none()));
+}
+
+#[tokio::test]
 async fn test_execute_typed_with_lifecycle_records_validation_and_backend_completion() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let sink = Arc::new(RecordingLifecycleSink::default());
