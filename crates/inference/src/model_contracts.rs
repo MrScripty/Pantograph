@@ -2356,6 +2356,54 @@ mod tests {
     }
 
     #[test]
+    fn roadmap_task_request_contracts_are_not_executable() {
+        let image_understanding = registry_contract(InferenceTaskId::ImageUnderstanding);
+        assert_eq!(
+            image_understanding.input_kind,
+            InferenceExecutionInputKind::ImageUnderstanding
+        );
+        assert_eq!(
+            image_understanding.result_kind,
+            InferenceExecutionResultKind::ImageUnderstanding
+        );
+        assert_eq!(
+            image_understanding.streaming_support,
+            TaskStreamingSupport::BackendDependent
+        );
+        assert!(!image_understanding.execution_supported);
+
+        let video_understanding = registry_contract(InferenceTaskId::VideoUnderstanding);
+        assert_eq!(
+            video_understanding.input_kind,
+            InferenceExecutionInputKind::VideoUnderstanding
+        );
+        assert_eq!(
+            video_understanding.result_kind,
+            InferenceExecutionResultKind::VideoUnderstanding
+        );
+        assert_eq!(
+            video_understanding.streaming_support,
+            TaskStreamingSupport::Unsupported
+        );
+        assert!(!video_understanding.execution_supported);
+
+        let multimodal_generation = registry_contract(InferenceTaskId::MultimodalGeneration);
+        assert_eq!(
+            multimodal_generation.input_kind,
+            InferenceExecutionInputKind::MultimodalGeneration
+        );
+        assert_eq!(
+            multimodal_generation.result_kind,
+            InferenceExecutionResultKind::MultimodalGeneration
+        );
+        assert_eq!(
+            multimodal_generation.streaming_support,
+            TaskStreamingSupport::BackendDependent
+        );
+        assert!(!multimodal_generation.execution_supported);
+    }
+
+    #[test]
     fn task_request_contract_serde_uses_stable_snake_case() {
         let contract = registry_contract(InferenceTaskId::ImageGeneration);
         let encoded = serde_json::to_value(&contract).unwrap();

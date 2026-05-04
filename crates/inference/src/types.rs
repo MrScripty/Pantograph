@@ -1443,6 +1443,39 @@ mod tests {
     }
 
     #[test]
+    fn typed_execution_rejects_registry_tasks_without_execution_contract() {
+        for task_id in [
+            InferenceTaskId::ImageUnderstanding,
+            InferenceTaskId::VideoUnderstanding,
+            InferenceTaskId::MultimodalGeneration,
+        ] {
+            let request = InferenceExecutionRequest {
+                request_id: Some(format!("req-{}", task_id.canonical_label())),
+                task_id: task_id.clone(),
+                model_ref: None,
+                model_name: Some("roadmap-model".to_string()),
+                runtime_hint: None,
+                resolved_model_package_facts: None,
+                input: InferenceExecutionInput::TextGeneration {
+                    prompt: Some("hello".to_string()),
+                    system_prompt: None,
+                    messages: Vec::new(),
+                    stream: false,
+                },
+                generation_options: None,
+                extra_options: Value::Null,
+            };
+
+            match request.validate() {
+                Err(InferenceExecutionRequestValidationError::UnsupportedTask {
+                    task_id: rejected,
+                }) => assert_eq!(rejected, task_id),
+                other => panic!("expected unsupported task for {task_id:?}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
     fn typed_execution_result_serde_keeps_diagnostics_and_usage() {
         let result = InferenceExecutionResult::TextGeneration {
             text: "Done".to_string(),

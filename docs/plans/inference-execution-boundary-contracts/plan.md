@@ -1869,6 +1869,10 @@ requests from encoded audio or artifact references, routes them through
 `InferenceGateway::execute_typed`, validates the typed result kind, and projects
 bounded text/language/duration/segment outputs without serializing raw audio
 payloads into diagnostics.
+Roadmap registry tasks for image understanding, video understanding, and
+multimodal generation now have guardrail coverage proving their task/request
+contracts remain non-executable and typed request validation rejects them before
+any backend/input-kind dispatch.
 
 ### Milestone 11: Canonical Workflow Node Migration
 
