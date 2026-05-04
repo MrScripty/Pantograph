@@ -323,6 +323,45 @@ fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
 }
 
 #[test]
+fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
+    let generate_envelope = PyTorchBackend::generate_text_envelope(
+        "req-generate-top-k",
+        PyTorchWorkerOperation::GenerateText,
+        "Explain adapters.".to_string(),
+        Some("Be precise.".to_string()),
+        48,
+        0.3,
+        0.9,
+        Some(33),
+        None,
+    );
+    let stream_envelope = PyTorchBackend::generate_text_envelope(
+        "req-stream-top-k",
+        PyTorchWorkerOperation::GenerateTextStream,
+        "Explain adapters.".to_string(),
+        Some("Be precise.".to_string()),
+        48,
+        0.3,
+        0.9,
+        Some(33),
+        None,
+    );
+
+    PyTorchBackend::validate_generate_text_envelope(&generate_envelope)
+        .expect("generate envelope validates");
+    PyTorchBackend::validate_generate_text_stream_envelope(&stream_envelope)
+        .expect("stream envelope validates");
+    assert_eq!(
+        generate_envelope.payload.transformers_kwargs["top_k"],
+        serde_json::json!(33)
+    );
+    assert_eq!(
+        stream_envelope.payload.transformers_kwargs["top_k"],
+        serde_json::json!(33)
+    );
+}
+
+#[test]
 fn test_pytorch_generate_text_request_omits_absent_top_k_kwarg() {
     let request = PyTorchBackend::generate_text_request(
         "Explain adapters.".to_string(),
@@ -899,6 +938,7 @@ fn test_pytorch_generation_options_map_to_transformers_kwargs_and_diagnostics() 
         sampling: SamplingGenerationOptions {
             temperature: Some(0.6),
             top_p: Some(0.9),
+            top_k: Some(40),
             seed: Some(42),
             ..Default::default()
         },
@@ -947,6 +987,11 @@ fn test_pytorch_generation_options_map_to_transformers_kwargs_and_diagnostics() 
         mapping.kwargs["renormalize_logits"],
         serde_json::json!(true)
     );
+    assert_eq!(mapping.kwargs["top_k"], serde_json::json!(40));
+    assert!(mapping.diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "sampling.top_k"
+            && diagnostic.state == OptionSupportState::Honored
+    }));
     assert!(mapping.diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "sampling.seed"
             && diagnostic.state == OptionSupportState::Unsupported

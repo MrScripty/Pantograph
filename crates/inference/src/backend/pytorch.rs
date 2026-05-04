@@ -561,6 +561,32 @@ impl PyTorchBackend {
         }
     }
 
+    fn generate_text_envelope(
+        request_id: impl Into<String>,
+        operation: PyTorchWorkerOperation,
+        prompt: String,
+        system_prompt: Option<String>,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
+        top_k: Option<u32>,
+        masked_prompt_json: Option<String>,
+    ) -> PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> {
+        PyTorchWorkerEnvelope::new(
+            request_id,
+            operation,
+            Self::generate_text_request(
+                prompt,
+                system_prompt,
+                max_tokens,
+                temperature,
+                top_p,
+                top_k,
+                masked_prompt_json,
+            ),
+        )
+    }
+
     fn generate_text_transformers_kwargs(top_k: Option<u32>) -> BTreeMap<String, Value> {
         let mut kwargs = BTreeMap::new();
         if let Some(top_k) = top_k {
@@ -983,18 +1009,16 @@ impl PyTorchBackend {
         top_k: Option<u32>,
         masked_prompt_json: Option<String>,
     ) -> Result<String, BackendError> {
-        let envelope = PyTorchWorkerEnvelope::new(
+        let envelope = Self::generate_text_envelope(
             format!("pytorch-generate-text-{}", Uuid::new_v4().simple()),
             PyTorchWorkerOperation::GenerateText,
-            Self::generate_text_request(
-                prompt,
-                system_prompt,
-                max_tokens,
-                temperature,
-                top_p,
-                top_k,
-                masked_prompt_json,
-            ),
+            prompt,
+            system_prompt,
+            max_tokens,
+            temperature,
+            top_p,
+            top_k,
+            masked_prompt_json,
         );
         Self::validate_generate_text_envelope(&envelope)?;
         let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
@@ -1077,18 +1101,16 @@ impl PyTorchBackend {
         masked_prompt_json: Option<String>,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatChunk, BackendError>>(32);
-        let envelope = PyTorchWorkerEnvelope::new(
+        let envelope = Self::generate_text_envelope(
             format!("pytorch-generate-text-stream-{}", Uuid::new_v4().simple()),
             PyTorchWorkerOperation::GenerateTextStream,
-            Self::generate_text_request(
-                prompt,
-                system_prompt,
-                max_tokens,
-                temperature,
-                top_p,
-                top_k,
-                masked_prompt_json,
-            ),
+            prompt,
+            system_prompt,
+            max_tokens,
+            temperature,
+            top_p,
+            top_k,
+            masked_prompt_json,
         );
 
         if let Err(error) = Self::validate_generate_text_stream_envelope(&envelope) {
