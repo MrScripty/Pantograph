@@ -2275,7 +2275,10 @@ external-connection, custom-code, device-selection, and KV-cache facts. The
 `backend-candle` feature remains optional and compiles, but the registry reports
 Candle unavailable because executable safetensors/tokenizer model loading is
 not implemented yet; this prevents runtime selection from treating a staged
-backend as executable.
+backend as executable. A backend-local load plan now resolves Pumas package
+facts into concrete local config, tokenizer, safetensors, dtype, model-type, and
+device-hint facts, but it still stops before constructing Candle tensors,
+tokenizers, or model modules.
 
 Update during implementation:
 - 2026-05-03: Candle backend availability now fails closed behind
@@ -2292,6 +2295,11 @@ Update during implementation:
   package components for the first embedding slice: config, safetensors weights,
   and tokenizer must be present before a Pumas package can map to
   `ResolvedModelSource`.
+- 2026-05-04: Added a staged Candle embedding load plan that validates local
+  package files exist, rejects unsafe component paths, resolves float32/float16/
+  bfloat16 dtype facts, accepts only the first `bert` embedding model family,
+  and parses CPU/CUDA device hints without advertising executable Candle
+  loading or adding scheduler/runtime residency policy.
 
 ### Milestone 13: Evaluate vLLM and MLX Roadmap Boundaries
 

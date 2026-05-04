@@ -3,6 +3,7 @@
 //! This backend provides in-process inference using Hugging Face Candle.
 //! It supports CUDA acceleration and various model architectures.
 
+use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -35,6 +36,39 @@ pub struct CandleBackend {
     base_url: Option<String>,
     /// Whether the backend is ready
     ready: bool,
+}
+
+/// Narrow staged load plan for Candle embedding models.
+///
+/// This is a backend-local fact projection. It resolves what Candle would load
+/// from package facts without choosing runtime residency or scheduler policy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CandleEmbeddingLoadPlan {
+    pub source: ResolvedModelSource,
+    pub model_dir: PathBuf,
+    pub config_path: PathBuf,
+    pub tokenizer_path: PathBuf,
+    pub safetensors_path: PathBuf,
+    pub dtype: CandleLoadDType,
+    pub device: CandleLoadDevice,
+    pub model_type: String,
+    pub architecture: Option<String>,
+}
+
+/// Dtype accepted by the staged Candle embedding loader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandleLoadDType {
+    F32,
+    F16,
+    BF16,
+}
+
+/// Device hint accepted by the staged Candle embedding loader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandleLoadDevice {
+    Auto,
+    Cpu,
+    Cuda { index: usize },
 }
 
 impl CandleBackend {
@@ -89,7 +123,7 @@ impl CandleBackend {
             (
                 false,
                 Some(
-                    "Candle backend is staged but executable model loading is not implemented"
+                    "Candle backend has a staged embedding load planner but executable model loading is not implemented"
                         .to_string(),
                 ),
             )
@@ -178,6 +212,84 @@ impl CandleBackend {
         })?;
         Ok(source)
     }
+
+    /// Resolve a factual Candle embedding load plan from Pumas package facts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::Config`] when the package facts are not a
+    /// supported embedding HF-compatible directory, when required package files
+    /// are missing, or when dtype/model/device hints are outside the first
+    /// staged Candle slice.
+    pub fn embedding_load_plan_from_package(
+        package: &ResolvedModelPackageFacts,
+        device_hint: Option<&str>,
+    ) -> Result<CandleEmbeddingLoadPlan, BackendError> {
+        let source = Self::embedding_model_source_from_package(package)?;
+        let transformers = package.transformers.as_ref().ok_or_else(|| {
+            BackendError::Config(
+                "Candle embedding package requires Transformers package evidence".to_string(),
+            )
+        })?;
+        let model_type = transformers
+            .config_model_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                BackendError::Config(
+                    "Candle embedding package requires config_model_type evidence".to_string(),
+                )
+            })?
+            .to_ascii_lowercase();
+        if model_type != "bert" {
+            return Err(BackendError::Config(format!(
+                "Candle staged embedding loader only supports bert model_type, got '{model_type}'"
+            )));
+        }
+
+        let model_dir = existing_directory(&source.entry_path, "Candle model directory")?;
+        let config_path = existing_component_file(
+            package,
+            &model_dir,
+            ProcessorComponentKind::Config,
+            "config",
+        )?;
+        let tokenizer_path = existing_component_file(
+            package,
+            &model_dir,
+            ProcessorComponentKind::Tokenizer,
+            "tokenizer",
+        )?;
+        let safetensors_path = existing_component_file(
+            package,
+            &model_dir,
+            ProcessorComponentKind::Weights,
+            "weights",
+        )?;
+        if safetensors_path
+            .extension()
+            .and_then(|value| value.to_str())
+            != Some("safetensors")
+        {
+            return Err(BackendError::Config(format!(
+                "Candle staged embedding loader requires safetensors weights, got {}",
+                safetensors_path.display()
+            )));
+        }
+
+        Ok(CandleEmbeddingLoadPlan {
+            source,
+            model_dir,
+            config_path,
+            tokenizer_path,
+            safetensors_path,
+            dtype: candle_dtype_from_transformers(transformers)?,
+            device: candle_device_from_hint(device_hint)?,
+            model_type,
+            architecture: transformers.architectures.first().cloned(),
+        })
+    }
 }
 
 fn has_present_component(
@@ -188,6 +300,122 @@ fn has_present_component(
         .components
         .iter()
         .any(|component| component.kind == kind && component.status == PackageFactStatus::Present)
+}
+
+fn existing_directory(raw_path: &str, label: &str) -> Result<PathBuf, BackendError> {
+    let path = PathBuf::from(raw_path);
+    if path.is_dir() {
+        Ok(path)
+    } else {
+        Err(BackendError::Config(format!(
+            "{label} does not exist or is not a directory: {}",
+            path.display()
+        )))
+    }
+}
+
+fn existing_component_file(
+    package: &ResolvedModelPackageFacts,
+    model_dir: &Path,
+    kind: ProcessorComponentKind,
+    label: &str,
+) -> Result<PathBuf, BackendError> {
+    let relative_path = package
+        .components
+        .iter()
+        .find(|component| component.kind == kind && component.status == PackageFactStatus::Present)
+        .and_then(|component| component.relative_path.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            BackendError::Config(format!(
+                "Candle embedding package requires a present {label} component path"
+            ))
+        })?;
+    let relative_path = safe_relative_component_path(relative_path).ok_or_else(|| {
+        BackendError::Config(format!(
+            "Candle embedding package has an unsafe {label} component path: {relative_path}"
+        ))
+    })?;
+    let path = model_dir.join(relative_path);
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err(BackendError::Config(format!(
+            "Candle embedding package {label} file is missing: {}",
+            path.display()
+        )))
+    }
+}
+
+fn safe_relative_component_path(raw_path: &str) -> Option<PathBuf> {
+    let path = Path::new(raw_path);
+    if path.is_absolute() {
+        return None;
+    }
+
+    let mut clean = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => clean.push(value),
+            _ => return None,
+        }
+    }
+
+    if clean.as_os_str().is_empty() {
+        None
+    } else {
+        Some(clean)
+    }
+}
+
+fn candle_dtype_from_transformers(
+    transformers: &crate::model_contracts::TransformersPackageEvidence,
+) -> Result<CandleLoadDType, BackendError> {
+    let dtype = transformers
+        .torch_dtype
+        .as_deref()
+        .or(transformers.dtype.as_deref())
+        .unwrap_or("float32")
+        .trim()
+        .to_ascii_lowercase()
+        .replace('_', "");
+    match dtype.as_str() {
+        "float32" | "f32" => Ok(CandleLoadDType::F32),
+        "float16" | "f16" => Ok(CandleLoadDType::F16),
+        "bfloat16" | "bf16" => Ok(CandleLoadDType::BF16),
+        _ => Err(BackendError::Config(format!(
+            "Candle staged embedding loader does not support dtype '{dtype}'"
+        ))),
+    }
+}
+
+fn candle_device_from_hint(device_hint: Option<&str>) -> Result<CandleLoadDevice, BackendError> {
+    let Some(device_hint) = device_hint.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(CandleLoadDevice::Auto);
+    };
+    let normalized = device_hint.to_ascii_lowercase();
+    if normalized == "auto" {
+        return Ok(CandleLoadDevice::Auto);
+    }
+    if normalized == "cpu" {
+        return Ok(CandleLoadDevice::Cpu);
+    }
+    if normalized == "cuda" {
+        return Ok(CandleLoadDevice::Cuda { index: 0 });
+    }
+    if let Some(index) = normalized.strip_prefix("cuda:") {
+        let index = index.parse::<usize>().map_err(|_| {
+            BackendError::Config(format!(
+                "Candle staged embedding loader does not support device hint '{device_hint}'"
+            ))
+        })?;
+        return Ok(CandleLoadDevice::Cuda { index });
+    }
+
+    Err(BackendError::Config(format!(
+        "Candle staged embedding loader does not support device hint '{device_hint}'"
+    )))
 }
 
 impl Default for CandleBackend {
@@ -326,9 +554,24 @@ impl InferenceBackend for CandleBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn package_fixture(raw: &str) -> ResolvedModelPackageFacts {
         serde_json::from_str(raw).expect("package facts fixture should decode")
+    }
+
+    fn package_fixture_with_entry_path(raw: &str, entry_path: &Path) -> ResolvedModelPackageFacts {
+        let mut value: serde_json::Value =
+            serde_json::from_str(raw).expect("package facts fixture should decode");
+        value["artifact"]["entry_path"] = serde_json::json!(entry_path.display().to_string());
+        serde_json::from_value(value).expect("package facts fixture should decode")
+    }
+
+    fn write_minimal_candle_package_files(model_dir: &Path) {
+        fs::write(model_dir.join("config.json"), "{}").expect("config fixture should write");
+        fs::write(model_dir.join("tokenizer.json"), "{}").expect("tokenizer fixture should write");
+        fs::write(model_dir.join("model.safetensors"), b"fixture")
+            .expect("safetensors fixture should write");
     }
 
     #[test]
@@ -388,6 +631,106 @@ mod tests {
         source
             .validate_for_backend_load()
             .expect("mapped source should remain backend-load valid");
+    }
+
+    #[test]
+    fn embedding_load_plan_resolves_candle_paths_dtype_and_device() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        write_minimal_candle_package_files(temp.path());
+        let package = package_fixture_with_entry_path(
+            include_str!(
+                "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+            ),
+            temp.path(),
+        );
+
+        let plan = CandleBackend::embedding_load_plan_from_package(&package, Some("cuda:1"))
+            .expect("Candle package facts should resolve to a load plan");
+
+        assert_eq!(plan.model_dir, temp.path());
+        assert_eq!(plan.config_path, temp.path().join("config.json"));
+        assert_eq!(plan.tokenizer_path, temp.path().join("tokenizer.json"));
+        assert_eq!(plan.safetensors_path, temp.path().join("model.safetensors"));
+        assert_eq!(plan.dtype, CandleLoadDType::F32);
+        assert_eq!(plan.device, CandleLoadDevice::Cuda { index: 1 });
+        assert_eq!(plan.model_type, "bert");
+        assert_eq!(plan.architecture.as_deref(), Some("BertModel"));
+        assert_eq!(
+            plan.source.artifact_kind,
+            ModelArtifactKind::HfCompatibleDirectory
+        );
+    }
+
+    #[test]
+    fn embedding_load_plan_rejects_missing_package_files() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        fs::write(temp.path().join("config.json"), "{}").expect("config fixture should write");
+        fs::write(temp.path().join("model.safetensors"), b"fixture")
+            .expect("safetensors fixture should write");
+        let package = package_fixture_with_entry_path(
+            include_str!(
+                "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+            ),
+            temp.path(),
+        );
+
+        let error = CandleBackend::embedding_load_plan_from_package(&package, Some("cpu"))
+            .expect_err("Candle load plan should fail closed on missing tokenizer file");
+
+        assert!(error.to_string().contains("tokenizer file is missing"));
+    }
+
+    #[test]
+    fn embedding_load_plan_rejects_unsafe_component_paths() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        write_minimal_candle_package_files(temp.path());
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+        ))
+        .expect("fixture json should decode");
+        value["artifact"]["entry_path"] = serde_json::json!(temp.path().display().to_string());
+        value["components"][1]["relative_path"] = serde_json::json!("../model.safetensors");
+        let package: ResolvedModelPackageFacts =
+            serde_json::from_value(value).expect("fixture should decode");
+
+        let error = CandleBackend::embedding_load_plan_from_package(&package, None)
+            .expect_err("Candle load plan should fail closed on unsafe component paths");
+
+        assert!(error.to_string().contains("unsafe weights component path"));
+    }
+
+    #[test]
+    fn embedding_load_plan_rejects_unsupported_dtype_model_type_and_device() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        write_minimal_candle_package_files(temp.path());
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+        ))
+        .expect("fixture json should decode");
+        value["artifact"]["entry_path"] = serde_json::json!(temp.path().display().to_string());
+        value["transformers"]["torch_dtype"] = serde_json::json!("int8");
+        let package: ResolvedModelPackageFacts =
+            serde_json::from_value(value.clone()).expect("fixture should decode");
+        let error = CandleBackend::embedding_load_plan_from_package(&package, None)
+            .expect_err("Candle load plan should reject unsupported dtype");
+        assert!(error.to_string().contains("does not support dtype 'int8'"));
+
+        value["transformers"]["torch_dtype"] = serde_json::json!("float32");
+        value["transformers"]["config_model_type"] = serde_json::json!("llama");
+        let package: ResolvedModelPackageFacts =
+            serde_json::from_value(value.clone()).expect("fixture should decode");
+        let error = CandleBackend::embedding_load_plan_from_package(&package, None)
+            .expect_err("Candle load plan should reject unsupported model type");
+        assert!(error.to_string().contains("only supports bert model_type"));
+
+        value["transformers"]["config_model_type"] = serde_json::json!("bert");
+        let package: ResolvedModelPackageFacts =
+            serde_json::from_value(value).expect("fixture should decode");
+        let error = CandleBackend::embedding_load_plan_from_package(&package, Some("vulkan:0"))
+            .expect_err("Candle load plan should reject unsupported device hints");
+        assert!(error
+            .to_string()
+            .contains("does not support device hint 'vulkan:0'"));
     }
 
     #[test]
