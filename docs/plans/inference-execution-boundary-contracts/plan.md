@@ -1786,6 +1786,8 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   PyTorch live-KV helper worker lookup and save/restore/clear failures now
   retain generated request ids and canonical `pytorch_worker_kv_*_failed`
   codes without exposing cache bytes or file paths in the canonical code.
+  PyTorch backend trait KV slot save/restore/clear/truncate worker failures
+  now use the same canonical KV worker failure shape.
   Non-streaming PyTorch generate-text worker transport failures now also retain
   the generated request id and canonical `pytorch_worker_generate_text_failed`
   code instead of returning raw Python bridge errors.

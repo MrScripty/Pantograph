@@ -1695,15 +1695,24 @@ impl InferenceBackend for PyTorchBackend {
     async fn save_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
         Self::require_live_kv_slot(slot_id)?;
         let path = path.to_path_buf();
+        let request_id = format!("pytorch-kv-slot-save-{}", Uuid::new_v4().simple());
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<(), BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_save_failed",
+                        format!("Failed to get worker module: {}", e),
+                    )
                 })?;
                 worker
                     .call_method1("save_live_kv_cache", (path.to_string_lossy().to_string(),))
                     .map_err(|e| {
-                        BackendError::Inference(format!("PyTorch KV save failed: {}", e))
+                        kv_worker_failure_from_message(
+                            &request_id,
+                            "pytorch_worker_kv_save_failed",
+                            format!("PyTorch KV save failed: {}", e),
+                        )
                     })?;
                 Ok(())
             })
@@ -1715,10 +1724,15 @@ impl InferenceBackend for PyTorchBackend {
     async fn restore_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
         Self::require_live_kv_slot(slot_id)?;
         let path = path.to_path_buf();
+        let request_id = format!("pytorch-kv-slot-restore-{}", Uuid::new_v4().simple());
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<(), BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_restore_failed",
+                        format!("Failed to get worker module: {}", e),
+                    )
                 })?;
                 worker
                     .call_method1(
@@ -1726,7 +1740,11 @@ impl InferenceBackend for PyTorchBackend {
                         (path.to_string_lossy().to_string(),),
                     )
                     .map_err(|e| {
-                        BackendError::Inference(format!("PyTorch KV restore failed: {}", e))
+                        kv_worker_failure_from_message(
+                            &request_id,
+                            "pytorch_worker_kv_restore_failed",
+                            format!("PyTorch KV restore failed: {}", e),
+                        )
                     })?;
                 Ok(())
             })
@@ -1737,13 +1755,22 @@ impl InferenceBackend for PyTorchBackend {
 
     async fn clear_kv_cache_slot(&self, slot_id: u32) -> Result<(), BackendError> {
         Self::require_live_kv_slot(slot_id)?;
+        let request_id = format!("pytorch-kv-slot-clear-{}", Uuid::new_v4().simple());
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<(), BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_clear_failed",
+                        format!("Failed to get worker module: {}", e),
+                    )
                 })?;
                 worker.call_method0("clear_live_kv_cache").map_err(|e| {
-                    BackendError::Inference(format!("PyTorch KV clear failed: {}", e))
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_clear_failed",
+                        format!("PyTorch KV clear failed: {}", e),
+                    )
                 })?;
                 Ok(())
             })
@@ -1766,10 +1793,15 @@ impl InferenceBackend for PyTorchBackend {
             .map_err(|e| BackendError::Inference(format!("Failed to write KV temp file: {}", e)))?;
         let truncate_result = tokio::task::spawn_blocking({
             let temp_path = temp_path.clone();
+            let request_id = format!("pytorch-kv-truncate-{}", Uuid::new_v4().simple());
             move || {
                 Python::with_gil(|py| -> Result<(), BackendError> {
                     let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                        BackendError::Inference(format!("Failed to get worker module: {}", e))
+                        kv_worker_failure_from_message(
+                            &request_id,
+                            "pytorch_worker_kv_truncate_failed",
+                            format!("Failed to get worker module: {}", e),
+                        )
                     })?;
                     worker
                         .call_method1(
@@ -1777,7 +1809,11 @@ impl InferenceBackend for PyTorchBackend {
                             (temp_path.to_string_lossy().to_string(), token_position),
                         )
                         .map_err(|e| {
-                            BackendError::Inference(format!("PyTorch KV truncate failed: {}", e))
+                            kv_worker_failure_from_message(
+                                &request_id,
+                                "pytorch_worker_kv_truncate_failed",
+                                format!("PyTorch KV truncate failed: {}", e),
+                            )
                         })?;
                     Ok(())
                 })
