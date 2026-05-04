@@ -1372,6 +1372,98 @@ async fn test_canonical_llm_image_generation_uses_typed_gateway_boundary() {
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_canonical_llm_image_generation_with_package_facts_emits_compatibility_lifecycle() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/diffusers_bundle_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("image package facts fixture");
+    let image_requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedImageGenerationBackend {
+            image_requests: image_requests.clone(),
+        }),
+        "mock",
+    ));
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("image_generation"),
+    );
+    inputs.insert(
+        "prompt".to_string(),
+        serde_json::json!("paint a quiet lake SECRET_PROMPT"),
+    );
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let executor = CoreTaskExecutor::new()
+        .with_gateway(gateway)
+        .with_execution_id("exec-image".to_string());
+    let outputs = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect("image package facts should execute through typed lifecycle");
+
+    assert_eq!(outputs["metadata"]["image_count"], 1);
+    assert_eq!(image_requests.lock().expect("image requests lock").len(), 1);
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 18);
+    let validation_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("task validation completion");
+    assert_eq!(
+        validation_completed.model_id.as_deref(),
+        Some("image/example/tiny-diffusers")
+    );
+    assert!(validation_completed.compatibility_report.is_some());
+
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion");
+    assert_eq!(
+        backend_completed.model_id.as_deref(),
+        Some("image/example/tiny-diffusers")
+    );
+    assert!(backend_completed.compatibility_report.is_some());
+
+    let bounded_events = serde_json::to_string(&*events).expect("events serialize");
+    assert!(!bounded_events.contains("SECRET_PROMPT"));
+    assert!(!bounded_events.contains("aW1hZ2U="));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_canonical_llm_embedding_uses_typed_gateway_boundary() {
     let embedding_requests = Arc::new(Mutex::new(Vec::new()));
     let gateway = Arc::new(InferenceGateway::with_backend(

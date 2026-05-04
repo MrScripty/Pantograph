@@ -2604,6 +2604,10 @@ inference write ledger events directly.
   and have graph-visible `llm-inference` coverage proving audio request
   construction forwards package facts while task-validation and
   backend-execution lifecycle events carry bounded compatibility summaries with
+  the stable Pumas model id. Diffusers image-generation package-facts fixtures
+  now have graph-visible `llm-inference` coverage proving image-generation
+  request construction forwards package facts while task-validation and
+  backend-execution lifecycle events carry bounded compatibility summaries with
   the stable Pumas model id.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
@@ -3411,6 +3415,11 @@ Update during implementation:
   resolved Pumas package facts for model identity, projects generated images
   through existing graph outputs, and verifies diagnostics do not include
   prompt text or encoded image bytes.
+- 2026-05-04: Node-engine canonical image-generation execution now has
+  package-facts lifecycle coverage. Diffusers package facts flow from graph
+  inputs through typed gateway execution, and task-validation plus
+  backend-execution lifecycle events carry compatibility summaries with the
+  package-derived image model id while omitting prompt and image payloads.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are
