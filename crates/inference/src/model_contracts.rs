@@ -341,7 +341,7 @@ impl TaskRequestContract {
                 task_id: task_id.clone(),
                 input_kind: InferenceExecutionInputKind::AudioTranscription,
                 result_kind: InferenceExecutionResultKind::AudioTranscription,
-                execution_supported: false,
+                execution_supported: true,
                 streaming_support: TaskStreamingSupport::BackendDependent,
                 required_input_modalities: vec![InferenceModality::Audio],
                 output_modalities: vec![InferenceModality::Text],
@@ -2341,7 +2341,7 @@ mod tests {
     }
 
     #[test]
-    fn roadmap_task_contracts_are_visible_but_not_executable() {
+    fn audio_transcription_task_contract_is_executable() {
         let audio = registry_contract(InferenceTaskId::AudioTranscription);
 
         assert_eq!(
@@ -2352,7 +2352,7 @@ mod tests {
             audio.result_kind,
             InferenceExecutionResultKind::AudioTranscription
         );
-        assert!(!audio.execution_supported);
+        assert!(audio.execution_supported);
     }
 
     #[test]

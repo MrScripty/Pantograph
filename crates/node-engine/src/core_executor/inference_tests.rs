@@ -17,6 +17,7 @@ use futures_util::stream;
 use inference::backend::BackendStartOutcome;
 #[cfg(feature = "inference-nodes")]
 use inference::{
+    AudioTranscriptionRequest, AudioTranscriptionResult, AudioTranscriptionSegment,
     BackendCapabilities, BackendConfig, BackendError, CacheGenerationOptions, ChatChunk,
     EmbeddingResult, GenerationOptions, InferenceBackend, InferenceExecutionInput,
     InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
@@ -238,7 +239,7 @@ fn test_build_text_generation_execution_request_rejects_malformed_package_facts(
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("Invalid resolved_model_package_facts input"));
         }
-        other => panic!("unexpected error variant: {other:?}"),
+        other => panic!("unexpected input variant: {other:?}"),
     }
 }
 
@@ -893,51 +894,90 @@ async fn test_canonical_llm_feature_extraction_alias_dispatches_to_embedding_han
 }
 
 #[cfg(feature = "inference-nodes")]
-#[tokio::test]
-async fn test_canonical_llm_contract_only_task_rejects_before_gateway() {
+#[test]
+fn test_build_audio_transcription_execution_request_preserves_canonical_inputs() {
     let mut inputs = HashMap::new();
     inputs.insert(
-        "_data".to_string(),
-        serde_json::json!({"node_type": "llm-inference"}),
-    );
-    inputs.insert(
         "task_kind".to_string(),
-        serde_json::json!("audio_transcription"),
+        serde_json::json!("automatic-speech-recognition"),
     );
     inputs.insert(
         "audio".to_string(),
-        serde_json::json!("artifact://audio.wav"),
+        serde_json::json!({
+            "data_base64": "UklGRg==",
+            "mime_type": "audio/flac",
+            "sample_rate_hz": 16000
+        }),
     );
+    inputs.insert("model_name".to_string(), serde_json::json!("whisper-tiny"));
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("pytorch"));
+    inputs.insert("language".to_string(), serde_json::json!("en"));
+    inputs.insert("prompt".to_string(), serde_json::json!("domain terms"));
+    inputs.insert("asr_task".to_string(), serde_json::json!("transcribe"));
+    inputs.insert("chunk_length_s".to_string(), serde_json::json!(30.0));
 
-    let executor = CoreTaskExecutor::new();
-    let context = graph_flow::Context::new();
-    let extensions = ExecutorExtensions::new();
-    let err = executor
-        .execute_task("llm-inference-1", inputs, &context, &extensions)
-        .await
-        .expect_err("contract-only audio task should reject before gateway execution");
-    match err {
-        NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("audio_transcription"));
-            assert!(message.contains("execution_supported=false"));
-            assert!(!message.contains("Missing prompt input"));
-            assert!(!message.contains("InferenceGateway not configured"));
+    let request = build_audio_transcription_execution_request(&inputs)
+        .expect("canonical audio transcription request should build");
+
+    assert_eq!(request.task_id, InferenceTaskId::AudioTranscription);
+    assert_eq!(request.model_name.as_deref(), Some("whisper-tiny"));
+    assert_eq!(request.runtime_hint.as_deref(), Some("pytorch"));
+    match request.input {
+        InferenceExecutionInput::AudioTranscription { request } => {
+            assert_eq!(request.model, "whisper-tiny");
+            let audio = request.audio.expect("encoded audio should be present");
+            assert_eq!(audio.data_base64, "UklGRg==");
+            assert_eq!(audio.mime_type, "audio/flac");
+            assert_eq!(audio.sample_rate_hz, Some(16000));
+            assert_eq!(request.audio_ref, None);
+            assert_eq!(request.language.as_deref(), Some("en"));
+            assert_eq!(request.prompt.as_deref(), Some("domain terms"));
+            assert_eq!(request.task.as_deref(), Some("transcribe"));
+            assert_eq!(request.chunk_length_s, Some(30.0));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
 }
 
 #[cfg(feature = "inference-nodes")]
-#[tokio::test]
-async fn test_canonical_llm_contract_only_task_records_lifecycle_failure() {
-    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
-    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
-        Arc::new(MockInferenceLifecycleSink {
-            events: lifecycle_events.clone(),
-        });
-    let mut extensions = ExecutorExtensions::new();
-    extensions.set(extension_keys::INFERENCE_LIFECYCLE_SINK, lifecycle_sink);
+#[test]
+fn test_build_audio_transcription_execution_request_accepts_artifact_ref() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("audio_transcription"),
+    );
+    inputs.insert(
+        "audio".to_string(),
+        serde_json::json!("artifact-read://audio.wav"),
+    );
+    inputs.insert("model".to_string(), serde_json::json!("whisper-tiny"));
 
+    let request = build_audio_transcription_execution_request(&inputs)
+        .expect("artifact audio refs should build");
+
+    match request.input {
+        InferenceExecutionInput::AudioTranscription { request } => {
+            assert_eq!(request.audio, None);
+            assert_eq!(
+                request.audio_ref.as_deref(),
+                Some("artifact-read://audio.wav")
+            );
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_audio_transcription_uses_typed_gateway_boundary() {
+    let audio_requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedAudioTranscriptionBackend {
+            audio_requests: audio_requests.clone(),
+        }),
+        "mock-audio",
+    ));
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
@@ -947,58 +987,45 @@ async fn test_canonical_llm_contract_only_task_records_lifecycle_failure() {
         "task_kind".to_string(),
         serde_json::json!("audio_transcription"),
     );
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
-    inputs.insert(
-        "resolved_model_source".to_string(),
-        resolved_model_source_with_artifact_kind(
-            "pumas://models/whisper",
-            "/models/whisper",
-            "hf_compatible_directory",
-        ),
-    );
-    inputs.insert(
-        "audio".to_string(),
-        serde_json::json!("artifact://audio.wav"),
-    );
+    inputs.insert("audio".to_string(), serde_json::json!("UklGRg=="));
+    inputs.insert("model_name".to_string(), serde_json::json!("whisper-tiny"));
+    inputs.insert("language".to_string(), serde_json::json!("en"));
 
-    let executor = CoreTaskExecutor::new().with_execution_id("exec-a".to_string());
-    let err = executor
+    let executor = CoreTaskExecutor::new().with_gateway(gateway);
+    let outputs = executor
         .execute_task(
             "llm-inference-1",
             inputs,
             &graph_flow::Context::new(),
-            &extensions,
+            &ExecutorExtensions::new(),
         )
         .await
-        .expect_err("contract-only audio task should reject");
+        .expect("canonical audio transcription should use typed gateway");
 
-    match err {
-        NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("execution_supported=false"));
-        }
-        other => panic!("unexpected error variant: {other:?}"),
-    }
-    let events = lifecycle_events.lock().expect("lifecycle events lock");
-    assert_eq!(events.len(), 3);
-    assert!(events.iter().all(|event| {
-        event.phase == InferenceLifecyclePhase::TaskValidation
-            && event.request_id.as_deref() == Some("exec-a:llm-inference-1:audio_transcription")
-            && event.backend_key.as_deref() == Some("pytorch")
-            && event.runtime_id.as_deref() == Some("pytorch")
-            && event.model_id.as_deref() == Some("pumas://models/whisper")
-    }));
-    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
-    assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
-    assert!(events[1]
-        .detail
-        .as_deref()
-        .is_some_and(|detail| detail.contains("execution_supported=false")));
     assert_eq!(
-        events[2].kind,
-        InferenceRequestLifecycleEventKind::CleanupCompleted
+        outputs.get("response"),
+        Some(&serde_json::json!("hello audio"))
+    );
+    assert_eq!(outputs.get("text"), Some(&serde_json::json!("hello audio")));
+    assert_eq!(outputs.get("language"), Some(&serde_json::json!("en")));
+    assert_eq!(
+        outputs.get("duration_seconds"),
+        Some(&serde_json::json!(1.25_f32))
+    );
+    assert_eq!(outputs.get("stream"), Some(&serde_json::Value::Null));
+    let diagnostics = serde_json::to_string(outputs.get("diagnostics").unwrap()).unwrap();
+    assert!(!diagnostics.contains("UklGRg=="));
+
+    let captured = audio_requests.lock().expect("audio requests lock");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0].model, "whisper-tiny");
+    assert_eq!(captured[0].language.as_deref(), Some("en"));
+    assert_eq!(
+        captured[0]
+            .audio
+            .as_ref()
+            .map(|audio| audio.data_base64.as_str()),
+        Some("UklGRg==")
     );
 }
 
@@ -2141,6 +2168,106 @@ impl InferenceBackend for MockTypedRerankBackend {
                 .take(request.top_n.unwrap_or(usize::MAX))
                 .collect(),
             metadata: serde_json::Value::Null,
+        })
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+struct MockTypedAudioTranscriptionBackend {
+    audio_requests: Arc<Mutex<Vec<AudioTranscriptionRequest>>>,
+}
+
+#[cfg(feature = "inference-nodes")]
+#[async_trait]
+impl InferenceBackend for MockTypedAudioTranscriptionBackend {
+    fn name(&self) -> &'static str {
+        "mock-audio"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock typed audio transcription backend"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities::default()
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> std::result::Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> std::result::Result<
+        Pin<
+            Box<
+                dyn futures_util::Stream<Item = std::result::Result<ChatChunk, BackendError>>
+                    + Send,
+            >,
+        >,
+        BackendError,
+    > {
+        Err(BackendError::Inference(
+            "chat not supported by mock".to_string(),
+        ))
+    }
+
+    async fn embeddings(
+        &self,
+        _texts: Vec<String>,
+        _model: &str,
+    ) -> std::result::Result<Vec<EmbeddingResult>, BackendError> {
+        Err(BackendError::Inference(
+            "embeddings not supported by mock".to_string(),
+        ))
+    }
+
+    async fn rerank(
+        &self,
+        _request: RerankRequest,
+    ) -> std::result::Result<RerankResponse, BackendError> {
+        Err(BackendError::Inference(
+            "rerank not supported by mock".to_string(),
+        ))
+    }
+
+    async fn transcribe_audio(
+        &self,
+        request: AudioTranscriptionRequest,
+    ) -> std::result::Result<AudioTranscriptionResult, BackendError> {
+        self.audio_requests
+            .lock()
+            .expect("audio requests lock")
+            .push(request);
+        Ok(AudioTranscriptionResult {
+            text: "hello audio".to_string(),
+            language: Some("en".to_string()),
+            duration_seconds: Some(1.25),
+            segments: vec![AudioTranscriptionSegment {
+                text: "hello audio".to_string(),
+                start_seconds: Some(0.0),
+                end_seconds: Some(1.25),
+            }],
+            metadata: serde_json::json!({"backend": "mock"}),
         })
     }
 }

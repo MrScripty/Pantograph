@@ -285,6 +285,16 @@ impl TaskExecutor for CoreTaskExecutor {
                         )
                         .await
                     }
+                    Some(InferenceExecutionInputKind::AudioTranscription) => {
+                        execute_audio_transcription_inference(
+                            self.gateway.as_ref(),
+                            &canonical_inputs,
+                            extensions,
+                            task_id,
+                            exec_id,
+                        )
+                        .await
+                    }
                     _ if preferred_backend.as_deref() == Some("llamacpp") => {
                         let resolved_model_ref = enforce_dependency_preflight(
                             "llm-inference",

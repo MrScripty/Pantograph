@@ -156,7 +156,8 @@ pub use pantograph_managed_dependencies::{
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
 pub use types::{
-    ChatMessage, ChatRequest, ContentPart, Delta, EncodedImage, ImageGenerationRequest,
+    AudioTranscriptionRequest, AudioTranscriptionResult, AudioTranscriptionSegment, ChatMessage,
+    ChatRequest, ContentPart, Delta, EncodedAudio, EncodedImage, ImageGenerationRequest,
     ImageGenerationResult, ImageUrlData, InferenceCompatibilityIssueSummary,
     InferenceCompatibilityReportSummary, InferenceEmbeddingResult, InferenceExecutionInput,
     InferenceExecutionRequest, InferenceExecutionRequestValidationError, InferenceExecutionResult,

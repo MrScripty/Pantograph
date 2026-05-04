@@ -1382,7 +1382,7 @@ mod tests {
     }
 
     #[test]
-    fn typed_execution_request_validation_rejects_contract_only_tasks() {
+    fn typed_execution_audio_transcription_validation_accepts_audio_refs() {
         let request = InferenceExecutionRequest {
             request_id: Some("req-audio".to_string()),
             task_id: InferenceTaskId::AudioTranscription,
@@ -1406,12 +1406,9 @@ mod tests {
             extra_options: Value::Null,
         };
 
-        match request.validate() {
-            Err(InferenceExecutionRequestValidationError::UnsupportedTask { task_id }) => {
-                assert_eq!(task_id, InferenceTaskId::AudioTranscription);
-            }
-            other => panic!("expected unsupported task error, got {other:?}"),
-        }
+        request
+            .validate()
+            .expect("audio refs should satisfy typed ASR validation");
     }
 
     #[test]

@@ -641,6 +641,253 @@ pub(crate) fn build_rerank_execution_request(
 }
 
 #[cfg(feature = "inference-nodes")]
+pub(crate) async fn execute_audio_transcription_inference(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+    extensions: &ExecutorExtensions,
+    task_id: &str,
+    execution_id: &str,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let gw = require_gateway(gateway)?;
+    let mut request = build_audio_transcription_execution_request(inputs)?;
+    assign_typed_request_id(&mut request, task_id, execution_id);
+    let expected_result_kind = expected_typed_result_kind(&request)?;
+    let result = execute_typed_gateway(gw, request, extensions)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Typed audio transcription failed: {error}"))
+        })?;
+    ensure_typed_result_kind(&result, expected_result_kind, "Typed audio transcription")?;
+    let (transcription, option_diagnostics) = match result {
+        inference::InferenceExecutionResult::AudioTranscription {
+            result,
+            option_diagnostics,
+        } => (result, option_diagnostics),
+        other => {
+            return Err(NodeEngineError::ExecutionFailed(format!(
+                "Typed audio transcription returned unexpected result: {other:?}"
+            )));
+        }
+    };
+
+    let mut outputs = HashMap::new();
+    outputs.insert(
+        "response".to_string(),
+        serde_json::json!(transcription.text.clone()),
+    );
+    outputs.insert("stream".to_string(), serde_json::Value::Null);
+    outputs.insert("text".to_string(), serde_json::json!(transcription.text));
+    outputs.insert(
+        "language".to_string(),
+        transcription
+            .language
+            .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert(
+        "duration_seconds".to_string(),
+        transcription
+            .duration_seconds
+            .map(|duration| serde_json::json!(duration))
+            .unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert(
+        "segments".to_string(),
+        serde_json::to_value(transcription.segments).unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert(
+        "metadata".to_string(),
+        if transcription.metadata.is_null() {
+            serde_json::Value::Null
+        } else {
+            transcription.metadata
+        },
+    );
+    outputs.insert(
+        "diagnostics".to_string(),
+        serde_json::to_value(option_diagnostics).unwrap_or(serde_json::Value::Null),
+    );
+    Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) fn build_audio_transcription_execution_request(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<inference::InferenceExecutionRequest> {
+    let audio_value = read_optional_input_value(inputs, "audio")
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing audio input".to_string()))?;
+    let (audio, audio_ref) = parse_audio_transcription_input(audio_value)?;
+    let model_ref = parse_pumas_model_ref(inputs);
+    let model_name = read_audio_model_name(inputs, model_ref.as_ref())?;
+    let mut extra_settings = build_extra_settings(inputs);
+    extra_settings.remove("audio");
+    extra_settings.remove("audio_ref");
+    extra_settings.remove("audioRef");
+    extra_settings.remove("audio_base64");
+    extra_settings.remove("audioBase64");
+    extra_settings.remove("audio_data");
+    extra_settings.remove("audioData");
+    extra_settings.remove("data_base64");
+    extra_settings.remove("dataBase64");
+
+    Ok(inference::InferenceExecutionRequest {
+        request_id: None,
+        task_id: inference::InferenceTaskId::AudioTranscription,
+        model_ref,
+        model_name: model_name.clone(),
+        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
+        resolved_model_package_facts: parse_resolved_model_package_facts(inputs)?,
+        input: inference::InferenceExecutionInput::AudioTranscription {
+            request: inference::AudioTranscriptionRequest {
+                model: model_name.unwrap_or_else(|| "default".to_string()),
+                audio,
+                audio_ref,
+                language: read_optional_input_string_aliases(inputs, &["language", "lang"]),
+                prompt: read_optional_input_string_aliases(inputs, &["prompt", "context"]),
+                task: read_optional_input_string_aliases(inputs, &["asr_task", "asrTask", "task"]),
+                chunk_length_s: read_positive_f32_aliases(
+                    inputs,
+                    &["chunk_length_s", "chunkLengthS", "chunk_length_seconds"],
+                ),
+                extra_options: serde_json::Value::Object(extra_settings.into_iter().collect()),
+            },
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn parse_audio_transcription_input(
+    value: serde_json::Value,
+) -> Result<(Option<inference::EncodedAudio>, Option<String>)> {
+    if let Some(audio) = value.as_str() {
+        let audio = audio.trim();
+        if audio.is_empty() {
+            return Err(NodeEngineError::ExecutionFailed(
+                "Audio input cannot be empty".to_string(),
+            ));
+        }
+        if audio.starts_with("artifact://") || audio.starts_with("artifact-read://") {
+            return Ok((None, Some(audio.to_string())));
+        }
+        return Ok((
+            Some(inference::EncodedAudio {
+                data_base64: audio.to_string(),
+                mime_type: "audio/wav".to_string(),
+                sample_rate_hz: None,
+            }),
+            None,
+        ));
+    }
+
+    let Some(object) = value.as_object() else {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Audio input must be a base64 string, artifact reference, or object".to_string(),
+        ));
+    };
+    let audio_ref = read_string_aliases_from_object(object, &["audio_ref", "audioRef", "ref"])
+        .filter(|value| !value.trim().is_empty());
+    let data_base64 = read_string_aliases_from_object(
+        object,
+        &[
+            "data_base64",
+            "dataBase64",
+            "audio_base64",
+            "audioBase64",
+            "audio_data",
+            "audioData",
+        ],
+    )
+    .filter(|value| !value.trim().is_empty());
+    let audio = data_base64.map(|data_base64| inference::EncodedAudio {
+        data_base64,
+        mime_type: read_string_aliases_from_object(object, &["mime_type", "mimeType"])
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "audio/wav".to_string()),
+        sample_rate_hz: read_u32_aliases_from_object(object, &["sample_rate_hz", "sampleRateHz"]),
+    });
+
+    if audio.is_none() && audio_ref.is_none() {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Audio input object must include data_base64 or audio_ref".to_string(),
+        ));
+    }
+    Ok((audio, audio_ref))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_audio_model_name(
+    inputs: &HashMap<String, serde_json::Value>,
+    model_ref: Option<&inference::PumasModelRef>,
+) -> Result<Option<String>> {
+    if let Some(model) = read_optional_input_string_aliases(
+        inputs,
+        &["model", "model_name", "modelName", "model_id", "modelId"],
+    )
+    .filter(|model| !model.trim().is_empty())
+    {
+        return Ok(Some(model));
+    }
+
+    if let Some(model_path) =
+        read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
+            .filter(|model_path| !model_path.trim().is_empty())
+    {
+        return Ok(Some(model_path));
+    }
+
+    Ok(model_ref.map(|model_ref| model_ref.model_id.clone()))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_string_aliases_from_object(
+    object: &serde_json::Map<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<String> {
+    aliases
+        .iter()
+        .find_map(|alias| object.get(*alias).and_then(|value| value.as_str()))
+        .map(str::to_string)
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_u32_aliases_from_object(
+    object: &serde_json::Map<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<u32> {
+    aliases.iter().find_map(|alias| {
+        object.get(*alias).and_then(|value| {
+            value
+                .as_u64()
+                .and_then(|value| u32::try_from(value).ok())
+                .or_else(|| value.as_i64().and_then(|value| u32::try_from(value).ok()))
+        })
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_positive_f32_aliases(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<f32> {
+    aliases.iter().find_map(|alias| {
+        read_optional_input_value(inputs, alias).and_then(|value| {
+            value
+                .as_f64()
+                .filter(|value| *value > 0.0 && value.is_finite())
+                .map(|value| value as f32)
+                .or_else(|| {
+                    value
+                        .as_i64()
+                        .filter(|value| *value > 0)
+                        .map(|value| value as f32)
+                })
+        })
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
 pub(crate) fn expected_typed_result_kind(
     request: &inference::InferenceExecutionRequest,
 ) -> Result<inference::InferenceExecutionResultKind> {

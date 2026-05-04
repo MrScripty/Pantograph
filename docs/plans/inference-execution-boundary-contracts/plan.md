@@ -1215,18 +1215,18 @@ Node-engine rerank request construction now reads migrated canonical
 `task_options.top_k` and `task_options.return_documents` values, while
 connected/top-level runtime inputs keep precedence over saved task options.
 Workflow-node contract projection now advertises audio transcription on
-canonical `llm-inference` as a contract-only task from the inference registry:
-the `audio` input maps to audio transcription input, `response` maps to the
-transcription result, and `execution_supported = false` prevents consumers from
-mistaking descriptor visibility for backend support.
+canonical `llm-inference` from the inference registry: the `audio` input maps
+to audio transcription input, `response` maps to the transcription result, and
+`execution_supported = true` reflects the typed gateway/backend boundary while
+artifact payload resolution remains host-owned.
 Node-engine typed request construction now also derives `PumasModelRef`
 identity from `resolved_model_source.model_ref` when a canonical node receives
 fully resolved Pumas model-source facts instead of a separate
 `pumas_model_ref` input.
-Node-engine canonical `llm-inference` dispatch now rejects contract-only task
-registry entries such as `audio_transcription` before gateway or backend
-preflight execution, returning a task-contract error that cites
-`execution_supported=false` instead of falling through to text/prompt handling.
+Node-engine canonical `llm-inference` dispatch still rejects any remaining
+contract-only task registry entries before gateway or backend preflight
+execution. `audio_transcription` now routes through the typed audio
+transcription gateway path instead of falling through to text/prompt handling.
 The canonical llama.cpp execution path now derives request generation
 parameters from grouped `generation_options` first, while retaining legacy
 top-level `max_tokens` and `temperature` inputs as fallback compatibility.
@@ -1837,15 +1837,13 @@ mappers for PyTorch/Transformers and llama.cpp instead of the public
 `GenerationOptions` contract. Future vLLM, MLX, and Candle slices must follow
 the same boundary. `InferenceGateway::execute_typed` validates typed execution
 requests and bridges them into existing backend paths for text/chat,
-embedding, rerank, and image generation.
+embedding, rerank, image generation, and audio transcription.
 Audio transcription now has stable typed input/result DTOs, serde coverage,
-and validation that requires either encoded audio or a host-owned audio
-artifact reference, but `audio_transcription` remains contract-only until a
-later PyTorch/Transformers execution slice wires the gateway and backend path.
-`InferenceBackend` and `InferenceGateway` now expose a typed
-`transcribe_audio` method that fails closed by default, giving future PyTorch
-and external-runtime slices a single backend edge without advertising canonical
-task execution support yet.
+validation that requires either encoded audio or a host-owned audio artifact
+reference, and canonical executable registry status. `InferenceBackend` and
+`InferenceGateway` expose a typed `transcribe_audio` method that fails closed
+by default, giving PyTorch and future external-runtime slices a single backend
+edge while keeping artifact lookup outside the inference crate.
 The PyTorch backend now implements the `transcribe_audio` method for encoded
 in-memory audio only, while rejecting `audio_ref` requests with a config error
 so artifact lookup stays in host/runtime adapters rather than moving media
@@ -1854,6 +1852,11 @@ The embedded Python runtime bridge now recognizes canonical
 `audio_transcription`, Hugging Face `automatic-speech-recognition`, and legacy
 `audio-to-text` labels at a single PyTorch ASR branch so future gateway work
 does not inherit another task-label drift point.
+Node-engine canonical `llm-inference` now builds typed audio transcription
+requests from encoded audio or artifact references, routes them through
+`InferenceGateway::execute_typed`, validates the typed result kind, and projects
+bounded text/language/duration/segment outputs without serializing raw audio
+payloads into diagnostics.
 
 ### Milestone 11: Canonical Workflow Node Migration
 
@@ -2817,6 +2820,11 @@ Update during implementation:
 - 2026-05-03: Moved embedded-runtime embedding metadata emission detection from
   the retired `embedding` node type to canonical `llm-inference` task-registry
   semantics.
+- 2026-05-04: Enabled canonical `audio_transcription` execution through the
+  typed registry, gateway, PyTorch backend edge, and node-engine
+  `llm-inference` dispatch path. Node-engine now accepts encoded audio or
+  host-owned artifact refs, projects text/language/duration/segment outputs,
+  and keeps raw audio payloads out of option diagnostics.
 - 2026-05-03: Follow-up issue discovered during focused embedded-runtime
   validation: `node-engine` still emits a dead-code warning for
   `enforce_dependency_preflight_with_lifecycle` when compiled without the

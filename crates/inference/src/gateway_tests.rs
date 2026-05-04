@@ -913,6 +913,57 @@ async fn test_execute_typed_forwards_image_generation_to_active_backend() {
 }
 
 #[tokio::test]
+async fn test_execute_typed_forwards_audio_transcription_to_active_backend() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-audio-1".to_string()),
+        task_id: InferenceTaskId::AudioTranscription,
+        model_ref: None,
+        model_name: Some("mock-asr".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::AudioTranscription {
+            request: AudioTranscriptionRequest {
+                model: "mock-asr".to_string(),
+                audio: None,
+                audio_ref: Some("artifact://audio.wav".to_string()),
+                language: Some("en".to_string()),
+                prompt: None,
+                task: Some("transcribe".to_string()),
+                chunk_length_s: None,
+                extra_options: serde_json::json!({
+                    "return_timestamps": true,
+                }),
+            },
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let result = gateway
+        .execute_typed(request)
+        .await
+        .expect("typed audio request should execute");
+
+    match result {
+        InferenceExecutionResult::AudioTranscription {
+            result,
+            option_diagnostics,
+        } => {
+            assert_eq!(result.text, "transcribed mock-asr");
+            assert_eq!(result.language.as_deref(), Some("en"));
+            assert_eq!(result.duration_seconds, Some(1.5));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "audio_transcription.extra_options.return_timestamps"
+                    && diagnostic.state == OptionSupportState::Mapped
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
+        }
+        other => panic!("expected audio transcription result, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn test_execute_typed_text_reports_generation_option_diagnostics() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
     let sink = Arc::new(RecordingLifecycleSink::default());

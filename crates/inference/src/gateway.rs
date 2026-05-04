@@ -22,7 +22,7 @@ use crate::backend::{
 use crate::config::EmbeddingMemoryMode;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
-    resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase, InferenceTaskId,
+    resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase,
     OptionCompatibilityDiagnostic, OptionSupportState,
 };
 use crate::process::ProcessSpawner;
@@ -1289,11 +1289,19 @@ impl InferenceGateway {
                     option_diagnostics,
                 })
             }
-            InferenceExecutionInput::AudioTranscription { .. } => Err(GatewayError::Validation(
-                InferenceExecutionRequestValidationError::UnsupportedTask {
-                    task_id: InferenceTaskId::AudioTranscription,
-                },
-            )),
+            InferenceExecutionInput::AudioTranscription { request } => {
+                let backend_key = canonical_backend_key(&self.current_backend_name().await);
+                let option_diagnostics = extra_option_diagnostics(
+                    &request.extra_options,
+                    Some(&backend_key),
+                    "audio_transcription.extra_options",
+                );
+                let result = self.transcribe_audio(request).await?;
+                Ok(InferenceExecutionResult::AudioTranscription {
+                    result,
+                    option_diagnostics,
+                })
+            }
         }
     }
 

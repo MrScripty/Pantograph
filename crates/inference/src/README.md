@@ -144,11 +144,10 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   compatibility must use resolved local package facts plus backend checks.
 - Embeddings are normal task evidence in `model_contracts.rs`; dedicated
   embedding runtime state remains a backend-local residency strategy.
-- Audio transcription now has stable typed request/result DTOs, but remains a
-  contract-only task until a backend slice explicitly wires execution support
-  through typed request dispatch and updates capability facts. The backend trait
-  and gateway expose a speech-to-text method that fails closed by default so
-  implementers have one typed boundary to fill in later slices.
+- Audio transcription now has stable typed request/result DTOs and executable
+  typed gateway dispatch. The backend trait exposes a speech-to-text method
+  that fails closed by default, while implemented backends opt into the typed
+  boundary explicitly.
 - PyTorch audio transcription currently accepts only encoded in-memory audio at
   the backend edge. `audio_ref` resolution remains host-owned so artifact
   lookup and media payload handling do not move into the inference crate.
