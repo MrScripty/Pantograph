@@ -1873,6 +1873,10 @@ Roadmap registry tasks for image understanding, video understanding, and
 multimodal generation now have guardrail coverage proving their task/request
 contracts remain non-executable and typed request validation rejects them before
 any backend/input-kind dispatch.
+Public inference contract JSON keys now have guardrail coverage against
+scheduler-policy terminology such as admission, reservation, priority,
+eviction, scheduler-policy, and selected-best-backend in representative
+runtime, lifecycle, capability, and model-source DTOs.
 
 ### Milestone 11: Canonical Workflow Node Migration
 

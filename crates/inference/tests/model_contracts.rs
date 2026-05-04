@@ -2,17 +2,19 @@ use std::collections::BTreeMap;
 
 use inference::{
     default_task_registry_entries, normalize_modality_label, normalize_task_label,
-    resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, BackendHintLabel,
-    GenerationOptionSource, GenerationOptions, InferenceLifecyclePhase, InferenceModality,
-    InferenceTaskId, ModelArtifactKind, ModelExecutionDescriptor, ModelExecutionStorageKind,
-    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
-    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
-    ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy, ModelPackageDiagnostic,
-    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy,
-    ModelStorageKind, ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
-    PackageFactStatus, ProcessorComponentKind, PumasModelRef, ResolvedModelPackageFacts,
-    ResolvedModelSource, ResolvedModelSourceKind, SupportTier, TaskEvidence, TaskExecutionBehavior,
-    TaskFamily, TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
+    resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, BackendCapabilityFacts,
+    BackendHintLabel, BackendTaskCapability, GenerationOptionSource, GenerationOptions,
+    InferenceLifecyclePhase, InferenceModality, InferenceRequestLifecycleEvent,
+    InferenceRequestLifecycleEventKind, InferenceTaskId, InferenceUsage, ModelArtifactKind,
+    ModelExecutionDescriptor, ModelExecutionStorageKind, ModelExecutionValidationState,
+    ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+    ModelLibraryUpdateFeed, ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy,
+    ModelPackageDiagnostic, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
+    ModelRemoteCodePolicy, ModelStorageKind, ModelValidationState, OptionCompatibilityDiagnostic,
+    OptionSupportState, PackageFactStatus, ProcessorComponentKind, PumasModelRef,
+    ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
+    RuntimeLifecycleSnapshot, SupportTier, TaskEvidence, TaskExecutionBehavior, TaskFamily,
+    TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
     MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
@@ -127,6 +129,116 @@ fn remote_search_hints_are_not_executable_guarantees() {
     assert!(compatible_engines
         .iter()
         .any(|engine| engine.as_str() == Some("vllm")));
+}
+
+#[test]
+fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
+    let lifecycle = RuntimeLifecycleSnapshot {
+        runtime_id: Some("runtime.llama_cpp".to_string()),
+        runtime_instance_id: Some("runtime.llama_cpp.1".to_string()),
+        runtime_reused: Some(true),
+        active: true,
+        ..RuntimeLifecycleSnapshot::default()
+    };
+    let event = InferenceRequestLifecycleEvent {
+        request_id: Some("req-1".to_string()),
+        phase: InferenceLifecyclePhase::BackendExecution,
+        kind: InferenceRequestLifecycleEventKind::Completed,
+        occurred_at_ms: 42,
+        task_id: Some("text_generation".to_string()),
+        backend_key: Some("llama_cpp".to_string()),
+        runtime_id: Some("runtime.llama_cpp".to_string()),
+        runtime_instance_id: Some("runtime.llama_cpp.1".to_string()),
+        model_id: Some("pumas://models/tiny".to_string()),
+        usage: Some(InferenceUsage {
+            prompt_tokens: Some(2),
+            completion_tokens: Some(3),
+            total_tokens: Some(5),
+        }),
+        cache_handle_id: Some("kv-1".to_string()),
+        detail: None,
+        compatibility_report: None,
+        compatibility_issues: Vec::new(),
+        option_diagnostics: Vec::new(),
+    };
+    let capability_facts = BackendCapabilityFacts::from_tasks(vec![BackendTaskCapability::stable(
+        InferenceTaskId::TextGeneration,
+        vec![InferenceModality::Text],
+        vec![InferenceModality::Text],
+    )]);
+    let source = ResolvedModelSource {
+        source_contract_version: 1,
+        source_kind: ResolvedModelSourceKind::PumasResolved,
+        artifact_kind: ModelArtifactKind::Gguf,
+        entry_path: "models/tiny.gguf".to_string(),
+        storage_kind: ModelStorageKind::LibraryOwned,
+        validation_state: ModelValidationState::Valid,
+        model_ref: Some(PumasModelRef {
+            model_id: "pumas://models/tiny".to_string(),
+            revision: None,
+            selected_artifact_id: Some("gguf".to_string()),
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        }),
+        repo_id: None,
+        revision: None,
+        selected_files: Vec::new(),
+        companion_artifacts: Vec::new(),
+        diagnostics: Vec::new(),
+    };
+
+    for (name, value) in [
+        (
+            "runtime_lifecycle_snapshot",
+            serde_json::to_value(lifecycle).expect("encode lifecycle"),
+        ),
+        (
+            "inference_request_lifecycle_event",
+            serde_json::to_value(event).expect("encode lifecycle event"),
+        ),
+        (
+            "backend_capability_facts",
+            serde_json::to_value(capability_facts).expect("encode capabilities"),
+        ),
+        (
+            "resolved_model_source",
+            serde_json::to_value(source).expect("encode source"),
+        ),
+    ] {
+        assert_json_keys_avoid_scheduler_policy_language(name, &value);
+    }
+}
+
+fn assert_json_keys_avoid_scheduler_policy_language(context: &str, value: &serde_json::Value) {
+    const FORBIDDEN_KEY_PARTS: &[&str] = &[
+        "admission",
+        "eviction",
+        "priority",
+        "reservation",
+        "scheduler_policy",
+        "selected_best_backend",
+    ];
+
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, nested) in map {
+                let normalized = key.to_ascii_lowercase();
+                for forbidden in FORBIDDEN_KEY_PARTS {
+                    assert!(
+                        !normalized.contains(forbidden),
+                        "{context} key '{key}' must stay factual and avoid scheduler policy term '{forbidden}'"
+                    );
+                }
+                assert_json_keys_avoid_scheduler_policy_language(context, nested);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                assert_json_keys_avoid_scheduler_policy_language(context, item);
+            }
+        }
+        _ => {}
+    }
 }
 
 #[test]
