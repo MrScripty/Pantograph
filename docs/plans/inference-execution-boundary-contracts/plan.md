@@ -3111,6 +3111,11 @@ Update during implementation:
   task evidence still flow to compatibility diagnostics, but a text request
   carrying embedding package facts fails during task validation with bounded
   request task, package task, and model identity.
+- 2026-05-04: Node-engine canonical `llm-inference` execution now has
+  consumer-boundary coverage proving forwarded Pumas package facts participate
+  in the same task validation. A text node carrying embedding package facts
+  emits package-resolution and task-validation lifecycle facts and never reaches
+  the mock backend.
 
 ## Commit Cadence Notes
 

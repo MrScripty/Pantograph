@@ -427,7 +427,7 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
     }));
     assert!(diagnostics.iter().any(|diagnostic| {
         diagnostic["option_path"] == serde_json::json!("cache.use_cache")
-            && diagnostic["state"] == serde_json::json!("unsupported")
+            && diagnostic["state"] == serde_json::json!("requires_backend_support")
     }));
 }
 
@@ -581,6 +581,84 @@ async fn test_canonical_llm_text_uses_typed_lifecycle_sink_extension() {
             && event.backend_key.as_deref() == Some("mock")
             && event.model_id.as_deref() == Some("typed-model")
     }));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_text_rejects_package_task_mismatch_before_backend() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("embedding package facts fixture");
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedTextBackend {
+            requests: requests.clone(),
+        }),
+        "mock",
+    ));
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let executor = CoreTaskExecutor::new()
+        .with_gateway(gateway)
+        .with_execution_id("exec-a".to_string());
+    let err = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect_err("text node should reject embedding package facts");
+
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Typed LLM inference failed"));
+            assert!(message.contains("TextGeneration"));
+            assert!(message.contains("Embedding"));
+            assert!(message.contains("embedding/qwen3/tiny-embedding-gguf"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+
+    assert!(
+        requests.lock().expect("requests lock").is_empty(),
+        "backend must not receive a request after package/task validation failure"
+    );
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 6);
+    assert!(events[..3].iter().all(|event| {
+        event.phase == InferenceLifecyclePhase::ModelPackageResolution
+            && event.model_id.as_deref() == Some("embedding/qwen3/tiny-embedding-gguf")
+    }));
+    assert!(events[3..].iter().all(|event| {
+        event.phase == InferenceLifecyclePhase::TaskValidation
+            && event.model_id.as_deref() == Some("embedding/qwen3/tiny-embedding-gguf")
+    }));
+    assert!(!events
+        .iter()
+        .any(|event| event.phase == InferenceLifecyclePhase::BackendExecution));
 }
 
 #[cfg(feature = "inference-nodes")]
