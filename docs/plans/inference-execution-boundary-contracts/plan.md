@@ -2287,7 +2287,12 @@ inference write ledger events directly.
   populate package facts consistently for every executable task.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
-  conflicts, requires-model-support, and requires-backend-support.
+  conflicts, requires-model-support, and requires-backend-support. Canonical
+  `llm-inference` request construction now projects non-null `kv_cache_in`
+  graph input and explicit `kv_cache_checkpoint_requested` task options into
+  typed cache generation intent, so the existing typed gateway option
+  diagnostics can report cache support without moving cache reuse, residency,
+  or scheduler decisions into inference.
 - [ ] Map non-generation task option support summaries into durable bounded
   metadata for embedding, rerank, image/video/audio, and KV-cache task options
   after those task option diagnostics are emitted by the corresponding typed

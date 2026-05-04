@@ -214,13 +214,14 @@ pub(crate) fn build_text_generation_execution_request(
         prompt.to_string()
     };
 
-    let generation_options = read_optional_input_value(inputs, "generation_options")
+    let mut generation_options = read_optional_input_value(inputs, "generation_options")
         .map(normalize_generation_options_value)
         .map(serde_json::from_value::<inference::GenerationOptions>)
         .transpose()
         .map_err(|error| {
             NodeEngineError::ExecutionFailed(format!("Invalid generation_options input: {error}"))
         })?;
+    apply_graph_cache_generation_options(inputs, &mut generation_options);
 
     let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
 
@@ -243,6 +244,40 @@ pub(crate) fn build_text_generation_execution_request(
         generation_options,
         extra_options: serde_json::Value::Null,
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn apply_graph_cache_generation_options(
+    inputs: &HashMap<String, serde_json::Value>,
+    generation_options: &mut Option<inference::GenerationOptions>,
+) {
+    if graph_cache_input_present(inputs) {
+        generation_options
+            .get_or_insert_with(inference::GenerationOptions::default)
+            .cache
+            .use_cache
+            .get_or_insert(true);
+    }
+
+    if read_bool_with_task_options(
+        inputs,
+        &[
+            "kv_cache_checkpoint_requested",
+            "kvCacheCheckpointRequested",
+        ],
+        "kv_cache_checkpoint_requested",
+    ) == Some(true)
+    {
+        generation_options
+            .get_or_insert_with(inference::GenerationOptions::default)
+            .cache
+            .kv_cache_checkpoint_requested = Some(true);
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn graph_cache_input_present(inputs: &HashMap<String, serde_json::Value>) -> bool {
+    read_optional_input_value(inputs, "kv_cache_in").is_some_and(|value| !value.is_null())
 }
 
 #[cfg(feature = "inference-nodes")]

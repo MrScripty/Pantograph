@@ -17,9 +17,9 @@ use futures_util::stream;
 use inference::backend::BackendStartOutcome;
 #[cfg(feature = "inference-nodes")]
 use inference::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
-    GenerationOptions, InferenceBackend, InferenceExecutionInput, InferenceLifecyclePhase,
-    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    BackendCapabilities, BackendConfig, BackendError, CacheGenerationOptions, ChatChunk,
+    EmbeddingResult, GenerationOptions, InferenceBackend, InferenceExecutionInput,
+    InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, InferenceTaskId, LengthGenerationOptions, ProcessSpawner,
     PumasModelRef, RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts,
     SamplingGenerationOptions,
@@ -98,6 +98,40 @@ fn test_build_text_generation_execution_request_preserves_canonical_inputs() {
         }
         other => panic!("unexpected input variant: {other:?}"),
     }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_text_generation_execution_request_projects_kv_cache_options() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "kv_cache_in".to_string(),
+        serde_json::json!({
+            "cache_id": "cache-1",
+            "backend_hint": "llama_cpp"
+        }),
+    );
+    inputs.insert(
+        "task_options".to_string(),
+        serde_json::json!({
+            "kv_cache_checkpoint_requested": true
+        }),
+    );
+
+    let request = build_text_generation_execution_request(&inputs)
+        .expect("kv cache request should build typed generation options");
+
+    assert_eq!(
+        request.generation_options,
+        Some(GenerationOptions {
+            cache: CacheGenerationOptions {
+                use_cache: Some(true),
+                kv_cache_checkpoint_requested: Some(true),
+            },
+            ..GenerationOptions::default()
+        })
+    );
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -334,6 +368,13 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
     inputs.insert("model_name".to_string(), serde_json::json!("typed-model"));
     inputs.insert(
+        "kv_cache_in".to_string(),
+        serde_json::json!({
+            "cache_id": "cache-1",
+            "backend_hint": "mock"
+        }),
+    );
+    inputs.insert(
         "generation_options".to_string(),
         serde_json::json!({
             "length": {"max_new_tokens": 16},
@@ -382,6 +423,10 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
     assert!(diagnostics.iter().any(|diagnostic| {
         diagnostic["option_path"] == serde_json::json!("length.max_new_tokens")
             && diagnostic["state"] == serde_json::json!("mapped")
+    }));
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic["option_path"] == serde_json::json!("cache.use_cache")
+            && diagnostic["state"] == serde_json::json!("unsupported")
     }));
 }
 
