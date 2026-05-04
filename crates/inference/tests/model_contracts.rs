@@ -38,6 +38,10 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
         include_str!("fixtures/inference_package_facts/hf_multimodal_processor_package_facts.json"),
     ),
     (
+        "safetensors_package_facts.json",
+        include_str!("fixtures/inference_package_facts/safetensors_package_facts.json"),
+    ),
+    (
         "diffusers_bundle_package_facts.json",
         include_str!("fixtures/inference_package_facts/diffusers_bundle_package_facts.json"),
     ),
@@ -89,8 +93,13 @@ fn package_fact_fixtures_decode_through_public_contracts() {
 }
 
 #[test]
-fn package_fact_fixtures_cover_diffusers_and_onnx_artifact_kinds() {
+fn package_fact_fixtures_cover_safetensors_diffusers_and_onnx_artifact_kinds() {
     for (fixture_name, expected_kind, expected_backend_hint) in [
+        (
+            "safetensors_package_facts.json",
+            ModelArtifactKind::Safetensors,
+            BackendHintLabel::Candle,
+        ),
         (
             "diffusers_bundle_package_facts.json",
             ModelArtifactKind::DiffusersBundle,

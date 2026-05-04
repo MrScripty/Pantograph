@@ -1015,8 +1015,9 @@ contracts/fixtures that decode the canonical Pumas full-detail producer shape
 and an embedded-runtime projection that derives `pumas_package_facts`
 technical-fit candidates from those facts. Remote MLX/vLLM search tags do not
 project into executable candidates. The executable package-fact fixture set now
-includes current-contract diffusers bundle and ONNX artifact cases, closing a
-previous Pantograph fixture gap against the Milestone 2 cross-repo review list.
+includes current-contract safetensors, diffusers bundle, and ONNX artifact
+cases, closing a previous Pantograph fixture gap against the Milestone 2
+cross-repo review list.
 Inference now exposes Pumas-aligned update feed and package-fact summary
 snapshot DTOs. Model-list cache and update-event consumption remain pending.
 The `puma-lib` model-list option cache now has a bounded

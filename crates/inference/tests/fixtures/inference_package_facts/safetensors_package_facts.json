@@ -1,0 +1,83 @@
+{
+  "package_facts_contract_version": 1,
+  "model_ref": {
+    "model_id": "embedding/example/tiny-safetensors",
+    "revision": "abc123",
+    "selected_artifact_id": "main",
+    "selected_artifact_path": "embedding/example/tiny-safetensors/model.safetensors"
+  },
+  "artifact": {
+    "artifact_kind": "safetensors",
+    "entry_path": "embedding/example/tiny-safetensors/model.safetensors",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "model.safetensors",
+      "config.json",
+      "tokenizer.json"
+    ],
+    "sibling_files": [
+      "README.md",
+      "model.safetensors",
+      "config.json",
+      "tokenizer.json"
+    ]
+  },
+  "components": [
+    {
+      "kind": "config",
+      "status": "present",
+      "relative_path": "config.json"
+    },
+    {
+      "kind": "weights",
+      "status": "present",
+      "relative_path": "model.safetensors"
+    },
+    {
+      "kind": "tokenizer",
+      "status": "present",
+      "relative_path": "tokenizer.json"
+    }
+  ],
+  "transformers": {
+    "config_status": "present",
+    "config_model_type": "bert",
+    "architectures": [
+      "BertModel"
+    ],
+    "torch_dtype": "float32",
+    "generation_config_status": "missing",
+    "source_repo_id": "org/tiny-safetensors",
+    "source_revision": "abc123",
+    "selected_files": [
+      "config.json"
+    ]
+  },
+  "task": {
+    "pipeline_tag": "feature-extraction",
+    "task_type_primary": "embedding",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "embedding"
+    ]
+  },
+  "generation_defaults": {
+    "status": "missing"
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "candle",
+      "transformers"
+    ],
+    "raw": [
+      "candle",
+      "transformers"
+    ]
+  }
+}
