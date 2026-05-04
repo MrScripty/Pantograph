@@ -3116,6 +3116,11 @@ Update during implementation:
   in the same task validation. A text node carrying embedding package facts
   emits package-resolution and task-validation lifecycle facts and never reaches
   the mock backend.
+- 2026-05-04: Node-engine canonical `llm-inference` execution now also covers
+  the successful package-facts path. Text package facts flow from graph inputs
+  into typed gateway lifecycle events, task-validation and backend-execution
+  compatibility summaries are emitted with package-derived model identity, and
+  package-resolution completion remains compatibility-summary free.
 
 ## Commit Cadence Notes
 

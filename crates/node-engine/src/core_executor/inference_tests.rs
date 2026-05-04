@@ -585,6 +585,112 @@ async fn test_canonical_llm_text_uses_typed_lifecycle_sink_extension() {
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_canonical_llm_text_with_package_facts_emits_compatibility_lifecycle() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("text package facts fixture");
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedTextBackend {
+            requests: requests.clone(),
+        }),
+        "mock",
+    ));
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("model_name".to_string(), serde_json::json!("typed-model"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let executor = CoreTaskExecutor::new()
+        .with_gateway(gateway)
+        .with_execution_id("exec-a".to_string());
+    let outputs = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect("text package facts should execute through typed lifecycle");
+
+    assert_eq!(
+        outputs.get("response").and_then(|value| value.as_str()),
+        Some("typed response")
+    );
+    assert_eq!(requests.lock().expect("requests lock").len(), 1);
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 9);
+    let package_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::ModelPackageResolution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("package resolution completion");
+    assert_eq!(
+        package_completed.model_id.as_deref(),
+        Some("llm/llama/tiny-gguf")
+    );
+    assert!(package_completed.compatibility_report.is_none());
+
+    let validation_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("task validation completion");
+    assert_eq!(
+        validation_completed.model_id.as_deref(),
+        Some("llm/llama/tiny-gguf")
+    );
+    assert!(validation_completed.compatibility_report.is_some());
+    assert!(validation_completed
+        .compatibility_issues
+        .iter()
+        .all(|issue| issue.model_id.as_deref() == Some("llm/llama/tiny-gguf")));
+
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion");
+    assert_eq!(
+        backend_completed.model_id.as_deref(),
+        Some("llm/llama/tiny-gguf")
+    );
+    assert!(backend_completed.compatibility_report.is_some());
+    assert!(backend_completed
+        .compatibility_issues
+        .iter()
+        .all(|issue| issue.model_id.as_deref() == Some("llm/llama/tiny-gguf")));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_canonical_llm_text_rejects_package_task_mismatch_before_backend() {
     let fixture = include_str!(
         "../../../inference/tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json"
