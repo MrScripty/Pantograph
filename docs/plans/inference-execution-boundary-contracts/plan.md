@@ -2758,7 +2758,10 @@ inference write ledger events directly.
   conversion, or terminal diagnostic append fails. Runtime unload failures now
   remain authoritative when keep-alive shutdown or capacity-rebalance lifecycle
   diagnostic appends are unavailable, including the runtime-load admission
-  error path used to surface capacity-rebalance unload failures.
+  error path used to surface capacity-rebalance unload failures. Frontend
+  workflow-service error parsing now has explicit coverage proving
+  `diagnostics_unavailable` links survive backend error envelopes even when no
+  diagnostic event id exists.
 - [ ] Keep prompts, chat messages, raw media, generated content, embeddings,
   token arrays, logits, tensors, Python kwargs, backend CLI flags, full local
   paths where stable ids exist, and unbounded stderr/stdout out of ledger
@@ -3503,6 +3506,10 @@ Update during implementation:
 - 2026-05-04: Closed Milestone 1 vocabulary checklist items that are now backed
   by the implementation strategy, raw-facts-versus-policy boundary language,
   and public inference DTO guardrail tests for scheduler-policy terminology.
+- 2026-05-04: Added frontend workflow-service error parsing coverage for
+  backend envelopes that carry `diagnostics_unavailable` without a diagnostic
+  event id, preserving the original error code/message while exposing the
+  diagnostics append failure link to callers.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are

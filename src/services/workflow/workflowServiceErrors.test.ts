@@ -63,6 +63,27 @@ test('normalizeWorkflowServiceError preserves backend code and details', () => {
   });
 });
 
+test('normalizeWorkflowServiceError preserves diagnostics unavailable links', () => {
+  const error = normalizeWorkflowServiceError(
+    JSON.stringify({
+      code: 'runtime_timeout',
+      message: 'model execution timed out',
+      diagnostics: {
+        workflow_run_id: 'run-timeout',
+        diagnostics_unavailable: 'diagnostics ledger append failed: database locked',
+      },
+    }),
+  );
+
+  assert.ok(error instanceof WorkflowServiceError);
+  assert.equal(error.code, 'runtime_timeout');
+  assert.deepEqual(error.diagnostics, {
+    workflow_run_id: 'run-timeout',
+    diagnostic_event_id: null,
+    diagnostics_unavailable: 'diagnostics ledger append failed: database locked',
+  });
+});
+
 test('normalizeWorkflowServiceError classifies non-envelope failures as transport errors', () => {
   const error = normalizeWorkflowServiceError(new Error('IPC disconnected'));
 
