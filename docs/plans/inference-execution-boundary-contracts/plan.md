@@ -2497,7 +2497,10 @@ drift back into inference.
   same implementation slice as native DTO changes when those bindings are
   public contract surface. Frontend workflow service and shared svelte-graph
   TypeScript `PortDefinition` types now mirror workflow-service
-  `inference_payloads`.
+  `inference_payloads`. Workflow-nodes canonical contract projection now
+  includes executable image-generation task metadata and prompt/results payload
+  annotations, and workflow-service registry coverage verifies the projected
+  payloads still round-trip without backend/runtime policy fields.
 - [x] Add tests proving scheduler/runtime-registry policy remains outside
   inference.
 - [ ] Update source READMEs and any ADR links affected by boundary changes.
@@ -3436,6 +3439,11 @@ Update during implementation:
   backend family, artifact kind, compatibility summary, and option support
   counts, while excluding prompt text, encoded image bytes, backend flags, and
   local paths.
+- 2026-05-04: Fixed descriptor drift after enabling executable
+  image-generation: `workflow-nodes` now includes image-generation in canonical
+  `llm-inference` task contracts, prompt input payloads, Pumas model-reference
+  payloads, and `results` output payloads, with workflow-service registry
+  projection coverage.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are

@@ -362,6 +362,10 @@ fn llm_input_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
                 ContractInferenceTaskId::ChatCompletion,
                 ContractInferenceExecutionInputKind::TextGeneration,
             ),
+            InferencePortPayloadContract::task_input(
+                ContractInferenceTaskId::ImageGeneration,
+                ContractInferenceExecutionInputKind::ImageGeneration,
+            ),
         ],
         "audio" => vec![InferencePortPayloadContract::task_input(
             ContractInferenceTaskId::AudioTranscription,
@@ -435,12 +439,20 @@ fn llm_output_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
             ContractInferenceTaskId::Embedding,
             ContractInferenceExecutionResultKind::Embedding,
         )],
-        "results" | "scores" | "top_document" | "top_score" => {
-            vec![InferencePortPayloadContract::task_output(
+        "results" => vec![
+            InferencePortPayloadContract::task_output(
                 ContractInferenceTaskId::Rerank,
                 ContractInferenceExecutionResultKind::Rerank,
-            )]
-        }
+            ),
+            InferencePortPayloadContract::task_output(
+                ContractInferenceTaskId::ImageGeneration,
+                ContractInferenceExecutionResultKind::ImageGeneration,
+            ),
+        ],
+        "scores" | "top_document" | "top_score" => vec![InferencePortPayloadContract::task_output(
+            ContractInferenceTaskId::Rerank,
+            ContractInferenceExecutionResultKind::Rerank,
+        )],
         _ => Vec::new(),
     }
 }
@@ -456,22 +468,24 @@ fn task_role_payloads(
         .collect()
 }
 
-fn llm_supported_task_ids() -> [ContractInferenceTaskId; 5] {
+fn llm_supported_task_ids() -> [ContractInferenceTaskId; 6] {
     [
         ContractInferenceTaskId::TextGeneration,
         ContractInferenceTaskId::ChatCompletion,
         ContractInferenceTaskId::Embedding,
         ContractInferenceTaskId::Rerank,
+        ContractInferenceTaskId::ImageGeneration,
         ContractInferenceTaskId::AudioTranscription,
     ]
 }
 
-fn llm_supported_registry_task_ids() -> [InferenceTaskId; 5] {
+fn llm_supported_registry_task_ids() -> [InferenceTaskId; 6] {
     [
         InferenceTaskId::TextGeneration,
         InferenceTaskId::ChatCompletion,
         InferenceTaskId::Embedding,
         InferenceTaskId::Rerank,
+        InferenceTaskId::ImageGeneration,
         InferenceTaskId::AudioTranscription,
     ]
 }
@@ -664,6 +678,12 @@ mod tests {
                 && task.result_kind == ContractInferenceExecutionResultKind::Rerank
         }));
         assert!(llm.inference_tasks.iter().any(|task| {
+            task.task_id == ContractInferenceTaskId::ImageGeneration
+                && task.input_kind == ContractInferenceExecutionInputKind::ImageGeneration
+                && task.result_kind == ContractInferenceExecutionResultKind::ImageGeneration
+                && task.execution_supported
+        }));
+        assert!(llm.inference_tasks.iter().any(|task| {
             task.task_id == ContractInferenceTaskId::AudioTranscription
                 && task.input_kind == ContractInferenceExecutionInputKind::AudioTranscription
                 && task.result_kind == ContractInferenceExecutionResultKind::AudioTranscription
@@ -714,6 +734,10 @@ mod tests {
             payload.task_id == ContractInferenceTaskId::TextGeneration
                 && payload.input_kind == Some(ContractInferenceExecutionInputKind::TextGeneration)
         }));
+        assert!(prompt.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::ImageGeneration
+                && payload.input_kind == Some(ContractInferenceExecutionInputKind::ImageGeneration)
+        }));
 
         let task_kind = llm
             .input(&port_id("task_kind").expect("task kind port id"))
@@ -756,6 +780,10 @@ mod tests {
             payload.task_id == ContractInferenceTaskId::Embedding
                 && payload.role == InferencePortPayloadRole::ModelReference
         }));
+        assert!(package_facts.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::ImageGeneration
+                && payload.role == InferencePortPayloadRole::ModelReference
+        }));
 
         let results = llm
             .output(&port_id("results").expect("results port id"))
@@ -763,6 +791,11 @@ mod tests {
         assert!(results.inference_payloads.iter().any(|payload| {
             payload.task_id == ContractInferenceTaskId::Rerank
                 && payload.result_kind == Some(ContractInferenceExecutionResultKind::Rerank)
+        }));
+        assert!(results.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::ImageGeneration
+                && payload.result_kind
+                    == Some(ContractInferenceExecutionResultKind::ImageGeneration)
         }));
 
         let usage = llm
