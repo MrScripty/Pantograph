@@ -222,6 +222,8 @@ pub(crate) fn build_text_generation_execution_request(
             NodeEngineError::ExecutionFailed(format!("Invalid generation_options input: {error}"))
         })?;
 
+    let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
+
     Ok(inference::InferenceExecutionRequest {
         request_id: None,
         task_id: text_generation_task_id(inputs)?,
@@ -231,7 +233,7 @@ pub(crate) fn build_text_generation_execution_request(
             &["model_name", "modelName", "model", "model_id", "modelId"],
         ),
         runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
-        resolved_model_package_facts: parse_resolved_model_package_facts(inputs),
+        resolved_model_package_facts,
         input: inference::InferenceExecutionInput::TextGeneration {
             prompt: Some(full_prompt),
             system_prompt,
@@ -357,10 +359,20 @@ fn parse_resolved_model_source_ref(
 #[cfg(feature = "inference-nodes")]
 fn parse_resolved_model_package_facts(
     inputs: &HashMap<String, serde_json::Value>,
-) -> Option<inference::ResolvedModelPackageFacts> {
-    read_optional_input_value(inputs, "resolved_model_package_facts")
-        .or_else(|| read_optional_input_value(inputs, "model_package_facts"))
-        .and_then(|value| serde_json::from_value(value).ok())
+) -> Result<Option<inference::ResolvedModelPackageFacts>> {
+    let Some((key, value)) = read_optional_input_value(inputs, "resolved_model_package_facts")
+        .map(|value| ("resolved_model_package_facts", value))
+        .or_else(|| {
+            read_optional_input_value(inputs, "model_package_facts")
+                .map(|value| ("model_package_facts", value))
+        })
+    else {
+        return Ok(None);
+    };
+
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(|error| NodeEngineError::ExecutionFailed(format!("Invalid {key} input: {error}")))
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -440,6 +452,8 @@ pub(crate) fn build_embedding_execution_request(
         ));
     }
 
+    let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
+
     Ok(inference::InferenceExecutionRequest {
         request_id: None,
         task_id: inference::InferenceTaskId::Embedding,
@@ -450,7 +464,7 @@ pub(crate) fn build_embedding_execution_request(
         )
         .filter(|model| !model.trim().is_empty()),
         runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
-        resolved_model_package_facts: parse_resolved_model_package_facts(inputs),
+        resolved_model_package_facts,
         input: inference::InferenceExecutionInput::Embedding {
             texts: vec![text.to_string()],
         },
@@ -571,13 +585,15 @@ pub(crate) fn build_rerank_execution_request(
     extra_settings.remove("gpu_layers");
     extra_settings.remove("context_length");
 
+    let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
+
     Ok(inference::InferenceExecutionRequest {
         request_id: None,
         task_id: inference::InferenceTaskId::Rerank,
         model_ref,
         model_name,
         runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
-        resolved_model_package_facts: parse_resolved_model_package_facts(inputs),
+        resolved_model_package_facts,
         input: inference::InferenceExecutionInput::Rerank {
             query: query.to_string(),
             documents,

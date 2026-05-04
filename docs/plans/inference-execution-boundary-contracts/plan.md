@@ -2657,6 +2657,10 @@ Update during implementation:
   inference inputs, and typed gateway lifecycle task-validation completion
   emits backend/model compatibility summaries without importing the diagnostics
   ledger or moving compatibility derivation into node-engine.
+- 2026-05-03: Node-engine canonical text, embedding, and rerank request builders
+  now reject malformed resolved Pumas package-facts payloads as execution input
+  errors instead of silently dropping them before inference compatibility
+  validation.
 - 2026-05-03: Added the first non-generation option diagnostics producer.
   Typed embedding and rerank lifecycle completion events now emit bounded
   option support summaries for backend extra-option keys and rerank controls,

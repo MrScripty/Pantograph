@@ -187,6 +187,29 @@ fn test_build_text_generation_execution_request_forwards_package_facts() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_text_generation_execution_request_rejects_malformed_package_facts() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::json!({
+            "contract_version": "pantograph.inference.package-facts.v1"
+        }),
+    );
+
+    let err = build_text_generation_execution_request(&inputs)
+        .expect_err("malformed package facts should fail explicitly");
+
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Invalid resolved_model_package_facts input"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_text_generation_execution_request_defaults_missing_task_kind_to_text_generation() {
     let mut inputs = HashMap::new();
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
