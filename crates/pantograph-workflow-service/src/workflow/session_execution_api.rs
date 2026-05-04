@@ -628,22 +628,25 @@ impl WorkflowService {
                 )?,
                 Err(error) => {
                     let error_text = sanitize_diagnostic_error_text(&error.to_string());
-                    self.record_scheduler_model_lifecycle_events_if_configured(
-                        SchedulerModelLifecycleEventRequest {
-                            session: &session,
-                            snapshot: run_snapshot.as_ref(),
-                            workflow_run_id: &workflow_run_id,
-                            workflow_semantic_version: &queued_workflow_semantic_version,
-                            selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
-                            required_backends: &required_backends,
-                            required_models: &required_models,
-                            transition: SchedulerModelLifecycleTransition::UnloadFailed,
-                            reason: Some("keep-alive disabled after run completion"),
-                            duration_ms: Some(runtime_unload_duration_ms),
-                            error: Some(error_text.as_str()),
-                            canonical_error_event_id: None,
-                        },
-                    )?
+                    let _diagnostic_result = self
+                        .record_scheduler_model_lifecycle_events_if_configured(
+                            SchedulerModelLifecycleEventRequest {
+                                session: &session,
+                                snapshot: run_snapshot.as_ref(),
+                                workflow_run_id: &workflow_run_id,
+                                workflow_semantic_version: &queued_workflow_semantic_version,
+                                selected_runtime_id: reservation_context
+                                    .selected_runtime_id
+                                    .as_deref(),
+                                required_backends: &required_backends,
+                                required_models: &required_models,
+                                transition: SchedulerModelLifecycleTransition::UnloadFailed,
+                                reason: Some("keep-alive disabled after run completion"),
+                                duration_ms: Some(runtime_unload_duration_ms),
+                                error: Some(error_text.as_str()),
+                                canonical_error_event_id: None,
+                            },
+                        );
                 }
             }
             runtime_unload_result?;

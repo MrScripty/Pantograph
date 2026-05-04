@@ -86,6 +86,20 @@ pub(in crate::workflow::tests) struct FailingRunWithPoisonedDiagnosticsHost {
     pub(in crate::workflow::tests) diagnostics_ledger: Arc<Mutex<SqliteDiagnosticsLedger>>,
 }
 
+pub(in crate::workflow::tests) struct FailingUnloadWithPoisonedDiagnosticsHost {
+    pub(in crate::workflow::tests) inner: MockWorkflowHost,
+    pub(in crate::workflow::tests) diagnostics_ledger: Arc<Mutex<SqliteDiagnosticsLedger>>,
+}
+
+fn poison_diagnostics_ledger(diagnostics_ledger: &Arc<Mutex<SqliteDiagnosticsLedger>>) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _guard = diagnostics_ledger
+            .lock()
+            .expect("diagnostics ledger lock should be available before poisoning");
+        panic!("poison diagnostics ledger for test");
+    }));
+}
+
 impl RecordingRuntimeHost {
     pub(in crate::workflow::tests) fn new(
         retention_hints: Arc<Mutex<Vec<WorkflowExecutionSessionRetentionHint>>>,
@@ -141,13 +155,22 @@ impl FailingRunWithPoisonedDiagnosticsHost {
     }
 
     fn poison_diagnostics_ledger(&self) {
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _guard = self
-                .diagnostics_ledger
-                .lock()
-                .expect("diagnostics ledger lock should be available before poisoning");
-            panic!("poison diagnostics ledger for test");
-        }));
+        poison_diagnostics_ledger(&self.diagnostics_ledger);
+    }
+}
+
+impl FailingUnloadWithPoisonedDiagnosticsHost {
+    pub(in crate::workflow::tests) fn new(
+        diagnostics_ledger: Arc<Mutex<SqliteDiagnosticsLedger>>,
+    ) -> Self {
+        Self {
+            inner: MockWorkflowHost::new(8, 1024),
+            diagnostics_ledger,
+        }
+    }
+
+    fn poison_diagnostics_ledger(&self) {
+        poison_diagnostics_ledger(&self.diagnostics_ledger);
     }
 }
 
@@ -493,6 +516,77 @@ impl WorkflowHost for FailingRunWithPoisonedDiagnosticsHost {
         self.poison_diagnostics_ledger();
         Err(WorkflowServiceError::InvalidRequest(
             "workflow execution failed".to_string(),
+        ))
+    }
+}
+
+#[async_trait]
+impl WorkflowHost for FailingUnloadWithPoisonedDiagnosticsHost {
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        self.inner.validate_workflow(workflow_id).await
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        self.inner.workflow_graph_fingerprint(workflow_id).await
+    }
+
+    async fn workflow_graph(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        self.inner.workflow_graph(workflow_id).await
+    }
+
+    async fn workflow_capabilities(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        self.inner.workflow_capabilities(workflow_id).await
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        self.inner.runtime_capabilities().await
+    }
+
+    async fn load_session_runtime(
+        &self,
+        session_id: &str,
+        workflow_id: &str,
+        usage_profile: Option<&str>,
+        retention_hint: WorkflowExecutionSessionRetentionHint,
+    ) -> Result<(), WorkflowServiceError> {
+        self.inner
+            .load_session_runtime(session_id, workflow_id, usage_profile, retention_hint)
+            .await
+    }
+
+    async fn run_workflow(
+        &self,
+        workflow_id: &str,
+        inputs: &[WorkflowPortBinding],
+        output_targets: Option<&[WorkflowOutputTarget]>,
+        run_options: WorkflowRunOptions,
+        run_handle: WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        self.inner
+            .run_workflow(workflow_id, inputs, output_targets, run_options, run_handle)
+            .await
+    }
+
+    async fn unload_session_runtime(
+        &self,
+        _session_id: &str,
+        _workflow_id: &str,
+        _reason: WorkflowExecutionSessionUnloadReason,
+    ) -> Result<(), WorkflowServiceError> {
+        self.poison_diagnostics_ledger();
+        Err(WorkflowServiceError::RuntimeNotReady(
+            "runtime unload failed".to_string(),
         ))
     }
 }

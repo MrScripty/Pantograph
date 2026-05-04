@@ -2788,6 +2788,10 @@ Update during implementation:
   preprocessing, postprocessing, and result projection when a matched lifecycle
   start supplies observed timing. Durationless lifecycle events without bounded
   diagnostics remain suppressed.
+- 2026-05-03: Workflow-session keep-alive-disabled unload failures now preserve
+  the original unload error when the secondary scheduler lifecycle diagnostic
+  append fails, preventing diagnostics ledger availability from replacing the
+  runtime failure returned to the caller.
 
 ## Commit Cadence Notes
 

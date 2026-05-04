@@ -1261,6 +1261,54 @@ async fn workflow_execution_session_preserves_run_error_when_execution_diagnosti
 }
 
 #[tokio::test]
+async fn workflow_execution_session_preserves_unload_error_when_unload_diagnostics_unavailable() {
+    let service = WorkflowService::with_max_sessions(2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let diagnostics_ledger = service
+        .diagnostics_ledger
+        .as_ref()
+        .expect("diagnostics ledger configured")
+        .clone();
+    let host = FailingUnloadWithPoisonedDiagnosticsHost::new(diagnostics_ledger);
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-unload-diagnostics-unavailable".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello"),
+                }],
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("workflow run should preserve unload failure");
+
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
+    assert!(error.message().contains("runtime unload failed"));
+    assert!(!error.message().contains("diagnostics ledger lock poisoned"));
+}
+
+#[tokio::test]
 async fn workflow_execution_session_runtime_load_failure_uses_phase_hint() {
     let host =
         FailingRuntimeLoadHost::with_phase_hint(WorkflowRuntimeDiagnosticPhaseHint::ManagedBinary);
