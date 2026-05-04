@@ -1137,6 +1137,10 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   lifecycle event coverage now also freezes snake_case phase/kind decoding,
   absent optional field defaults, empty diagnostics vectors, and additive
   unknown-field tolerance for diagnostics producers that evolve independently.
+  Public task request contract integration coverage now freezes snake_case
+  task/input/result/streaming/modality labels, default omission of empty
+  modality arrays, execution support preservation, and additive unknown-field
+  tolerance at the crate boundary.
 - [x] Add validation rules so internal code consumes parsed model/task types
   rather than raw strings or ad hoc JSON.
 - [x] Document that Python Transformers is one implementation of these

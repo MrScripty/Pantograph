@@ -18,8 +18,8 @@ use inference::{
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
     PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
     RuntimeLifecycleSnapshot, SupportTier, TaskEvidence, TaskExecutionBehavior, TaskFamily,
-    TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
-    MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskRequestContract,
+    TaskStreamingSupport, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
@@ -84,6 +84,13 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
         include_str!("fixtures/inference_package_facts/missing_tokenizer_package_facts.json"),
     ),
 ];
+
+fn package_fact_fixture(name: &str) -> &'static str {
+    PACKAGE_FACT_FIXTURES
+        .iter()
+        .find_map(|(fixture_name, raw)| (*fixture_name == name).then_some(*raw))
+        .unwrap_or_else(|| panic!("missing package fact fixture {name}"))
+}
 
 #[test]
 fn package_fact_fixtures_decode_through_public_contracts() {
@@ -873,6 +880,92 @@ fn task_request_contracts_publish_transformers_aligned_execution_matrix() {
 }
 
 #[test]
+fn task_request_contract_wire_shape_preserves_snake_case_defaults_and_unknown_fields() {
+    let encoded = serde_json::json!({
+        "task_id": "audio_transcription",
+        "input_kind": "audio_transcription",
+        "result_kind": "audio_transcription",
+        "execution_supported": true,
+        "streaming_support": "unsupported",
+        "required_input_modalities": ["audio"],
+        "output_modalities": ["text"],
+        "future_transformers_task_field": {
+            "ignored": true
+        }
+    });
+
+    let decoded: TaskRequestContract =
+        serde_json::from_value(encoded).expect("task request contract decodes");
+    let round_tripped = serde_json::to_value(&decoded).expect("task request contract encodes");
+
+    assert_eq!(decoded.task_id, InferenceTaskId::AudioTranscription);
+    assert_eq!(
+        decoded.input_kind,
+        InferenceExecutionInputKind::AudioTranscription
+    );
+    assert_eq!(
+        decoded.result_kind,
+        InferenceExecutionResultKind::AudioTranscription
+    );
+    assert!(decoded.execution_supported);
+    assert_eq!(decoded.streaming_support, TaskStreamingSupport::Unsupported);
+    assert_eq!(
+        decoded.required_input_modalities,
+        vec![InferenceModality::Audio]
+    );
+    assert_eq!(decoded.output_modalities, vec![InferenceModality::Text]);
+    assert_eq!(
+        round_tripped["task_id"],
+        serde_json::json!("audio_transcription")
+    );
+    assert_eq!(
+        round_tripped["input_kind"],
+        serde_json::json!("audio_transcription")
+    );
+    assert_eq!(
+        round_tripped["result_kind"],
+        serde_json::json!("audio_transcription")
+    );
+    assert_eq!(
+        round_tripped["streaming_support"],
+        serde_json::json!("unsupported")
+    );
+    assert_eq!(
+        round_tripped["required_input_modalities"][0],
+        serde_json::json!("audio")
+    );
+    assert_eq!(
+        round_tripped["output_modalities"][0],
+        serde_json::json!("text")
+    );
+    assert!(round_tripped
+        .get("future_transformers_task_field")
+        .is_none());
+
+    let minimal = TaskRequestContract {
+        task_id: InferenceTaskId::TextGeneration,
+        input_kind: InferenceExecutionInputKind::TextGeneration,
+        result_kind: InferenceExecutionResultKind::TextGeneration,
+        execution_supported: true,
+        streaming_support: TaskStreamingSupport::BackendDependent,
+        required_input_modalities: Vec::new(),
+        output_modalities: Vec::new(),
+    };
+    let minimal_encoded = serde_json::to_value(&minimal).expect("minimal contract encodes");
+
+    assert_eq!(
+        minimal_encoded["task_id"],
+        serde_json::json!("text_generation")
+    );
+    assert_eq!(
+        minimal_encoded["streaming_support"],
+        serde_json::json!("backend_dependent")
+    );
+    assert!(minimal_encoded.get("required_input_modalities").is_none());
+    assert!(minimal_encoded.get("output_modalities").is_none());
+}
+
+#[test]
 fn task_registry_labels_normalize_without_leaking_backend_policy() {
     assert_eq!(normalize_task_label(" text-generation "), "text_generation");
     assert_eq!(
@@ -1165,8 +1258,10 @@ fn assert_diagnostic_code(diagnostics: &[ModelPackageDiagnostic], expected: &str
 
 #[test]
 fn generation_defaults_preserve_raw_pumas_defaults() {
-    let facts: ResolvedModelPackageFacts =
-        serde_json::from_str(PACKAGE_FACT_FIXTURES[2].1).expect("decode hf transformers fixture");
+    let facts: ResolvedModelPackageFacts = serde_json::from_str(package_fact_fixture(
+        "hf_transformers_text_generation_package_facts.json",
+    ))
+    .expect("decode hf transformers fixture");
 
     assert_eq!(facts.generation_defaults.status, PackageFactStatus::Present);
     assert_eq!(
