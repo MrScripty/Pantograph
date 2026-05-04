@@ -2473,6 +2473,10 @@ drift back into inference.
   graph registry conversion now preserves canonical port `inference_payloads`
   and reverse `PortDefinition` contract projection keeps those payloads intact;
   the frontend/shared graph types expose the append-only payload contract.
+  Node-engine canonical `llm-inference` rerank execution now projects typed
+  option diagnostics onto the existing `diagnostics` graph output like text,
+  embedding, and audio paths, without copying query or document payloads into
+  diagnostic metadata.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer

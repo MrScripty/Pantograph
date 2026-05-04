@@ -550,8 +550,11 @@ pub(crate) async fn execute_rerank_inference(
             NodeEngineError::ExecutionFailed(format!("Typed rerank inference failed: {error}"))
         })?;
     ensure_typed_result_kind(&result, expected_result_kind, "Typed rerank inference")?;
-    let response = match result {
-        inference::InferenceExecutionResult::Rerank { response, .. } => response,
+    let (response, option_diagnostics) = match result {
+        inference::InferenceExecutionResult::Rerank {
+            response,
+            option_diagnostics,
+        } => (response, option_diagnostics),
         other => {
             return Err(NodeEngineError::ExecutionFailed(format!(
                 "Typed rerank inference returned unexpected result: {other:?}"
@@ -602,6 +605,10 @@ pub(crate) async fn execute_rerank_inference(
         top_score
             .map(|value| serde_json::json!(value))
             .unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert(
+        "diagnostics".to_string(),
+        serde_json::to_value(option_diagnostics).unwrap_or(serde_json::Value::Null),
     );
     Ok(outputs)
 }

@@ -1697,6 +1697,24 @@ async fn test_canonical_llm_rerank_uses_typed_gateway_boundary() {
     assert_eq!(outputs.get("top_document"), Some(&serde_json::json!("b")));
     assert_eq!(outputs.get("top_score"), Some(&serde_json::json!(0.9_f32)));
     assert_eq!(outputs.get("scores"), Some(&serde_json::json!([0.9_f32])));
+    let diagnostics = outputs
+        .get("diagnostics")
+        .and_then(|value| value.as_array())
+        .expect("rerank diagnostics output should be an array");
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .get("option_path")
+                .and_then(|value| value.as_str())
+                == Some("rerank.top_n")
+        }),
+        "rerank top_n option diagnostic should be projected to graph outputs"
+    );
+    let diagnostics_json =
+        serde_json::to_string(diagnostics).expect("diagnostics should serialize");
+    assert!(!diagnostics_json.contains("search"));
+    assert!(!diagnostics_json.contains("\"a\""));
+    assert!(!diagnostics_json.contains("\"b\""));
     let captured = rerank_requests.lock().expect("rerank requests lock");
     assert_eq!(captured.len(), 1);
     assert_eq!(captured[0].model, "/tmp/reranker.gguf");
