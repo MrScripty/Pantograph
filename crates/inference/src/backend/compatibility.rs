@@ -847,6 +847,28 @@ mod tests {
     }
 
     #[test]
+    fn hf_candle_embedding_fixture_matches_declared_backend_source() {
+        let package = fixture(include_str!(
+            "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+        ));
+        let task = embedding_task();
+        let report = backend_for_embedding_source(
+            ModelArtifactKind::HfCompatibleDirectory,
+            BackendHintLabel::Candle,
+        )
+        .check_model_compatibility(
+            Some("candle"),
+            BackendCompatibilityRequest::new(&task, &package),
+        );
+
+        assert!(report.compatible, "unexpected issues: {:?}", report.issues);
+        assert_eq!(report.task, BackendCompatibilityStatus::Supported);
+        assert_eq!(report.model_source, BackendCompatibilityStatus::Supported);
+        assert_eq!(report.preprocessing, BackendCompatibilityStatus::Supported);
+        assert!(report.issues.is_empty());
+    }
+
+    #[test]
     fn rejects_unsupported_requested_options() {
         let package = fixture(include_str!(
             "../../tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"

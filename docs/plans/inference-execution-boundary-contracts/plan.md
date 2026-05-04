@@ -1027,6 +1027,10 @@ without inventing a generic image-processor fact.
 Backend compatibility coverage also verifies the standalone safetensors and
 ONNX embedding package-fact fixtures match declared backend source capabilities
 and required tokenizer preprocessing through the same factual report path.
+The HF-compatible Candle embedding package-fact fixture is now registered in
+the public fixture set, resolves to the canonical embedding task, projects into
+a backend-loadable source, and passes static Candle backend compatibility
+without invoking real model loading.
 Inference now exposes Pumas-aligned update feed and package-fact summary
 snapshot DTOs. Model-list cache and update-event consumption remain pending.
 The `puma-lib` model-list option cache now has a bounded

@@ -34,6 +34,10 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
         ),
     ),
     (
+        "hf_candle_embedding_package_facts.json",
+        include_str!("fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"),
+    ),
+    (
         "hf_multimodal_processor_package_facts.json",
         include_str!("fixtures/inference_package_facts/hf_multimodal_processor_package_facts.json"),
     ),
@@ -144,6 +148,41 @@ fn package_fact_fixtures_cover_safetensors_diffusers_and_onnx_artifact_kinds() {
 }
 
 #[test]
+fn hf_candle_embedding_fixture_projects_to_backend_load_source() {
+    let raw = PACKAGE_FACT_FIXTURES
+        .iter()
+        .find_map(|(name, raw)| (*name == "hf_candle_embedding_package_facts.json").then_some(*raw))
+        .expect("HF Candle embedding fixture should be registered");
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(raw).expect("decode package facts fixture");
+    let source = ResolvedModelSource::from_package_facts(&facts);
+
+    assert!(facts.uses_current_contract());
+    assert_eq!(
+        facts.package_facts_contract_version,
+        MODEL_PACKAGE_FACTS_CONTRACT_VERSION
+    );
+    assert_eq!(
+        facts.artifact.artifact_kind,
+        ModelArtifactKind::HfCompatibleDirectory
+    );
+    assert_eq!(facts.task.task_type_primary.as_deref(), Some("embedding"));
+    assert!(facts
+        .backend_hints
+        .accepted
+        .contains(&BackendHintLabel::Candle));
+    assert_eq!(
+        source.artifact_kind,
+        ModelArtifactKind::HfCompatibleDirectory
+    );
+    assert_eq!(source.model_ref.as_ref(), Some(&facts.model_ref));
+    assert!(
+        source.validate_for_backend_load().is_ok(),
+        "HF Candle embedding fixture should project into backend-loadable package facts"
+    );
+}
+
+#[test]
 fn package_fact_fixtures_resolve_task_evidence_through_registry() {
     for (fixture_name, expected_task_id) in [
         (
@@ -157,6 +196,10 @@ fn package_fact_fixtures_resolve_task_evidence_through_registry() {
         (
             "hf_transformers_text_generation_package_facts.json",
             InferenceTaskId::TextGeneration,
+        ),
+        (
+            "hf_candle_embedding_package_facts.json",
+            InferenceTaskId::Embedding,
         ),
         (
             "hf_multimodal_processor_package_facts.json",
