@@ -1101,6 +1101,98 @@ async fn test_canonical_llm_embedding_uses_typed_gateway_boundary() {
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_canonical_llm_embedding_with_package_facts_emits_compatibility_lifecycle() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("embedding package facts fixture");
+    let embedding_requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedEmbeddingBackend {
+            embedding_requests: embedding_requests.clone(),
+        }),
+        "mock",
+    ));
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));
+    inputs.insert("text".to_string(), serde_json::json!("hello"));
+    inputs.insert("model".to_string(), serde_json::json!("embed-model"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let executor = CoreTaskExecutor::new()
+        .with_gateway(gateway)
+        .with_execution_id("exec-a".to_string());
+    let outputs = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect("embedding package facts should execute through typed lifecycle");
+
+    assert_eq!(
+        outputs.get("embedding"),
+        Some(&serde_json::json!([0.25, 0.5, 0.75]))
+    );
+    assert_eq!(
+        embedding_requests
+            .lock()
+            .expect("embedding requests lock")
+            .len(),
+        1
+    );
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 9);
+    let validation_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("task validation completion");
+    assert_eq!(
+        validation_completed.model_id.as_deref(),
+        Some("embedding/qwen3/tiny-embedding-gguf")
+    );
+    assert!(validation_completed.compatibility_report.is_some());
+
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion");
+    assert_eq!(
+        backend_completed.model_id.as_deref(),
+        Some("embedding/qwen3/tiny-embedding-gguf")
+    );
+    assert!(backend_completed.compatibility_report.is_some());
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_canonical_llm_feature_extraction_alias_dispatches_to_embedding_handler() {
     let mut inputs = HashMap::new();
     inputs.insert(

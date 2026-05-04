@@ -3137,6 +3137,11 @@ Update during implementation:
   into typed gateway lifecycle events, task-validation and backend-execution
   compatibility summaries are emitted with package-derived model identity, and
   package-resolution completion remains compatibility-summary free.
+- 2026-05-04: Node-engine canonical embedding execution now has matching
+  package-facts lifecycle coverage. Embedding package facts flow from graph
+  inputs through typed gateway execution, and task-validation plus
+  backend-execution lifecycle events carry compatibility summaries with the
+  package-derived embedding model id.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are
