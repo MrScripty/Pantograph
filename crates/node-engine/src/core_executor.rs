@@ -15,7 +15,8 @@ use async_trait::async_trait;
 use inference::{
     InferenceExecutionInputKind, InferenceGateway, InferenceLifecyclePhase,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink,
+    InferenceRequestLifecycleEventSink, InferenceTaskId, OptionCompatibilityDiagnostic,
+    OptionSupportState,
 };
 
 use crate::engine::TaskExecutor;
@@ -435,6 +436,8 @@ fn reject_contract_only_inference_task(
         entry.canonical_label(),
         contract.input_kind.canonical_label()
     );
+    let option_diagnostics =
+        contract_only_task_option_diagnostics(inputs, entry.task_id.clone(), backend_key);
     record_task_validation_failure_lifecycle(
         extensions,
         task_id,
@@ -443,9 +446,100 @@ fn reject_contract_only_inference_task(
         backend_key,
         inference_model_id_from_inputs(inputs),
         message.clone(),
+        option_diagnostics,
     );
 
     Err(NodeEngineError::ExecutionFailed(message))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn contract_only_task_option_diagnostics(
+    inputs: &HashMap<String, serde_json::Value>,
+    task_id: InferenceTaskId,
+    backend_key: Option<&str>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    match task_id {
+        InferenceTaskId::VideoUnderstanding => {
+            video_understanding_task_option_diagnostics(inputs, backend_key)
+        }
+        _ => Vec::new(),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn video_understanding_task_option_diagnostics(
+    inputs: &HashMap<String, serde_json::Value>,
+    backend_key: Option<&str>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    let mut diagnostics = Vec::new();
+    push_video_understanding_option_diagnostic(
+        inputs,
+        &mut diagnostics,
+        backend_key,
+        "video_understanding.frame_sample_rate",
+        &[
+            "frame_sample_rate",
+            "frameSampleRate",
+            "sample_rate",
+            "sampleRate",
+        ],
+    );
+    push_video_understanding_option_diagnostic(
+        inputs,
+        &mut diagnostics,
+        backend_key,
+        "video_understanding.max_frames",
+        &["max_frames", "maxFrames"],
+    );
+    push_video_understanding_option_diagnostic(
+        inputs,
+        &mut diagnostics,
+        backend_key,
+        "video_understanding.start_time_seconds",
+        &["start_time_seconds", "startTimeSeconds"],
+    );
+    push_video_understanding_option_diagnostic(
+        inputs,
+        &mut diagnostics,
+        backend_key,
+        "video_understanding.end_time_seconds",
+        &["end_time_seconds", "endTimeSeconds"],
+    );
+    diagnostics
+}
+
+#[cfg(feature = "inference-nodes")]
+fn push_video_understanding_option_diagnostic(
+    inputs: &HashMap<String, serde_json::Value>,
+    diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
+    backend_key: Option<&str>,
+    option_path: &str,
+    aliases: &[&str],
+) {
+    if !task_option_present(inputs, aliases) {
+        return;
+    }
+
+    diagnostics.push(OptionCompatibilityDiagnostic {
+        option_path: option_path.to_string(),
+        state: OptionSupportState::BackendUnavailable,
+        backend_key: backend_key.map(ToOwned::to_owned),
+        message: Some(
+            "video_understanding is contract-only at this execution boundary; option support is deferred to an executable video backend"
+                .to_string(),
+        ),
+    });
+}
+
+#[cfg(feature = "inference-nodes")]
+fn task_option_present(inputs: &HashMap<String, serde_json::Value>, aliases: &[&str]) -> bool {
+    aliases.iter().any(|alias| {
+        inputs.get(*alias).is_some_and(|value| !value.is_null())
+            || inputs
+                .get("task_options")
+                .and_then(|task_options| task_options.get(*alias))
+                .is_some_and(|value| !value.is_null())
+    })
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -457,6 +551,7 @@ fn record_task_validation_failure_lifecycle(
     backend_key: Option<&str>,
     model_id: Option<String>,
     detail: String,
+    option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
 ) {
     let Some(sink) = extensions
         .get::<Arc<dyn InferenceRequestLifecycleEventSink>>(
@@ -475,6 +570,12 @@ fn record_task_validation_failure_lifecycle(
         (InferenceRequestLifecycleEventKind::Failed, Some(detail)),
         (InferenceRequestLifecycleEventKind::CleanupCompleted, None),
     ] {
+        let event_option_diagnostics = if matches!(kind, InferenceRequestLifecycleEventKind::Failed)
+        {
+            option_diagnostics.clone()
+        } else {
+            Vec::new()
+        };
         sink.record(InferenceRequestLifecycleEvent {
             request_id: request_id.clone(),
             phase: InferenceLifecyclePhase::TaskValidation,
@@ -492,7 +593,7 @@ fn record_task_validation_failure_lifecycle(
             detail,
             compatibility_report: None,
             compatibility_issues: Vec::new(),
-            option_diagnostics: Vec::new(),
+            option_diagnostics: event_option_diagnostics,
         });
     }
 }

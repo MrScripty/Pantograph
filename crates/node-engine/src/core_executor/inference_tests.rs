@@ -2138,6 +2138,13 @@ async fn test_canonical_llm_video_understanding_rejects_contract_only_with_lifec
             "model_id": "pumas://models/video-understanding"
         }),
     );
+    inputs.insert(
+        "task_options".to_string(),
+        serde_json::json!({
+            "max_frames": 16,
+            "frame_sample_rate": 2
+        }),
+    );
 
     let executor = CoreTaskExecutor::new().with_execution_id("exec-a".to_string());
     let err = executor
@@ -2174,10 +2181,23 @@ async fn test_canonical_llm_video_understanding_rejects_contract_only_with_lifec
         .detail
         .as_deref()
         .is_some_and(|detail| detail.contains("execution_supported=false")));
+    assert_eq!(events[1].option_diagnostics.len(), 2);
+    assert!(events[1].option_diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "video_understanding.max_frames"
+            && diagnostic.state == inference::OptionSupportState::BackendUnavailable
+            && diagnostic.backend_key.as_deref() == Some("vllm")
+    }));
+    assert!(events[1].option_diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "video_understanding.frame_sample_rate"
+            && diagnostic.state == inference::OptionSupportState::BackendUnavailable
+            && diagnostic.backend_key.as_deref() == Some("vllm")
+    }));
     assert_eq!(
         events[2].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
     );
+    assert!(events[0].option_diagnostics.is_empty());
+    assert!(events[2].option_diagnostics.is_empty());
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

@@ -2460,7 +2460,7 @@ inference write ledger events directly.
   option diagnostics now appear on task-validation completion as well as
   backend-execution completion so validation surfaces can report generation and
   cache option support before backend execution.
-- [ ] Map non-generation task option support summaries into durable bounded
+- [x] Map non-generation task option support summaries into durable bounded
   metadata for embedding, rerank, image/video/audio, and KV-cache task options
   after those task option diagnostics are emitted by the corresponding typed
   execution paths. Embedding/rerank/image-generation typed gateway diagnostics
@@ -2481,7 +2481,10 @@ inference write ledger events directly.
   diagnostics alongside embedding/rerank diagnostics. KV-cache task progress
   now carries bounded option diagnostics for truncate marker/token-position
   handling, and embedded-runtime maps those summaries into durable
-  option-support metadata. Video task-specific options remain open.
+  option-support metadata. Contract-only `video_understanding` task validation
+  now emits bounded backend-unavailable diagnostics for recognized video
+  sampling/window task options and embedded-runtime persists those option
+  support counts without storing raw video payloads.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup. Diagnostic-observed
@@ -3017,6 +3020,10 @@ Update during implementation:
   `llm-inference` dispatch path. Node-engine now accepts encoded audio or
   host-owned artifact refs, projects text/language/duration/segment outputs,
   and keeps raw audio payloads out of option diagnostics.
+- 2026-05-04: Added bounded contract-only `video_understanding` option
+  diagnostics for recognized video sampling/window task options, so failed
+  task-validation lifecycle facts expose backend-unavailable option support
+  summaries without adding a video backend or storing media payloads.
 - 2026-05-04: Added typed audio transcription lifecycle coverage proving
   backend-execution events carry canonical `audio_transcription` task ids,
   selected model ids, bounded extra-option diagnostics, and no raw audio

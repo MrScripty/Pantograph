@@ -193,7 +193,15 @@ fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure(
         ),
         compatibility_report: None,
         compatibility_issues: Vec::new(),
-        option_diagnostics: Vec::new(),
+        option_diagnostics: vec![inference::OptionCompatibilityDiagnostic {
+            option_path: "video_understanding.max_frames".to_string(),
+            state: inference::OptionSupportState::BackendUnavailable,
+            backend_key: Some("vllm".to_string()),
+            message: Some(
+                "video_understanding is contract-only at this execution boundary; option support is deferred to an executable video backend"
+                    .to_string(),
+            ),
+        }],
     };
 
     let request = inference_lifecycle_event_ledger_append_request(&context, &event)
@@ -216,6 +224,24 @@ fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure(
                 .is_some_and(|error| error.contains("execution_supported=false")));
         }
         other => panic!("expected node execution status payload, got {other:?}"),
+    }
+
+    let diagnostic_request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("contract-only task option diagnostics should map to durable diagnostic payload");
+    match diagnostic_request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.task_id, "video_understanding");
+            assert_eq!(payload.lifecycle_phase.as_deref(), Some("task_validation"));
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("vllm"));
+            assert_eq!(payload.option_support_counts.backend_unavailable, 1);
+            assert_eq!(payload.option_diagnostics.len(), 1);
+            assert_eq!(
+                payload.option_diagnostics[0].option_path,
+                "video_understanding.max_frames"
+            );
+            assert_eq!(payload.option_diagnostics[0].state, "backend_unavailable");
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }
 }
 
