@@ -151,7 +151,17 @@ impl CandleBackend {
                 "Candle staged loader does not execute custom model code".to_string(),
             ));
         }
-        if !has_present_tokenizer(package) {
+        if !has_present_component(package, ProcessorComponentKind::Config) {
+            return Err(BackendError::Config(
+                "Candle embedding package requires a present config component".to_string(),
+            ));
+        }
+        if !has_present_component(package, ProcessorComponentKind::Weights) {
+            return Err(BackendError::Config(
+                "Candle embedding package requires present safetensors weights".to_string(),
+            ));
+        }
+        if !has_present_component(package, ProcessorComponentKind::Tokenizer) {
             return Err(BackendError::Config(
                 "Candle embedding package requires a present tokenizer component".to_string(),
             ));
@@ -170,11 +180,14 @@ impl CandleBackend {
     }
 }
 
-fn has_present_tokenizer(package: &ResolvedModelPackageFacts) -> bool {
-    package.components.iter().any(|component| {
-        component.kind == ProcessorComponentKind::Tokenizer
-            && component.status == PackageFactStatus::Present
-    })
+fn has_present_component(
+    package: &ResolvedModelPackageFacts,
+    kind: ProcessorComponentKind,
+) -> bool {
+    package
+        .components
+        .iter()
+        .any(|component| component.kind == kind && component.status == PackageFactStatus::Present)
 }
 
 impl Default for CandleBackend {
@@ -414,15 +427,21 @@ mod tests {
     #[test]
     fn embedding_model_source_rejects_missing_tokenizer() {
         let mut value: serde_json::Value = serde_json::from_str(include_str!(
-            "../../tests/fixtures/inference_package_facts/missing_tokenizer_package_facts.json"
+            "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
         ))
         .expect("fixture json should decode");
-        value["task"] = serde_json::json!({
-            "pipeline_tag": "feature-extraction",
-            "task_type_primary": "embedding",
-            "input_modalities": ["text"],
-            "output_modalities": ["embedding"]
-        });
+        value["components"] = serde_json::json!([
+            {
+                "kind": "config",
+                "status": "present",
+                "relative_path": "config.json"
+            },
+            {
+                "kind": "weights",
+                "status": "present",
+                "relative_path": "model.safetensors"
+            }
+        ]);
         let package: ResolvedModelPackageFacts =
             serde_json::from_value(value).expect("fixture should decode");
 
@@ -432,6 +451,64 @@ mod tests {
         assert!(error
             .to_string()
             .contains("requires a present tokenizer component"));
+    }
+
+    #[test]
+    fn embedding_model_source_rejects_missing_config() {
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+        ))
+        .expect("fixture json should decode");
+        value["components"] = serde_json::json!([
+            {
+                "kind": "weights",
+                "status": "present",
+                "relative_path": "model.safetensors"
+            },
+            {
+                "kind": "tokenizer",
+                "status": "present",
+                "relative_path": "tokenizer.json"
+            }
+        ]);
+        let package: ResolvedModelPackageFacts =
+            serde_json::from_value(value).expect("fixture should decode");
+
+        let error = CandleBackend::embedding_model_source_from_package(&package)
+            .expect_err("Candle should require a present config");
+
+        assert!(error
+            .to_string()
+            .contains("requires a present config component"));
+    }
+
+    #[test]
+    fn embedding_model_source_rejects_missing_weights() {
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+        ))
+        .expect("fixture json should decode");
+        value["components"] = serde_json::json!([
+            {
+                "kind": "config",
+                "status": "present",
+                "relative_path": "config.json"
+            },
+            {
+                "kind": "tokenizer",
+                "status": "present",
+                "relative_path": "tokenizer.json"
+            }
+        ]);
+        let package: ResolvedModelPackageFacts =
+            serde_json::from_value(value).expect("fixture should decode");
+
+        let error = CandleBackend::embedding_model_source_from_package(&package)
+            .expect_err("Candle should require present safetensors weights");
+
+        assert!(error
+            .to_string()
+            .contains("requires present safetensors weights"));
     }
 
     #[test]

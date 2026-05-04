@@ -2176,6 +2176,10 @@ Update during implementation:
   present tokenizer, and no custom-code requirement; rejects
   GGUF/non-embedding/missing-tokenizer/custom-code packages; and still does not
   advertise executable model loading.
+- 2026-05-04: Tightened the staged Candle mapper to enforce all declared
+  package components for the first embedding slice: config, safetensors weights,
+  and tokenizer must be present before a Pumas package can map to
+  `ResolvedModelSource`.
 
 ### Milestone 13: Evaluate vLLM and MLX Roadmap Boundaries
 
