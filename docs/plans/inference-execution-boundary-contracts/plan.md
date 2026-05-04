@@ -2652,7 +2652,11 @@ inference write ledger events directly.
   embedded-runtime payload-hygiene regression now covers raw-looking rerank
   documents, embedding vectors, Python kwargs, backend CLI flags, and full local
   model paths in lifecycle detail, proving they are not copied into durable
-  inference diagnostic summary payloads.
+  inference diagnostic summary payloads. Durable inference option diagnostics
+  now drop producer message text for both typed inference and KV-cache progress
+  summaries, retaining bounded option path/state/backend keys and support
+  counts while closing a remaining channel for prompts, Python kwargs, backend
+  CLI flags, token arrays, logits, tensors, and local paths.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle

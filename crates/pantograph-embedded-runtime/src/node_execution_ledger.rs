@@ -918,7 +918,7 @@ fn kv_cache_option_diagnostic_summary(
         option_path: diagnostic.option_path.clone(),
         state: kv_cache_option_support_state_label(diagnostic.state).to_string(),
         backend_key: diagnostic.backend_key.clone(),
-        message: diagnostic.message.clone(),
+        message: None,
     }
 }
 
@@ -940,7 +940,7 @@ fn option_diagnostic_summary(
         option_path: diagnostic.option_path.clone(),
         state: option_support_state_label(diagnostic.state).to_string(),
         backend_key: diagnostic.backend_key.clone(),
-        message: diagnostic.message.clone(),
+        message: None,
     }
 }
 

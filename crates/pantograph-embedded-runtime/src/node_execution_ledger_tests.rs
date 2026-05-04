@@ -314,13 +314,19 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
             option_path: "sampling.temperature".to_string(),
             state: inference::OptionSupportState::Mapped,
             backend_key: Some("pytorch".to_string()),
-            message: Some("mapped to backend temperature".to_string()),
+            message: Some(
+                "mapped to backend temperature SECRET_PROMPT raw prompt --model /tmp/private/model.gguf"
+                    .to_string(),
+            ),
         },
         inference::OptionCompatibilityDiagnostic {
             option_path: "stopping.stop_strings".to_string(),
             state: inference::OptionSupportState::Unsupported,
             backend_key: Some("pytorch".to_string()),
-            message: Some("not mapped by this backend boundary".to_string()),
+            message: Some(
+                "not mapped by this backend boundary PYTHON_KWARGS {'trust_remote_code': true}"
+                    .to_string(),
+            ),
         },
     ];
     event.compatibility_report = Some(inference::InferenceCompatibilityReportSummary {
@@ -350,6 +356,12 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
 
     let request = inference_diagnostic_event_ledger_append_request(&context, &event)
         .expect("completed backend lifecycle with option diagnostics should map");
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("SECRET_PROMPT"));
+    assert!(!payload_json.contains("--model"));
+    assert!(!payload_json.contains("/tmp/private/model.gguf"));
+    assert!(!payload_json.contains("PYTHON_KWARGS"));
+    assert!(!payload_json.contains("trust_remote_code"));
 
     assert_eq!(request.node_id.as_deref(), Some("node-a"));
     assert_eq!(request.runtime_id.as_deref(), Some("pytorch.transformers"));
@@ -402,6 +414,10 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
                 "sampling.temperature"
             );
             assert_eq!(payload.option_diagnostics[0].state, "mapped");
+            assert!(payload
+                .option_diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.message.is_none()));
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }
@@ -932,7 +948,10 @@ fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
                         option_path: "kv_cache.token_position".to_string(),
                         state: node_engine::KvCacheOptionSupportState::Honored,
                         backend_key: Some("llamacpp".to_string()),
-                        message: Some("used as the truncation target".to_string()),
+                        message: Some(
+                            "used as the truncation target TOKEN_ARRAY [1,2,3] LOGITS [0.1,0.2] /tmp/private/cache.bin"
+                                .to_string(),
+                        ),
                     }],
                 },
             )),
@@ -940,6 +959,10 @@ fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
         },
     )
     .expect("kv cache progress should map");
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("TOKEN_ARRAY"));
+    assert!(!payload_json.contains("LOGITS"));
+    assert!(!payload_json.contains("/tmp/private/cache.bin"));
 
     assert_eq!(request.node_id.as_deref(), Some("node-a"));
     assert_eq!(request.runtime_id.as_deref(), Some("llamacpp"));
@@ -965,6 +988,7 @@ fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
                 "kv_cache.token_position"
             );
             assert_eq!(payload.option_diagnostics[0].state, "honored");
+            assert!(payload.option_diagnostics[0].message.is_none());
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }
