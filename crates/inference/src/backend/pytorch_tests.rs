@@ -419,6 +419,66 @@ fn test_pytorch_worker_generate_text_response_decodes_fixture() {
 }
 
 #[test]
+fn test_pytorch_worker_generate_text_success_response_returns_text() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-generate-ok",
+        "result": {
+            "text": "Generated through Transformers."
+        }
+    });
+
+    let text = PyTorchBackend::generate_text_from_worker_response(&response.to_string())
+        .expect("generate_text response decodes");
+
+    assert_eq!(text, "Generated through Transformers.");
+}
+
+#[test]
+fn test_pytorch_worker_generate_text_runtime_unavailable_normalizes_to_backend_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-generate-no-model",
+        "error": {
+            "kind": "runtime_unavailable",
+            "message": "No model loaded. Call load_model() first.",
+            "canonical_code": "pytorch_worker_generate_text_failed"
+        }
+    });
+
+    match PyTorchBackend::generate_text_from_worker_response(&response.to_string()) {
+        Err(BackendError::NotRunning(message)) => {
+            assert!(message.contains("pytorch_worker_generate_text_failed"));
+            assert!(message.contains("req-generate-no-model"));
+            assert!(message.contains("No model loaded"));
+        }
+        other => panic!("expected NotRunning error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_generate_text_failure_normalizes_to_inference_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-generate-failed",
+        "error": {
+            "kind": "generation_failed",
+            "message": "Transformers generation failed.",
+            "canonical_code": "pytorch_worker_generation_failed"
+        }
+    });
+
+    match PyTorchBackend::generate_text_from_worker_response(&response.to_string()) {
+        Err(BackendError::Inference(message)) => {
+            assert!(message.contains("pytorch_worker_generation_failed"));
+            assert!(message.contains("req-generate-failed"));
+            assert!(message.contains("Transformers generation failed"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
     let request = PyTorchBackend::generate_text_request(
         "Explain adapters.".to_string(),

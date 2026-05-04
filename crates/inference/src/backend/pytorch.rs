@@ -517,6 +517,19 @@ impl PyTorchBackend {
         }
     }
 
+    fn generate_text_from_worker_response(response_json: &str) -> Result<String, BackendError> {
+        let response: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
+            serde_json::from_str(response_json).map_err(|error| {
+                BackendError::Inference(format!(
+                    "Failed to decode PyTorch worker generate_text response: {error}"
+                ))
+            })?;
+        match response {
+            PyTorchWorkerResponse::Ok(success) => Ok(success.result.text),
+            PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
+        }
+    }
+
     fn validate_transformers_load_envelope(
         envelope: &PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
     ) -> Result<(), BackendError> {
@@ -1071,17 +1084,7 @@ impl PyTorchBackend {
                         e
                     ))
                 })?;
-                let response: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
-                    serde_json::from_str(&response_json).map_err(|e| {
-                        BackendError::Inference(format!(
-                            "Failed to decode PyTorch worker generate_text response: {}",
-                            e
-                        ))
-                    })?;
-                match response {
-                    PyTorchWorkerResponse::Ok(success) => Ok(success.result.text),
-                    PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
-                }
+                Self::generate_text_from_worker_response(&response_json)
             })
         })
         .await

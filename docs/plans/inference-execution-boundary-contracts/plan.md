@@ -1753,7 +1753,11 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   logic, but describe it as backend-local support rather than a public
   Pantograph model standard.
 - [ ] Normalize Transformers/Python errors into Pantograph backend errors and
-  runtime facts.
+  runtime facts. The non-streaming PyTorch generate-text worker response now
+  decodes through the same typed worker-response normalization pattern as model
+  load and stream setup: `runtime_unavailable` maps to `BackendError::NotRunning`,
+  `generation_failed` maps to `BackendError::Inference`, request ids and
+  canonical worker error codes are retained, and success returns generated text.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
