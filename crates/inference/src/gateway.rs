@@ -16,8 +16,8 @@ use tokio::sync::RwLock;
 
 use crate::backend::{
     canonical_backend_key, BackendCapabilities, BackendCompatibilityOptions,
-    BackendCompatibilityRequest, BackendConfig, BackendError, BackendInfo, BackendRegistry,
-    ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendCompatibilityRequest, BackendConfig, BackendDefaultStartMode, BackendError, BackendInfo,
+    BackendRegistry, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
@@ -450,6 +450,34 @@ impl InferenceGateway {
     /// List all available backends with their info
     pub fn available_backends(&self) -> Vec<BackendInfo> {
         self.registry.list()
+    }
+
+    /// Describe the currently active backend instance.
+    pub async fn current_backend_info(&self) -> BackendInfo {
+        let selected_name = self.current_backend_name().await;
+        let selected_backend_key = canonical_backend_key(&selected_name);
+        let registry_info = self
+            .registry
+            .list()
+            .into_iter()
+            .find(|info| canonical_backend_key(&info.backend_key) == selected_backend_key);
+        let backend = self.backend.read().await;
+
+        BackendInfo {
+            name: selected_name,
+            backend_key: selected_backend_key,
+            description: backend.description().to_string(),
+            capabilities: backend.capabilities(),
+            default_start_mode: registry_info
+                .as_ref()
+                .map(|info| info.default_start_mode)
+                .unwrap_or(BackendDefaultStartMode::Inference),
+            active: true,
+            available: true,
+            unavailable_reason: None,
+            can_install: registry_info.as_ref().is_some_and(|info| info.can_install),
+            runtime_binary_id: registry_info.and_then(|info| info.runtime_binary_id),
+        }
     }
 
     // ─── LIFECYCLE METHODS ──────────────────────────────────────────

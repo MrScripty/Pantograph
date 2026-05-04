@@ -84,7 +84,15 @@ impl WorkflowHost for EmbeddedWorkflowHost {
     ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
         let selected_backend_key =
             canonical_runtime_backend_key(&self.gateway.current_backend_name().await);
-        let available_backends = self.gateway.available_backends();
+        let mut available_backends = self.gateway.available_backends();
+        let current_backend = self.gateway.current_backend_info().await;
+        if let Some(existing) = available_backends.iter_mut().find(|backend| {
+            canonical_runtime_backend_key(&backend.backend_key) == selected_backend_key
+        }) {
+            *existing = current_backend;
+        } else {
+            available_backends.push(current_backend);
+        }
         let managed_binaries = inference::list_managed_binary_statuses(&self.app_data_dir)
             .map_err(|error| WorkflowServiceError::RuntimeNotReady(error.to_string()))?;
         let mut runtimes = runtime_capabilities::managed_binary_runtime_capabilities(

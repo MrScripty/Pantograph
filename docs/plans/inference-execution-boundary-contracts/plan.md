@@ -795,8 +795,10 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - Reason: the failure is in Candle runtime preflight availability
   (`response.blocking_runtime_issues` is not empty) and is outside the KV-cache
   progress/ledger option-diagnostics boundary touched by this slice.
-- Revisit trigger: inspect Candle runtime capability/preflight aliasing before
-  requiring full embedded-runtime suite success for inference diagnostics work.
+- Resolution: active backend capability projection now overlays the registry
+  factory row with `InferenceGateway::current_backend_info`, so host-injected
+  current backends are represented as available even when the compile-time
+  registry factory reports missing system prerequisites.
 
 ## Definition of Done
 
