@@ -2349,7 +2349,10 @@ inference write ledger events directly.
   or scheduler decisions into inference. Typed text gateway diagnostics now
   classify `cache.use_cache` as requiring backend/runtime cache support and
   `cache.kv_cache_checkpoint_requested` as mapped to Pantograph KV-cache
-  publication outside backend-native chat request fields.
+  publication outside backend-native chat request fields. Typed text generation
+  option diagnostics now appear on task-validation completion as well as
+  backend-execution completion so validation surfaces can report generation and
+  cache option support before backend execution.
 - [ ] Map non-generation task option support summaries into durable bounded
   metadata for embedding, rerank, image/video/audio, and KV-cache task options
   after those task option diagnostics are emitted by the corresponding typed

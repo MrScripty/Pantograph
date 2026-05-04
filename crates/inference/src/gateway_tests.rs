@@ -1060,6 +1060,30 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
     }
 
     let events = sink.events();
+    let completed_validation_event = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("completed validation event");
+    assert!(completed_validation_event
+        .option_diagnostics
+        .iter()
+        .any(
+            |diagnostic| diagnostic.option_path == "length.max_new_tokens"
+                && diagnostic.state == OptionSupportState::Mapped
+        ));
+    assert!(completed_validation_event
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.option_path == "sampling.seed"
+            && diagnostic.state == OptionSupportState::Unsupported));
+    assert!(completed_validation_event
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.option_path == "cache.use_cache"
+            && diagnostic.state == OptionSupportState::RequiresBackendSupport));
     let completed_backend_event = events
         .iter()
         .find(|event| {

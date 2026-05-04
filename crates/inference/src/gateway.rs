@@ -907,6 +907,13 @@ impl InferenceGateway {
         let compatibility_diagnostics = self
             .compatibility_diagnostics_for_request(&request, backend_key.as_deref())
             .await;
+        let mut validation_option_diagnostics =
+            compatibility_diagnostics.option_diagnostics.clone();
+        validation_option_diagnostics.extend(typed_request_option_diagnostics(
+            &request,
+            backend_key.as_deref(),
+        ));
+        dedupe_option_diagnostics(&mut validation_option_diagnostics);
         record_non_streaming_lifecycle_phase_result_with_diagnostics(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
@@ -917,7 +924,7 @@ impl InferenceGateway {
             runtime_instance_id.clone(),
             model_id.clone(),
             &Ok(()),
-            compatibility_diagnostics.option_diagnostics.clone(),
+            validation_option_diagnostics,
             compatibility_diagnostics.compatibility_report.clone(),
             compatibility_diagnostics.compatibility_issues.clone(),
         );
@@ -1161,7 +1168,7 @@ impl InferenceGateway {
             .compatibility_diagnostics_for_request(&request, backend_key.as_deref())
             .await;
         let request_option_diagnostics =
-            typed_non_generation_option_diagnostics(&request, backend_key.as_deref());
+            typed_request_option_diagnostics(&request, backend_key.as_deref());
         let mut validation_option_diagnostics =
             compatibility_diagnostics.option_diagnostics.clone();
         validation_option_diagnostics.extend(request_option_diagnostics.clone());
@@ -1661,6 +1668,19 @@ fn typed_text_generation_option_diagnostics(
     }
 
     diagnostics
+}
+
+fn typed_request_option_diagnostics(
+    request: &InferenceExecutionRequest,
+    backend_key: Option<&str>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    match &request.input {
+        InferenceExecutionInput::TextGeneration { .. } => typed_text_generation_option_diagnostics(
+            request.generation_options.as_ref(),
+            backend_key,
+        ),
+        _ => typed_non_generation_option_diagnostics(request, backend_key),
+    }
 }
 
 fn push_chat_cache_use_diagnostic(
