@@ -617,6 +617,41 @@ fn generation_options_group_transformers_aligned_request_fields() {
 }
 
 #[test]
+fn generation_options_reject_unscoped_backend_extension_keys() {
+    let options = GenerationOptions {
+        backend_extensions: BTreeMap::from([
+            (
+                "transformers:renormalize_logits".to_string(),
+                serde_json::json!(true),
+            ),
+            ("top_k".to_string(), serde_json::json!(40)),
+            ("llama.cpp:mirostat".to_string(), serde_json::json!(1)),
+            (":missing_scope".to_string(), serde_json::json!(true)),
+            ("missing_option:".to_string(), serde_json::json!(true)),
+        ]),
+        ..Default::default()
+    };
+
+    let diagnostics = options.backend_extension_scope_diagnostics();
+
+    assert_eq!(diagnostics.len(), 3);
+    assert!(diagnostics.iter().all(|diagnostic| {
+        diagnostic.state == OptionSupportState::Rejected && diagnostic.backend_key.is_none()
+    }));
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "backend_extensions.top_k"
+            && diagnostic.message.as_deref()
+                == Some("backend extension keys must be scoped as <backend-or-adapter>:<option>")
+    }));
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.option_path == "backend_extensions.:missing_scope"));
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.option_path == "backend_extensions.missing_option:"));
+}
+
+#[test]
 fn generation_option_precedence_resolves_model_workflow_runtime_and_request_layers() {
     let model_defaults = serde_json::json!({
         "max_new_tokens": 128,

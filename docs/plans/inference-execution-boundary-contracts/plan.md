@@ -1146,6 +1146,10 @@ Generation option contract tests now freeze the stable typed option groups
 versus backend-local `backend_extensions` escape hatches: extension keys are
 scoped as `<backend-or-adapter>:<option>`, missing option groups default, and
 unknown future groups are additive rather than public raw kwargs.
+`GenerationOptions::backend_extension_scope_diagnostics()` now enforces that
+stable scoping rule with bounded `OptionCompatibilityDiagnostic` entries,
+letting adapters reject unscoped backend extensions without interpreting them
+as canonical generation fields.
 Node-engine text/chat request construction now validates supplied `task_kind`,
 `taskKind`, `task_id`, and `taskId` labels through the inference task registry.
 Missing task labels still default to text generation for existing text nodes,

@@ -1397,6 +1397,28 @@ impl GenerationOptions {
         paths
     }
 
+    /// Return diagnostics for backend-extension keys that are not scoped.
+    ///
+    /// Extension keys are intentionally backend-local, but the scope itself is
+    /// part of the stable Pantograph wire contract so adapters can reject
+    /// foreign or malformed options explicitly.
+    #[must_use]
+    pub fn backend_extension_scope_diagnostics(&self) -> Vec<OptionCompatibilityDiagnostic> {
+        self.backend_extensions
+            .keys()
+            .filter(|key| !backend_extension_key_is_scoped(key))
+            .map(|key| OptionCompatibilityDiagnostic {
+                option_path: format!("backend_extensions.{key}"),
+                state: OptionSupportState::Rejected,
+                backend_key: None,
+                message: Some(
+                    "backend extension keys must be scoped as <backend-or-adapter>:<option>"
+                        .to_string(),
+                ),
+            })
+            .collect()
+    }
+
     /// Resolve generation options from layered defaults and request overrides.
     ///
     /// Precedence is model defaults, then workflow/node defaults, then runtime
@@ -1733,6 +1755,11 @@ fn push_requested_vec_option<T>(paths: &mut Vec<String>, option_path: &'static s
     if !value.is_empty() {
         paths.push(option_path.to_string());
     }
+}
+
+fn backend_extension_key_is_scoped(key: &str) -> bool {
+    key.split_once(':')
+        .is_some_and(|(scope, option)| !scope.trim().is_empty() && !option.trim().is_empty())
 }
 
 fn apply_vec_option<T: Clone>(
