@@ -730,6 +730,8 @@ pub struct InferenceRequestLifecycleEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_error_event_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility_report: Option<InferenceCompatibilityReportSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
@@ -2064,6 +2066,7 @@ mod tests {
             }),
             cache_handle_id: Some("kv-checkpoint-1".to_string()),
             detail: Some("stream dropped by consumer".to_string()),
+            canonical_error_event_id: Some("diagnostic-error-inference-1".to_string()),
             compatibility_report: Some(InferenceCompatibilityReportSummary {
                 status: "accepted".to_string(),
                 compatible: true,
@@ -2100,6 +2103,10 @@ mod tests {
         assert_eq!(
             encoded["cache_handle_id"],
             serde_json::json!("kv-checkpoint-1")
+        );
+        assert_eq!(
+            encoded["canonical_error_event_id"],
+            serde_json::json!("diagnostic-error-inference-1")
         );
         assert_eq!(
             encoded["compatibility_report"]["compatible"],

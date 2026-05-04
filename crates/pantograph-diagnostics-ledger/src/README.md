@@ -113,6 +113,9 @@ Failed `node.execution_status` payloads may also carry
 `canonical_error_event_id`; node-status projections preserve that link
 separately from `error_event_id`, which remains reserved for fatal
 node-scoped `diagnostic.error_occurred` rows projected directly as node status.
+Embedded inference lifecycle adapters should pass through directly-known
+canonical error links into node-status payloads rather than copying detailed
+inference failure text into a second canonical error event.
 When a secondary diagnostic append fails while handling an existing workflow or
 inference error, service layers should preserve the original error and expose a
 `diagnostics_unavailable` link instead of replacing the user-visible failure

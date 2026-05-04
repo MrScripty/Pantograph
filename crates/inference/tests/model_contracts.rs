@@ -310,6 +310,7 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
         }),
         cache_handle_id: Some("kv-1".to_string()),
         detail: None,
+        canonical_error_event_id: None,
         compatibility_report: None,
         compatibility_issues: Vec::new(),
         option_diagnostics: Vec::new(),

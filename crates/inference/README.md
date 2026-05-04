@@ -143,6 +143,9 @@ selection must use supported runtimes through Pumas model references.
   `InferenceExecutionResult` are the canonical task execution wire contracts.
   They use task ids and input/result tags from the task registry and keep
   backend-local extensions under typed generation options or `extra_options`.
+- `InferenceRequestLifecycleEvent` carries bounded lifecycle facts, including
+  direct `canonical_error_event_id` links when a caller already recorded the
+  detailed canonical diagnostic error elsewhere.
 - Stable generation behavior belongs in typed `GenerationOptions` groups.
   Backend-local generation escape hatches are limited to
   `backend_extensions` keys scoped as `<backend-or-adapter>:<option>`, and

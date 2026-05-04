@@ -2523,7 +2523,7 @@ inference write ledger events directly.
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
   validation phases are insufficient.
-- [ ] Preserve canonical error links from run terminal, node status, model
+- [x] Preserve canonical error links from run terminal, node status, model
   lifecycle, and inference lifecycle summaries where the direct causal event is
   known. Run terminal projection now carries `canonical_error_event_id` into
   run-list and run-detail `latest_error_event_id` without duplicating the
@@ -2531,8 +2531,10 @@ inference write ledger events directly.
   lifecycle failed transitions now do the same when they carry
   `canonical_error_event_id`. Node execution status payloads and projections
   now preserve `canonical_error_event_id` separately from direct node-scoped
-  `error_event_id`; inference lifecycle summary links remain open until a
-  direct causal error id is available on that producer DTO.
+  `error_event_id`. Inference request lifecycle events now expose an
+  append-only `canonical_error_event_id` field, and embedded-runtime lifecycle
+  ledger adapters pass it through to node-status payloads when a producer
+  already knows the direct causal error event.
 - [ ] Ensure ledger append failure returns or projects `diagnostics_unavailable`
   while preserving the original inference/preflight/execution error. Failed
   inference lifecycle detail is now sanitized and bounded before node-status
@@ -3031,6 +3033,10 @@ Update during implementation:
   payloads, node-status projections, workflow-service contracts, and frontend
   run-graph/diagnostics focus helpers while keeping direct node fatal
   `error_event_id` projections distinct.
+- 2026-05-04: Added append-only inference lifecycle canonical error links and
+  embedded-runtime pass-through into node-status diagnostics so lifecycle
+  summaries can point at directly-known `diagnostic.error_occurred` events
+  without duplicating error payloads.
 - 2026-05-04: Fixed a workflow-service issue found during full validation:
   edge-insert preview for canonical `llm-inference` could choose text-compatible
   configuration/context ports before the primary `prompt` port after

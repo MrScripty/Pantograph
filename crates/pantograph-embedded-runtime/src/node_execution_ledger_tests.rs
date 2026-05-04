@@ -138,6 +138,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         usage: None,
         cache_handle_id: None,
         detail: Some("backend failed".to_string()),
+        canonical_error_event_id: Some("diagnostic-error-inference-a".to_string()),
         compatibility_report: None,
         compatibility_issues: Vec::new(),
         option_diagnostics: Vec::new(),
@@ -163,6 +164,10 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
             assert_eq!(payload.status, NodeExecutionProjectionStatus::Failed);
             assert_eq!(payload.completed_at_ms, Some(123));
             assert_eq!(payload.error.as_deref(), Some("backend failed"));
+            assert_eq!(
+                payload.canonical_error_event_id.as_deref(),
+                Some("diagnostic-error-inference-a")
+            );
             assert_eq!(payload.task_id.as_deref(), Some("text_generation"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
         }
@@ -191,6 +196,7 @@ fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure(
             "Canonical inference task 'video_understanding' is contract-only at this execution boundary: task request contract has execution_supported=false for input kind 'video_understanding'."
                 .to_string(),
         ),
+        canonical_error_event_id: None,
         compatibility_report: None,
         compatibility_issues: Vec::new(),
         option_diagnostics: vec![inference::OptionCompatibilityDiagnostic {
@@ -284,6 +290,7 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         usage: None,
         cache_handle_id: None,
         detail: None,
+        canonical_error_event_id: None,
         compatibility_report: None,
         compatibility_issues: Vec::new(),
         option_diagnostics: Vec::new(),
@@ -1052,6 +1059,7 @@ fn inference_lifecycle_workflow_sink_records_failed_node_status_to_workflow_ledg
         inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Failed, 175);
     failed.request_id = Some("run-a:node-a:LLM".to_string());
     failed.detail = Some("backend failed".to_string());
+    failed.canonical_error_event_id = Some("diagnostic-error-inference-workflow".to_string());
     inference::InferenceRequestLifecycleEventSink::record(&sink, failed);
 
     let response = service
@@ -1074,6 +1082,10 @@ fn inference_lifecycle_workflow_sink_records_failed_node_status_to_workflow_ledg
         Some("pytorch")
     );
     assert_eq!(response.nodes[0].error.as_deref(), Some("backend failed"));
+    assert_eq!(
+        response.nodes[0].canonical_error_event_id.as_deref(),
+        Some("diagnostic-error-inference-workflow")
+    );
 }
 
 #[test]
@@ -1164,6 +1176,7 @@ fn inference_lifecycle_event(
         usage: None,
         cache_handle_id: None,
         detail,
+        canonical_error_event_id: None,
         compatibility_report: None,
         compatibility_issues: Vec::new(),
         option_diagnostics: Vec::new(),

@@ -760,6 +760,7 @@ fn record_dependency_preflight_failure_lifecycle(
             usage: None,
             cache_handle_id: None,
             detail,
+            canonical_error_event_id: None,
             compatibility_report: None,
             compatibility_issues: Vec::new(),
             option_diagnostics: Vec::new(),

@@ -2404,6 +2404,7 @@ fn record_inference_lifecycle_phase_event_with_references(
         usage,
         cache_handle_id,
         detail,
+        canonical_error_event_id: None,
         compatibility_report,
         compatibility_issues,
         option_diagnostics,
