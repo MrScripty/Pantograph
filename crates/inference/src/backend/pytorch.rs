@@ -535,6 +535,27 @@ impl PyTorchBackend {
         .into_backend_error()
     }
 
+    fn generate_text_worker_failure_from_message(
+        request_id: &str,
+        message: String,
+    ) -> BackendError {
+        let kind = if message.contains("No model loaded") {
+            PyTorchWorkerErrorKind::RuntimeUnavailable
+        } else {
+            PyTorchWorkerErrorKind::GenerationFailed
+        };
+
+        PyTorchWorkerFailure {
+            request_id: request_id.to_string(),
+            error: PyTorchWorkerError {
+                kind,
+                message,
+                canonical_code: Some("pytorch_worker_generate_text_failed".to_string()),
+            },
+        }
+        .into_backend_error()
+    }
+
     fn generate_text_from_worker_response(response_json: &str) -> Result<String, BackendError> {
         let response: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
             serde_json::from_str(response_json).map_err(|error| {
@@ -1065,8 +1086,9 @@ impl PyTorchBackend {
         top_k: Option<u32>,
         masked_prompt_json: Option<String>,
     ) -> Result<String, BackendError> {
+        let request_id = format!("pytorch-generate-text-{}", Uuid::new_v4().simple());
         let envelope = Self::generate_text_envelope(
-            format!("pytorch-generate-text-{}", Uuid::new_v4().simple()),
+            request_id.clone(),
             PyTorchWorkerOperation::GenerateText,
             prompt,
             system_prompt,
@@ -1086,23 +1108,29 @@ impl PyTorchBackend {
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<String, BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                    Self::generate_text_worker_failure_from_message(
+                        &request_id,
+                        format!("Failed to get worker module: {}", e),
+                    )
                 })?;
 
                 let result = worker
                     .call_method1("generate_text_from_envelope", (envelope_json,))
                     .map_err(|e| {
-                        BackendError::Inference(format!(
-                            "PyTorch worker generate_text envelope failed: {}",
-                            e
-                        ))
+                        Self::generate_text_worker_failure_from_message(
+                            &request_id,
+                            format!("PyTorch worker generate_text envelope failed: {}", e),
+                        )
                     })?;
 
                 let response_json = result.extract::<String>().map_err(|e| {
-                    BackendError::Inference(format!(
-                        "Failed to extract PyTorch worker generate_text response: {}",
-                        e
-                    ))
+                    Self::generate_text_worker_failure_from_message(
+                        &request_id,
+                        format!(
+                            "Failed to extract PyTorch worker generate_text response: {}",
+                            e
+                        ),
+                    )
                 })?;
                 Self::generate_text_from_worker_response(&response_json)
             })

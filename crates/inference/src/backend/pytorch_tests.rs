@@ -539,6 +539,36 @@ fn test_pytorch_worker_generate_text_failure_normalizes_to_inference_error() {
 }
 
 #[test]
+fn test_pytorch_worker_generate_text_transport_error_normalizes_to_backend_error() {
+    match PyTorchBackend::generate_text_worker_failure_from_message(
+        "req-generate-transport",
+        "PyTorch worker generate_text envelope failed: Python bridge failed.".to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_generate_text_failed"));
+            assert!(message.contains("req-generate-transport"));
+            assert!(message.contains("Python bridge failed"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_generate_text_transport_no_model_normalizes_to_not_running() {
+    match PyTorchBackend::generate_text_worker_failure_from_message(
+        "req-generate-no-model",
+        "PyTorch worker generate_text envelope failed: No model loaded.".to_string(),
+    ) {
+        BackendError::NotRunning(message) => {
+            assert!(message.contains("pytorch_worker_generate_text_failed"));
+            assert!(message.contains("req-generate-no-model"));
+            assert!(message.contains("No model loaded"));
+        }
+        other => panic!("expected NotRunning error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
     let request = PyTorchBackend::generate_text_request(
         "Explain adapters.".to_string(),
