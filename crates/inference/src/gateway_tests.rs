@@ -9,9 +9,9 @@ use tokio::sync::mpsc;
 
 use crate::backend::BackendStartOutcome;
 use crate::model_contracts::{
-    GenerationOptions, InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions,
-    OptionSupportState, ResolvedModelPackageFacts, SamplingGenerationOptions,
-    StoppingGenerationOptions,
+    CacheGenerationOptions, GenerationOptions, InferenceLifecyclePhase, InferenceTaskId,
+    LengthGenerationOptions, OptionSupportState, ResolvedModelPackageFacts,
+    SamplingGenerationOptions, StoppingGenerationOptions,
 };
 use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, EncodedAudio, ImageGenerationRequest,
@@ -1010,6 +1010,10 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
                 seed: Some(42),
                 ..SamplingGenerationOptions::default()
             },
+            cache: CacheGenerationOptions {
+                use_cache: Some(true),
+                kv_cache_checkpoint_requested: Some(true),
+            },
             stopping: StoppingGenerationOptions {
                 stop_strings: vec!["END".to_string()],
                 ..StoppingGenerationOptions::default()
@@ -1041,6 +1045,16 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
                 diagnostic.option_path == "stopping.stop_strings"
                     && diagnostic.state == OptionSupportState::Unsupported
             }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "cache.use_cache"
+                    && diagnostic.state == OptionSupportState::RequiresBackendSupport
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "cache.kv_cache_checkpoint_requested"
+                    && diagnostic.state == OptionSupportState::Mapped
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
         }
         other => panic!("expected text generation result, got {other:?}"),
     }
@@ -1062,6 +1076,18 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
         .iter()
         .any(|diagnostic| diagnostic.option_path == "sampling.seed"
             && diagnostic.state == OptionSupportState::Unsupported));
+    assert!(completed_backend_event
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.option_path == "cache.use_cache"
+            && diagnostic.state == OptionSupportState::RequiresBackendSupport));
+    assert!(completed_backend_event
+        .option_diagnostics
+        .iter()
+        .any(
+            |diagnostic| diagnostic.option_path == "cache.kv_cache_checkpoint_requested"
+                && diagnostic.state == OptionSupportState::Mapped
+        ));
 }
 
 #[tokio::test]

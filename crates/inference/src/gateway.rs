@@ -1629,6 +1629,18 @@ fn typed_text_generation_option_diagnostics(
         options.sampling.top_k.is_some(),
         "mapped to chat top_k",
     );
+    push_chat_cache_use_diagnostic(
+        &mut diagnostics,
+        &mut mapped_paths,
+        backend_key,
+        options.cache.use_cache,
+    );
+    push_chat_cache_checkpoint_diagnostic(
+        &mut diagnostics,
+        &mut mapped_paths,
+        backend_key,
+        options.cache.kv_cache_checkpoint_requested,
+    );
 
     for path in options.requested_option_paths() {
         if mapped_paths.iter().any(|mapped| mapped == &path) {
@@ -1645,6 +1657,55 @@ fn typed_text_generation_option_diagnostics(
     }
 
     diagnostics
+}
+
+fn push_chat_cache_use_diagnostic(
+    diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
+    mapped_paths: &mut Vec<&'static str>,
+    backend_key: Option<&str>,
+    requested: Option<bool>,
+) {
+    if requested.is_none() {
+        return;
+    }
+
+    mapped_paths.push("cache.use_cache");
+    diagnostics.push(OptionCompatibilityDiagnostic {
+        option_path: "cache.use_cache".to_string(),
+        state: OptionSupportState::RequiresBackendSupport,
+        backend_key: backend_key.map(ToOwned::to_owned),
+        message: Some(
+            "cache reuse is resolved by Pantograph runtime/KV policy outside the chat request"
+                .to_string(),
+        ),
+    });
+}
+
+fn push_chat_cache_checkpoint_diagnostic(
+    diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
+    mapped_paths: &mut Vec<&'static str>,
+    backend_key: Option<&str>,
+    requested: Option<bool>,
+) {
+    let Some(requested) = requested else {
+        return;
+    };
+
+    mapped_paths.push("cache.kv_cache_checkpoint_requested");
+    diagnostics.push(OptionCompatibilityDiagnostic {
+        option_path: "cache.kv_cache_checkpoint_requested".to_string(),
+        state: if requested {
+            OptionSupportState::Mapped
+        } else {
+            OptionSupportState::Honored
+        },
+        backend_key: backend_key.map(ToOwned::to_owned),
+        message: Some(if requested {
+            "handled by Pantograph KV-cache publication outside the chat request".to_string()
+        } else {
+            "no KV-cache checkpoint requested".to_string()
+        }),
+    });
 }
 
 fn typed_non_generation_option_diagnostics(
