@@ -115,25 +115,27 @@ fn copy_relevant_entries(
             .map_err(|e| format!("Failed to relativize {:?}: {}", source_path, e))?;
         let file_name = entry.file_name();
         let file_name = file_name.to_string_lossy();
+        let file_name_ref: &str = file_name.as_ref();
 
         let is_cuda_entry = relative_path
             .components()
             .any(|component| component.as_os_str() == "cuda");
 
-        let destination = if file_name == "llama-server" || file_name == "llama-server.exe" {
+        let destination = if file_name_ref == "llama-server" || file_name_ref == "llama-server.exe"
+        {
             if is_cuda_entry {
-                binaries_dir.join("cuda").join(file_name.as_ref())
+                binaries_dir.join("cuda").join(file_name_ref)
             } else {
                 *installed_server = true;
                 binaries_dir.join(platform.installed_server_name())
             }
-        } else if platform.is_runtime_library(&file_name) {
+        } else if platform.is_runtime_library(file_name_ref) {
             let dest_dir = if is_cuda_entry {
                 binaries_dir.join("cuda")
             } else {
                 binaries_dir.to_path_buf()
             };
-            dest_dir.join(file_name.as_ref())
+            dest_dir.join(file_name_ref)
         } else {
             continue;
         };

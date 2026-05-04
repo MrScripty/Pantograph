@@ -2512,7 +2512,11 @@ inference write ledger events directly.
   requests that carry resolved Pumas package facts now emit explicit
   model-package-resolution started/completed/cleanup lifecycle facts before
   task validation, and lifecycle model identity prefers the package-facts model
-  id over backend transport model names.
+  id over backend transport model names. Typed non-streaming text generation
+  now emits duration-observable preprocessing, postprocessing, and
+  result-projection lifecycle phases around the validated backend execution
+  path, giving ledger adapters producer coverage for those Transformers-aligned
+  boundaries without storing prompts or generated text.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -3059,6 +3063,14 @@ Update during implementation:
   after the startup/page snapshot, closing the stale window for updates that
   arrive while sparse summary rows are regenerated and refilling affected page
   rows against the newest cursor.
+- 2026-05-04: Added typed non-streaming text lifecycle producer coverage for
+  preprocessing, postprocessing, and result projection, reusing existing
+  duration-only durable inference diagnostic mapping without adding ledger
+  schema fields.
+- 2026-05-04: Validation of the typed text lifecycle slice exposed a Rust
+  inference ambiguity in llama.cpp managed-runtime file-name path joins;
+  binding the lossy file name as `&str` keeps the platform copy path explicit
+  and restores inference crate compilation.
 - 2026-05-04: Fixed a workflow-service issue found during full validation:
   edge-insert preview for canonical `llm-inference` could choose text-compatible
   configuration/context ports before the primary `prompt` port after

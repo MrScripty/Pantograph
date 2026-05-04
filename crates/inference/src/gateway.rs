@@ -1207,6 +1207,10 @@ impl InferenceGateway {
         let request_id = request.request_id.clone();
         let model_id = typed_request_lifecycle_model_id(&request);
         let task_id = Some(request.task_id.canonical_label().to_string());
+        let emit_text_boundary_lifecycle = matches!(
+            &request.input,
+            InferenceExecutionInput::TextGeneration { .. }
+        );
         record_model_package_resolution_lifecycle_if_present(
             lifecycle_sink.as_ref(),
             &request,
@@ -1274,6 +1278,19 @@ impl InferenceGateway {
             compatibility_diagnostics.compatibility_report.clone(),
             compatibility_diagnostics.compatibility_issues.clone(),
         );
+        if emit_text_boundary_lifecycle {
+            record_successful_non_streaming_lifecycle_phase(
+                lifecycle_sink.as_ref(),
+                InferenceLifecyclePhase::Preprocessing,
+                request_id.clone(),
+                task_id.clone(),
+                backend_key.clone(),
+                runtime_id.clone(),
+                runtime_instance_id.clone(),
+                selected_device_id.clone(),
+                model_id.clone(),
+            );
+        }
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
             request_id.clone(),
@@ -1292,18 +1309,42 @@ impl InferenceGateway {
         dedupe_option_diagnostics(&mut option_diagnostics);
         record_typed_lifecycle_result_with_option_diagnostics(
             lifecycle_sink.as_ref(),
-            request_id,
-            task_id,
-            backend_key,
-            runtime_id,
-            runtime_instance_id,
-            selected_device_id,
-            model_id,
+            request_id.clone(),
+            task_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            selected_device_id.clone(),
+            model_id.clone(),
             &result,
             option_diagnostics,
             compatibility_diagnostics.compatibility_report,
             compatibility_diagnostics.compatibility_issues,
         );
+        if emit_text_boundary_lifecycle && result.is_ok() {
+            record_successful_non_streaming_lifecycle_phase(
+                lifecycle_sink.as_ref(),
+                InferenceLifecyclePhase::Postprocessing,
+                request_id.clone(),
+                task_id.clone(),
+                backend_key.clone(),
+                runtime_id.clone(),
+                runtime_instance_id.clone(),
+                selected_device_id.clone(),
+                model_id.clone(),
+            );
+            record_successful_non_streaming_lifecycle_phase(
+                lifecycle_sink.as_ref(),
+                InferenceLifecyclePhase::ResultProjection,
+                request_id,
+                task_id,
+                backend_key,
+                runtime_id,
+                runtime_instance_id,
+                selected_device_id,
+                model_id,
+            );
+        }
         result
     }
 
@@ -2549,6 +2590,46 @@ fn record_non_streaming_lifecycle_phase_result<T>(
         model_id,
         result,
         Vec::new(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_successful_non_streaming_lifecycle_phase(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    selected_device_id: Option<String>,
+    model_id: Option<String>,
+) {
+    record_inference_lifecycle_phase_event(
+        sink,
+        phase.clone(),
+        request_id.clone(),
+        task_id.clone(),
+        backend_key.clone(),
+        runtime_id.clone(),
+        runtime_instance_id.clone(),
+        selected_device_id.clone(),
+        model_id.clone(),
+        InferenceRequestLifecycleEventKind::Started,
+        None,
+    );
+    let result: Result<(), GatewayError> = Ok(());
+    record_non_streaming_lifecycle_phase_result(
+        sink,
+        phase,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        selected_device_id,
+        model_id,
+        &result,
     );
 }
 

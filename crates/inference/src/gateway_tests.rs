@@ -1157,6 +1157,75 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
     }
 
     let events = sink.events();
+    let phase_kinds: Vec<(InferenceLifecyclePhase, InferenceRequestLifecycleEventKind)> = events
+        .iter()
+        .map(|event| (event.phase.clone(), event.kind.clone()))
+        .collect();
+    assert_eq!(
+        phase_kinds,
+        vec![
+            (
+                InferenceLifecyclePhase::TaskValidation,
+                InferenceRequestLifecycleEventKind::Started
+            ),
+            (
+                InferenceLifecyclePhase::TaskValidation,
+                InferenceRequestLifecycleEventKind::Completed
+            ),
+            (
+                InferenceLifecyclePhase::TaskValidation,
+                InferenceRequestLifecycleEventKind::CleanupCompleted
+            ),
+            (
+                InferenceLifecyclePhase::Preprocessing,
+                InferenceRequestLifecycleEventKind::Started
+            ),
+            (
+                InferenceLifecyclePhase::Preprocessing,
+                InferenceRequestLifecycleEventKind::Completed
+            ),
+            (
+                InferenceLifecyclePhase::Preprocessing,
+                InferenceRequestLifecycleEventKind::CleanupCompleted
+            ),
+            (
+                InferenceLifecyclePhase::BackendExecution,
+                InferenceRequestLifecycleEventKind::Started
+            ),
+            (
+                InferenceLifecyclePhase::BackendExecution,
+                InferenceRequestLifecycleEventKind::Completed
+            ),
+            (
+                InferenceLifecyclePhase::BackendExecution,
+                InferenceRequestLifecycleEventKind::CleanupCompleted
+            ),
+            (
+                InferenceLifecyclePhase::Postprocessing,
+                InferenceRequestLifecycleEventKind::Started
+            ),
+            (
+                InferenceLifecyclePhase::Postprocessing,
+                InferenceRequestLifecycleEventKind::Completed
+            ),
+            (
+                InferenceLifecyclePhase::Postprocessing,
+                InferenceRequestLifecycleEventKind::CleanupCompleted
+            ),
+            (
+                InferenceLifecyclePhase::ResultProjection,
+                InferenceRequestLifecycleEventKind::Started
+            ),
+            (
+                InferenceLifecyclePhase::ResultProjection,
+                InferenceRequestLifecycleEventKind::Completed
+            ),
+            (
+                InferenceLifecyclePhase::ResultProjection,
+                InferenceRequestLifecycleEventKind::CleanupCompleted
+            ),
+        ]
+    );
     let completed_validation_event = events
         .iter()
         .find(|event| {
