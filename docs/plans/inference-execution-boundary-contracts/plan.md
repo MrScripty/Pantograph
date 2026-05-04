@@ -1775,6 +1775,9 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   load and stream setup: `runtime_unavailable` maps to `BackendError::NotRunning`,
   `generation_failed` maps to `BackendError::Inference`, request ids and
   canonical worker error codes are retained, and success returns generated text.
+  PyTorch worker initialization failures now map to
+  `BackendError::StartupFailed` with a generated request id and canonical
+  `pytorch_worker_init_failed` code.
   PyTorch model-load worker transport failures now also route through the typed
   worker failure shape with the load request id and canonical
   `pytorch_worker_model_load_failed` code.

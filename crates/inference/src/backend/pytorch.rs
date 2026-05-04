@@ -653,6 +653,18 @@ impl PyTorchBackend {
         .into_backend_error()
     }
 
+    fn init_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
+        PyTorchWorkerFailure {
+            request_id: request_id.to_string(),
+            error: PyTorchWorkerError {
+                kind: PyTorchWorkerErrorKind::ModelLoadFailed,
+                message,
+                canonical_code: Some("pytorch_worker_init_failed".to_string()),
+            },
+        }
+        .into_backend_error()
+    }
+
     fn generate_text_from_worker_response(response_json: &str) -> Result<String, BackendError> {
         let response: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
             serde_json::from_str(response_json).map_err(|error| {
@@ -1441,13 +1453,14 @@ impl InferenceBackend for PyTorchBackend {
         let was_ready = self.ready;
 
         // Initialise the Python worker module
-        tokio::task::spawn_blocking(|| {
+        let request_id = format!("pytorch-worker-init-{}", Uuid::new_v4().simple());
+        tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| {
                 pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
-                    BackendError::StartupFailed(format!(
-                        "Failed to initialise Python worker: {}",
-                        e
-                    ))
+                    Self::init_worker_failure_from_message(
+                        &request_id,
+                        format!("Failed to initialise Python worker: {}", e),
+                    )
                 })
             })
         })

@@ -1090,6 +1090,21 @@ fn test_pytorch_worker_unload_transport_error_normalizes_to_backend_error() {
 }
 
 #[test]
+fn test_pytorch_worker_init_error_normalizes_to_startup_failed() {
+    match PyTorchBackend::init_worker_failure_from_message(
+        "req-init",
+        "Failed to initialise Python worker: import failed.".to_string(),
+    ) {
+        BackendError::StartupFailed(message) => {
+            assert!(message.contains("pytorch_worker_init_failed"));
+            assert!(message.contains("req-init"));
+            assert!(message.contains("import failed"));
+        }
+        other => panic!("expected StartupFailed error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_live_kv_transport_error_normalizes_to_backend_error() {
     match kv_worker_failure_from_message(
         "req-kv-save",
