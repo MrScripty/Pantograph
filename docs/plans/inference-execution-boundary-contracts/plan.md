@@ -2062,6 +2062,10 @@ Filesystem saved-workflow persistence now canonicalizes graphs on both
 and returned as canonical `llm-inference` nodes with preserved node ids,
 positions, compatible topology, Pumas migration evidence, runtime hints, and
 derived graph fingerprints even when callers bypass edit sessions.
+Filesystem persistence coverage now also includes mixed legacy embedding and
+reranker nodes, proving dedicated embedding/rerank node data migrates into
+canonical `task_kind`, `runtime_hint`, `task_options`, migration diagnostics,
+and output topology before workflows are written.
 Node-engine generic streaming text/chat execution now also routes through the
 gateway streaming facade instead of posting directly over HTTP from node-engine,
 preserving graph `TaskStream` event shape while making backend/lifecycle facts
@@ -2696,6 +2700,9 @@ Update during implementation:
 - 2026-05-04: Canonicalized filesystem saved-workflow persistence on save and
   load, so callers that bypass edit sessions still serialize and receive
   canonical `llm-inference` nodes instead of retired inference node types.
+- 2026-05-04: Added filesystem persistence coverage for mixed legacy embedding
+  and reranker nodes migrating into canonical `llm-inference` task shapes
+  before serialization.
 - 2026-05-03: Added a positive node-engine dependency preflight fixture for
   HF-compatible Transformers/PyTorch model sources, proving canonical runtime
   hints and Pumas model-source identity reach the host resolver.

@@ -87,6 +87,78 @@ fn legacy_llamacpp_graph() -> WorkflowGraph {
     }
 }
 
+fn mixed_legacy_inference_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({"text": "rank these"}),
+            },
+            GraphNode {
+                id: "embedding".to_string(),
+                node_type: "embedding".to_string(),
+                position: Position { x: 100.0, y: 120.0 },
+                data: serde_json::json!({"model": "bge-small"}),
+            },
+            GraphNode {
+                id: "rerank".to_string(),
+                node_type: "reranker".to_string(),
+                position: Position { x: 220.0, y: 0.0 },
+                data: serde_json::json!({
+                    "model_path": "/models/rerank.gguf",
+                    "top_k": 1,
+                    "return_documents": true
+                }),
+            },
+            GraphNode {
+                id: "vector-output".to_string(),
+                node_type: "vector-output".to_string(),
+                position: Position { x: 340.0, y: 120.0 },
+                data: serde_json::json!({}),
+            },
+            GraphNode {
+                id: "text-output".to_string(),
+                node_type: "text-output".to_string(),
+                position: Position { x: 340.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "prompt-embedding-text".to_string(),
+                source: "prompt".to_string(),
+                source_handle: "text".to_string(),
+                target: "embedding".to_string(),
+                target_handle: "text".to_string(),
+            },
+            GraphEdge {
+                id: "embedding-vector-output-vector".to_string(),
+                source: "embedding".to_string(),
+                source_handle: "embedding".to_string(),
+                target: "vector-output".to_string(),
+                target_handle: "vector".to_string(),
+            },
+            GraphEdge {
+                id: "prompt-rerank-documents-json".to_string(),
+                source: "prompt".to_string(),
+                source_handle: "text".to_string(),
+                target: "rerank".to_string(),
+                target_handle: "documents_json".to_string(),
+            },
+            GraphEdge {
+                id: "rerank-results-output-text".to_string(),
+                source: "rerank".to_string(),
+                source_handle: "results".to_string(),
+                target: "text-output".to_string(),
+                target_handle: "text".to_string(),
+            },
+        ],
+        derived_graph: None,
+    }
+}
+
 fn write_workflow(
     store_root: &Path,
     file_name: &str,
@@ -309,6 +381,66 @@ fn save_workflow_canonicalizes_retired_inference_nodes_before_serializing() {
         .derived_graph
         .as_ref()
         .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
+}
+
+#[test]
+fn save_workflow_canonicalizes_mixed_embedding_and_rerank_nodes_before_serializing() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+
+    let path = store
+        .save_workflow(
+            "mixed-legacy-inference".to_string(),
+            mixed_legacy_inference_graph(),
+        )
+        .expect("save workflow");
+    let saved = fs::read_to_string(path).expect("read saved workflow");
+    let workflow: WorkflowFile = serde_json::from_str(&saved).expect("parse saved workflow");
+
+    let embedding = workflow
+        .graph
+        .nodes
+        .iter()
+        .find(|node| node.id == "embedding")
+        .expect("migrated embedding node");
+    let rerank = workflow
+        .graph
+        .nodes
+        .iter()
+        .find(|node| node.id == "rerank")
+        .expect("migrated rerank node");
+
+    assert_eq!(embedding.node_type, "llm-inference");
+    assert_eq!(embedding.data["task_kind"], serde_json::json!("embedding"));
+    assert_eq!(
+        embedding.data["runtime_hint"],
+        serde_json::json!("llamacpp")
+    );
+    assert_eq!(
+        embedding.data["migration_diagnostics"][0]["code"],
+        serde_json::json!("legacy_embedding_node")
+    );
+    assert_eq!(rerank.node_type, "llm-inference");
+    assert_eq!(rerank.data["task_kind"], serde_json::json!("rerank"));
+    assert_eq!(rerank.data["task_options"]["top_k"], serde_json::json!(1));
+    assert_eq!(
+        rerank.data["task_options"]["return_documents"],
+        serde_json::json!(true)
+    );
+    assert_eq!(
+        rerank.data["migration_diagnostics"][0]["code"],
+        serde_json::json!("legacy_reranker_node")
+    );
+    assert!(workflow.graph.edges.iter().any(|edge| {
+        edge.id == "embedding-vector-output-vector"
+            && edge.source == "embedding"
+            && edge.source_handle == "embedding"
+    }));
+    assert!(workflow.graph.edges.iter().any(|edge| {
+        edge.id == "rerank-results-output-text"
+            && edge.source == "rerank"
+            && edge.source_handle == "results"
+    }));
 }
 
 #[test]
