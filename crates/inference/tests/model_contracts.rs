@@ -6,13 +6,14 @@ use inference::{
     BackendCompatibilityIssue, BackendCompatibilityIssueKind, BackendCompatibilityReport,
     BackendCompatibilityStatus, BackendHintLabel, BackendTaskCapability, GenerationOptionSource,
     GenerationOptions, InferenceEmbeddingResult, InferenceExecutionInput,
-    InferenceExecutionRequest, InferenceExecutionResult, InferenceLifecyclePhase,
-    InferenceModality, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceTaskId, InferenceUsage, ModelArtifactKind, ModelExecutionDescriptor,
-    ModelExecutionStorageKind, ModelExecutionValidationState, ModelFactFamily,
-    ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
-    ModelLibraryUpdateFeed, ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy,
-    ModelPackageDiagnostic, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummarySnapshotItem,
+    InferenceExecutionInputKind, InferenceExecutionRequest, InferenceExecutionResult,
+    InferenceExecutionResultKind, InferenceLifecyclePhase, InferenceModality,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind, InferenceTaskId,
+    InferenceUsage, ModelArtifactKind, ModelExecutionDescriptor, ModelExecutionStorageKind,
+    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
+    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
+    ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy, ModelPackageDiagnostic,
+    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummarySnapshotItem,
     ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy, ModelStorageKind, ModelValidationState,
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
     PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
@@ -747,6 +748,119 @@ fn default_task_registry_entries_have_complete_public_contract_shape() {
             entry.modality_signature.inputs
         );
         assert_eq!(contract.output_modalities, entry.modality_signature.outputs);
+    }
+}
+
+#[test]
+fn task_request_contracts_publish_transformers_aligned_execution_matrix() {
+    for (
+        task_id,
+        input_kind,
+        result_kind,
+        execution_supported,
+        streaming_support,
+        input_modalities,
+        output_modalities,
+    ) in [
+        (
+            InferenceTaskId::TextGeneration,
+            InferenceExecutionInputKind::TextGeneration,
+            InferenceExecutionResultKind::TextGeneration,
+            true,
+            TaskStreamingSupport::BackendDependent,
+            vec![InferenceModality::Text],
+            vec![InferenceModality::Text],
+        ),
+        (
+            InferenceTaskId::ChatCompletion,
+            InferenceExecutionInputKind::TextGeneration,
+            InferenceExecutionResultKind::TextGeneration,
+            true,
+            TaskStreamingSupport::BackendDependent,
+            vec![InferenceModality::Text],
+            vec![InferenceModality::Text],
+        ),
+        (
+            InferenceTaskId::Embedding,
+            InferenceExecutionInputKind::Embedding,
+            InferenceExecutionResultKind::Embedding,
+            true,
+            TaskStreamingSupport::Unsupported,
+            vec![InferenceModality::Text],
+            vec![InferenceModality::Embedding],
+        ),
+        (
+            InferenceTaskId::Rerank,
+            InferenceExecutionInputKind::Rerank,
+            InferenceExecutionResultKind::Rerank,
+            true,
+            TaskStreamingSupport::Unsupported,
+            vec![InferenceModality::Text, InferenceModality::Json],
+            vec![InferenceModality::Json],
+        ),
+        (
+            InferenceTaskId::ImageGeneration,
+            InferenceExecutionInputKind::ImageGeneration,
+            InferenceExecutionResultKind::ImageGeneration,
+            true,
+            TaskStreamingSupport::Unsupported,
+            vec![InferenceModality::Text],
+            vec![InferenceModality::Image],
+        ),
+        (
+            InferenceTaskId::ImageUnderstanding,
+            InferenceExecutionInputKind::ImageUnderstanding,
+            InferenceExecutionResultKind::ImageUnderstanding,
+            false,
+            TaskStreamingSupport::BackendDependent,
+            vec![InferenceModality::Image, InferenceModality::Text],
+            vec![InferenceModality::Text],
+        ),
+        (
+            InferenceTaskId::AudioTranscription,
+            InferenceExecutionInputKind::AudioTranscription,
+            InferenceExecutionResultKind::AudioTranscription,
+            true,
+            TaskStreamingSupport::BackendDependent,
+            vec![InferenceModality::Audio],
+            vec![InferenceModality::Text],
+        ),
+        (
+            InferenceTaskId::VideoUnderstanding,
+            InferenceExecutionInputKind::VideoUnderstanding,
+            InferenceExecutionResultKind::VideoUnderstanding,
+            false,
+            TaskStreamingSupport::Unsupported,
+            vec![InferenceModality::Video, InferenceModality::Text],
+            vec![InferenceModality::Text],
+        ),
+        (
+            InferenceTaskId::MultimodalGeneration,
+            InferenceExecutionInputKind::MultimodalGeneration,
+            InferenceExecutionResultKind::MultimodalGeneration,
+            false,
+            TaskStreamingSupport::BackendDependent,
+            vec![
+                InferenceModality::Text,
+                InferenceModality::Image,
+                InferenceModality::Audio,
+            ],
+            vec![InferenceModality::Text],
+        ),
+    ] {
+        let entry = resolve_task_registry_entry(task_id.canonical_label())
+            .unwrap_or_else(|| panic!("task {task_id:?} should resolve"));
+        let contract = entry
+            .request_contract()
+            .unwrap_or_else(|| panic!("task {task_id:?} should publish a request contract"));
+
+        assert_eq!(contract.task_id, task_id);
+        assert_eq!(contract.input_kind, input_kind);
+        assert_eq!(contract.result_kind, result_kind);
+        assert_eq!(contract.execution_supported, execution_supported);
+        assert_eq!(contract.streaming_support, streaming_support);
+        assert_eq!(contract.required_input_modalities, input_modalities);
+        assert_eq!(contract.output_modalities, output_modalities);
     }
 }
 

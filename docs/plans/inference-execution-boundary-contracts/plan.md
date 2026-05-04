@@ -1092,7 +1092,12 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   template, and generation config.
 - [ ] Define task request contracts aligned with Transformers task semantics
   for text generation/chat, embeddings, rerank, image/depth/audio/video-ready
-  extensions, and multimodal payloads.
+  extensions, and multimodal payloads. Public inference integration coverage
+  now freezes the task request contract matrix for text generation, chat,
+  embeddings, rerank, image generation, image understanding,
+  audio transcription, video understanding, and multimodal generation,
+  including input/result kind, execution support, streaming support, and
+  required/output modalities.
 - [x] Define the strong task registry shape, including canonical task id,
   aliases, task family, input modalities, output modalities, result schema,
   processor/component requirements, streaming support, generative/scoring
