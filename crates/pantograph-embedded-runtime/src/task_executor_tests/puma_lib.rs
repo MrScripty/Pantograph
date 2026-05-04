@@ -124,8 +124,6 @@ async fn puma_lib_execution_resolves_saved_model_name_without_path_or_id() {
         serde_json::json!({
             "modelPath": "",
             "modelName": "Test Bundle",
-            "model_type": "diffusion",
-            "task_type_primary": "text-to-image",
             "recommended_backend": "diffusers",
             "inference_settings": []
         }),
@@ -142,8 +140,26 @@ async fn puma_lib_execution_resolves_saved_model_name_without_path_or_id() {
     );
     assert_eq!(outputs.get("model_id"), Some(&serde_json::json!(model_id)));
     assert_eq!(
+        outputs.get("model_type"),
+        Some(&serde_json::json!("diffusion"))
+    );
+    assert_eq!(
         outputs.get("task_type_primary"),
         Some(&serde_json::json!("text-to-image"))
+    );
+    assert_eq!(
+        outputs
+            .get("resolved_model_package_facts")
+            .and_then(|value| value.get("model_ref"))
+            .and_then(|value| value.get("model_id")),
+        Some(&serde_json::json!(model_id))
+    );
+    assert_eq!(
+        outputs
+            .get("resolved_model_package_facts")
+            .and_then(|value| value.get("artifact"))
+            .and_then(|value| value.get("entry_path")),
+        Some(&serde_json::json!(bundle_root.display().to_string()))
     );
     assert_eq!(
         outputs

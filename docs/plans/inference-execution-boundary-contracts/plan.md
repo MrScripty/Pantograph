@@ -1000,7 +1000,11 @@ Detailed Pumas-side work is split into
   bindings change.
 - [ ] Ensure Pantograph consumes versioned Pumas DTO/API outputs only. It must
   not depend on Pumas `models.metadata_json`, SQLite table layouts, or
-  search-cache internals.
+  search-cache internals. Embedded-runtime `puma-lib` execution no longer reads
+  task/backend facts directly from `ModelRecord.metadata`; model entry path,
+  model type, task type, and package facts now come from Pumas public execution
+  descriptor and package-facts APIs, with saved node inputs retained as the
+  compatibility fallback when Pumas lookup is unavailable.
 - [x] Treat Pumas HF search MLX/vLLM tags as remote discovery hints only.
   Installed-model compatibility and workflow preflight must use resolved local
   Pumas package facts plus Pantograph inference/backend checks.

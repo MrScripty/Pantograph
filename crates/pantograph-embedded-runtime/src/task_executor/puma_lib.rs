@@ -1,32 +1,6 @@
 use super::*;
 
 impl TauriTaskExecutor {
-    pub(super) fn puma_lib_task_type_from_pipeline_tag(pipeline_tag: &str) -> String {
-        match pipeline_tag.trim().to_lowercase().as_str() {
-            "text-to-audio" | "text-to-speech" => "text-to-audio".to_string(),
-            "automatic-speech-recognition" => "audio-to-text".to_string(),
-            "text-to-image" | "image-to-image" => "text-to-image".to_string(),
-            "image-classification" | "object-detection" | "image-to-text" => {
-                "image-to-text".to_string()
-            }
-            "feature-extraction" | "sentence-similarity" => "feature-extraction".to_string(),
-            _ => "text-generation".to_string(),
-        }
-    }
-
-    pub(super) fn puma_lib_metadata_string(
-        metadata: &serde_json::Map<String, serde_json::Value>,
-        keys: &[&str],
-    ) -> Option<String> {
-        keys.iter().find_map(|key| {
-            metadata
-                .get(*key)
-                .and_then(|value| value.as_str())
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-        })
-    }
-
     pub(super) fn insert_puma_lib_output_string(
         outputs: &mut HashMap<String, serde_json::Value>,
         key: &str,
@@ -112,7 +86,7 @@ impl TauriTaskExecutor {
         );
         let backend_key =
             Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"]);
-        let mut recommended_backend = Self::read_optional_input_string_aliases(
+        let recommended_backend = Self::read_optional_input_string_aliases(
             inputs,
             &["recommended_backend", "recommendedBackend"],
         );
@@ -140,40 +114,6 @@ impl TauriTaskExecutor {
                         .is_none_or(|value| value.trim().is_empty())
                     {
                         model_type = Some(model.model_type.clone());
-                    }
-
-                    if let Some(metadata) = model.metadata.as_object() {
-                        if task_type_primary
-                            .as_deref()
-                            .is_none_or(|value| value.trim().is_empty())
-                        {
-                            task_type_primary = Self::puma_lib_metadata_string(
-                                metadata,
-                                &[
-                                    "task_type_primary",
-                                    "taskTypePrimary",
-                                    "task_type",
-                                    "taskType",
-                                ],
-                            )
-                            .or_else(|| {
-                                Self::puma_lib_metadata_string(
-                                    metadata,
-                                    &["pipeline_tag", "pipelineTag"],
-                                )
-                                .map(|value| Self::puma_lib_task_type_from_pipeline_tag(&value))
-                            });
-                        }
-
-                        if recommended_backend
-                            .as_deref()
-                            .is_none_or(|value| value.trim().is_empty())
-                        {
-                            recommended_backend = Self::puma_lib_metadata_string(
-                                metadata,
-                                &["recommended_backend", "recommendedBackend"],
-                            );
-                        }
                     }
 
                     match api.resolve_model_execution_descriptor(&model.id).await {
