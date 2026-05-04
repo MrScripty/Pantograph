@@ -2449,8 +2449,8 @@ one-off conversions.
   embedded-runtime maps completed backend-execution lifecycle facts into durable
   metadata without importing the diagnostics ledger into `crates/inference` or
   storing prompt/result bodies. Remaining task-option diagnostics for embedding,
-  rerank, image/video/audio, and KV-cache task options stay open until those
-  typed paths emit compatibility reports.
+  rerank, image/video, and KV-cache task options stay open until those typed
+  paths emit compatibility reports.
 - 2026-05-03: Node-status task projection slice added an additive `task_id`
   field to `node_execution.status` payloads and the queryable
   `node_status_projection`, bumped the rebuildable projection version, and
@@ -2825,6 +2825,10 @@ Update during implementation:
   `llm-inference` dispatch path. Node-engine now accepts encoded audio or
   host-owned artifact refs, projects text/language/duration/segment outputs,
   and keeps raw audio payloads out of option diagnostics.
+- 2026-05-04: Added typed audio transcription lifecycle coverage proving
+  backend-execution events carry canonical `audio_transcription` task ids,
+  selected model ids, bounded extra-option diagnostics, and no raw audio
+  payloads.
 - 2026-05-03: Follow-up issue discovered during focused embedded-runtime
   validation: `node-engine` still emits a dead-code warning for
   `enforce_dependency_preflight_with_lifecycle` when compiled without the

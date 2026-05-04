@@ -14,7 +14,7 @@ use crate::model_contracts::{
     StoppingGenerationOptions,
 };
 use crate::types::{
-    AudioTranscriptionRequest, AudioTranscriptionResult, ImageGenerationRequest,
+    AudioTranscriptionRequest, AudioTranscriptionResult, EncodedAudio, ImageGenerationRequest,
     InferenceExecutionInput, InferenceExecutionRequest, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, RuntimeFactReadiness,
@@ -1345,6 +1345,71 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
             && event.backend_key.as_deref() == Some("mock")
             && event.model_id.as_deref() == Some("mock-image")
     }));
+}
+
+#[tokio::test]
+async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-audio-lifecycle".to_string()),
+        task_id: InferenceTaskId::AudioTranscription,
+        model_ref: None,
+        model_name: Some("mock-asr".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::AudioTranscription {
+            request: AudioTranscriptionRequest {
+                model: "mock-asr".to_string(),
+                audio: Some(EncodedAudio {
+                    data_base64: "UklGRg==".to_string(),
+                    mime_type: "audio/wav".to_string(),
+                    sample_rate_hz: Some(16000),
+                }),
+                audio_ref: None,
+                language: Some("en".to_string()),
+                prompt: None,
+                task: Some("transcribe".to_string()),
+                chunk_length_s: None,
+                extra_options: serde_json::json!({
+                    "return_timestamps": true,
+                }),
+            },
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed audio request should execute");
+
+    let events = sink.events();
+    assert_eq!(events.len(), 6);
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend completion event should be recorded");
+    assert_eq!(
+        backend_completed.task_id.as_deref(),
+        Some("audio_transcription")
+    );
+    assert_eq!(backend_completed.model_id.as_deref(), Some("mock-asr"));
+    assert!(backend_completed
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| {
+            diagnostic.option_path == "audio_transcription.extra_options.return_timestamps"
+                && diagnostic.state == OptionSupportState::Mapped
+                && diagnostic.backend_key.as_deref() == Some("mock")
+        }));
+
+    let serialized_events = serde_json::to_string(&events).unwrap();
+    assert!(!serialized_events.contains("UklGRg=="));
 }
 
 #[tokio::test]
