@@ -2729,6 +2729,9 @@ Update during implementation:
 - 2026-05-03: I/O Inspector page filters can now pass `selected_backend_key`
   through the workflow projection service and artifact detail rows display the
   selected backend alongside runtime/model projection facts.
+- 2026-05-03: Workflow projection service README now names
+  `selected_backend_key` as a preserved I/O artifact projection filter and
+  response fact so frontend services keep backend-owned artifact context intact.
 
 ## Commit Cadence Notes
 

@@ -173,8 +173,8 @@ preserve the backend download/audit response.
 - Scheduler estimate projection reads must return backend-authored estimate
   DTOs exactly and must not parse raw scheduler event payloads client-side.
 - I/O artifact projection reads must preserve backend query/filter shapes,
-  including producer and consumer node filters, instead of widening requests
-  and filtering artifact pages in `WorkflowService`.
+  including producer, consumer, and selected-backend filters, instead of
+  widening requests and filtering artifact pages in `WorkflowService`.
 - Artifact descriptor DTOs preserve optional backend-authored conversion
   metadata, including conversion id/status/command id and per-conversion
   dependency lease attribution, without synthesizing those facts in the
@@ -281,10 +281,11 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   with the backend-owned node registry and port contracts shipped in the same
   build.
 - `WorkflowIoArtifactQueryResponse` carries backend-authored
-  `retention_state` values. Mock and native responses must preserve that field
-  shape so I/O Inspector callers can render retention state without guessing
-  from `payload_ref`. The same response carries `retention_summary` counts
-  derived from backend projections.
+  `retention_state`, `runtime_id`, `selected_backend_key`, and `model_id`
+  values. Mock and native responses must preserve that field shape so I/O
+  Inspector callers can render retention and backend context without guessing
+  from `payload_ref`, artifact labels, or media type. The same response carries
+  `retention_summary` counts derived from backend projections.
 - Mock projection responses must track backend projection versions so page
   logic exercises the same rebuild/freshness contracts in mock and native
   modes.
