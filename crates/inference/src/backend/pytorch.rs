@@ -15,6 +15,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures_util::Stream;
 use pyo3::prelude::*;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
@@ -59,7 +60,7 @@ pub struct PyTorchBackend {
     loaded_model: Option<LoadedModelInfo>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LoadedModelInfo {
     pub model_path: String,
     pub model_type: String,
@@ -431,8 +432,9 @@ impl PyTorchBackend {
                     BackendError::StartupFailed(format!("Failed to load worker module: {}", e))
                 })?;
 
-                let result = worker
+                let response_json = worker
                     .call_method1("load_transformers_model_from_envelope", (envelope_json,))
+                    .and_then(|result| result.extract::<String>())
                     .map_err(|e| {
                         BackendError::Inference(format!(
                             "Transformers envelope model load failed: {}",
@@ -440,25 +442,7 @@ impl PyTorchBackend {
                         ))
                     })?;
 
-                let info = LoadedModelInfo {
-                    model_path: result
-                        .get_item("model_path")
-                        .ok()
-                        .and_then(|v| v.extract::<String>().ok())
-                        .unwrap_or_default(),
-                    model_type: result
-                        .get_item("model_type")
-                        .ok()
-                        .and_then(|v| v.extract::<String>().ok())
-                        .unwrap_or_else(|| "text-generation".to_string()),
-                    device: result
-                        .get_item("device")
-                        .ok()
-                        .and_then(|v| v.extract::<String>().ok())
-                        .unwrap_or_else(|| "cpu".to_string()),
-                };
-
-                Ok(info)
+                Self::load_info_from_worker_response(&response_json)
             })
         })
         .await
@@ -467,6 +451,21 @@ impl PyTorchBackend {
         self.loaded_model = Some(info.clone());
         self.ready = true;
         Ok(info)
+    }
+
+    fn load_info_from_worker_response(
+        response_json: &str,
+    ) -> Result<LoadedModelInfo, BackendError> {
+        let response: PyTorchWorkerResponse<LoadedModelInfo> = serde_json::from_str(response_json)
+            .map_err(|error| {
+                BackendError::Inference(format!(
+                    "Failed to decode PyTorch worker load response: {error}"
+                ))
+            })?;
+        match response {
+            PyTorchWorkerResponse::Ok(success) => Ok(success.result),
+            PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
+        }
     }
 
     fn validate_transformers_load_envelope(

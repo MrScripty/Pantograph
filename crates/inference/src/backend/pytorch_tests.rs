@@ -549,6 +549,48 @@ fn test_pytorch_worker_failure_normalizes_to_backend_error() {
 }
 
 #[test]
+fn test_pytorch_worker_load_response_decodes_loaded_model_info() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-load-ok",
+        "result": {
+            "model_path": "/models/tiny",
+            "model_type": "text-generation",
+            "device": "cpu"
+        }
+    });
+
+    let info = PyTorchBackend::load_info_from_worker_response(&response.to_string())
+        .expect("load response decodes");
+
+    assert_eq!(info.model_path, "/models/tiny");
+    assert_eq!(info.model_type, "text-generation");
+    assert_eq!(info.device, "cpu");
+}
+
+#[test]
+fn test_pytorch_worker_load_error_response_normalizes_to_backend_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-load-rejected",
+        "error": {
+            "kind": "trust_policy_rejected",
+            "message": "Model package requires custom Transformers code but trust policy is closed.",
+            "canonical_code": "pytorch_transformers_trust_policy_rejected"
+        }
+    });
+
+    match PyTorchBackend::load_info_from_worker_response(&response.to_string()) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("pytorch_transformers_trust_policy_rejected"));
+            assert!(message.contains("req-load-rejected"));
+            assert!(message.contains("trust policy is closed"));
+        }
+        other => panic!("expected Config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_envelope_rejects_missing_required_fields() {
     let fixture = include_str!(
         "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"

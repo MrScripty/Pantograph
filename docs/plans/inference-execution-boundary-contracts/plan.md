@@ -1752,6 +1752,11 @@ the PyTorch backend worker surface: Rust worker DTOs remain `pub(super)`,
 backend-local mappers create Transformers kwargs, `worker_contract.py` projects
 validated envelopes into Python calls, and backend README guidance describes
 these fields as adapter-local rather than Pantograph public contracts.
+PyTorch/Transformers envelope load failures now return the same structured
+worker response shape as generation requests. Rust decodes load success and
+failure envelopes, preserves request ids and canonical worker error codes, and
+normalizes worker load failures through the existing `BackendError` mapping
+instead of surfacing raw PyO3 exception text.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 
