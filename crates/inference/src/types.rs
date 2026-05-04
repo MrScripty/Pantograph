@@ -1395,6 +1395,40 @@ mod tests {
     }
 
     #[test]
+    fn typed_execution_request_wire_shape_defaults_and_ignores_unknown_fields() {
+        let encoded = serde_json::json!({
+            "task_id": "embedding",
+            "model_name": "sentence-transformers/tiny",
+            "input": {
+                "input_type": "embedding",
+                "texts": ["first"]
+            },
+            "future_public_field": {
+                "ignored": true
+            }
+        });
+
+        let decoded: InferenceExecutionRequest = serde_json::from_value(encoded).unwrap();
+
+        assert_eq!(decoded.request_id, None);
+        assert_eq!(decoded.task_id, InferenceTaskId::Embedding);
+        assert_eq!(decoded.model_ref, None);
+        assert_eq!(decoded.runtime_hint, None);
+        assert_eq!(decoded.resolved_model_package_facts, None);
+        assert_eq!(decoded.generation_options, None);
+        assert_eq!(decoded.extra_options, Value::Null);
+        assert_eq!(
+            decoded.input,
+            InferenceExecutionInput::Embedding {
+                texts: vec!["first".to_string()]
+            }
+        );
+        decoded
+            .validate()
+            .expect("decoded minimal typed request should validate");
+    }
+
+    #[test]
     fn typed_execution_audio_transcription_serde_uses_stable_contract() {
         let request = InferenceExecutionRequest {
             request_id: Some("req-audio-1".to_string()),

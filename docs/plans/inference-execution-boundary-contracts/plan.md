@@ -1192,6 +1192,9 @@ Request wire-shape coverage now also freezes the top-level stable
 `generation_options.backend_extensions` or `extra_options`, preventing raw
 Transformers kwargs, backend CLI flags, or scheduler policy fields from
 becoming public request contract keys.
+Minimal typed request decode coverage now proves omitted optional fields
+default to `None`/`null` and unknown future request fields are additive while
+still validating through the parsed task/input contract.
 Executable task-registry invariant coverage now freezes the complete public
 shape for every seeded task entry: unique canonical ids, known family,
 execution-behavior, streaming, and support-tier classifications, non-empty
