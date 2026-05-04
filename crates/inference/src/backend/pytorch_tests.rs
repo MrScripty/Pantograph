@@ -289,6 +289,38 @@ fn test_pytorch_worker_generate_text_response_decodes_fixture() {
 }
 
 #[test]
+fn test_pytorch_generate_text_request_threads_top_k_as_transformers_kwarg() {
+    let request = PyTorchBackend::generate_text_request(
+        "Explain adapters.".to_string(),
+        Some("Be precise.".to_string()),
+        48,
+        0.3,
+        0.9,
+        Some(20),
+        None,
+    );
+
+    assert_eq!(request.transformers_kwargs["top_k"], serde_json::json!(20));
+    assert_eq!(request.prompt, "Explain adapters.");
+    assert_eq!(request.system_prompt.as_deref(), Some("Be precise."));
+}
+
+#[test]
+fn test_pytorch_generate_text_request_omits_absent_top_k_kwarg() {
+    let request = PyTorchBackend::generate_text_request(
+        "Explain adapters.".to_string(),
+        None,
+        48,
+        0.3,
+        0.9,
+        None,
+        None,
+    );
+
+    assert!(request.transformers_kwargs.is_empty());
+}
+
+#[test]
 fn test_pytorch_worker_generate_text_stream_envelope_rejects_wrong_operation() {
     let fixture = include_str!(
         "../../tests/fixtures/pytorch_worker_contract/generate_text_stream_request.json"

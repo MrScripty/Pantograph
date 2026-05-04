@@ -1722,6 +1722,10 @@ The PyTorch streaming generation path now sends the same typed
 `PyTorchGenerateTextRequest` payload through a `generate_text_stream` worker
 envelope before delegating to the existing Python `generate_tokens` generator,
 keeping streaming-specific Python kwargs behind the backend adapter boundary.
+PyTorch text generation request builders now thread the typed `sampling.top_k`
+generation option into backend-local Transformers kwargs for both streaming and
+non-streaming worker envelopes, while leaving broader option threading as a
+follow-up.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

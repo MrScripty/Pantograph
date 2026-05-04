@@ -7,6 +7,7 @@
 //! The Python worker module (`torch/worker.py`) is embedded at compile time
 //! via `include_str!` and loaded into `sys.modules` on first use.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -528,6 +529,34 @@ impl PyTorchBackend {
         Ok(())
     }
 
+    fn generate_text_request(
+        prompt: String,
+        system_prompt: Option<String>,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
+        top_k: Option<u32>,
+        masked_prompt_json: Option<String>,
+    ) -> PyTorchGenerateTextRequest {
+        PyTorchGenerateTextRequest {
+            prompt,
+            system_prompt,
+            max_tokens,
+            temperature,
+            top_p,
+            masked_prompt_json,
+            transformers_kwargs: Self::generate_text_transformers_kwargs(top_k),
+        }
+    }
+
+    fn generate_text_transformers_kwargs(top_k: Option<u32>) -> BTreeMap<String, Value> {
+        let mut kwargs = BTreeMap::new();
+        if let Some(top_k) = top_k {
+            kwargs.insert("top_k".to_string(), serde_json::json!(top_k));
+        }
+        kwargs
+    }
+
     #[cfg(test)]
     fn transformers_load_args_from_request(
         request: &PyTorchTransformersLoadRequest,
@@ -907,18 +936,40 @@ impl PyTorchBackend {
         top_p: f64,
         masked_prompt_json: Option<String>,
     ) -> Result<String, BackendError> {
+        self.generate_with_top_k(
+            prompt,
+            system_prompt,
+            max_tokens,
+            temperature,
+            top_p,
+            None,
+            masked_prompt_json,
+        )
+        .await
+    }
+
+    async fn generate_with_top_k(
+        &self,
+        prompt: String,
+        system_prompt: Option<String>,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
+        top_k: Option<u32>,
+        masked_prompt_json: Option<String>,
+    ) -> Result<String, BackendError> {
         let envelope = PyTorchWorkerEnvelope::new(
             format!("pytorch-generate-text-{}", Uuid::new_v4().simple()),
             PyTorchWorkerOperation::GenerateText,
-            PyTorchGenerateTextRequest {
+            Self::generate_text_request(
                 prompt,
                 system_prompt,
                 max_tokens,
                 temperature,
                 top_p,
+                top_k,
                 masked_prompt_json,
-                transformers_kwargs: Default::default(),
-            },
+            ),
         );
         Self::validate_generate_text_envelope(&envelope)?;
         let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
@@ -979,19 +1030,40 @@ impl PyTorchBackend {
         top_p: f64,
         masked_prompt_json: Option<String>,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
+        self.generate_stream_with_top_k(
+            prompt,
+            system_prompt,
+            max_tokens,
+            temperature,
+            top_p,
+            None,
+            masked_prompt_json,
+        )
+    }
+
+    fn generate_stream_with_top_k(
+        &self,
+        prompt: String,
+        system_prompt: Option<String>,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
+        top_k: Option<u32>,
+        masked_prompt_json: Option<String>,
+    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatChunk, BackendError>>(32);
         let envelope = PyTorchWorkerEnvelope::new(
             format!("pytorch-generate-text-stream-{}", Uuid::new_v4().simple()),
             PyTorchWorkerOperation::GenerateTextStream,
-            PyTorchGenerateTextRequest {
+            Self::generate_text_request(
                 prompt,
                 system_prompt,
                 max_tokens,
                 temperature,
                 top_p,
+                top_k,
                 masked_prompt_json,
-                transformers_kwargs: Default::default(),
-            },
+            ),
         );
 
         if let Err(error) = Self::validate_generate_text_stream_envelope(&envelope) {
@@ -1241,8 +1313,20 @@ impl InferenceBackend for PyTorchBackend {
             .and_then(|v| v.as_f64())
             .unwrap_or(0.7);
         let top_p = request.get("top_p").and_then(|v| v.as_f64()).unwrap_or(1.0);
+        let top_k = request
+            .get("top_k")
+            .and_then(|value| value.as_u64())
+            .and_then(|value| u32::try_from(value).ok());
 
-        Ok(self.generate_stream(prompt, system_prompt, max_tokens, temperature, top_p, None))
+        Ok(self.generate_stream_with_top_k(
+            prompt,
+            system_prompt,
+            max_tokens,
+            temperature,
+            top_p,
+            top_k,
+            None,
+        ))
     }
 
     async fn embeddings(
