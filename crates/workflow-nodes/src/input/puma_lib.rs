@@ -186,7 +186,7 @@ mod options_provider {
     ) -> String {
         execution_descriptor
             .map(|descriptor| descriptor.task_type_primary.trim())
-            .filter(|task| !task.is_empty())
+            .filter(|task| !task.is_empty() && !task.eq_ignore_ascii_case("unknown"))
             .map(ToOwned::to_owned)
             .or_else(|| {
                 metadata_string(
@@ -830,6 +830,19 @@ mod model_library_tests {
         let task_type = task_type_primary_from_descriptor_or_record(Some(&descriptor), &record);
 
         assert_eq!(task_type, "image-to-text");
+    }
+
+    #[test]
+    fn test_task_type_primary_uses_metadata_when_execution_descriptor_task_is_unknown() {
+        let record = model_record_with_metadata(serde_json::json!({
+            "task_type_primary": "text-generation",
+            "pipeline_tag": "text-generation"
+        }));
+        let descriptor = model_execution_descriptor_with_task("unknown");
+
+        let task_type = task_type_primary_from_descriptor_or_record(Some(&descriptor), &record);
+
+        assert_eq!(task_type, "text-generation");
     }
 
     #[tokio::test]

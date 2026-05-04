@@ -1006,8 +1006,10 @@ Detailed Pumas-side work is split into
   descriptor and package-facts APIs, with saved node inputs retained as the
   compatibility fallback when Pumas lookup is unavailable. The model-list
   option provider now also prefers the Pumas execution descriptor's
-  `task_type_primary` over projected record metadata so stale metadata cannot
-  override the versioned DTO. Embedded-runtime model dependency descriptors now
+  non-`unknown` `task_type_primary` over projected record metadata so stale
+  metadata cannot override the versioned DTO while sparse descriptor task
+  evidence can still fall back to public record facts. Embedded-runtime model
+  dependency descriptors now
   also treat Pumas `ModelExecutionDescriptor.task_type_primary` as
   authoritative over stale record metadata, falling back to metadata only when
   the descriptor task is missing or `unknown`, and falling back to saved request
@@ -3450,6 +3452,11 @@ Update during implementation:
 - 2026-05-04: Added workflow-service registry coverage for image-generation
   payload projection so prompt input and `results` output metadata survive the
   graph registry boundary with snake_case task/result labels.
+- 2026-05-04: Fixed a model-list option-provider drift where
+  `ModelExecutionDescriptor.task_type_primary = unknown` was treated as
+  authoritative. The provider now matches embedded-runtime dependency
+  descriptor semantics by falling back to record task metadata only when the
+  descriptor task is missing or `unknown`.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are
