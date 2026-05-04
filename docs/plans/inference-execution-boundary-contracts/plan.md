@@ -2501,6 +2501,9 @@ drift back into inference.
 - [x] Add tests proving scheduler/runtime-registry policy remains outside
   inference.
 - [ ] Update source READMEs and any ADR links affected by boundary changes.
+  Node-engine and workflow-nodes source READMEs now document executable
+  canonical image-generation as part of the typed `llm-inference` boundary and
+  preserve the diagnostic hygiene rules for prompt/generated image payloads.
 - [ ] Record any deferred consumer migrations in this plan.
 
 **Verification:**
@@ -3420,6 +3423,10 @@ Update during implementation:
   inputs through typed gateway execution, and task-validation plus
   backend-execution lifecycle events carry compatibility summaries with the
   package-derived image model id while omitting prompt and image payloads.
+- 2026-05-04: Updated node-engine and workflow-nodes source README contracts
+  for executable canonical image-generation so the documented consumer and
+  producer boundaries match the typed gateway implementation and descriptor
+  payload metadata.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are

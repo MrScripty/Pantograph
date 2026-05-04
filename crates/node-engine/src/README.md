@@ -175,8 +175,9 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Additive node inputs may be accepted for compatibility, but callers should
   prefer the canonical `pantograph-node-contracts` projections when
   constructing new graph-authoring workflows.
-- Canonical `llm-inference` text/chat, embedding, and rerank execution should
-  pass through `inference::InferenceExecutionRequest` rather than constructing
+- Canonical `llm-inference` text/chat, embedding, rerank, audio transcription,
+  and image-generation execution should pass through
+  `inference::InferenceExecutionRequest` rather than constructing
   backend-native request JSON or calling backend-specific gateway helpers in
   node-engine. Streaming remains responsible for graph `TaskStream` event
   shaping, but the request itself uses typed gateway stream methods instead of
@@ -205,3 +206,7 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Reranker outputs are published as ordered result lists plus convenience fields
   such as top score/document; consumers should not infer ranking from raw input
   order.
+- Image-generation outputs are published as generated image results plus
+  bounded metadata/diagnostics. Diagnostics must not include prompt text,
+  generated image bytes, tensors, backend kwargs, or backend-local command
+  flags.
