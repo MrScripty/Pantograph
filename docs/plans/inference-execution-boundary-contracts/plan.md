@@ -2602,9 +2602,10 @@ one-off conversions.
   now carries canonical task ids and bounded option diagnostics, while
   embedded-runtime maps completed backend-execution lifecycle facts into durable
   metadata without importing the diagnostics ledger into `crates/inference` or
-  storing prompt/result bodies. Remaining task-option diagnostics for embedding,
-  rerank, image/video, and KV-cache task options stay open until those typed
-  paths emit compatibility reports.
+  storing prompt/result bodies. Remaining task-option diagnostics for video
+  stay open until that contract-only task becomes executable; embedding,
+  rerank, image, audio, and KV-cache task-option diagnostics now have bounded
+  producers.
 - 2026-05-03: Node-status task projection slice added an additive `task_id`
   field to `node_execution.status` payloads and the queryable
   `node_status_projection`, bumped the rebuildable projection version, and
@@ -3026,7 +3027,9 @@ Update during implementation:
 - 2026-05-03: Added the first non-generation option diagnostics producer.
   Typed embedding and rerank lifecycle completion events now emit bounded
   option support summaries for backend extra-option keys and rerank controls,
-  leaving image/video/audio and KV-cache task-specific option diagnostics open.
+  leaving image, video, audio, and KV-cache task-specific option diagnostics
+  open at that point. Later slices added image, audio, and KV-cache producers;
+  video remains contract-only.
 - 2026-05-03: Extended typed image-generation results and lifecycle completion
   events with bounded option diagnostics for first-class image settings and
   backend-specific image extra-option keys, without recording prompts or image
