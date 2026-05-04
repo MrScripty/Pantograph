@@ -891,6 +891,70 @@ fn diagnostic_event_ledger_appends_inference_execution_diagnostic_summary() {
 }
 
 #[test]
+fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event appends");
+    ledger
+        .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
+        .expect("run started event appends");
+    let event = ledger
+        .append_diagnostic_event(sample_inference_execution_diagnostic_event())
+        .expect("inference diagnostic event appends");
+
+    let list_state = ledger
+        .drain_run_list_projection(10)
+        .expect("run list projection drains");
+    assert_eq!(list_state.last_applied_event_seq, event.event_seq);
+    let list_records = ledger
+        .query_run_list_projection(RunListProjectionQuery::default())
+        .expect("run list projection loads");
+    assert_eq!(list_records.len(), 1);
+    let list_record = &list_records[0];
+    assert_eq!(
+        list_record.selected_runtime_id.as_deref(),
+        Some("pytorch.transformers")
+    );
+    assert_eq!(list_record.selected_backend_key.as_deref(), Some("pytorch"));
+    assert_eq!(
+        list_record.selected_model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    assert_eq!(
+        list_record.selected_task_id.as_deref(),
+        Some("text_generation")
+    );
+
+    let detail_state = ledger
+        .drain_run_detail_projection(10)
+        .expect("run detail projection drains");
+    assert_eq!(detail_state.last_applied_event_seq, event.event_seq);
+    let detail_record = ledger
+        .query_run_detail_projection(RunDetailProjectionQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+        })
+        .expect("run detail projection loads")
+        .expect("run detail exists");
+    assert_eq!(
+        detail_record.selected_runtime_id.as_deref(),
+        Some("pytorch.transformers")
+    );
+    assert_eq!(
+        detail_record.selected_backend_key.as_deref(),
+        Some("pytorch")
+    );
+    assert_eq!(
+        detail_record.selected_model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    assert_eq!(
+        detail_record.selected_task_id.as_deref(),
+        Some("text_generation")
+    );
+}
+
+#[test]
 fn diagnostic_event_ledger_validates_inference_execution_diagnostic_scope_and_bounds() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let mut missing_node = sample_inference_execution_diagnostic_event();

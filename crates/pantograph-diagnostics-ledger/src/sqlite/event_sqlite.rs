@@ -1364,6 +1364,7 @@ fn diagnostic_projection_events_after(
                 'run.terminal',
                 'run.snapshot_accepted',
                 'node.execution_status',
+                'inference.execution_diagnostic_observed',
                 'diagnostic.error_occurred'
            )
          ORDER BY event_seq
@@ -2170,6 +2171,9 @@ fn apply_run_list_projection_event(
     if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &payload {
         return apply_run_list_projection_inference_facts(tx, event, payload);
     }
+    if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) = &payload {
+        return apply_run_list_projection_inference_diagnostic_facts(tx, event, payload);
+    }
     let status = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
@@ -2358,6 +2362,36 @@ fn apply_run_list_projection_inference_facts(
     Ok(())
 }
 
+fn apply_run_list_projection_inference_diagnostic_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &crate::event::InferenceExecutionDiagnosticObservedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    tx.execute(
+        "UPDATE run_list_projection
+         SET selected_runtime_id = COALESCE(selected_runtime_id, ?1),
+             selected_backend_key = COALESCE(?2, selected_backend_key),
+             selected_model_id = COALESCE(?3, selected_model_id),
+             selected_task_id = COALESCE(?4, selected_task_id),
+             last_event_seq = ?5,
+             last_updated_at_ms = ?6
+         WHERE workflow_run_id = ?7",
+        params![
+            event.runtime_id.as_deref(),
+            payload.selected_backend_key.as_deref(),
+            event.model_id.as_deref(),
+            Some(payload.task_id.as_str()),
+            event.event_seq,
+            event.occurred_at_ms,
+            workflow_run_id.as_str(),
+        ],
+    )?;
+    Ok(())
+}
+
 struct SchedulerProjectionFacts {
     queue_position: Option<u32>,
     priority: Option<i32>,
@@ -2528,6 +2562,9 @@ fn apply_run_detail_projection_event(
     let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
     if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &payload {
         return apply_run_detail_projection_inference_facts(tx, event, payload);
+    }
+    if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) = &payload {
+        return apply_run_detail_projection_inference_diagnostic_facts(tx, event, payload);
     }
     let status = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
@@ -2755,6 +2792,36 @@ fn apply_run_detail_projection_inference_facts(
             payload.selected_backend_key.as_deref(),
             event.model_id.as_deref(),
             payload.task_id.as_deref(),
+            event.event_seq,
+            event.occurred_at_ms,
+            workflow_run_id.as_str(),
+        ],
+    )?;
+    Ok(())
+}
+
+fn apply_run_detail_projection_inference_diagnostic_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &crate::event::InferenceExecutionDiagnosticObservedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    tx.execute(
+        "UPDATE run_detail_projection
+         SET selected_runtime_id = COALESCE(selected_runtime_id, ?1),
+             selected_backend_key = COALESCE(?2, selected_backend_key),
+             selected_model_id = COALESCE(?3, selected_model_id),
+             selected_task_id = COALESCE(?4, selected_task_id),
+             last_event_seq = ?5,
+             last_updated_at_ms = ?6
+         WHERE workflow_run_id = ?7",
+        params![
+            event.runtime_id.as_deref(),
+            payload.selected_backend_key.as_deref(),
+            event.model_id.as_deref(),
+            Some(payload.task_id.as_str()),
             event.event_seq,
             event.occurred_at_ms,
             workflow_run_id.as_str(),
