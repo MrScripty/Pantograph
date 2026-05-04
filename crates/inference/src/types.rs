@@ -356,6 +356,29 @@ impl InferenceExecutionResult {
             } => option_diagnostics,
         }
     }
+
+    #[must_use]
+    pub fn usage(&self) -> Option<&InferenceUsage> {
+        match self {
+            Self::TextGeneration { usage, .. } | Self::Embedding { usage, .. } => usage.as_ref(),
+            Self::Rerank { .. }
+            | Self::ImageGeneration { .. }
+            | Self::AudioTranscription { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub fn cache_handle_id(&self) -> Option<&str> {
+        match self {
+            Self::TextGeneration {
+                cache_handle_id, ..
+            } => cache_handle_id.as_deref(),
+            Self::Embedding { .. }
+            | Self::Rerank { .. }
+            | Self::ImageGeneration { .. }
+            | Self::AudioTranscription { .. } => None,
+        }
+    }
 }
 
 /// Token or item usage attached to a typed execution result when available.
@@ -1642,6 +1665,51 @@ mod tests {
             result.result_kind(),
             crate::model_contracts::InferenceExecutionResultKind::AudioTranscription
         );
+    }
+
+    #[test]
+    fn typed_result_usage_and_cache_accessors_match_contract() {
+        let text_result = InferenceExecutionResult::TextGeneration {
+            text: "Done".to_string(),
+            usage: Some(InferenceUsage {
+                prompt_tokens: Some(8),
+                completion_tokens: Some(5),
+                total_tokens: Some(13),
+            }),
+            cache_handle_id: Some("kv-checkpoint-1".to_string()),
+            option_diagnostics: Vec::new(),
+        };
+        let embedding_result = InferenceExecutionResult::Embedding {
+            embeddings: Vec::new(),
+            usage: Some(InferenceUsage {
+                prompt_tokens: Some(3),
+                completion_tokens: None,
+                total_tokens: Some(3),
+            }),
+            option_diagnostics: Vec::new(),
+        };
+        let rerank_result = InferenceExecutionResult::Rerank {
+            response: RerankResponse {
+                results: Vec::new(),
+                metadata: Value::Null,
+            },
+            option_diagnostics: Vec::new(),
+        };
+
+        assert_eq!(
+            text_result.usage().and_then(|usage| usage.total_tokens),
+            Some(13)
+        );
+        assert_eq!(text_result.cache_handle_id(), Some("kv-checkpoint-1"));
+        assert_eq!(
+            embedding_result
+                .usage()
+                .and_then(|usage| usage.prompt_tokens),
+            Some(3)
+        );
+        assert_eq!(embedding_result.cache_handle_id(), None);
+        assert!(rerank_result.usage().is_none());
+        assert_eq!(rerank_result.cache_handle_id(), None);
     }
 
     #[test]

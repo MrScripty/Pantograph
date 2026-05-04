@@ -2395,7 +2395,10 @@ inference write ledger events directly.
   durable inference diagnostic payloads now carry bounded usage counts and
   cache-handle ids. Typed embedding execution now aggregates backend embedding
   item token counts into bounded prompt/total usage summaries without storing
-  vectors or input text. Host-owned workflow event sinks now persist structured
+  vectors or input text. Gateway lifecycle projection now reads usage and
+  cache-handle summaries through canonical typed result accessors instead of
+  duplicating result-shape matches in producer code. Host-owned workflow event
+  sinks now persist structured
   KV-cache progress references for action, outcome, cache id, backend key, reuse
   source, token count, and reason without cache bytes/fingerprints/temp paths;
   I/O artifact projection now exposes selected-backend context and derives

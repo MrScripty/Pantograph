@@ -2450,8 +2450,7 @@ fn usage_from_execution_result(
     result: &Result<InferenceExecutionResult, GatewayError>,
 ) -> Option<InferenceUsage> {
     match result {
-        Ok(InferenceExecutionResult::TextGeneration { usage, .. })
-        | Ok(InferenceExecutionResult::Embedding { usage, .. }) => usage.clone(),
+        Ok(result) => result.usage().cloned(),
         _ => None,
     }
 }
@@ -2483,9 +2482,7 @@ fn cache_handle_from_execution_result(
     result: &Result<InferenceExecutionResult, GatewayError>,
 ) -> Option<String> {
     match result {
-        Ok(InferenceExecutionResult::TextGeneration {
-            cache_handle_id, ..
-        }) => cache_handle_id.clone(),
+        Ok(result) => result.cache_handle_id().map(ToOwned::to_owned),
         _ => None,
     }
 }
