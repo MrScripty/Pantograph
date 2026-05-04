@@ -2189,8 +2189,10 @@ inference write ledger events directly.
   result projection, duration, cancellation, and cleanup. Diagnostic-observed
   inference payloads now preserve lifecycle phase and event kind for events that
   carry compatibility or option summaries, and workflow-owned lifecycle sinks
-  now copy matched terminal durations into durable bounded diagnostic summaries
-  when a matching start is known; broader phase coverage remains open.
+  now copy matched terminal durations into durable bounded diagnostic summaries.
+  Completed package-resolution, preprocessing, postprocessing, and
+  result-projection events can persist duration-only summaries when a matching
+  start is known; cancellation and cleanup summary coverage remains open.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -2732,6 +2734,11 @@ Update during implementation:
 - 2026-05-03: Workflow projection service README now names
   `selected_backend_key` as a preserved I/O artifact projection filter and
   response fact so frontend services keep backend-owned artifact context intact.
+- 2026-05-03: Embedded-runtime lifecycle diagnostics now persist
+  duration-only completed summaries for model-package resolution,
+  preprocessing, postprocessing, and result projection when a matched lifecycle
+  start supplies observed timing. Durationless lifecycle events without bounded
+  diagnostics remain suppressed.
 
 ## Commit Cadence Notes
 

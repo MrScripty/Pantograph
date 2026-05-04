@@ -613,7 +613,8 @@ fn build_inference_diagnostic_event_ledger_append_request(
         || event.compatibility_report.is_some()
         || !event.compatibility_issues.is_empty()
         || event.usage.is_some()
-        || event.cache_handle_id.is_some();
+        || event.cache_handle_id.is_some()
+        || duration_ms.is_some();
     if !has_bounded_diagnostics
         || !inference_diagnostic_phase_is_persistable(event)
         || event.kind != inference::InferenceRequestLifecycleEventKind::Completed
@@ -696,13 +697,16 @@ fn inference_diagnostic_phase_is_persistable(
     event: &inference::InferenceRequestLifecycleEvent,
 ) -> bool {
     match event.phase {
+        inference::InferenceLifecyclePhase::ModelPackageResolution
+        | inference::InferenceLifecyclePhase::Preprocessing
+        | inference::InferenceLifecyclePhase::Postprocessing
+        | inference::InferenceLifecyclePhase::ResultProjection => true,
         inference::InferenceLifecyclePhase::TaskValidation => {
             event.compatibility_report.is_some()
                 || !event.compatibility_issues.is_empty()
                 || !event.option_diagnostics.is_empty()
         }
         inference::InferenceLifecyclePhase::BackendExecution => true,
-        _ => false,
     }
 }
 

@@ -491,6 +491,64 @@ fn inference_diagnostic_event_adapter_carries_known_lifecycle_duration() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_persists_duration_only_non_backend_lifecycle() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.phase = inference::InferenceLifecyclePhase::Preprocessing;
+    event.usage = None;
+    event.cache_handle_id = None;
+    event.compatibility_report = None;
+    event.compatibility_issues.clear();
+    event.option_diagnostics.clear();
+
+    let request =
+        inference_diagnostic_event_ledger_append_request_with_duration(&context, &event, Some(75))
+            .expect("completed duration-only preprocessing lifecycle should map");
+
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("SECRET_PROMPT"));
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.duration_ms, Some(75));
+            assert_eq!(payload.lifecycle_phase.as_deref(), Some("preprocessing"));
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
+            assert!(payload.usage.is_none());
+            assert!(payload.cache_handle_id.is_none());
+            assert!(payload.kv_cache.is_none());
+            assert!(payload.compatibility_report.is_none());
+            assert_eq!(payload.compatibility_issue_count, 0);
+            assert!(payload.compatibility_issues.is_empty());
+            assert_eq!(payload.option_support_counts, Default::default());
+            assert!(payload.option_diagnostics.is_empty());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_skips_durationless_lifecycle_without_diagnostics() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.phase = inference::InferenceLifecyclePhase::Preprocessing;
+    event.usage = None;
+    event.cache_handle_id = None;
+    event.compatibility_report = None;
+    event.compatibility_issues.clear();
+    event.option_diagnostics.clear();
+
+    assert!(
+        inference_diagnostic_event_ledger_append_request_with_duration(&context, &event, None)
+            .is_none()
+    );
+}
+
+#[test]
 fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
     let workflow_id = WorkflowId::try_from("workflow-a".to_string()).expect("workflow id");
     let workflow_run_id = WorkflowRunId::try_from("run-a".to_string()).expect("run id");

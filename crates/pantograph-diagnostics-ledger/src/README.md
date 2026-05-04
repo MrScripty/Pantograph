@@ -81,9 +81,11 @@ Inference option-support summaries use
 system metadata for request id, task id, lifecycle phase/kind, selected backend,
 support-state counts, backend/model compatibility summaries, per-option
 compatibility summaries, usage-count summaries, cache-handle ids, and
-structured KV-cache action/outcome references; they must not carry prompt text,
-messages, generated content, embeddings, tensors, token arrays, Python kwargs,
-raw backend process output, cache bytes, cache fingerprints, or temp paths.
+structured KV-cache action/outcome references. Duration-only completed
+lifecycle rows are allowed for bounded phase timing even when a phase carries no
+usage or compatibility details; they must not carry prompt text, messages,
+generated content, embeddings, tensors, token arrays, Python kwargs, raw backend
+process output, cache bytes, cache fingerprints, or temp paths.
 I/O artifact projection queries can filter producer and consumer node
 endpoints directly; callers should not scan projection pages client-side to
 answer node-produced or node-consumed artifact questions.
@@ -310,6 +312,8 @@ let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
   task id, lifecycle phase/kind, duration when known, selected backend
   key/family, compatibility summaries, option-support summaries, usage counts,
   cache-handle ids, and KV-cache action/outcome references.
+  Producers may emit duration-only completed lifecycle summaries for phase
+  timing when a matching start/terminal pair exists.
   Producers must keep raw request/result bodies, embeddings, tensors, token
   arrays, Python kwargs, backend CLI flags, and unbounded process output out of
   these payloads.
