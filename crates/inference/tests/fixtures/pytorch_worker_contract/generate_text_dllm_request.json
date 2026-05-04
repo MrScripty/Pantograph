@@ -1,0 +1,21 @@
+{
+  "contract_version": 1,
+  "request_id": "req-generate-dllm-001",
+  "operation": "generate_text",
+  "cancellation": {
+    "drop_stream_cancels": false
+  },
+  "payload": {
+    "prompt": "Complete the masked denoising plan.",
+    "system_prompt": "Preserve block-local reasoning.",
+    "max_tokens": 128,
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "masked_prompt_json": "{\"segments\":[{\"kind\":\"known\",\"text\":\"Plan:\"},{\"kind\":\"mask\",\"token_count\":8}]}",
+    "denoising_steps": 8,
+    "block_length": 64,
+    "transformers_kwargs": {
+      "top_k": 10
+    }
+  }
+}

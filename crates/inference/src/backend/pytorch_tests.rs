@@ -374,6 +374,66 @@ fn test_pytorch_worker_generate_text_envelope_decodes_fixture() {
 }
 
 #[test]
+fn test_pytorch_worker_generate_text_dllm_envelope_decodes_backend_local_controls() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/generate_text_dllm_request.json"
+    );
+    let envelope: PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> =
+        serde_json::from_str(fixture).expect("decode worker dLLM generate fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-generate-dllm-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::GenerateText);
+    assert_eq!(
+        envelope.payload.masked_prompt_json.as_deref(),
+        Some("{\"segments\":[{\"kind\":\"known\",\"text\":\"Plan:\"},{\"kind\":\"mask\",\"token_count\":8}]}")
+    );
+    assert_eq!(envelope.payload.denoising_steps, Some(8));
+    assert_eq!(envelope.payload.block_length, Some(64));
+    assert_eq!(
+        envelope.payload.transformers_kwargs["top_k"],
+        serde_json::json!(10)
+    );
+
+    PyTorchBackend::validate_generate_text_envelope(&envelope)
+        .expect("dLLM generate_text fixture should validate");
+}
+
+#[test]
+fn test_python_worker_contract_projects_dllm_generation_controls() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/generate_text_dllm_request.json"
+        );
+
+        let kwargs = module
+            .call_method1("generate_text_kwargs_from_envelope", (fixture,))
+            .expect("dLLM worker envelope should project to kwargs");
+
+        let masked_prompt_json = kwargs
+            .get_item("masked_prompt_json")
+            .expect("masked prompt key should exist")
+            .extract::<String>()
+            .expect("masked prompt should be a string");
+        let denoising_steps = kwargs
+            .get_item("denoising_steps")
+            .expect("denoising steps key should exist")
+            .extract::<i64>()
+            .expect("denoising steps should be an integer");
+        let block_length = kwargs
+            .get_item("block_length")
+            .expect("block length key should exist")
+            .extract::<i64>()
+            .expect("block length should be an integer");
+
+        assert!(masked_prompt_json.contains("\"mask\""));
+        assert_eq!(denoising_steps, 8);
+        assert_eq!(block_length, 64);
+    });
+}
+
+#[test]
 fn test_pytorch_worker_generate_text_stream_envelope_decodes_fixture() {
     let fixture = include_str!(
         "../../tests/fixtures/pytorch_worker_contract/generate_text_stream_request.json"

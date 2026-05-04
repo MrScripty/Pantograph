@@ -1763,9 +1763,12 @@ using Python Transformers behind the boundary for broad HF-compatible support.
 - [x] Define the Rust-to-Python worker envelope, init/shutdown lifecycle,
   error mapping, request correlation, cancellation behavior, and schema
   fixtures before changing worker behavior.
-- [ ] Preserve dLLM/Sherry-specific behavior if it still requires custom worker
+- [x] Preserve dLLM/Sherry-specific behavior if it still requires custom worker
   logic, but describe it as backend-local support rather than a public
-  Pantograph model standard.
+  Pantograph model standard. PyTorch worker envelopes now carry backend-local
+  masked prompt JSON, denoising step, and block length controls through
+  Rust/Python worker fixtures and projection tests while public Rust callers
+  continue to default those fields to absent.
 - [ ] Normalize Transformers/Python errors into Pantograph backend errors and
   runtime facts. The non-streaming PyTorch generate-text worker response now
   decodes through the same typed worker-response normalization pattern as model

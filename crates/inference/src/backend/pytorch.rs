@@ -646,6 +646,8 @@ impl PyTorchBackend {
             temperature,
             top_p,
             masked_prompt_json,
+            denoising_steps: None,
+            block_length: None,
             transformers_kwargs: Self::generate_text_transformers_kwargs(top_k),
         }
     }

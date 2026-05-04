@@ -102,6 +102,8 @@ def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEX
         "temperature": float(payload.get("temperature", 0.7)),
         "top_p": float(payload.get("top_p", 1.0)),
         "masked_prompt_json": payload.get("masked_prompt_json"),
+        "denoising_steps": payload.get("denoising_steps"),
+        "block_length": payload.get("block_length"),
     }
     for key, value in transformers_kwargs.items():
         if value is not None:

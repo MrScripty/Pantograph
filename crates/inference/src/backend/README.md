@@ -154,3 +154,7 @@ fn create_backend() {
   Transformers-style kwargs, while llama.cpp maps them to bounded
   OpenAI-compatible request fields; callers consume compatibility diagnostics
   instead of backend-native flags.
+- dLLM/Sherry controls such as masked prompt JSON, denoising steps, and block
+  length are PyTorch worker-envelope fields only. They preserve backend-local
+  custom generation behavior without becoming public Pantograph graph/request
+  contract fields.

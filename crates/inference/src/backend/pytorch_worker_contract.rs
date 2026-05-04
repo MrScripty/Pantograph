@@ -157,6 +157,10 @@ pub(super) struct PyTorchGenerateTextRequest {
     pub top_p: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub masked_prompt_json: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub denoising_steps: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block_length: Option<i64>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub transformers_kwargs: BTreeMap<String, Value>,
 }
