@@ -149,6 +149,9 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   through typed request dispatch and updates capability facts. The backend trait
   and gateway expose a speech-to-text method that fails closed by default so
   implementers have one typed boundary to fill in later slices.
+- PyTorch audio transcription currently accepts only encoded in-memory audio at
+  the backend edge. `audio_ref` resolution remains host-owned so artifact
+  lookup and media payload handling do not move into the inference crate.
 - Gateway lifecycle, request forwarding, runtime reuse, and shared mock-backend
   fixtures stay in `gateway_tests.rs`, while oversized behavior families split
   under `gateway_tests/` so `gateway.rs` remains focused on production gateway

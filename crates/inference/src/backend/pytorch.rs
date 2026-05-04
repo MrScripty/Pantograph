@@ -39,7 +39,9 @@ use crate::model_contracts::{
     TaskRegistryEntry,
 };
 use crate::process::ProcessSpawner;
-use crate::types::{RerankRequest, RerankResponse};
+use crate::types::{
+    AudioTranscriptionRequest, AudioTranscriptionResult, RerankRequest, RerankResponse,
+};
 use crate::{BackendHintLabel, ModelArtifactKind};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 
@@ -870,6 +872,31 @@ impl PyTorchBackend {
         }
     }
 
+    fn audio_base64_from_request(
+        request: &AudioTranscriptionRequest,
+    ) -> Result<String, BackendError> {
+        if let Some(audio) = &request.audio {
+            let data_base64 = audio.data_base64.trim();
+            if !data_base64.is_empty() {
+                return Ok(data_base64.to_string());
+            }
+        }
+
+        if request
+            .audio_ref
+            .as_deref()
+            .is_some_and(|audio_ref| !audio_ref.trim().is_empty())
+        {
+            return Err(BackendError::Config(
+                "PyTorch audio transcription requires encoded audio; audio_ref resolution is owned by the host adapter".to_string(),
+            ));
+        }
+
+        Err(BackendError::Config(
+            "PyTorch audio transcription requires encoded audio".to_string(),
+        ))
+    }
+
     async fn load_model_with_trust_policy(
         &mut self,
         model_path: &str,
@@ -1389,6 +1416,78 @@ impl InferenceBackend for PyTorchBackend {
         Err(BackendError::Inference(
             "Reranking not supported by PyTorch backend".to_string(),
         ))
+    }
+
+    async fn transcribe_audio(
+        &self,
+        request: AudioTranscriptionRequest,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        if !self.ready {
+            return Err(BackendError::NotReady);
+        }
+
+        let model_path = request.model.clone();
+        if model_path.trim().is_empty() {
+            return Err(BackendError::Config(
+                "PyTorch audio transcription requires a model".to_string(),
+            ));
+        }
+        let audio_base64 = Self::audio_base64_from_request(&request)?;
+        let language = request.language.clone();
+        let prompt = request.prompt.clone();
+        let task = request.task.clone();
+        let chunk_length_s = request.chunk_length_s;
+
+        tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| -> Result<AudioTranscriptionResult, BackendError> {
+                let worker = pytorch_worker::worker_module(py).map_err(|e| {
+                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                })?;
+                let kwargs = pyo3::types::PyDict::new(py);
+                kwargs.set_item("model_path", model_path).unwrap();
+                kwargs.set_item("audio_base64", audio_base64).unwrap();
+                kwargs.set_item("device", "auto").unwrap();
+                if let Some(language) = language.filter(|value| !value.trim().is_empty()) {
+                    kwargs.set_item("language", language).unwrap();
+                }
+                if let Some(prompt) = prompt.filter(|value| !value.trim().is_empty()) {
+                    kwargs.set_item("prompt", prompt).unwrap();
+                }
+                if let Some(task) = task.filter(|value| !value.trim().is_empty()) {
+                    kwargs.set_item("task", task).unwrap();
+                }
+                if let Some(chunk_length_s) = chunk_length_s {
+                    kwargs.set_item("chunk_length_s", chunk_length_s).unwrap();
+                }
+
+                let result = worker
+                    .call_method("transcribe_audio", (), Some(&kwargs))
+                    .map_err(|e| {
+                        BackendError::Inference(format!("PyTorch audio transcription failed: {e}"))
+                    })?;
+                Ok(AudioTranscriptionResult {
+                    text: result
+                        .get_item("text")
+                        .ok()
+                        .and_then(|value| value.extract::<String>().ok())
+                        .unwrap_or_default(),
+                    language: result
+                        .get_item("language")
+                        .ok()
+                        .and_then(|value| value.extract::<Option<String>>().ok())
+                        .flatten(),
+                    duration_seconds: result
+                        .get_item("duration_seconds")
+                        .ok()
+                        .and_then(|value| value.extract::<Option<f32>>().ok())
+                        .flatten(),
+                    segments: Vec::new(),
+                    metadata: serde_json::Value::Null,
+                })
+            })
+        })
+        .await
+        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
     }
 
     async fn kv_cache_runtime_fingerprint(

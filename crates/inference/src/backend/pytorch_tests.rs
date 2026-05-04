@@ -14,6 +14,7 @@ use crate::model_contracts::{
     PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSourceKind, SamplingGenerationOptions,
     SpecialTokenGenerationOptions, StoppingGenerationOptions, TaskEvidence,
 };
+use crate::types::{AudioTranscriptionRequest, EncodedAudio};
 
 #[test]
 fn test_backend_name() {
@@ -588,6 +589,49 @@ fn test_pytorch_worker_load_error_response_normalizes_to_backend_error() {
         }
         other => panic!("expected Config error, got {other:?}"),
     }
+}
+
+#[test]
+fn test_pytorch_audio_transcription_requires_encoded_audio() {
+    let request = AudioTranscriptionRequest {
+        model: "openai/whisper-tiny".to_string(),
+        audio: None,
+        audio_ref: Some("artifact://audio.wav".to_string()),
+        language: None,
+        prompt: None,
+        task: None,
+        chunk_length_s: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    match PyTorchBackend::audio_base64_from_request(&request) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("audio_ref resolution is owned by the host adapter"));
+        }
+        other => panic!("expected config error for unresolved audio_ref, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_audio_transcription_accepts_encoded_audio() {
+    let request = AudioTranscriptionRequest {
+        model: "openai/whisper-tiny".to_string(),
+        audio: Some(EncodedAudio {
+            data_base64: " UklGRg== ".to_string(),
+            mime_type: "audio/wav".to_string(),
+            sample_rate_hz: Some(16_000),
+        }),
+        audio_ref: None,
+        language: Some("en".to_string()),
+        prompt: None,
+        task: Some("transcribe".to_string()),
+        chunk_length_s: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let audio = PyTorchBackend::audio_base64_from_request(&request)
+        .expect("encoded audio should be accepted");
+    assert_eq!(audio, "UklGRg==");
 }
 
 #[test]

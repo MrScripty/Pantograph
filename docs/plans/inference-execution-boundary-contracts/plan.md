@@ -1846,6 +1846,10 @@ later PyTorch/Transformers execution slice wires the gateway and backend path.
 `transcribe_audio` method that fails closed by default, giving future PyTorch
 and external-runtime slices a single backend edge without advertising canonical
 task execution support yet.
+The PyTorch backend now implements the `transcribe_audio` method for encoded
+in-memory audio only, while rejecting `audio_ref` requests with a config error
+so artifact lookup stays in host/runtime adapters rather than moving media
+payload ownership into the inference crate.
 The embedded Python runtime bridge now recognizes canonical
 `audio_transcription`, Hugging Face `automatic-speech-recognition`, and legacy
 `audio-to-text` labels at a single PyTorch ASR branch so future gateway work
