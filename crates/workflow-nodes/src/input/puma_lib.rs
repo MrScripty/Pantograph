@@ -219,6 +219,21 @@ mod options_provider {
                 }
             }
         }
+
+        pub(crate) fn insert_summary(&mut self, summary: ModelPackageFactsSummaryResult) {
+            self.summaries.insert(summary.model_id.clone(), summary);
+        }
+
+        pub(crate) fn needs_resolution(&self, model_id: &str) -> bool {
+            self.summaries.get(model_id).map_or(true, |result| {
+                result.summary.is_none()
+                    || matches!(
+                        result.status,
+                        ModelPackageFactsSummaryStatus::Missing
+                            | ModelPackageFactsSummaryStatus::Invalid
+                    )
+            })
+        }
     }
 
     pub(crate) async fn load_package_facts_summary_cache(
@@ -259,18 +274,9 @@ mod options_provider {
         }
 
         for record in records {
-            let needs_resolution = cache.summaries.get(&record.id).map_or(true, |result| {
-                result.summary.is_none()
-                    || matches!(
-                        result.status,
-                        ModelPackageFactsSummaryStatus::Missing
-                            | ModelPackageFactsSummaryStatus::Invalid
-                    )
-            });
-
-            if needs_resolution {
+            if cache.needs_resolution(&record.id) {
                 if let Ok(summary) = api.resolve_model_package_facts_summary(&record.id).await {
-                    cache.summaries.insert(record.id.clone(), summary);
+                    cache.insert_summary(summary);
                 }
             }
         }
@@ -569,6 +575,43 @@ mod model_library_tests {
         temp_dir
     }
 
+    fn package_summary_result(model_id: &str, status: &str) -> ModelPackageFactsSummaryResult {
+        serde_json::from_value(serde_json::json!({
+            "model_id": model_id,
+            "status": status,
+            "summary": {
+                "package_facts_contract_version": 1,
+                "model_ref": {
+                    "model_id": model_id,
+                    "revision": null,
+                    "selected_artifact_id": "main",
+                    "selected_artifact_path": model_id
+                },
+                "artifact_kind": "gguf",
+                "entry_path": format!("{model_id}/model.gguf"),
+                "storage_kind": "library_owned",
+                "validation_state": "valid",
+                "task": {
+                    "pipeline_tag": "text-generation",
+                    "task_type_primary": "text-generation",
+                    "input_modalities": ["text"],
+                    "output_modalities": ["text"]
+                },
+                "backend_hints": {
+                    "accepted": ["llama.cpp"],
+                    "raw": ["llama.cpp"]
+                },
+                "requires_custom_code": false,
+                "config_status": "missing",
+                "tokenizer_status": "missing",
+                "processor_status": "missing",
+                "generation_config_status": "missing",
+                "generation_defaults_status": "missing"
+            }
+        }))
+        .expect("summary fixture should decode")
+    }
+
     fn write_test_diffusers_bundle(root: &std::path::Path) {
         std::fs::create_dir_all(root.join("scheduler")).unwrap();
         std::fs::create_dir_all(root.join("text_encoder")).unwrap();
@@ -785,6 +828,57 @@ mod model_library_tests {
         assert_eq!(cache.cursor.as_deref(), Some("model-library-updates:2"));
         assert!(!cache.summaries.contains_key("model-a"));
         assert!(cache.summaries.contains_key("model-b"));
+    }
+
+    #[test]
+    fn test_package_facts_summary_cache_regenerates_after_snapshot_update_invalidation() {
+        let mut cache = PackageFactsSummaryCache {
+            cursor: Some("model-library-updates:1".to_string()),
+            summaries: HashMap::from([
+                (
+                    "model-a".to_string(),
+                    package_summary_result("model-a", "cached"),
+                ),
+                (
+                    "model-b".to_string(),
+                    package_summary_result("model-b", "cached"),
+                ),
+            ]),
+        };
+        let feed = ModelLibraryUpdateFeed {
+            cursor: "model-library-updates:2".to_string(),
+            events: vec![ModelLibraryUpdateEvent {
+                cursor: "model-library-updates:2".to_string(),
+                model_id: "model-a".to_string(),
+                change_kind: ModelLibraryChangeKind::PackageFactsModified,
+                fact_family: ModelFactFamily::PackageFacts,
+                refresh_scope: ModelLibraryRefreshScope::SummaryAndDetail,
+                selected_artifact_id: Some("main".to_string()),
+                producer_revision: Some("rev-2".to_string()),
+            }],
+            stale_cursor: false,
+            snapshot_required: false,
+        };
+
+        cache.apply_update_feed(&feed);
+
+        assert_eq!(cache.cursor.as_deref(), Some("model-library-updates:2"));
+        assert!(
+            cache.needs_resolution("model-a"),
+            "updated snapshot rows must be regenerated after feed invalidation"
+        );
+        assert!(
+            !cache.needs_resolution("model-b"),
+            "unaffected snapshot rows should remain usable"
+        );
+
+        cache.insert_summary(package_summary_result("model-a", "regenerated"));
+
+        assert!(!cache.needs_resolution("model-a"));
+        assert_eq!(
+            cache.summaries.get("model-a").map(|summary| summary.status),
+            Some(ModelPackageFactsSummaryStatus::Regenerated)
+        );
     }
 
     #[test]

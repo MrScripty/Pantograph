@@ -63,6 +63,10 @@ Pumas update feeds without inspecting Pumas storage.
   into Pantograph routing.
 - `puma-lib` option metadata may cache bounded Pumas package summaries for the
   listed page, but Pumas remains the source of truth and update cursor producer.
+- `puma-lib` summary-cache population applies the Pumas snapshot cursor before
+  resolving sparse rows, then consumes the update feed for that cursor so
+  modified or removed model summaries cannot be served from a stale startup
+  page.
 - Pantograph must not infer Pumas runtime bundle semantics from projected
   metadata when an execution descriptor is available.
 - Fallback task inference must remain conservative and deterministic.
