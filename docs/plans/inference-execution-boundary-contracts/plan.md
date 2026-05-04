@@ -2333,7 +2333,8 @@ inference write ledger events directly.
   Typed streaming backend-execution terminal events now carry the same bounded
   compatibility summary through the private lifecycle stream wrapper, keeping
   public chat streaming lifecycle calls diagnostic-free unless a typed request
-  supplied package facts.
+  supplied package facts. Coverage includes completed and failed typed stream
+  terminal events while cleanup remains diagnostic-free.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support. Canonical

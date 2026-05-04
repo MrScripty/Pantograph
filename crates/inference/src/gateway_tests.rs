@@ -1737,6 +1737,67 @@ async fn test_chat_completion_stream_with_lifecycle_records_stream_failure() {
 }
 
 #[tokio::test]
+async fn test_stream_typed_text_with_lifecycle_records_failed_backend_compatibility() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: true,
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let fixture = include_str!(
+        "../tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("package facts fixture");
+
+    let request = InferenceExecutionRequest {
+        request_id: Some("req-typed-stream-fail".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: Some(package_facts.model_ref.clone()),
+        model_name: Some("typed-model".to_string()),
+        runtime_hint: None,
+        resolved_model_package_facts: Some(package_facts),
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: true,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let mut stream = gateway
+        .stream_typed_text_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed stream should start");
+    let result = stream.next().await.expect("stream item");
+    assert!(matches!(
+        result,
+        Err(BackendError::Inference(message)) if message.contains("mock stream failure")
+    ));
+
+    let events = sink.events();
+    assert_eq!(events.len(), 6);
+    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[4].kind, InferenceRequestLifecycleEventKind::Failed);
+    let backend_compatibility_report = events[4]
+        .compatibility_report
+        .as_ref()
+        .expect("failed backend execution compatibility report");
+    assert_eq!(backend_compatibility_report.status, "rejected");
+    assert!(!backend_compatibility_report.compatible);
+    assert!(!events[4].compatibility_issues.is_empty());
+    assert_eq!(
+        events[4].detail.as_deref(),
+        Some("Inference error: mock stream failure")
+    );
+    assert!(events[5].compatibility_report.is_none());
+    assert!(events[5].compatibility_issues.is_empty());
+}
+
+#[tokio::test]
 async fn test_chat_completion_stream_with_lifecycle_records_drop_cancellation() {
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
