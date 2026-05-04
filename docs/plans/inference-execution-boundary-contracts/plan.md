@@ -2232,7 +2232,9 @@ inference write ledger events directly.
   now copy matched terminal durations into durable bounded diagnostic summaries.
   Completed package-resolution, preprocessing, postprocessing, and
   result-projection events can persist duration-only summaries when a matching
-  start is known; cancellation and cleanup summary coverage remains open.
+  start is known. Cancelled lifecycle events now persist duration-only bounded
+  diagnostic summaries when a matching start is known, while durationless
+  cancellation and cleanup remain non-persisted to avoid ledger noise.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and

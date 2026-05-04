@@ -491,6 +491,51 @@ fn inference_diagnostic_event_adapter_carries_known_lifecycle_duration() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_persists_cancelled_lifecycle_duration() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Cancelled,
+        175,
+    );
+    event.detail = Some("SECRET_PROMPT should not leak".to_string());
+
+    let request =
+        inference_diagnostic_event_ledger_append_request_with_duration(&context, &event, Some(75))
+            .expect("cancelled backend lifecycle with duration should map");
+
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("SECRET_PROMPT"));
+    assert_eq!(request.runtime_id.as_deref(), Some("pytorch.transformers"));
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.request_id, "req-a");
+            assert_eq!(payload.task_id, "text_generation");
+            assert_eq!(payload.duration_ms, Some(75));
+            assert_eq!(
+                payload.lifecycle_phase.as_deref(),
+                Some("backend_execution")
+            );
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("cancelled"));
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(payload.selected_backend_family.as_deref(), Some("pytorch"));
+            assert!(payload.usage.is_none());
+            assert!(payload.cache_handle_id.is_none());
+            assert!(payload.kv_cache.is_none());
+            assert!(payload.compatibility_report.is_none());
+            assert_eq!(payload.compatibility_issue_count, 0);
+            assert!(payload.compatibility_issues.is_empty());
+            assert_eq!(payload.option_support_counts, Default::default());
+            assert!(payload.option_diagnostics.is_empty());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_diagnostic_event_adapter_persists_duration_only_non_backend_lifecycle() {
     let context = context();
     let mut event = inference_lifecycle_event(
@@ -536,6 +581,25 @@ fn inference_diagnostic_event_adapter_skips_durationless_lifecycle_without_diagn
         175,
     );
     event.phase = inference::InferenceLifecyclePhase::Preprocessing;
+    event.usage = None;
+    event.cache_handle_id = None;
+    event.compatibility_report = None;
+    event.compatibility_issues.clear();
+    event.option_diagnostics.clear();
+
+    assert!(
+        inference_diagnostic_event_ledger_append_request_with_duration(&context, &event, None)
+            .is_none()
+    );
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_skips_durationless_cancelled_lifecycle_without_diagnostics() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Cancelled,
+        175,
+    );
     event.usage = None;
     event.cache_handle_id = None;
     event.compatibility_report = None;
@@ -700,6 +764,69 @@ fn inference_lifecycle_recorder_cleanup_clears_tracked_start_without_persisting(
         }
         other => panic!("expected node execution status payload, got {other:?}"),
     }
+}
+
+#[test]
+fn inference_lifecycle_workflow_sink_records_cancelled_node_status_to_workflow_ledger() {
+    let service =
+        std::sync::Arc::new(WorkflowService::with_ephemeral_diagnostics_ledger().expect("service"));
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![node_engine::GraphNode {
+            id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        }],
+        edges: Vec::new(),
+        groups: Vec::new(),
+    };
+    let sink = InferenceLifecycleWorkflowLedgerSink::try_new(
+        service.clone(),
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+    )
+    .expect("sink");
+
+    let mut started =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Started, 100);
+    started.request_id = Some("run-a:node-a:LLM".to_string());
+    inference::InferenceRequestLifecycleEventSink::record(&sink, started);
+
+    let mut cancelled = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Cancelled,
+        175,
+    );
+    cancelled.request_id = Some("run-a:node-a:LLM".to_string());
+    inference::InferenceRequestLifecycleEventSink::record(&sink, cancelled);
+
+    let response = service
+        .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            projection_batch_size: Some(10),
+            ..WorkflowNodeStatusQueryRequest::default()
+        })
+        .expect("node status query");
+
+    assert_eq!(response.nodes.len(), 1);
+    assert_eq!(response.nodes[0].node_id, "node-a");
+    assert_eq!(
+        response.nodes[0].status,
+        NodeExecutionProjectionStatus::Cancelled
+    );
+    assert_eq!(response.nodes[0].duration_ms, Some(75));
+    assert_eq!(
+        response.nodes[0].runtime_id.as_deref(),
+        Some("pytorch.transformers")
+    );
+    assert_eq!(
+        response.nodes[0].model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
 }
 
 #[test]

@@ -617,7 +617,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
         || duration_ms.is_some();
     if !has_bounded_diagnostics
         || !inference_diagnostic_phase_is_persistable(event)
-        || event.kind != inference::InferenceRequestLifecycleEventKind::Completed
+        || !inference_diagnostic_event_kind_is_persistable(event)
     {
         return None;
     }
@@ -708,6 +708,16 @@ fn inference_diagnostic_phase_is_persistable(
         }
         inference::InferenceLifecyclePhase::BackendExecution => true,
     }
+}
+
+fn inference_diagnostic_event_kind_is_persistable(
+    event: &inference::InferenceRequestLifecycleEvent,
+) -> bool {
+    matches!(
+        event.kind,
+        inference::InferenceRequestLifecycleEventKind::Completed
+            | inference::InferenceRequestLifecycleEventKind::Cancelled
+    )
 }
 
 fn inference_usage_summary(usage: &inference::InferenceUsage) -> InferenceUsageDiagnosticSummary {
