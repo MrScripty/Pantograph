@@ -2127,7 +2127,11 @@ implementation beyond the cleaned execution boundary.
 - No code verification required unless implementation is pulled into scope by a
   re-plan.
 
-**Status:** Not started.
+**Status:** In progress. Runtime identity now recognizes `vllm` and `mlx` as
+stable roadmap runtime ids and display labels so diagnostics, capability
+matching, and future registry observations can name them consistently without
+registering executable backends, managed binaries, scheduler policy, or platform
+dependencies.
 
 ### Milestone 14: Consumer Migration and Guardrails
 

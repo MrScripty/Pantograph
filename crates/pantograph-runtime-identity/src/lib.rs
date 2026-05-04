@@ -20,6 +20,8 @@ pub fn canonical_runtime_backend_key(name: &str) -> String {
         "onnxruntime" => "onnx-runtime".to_string(),
         "stableaudio" => "stable_audio".to_string(),
         "diffusers" => "diffusers".to_string(),
+        "vllm" => "vllm".to_string(),
+        "mlx" => "mlx".to_string(),
         other => other.to_string(),
     }
 }
@@ -39,6 +41,8 @@ pub fn canonical_runtime_id(value: &str) -> String {
         "ollama" => "ollama".to_string(),
         "candle" => "candle".to_string(),
         "diffusers" => "diffusers".to_string(),
+        "vllm" => "vllm".to_string(),
+        "mlx" => "mlx".to_string(),
         _ => trimmed.to_string(),
     }
 }
@@ -115,6 +119,8 @@ pub fn runtime_display_name(runtime_id: &str) -> Option<&'static str> {
         "diffusers" => Some("Diffusers (Python sidecar)"),
         "onnx-runtime" => Some("ONNX Runtime (Python sidecar)"),
         "stable_audio" => Some("Stable Audio (Python sidecar)"),
+        "vllm" => Some("vLLM (external runtime)"),
+        "mlx" => Some("MLX (macOS local runtime)"),
         _ => None,
     }
 }
@@ -162,6 +168,8 @@ mod tests {
             "stable_audio"
         );
         assert_eq!(canonical_runtime_backend_key("diffusers"), "diffusers");
+        assert_eq!(canonical_runtime_backend_key("vLLM"), "vllm");
+        assert_eq!(canonical_runtime_backend_key("MLX"), "mlx");
         assert_eq!(
             canonical_runtime_backend_key("OpenAI Compatible"),
             "openaicompatible"
@@ -198,6 +206,8 @@ mod tests {
         assert_eq!(canonical_runtime_id("PyTorch"), "pytorch");
         assert_eq!(canonical_runtime_id("onnx_runtime"), "onnx-runtime");
         assert_eq!(canonical_runtime_id("Stable Audio"), "stable_audio");
+        assert_eq!(canonical_runtime_id("vLLM"), "vllm");
+        assert_eq!(canonical_runtime_id("MLX"), "mlx");
     }
 
     #[test]
@@ -239,6 +249,14 @@ mod tests {
         assert_eq!(
             runtime_display_name("onnx-runtime"),
             Some("ONNX Runtime (Python sidecar)")
+        );
+        assert_eq!(
+            runtime_display_name("vllm"),
+            Some("vLLM (external runtime)")
+        );
+        assert_eq!(
+            runtime_display_name("mlx"),
+            Some("MLX (macOS local runtime)")
         );
         assert_eq!(runtime_display_name("custom-runtime"), None);
     }
