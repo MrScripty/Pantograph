@@ -561,7 +561,7 @@ async fn test_canonical_llm_text_uses_typed_lifecycle_sink_extension() {
         Some("typed response")
     );
     let events = lifecycle_events.lock().expect("lifecycle events lock");
-    assert_eq!(events.len(), 6);
+    assert_eq!(events.len(), 15);
     assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
     assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
     assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
@@ -569,13 +569,17 @@ async fn test_canonical_llm_text_uses_typed_lifecycle_sink_extension() {
         events[1].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
-    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[3].phase, InferenceLifecyclePhase::Preprocessing);
     assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
-    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[6].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[6].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[7].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(
-        events[4].kind,
+        events[7].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
+    assert_eq!(events[9].phase, InferenceLifecyclePhase::Postprocessing);
+    assert_eq!(events[12].phase, InferenceLifecyclePhase::ResultProjection);
     assert!(events.iter().all(|event| {
         event.request_id.as_deref() == Some("exec-a:llm-inference-1:text_generation")
             && event.backend_key.as_deref() == Some("mock")
@@ -640,7 +644,7 @@ async fn test_canonical_llm_text_with_package_facts_emits_compatibility_lifecycl
     assert_eq!(requests.lock().expect("requests lock").len(), 1);
 
     let events = lifecycle_events.lock().expect("lifecycle events lock");
-    assert_eq!(events.len(), 9);
+    assert_eq!(events.len(), 18);
     let package_completed = events
         .iter()
         .find(|event| {
@@ -1220,6 +1224,23 @@ async fn test_canonical_llm_embedding_uses_typed_gateway_boundary() {
         outputs.get("embedding"),
         Some(&serde_json::json!([0.25, 0.5, 0.75]))
     );
+    assert_eq!(
+        outputs.get("usage"),
+        Some(&serde_json::json!({
+            "prompt_tokens": 3,
+            "total_tokens": 3
+        }))
+    );
+    assert_eq!(outputs.get("diagnostics"), Some(&serde_json::json!([])));
+    let bounded_outputs = serde_json::to_string(&serde_json::json!({
+        "usage": outputs.get("usage"),
+        "diagnostics": outputs.get("diagnostics"),
+    }))
+    .expect("bounded outputs serialize");
+    assert!(!bounded_outputs.contains("hello"));
+    assert!(!bounded_outputs.contains("0.25"));
+    assert!(!bounded_outputs.contains("0.5"));
+    assert!(!bounded_outputs.contains("0.75"));
     let captured = embedding_requests.lock().expect("embedding requests lock");
     assert_eq!(captured.len(), 1);
     assert_eq!(captured[0].0, vec!["hello".to_string()]);
@@ -1290,7 +1311,7 @@ async fn test_canonical_llm_embedding_with_package_facts_emits_compatibility_lif
     );
 
     let events = lifecycle_events.lock().expect("lifecycle events lock");
-    assert_eq!(events.len(), 9);
+    assert_eq!(events.len(), 18);
     let validation_completed = events
         .iter()
         .find(|event| {

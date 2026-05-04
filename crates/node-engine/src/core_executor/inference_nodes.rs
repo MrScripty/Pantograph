@@ -430,8 +430,12 @@ pub(crate) async fn execute_embedding_inference(
             NodeEngineError::ExecutionFailed(format!("Typed embedding inference failed: {error}"))
         })?;
     ensure_typed_result_kind(&result, expected_result_kind, "Typed embedding inference")?;
-    let embeddings = match result {
-        inference::InferenceExecutionResult::Embedding { embeddings, .. } => embeddings,
+    let (embeddings, usage, option_diagnostics) = match result {
+        inference::InferenceExecutionResult::Embedding {
+            embeddings,
+            usage,
+            option_diagnostics,
+        } => (embeddings, usage, option_diagnostics),
         other => {
             return Err(NodeEngineError::ExecutionFailed(format!(
                 "Typed embedding inference returned unexpected result: {other:?}"
@@ -456,6 +460,16 @@ pub(crate) async fn execute_embedding_inference(
 
     let mut outputs = HashMap::new();
     outputs.insert("embedding".to_string(), serde_json::json!(embedding.vector));
+    if let Some(usage) = usage {
+        outputs.insert(
+            "usage".to_string(),
+            serde_json::to_value(usage).unwrap_or(serde_json::Value::Null),
+        );
+    }
+    outputs.insert(
+        "diagnostics".to_string(),
+        serde_json::to_value(option_diagnostics).unwrap_or(serde_json::Value::Null),
+    );
     let emit_metadata =
         super::read_optional_input_bool_aliases(inputs, &["emit_metadata", "emitMetadata"])
             .unwrap_or(false);

@@ -2604,7 +2604,12 @@ inference write ledger events directly.
   I/O artifact projection now exposes selected-backend context and derives
   missing runtime/model/backend facts only from the latest raw producer-node
   execution status event at or before the artifact observation. Additional
-  backend producers remain open.
+  backend producers remain open. Canonical `llm-inference` embedding execution
+  now projects typed embedding `usage` and bounded `option_diagnostics` onto
+  graph output ports while keeping input text and embedding vectors out of
+  those metadata outputs; node lifecycle tests now match the explicit
+  preprocessing, postprocessing, and result-projection phase model for
+  non-streaming typed execution.
 - [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
