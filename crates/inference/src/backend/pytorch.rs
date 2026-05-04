@@ -776,11 +776,24 @@ impl PyTorchBackend {
                 Some("token-id output is not exposed by the PyTorch worker yet".to_string()),
             ));
         }
+        let invalid_backend_extension_paths = options
+            .backend_extension_scope_diagnostics()
+            .into_iter()
+            .map(|diagnostic| {
+                let path = diagnostic.option_path.clone();
+                diagnostics.push(diagnostic);
+                path
+            })
+            .collect::<Vec<_>>();
         for (key, value) in &options.backend_extensions {
+            let option_path = format!("backend_extensions.{key}");
+            if invalid_backend_extension_paths.contains(&option_path) {
+                continue;
+            }
             if let Some(transformers_key) = key.strip_prefix("transformers:") {
                 kwargs.insert(transformers_key.to_string(), value.clone());
                 diagnostics.push(Self::generation_option_diagnostic(
-                    format!("backend_extensions.{key}"),
+                    option_path,
                     OptionSupportState::Mapped,
                     Some(format!(
                         "mapped to Transformers extension key {transformers_key}"
@@ -788,7 +801,7 @@ impl PyTorchBackend {
                 ));
             } else {
                 diagnostics.push(Self::generation_option_diagnostic(
-                    format!("backend_extensions.{key}"),
+                    option_path,
                     OptionSupportState::Unsupported,
                     Some("backend extension is not scoped to Transformers".to_string()),
                 ));

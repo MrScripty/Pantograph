@@ -918,10 +918,13 @@ fn test_pytorch_generation_options_map_to_transformers_kwargs_and_diagnostics() 
             pad_token_id: Some(0),
             ..Default::default()
         },
-        backend_extensions: [(
-            "transformers:renormalize_logits".to_string(),
-            serde_json::json!(true),
-        )]
+        backend_extensions: [
+            (
+                "transformers:renormalize_logits".to_string(),
+                serde_json::json!(true),
+            ),
+            ("raw_top_k".to_string(), serde_json::json!(40)),
+        ]
         .into_iter()
         .collect(),
         ..Default::default()
@@ -959,6 +962,10 @@ fn test_pytorch_generation_options_map_to_transformers_kwargs_and_diagnostics() 
     assert!(mapping.diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "output.return_logprobs"
             && diagnostic.state == OptionSupportState::Unsupported
+    }));
+    assert!(mapping.diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "backend_extensions.raw_top_k"
+            && diagnostic.state == OptionSupportState::Rejected
     }));
 
     let requested_paths: BTreeSet<_> = options.requested_option_paths().into_iter().collect();

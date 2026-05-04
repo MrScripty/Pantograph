@@ -1150,6 +1150,10 @@ unknown future groups are additive rather than public raw kwargs.
 stable scoping rule with bounded `OptionCompatibilityDiagnostic` entries,
 letting adapters reject unscoped backend extensions without interpreting them
 as canonical generation fields.
+The PyTorch/Transformers and llama.cpp generation-option mappers now consume
+that shared scope diagnostic before backend-local extension mapping, so raw
+kwargs are rejected consistently while correctly scoped foreign extensions
+remain backend-specific unsupported diagnostics.
 Node-engine text/chat request construction now validates supplied `task_kind`,
 `taskKind`, `task_id`, and `taskId` labels through the inference task registry.
 Missing task labels still default to text generation for existing text nodes,

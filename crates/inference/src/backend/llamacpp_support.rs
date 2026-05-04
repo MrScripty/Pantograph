@@ -220,17 +220,30 @@ pub(super) fn llama_cpp_generation_option_mapping(
         options.special_tokens.pad_token_id.is_some(),
         "llama.cpp request mapping does not accept PAD token overrides",
     );
+    let invalid_backend_extension_paths = options
+        .backend_extension_scope_diagnostics()
+        .into_iter()
+        .map(|diagnostic| {
+            let path = diagnostic.option_path.clone();
+            diagnostics.push(diagnostic);
+            path
+        })
+        .collect::<Vec<_>>();
     for (key, value) in &options.backend_extensions {
+        let option_path = format!("backend_extensions.{key}");
+        if invalid_backend_extension_paths.contains(&option_path) {
+            continue;
+        }
         if let Some(llama_key) = key.strip_prefix("llama.cpp:") {
             request_fields.insert(llama_key.to_string(), value.clone());
             diagnostics.push(llama_option_diagnostic(
-                format!("backend_extensions.{key}"),
+                option_path,
                 OptionSupportState::Mapped,
                 Some(format!("mapped to llama.cpp extension key {llama_key}")),
             ));
         } else {
             diagnostics.push(llama_option_diagnostic(
-                format!("backend_extensions.{key}"),
+                option_path,
                 OptionSupportState::Unsupported,
                 Some("backend extension is not scoped to llama.cpp".to_string()),
             ));
@@ -531,6 +544,7 @@ mod tests {
                     "transformers:renormalize_logits".to_string(),
                     serde_json::json!(true),
                 ),
+                ("raw_top_k".to_string(), serde_json::json!(40)),
             ]
             .into_iter()
             .collect(),
@@ -557,6 +571,10 @@ mod tests {
         assert!(mapping.diagnostics.iter().any(|diagnostic| {
             diagnostic.option_path == "backend_extensions.transformers:renormalize_logits"
                 && diagnostic.state == OptionSupportState::Unsupported
+        }));
+        assert!(mapping.diagnostics.iter().any(|diagnostic| {
+            diagnostic.option_path == "backend_extensions.raw_top_k"
+                && diagnostic.state == OptionSupportState::Rejected
         }));
 
         let requested_paths: BTreeSet<_> = options.requested_option_paths().into_iter().collect();
