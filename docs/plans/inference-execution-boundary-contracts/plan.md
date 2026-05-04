@@ -2439,6 +2439,11 @@ eviction, scheduler-policy, and selected-best-backend.
 package-source/load-plan contract, the unavailable-until-executable guardrail,
 and the boundary that keeps Candle package validation separate from runtime
 selection, residency, and scheduling policy.
+2026-05-04 update: `crates/inference/README.md` now also documents that
+PyTorch direct local loads and Pumas-resolved loads share the backend-local
+`load_transformers_model` worker envelope, that direct paths remain
+import/debug sources rather than Pumas model refs, and that Candle staged
+resource probes do not imply executable runtime availability.
 
 ### Milestone 15: Diagnostics Ledger Integration
 

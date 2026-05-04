@@ -125,6 +125,14 @@ selection must use supported runtimes through Pumas model references.
 - Versioning: Cargo features, backend capability fields, typed execution
   request/result payloads, model/package fact DTOs, and runtime lifecycle
   payloads are public contracts for workspace consumers.
+- PyTorch/Transformers loading enters Python through the backend-local
+  `load_transformers_model` worker envelope for both Pumas-resolved packages
+  and direct local import/debug paths. Direct paths are represented as direct
+  model sources and must not be treated as Pumas-owned stable model refs.
+- Candle's current `backend-candle` surface validates Pumas package facts,
+  staged local load plans, tokenizers, dtype/device facts, and safetensors
+  tensor resources, but it still reports unavailable until an executable model
+  module and request path exist.
 - Policy: runtime placement, scheduler admission, reservation, priority,
   eviction, and final backend choice are caller-owned policy. This crate emits
   factual capabilities, compatibility diagnostics, lifecycle events, and
@@ -139,6 +147,10 @@ selection must use supported runtimes through Pumas model references.
   option compatibility diagnostics, lifecycle phases, Pumas package-facts
   summary snapshots, and model-library update feeds are structured
   producer/consumer contracts for later inference slices.
+- Backend-local load envelopes, including PyTorch worker envelopes and Candle
+  staged resource probes, are adapter contracts. They may contain direct-source
+  import/debug paths or loaded tensor resources, but they do not choose
+  scheduler placement, runtime admission, residency, or final backend policy.
 - `InferenceExecutionRequest`, `InferenceExecutionInput`, and
   `InferenceExecutionResult` are the canonical task execution wire contracts.
   They use task ids and input/result tags from the task registry and keep
