@@ -931,13 +931,13 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - [x] Define contract versioning, compatibility, and default semantics for
   Pumas package facts, task registry entries, generation options,
   compatibility reports, lifecycle diagnostics, and canonical inference nodes.
-- [ ] Identify current fields that are raw facts versus fields that risk
+- [x] Identify current fields that are raw facts versus fields that risk
   policy interpretation.
 - [x] Decide whether runtime facts extend `RuntimeLifecycleSnapshot` directly
   or use a new wrapper DTO.
-- [ ] Define naming rules that avoid scheduler-language fields such as
+- [x] Define naming rules that avoid scheduler-language fields such as
   priority, reservation, admission, eviction, or selected-best-backend.
-- [ ] Freeze the vertical-slice implementation order and the minimum
+- [x] Freeze the vertical-slice implementation order and the minimum
   cross-layer acceptance fixture required for each slice.
 
 **Verification:**
@@ -960,6 +960,11 @@ Pantograph-local technical-fit candidate facts, compact
 Runtime facts now use the wrapper `RuntimeFactSnapshot` projected from
 `ServerModeInfo`/`RuntimeLifecycleSnapshot`; explicit non-`auto` device facts
 are carried through the wrapper instead of extending the lifecycle snapshot.
+The implementation strategy now freezes the validated vertical-slice order and
+minimum cross-layer fixture requirements, while public inference contract tests
+guard representative DTO JSON keys against scheduler-policy terminology such
+as admission, reservation, priority, eviction, scheduler-policy, and
+selected-best-backend.
 
 ### Milestone 2: Align Pumas as Canonical Model Source
 
@@ -3495,6 +3500,9 @@ Update during implementation:
   svelte-graph backend README contract sections so mock `inference_payloads`
   are documented as task payload facts only, not backend choice, runtime
   residency, or scheduler policy.
+- 2026-05-04: Closed Milestone 1 vocabulary checklist items that are now backed
+  by the implementation strategy, raw-facts-versus-policy boundary language,
+  and public inference DTO guardrail tests for scheduler-policy terminology.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are
