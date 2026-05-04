@@ -1133,7 +1133,10 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   runtime boundaries. Public inference integration coverage now freezes the
   canonical `InferenceExecutionRequest` wire shape for snake_case fields,
   internally tagged task input payloads, absent optional fields, null
-  `extra_options`, and additive unknown request/input fields.
+  `extra_options`, and additive unknown request/input fields. Inference
+  lifecycle event coverage now also freezes snake_case phase/kind decoding,
+  absent optional field defaults, empty diagnostics vectors, and additive
+  unknown-field tolerance for diagnostics producers that evolve independently.
 - [x] Add validation rules so internal code consumes parsed model/task types
   rather than raw strings or ad hoc JSON.
 - [x] Document that Python Transformers is one implementation of these

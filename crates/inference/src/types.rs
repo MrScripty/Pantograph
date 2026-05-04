@@ -2358,6 +2358,44 @@ mod tests {
     }
 
     #[test]
+    fn inference_request_lifecycle_event_serde_defaults_and_ignores_unknown_fields() {
+        let encoded = serde_json::json!({
+            "phase": "task_validation",
+            "kind": "completed",
+            "occurred_at_ms": 99,
+            "producer_future_field": {
+                "ignored": true
+            },
+            "compatibility_issues_future": [
+                "ignored"
+            ]
+        });
+
+        let decoded: InferenceRequestLifecycleEvent =
+            serde_json::from_value(encoded).expect("minimal lifecycle event decodes");
+
+        assert_eq!(decoded.request_id, None);
+        assert_eq!(decoded.phase, InferenceLifecyclePhase::TaskValidation);
+        assert_eq!(decoded.kind, InferenceRequestLifecycleEventKind::Completed);
+        assert_eq!(decoded.occurred_at_ms, 99);
+        assert_eq!(decoded.task_id, None);
+        assert_eq!(decoded.backend_key, None);
+        assert_eq!(decoded.runtime_id, None);
+        assert_eq!(decoded.runtime_instance_id, None);
+        assert_eq!(decoded.selected_device_id, None);
+        assert_eq!(decoded.selected_network_node_id, None);
+        assert_eq!(decoded.model_id, None);
+        assert_eq!(decoded.resolved_artifact_kind, None);
+        assert_eq!(decoded.usage, None);
+        assert_eq!(decoded.cache_handle_id, None);
+        assert_eq!(decoded.detail, None);
+        assert_eq!(decoded.canonical_error_event_id, None);
+        assert_eq!(decoded.compatibility_report, None);
+        assert!(decoded.compatibility_issues.is_empty());
+        assert!(decoded.option_diagnostics.is_empty());
+    }
+
+    #[test]
     fn runtime_lifecycle_snapshot_normalized_reason_preserves_explicit_reason() {
         let snapshot = RuntimeLifecycleSnapshot {
             lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
