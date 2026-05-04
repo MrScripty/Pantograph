@@ -1278,6 +1278,8 @@ pub struct NodeExecutionStatusPayload {
     pub duration_ms: Option<u64>,
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_error_event_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_backend_key: Option<String>,
@@ -1286,6 +1288,11 @@ pub struct NodeExecutionStatusPayload {
 impl NodeExecutionStatusPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_optional_text("error", self.error.as_deref(), MAX_JSON_LEN)?;
+        validate_optional_text(
+            "canonical_error_event_id",
+            self.canonical_error_event_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text("task_id", self.task_id.as_deref(), MAX_ID_LEN)?;
         validate_optional_text(
             "selected_backend_key",
@@ -2454,6 +2461,7 @@ pub struct NodeStatusProjectionRecord {
     pub duration_ms: Option<u64>,
     pub error: Option<String>,
     pub error_event_id: Option<String>,
+    pub canonical_error_event_id: Option<String>,
     pub error_severity: Option<DiagnosticErrorSeverity>,
     pub error_phase: Option<String>,
     pub error_code: Option<String>,

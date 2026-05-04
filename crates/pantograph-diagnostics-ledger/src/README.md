@@ -109,6 +109,10 @@ Failed `run.terminal` payloads may carry `canonical_error_event_id` when the
 workflow service knows the directly related `diagnostic.error_occurred` row.
 Consumers should use that link for navigation and causality display instead of
 deriving cause from adjacent timestamps.
+Failed `node.execution_status` payloads may also carry
+`canonical_error_event_id`; node-status projections preserve that link
+separately from `error_event_id`, which remains reserved for fatal
+node-scoped `diagnostic.error_occurred` rows projected directly as node status.
 When a secondary diagnostic append fails while handling an existing workflow or
 inference error, service layers should preserve the original error and expose a
 `diagnostics_unavailable` link instead of replacing the user-visible failure

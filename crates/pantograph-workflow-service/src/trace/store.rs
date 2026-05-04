@@ -551,6 +551,7 @@ fn node_status_event_from_trace_node(
             completed_at_ms,
             duration_ms: node.duration_ms,
             error: node.last_error.clone(),
+            canonical_error_event_id: None,
             task_id: None,
             selected_backend_key: None,
         }),

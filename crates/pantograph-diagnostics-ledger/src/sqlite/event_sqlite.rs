@@ -1039,8 +1039,8 @@ pub(super) fn query_node_status_projection(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, node_id, node_type, node_version, runtime_id,
                 runtime_version, task_id, selected_backend_key, model_id, model_version, status, started_at_ms,
-                completed_at_ms, duration_ms, error, error_event_id, error_severity,
-                error_phase, error_code, last_event_seq, last_updated_at_ms
+                completed_at_ms, duration_ms, error, error_event_id, canonical_error_event_id,
+                error_severity, error_phase, error_code, last_event_seq, last_updated_at_ms
          FROM node_status_projection
          WHERE (?1 IS NULL OR workflow_run_id = ?1)
            AND (?2 IS NULL OR node_id = ?2)
@@ -2035,6 +2035,7 @@ fn apply_node_status_projection_event(
         duration_ms,
         error,
         error_event_id,
+        canonical_error_event_id,
         error_severity,
         error_phase,
         error_code,
@@ -2048,6 +2049,7 @@ fn apply_node_status_projection_event(
             payload.duration_ms.map(|value| value as i64),
             payload.error.clone(),
             None,
+            payload.canonical_error_event_id.clone(),
             None,
             None,
             None,
@@ -2065,6 +2067,7 @@ fn apply_node_status_projection_event(
                 None,
                 Some(payload.message.clone()),
                 Some(event.event_id.clone()),
+                None,
                 Some(payload.severity),
                 Some(payload.phase.clone()),
                 Some(payload.code.clone()),
@@ -2097,10 +2100,10 @@ fn apply_node_status_projection_event(
             (workflow_run_id, workflow_id, workflow_version_id,
              workflow_semantic_version, node_id, node_type, node_version, runtime_id,
              runtime_version, task_id, selected_backend_key, model_id, model_version, status, started_at_ms,
-             completed_at_ms, duration_ms, error, error_event_id, error_severity,
-             error_phase, error_code, last_event_seq, last_updated_at_ms)
+             completed_at_ms, duration_ms, error, error_event_id, canonical_error_event_id,
+             error_severity, error_phase, error_code, last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
+                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
          ON CONFLICT(workflow_run_id, node_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = excluded.workflow_version_id,
@@ -2119,6 +2122,7 @@ fn apply_node_status_projection_event(
             duration_ms = COALESCE(excluded.duration_ms, node_status_projection.duration_ms),
             error = excluded.error,
             error_event_id = COALESCE(excluded.error_event_id, node_status_projection.error_event_id),
+            canonical_error_event_id = COALESCE(excluded.canonical_error_event_id, node_status_projection.canonical_error_event_id),
             error_severity = COALESCE(excluded.error_severity, node_status_projection.error_severity),
             error_phase = COALESCE(excluded.error_phase, node_status_projection.error_phase),
             error_code = COALESCE(excluded.error_code, node_status_projection.error_code),
@@ -2147,6 +2151,7 @@ fn apply_node_status_projection_event(
             duration_ms,
             error.as_deref(),
             error_event_id.as_deref(),
+            canonical_error_event_id.as_deref(),
             error_severity.map(DiagnosticErrorSeverity::as_db),
             error_phase.as_deref(),
             error_code.as_deref(),
@@ -3529,14 +3534,15 @@ fn node_status_projection_from_row(row: &Row<'_>) -> rusqlite::Result<NodeStatus
         duration_ms: row.get::<_, Option<i64>>(16)?.map(i64_to_u64_saturating),
         error: row.get(17)?,
         error_event_id: row.get(18)?,
+        canonical_error_event_id: row.get(19)?,
         error_severity: row
-            .get::<_, Option<String>>(19)?
+            .get::<_, Option<String>>(20)?
             .map(parse_diagnostic_error_severity)
             .transpose()?,
-        error_phase: row.get(20)?,
-        error_code: row.get(21)?,
-        last_event_seq: row.get(22)?,
-        last_updated_at_ms: row.get(23)?,
+        error_phase: row.get(21)?,
+        error_code: row.get(22)?,
+        last_event_seq: row.get(23)?,
+        last_updated_at_ms: row.get(24)?,
     })
 }
 

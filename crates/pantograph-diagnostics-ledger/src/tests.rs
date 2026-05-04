@@ -931,6 +931,51 @@ fn diagnostic_event_ledger_replays_legacy_node_failed_status() {
     assert_eq!(nodes[0].status, NodeExecutionProjectionStatus::Failed);
     assert_eq!(nodes[0].error.as_deref(), Some("legacy node failed"));
     assert_eq!(nodes[0].error_event_id, None);
+    assert_eq!(nodes[0].canonical_error_event_id, None);
+}
+
+#[test]
+fn diagnostic_event_ledger_preserves_node_status_canonical_error_link() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut event = sample_node_status_event(
+        "workflow_run_alpha",
+        "canonical-error-node",
+        NodeExecutionProjectionStatus::Failed,
+        1_240,
+    );
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut event.payload {
+        payload.error = Some("node failed after canonical diagnostic".to_string());
+        payload.canonical_error_event_id = Some("diagnostic-error-node-alpha".to_string());
+    }
+    ledger
+        .append_diagnostic_event(event)
+        .expect("node status event");
+    ledger
+        .drain_node_status_projection(500)
+        .expect("node status projection drains");
+
+    let nodes = ledger
+        .query_node_status_projection(NodeStatusProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: Some("canonical-error-node".to_string()),
+            status: Some(NodeExecutionProjectionStatus::Failed),
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("node status query succeeds");
+
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(
+        nodes[0].error.as_deref(),
+        Some("node failed after canonical diagnostic")
+    );
+    assert_eq!(nodes[0].error_event_id, None);
+    assert_eq!(
+        nodes[0].canonical_error_event_id.as_deref(),
+        Some("diagnostic-error-node-alpha")
+    );
 }
 
 #[test]
@@ -4554,6 +4599,7 @@ fn sample_node_status_event(
                 .then_some(started_at_ms + 100),
             duration_ms: (status == NodeExecutionProjectionStatus::Completed).then_some(100),
             error: None,
+            canonical_error_event_id: None,
             task_id: None,
             selected_backend_key: None,
         }),

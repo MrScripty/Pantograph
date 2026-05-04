@@ -271,6 +271,7 @@ export interface NodeStatusProjectionRecord {
   duration_ms?: number | null;
   error?: string | null;
   error_event_id?: string | null;
+  canonical_error_event_id?: string | null;
   error_severity?: DiagnosticErrorSeverity | null;
   error_phase?: string | null;
   error_code?: string | null;

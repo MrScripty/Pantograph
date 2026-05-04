@@ -195,6 +195,11 @@ session-runtime workflows, and the root facade test module.
   `RunTerminalPayload::canonical_error_event_id` when the error provides one.
   The terminal event records state transition; `diagnostic.error_occurred`
   remains the detailed error fact.
+- Failed node status events may carry
+  `NodeExecutionStatusPayload::canonical_error_event_id` when node execution
+  already knows the causal diagnostic event. Consumers should prefer that link
+  for node-focused navigation while keeping `error_event_id` for direct
+  node-scoped fatal diagnostic projections.
 
 ## Revisit Triggers
 - Runtime preflight becomes a public reusable crate-level policy.

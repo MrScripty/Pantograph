@@ -513,6 +513,7 @@ fn build_inference_lifecycle_event_ledger_append_request(
                 .detail
                 .as_deref()
                 .map(sanitize_inference_lifecycle_error_detail),
+            canonical_error_event_id: None,
             task_id: event.task_id.clone(),
             selected_backend_key: event.backend_key.clone(),
         }),

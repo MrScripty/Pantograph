@@ -150,7 +150,7 @@ export function buildRunGraphNodeRows(
       hasOutputArtifacts: (artifactSummary?.outputCount ?? 0) > 0,
       statusLabel: formatRunGraphNodeStatusLabel(nodeStatus?.status),
       statusClass: runGraphNodeStatusClass(nodeStatus?.status),
-      errorEventId: nodeStatus?.error_event_id ?? null,
+      errorEventId: nodeStatus?.canonical_error_event_id ?? nodeStatus?.error_event_id ?? null,
       errorSeverity: nodeStatus?.error_severity ?? null,
       errorPhase: nodeStatus?.error_phase ?? null,
       errorCode: nodeStatus?.error_code ?? null,
@@ -202,7 +202,8 @@ export function buildRunGraphCanvasModel(
     hasOutputArtifacts: (artifactSummaries[node.id]?.outputCount ?? 0) > 0,
     statusLabel: formatRunGraphNodeStatusLabel(nodeStatuses[node.id]?.status),
     statusClass: runGraphNodeStatusClass(nodeStatuses[node.id]?.status),
-    errorEventId: nodeStatuses[node.id]?.error_event_id ?? null,
+    errorEventId:
+      nodeStatuses[node.id]?.canonical_error_event_id ?? nodeStatuses[node.id]?.error_event_id ?? null,
     errorSeverity: nodeStatuses[node.id]?.error_severity ?? null,
     errorPhase: nodeStatuses[node.id]?.error_phase ?? null,
     errorCode: nodeStatuses[node.id]?.error_code ?? null,
@@ -228,7 +229,12 @@ export function buildRunGraphCanvasModel(
 export function formatRunGraphNodeErrorBadge(
   status: NodeStatusProjectionRecord | null | undefined,
 ): string | null {
-  if (!status?.error_severity && !status?.error_event_id && !status?.error_code) {
+  if (
+    !status?.error_severity &&
+    !status?.canonical_error_event_id &&
+    !status?.error_event_id &&
+    !status?.error_code
+  ) {
     return null;
   }
   const severity = status.error_severity ? formatRunGraphErrorSeverity(status.error_severity) : 'Error';

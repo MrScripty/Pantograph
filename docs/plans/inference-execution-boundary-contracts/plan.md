@@ -2529,7 +2529,10 @@ inference write ledger events directly.
   run-list and run-detail `latest_error_event_id` without duplicating the
   detailed error payload or incrementing error counters. Scheduler model
   lifecycle failed transitions now do the same when they carry
-  `canonical_error_event_id`; node lifecycle links remain open.
+  `canonical_error_event_id`. Node execution status payloads and projections
+  now preserve `canonical_error_event_id` separately from direct node-scoped
+  `error_event_id`; inference lifecycle summary links remain open until a
+  direct causal error id is available on that producer DTO.
 - [ ] Ensure ledger append failure returns or projects `diagnostics_unavailable`
   while preserving the original inference/preflight/execution error. Failed
   inference lifecycle detail is now sanitized and bounded before node-status
@@ -3024,6 +3027,10 @@ Update during implementation:
   diagnostics for recognized video sampling/window task options, so failed
   task-validation lifecycle facts expose backend-unavailable option support
   summaries without adding a video backend or storing media payloads.
+- 2026-05-04: Added node execution status canonical error links to ledger
+  payloads, node-status projections, workflow-service contracts, and frontend
+  run-graph/diagnostics focus helpers while keeping direct node fatal
+  `error_event_id` projections distinct.
 - 2026-05-04: Added typed audio transcription lifecycle coverage proving
   backend-execution events carry canonical `audio_transcription` task ids,
   selected model ids, bounded extra-option diagnostics, and no raw audio

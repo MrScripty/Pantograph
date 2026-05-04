@@ -74,6 +74,9 @@
       : EMPTY_DIAGNOSTICS_EXECUTION_FILTER_OPTIONS,
   );
   let filteredExecutionNodes = $derived(filterDiagnosticsExecutionNodes(nodeStatuses, executionFilters));
+  let filteredExecutionErrorNodes = $derived(
+    filteredExecutionNodes.filter((node) => nodeHasErrorFocus(node)),
+  );
   let executionFacetRows = $derived(buildDiagnosticsExecutionFacetRows(filteredExecutionNodes));
   let retentionSummaryRows = $derived(buildDiagnosticsRetentionSummaryRows(retentionSummary));
   let comparisonFilterOptions = $derived(
@@ -105,6 +108,18 @@
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
+  }
+
+  function nodeDiagnosticErrorEventId(node: NodeStatusProjectionRecord): string | null {
+    return node.canonical_error_event_id ?? node.error_event_id ?? null;
+  }
+
+  function nodeHasErrorFocus(node: NodeStatusProjectionRecord): boolean {
+    return Boolean(nodeDiagnosticErrorEventId(node) || node.error || node.error_severity);
+  }
+
+  function nodeMatchesFocusedDiagnostic(node: NodeStatusProjectionRecord): boolean {
+    return nodeDiagnosticErrorEventId(node) === focusedDiagnosticEventId || node.node_id === focusedNodeId;
   }
 
   async function refreshDiagnostics(runId = activeRunId()): Promise<void> {
@@ -702,7 +717,7 @@
             </section>
           {/if}
 
-          {#if filteredExecutionNodes.some((node) => node.error_event_id || node.error || node.error_severity)}
+          {#if filteredExecutionErrorNodes.length > 0}
             <section class="rounded border border-neutral-800 bg-neutral-900/50">
               <div class="border-b border-neutral-800 px-4 py-3">
                 <h2 class="text-sm font-semibold text-neutral-100">Node Errors</h2>
@@ -721,8 +736,8 @@
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-neutral-900">
-                    {#each filteredExecutionNodes.filter((node) => node.error_event_id || node.error || node.error_severity) as node (node.node_id)}
-                      <tr class:border-l-2={node.error_event_id === focusedDiagnosticEventId || node.node_id === focusedNodeId} class:border-cyan-400={node.error_event_id === focusedDiagnosticEventId || node.node_id === focusedNodeId}>
+                    {#each filteredExecutionErrorNodes as node (node.node_id)}
+                      <tr class:border-l-2={nodeMatchesFocusedDiagnostic(node)} class:border-cyan-400={nodeMatchesFocusedDiagnostic(node)}>
                         <td class="px-4 py-2 font-mono text-xs text-neutral-300" title={node.node_id}>{node.node_id}</td>
                         <td class="px-3 py-2 text-xs text-neutral-300">{node.status}</td>
                         <td class="px-3 py-2 text-xs text-neutral-300">
@@ -732,8 +747,8 @@
                           {formatDiagnosticErrorPhase(node.error_phase)}
                         </td>
                         <td class="px-3 py-2 font-mono text-xs text-neutral-400">{node.error_code ?? 'unknown_error'}</td>
-                        <td class="px-4 py-2 font-mono text-xs text-neutral-500" title={node.error_event_id ?? ''}>
-                          {node.error_event_id ?? 'Unassigned'}
+                        <td class="px-4 py-2 font-mono text-xs text-neutral-500" title={nodeDiagnosticErrorEventId(node) ?? ''}>
+                          {nodeDiagnosticErrorEventId(node) ?? 'Unassigned'}
                         </td>
                       </tr>
                     {/each}
