@@ -2498,8 +2498,9 @@ drift back into inference.
   generated image results plus bounded metadata/diagnostics onto existing graph
   outputs, and keeps prompt text plus generated image bytes out of diagnostics.
   Frontend and shared svelte-graph mock `llm-inference` definitions now expose
-  image-generation and audio-transcription payload roles for prompt/audio,
-  model-reference, results/response, metadata, and diagnostics ports, keeping
+  payload roles for the executable text/chat, embedding, rerank,
+  image-generation, and audio-transcription task families across
+  task/model-reference/options/input/output/usage/diagnostic ports, keeping
   mock-backed tests aligned with the Rust registry contract without introducing
   backend/runtime policy fields.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
@@ -3475,11 +3476,11 @@ Update during implementation:
   metadata fallbacks are recorded under Milestone 2 as consumer-boundary gaps
   until Pumas exposes equivalent summary/detail facts or Pantograph omits them.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
-  `llm-inference` node definitions with the Rust image-generation and
-  audio-transcription `inference_payloads` contracts for
-  prompt/audio/model-reference/results/response/diagnostic ports, with
-  frontend test coverage proving the mock surface carries payload facts without
-  adding backend/runtime policy inputs.
+  `llm-inference` node definitions with the Rust executable
+  `inference_payloads` contracts for text/chat, embedding, rerank,
+  image-generation, and audio-transcription task families, with frontend test
+  coverage proving the mock surface carries payload facts without adding
+  backend/runtime policy inputs.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are

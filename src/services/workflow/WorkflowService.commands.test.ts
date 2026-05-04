@@ -87,27 +87,62 @@ test('mock node definitions expose canonical Pumas inference ports', () => {
   const audio = llmInference.inputs.find((port) => port.id === 'audio');
   const response = llmInference.outputs.find((port) => port.id === 'response');
   const results = llmInference.outputs.find((port) => port.id === 'results');
+  const embedding = llmInference.outputs.find((port) => port.id === 'embedding');
+  const scores = llmInference.outputs.find((port) => port.id === 'scores');
   const diagnostics = llmInference.outputs.find((port) => port.id === 'diagnostics');
-  assert.deepEqual(prompt?.inference_payloads, [
-    { task_id: 'image_generation', role: 'task_input', input_kind: 'image_generation' },
-  ]);
+  assert.ok(
+    prompt?.inference_payloads?.some(
+      (payload) => payload.task_id === 'text_generation' && payload.role === 'task_input',
+    ),
+  );
+  assert.ok(
+    prompt?.inference_payloads?.some(
+      (payload) =>
+        payload.task_id === 'image_generation' && payload.input_kind === 'image_generation',
+    ),
+  );
   assert.deepEqual(audio?.inference_payloads, [
     { task_id: 'audio_transcription', role: 'task_input', input_kind: 'audio_transcription' },
   ]);
-  assert.deepEqual(response?.inference_payloads, [
-    {
-      task_id: 'audio_transcription',
-      role: 'task_output',
-      result_kind: 'audio_transcription',
-    },
+  assert.ok(
+    response?.inference_payloads?.some(
+      (payload) => payload.task_id === 'chat_completion' && payload.role === 'task_output',
+    ),
+  );
+  assert.ok(
+    response?.inference_payloads?.some(
+      (payload) =>
+        payload.task_id === 'audio_transcription' &&
+        payload.result_kind === 'audio_transcription',
+    ),
+  );
+  assert.ok(
+    results?.inference_payloads?.some(
+      (payload) => payload.task_id === 'rerank' && payload.result_kind === 'rerank',
+    ),
+  );
+  assert.ok(
+    results?.inference_payloads?.some(
+      (payload) =>
+        payload.task_id === 'image_generation' && payload.result_kind === 'image_generation',
+    ),
+  );
+  assert.deepEqual(embedding?.inference_payloads, [
+    { task_id: 'embedding', role: 'task_output', result_kind: 'embedding' },
   ]);
-  assert.deepEqual(results?.inference_payloads, [
-    { task_id: 'image_generation', role: 'task_output', result_kind: 'image_generation' },
+  assert.deepEqual(scores?.inference_payloads, [
+    { task_id: 'rerank', role: 'task_output', result_kind: 'rerank' },
   ]);
-  assert.deepEqual(diagnostics?.inference_payloads, [
-    { task_id: 'image_generation', role: 'diagnostics' },
-    { task_id: 'audio_transcription', role: 'diagnostics' },
-  ]);
+  assert.ok(
+    diagnostics?.inference_payloads?.some(
+      (payload) => payload.task_id === 'image_generation' && payload.role === 'diagnostics',
+    ),
+  );
+  assert.ok(
+    diagnostics?.inference_payloads?.some(
+      (payload) => payload.task_id === 'audio_transcription' && payload.role === 'diagnostics',
+    ),
+  );
   assert.ok(!llmInference.inputs.some((port) => port.id === 'backend_key'));
   assert.ok(!llmInference.inputs.some((port) => port.id === 'runtime_id'));
 });

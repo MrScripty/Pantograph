@@ -39,8 +39,32 @@ import {
 } from './mockConnectionIntent.js';
 
 /** Default mock node definitions */
-const IMAGE_GENERATION_MODEL_REFERENCE_PAYLOADS: InferencePortPayloadContract[] = [
-  { task_id: 'image_generation', role: 'model_reference' },
+type InferenceTaskId = InferencePortPayloadContract['task_id'];
+type InferencePortPayloadRole = InferencePortPayloadContract['role'];
+
+const TEXT_CHAT_TASK_IDS: InferenceTaskId[] = ['text_generation', 'chat_completion'];
+const LLM_TASK_IDS: InferenceTaskId[] = [
+  ...TEXT_CHAT_TASK_IDS,
+  'embedding',
+  'rerank',
+  'image_generation',
+  'audio_transcription',
+];
+
+function taskRolePayloads(
+  taskIds: InferenceTaskId[],
+  role: InferencePortPayloadRole,
+): InferencePortPayloadContract[] {
+  return taskIds.map((task_id) => ({ task_id, role }));
+}
+
+const TEXT_CHAT_INPUT_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'text_generation', role: 'task_input', input_kind: 'text_generation' },
+  { task_id: 'chat_completion', role: 'task_input', input_kind: 'text_generation' },
+];
+const TEXT_CHAT_OUTPUT_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'text_generation', role: 'task_output', result_kind: 'text_generation' },
+  { task_id: 'chat_completion', role: 'task_output', result_kind: 'text_generation' },
 ];
 const IMAGE_GENERATION_PROMPT_PAYLOADS: InferencePortPayloadContract[] = [
   { task_id: 'image_generation', role: 'task_input', input_kind: 'image_generation' },
@@ -48,28 +72,41 @@ const IMAGE_GENERATION_PROMPT_PAYLOADS: InferencePortPayloadContract[] = [
 const IMAGE_GENERATION_RESULT_PAYLOADS: InferencePortPayloadContract[] = [
   { task_id: 'image_generation', role: 'task_output', result_kind: 'image_generation' },
 ];
-const IMAGE_GENERATION_DIAGNOSTIC_PAYLOADS: InferencePortPayloadContract[] = [
-  { task_id: 'image_generation', role: 'diagnostics' },
-];
-const AUDIO_TRANSCRIPTION_MODEL_REFERENCE_PAYLOADS: InferencePortPayloadContract[] = [
-  { task_id: 'audio_transcription', role: 'model_reference' },
-];
 const AUDIO_TRANSCRIPTION_AUDIO_PAYLOADS: InferencePortPayloadContract[] = [
   { task_id: 'audio_transcription', role: 'task_input', input_kind: 'audio_transcription' },
 ];
 const AUDIO_TRANSCRIPTION_RESPONSE_PAYLOADS: InferencePortPayloadContract[] = [
   { task_id: 'audio_transcription', role: 'task_output', result_kind: 'audio_transcription' },
 ];
-const AUDIO_TRANSCRIPTION_DIAGNOSTIC_PAYLOADS: InferencePortPayloadContract[] = [
-  { task_id: 'audio_transcription', role: 'diagnostics' },
+const EMBEDDING_TEXT_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'embedding', role: 'task_input', input_kind: 'embedding' },
 ];
-const LLM_MODEL_REFERENCE_PAYLOADS: InferencePortPayloadContract[] = [
-  ...IMAGE_GENERATION_MODEL_REFERENCE_PAYLOADS,
-  ...AUDIO_TRANSCRIPTION_MODEL_REFERENCE_PAYLOADS,
+const EMBEDDING_RESULT_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'embedding', role: 'task_output', result_kind: 'embedding' },
 ];
-const LLM_DIAGNOSTIC_PAYLOADS: InferencePortPayloadContract[] = [
-  ...IMAGE_GENERATION_DIAGNOSTIC_PAYLOADS,
-  ...AUDIO_TRANSCRIPTION_DIAGNOSTIC_PAYLOADS,
+const RERANK_INPUT_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'rerank', role: 'task_input', input_kind: 'rerank' },
+];
+const RERANK_RESULT_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'rerank', role: 'task_output', result_kind: 'rerank' },
+];
+const LLM_MODEL_REFERENCE_PAYLOADS = taskRolePayloads(LLM_TASK_IDS, 'model_reference');
+const LLM_OPTIONS_PAYLOADS = taskRolePayloads(LLM_TASK_IDS, 'options');
+const TEXT_CHAT_OPTIONS_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'options');
+const TEXT_CHAT_USAGE_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'usage');
+const TEXT_CHAT_KV_OUTPUT_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'task_output');
+const LLM_DIAGNOSTIC_PAYLOADS = taskRolePayloads(LLM_TASK_IDS, 'diagnostics');
+const PROMPT_PAYLOADS: InferencePortPayloadContract[] = [
+  ...TEXT_CHAT_INPUT_PAYLOADS,
+  ...IMAGE_GENERATION_PROMPT_PAYLOADS,
+];
+const RESPONSE_PAYLOADS: InferencePortPayloadContract[] = [
+  ...TEXT_CHAT_OUTPUT_PAYLOADS,
+  ...AUDIO_TRANSCRIPTION_RESPONSE_PAYLOADS,
+];
+const RESULTS_PAYLOADS: InferencePortPayloadContract[] = [
+  ...RERANK_RESULT_PAYLOADS,
+  ...IMAGE_GENERATION_RESULT_PAYLOADS,
 ];
 
 export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
@@ -135,40 +172,40 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     description: 'Canonical model inference across text, embedding, rerank, and multimodal tasks',
     io_binding_origin: 'integrated',
     inputs: [
-      { id: 'task_kind', label: 'Task Kind', data_type: 'string', required: false, multiple: false },
-      { id: 'runtime_hint', label: 'Runtime Hint', data_type: 'string', required: false, multiple: false },
+      { id: 'task_kind', label: 'Task Kind', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
+      { id: 'runtime_hint', label: 'Runtime Hint', data_type: 'string', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
       { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_MODEL_REFERENCE_PAYLOADS },
       { id: 'resolved_model_source', label: 'Resolved Model Source', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_MODEL_REFERENCE_PAYLOADS },
       { id: 'resolved_model_package_facts', label: 'Resolved Model Package Facts', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_MODEL_REFERENCE_PAYLOADS },
-      { id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false },
-      { id: 'query', label: 'Query', data_type: 'string', required: false, multiple: false },
-      { id: 'documents', label: 'Documents', data_type: 'json', required: false, multiple: false },
-      { id: 'documents_json', label: 'Documents JSON', data_type: 'string', required: false, multiple: false },
-      { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_PROMPT_PAYLOADS },
+      { id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false, inference_payloads: EMBEDDING_TEXT_PAYLOADS },
+      { id: 'query', label: 'Query', data_type: 'string', required: false, multiple: false, inference_payloads: RERANK_INPUT_PAYLOADS },
+      { id: 'documents', label: 'Documents', data_type: 'json', required: false, multiple: false, inference_payloads: RERANK_INPUT_PAYLOADS },
+      { id: 'documents_json', label: 'Documents JSON', data_type: 'string', required: false, multiple: false, inference_payloads: RERANK_INPUT_PAYLOADS },
+      { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: false, multiple: false, inference_payloads: PROMPT_PAYLOADS },
       { id: 'audio', label: 'Audio', data_type: 'audio', required: false, multiple: false, inference_payloads: AUDIO_TRANSCRIPTION_AUDIO_PAYLOADS },
       { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },
       { id: 'context', label: 'Context', data_type: 'string', required: false, multiple: false },
       { id: 'tools', label: 'Tools', data_type: 'tools', required: false, multiple: true },
       { id: 'kv_cache_in', label: 'KV Cache In', data_type: 'kv_cache', required: false, multiple: false },
-      { id: 'generation_options', label: 'Generation Options', data_type: 'json', required: false, multiple: false },
-      { id: 'task_options', label: 'Task Options', data_type: 'json', required: false, multiple: false },
-      { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: false, multiple: false },
+      { id: 'generation_options', label: 'Generation Options', data_type: 'json', required: false, multiple: false, inference_payloads: TEXT_CHAT_OPTIONS_PAYLOADS },
+      { id: 'task_options', label: 'Task Options', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
+      { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
     ],
     outputs: [
-      { id: 'response', label: 'Response', data_type: 'string', required: false, multiple: false, inference_payloads: AUDIO_TRANSCRIPTION_RESPONSE_PAYLOADS },
-      { id: 'results', label: 'Results', data_type: 'json', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_RESULT_PAYLOADS },
-      { id: 'scores', label: 'Scores', data_type: 'json', required: false, multiple: false },
-      { id: 'top_document', label: 'Top Document', data_type: 'string', required: false, multiple: false },
-      { id: 'top_score', label: 'Top Score', data_type: 'number', required: false, multiple: false },
-      { id: 'embedding', label: 'Embedding', data_type: 'embedding', required: false, multiple: false },
+      { id: 'response', label: 'Response', data_type: 'string', required: false, multiple: false, inference_payloads: RESPONSE_PAYLOADS },
+      { id: 'results', label: 'Results', data_type: 'json', required: false, multiple: false, inference_payloads: RESULTS_PAYLOADS },
+      { id: 'scores', label: 'Scores', data_type: 'json', required: false, multiple: false, inference_payloads: RERANK_RESULT_PAYLOADS },
+      { id: 'top_document', label: 'Top Document', data_type: 'string', required: false, multiple: false, inference_payloads: RERANK_RESULT_PAYLOADS },
+      { id: 'top_score', label: 'Top Score', data_type: 'number', required: false, multiple: false, inference_payloads: RERANK_RESULT_PAYLOADS },
+      { id: 'embedding', label: 'Embedding', data_type: 'embedding', required: false, multiple: false, inference_payloads: EMBEDDING_RESULT_PAYLOADS },
       { id: 'metadata', label: 'Metadata', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_DIAGNOSTIC_PAYLOADS },
-      { id: 'model_ref', label: 'Model Ref', data_type: 'json', required: false, multiple: false },
-      { id: 'tool_calls', label: 'Tool Calls', data_type: 'json', required: false, multiple: false },
-      { id: 'has_tool_calls', label: 'Has Tool Calls', data_type: 'boolean', required: false, multiple: false },
-      { id: 'kv_cache_out', label: 'KV Cache Out', data_type: 'kv_cache', required: false, multiple: false },
-      { id: 'stream', label: 'Stream', data_type: 'stream', required: false, multiple: false },
+      { id: 'model_ref', label: 'Model Ref', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_MODEL_REFERENCE_PAYLOADS },
+      { id: 'tool_calls', label: 'Tool Calls', data_type: 'json', required: false, multiple: false, inference_payloads: TEXT_CHAT_OUTPUT_PAYLOADS },
+      { id: 'has_tool_calls', label: 'Has Tool Calls', data_type: 'boolean', required: false, multiple: false, inference_payloads: TEXT_CHAT_OUTPUT_PAYLOADS },
+      { id: 'kv_cache_out', label: 'KV Cache Out', data_type: 'kv_cache', required: false, multiple: false, inference_payloads: TEXT_CHAT_KV_OUTPUT_PAYLOADS },
+      { id: 'stream', label: 'Stream', data_type: 'stream', required: false, multiple: false, inference_payloads: TEXT_CHAT_OUTPUT_PAYLOADS },
       { id: 'diagnostics', label: 'Diagnostics', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_DIAGNOSTIC_PAYLOADS },
-      { id: 'usage', label: 'Usage', data_type: 'json', required: false, multiple: false },
+      { id: 'usage', label: 'Usage', data_type: 'json', required: false, multiple: false, inference_payloads: TEXT_CHAT_USAGE_PAYLOADS },
     ],
     execution_mode: 'stream',
   },
