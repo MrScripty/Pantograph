@@ -1210,6 +1210,11 @@ Typed request serde coverage now freezes the stable wire shape for current
 executable text, embedding, rerank, image-generation, and audio-transcription
 inputs, including tagged `input_type` payloads and append-only `extra_options`
 where backend-local options are still needed.
+Contract-only typed request/result wire shapes now also cover image
+understanding, video understanding, and multimodal generation payloads with
+artifact-reference-friendly media fields while preserving unsupported-task
+validation until executable backends exist. Depth-specific task contracts remain
+unseeded.
 Request wire-shape coverage now also freezes the top-level stable
 `InferenceExecutionRequest` fields and keeps backend-local escape hatches under
 `generation_options.backend_extensions` or `extra_options`, preventing raw
@@ -3037,6 +3042,9 @@ Update during implementation:
   embedded-runtime pass-through into node-status diagnostics so lifecycle
   summaries can point at directly-known `diagnostic.error_occurred` events
   without duplicating error payloads.
+- 2026-05-04: Added contract-only typed payload DTOs for image understanding,
+  video understanding, and multimodal generation so the registry's roadmap task
+  contracts have stable request/result wire shapes without enabling execution.
 - 2026-05-04: Fixed a workflow-service issue found during full validation:
   edge-insert preview for canonical `llm-inference` could choose text-compatible
   configuration/context ports before the primary `prompt` port after

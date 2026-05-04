@@ -220,6 +220,9 @@ impl InferenceExecutionRequest {
             }
             InferenceExecutionInput::ImageGeneration { .. } => Ok(()),
             InferenceExecutionInput::AudioTranscription { .. } => Ok(()),
+            InferenceExecutionInput::ImageUnderstanding { .. }
+            | InferenceExecutionInput::VideoUnderstanding { .. }
+            | InferenceExecutionInput::MultimodalGeneration { .. } => Ok(()),
         }
     }
 }
@@ -289,6 +292,15 @@ pub enum InferenceExecutionInput {
     AudioTranscription {
         request: AudioTranscriptionRequest,
     },
+    ImageUnderstanding {
+        request: ImageUnderstandingRequest,
+    },
+    VideoUnderstanding {
+        request: VideoUnderstandingRequest,
+    },
+    MultimodalGeneration {
+        request: MultimodalGenerationRequest,
+    },
 }
 
 impl InferenceExecutionInput {
@@ -305,6 +317,9 @@ impl InferenceExecutionInput {
             Self::Rerank { .. } => InferenceExecutionInputKind::Rerank,
             Self::ImageGeneration { .. } => InferenceExecutionInputKind::ImageGeneration,
             Self::AudioTranscription { .. } => InferenceExecutionInputKind::AudioTranscription,
+            Self::ImageUnderstanding { .. } => InferenceExecutionInputKind::ImageUnderstanding,
+            Self::VideoUnderstanding { .. } => InferenceExecutionInputKind::VideoUnderstanding,
+            Self::MultimodalGeneration { .. } => InferenceExecutionInputKind::MultimodalGeneration,
         }
     }
 }
@@ -344,6 +359,21 @@ pub enum InferenceExecutionResult {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
     },
+    ImageUnderstanding {
+        result: TextUnderstandingResult,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    },
+    VideoUnderstanding {
+        result: TextUnderstandingResult,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    },
+    MultimodalGeneration {
+        result: TextUnderstandingResult,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    },
 }
 
 impl InferenceExecutionResult {
@@ -355,6 +385,9 @@ impl InferenceExecutionResult {
             Self::Rerank { .. } => InferenceExecutionResultKind::Rerank,
             Self::ImageGeneration { .. } => InferenceExecutionResultKind::ImageGeneration,
             Self::AudioTranscription { .. } => InferenceExecutionResultKind::AudioTranscription,
+            Self::ImageUnderstanding { .. } => InferenceExecutionResultKind::ImageUnderstanding,
+            Self::VideoUnderstanding { .. } => InferenceExecutionResultKind::VideoUnderstanding,
+            Self::MultimodalGeneration { .. } => InferenceExecutionResultKind::MultimodalGeneration,
         }
     }
 
@@ -375,6 +408,15 @@ impl InferenceExecutionResult {
             }
             | Self::AudioTranscription {
                 option_diagnostics, ..
+            }
+            | Self::ImageUnderstanding {
+                option_diagnostics, ..
+            }
+            | Self::VideoUnderstanding {
+                option_diagnostics, ..
+            }
+            | Self::MultimodalGeneration {
+                option_diagnostics, ..
             } => option_diagnostics,
         }
     }
@@ -385,7 +427,10 @@ impl InferenceExecutionResult {
             Self::TextGeneration { usage, .. } | Self::Embedding { usage, .. } => usage.as_ref(),
             Self::Rerank { .. }
             | Self::ImageGeneration { .. }
-            | Self::AudioTranscription { .. } => None,
+            | Self::AudioTranscription { .. }
+            | Self::ImageUnderstanding { .. }
+            | Self::VideoUnderstanding { .. }
+            | Self::MultimodalGeneration { .. } => None,
         }
     }
 
@@ -398,7 +443,10 @@ impl InferenceExecutionResult {
             Self::Embedding { .. }
             | Self::Rerank { .. }
             | Self::ImageGeneration { .. }
-            | Self::AudioTranscription { .. } => None,
+            | Self::AudioTranscription { .. }
+            | Self::ImageUnderstanding { .. }
+            | Self::VideoUnderstanding { .. }
+            | Self::MultimodalGeneration { .. } => None,
         }
     }
 }
@@ -451,6 +499,86 @@ pub struct EncodedAudio {
     /// Optional sample rate in hertz when known by the caller.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_rate_hz: Option<u32>,
+}
+
+/// Base64-encoded video payload reserved for video understanding contracts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EncodedVideo {
+    /// Base64-encoded video bytes.
+    pub data_base64: String,
+    /// MIME type describing the encoded video payload.
+    pub mime_type: String,
+    /// Optional duration in seconds when known by the caller.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_seconds: Option<f32>,
+    /// Optional frame count when known by the caller.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame_count: Option<u32>,
+}
+
+/// Image-to-text request contract reserved for future vision-language backends.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ImageUnderstandingRequest {
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<EncodedImage>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub extra_options: Value,
+}
+
+/// Video-to-text request contract reserved for future video-language backends.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VideoUnderstandingRequest {
+    pub prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video: Option<EncodedVideo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub extra_options: Value,
+}
+
+/// One typed multimodal input part for future generation/perception contracts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "part_type", rename_all = "snake_case")]
+pub enum MultimodalInputPart {
+    Text {
+        text: String,
+    },
+    Image {
+        image: EncodedImage,
+    },
+    Audio {
+        audio: EncodedAudio,
+    },
+    Video {
+        video: EncodedVideo,
+    },
+    Artifact {
+        modality: crate::model_contracts::InferenceModality,
+        artifact_ref: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        mime_type: Option<String>,
+    },
+}
+
+/// Multimodal generation request contract reserved for future backends.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MultimodalGenerationRequest {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parts: Vec<MultimodalInputPart>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub extra_options: Value,
+}
+
+/// Text result returned by understanding-style contract-only tasks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TextUnderstandingResult {
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub metadata: Value,
 }
 
 /// Speech-to-text request contract used by ASR-capable backends.
@@ -1521,6 +1649,109 @@ mod tests {
             crate::model_contracts::InferenceExecutionResultKind::AudioTranscription
         );
         assert_eq!(decoded_request, request);
+        assert_eq!(decoded_result, result);
+    }
+
+    #[test]
+    fn typed_execution_understanding_roadmap_contracts_use_stable_wire_shapes() {
+        let image_request = InferenceExecutionRequest {
+            request_id: Some("req-image-understanding".to_string()),
+            task_id: InferenceTaskId::ImageUnderstanding,
+            model_ref: None,
+            model_name: Some("vision-language-roadmap".to_string()),
+            runtime_hint: None,
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::ImageUnderstanding {
+                request: ImageUnderstandingRequest {
+                    prompt: "describe this image".to_string(),
+                    images: Vec::new(),
+                    image_refs: vec!["artifact://image-a.png".to_string()],
+                    extra_options: Value::Null,
+                },
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+        let video_request = InferenceExecutionRequest {
+            request_id: Some("req-video-understanding".to_string()),
+            task_id: InferenceTaskId::VideoUnderstanding,
+            model_ref: None,
+            model_name: Some("video-language-roadmap".to_string()),
+            runtime_hint: None,
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::VideoUnderstanding {
+                request: VideoUnderstandingRequest {
+                    prompt: "summarize this clip".to_string(),
+                    video: None,
+                    video_ref: Some("artifact://clip.mp4".to_string()),
+                    extra_options: serde_json::json!({
+                        "max_frames": 8
+                    }),
+                },
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+        let multimodal_request = InferenceExecutionRequest {
+            request_id: Some("req-multimodal".to_string()),
+            task_id: InferenceTaskId::MultimodalGeneration,
+            model_ref: None,
+            model_name: Some("multimodal-roadmap".to_string()),
+            runtime_hint: None,
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::MultimodalGeneration {
+                request: MultimodalGenerationRequest {
+                    parts: vec![
+                        MultimodalInputPart::Text {
+                            text: "compare".to_string(),
+                        },
+                        MultimodalInputPart::Artifact {
+                            modality: crate::model_contracts::InferenceModality::Image,
+                            artifact_ref: "artifact://image-a.png".to_string(),
+                            mime_type: Some("image/png".to_string()),
+                        },
+                    ],
+                    extra_options: Value::Null,
+                },
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+        let result = InferenceExecutionResult::VideoUnderstanding {
+            result: TextUnderstandingResult {
+                text: "a short clip".to_string(),
+                metadata: serde_json::json!({
+                    "frames_sampled": 8
+                }),
+            },
+            option_diagnostics: Vec::new(),
+        };
+
+        for request in [image_request, video_request, multimodal_request] {
+            let encoded = serde_json::to_value(&request).unwrap();
+            let decoded: InferenceExecutionRequest = serde_json::from_value(encoded).unwrap();
+
+            match decoded.validate() {
+                Err(InferenceExecutionRequestValidationError::UnsupportedTask { task_id }) => {
+                    assert_eq!(task_id, decoded.task_id)
+                }
+                other => panic!("expected unsupported roadmap task, got {other:?}"),
+            }
+            assert_eq!(decoded, request);
+        }
+
+        let encoded_result = serde_json::to_value(&result).unwrap();
+        let decoded_result: InferenceExecutionResult =
+            serde_json::from_value(encoded_result.clone()).unwrap();
+
+        assert_eq!(
+            encoded_result["result_type"],
+            serde_json::json!("video_understanding")
+        );
+        assert_eq!(
+            decoded_result.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::VideoUnderstanding
+        );
         assert_eq!(decoded_result, result);
     }
 

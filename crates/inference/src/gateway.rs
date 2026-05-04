@@ -1315,6 +1315,7 @@ impl InferenceGateway {
         let backend_key = canonical_backend_key(&self.current_backend_name().await);
         let request_option_diagnostics =
             typed_request_option_diagnostics(&request, Some(&backend_key));
+        let task_id = request.task_id.clone();
 
         match request.input {
             InferenceExecutionInput::TextGeneration {
@@ -1423,6 +1424,13 @@ impl InferenceGateway {
                     result,
                     option_diagnostics,
                 })
+            }
+            InferenceExecutionInput::ImageUnderstanding { .. }
+            | InferenceExecutionInput::VideoUnderstanding { .. }
+            | InferenceExecutionInput::MultimodalGeneration { .. } => {
+                Err(GatewayError::Validation(
+                    InferenceExecutionRequestValidationError::UnsupportedTask { task_id },
+                ))
             }
         }
     }
@@ -1908,6 +1916,21 @@ fn typed_non_generation_option_diagnostics(
             ));
             diagnostics
         }
+        InferenceExecutionInput::ImageUnderstanding { request } => extra_option_diagnostics(
+            &request.extra_options,
+            backend_key,
+            "image_understanding.extra_options",
+        ),
+        InferenceExecutionInput::VideoUnderstanding { request } => extra_option_diagnostics(
+            &request.extra_options,
+            backend_key,
+            "video_understanding.extra_options",
+        ),
+        InferenceExecutionInput::MultimodalGeneration { request } => extra_option_diagnostics(
+            &request.extra_options,
+            backend_key,
+            "multimodal_generation.extra_options",
+        ),
         InferenceExecutionInput::TextGeneration { .. } => Vec::new(),
     };
 
