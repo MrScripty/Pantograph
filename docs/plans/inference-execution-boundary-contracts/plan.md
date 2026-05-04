@@ -1840,11 +1840,11 @@ embedding, rerank, and image generation.
 canonical inference shape instead of preserving backend-specific node contracts.
 
 **Tasks:**
-- [ ] Define the canonical inference node descriptor, node data schema, port
+- [x] Define the canonical inference node descriptor, node data schema, port
   contract, settings schema, Pumas model-reference field, resolved model-source
   projection field, task-kind field, runtime-hint field, and migration
   diagnostics.
-- [ ] Store canonical task registry ids and typed generation/task options in
+- [x] Store canonical task registry ids and typed generation/task options in
   the canonical node shape rather than backend node names, embedding-mode flags,
   or backend-specific parameter bags.
 - [ ] Define how node validation displays task registry, package-fact,
@@ -1852,7 +1852,7 @@ canonical inference shape instead of preserving backend-specific node contracts.
   internals.
 - [ ] Define saved-workflow schema versioning and append-only migration records
   for the canonical inference node shape.
-- [ ] Define executable migration fixtures for old and new saved workflow
+- [x] Define executable migration fixtures for old and new saved workflow
   shapes, including expected diagnostics and default semantics when fields are
   omitted.
 - [x] Inventory old graph-visible inference node types and related ports,
@@ -1879,9 +1879,9 @@ canonical inference shape instead of preserving backend-specific node contracts.
   graph contract while preserving embedding inputs/outputs.
 - [x] Migrate reranker nodes to canonical inference or a canonical rerank task
   shape without backend-specific request semantics.
-- [ ] Preserve graph topology, node ids where possible, edge ids, positions,
+- [x] Preserve graph topology, node ids where possible, edge ids, positions,
   labels, groups, output bindings, and user-authored settings.
-- [ ] Update node registry, workflow-node descriptors, graph validation,
+- [x] Update node registry, workflow-node descriptors, graph validation,
   frontend node renderers, and templates so new saved workflows use the
   canonical node shape.
 - [x] Add validation that old backend-specific inference node types do not
@@ -2071,6 +2071,12 @@ Filesystem persistence coverage now also includes mixed legacy embedding and
 reranker nodes, proving dedicated embedding/rerank node data migrates into
 canonical `task_kind`, `runtime_hint`, `task_options`, migration diagnostics,
 and output topology before workflows are written.
+Milestone 11 checklist status was reconciled against the executable
+canonicalization, persistence, workflow-node, frontend mock, and template
+coverage. Descriptor/schema definition, canonical task/options storage,
+executable migration fixtures, topology preservation, and registry/template
+updates are now marked complete. Pumas-backed package resolution, validation
+display behavior, and persisted schema-version records remain open.
 Node-engine generic streaming text/chat execution now also routes through the
 gateway streaming facade instead of posting directly over HTTP from node-engine,
 preserving graph `TaskStream` event shape while making backend/lifecycle facts
