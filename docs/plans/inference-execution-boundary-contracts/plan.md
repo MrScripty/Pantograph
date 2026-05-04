@@ -1451,7 +1451,10 @@ retired inference Ollama backend implementation and per-platform managed
 Ollama adapters while keeping small unsupported compatibility definitions for
 old serialized runtime ids. Milestone 6 is implemented; remaining Ollama
 references are intentional migration guards, unsupported-id compatibility,
-tests/fixtures, or historical documentation.
+tests/fixtures, or historical documentation. A follow-up cleanup removed
+Ollama from the Tauri Pumas dependency-runtime probe backend-binding candidate
+matrix so Pumas Ollama compatibility facts are ignored instead of queried as
+Pantograph-executable backend options.
 
 ### Milestone 7: Strengthen Capability Facts
 

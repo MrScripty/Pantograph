@@ -336,7 +336,6 @@ async fn backend_binding_matrix(
         Some("pytorch"),
         Some("transformers"),
         Some("llamacpp"),
-        Some("ollama"),
     ];
 
     if model_type.eq_ignore_ascii_case("audio") {
