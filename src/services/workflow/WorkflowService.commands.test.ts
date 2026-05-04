@@ -84,16 +84,29 @@ test('mock node definitions expose canonical Pumas inference ports', () => {
   assert.ok(llmInference.inputs.some((port) => port.id === 'resolved_model_package_facts'));
   assert.ok(llmInference.outputs.some((port) => port.id === 'diagnostics'));
   const prompt = llmInference.inputs.find((port) => port.id === 'prompt');
+  const audio = llmInference.inputs.find((port) => port.id === 'audio');
+  const response = llmInference.outputs.find((port) => port.id === 'response');
   const results = llmInference.outputs.find((port) => port.id === 'results');
   const diagnostics = llmInference.outputs.find((port) => port.id === 'diagnostics');
   assert.deepEqual(prompt?.inference_payloads, [
     { task_id: 'image_generation', role: 'task_input', input_kind: 'image_generation' },
+  ]);
+  assert.deepEqual(audio?.inference_payloads, [
+    { task_id: 'audio_transcription', role: 'task_input', input_kind: 'audio_transcription' },
+  ]);
+  assert.deepEqual(response?.inference_payloads, [
+    {
+      task_id: 'audio_transcription',
+      role: 'task_output',
+      result_kind: 'audio_transcription',
+    },
   ]);
   assert.deepEqual(results?.inference_payloads, [
     { task_id: 'image_generation', role: 'task_output', result_kind: 'image_generation' },
   ]);
   assert.deepEqual(diagnostics?.inference_payloads, [
     { task_id: 'image_generation', role: 'diagnostics' },
+    { task_id: 'audio_transcription', role: 'diagnostics' },
   ]);
   assert.ok(!llmInference.inputs.some((port) => port.id === 'backend_key'));
   assert.ok(!llmInference.inputs.some((port) => port.id === 'runtime_id'));
