@@ -840,6 +840,51 @@ fn test_pytorch_worker_stream_setup_error_response_normalizes_to_backend_error()
 }
 
 #[test]
+fn test_pytorch_worker_stream_generator_error_normalizes_to_backend_error() {
+    match PyTorchBackend::stream_worker_failure_from_message(
+        "req-stream-generator",
+        "Generator error: Transformers stream failed.".to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_generate_text_stream_failed"));
+            assert!(message.contains("req-stream-generator"));
+            assert!(message.contains("Transformers stream failed"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_stream_token_extraction_error_normalizes_to_backend_error() {
+    match PyTorchBackend::stream_worker_failure_from_message(
+        "req-stream-token",
+        "Token extraction failed: expected string token.".to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_generate_text_stream_failed"));
+            assert!(message.contains("req-stream-token"));
+            assert!(message.contains("expected string token"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_stream_runtime_unavailable_normalizes_to_not_running() {
+    match PyTorchBackend::stream_worker_failure_from_message(
+        "req-stream-no-model",
+        "Generator error: No model loaded. Call load_model() first.".to_string(),
+    ) {
+        BackendError::NotRunning(message) => {
+            assert!(message.contains("pytorch_worker_generate_text_stream_failed"));
+            assert!(message.contains("req-stream-no-model"));
+            assert!(message.contains("No model loaded"));
+        }
+        other => panic!("expected NotRunning error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_stream_setup_success_response_decodes() {
     let response = serde_json::json!({
         "status": "ok",

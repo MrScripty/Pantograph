@@ -1769,6 +1769,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   load and stream setup: `runtime_unavailable` maps to `BackendError::NotRunning`,
   `generation_failed` maps to `BackendError::Inference`, request ids and
   canonical worker error codes are retained, and success returns generated text.
+  PyTorch streaming setup call failures, generator creation failures, iterator
+  failures, token extraction failures, and generator item errors now also route
+  through the same canonical stream worker failure code and generated request id
+  instead of returning ad hoc raw Python exception strings.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.

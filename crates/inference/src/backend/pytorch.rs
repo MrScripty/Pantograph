@@ -22,8 +22,8 @@ use uuid::Uuid;
 use self::pytorch_worker_contract::{
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchTransformersLoadRequest,
     PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy,
-    PyTorchWorkerEnvelope, PyTorchWorkerOperation, PyTorchWorkerResponse,
-    PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
+    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -515,6 +515,24 @@ impl PyTorchBackend {
             PyTorchWorkerResponse::Ok(_) => Ok(()),
             PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
         }
+    }
+
+    fn stream_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
+        let kind = if message.contains("No model loaded") {
+            PyTorchWorkerErrorKind::RuntimeUnavailable
+        } else {
+            PyTorchWorkerErrorKind::GenerationFailed
+        };
+
+        PyTorchWorkerFailure {
+            request_id: request_id.to_string(),
+            error: PyTorchWorkerError {
+                kind,
+                message,
+                canonical_code: Some("pytorch_worker_generate_text_stream_failed".to_string()),
+            },
+        }
+        .into_backend_error()
     }
 
     fn generate_text_from_worker_response(response_json: &str) -> Result<String, BackendError> {
@@ -1127,8 +1145,9 @@ impl PyTorchBackend {
         masked_prompt_json: Option<String>,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatChunk, BackendError>>(32);
+        let request_id = format!("pytorch-generate-text-stream-{}", Uuid::new_v4().simple());
         let envelope = Self::generate_text_envelope(
-            format!("pytorch-generate-text-stream-{}", Uuid::new_v4().simple()),
+            request_id.clone(),
             PyTorchWorkerOperation::GenerateTextStream,
             prompt,
             system_prompt,
@@ -1176,10 +1195,10 @@ impl PyTorchBackend {
                 {
                     Ok(response_json) => response_json,
                     Err(e) => {
-                        let _ = tx.blocking_send(Err(BackendError::Inference(format!(
-                            "PyTorch worker generate_text_stream setup failed: {}",
-                            e
-                        ))));
+                        let _ = tx.blocking_send(Err(Self::stream_worker_failure_from_message(
+                            &request_id,
+                            format!("PyTorch worker generate_text_stream setup failed: {}", e),
+                        )));
                         return;
                     }
                 };
@@ -1193,10 +1212,10 @@ impl PyTorchBackend {
                 {
                     Ok(g) => g,
                     Err(e) => {
-                        let _ = tx.blocking_send(Err(BackendError::Inference(format!(
-                            "PyTorch worker generate_text_stream envelope failed: {}",
-                            e
-                        ))));
+                        let _ = tx.blocking_send(Err(Self::stream_worker_failure_from_message(
+                            &request_id,
+                            format!("PyTorch worker generate_text_stream envelope failed: {}", e),
+                        )));
                         return;
                     }
                 };
@@ -1205,10 +1224,10 @@ impl PyTorchBackend {
                 let iter = match generator.try_iter() {
                     Ok(it) => it,
                     Err(e) => {
-                        let _ = tx.blocking_send(Err(BackendError::Inference(format!(
-                            "Generator is not iterable: {}",
-                            e
-                        ))));
+                        let _ = tx.blocking_send(Err(Self::stream_worker_failure_from_message(
+                            &request_id,
+                            format!("Generator is not iterable: {}", e),
+                        )));
                         return;
                     }
                 };
@@ -1228,18 +1247,21 @@ impl PyTorchBackend {
                                 }
                             }
                             Err(e) => {
-                                let _ = tx.blocking_send(Err(BackendError::Inference(format!(
-                                    "Token extraction failed: {}",
-                                    e
-                                ))));
+                                let _ = tx.blocking_send(Err(
+                                    Self::stream_worker_failure_from_message(
+                                        &request_id,
+                                        format!("Token extraction failed: {}", e),
+                                    ),
+                                ));
                                 return;
                             }
                         },
                         Err(e) => {
-                            let _ = tx.blocking_send(Err(BackendError::Inference(format!(
-                                "Generator error: {}",
-                                e
-                            ))));
+                            let _ =
+                                tx.blocking_send(Err(Self::stream_worker_failure_from_message(
+                                    &request_id,
+                                    format!("Generator error: {}", e),
+                                )));
                             return;
                         }
                     }
