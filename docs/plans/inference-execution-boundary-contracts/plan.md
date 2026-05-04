@@ -1674,7 +1674,7 @@ using Python Transformers behind the boundary for broad HF-compatible support.
 - [x] Make `trust_remote_code` and custom-code loading explicit inputs from the
   validated contract and default them closed unless an accepted policy says
   otherwise.
-- [ ] Keep Python-specific compatibility shims and kwargs inside the PyTorch
+- [x] Keep Python-specific compatibility shims and kwargs inside the PyTorch
   backend worker modules.
 - [x] Define the Rust-to-Python worker envelope, init/shutdown lifecycle,
   error mapping, request correlation, cancellation behavior, and schema
@@ -1747,6 +1747,11 @@ PyTorch text generation request builders now thread the typed `sampling.top_k`
 generation option into backend-local Transformers kwargs for both streaming and
 non-streaming worker envelopes, while leaving broader option threading as a
 follow-up.
+Python-specific compatibility shims and Transformers kwargs are now bounded to
+the PyTorch backend worker surface: Rust worker DTOs remain `pub(super)`,
+backend-local mappers create Transformers kwargs, `worker_contract.py` projects
+validated envelopes into Python calls, and backend README guidance describes
+these fields as adapter-local rather than Pantograph public contracts.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 
