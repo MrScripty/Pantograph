@@ -1,0 +1,60 @@
+{
+  "package_facts_contract_version": 1,
+  "model_ref": {
+    "model_id": "rerank/bge/tiny-reranker-gguf",
+    "selected_artifact_id": "q8_0",
+    "selected_artifact_path": "rerank/bge/tiny-reranker-gguf/tiny-reranker-Q8_0.gguf"
+  },
+  "artifact": {
+    "artifact_kind": "gguf",
+    "entry_path": "rerank/bge/tiny-reranker-gguf/tiny-reranker-Q8_0.gguf",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "tiny-reranker-Q8_0.gguf"
+    ]
+  },
+  "components": [
+    {
+      "kind": "weights",
+      "status": "present",
+      "relative_path": "tiny-reranker-Q8_0.gguf"
+    },
+    {
+      "kind": "tokenizer",
+      "status": "present",
+      "relative_path": "tokenizer.json"
+    },
+    {
+      "kind": "quantization",
+      "status": "present",
+      "relative_path": "tiny-reranker-Q8_0.gguf",
+      "message": "Q8_0"
+    }
+  ],
+  "task": {
+    "pipeline_tag": "text-ranking",
+    "task_type_primary": "reranking",
+    "input_modalities": [
+      "text",
+      "json"
+    ],
+    "output_modalities": [
+      "json"
+    ]
+  },
+  "generation_defaults": {
+    "status": "missing"
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "llama.cpp"
+    ],
+    "raw": [
+      "llama.cpp"
+    ]
+  }
+}

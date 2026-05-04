@@ -2502,6 +2502,11 @@ inference write ledger events directly.
   graph-visible `llm-inference` streaming execution now has package-facts
   lifecycle coverage proving task-validation and backend-execution terminal
   events carry the bounded compatibility summary and stable model id.
+  Canonical rerank package-facts fixtures now decode through the public
+  inference contract, resolve through the task registry as `rerank`, and have
+  graph-visible `llm-inference` coverage proving rerank request construction
+  forwards package facts while task-validation and backend-execution lifecycle
+  events carry bounded compatibility summaries with the stable Pumas model id.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support. Canonical

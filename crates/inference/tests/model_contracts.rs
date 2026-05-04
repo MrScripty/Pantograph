@@ -31,6 +31,10 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
         include_str!("fixtures/inference_package_facts/gguf_embedding_package_facts.json"),
     ),
     (
+        "rerank_package_facts.json",
+        include_str!("fixtures/inference_package_facts/rerank_package_facts.json"),
+    ),
+    (
         "hf_transformers_text_generation_package_facts.json",
         include_str!(
             "fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
@@ -196,6 +200,7 @@ fn package_fact_fixtures_resolve_task_evidence_through_registry() {
             "gguf_embedding_package_facts.json",
             InferenceTaskId::Embedding,
         ),
+        ("rerank_package_facts.json", InferenceTaskId::Rerank),
         (
             "hf_transformers_text_generation_package_facts.json",
             InferenceTaskId::TextGeneration,

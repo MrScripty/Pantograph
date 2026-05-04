@@ -1050,6 +1050,38 @@ fn test_build_rerank_execution_request_preserves_canonical_inputs() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_rerank_execution_request_forwards_package_facts() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/rerank_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("rerank package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
+    inputs.insert("query".to_string(), serde_json::json!("search"));
+    inputs.insert(
+        "documents".to_string(),
+        serde_json::json!(["first", "second"]),
+    );
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let request = build_rerank_execution_request(&inputs)
+        .expect("rerank package facts should be forwarded to typed request");
+
+    assert_eq!(
+        request
+            .resolved_model_package_facts
+            .as_ref()
+            .map(|facts| facts.model_ref.model_id.as_str()),
+        Some("rerank/bge/tiny-reranker-gguf")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_rerank_execution_request_reads_nested_task_options() {
     let mut inputs = HashMap::new();
     inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
@@ -1525,6 +1557,116 @@ async fn test_canonical_llm_rerank_uses_typed_gateway_boundary() {
         vec!["a".to_string(), "b".to_string()]
     );
     assert_eq!(captured[0].top_n, Some(1));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_rerank_with_package_facts_emits_compatibility_lifecycle() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/rerank_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("rerank package facts fixture");
+    let rerank_requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedRerankBackend {
+            rerank_requests: rerank_requests.clone(),
+        }),
+        "mock",
+    ));
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
+    inputs.insert("query".to_string(), serde_json::json!("search"));
+    inputs.insert("documents".to_string(), serde_json::json!(["a", "b"]));
+    inputs.insert("top_k".to_string(), serde_json::json!(1));
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_path": "rerank/bge/tiny-reranker-gguf/tiny-reranker-Q8_0.gguf",
+            "recommended_backend": "llamacpp"
+        }),
+    );
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let executor = CoreTaskExecutor::new()
+        .with_gateway(gateway)
+        .with_execution_id("exec-a".to_string());
+    let outputs = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect("rerank package facts should execute through typed lifecycle");
+
+    assert_eq!(outputs.get("top_document"), Some(&serde_json::json!("b")));
+    assert_eq!(outputs.get("top_score"), Some(&serde_json::json!(0.9_f32)));
+    assert_eq!(
+        rerank_requests.lock().expect("rerank requests lock").len(),
+        1
+    );
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert!(
+        events.iter().any(|event| {
+            event.phase == InferenceLifecyclePhase::ModelPackageResolution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+                && event.model_id.as_deref() == Some("rerank/bge/tiny-reranker-gguf")
+        }),
+        "rerank execution should emit model-package resolution lifecycle for package facts"
+    );
+    let validation_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("task validation completion");
+    assert_eq!(
+        validation_completed.model_id.as_deref(),
+        Some("rerank/bge/tiny-reranker-gguf")
+    );
+    assert!(validation_completed.compatibility_report.is_some());
+    assert!(validation_completed
+        .compatibility_issues
+        .iter()
+        .all(|issue| issue.model_id.as_deref() == Some("rerank/bge/tiny-reranker-gguf")));
+
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion");
+    assert_eq!(
+        backend_completed.model_id.as_deref(),
+        Some("rerank/bge/tiny-reranker-gguf")
+    );
+    assert!(backend_completed.compatibility_report.is_some());
+    assert!(backend_completed
+        .compatibility_issues
+        .iter()
+        .all(|issue| issue.model_id.as_deref() == Some("rerank/bge/tiny-reranker-gguf")));
 }
 
 #[cfg(feature = "inference-nodes")]
