@@ -2326,6 +2326,10 @@ inference write ledger events directly.
   summaries as durable inference diagnostic summaries as well as backend
   execution summaries, but upstream graph/preflight paths still need to
   populate package facts consistently for every executable task.
+  Typed non-streaming backend-execution completion events now retain the same
+  bounded compatibility summary computed during task validation, so downstream
+  ledger adapters can persist selected-backend compatibility facts from the
+  actual execution phase as well as validation.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support. Canonical

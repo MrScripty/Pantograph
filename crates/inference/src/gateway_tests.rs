@@ -1094,6 +1094,25 @@ async fn test_execute_typed_with_lifecycle_reports_package_compatibility() {
         .compatibility_issues
         .iter()
         .all(|issue| issue.model_id.as_deref() == Some("llm/llama/tiny-gguf")));
+
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion event");
+    let backend_compatibility_report = backend_completed
+        .compatibility_report
+        .as_ref()
+        .expect("backend execution compatibility report");
+    assert_eq!(backend_compatibility_report.status, "rejected");
+    assert!(!backend_compatibility_report.compatible);
+    assert!(!backend_completed.compatibility_issues.is_empty());
+    assert!(backend_completed
+        .compatibility_issues
+        .iter()
+        .all(|issue| issue.model_id.as_deref() == Some("llm/llama/tiny-gguf")));
 }
 
 #[tokio::test]

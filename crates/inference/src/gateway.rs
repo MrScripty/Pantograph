@@ -906,9 +906,9 @@ impl InferenceGateway {
             runtime_instance_id.clone(),
             model_id.clone(),
             &Ok(()),
-            compatibility_diagnostics.option_diagnostics,
-            compatibility_diagnostics.compatibility_report,
-            compatibility_diagnostics.compatibility_issues,
+            compatibility_diagnostics.option_diagnostics.clone(),
+            compatibility_diagnostics.compatibility_report.clone(),
+            compatibility_diagnostics.compatibility_issues.clone(),
         );
         let request_json = typed_text_generation_stream_request_json(request)?;
         self.chat_completion_stream_with_lifecycle_for_task(
@@ -1159,9 +1159,9 @@ impl InferenceGateway {
             runtime_instance_id.clone(),
             model_id.clone(),
             &Ok(()),
-            compatibility_diagnostics.option_diagnostics,
-            compatibility_diagnostics.compatibility_report,
-            compatibility_diagnostics.compatibility_issues,
+            compatibility_diagnostics.option_diagnostics.clone(),
+            compatibility_diagnostics.compatibility_report.clone(),
+            compatibility_diagnostics.compatibility_issues.clone(),
         );
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
@@ -1188,6 +1188,8 @@ impl InferenceGateway {
             model_id,
             &result,
             option_diagnostics,
+            compatibility_diagnostics.compatibility_report,
+            compatibility_diagnostics.compatibility_issues,
         );
         result
     }
@@ -2038,6 +2040,8 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
     model_id: Option<String>,
     result: &Result<InferenceExecutionResult, GatewayError>,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
 ) {
     record_non_streaming_lifecycle_phase_result_with_references(
         sink,
@@ -2050,8 +2054,8 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
         model_id,
         result,
         option_diagnostics,
-        None,
-        Vec::new(),
+        compatibility_report,
+        compatibility_issues,
         usage_from_execution_result(result),
         cache_handle_from_execution_result(result),
     );
