@@ -2621,7 +2621,11 @@ inference write ledger events directly.
   lifecycle detail markers are not serialized into durable inference diagnostic
   payloads. Embedded-runtime compatibility issue projection now omits absolute
   local issue paths when a stable model id is already present, while preserving
-  relative component paths for bounded compatibility diagnostics.
+  relative component paths for bounded compatibility diagnostics. The same
+  embedded-runtime payload-hygiene regression now covers raw-looking rerank
+  documents, embedding vectors, Python kwargs, backend CLI flags, and full local
+  model paths in lifecycle detail, proving they are not copied into durable
+  inference diagnostic summary payloads.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle

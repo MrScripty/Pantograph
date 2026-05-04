@@ -568,7 +568,9 @@ fn inference_diagnostic_event_adapter_persists_usage_and_cache_summary() {
     });
     event.cache_handle_id = Some("kv-checkpoint-2".to_string());
     event.detail = Some(
-        "SECRET_PROMPT raw prompt text SECRET_RESULT generated text SECRET_TENSOR [1,2,3]"
+        "SECRET_PROMPT raw prompt text SECRET_RESULT generated text SECRET_TENSOR [1,2,3] \
+         SECRET_DOCUMENT rerank document SECRET_EMBEDDING [0.1,0.2,0.3] \
+         PYTHON_KWARGS {'trust_remote_code': true} BACKEND_FLAG --model /tmp/private/model.gguf"
             .to_string(),
     );
 
@@ -578,6 +580,11 @@ fn inference_diagnostic_event_adapter_persists_usage_and_cache_summary() {
     assert!(!payload_json.contains("SECRET_PROMPT"));
     assert!(!payload_json.contains("SECRET_RESULT"));
     assert!(!payload_json.contains("SECRET_TENSOR"));
+    assert!(!payload_json.contains("SECRET_DOCUMENT"));
+    assert!(!payload_json.contains("SECRET_EMBEDDING"));
+    assert!(!payload_json.contains("PYTHON_KWARGS"));
+    assert!(!payload_json.contains("BACKEND_FLAG"));
+    assert!(!payload_json.contains("/tmp/private/model.gguf"));
 
     match request.payload {
         DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
