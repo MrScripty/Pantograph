@@ -180,6 +180,41 @@ mod options_provider {
             .find_map(|k| obj.get(*k).and_then(|v| v.as_str()).map(|s| s.to_string()))
     }
 
+    pub(crate) fn task_type_primary_from_descriptor_or_record(
+        execution_descriptor: Option<&ModelExecutionDescriptor>,
+        record: &pumas_library::ModelRecord,
+    ) -> String {
+        execution_descriptor
+            .map(|descriptor| descriptor.task_type_primary.trim())
+            .filter(|task| !task.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                metadata_string(
+                    record,
+                    &[
+                        "task_type_primary",
+                        "taskTypePrimary",
+                        "task_type",
+                        "taskType",
+                    ],
+                )
+            })
+            .or_else(|| {
+                metadata_string(record, &["pipeline_tag", "pipelineTag"])
+                    .as_deref()
+                    .map(pipeline_tag_to_task)
+            })
+            .unwrap_or_else(|| {
+                if record.model_type.eq_ignore_ascii_case("audio") {
+                    "text-to-audio".to_string()
+                } else if record.model_type.eq_ignore_ascii_case("diffusion") {
+                    "text-to-image".to_string()
+                } else {
+                    "text-generation".to_string()
+                }
+            })
+    }
+
     pub(crate) async fn resolve_execution_descriptor(
         api: &Arc<pumas_library::PumasApi>,
         record: &pumas_library::ModelRecord,
@@ -359,25 +394,8 @@ mod options_provider {
                     .map(|settings| serde_json::to_value(settings).unwrap_or_default())
                     .unwrap_or_else(|_| resolve_inference_settings_fallback(m));
                 let pipeline_tag = metadata_string(m, &["pipeline_tag", "pipelineTag"]);
-                let task_type_primary = metadata_string(
-                    m,
-                    &[
-                        "task_type_primary",
-                        "taskTypePrimary",
-                        "task_type",
-                        "taskType",
-                    ],
-                )
-                .or_else(|| pipeline_tag.as_deref().map(pipeline_tag_to_task))
-                .unwrap_or_else(|| {
-                    if m.model_type.eq_ignore_ascii_case("audio") {
-                        "text-to-audio".to_string()
-                    } else if m.model_type.eq_ignore_ascii_case("diffusion") {
-                        "text-to-image".to_string()
-                    } else {
-                        "text-generation".to_string()
-                    }
-                });
+                let task_type_primary =
+                    task_type_primary_from_descriptor_or_record(execution_descriptor.as_ref(), m);
                 let dependency_bindings = m
                     .metadata
                     .get("dependency_bindings")
@@ -571,13 +589,15 @@ mod tests {
 #[cfg(all(test, feature = "model-library"))]
 mod model_library_tests {
     use super::options_provider::{
-        load_package_facts_summary_cache, resolve_execution_descriptor, PackageFactsSummaryCache,
+        load_package_facts_summary_cache, resolve_execution_descriptor,
+        task_type_primary_from_descriptor_or_record, PackageFactsSummaryCache,
     };
     use pumas_library::models::{
-        ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
-        ModelLibraryUpdateFeed, ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
+        ModelExecutionDescriptor, ModelFactFamily, ModelLibraryChangeKind,
+        ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
+        ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
     };
-    use pumas_library::PumasApi;
+    use pumas_library::{ModelRecord, PumasApi};
     use std::collections::HashMap;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -627,6 +647,36 @@ mod model_library_tests {
             }
         }))
         .expect("summary fixture should decode")
+    }
+
+    fn model_record_with_metadata(metadata: serde_json::Value) -> ModelRecord {
+        ModelRecord {
+            id: "llm/imported/test-model".to_string(),
+            path: "/models/test-model".to_string(),
+            cleaned_name: "test-model".to_string(),
+            official_name: "test-model".to_string(),
+            model_type: "llm".to_string(),
+            tags: Vec::new(),
+            hashes: HashMap::new(),
+            metadata,
+            updated_at: "2026-05-04T00:00:00Z".to_string(),
+        }
+    }
+
+    fn model_execution_descriptor_with_task(task_type_primary: &str) -> ModelExecutionDescriptor {
+        serde_json::from_value(serde_json::json!({
+            "execution_contract_version": 1,
+            "model_id": "llm/imported/test-model",
+            "entry_path": "/models/test-model/model.safetensors",
+            "model_type": "llm",
+            "task_type_primary": task_type_primary,
+            "recommended_backend": "pytorch",
+            "runtime_engine_hints": ["transformers", "pytorch"],
+            "storage_kind": "library_owned",
+            "validation_state": "valid",
+            "dependency_resolution": null
+        }))
+        .expect("execution descriptor fixture should decode")
     }
 
     fn write_test_diffusers_bundle(root: &std::path::Path) {
@@ -767,6 +817,19 @@ mod model_library_tests {
             .expect("execution descriptor should resolve");
         assert_eq!(descriptor.entry_path, model_file.display().to_string());
         assert_eq!(descriptor.task_type_primary, "text-generation");
+    }
+
+    #[test]
+    fn test_task_type_primary_prefers_execution_descriptor_over_metadata() {
+        let record = model_record_with_metadata(serde_json::json!({
+            "task_type_primary": "text-generation",
+            "pipeline_tag": "text-generation"
+        }));
+        let descriptor = model_execution_descriptor_with_task("image-to-text");
+
+        let task_type = task_type_primary_from_descriptor_or_record(Some(&descriptor), &record);
+
+        assert_eq!(task_type, "image-to-text");
     }
 
     #[tokio::test]

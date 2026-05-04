@@ -1004,7 +1004,10 @@ Detailed Pumas-side work is split into
   task/backend facts directly from `ModelRecord.metadata`; model entry path,
   model type, task type, and package facts now come from Pumas public execution
   descriptor and package-facts APIs, with saved node inputs retained as the
-  compatibility fallback when Pumas lookup is unavailable.
+  compatibility fallback when Pumas lookup is unavailable. The model-list
+  option provider now also prefers the Pumas execution descriptor's
+  `task_type_primary` over projected record metadata so stale metadata cannot
+  override the versioned DTO.
 - [x] Treat Pumas HF search MLX/vLLM tags as remote discovery hints only.
   Installed-model compatibility and workflow preflight must use resolved local
   Pumas package facts plus Pantograph inference/backend checks.
