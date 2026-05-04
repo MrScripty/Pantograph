@@ -1020,7 +1020,10 @@ cases, closing a previous Pantograph fixture gap against the Milestone 2
 cross-repo review list. The fixture set now also resolves representative Pumas
 task evidence through the canonical inference task registry, proving package
 task labels and modalities map to typed task ids before backend compatibility
-or execution sees them.
+or execution sees them. Backend compatibility now treats a present diffusers
+`model_index` component as valid image-generation preprocessing evidence for
+Pumas-resolved diffusers bundles, so the fixture shape can pass compatibility
+without inventing a generic image-processor fact.
 Inference now exposes Pumas-aligned update feed and package-fact summary
 snapshot DTOs. Model-list cache and update-event consumption remain pending.
 The `puma-lib` model-list option cache now has a bounded

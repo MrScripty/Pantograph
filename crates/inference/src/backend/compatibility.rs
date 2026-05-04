@@ -528,15 +528,21 @@ fn package_components_available_for_task(
         | InferenceTaskId::Rerank => {
             component_family_available(package, &[ProcessorComponentKind::Tokenizer])
         }
-        InferenceTaskId::ImageGeneration | InferenceTaskId::ImageUnderstanding => {
-            component_family_available(
-                package,
-                &[
-                    ProcessorComponentKind::Processor,
-                    ProcessorComponentKind::ImageProcessor,
-                ],
-            )
-        }
+        InferenceTaskId::ImageGeneration => component_family_available(
+            package,
+            &[
+                ProcessorComponentKind::Processor,
+                ProcessorComponentKind::ImageProcessor,
+                ProcessorComponentKind::ModelIndex,
+            ],
+        ),
+        InferenceTaskId::ImageUnderstanding => component_family_available(
+            package,
+            &[
+                ProcessorComponentKind::Processor,
+                ProcessorComponentKind::ImageProcessor,
+            ],
+        ),
         InferenceTaskId::AudioTranscription => component_family_available(
             package,
             &[
@@ -616,6 +622,24 @@ mod tests {
         }
     }
 
+    fn image_generation_task() -> TaskRegistryEntry {
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::ImageGeneration,
+            aliases: vec!["text-to-image".to_string()],
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Text],
+                vec![InferenceModality::Image],
+            ),
+            result_family: "generated_image".to_string(),
+            task_family: TaskFamily::Generative,
+            execution_behavior: TaskExecutionBehavior::Generates,
+            streaming_support: TaskStreamingSupport::Unsupported,
+            support_tier: SupportTier::Experimental,
+            required_components: Vec::new(),
+            upstream_task_ids: vec!["text-to-image".to_string()],
+        }
+    }
+
     fn backend_for_text_generation() -> BackendCapabilities {
         BackendCapabilities {
             facts: BackendCapabilityFacts {
@@ -640,6 +664,30 @@ mod tests {
                     external_connection: BackendFeatureSupport::Unsupported,
                     kv_cache: BackendFeatureSupport::Supported,
                 },
+            },
+            ..BackendCapabilities::default()
+        }
+    }
+
+    fn backend_for_diffusers_image_generation() -> BackendCapabilities {
+        BackendCapabilities {
+            facts: BackendCapabilityFacts {
+                tasks: vec![BackendTaskCapability {
+                    task_id: InferenceTaskId::ImageGeneration,
+                    support_tier: SupportTier::Experimental,
+                    modality_signature: TaskModalitySignature::new(
+                        vec![InferenceModality::Text],
+                        vec![InferenceModality::Image],
+                    ),
+                }],
+                preprocessing: BackendComponentCapability::RequiresPackageComponent,
+                postprocessing: BackendComponentCapability::BackendManaged,
+                model_sources: BackendModelSourceCapabilityFacts {
+                    artifact_kinds: vec![ModelArtifactKind::DiffusersBundle],
+                    backend_hints: vec![BackendHintLabel::Diffusers],
+                    custom_code: BackendFeatureSupport::Unsupported,
+                },
+                features: BackendFeatureCapabilityFacts::default(),
             },
             ..BackendCapabilities::default()
         }
@@ -699,6 +747,24 @@ mod tests {
             issue.kind == BackendCompatibilityIssueKind::MissingPreprocessingComponent
                 && issue.phase == InferenceLifecyclePhase::Preprocessing
         }));
+    }
+
+    #[test]
+    fn diffusers_bundle_model_index_satisfies_image_generation_preprocessing() {
+        let package = fixture(include_str!(
+            "../../tests/fixtures/inference_package_facts/diffusers_bundle_package_facts.json"
+        ));
+        let task = image_generation_task();
+        let report = backend_for_diffusers_image_generation().check_model_compatibility(
+            Some("diffusers"),
+            BackendCompatibilityRequest::new(&task, &package),
+        );
+
+        assert!(report.compatible, "unexpected issues: {:?}", report.issues);
+        assert_eq!(report.task, BackendCompatibilityStatus::Supported);
+        assert_eq!(report.model_source, BackendCompatibilityStatus::Supported);
+        assert_eq!(report.preprocessing, BackendCompatibilityStatus::Supported);
+        assert!(report.issues.is_empty());
     }
 
     #[test]
