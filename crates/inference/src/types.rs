@@ -129,6 +129,12 @@ impl InferenceExecutionRequest {
     /// input variant disagree, when required text/query/document payloads are
     /// empty, or when the task is not supported by the typed request contract.
     pub fn validate(&self) -> Result<(), InferenceExecutionRequestValidationError> {
+        if let InferenceExecutionInput::AudioTranscription { request } = &self.input {
+            request
+                .validate_audio_source()
+                .map_err(|()| InferenceExecutionRequestValidationError::MissingAudioInput)?;
+        }
+
         let contract = resolve_task_registry_entry(self.task_id.canonical_label())
             .and_then(|entry| entry.request_contract())
             .ok_or_else(
@@ -199,6 +205,7 @@ impl InferenceExecutionRequest {
                 Ok(())
             }
             InferenceExecutionInput::ImageGeneration { .. } => Ok(()),
+            InferenceExecutionInput::AudioTranscription { .. } => Ok(()),
         }
     }
 }
@@ -218,6 +225,8 @@ pub enum InferenceExecutionRequestValidationError {
     EmptyRerankDocuments,
     #[error("rerank document at index {index} must not be blank")]
     BlankRerankDocument { index: usize },
+    #[error("audio transcription requires encoded audio or an audio artifact reference")]
+    MissingAudioInput,
     #[error("task {task_id:?} does not match input type {input_type}")]
     TaskInputMismatch {
         task_id: InferenceTaskId,
@@ -255,6 +264,9 @@ pub enum InferenceExecutionInput {
     ImageGeneration {
         request: ImageGenerationRequest,
     },
+    AudioTranscription {
+        request: AudioTranscriptionRequest,
+    },
 }
 
 impl InferenceExecutionInput {
@@ -270,6 +282,7 @@ impl InferenceExecutionInput {
             Self::Embedding { .. } => InferenceExecutionInputKind::Embedding,
             Self::Rerank { .. } => InferenceExecutionInputKind::Rerank,
             Self::ImageGeneration { .. } => InferenceExecutionInputKind::ImageGeneration,
+            Self::AudioTranscription { .. } => InferenceExecutionInputKind::AudioTranscription,
         }
     }
 }
@@ -300,6 +313,11 @@ pub enum InferenceExecutionResult {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
     },
+    AudioTranscription {
+        result: AudioTranscriptionResult,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    },
 }
 
 impl InferenceExecutionResult {
@@ -310,6 +328,7 @@ impl InferenceExecutionResult {
             Self::Embedding { .. } => InferenceExecutionResultKind::Embedding,
             Self::Rerank { .. } => InferenceExecutionResultKind::Rerank,
             Self::ImageGeneration { .. } => InferenceExecutionResultKind::ImageGeneration,
+            Self::AudioTranscription { .. } => InferenceExecutionResultKind::AudioTranscription,
         }
     }
 }
@@ -350,6 +369,89 @@ pub struct EncodedImage {
     /// Optional image height in pixels.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<u32>,
+}
+
+/// Base64-encoded audio payload used by audio transcription requests.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EncodedAudio {
+    /// Base64-encoded audio bytes.
+    pub data_base64: String,
+    /// MIME type describing the encoded audio payload.
+    pub mime_type: String,
+    /// Optional sample rate in hertz when known by the caller.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_rate_hz: Option<u32>,
+}
+
+/// Speech-to-text request contract used by ASR-capable backends.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AudioTranscriptionRequest {
+    /// Backend-specific model identifier or path.
+    pub model: String,
+    /// In-memory audio payload. Large media should normally flow through
+    /// artifact references instead of durable diagnostics.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<EncodedAudio>,
+    /// Optional artifact reference for host-owned audio payloads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_ref: Option<String>,
+    /// Optional language hint such as `en`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    /// Optional prompt/context hint for transcription.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    /// Optional backend task hint such as `transcribe` or `translate`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    /// Optional chunk size in seconds for long-form transcription.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chunk_length_s: Option<f32>,
+    /// Backend/model-specific append-only options.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub extra_options: Value,
+}
+
+impl AudioTranscriptionRequest {
+    fn validate_audio_source(&self) -> Result<(), ()> {
+        if self
+            .audio
+            .as_ref()
+            .is_some_and(|audio| !audio.data_base64.trim().is_empty())
+            || self
+                .audio_ref
+                .as_deref()
+                .is_some_and(|audio_ref| !audio_ref.trim().is_empty())
+        {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+/// Speech-to-text response contract returned by ASR-capable backends.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AudioTranscriptionResult {
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_seconds: Option<f32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<AudioTranscriptionSegment>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub metadata: Value,
+}
+
+/// Bounded timing segment returned by audio transcription when available.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AudioTranscriptionSegment {
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_seconds: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_seconds: Option<f32>,
 }
 
 /// Text-to-image request contract used by diffusion-capable backends.
@@ -969,6 +1071,56 @@ mod tests {
     }
 
     #[test]
+    fn test_audio_transcription_request_result_serde_roundtrip() {
+        let request = AudioTranscriptionRequest {
+            model: "openai/whisper-tiny".to_string(),
+            audio: Some(EncodedAudio {
+                data_base64: "UklGRg==".to_string(),
+                mime_type: "audio/wav".to_string(),
+                sample_rate_hz: Some(16_000),
+            }),
+            audio_ref: None,
+            language: Some("en".to_string()),
+            prompt: Some("technical vocabulary".to_string()),
+            task: Some("transcribe".to_string()),
+            chunk_length_s: Some(30.0),
+            extra_options: serde_json::json!({
+                "return_timestamps": true
+            }),
+        };
+        let result = AudioTranscriptionResult {
+            text: "hello world".to_string(),
+            language: Some("en".to_string()),
+            duration_seconds: Some(1.25),
+            segments: vec![AudioTranscriptionSegment {
+                text: "hello".to_string(),
+                start_seconds: Some(0.0),
+                end_seconds: Some(0.5),
+            }],
+            metadata: serde_json::json!({
+                "backend": "pytorch"
+            }),
+        };
+
+        let request_json = serde_json::to_string(&request).unwrap();
+        let result_json = serde_json::to_string(&result).unwrap();
+        let decoded_request: AudioTranscriptionRequest =
+            serde_json::from_str(&request_json).unwrap();
+        let decoded_result: AudioTranscriptionResult = serde_json::from_str(&result_json).unwrap();
+
+        assert_eq!(decoded_request.model, "openai/whisper-tiny");
+        assert_eq!(
+            decoded_request
+                .audio
+                .as_ref()
+                .and_then(|audio| audio.sample_rate_hz),
+            Some(16_000)
+        );
+        assert_eq!(decoded_result.text, "hello world");
+        assert_eq!(decoded_result.segments.len(), 1);
+    }
+
+    #[test]
     fn typed_execution_request_serde_uses_task_and_input_contracts() {
         let request = InferenceExecutionRequest {
             request_id: Some("req-typed-1".to_string()),
@@ -1012,6 +1164,68 @@ mod tests {
             serde_json::json!(64)
         );
         assert_eq!(decoded, request);
+    }
+
+    #[test]
+    fn typed_execution_audio_transcription_serde_uses_stable_contract() {
+        let request = InferenceExecutionRequest {
+            request_id: Some("req-audio-1".to_string()),
+            task_id: InferenceTaskId::AudioTranscription,
+            model_ref: None,
+            model_name: Some("openai/whisper-tiny".to_string()),
+            runtime_hint: Some("pytorch".to_string()),
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::AudioTranscription {
+                request: AudioTranscriptionRequest {
+                    model: "openai/whisper-tiny".to_string(),
+                    audio: None,
+                    audio_ref: Some("artifact://audio.wav".to_string()),
+                    language: Some("en".to_string()),
+                    prompt: None,
+                    task: Some("transcribe".to_string()),
+                    chunk_length_s: None,
+                    extra_options: Value::Null,
+                },
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+        let result = InferenceExecutionResult::AudioTranscription {
+            result: AudioTranscriptionResult {
+                text: "transcribed text".to_string(),
+                language: Some("en".to_string()),
+                duration_seconds: None,
+                segments: Vec::new(),
+                metadata: Value::Null,
+            },
+            option_diagnostics: Vec::new(),
+        };
+
+        let encoded_request = serde_json::to_value(&request).unwrap();
+        let decoded_request: InferenceExecutionRequest =
+            serde_json::from_value(encoded_request.clone()).unwrap();
+        let encoded_result = serde_json::to_value(&result).unwrap();
+        let decoded_result: InferenceExecutionResult =
+            serde_json::from_value(encoded_result.clone()).unwrap();
+
+        assert_eq!(
+            encoded_request["input"]["input_type"],
+            serde_json::json!("audio_transcription")
+        );
+        assert_eq!(
+            encoded_request["input"]["request"]["audio_ref"],
+            serde_json::json!("artifact://audio.wav")
+        );
+        assert_eq!(
+            encoded_result["result_type"],
+            serde_json::json!("audio_transcription")
+        );
+        assert_eq!(
+            decoded_result.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::AudioTranscription
+        );
+        assert_eq!(decoded_request, request);
+        assert_eq!(decoded_result, result);
     }
 
     #[test]
@@ -1176,11 +1390,17 @@ mod tests {
             model_name: Some("tiny-audio".to_string()),
             runtime_hint: None,
             resolved_model_package_facts: None,
-            input: InferenceExecutionInput::TextGeneration {
-                prompt: Some("transcribe".to_string()),
-                system_prompt: None,
-                messages: Vec::new(),
-                stream: false,
+            input: InferenceExecutionInput::AudioTranscription {
+                request: AudioTranscriptionRequest {
+                    model: "tiny-audio".to_string(),
+                    audio: None,
+                    audio_ref: Some("artifact://audio.wav".to_string()),
+                    language: None,
+                    prompt: None,
+                    task: None,
+                    chunk_length_s: None,
+                    extra_options: Value::Null,
+                },
             },
             generation_options: None,
             extra_options: Value::Null,
@@ -1191,6 +1411,37 @@ mod tests {
                 assert_eq!(task_id, InferenceTaskId::AudioTranscription);
             }
             other => panic!("expected unsupported task error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_execution_audio_transcription_validation_requires_audio_source() {
+        let request = InferenceExecutionRequest {
+            request_id: Some("req-audio-missing".to_string()),
+            task_id: InferenceTaskId::AudioTranscription,
+            model_ref: None,
+            model_name: Some("tiny-audio".to_string()),
+            runtime_hint: None,
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::AudioTranscription {
+                request: AudioTranscriptionRequest {
+                    model: "tiny-audio".to_string(),
+                    audio: None,
+                    audio_ref: Some("  ".to_string()),
+                    language: None,
+                    prompt: None,
+                    task: None,
+                    chunk_length_s: None,
+                    extra_options: Value::Null,
+                },
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+
+        match request.validate() {
+            Err(InferenceExecutionRequestValidationError::MissingAudioInput) => {}
+            other => panic!("expected missing audio input error, got {other:?}"),
         }
     }
 

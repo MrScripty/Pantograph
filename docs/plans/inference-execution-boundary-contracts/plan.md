@@ -1838,6 +1838,10 @@ mappers for PyTorch/Transformers and llama.cpp instead of the public
 the same boundary. `InferenceGateway::execute_typed` validates typed execution
 requests and bridges them into existing backend paths for text/chat,
 embedding, rerank, and image generation.
+Audio transcription now has stable typed input/result DTOs, serde coverage,
+and validation that requires either encoded audio or a host-owned audio
+artifact reference, but `audio_transcription` remains contract-only until a
+later PyTorch/Transformers execution slice wires the gateway and backend path.
 
 ### Milestone 11: Canonical Workflow Node Migration
 

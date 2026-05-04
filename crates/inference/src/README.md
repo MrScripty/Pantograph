@@ -144,6 +144,9 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   compatibility must use resolved local package facts plus backend checks.
 - Embeddings are normal task evidence in `model_contracts.rs`; dedicated
   embedding runtime state remains a backend-local residency strategy.
+- Audio transcription now has stable typed request/result DTOs, but remains a
+  contract-only task until a backend slice explicitly wires execution support
+  through the gateway and updates capability facts.
 - Gateway lifecycle, request forwarding, runtime reuse, and shared mock-backend
   fixtures stay in `gateway_tests.rs`, while oversized behavior families split
   under `gateway_tests/` so `gateway.rs` remains focused on production gateway
