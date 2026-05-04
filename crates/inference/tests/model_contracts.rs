@@ -301,6 +301,7 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
         runtime_id: Some("runtime.llama_cpp".to_string()),
         runtime_instance_id: Some("runtime.llama_cpp.1".to_string()),
         model_id: Some("pumas://models/tiny".to_string()),
+        resolved_artifact_kind: Some("gguf".to_string()),
         usage: Some(InferenceUsage {
             prompt_tokens: Some(2),
             completion_tokens: Some(3),

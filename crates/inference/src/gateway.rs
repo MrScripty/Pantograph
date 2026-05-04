@@ -22,7 +22,7 @@ use crate::backend::{
 use crate::config::EmbeddingMemoryMode;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
-    resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase,
+    resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase, ModelArtifactKind,
     OptionCompatibilityDiagnostic, OptionSupportState,
 };
 use crate::process::ProcessSpawner;
@@ -2178,11 +2178,13 @@ fn record_model_package_resolution_lifecycle_if_present(
     runtime_instance_id: Option<String>,
     model_id: Option<String>,
 ) {
-    if request.resolved_model_package_facts.is_none() {
+    let Some(package_facts) = request.resolved_model_package_facts.as_ref() else {
         return;
-    }
+    };
+    let resolved_artifact_kind =
+        Some(model_artifact_kind_label(&package_facts.artifact.artifact_kind).to_string());
 
-    record_inference_lifecycle_phase_event(
+    record_inference_lifecycle_phase_event_with_references(
         sink,
         InferenceLifecyclePhase::ModelPackageResolution,
         request_id.clone(),
@@ -2193,8 +2195,14 @@ fn record_model_package_resolution_lifecycle_if_present(
         model_id.clone(),
         InferenceRequestLifecycleEventKind::Started,
         None,
+        Vec::new(),
+        None,
+        Vec::new(),
+        None,
+        None,
+        resolved_artifact_kind.clone(),
     );
-    record_non_streaming_lifecycle_phase_result(
+    record_non_streaming_lifecycle_phase_result_with_references(
         sink,
         InferenceLifecyclePhase::ModelPackageResolution,
         request_id,
@@ -2204,7 +2212,26 @@ fn record_model_package_resolution_lifecycle_if_present(
         runtime_instance_id,
         model_id,
         &Ok::<(), GatewayError>(()),
+        Vec::new(),
+        None,
+        Vec::new(),
+        None,
+        None,
+        resolved_artifact_kind,
     );
+}
+
+fn model_artifact_kind_label(kind: &ModelArtifactKind) -> &'static str {
+    match kind {
+        ModelArtifactKind::Gguf => "gguf",
+        ModelArtifactKind::HfCompatibleDirectory => "hf_compatible_directory",
+        ModelArtifactKind::Safetensors => "safetensors",
+        ModelArtifactKind::DiffusersBundle => "diffusers_bundle",
+        ModelArtifactKind::Onnx => "onnx",
+        ModelArtifactKind::Adapter => "adapter",
+        ModelArtifactKind::Shard => "shard",
+        ModelArtifactKind::Unknown => "unknown",
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2270,6 +2297,7 @@ fn record_inference_lifecycle_phase_event_with_diagnostics(
         compatibility_issues,
         None,
         None,
+        None,
     );
 }
 
@@ -2290,6 +2318,7 @@ fn record_inference_lifecycle_phase_event_with_references(
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     usage: Option<InferenceUsage>,
     cache_handle_id: Option<String>,
+    resolved_artifact_kind: Option<String>,
 ) {
     sink.record(InferenceRequestLifecycleEvent {
         request_id,
@@ -2301,6 +2330,7 @@ fn record_inference_lifecycle_phase_event_with_references(
         runtime_id,
         runtime_instance_id,
         model_id,
+        resolved_artifact_kind,
         usage,
         cache_handle_id,
         detail,
@@ -2363,6 +2393,7 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
         compatibility_issues,
         usage_from_execution_result(result),
         cache_handle_from_execution_result(result),
+        None,
     );
 }
 
@@ -2477,6 +2508,7 @@ fn record_non_streaming_lifecycle_phase_result_with_diagnostics<T>(
         compatibility_issues,
         None,
         None,
+        None,
     );
 }
 
@@ -2496,6 +2528,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     usage: Option<InferenceUsage>,
     cache_handle_id: Option<String>,
+    resolved_artifact_kind: Option<String>,
 ) {
     match result {
         Ok(_) => record_inference_lifecycle_phase_event_with_references(
@@ -2514,6 +2547,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
             compatibility_issues,
             usage,
             cache_handle_id,
+            resolved_artifact_kind.clone(),
         ),
         Err(error) => record_inference_lifecycle_phase_event(
             sink,

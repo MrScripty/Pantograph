@@ -1254,6 +1254,10 @@ async fn test_execute_typed_with_lifecycle_reports_package_compatibility() {
         package_completed.model_id.as_deref(),
         Some("llm/llama/tiny-gguf")
     );
+    assert_eq!(
+        package_completed.resolved_artifact_kind.as_deref(),
+        Some("gguf")
+    );
     assert!(package_completed.compatibility_report.is_none());
     assert!(package_completed.option_diagnostics.is_empty());
 

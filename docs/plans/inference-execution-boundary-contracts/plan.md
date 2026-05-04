@@ -2413,9 +2413,11 @@ inference write ledger events directly.
   node id, and scheduler policy id into durable run/node/runtime diagnostics.
   Durable `InferenceExecutionDiagnosticObserved` events now feed run-list and
   run-detail selected runtime, backend, model, and task rollups from typed event
-  fields. Remaining follow-up: resolved artifact kind and execution-observed
-  device/network node facts need explicit producer DTO fields before they can
-  be projected without parsing backend-specific payload details.
+  fields. Inference lifecycle events and durable diagnostic payloads now carry
+  bounded `resolved_artifact_kind` metadata from Pumas package facts without
+  parsing backend-specific payload details. Remaining follow-up:
+  execution-observed device/network node facts need explicit producer DTO
+  fields before they can be projected.
 - [x] Map lifecycle-carried inference compatibility summaries into durable
   bounded metadata: accepted/rejected/degraded status dimensions, missing
   components, unsupported backend/task pairs, custom-code/trust blockers, and

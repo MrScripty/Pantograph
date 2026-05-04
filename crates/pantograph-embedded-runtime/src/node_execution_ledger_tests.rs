@@ -133,6 +133,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
+        resolved_artifact_kind: None,
         usage: None,
         cache_handle_id: None,
         detail: Some("backend failed".to_string()),
@@ -181,6 +182,7 @@ fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure(
         runtime_id: Some("vllm".to_string()),
         runtime_instance_id: None,
         model_id: Some("pumas://models/video-understanding".to_string()),
+        resolved_artifact_kind: None,
         usage: None,
         cache_handle_id: None,
         detail: Some(
@@ -249,6 +251,7 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
+        resolved_artifact_kind: None,
         usage: None,
         cache_handle_id: None,
         detail: None,
@@ -302,6 +305,7 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
         total_tokens: Some(13),
     });
     event.cache_handle_id = Some("kv-checkpoint-1".to_string());
+    event.resolved_artifact_kind = Some("gguf".to_string());
 
     let request = inference_diagnostic_event_ledger_append_request(&context, &event)
         .expect("completed backend lifecycle with option diagnostics should map");
@@ -322,6 +326,7 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
             );
             assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(payload.resolved_artifact_kind.as_deref(), Some("gguf"));
             assert_eq!(
                 payload.usage.as_ref().and_then(|usage| usage.total_tokens),
                 Some(13)
@@ -1123,6 +1128,7 @@ fn inference_lifecycle_event(
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
+        resolved_artifact_kind: None,
         usage: None,
         cache_handle_id: None,
         detail,

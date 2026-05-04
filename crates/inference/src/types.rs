@@ -720,6 +720,8 @@ pub struct InferenceRequestLifecycleEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_artifact_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<InferenceUsage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_handle_id: Option<String>,
@@ -2045,6 +2047,7 @@ mod tests {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-main-1".to_string()),
             model_id: Some("pumas://models/tiny-llama".to_string()),
+            resolved_artifact_kind: Some("gguf".to_string()),
             usage: Some(InferenceUsage {
                 prompt_tokens: Some(8),
                 completion_tokens: Some(5),
@@ -2080,6 +2083,7 @@ mod tests {
             encoded["model_id"],
             serde_json::json!("pumas://models/tiny-llama")
         );
+        assert_eq!(encoded["resolved_artifact_kind"], serde_json::json!("gguf"));
         assert_eq!(encoded["runtime_id"], serde_json::json!("llama.cpp"));
         assert_eq!(encoded["task_id"], serde_json::json!("text_generation"));
         assert_eq!(encoded["usage"]["total_tokens"], serde_json::json!(13));

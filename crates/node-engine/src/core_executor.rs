@@ -485,6 +485,7 @@ fn record_task_validation_failure_lifecycle(
             runtime_id: runtime_id.clone(),
             runtime_instance_id: None,
             model_id: model_id.clone(),
+            resolved_artifact_kind: None,
             usage: None,
             cache_handle_id: None,
             detail,
