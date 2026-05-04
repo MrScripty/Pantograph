@@ -2397,8 +2397,13 @@ error facts durable through the existing diagnostics ledger without making
 inference write ledger events directly.
 
 **Tasks:**
-- [ ] Map selected backend/runtime facts to existing scheduler admission,
+- [x] Map selected backend/runtime facts to existing scheduler admission,
   reservation, run-list, and run-detail projection fields where sufficient.
+  Node execution status now backfills run-list and run-detail
+  `selected_runtime_id` from the observed runtime id when scheduler admission
+  has not already supplied a selected runtime, preserving scheduler-owned
+  runtime selection precedence while making execution-observed backend facts
+  queryable.
 - [x] Decide whether the diagnostics ledger needs an additive
   `selected_backend_key` or `selected_backend_family` field when
   `selected_runtime_id` does not clearly identify llama.cpp,

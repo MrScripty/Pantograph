@@ -2338,13 +2338,15 @@ fn apply_run_list_projection_inference_facts(
     };
     tx.execute(
         "UPDATE run_list_projection
-         SET selected_backend_key = COALESCE(?1, selected_backend_key),
-             selected_model_id = COALESCE(?2, selected_model_id),
-             selected_task_id = COALESCE(?3, selected_task_id),
-             last_event_seq = ?4,
-             last_updated_at_ms = ?5
-         WHERE workflow_run_id = ?6",
+         SET selected_runtime_id = COALESCE(selected_runtime_id, ?1),
+             selected_backend_key = COALESCE(?2, selected_backend_key),
+             selected_model_id = COALESCE(?3, selected_model_id),
+             selected_task_id = COALESCE(?4, selected_task_id),
+             last_event_seq = ?5,
+             last_updated_at_ms = ?6
+         WHERE workflow_run_id = ?7",
         params![
+            event.runtime_id.as_deref(),
             payload.selected_backend_key.as_deref(),
             event.model_id.as_deref(),
             payload.task_id.as_deref(),
@@ -2741,13 +2743,15 @@ fn apply_run_detail_projection_inference_facts(
     };
     tx.execute(
         "UPDATE run_detail_projection
-         SET selected_backend_key = COALESCE(?1, selected_backend_key),
-             selected_model_id = COALESCE(?2, selected_model_id),
-             selected_task_id = COALESCE(?3, selected_task_id),
-             last_event_seq = ?4,
-             last_updated_at_ms = ?5
-         WHERE workflow_run_id = ?6",
+         SET selected_runtime_id = COALESCE(selected_runtime_id, ?1),
+             selected_backend_key = COALESCE(?2, selected_backend_key),
+             selected_model_id = COALESCE(?3, selected_model_id),
+             selected_task_id = COALESCE(?4, selected_task_id),
+             last_event_seq = ?5,
+             last_updated_at_ms = ?6
+         WHERE workflow_run_id = ?7",
         params![
+            event.runtime_id.as_deref(),
             payload.selected_backend_key.as_deref(),
             event.model_id.as_deref(),
             payload.task_id.as_deref(),

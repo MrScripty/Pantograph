@@ -1632,6 +1632,53 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
 }
 
 #[test]
+fn run_list_projection_backfills_selected_runtime_from_node_status() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event appends");
+    ledger
+        .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
+        .expect("run started event appends");
+    let mut node_event = sample_node_status_event(
+        "workflow_run_alpha",
+        "llm-node",
+        NodeExecutionProjectionStatus::Completed,
+        1_120,
+    );
+    node_event.runtime_id = Some("pytorch.transformers".to_string());
+    node_event.model_id = Some("pumas://models/tiny-transformers".to_string());
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut node_event.payload {
+        payload.task_id = Some("text_generation".to_string());
+        payload.selected_backend_key = Some("pytorch".to_string());
+    }
+    let node_event = ledger
+        .append_diagnostic_event(node_event)
+        .expect("node status event appends");
+
+    let state = ledger
+        .drain_run_list_projection(10)
+        .expect("run list projection drains");
+    assert_eq!(state.last_applied_event_seq, node_event.event_seq);
+
+    let records = ledger
+        .query_run_list_projection(RunListProjectionQuery::default())
+        .expect("run list projection loads");
+    assert_eq!(records.len(), 1);
+    let record = &records[0];
+    assert_eq!(
+        record.selected_runtime_id.as_deref(),
+        Some("pytorch.transformers")
+    );
+    assert_eq!(record.selected_backend_key.as_deref(), Some("pytorch"));
+    assert_eq!(
+        record.selected_model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    assert_eq!(record.selected_task_id.as_deref(), Some("text_generation"));
+}
+
+#[test]
 fn run_detail_projection_drains_lifecycle_events_incrementally() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
@@ -1753,6 +1800,54 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
         .expect("run detail projection loads after idempotent drain")
         .expect("run detail exists after idempotent drain");
     assert_eq!(after_idempotent.timeline_event_count, 6);
+}
+
+#[test]
+fn run_detail_projection_backfills_selected_runtime_from_node_status() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event appends");
+    ledger
+        .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
+        .expect("run started event appends");
+    let mut node_event = sample_node_status_event(
+        "workflow_run_alpha",
+        "llm-node",
+        NodeExecutionProjectionStatus::Completed,
+        1_120,
+    );
+    node_event.runtime_id = Some("pytorch.transformers".to_string());
+    node_event.model_id = Some("pumas://models/tiny-transformers".to_string());
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut node_event.payload {
+        payload.task_id = Some("text_generation".to_string());
+        payload.selected_backend_key = Some("pytorch".to_string());
+    }
+    let node_event = ledger
+        .append_diagnostic_event(node_event)
+        .expect("node status event appends");
+
+    let state = ledger
+        .drain_run_detail_projection(10)
+        .expect("run detail projection drains");
+    assert_eq!(state.last_applied_event_seq, node_event.event_seq);
+
+    let record = ledger
+        .query_run_detail_projection(RunDetailProjectionQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+        })
+        .expect("run detail projection loads")
+        .expect("run detail exists");
+    assert_eq!(
+        record.selected_runtime_id.as_deref(),
+        Some("pytorch.transformers")
+    );
+    assert_eq!(record.selected_backend_key.as_deref(), Some("pytorch"));
+    assert_eq!(
+        record.selected_model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    assert_eq!(record.selected_task_id.as_deref(), Some("text_generation"));
 }
 
 #[test]
