@@ -2258,7 +2258,10 @@ inference write ledger events directly.
   result-projection events can persist duration-only summaries when a matching
   start is known. Cancelled lifecycle events now persist duration-only bounded
   diagnostic summaries when a matching start is known, while durationless
-  cancellation and cleanup remain non-persisted to avoid ledger noise.
+  cancellation and failed events plus cleanup remain non-persisted to avoid
+  ledger noise. Failed lifecycle events with matched duration now persist
+  duration-only bounded diagnostic summaries without copying failure detail into
+  the inference diagnostic payload.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -2400,6 +2403,11 @@ one-off conversions.
   they contain either option diagnostics or compatibility summaries, so
   rejected/degraded compatibility reports are not dropped just because no
   generation option diagnostics were emitted.
+- 2026-05-04: Failed lifecycle duration follow-up extended the
+  embedded-runtime ledger adapter so failed lifecycle events with a matched
+  start can persist bounded `inference.execution_diagnostic_observed` duration
+  summaries while keeping failure detail in the node-status/error path instead
+  of copying it into inference diagnostic payloads.
 
 ## Execution Notes
 

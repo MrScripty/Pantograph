@@ -716,6 +716,7 @@ fn inference_diagnostic_event_kind_is_persistable(
     matches!(
         event.kind,
         inference::InferenceRequestLifecycleEventKind::Completed
+            | inference::InferenceRequestLifecycleEventKind::Failed
             | inference::InferenceRequestLifecycleEventKind::Cancelled
     )
 }

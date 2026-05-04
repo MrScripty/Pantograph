@@ -536,6 +536,49 @@ fn inference_diagnostic_event_adapter_persists_cancelled_lifecycle_duration() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_persists_failed_lifecycle_duration_without_detail() {
+    let context = context();
+    let mut event =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Failed, 175);
+    event.detail =
+        Some("SECRET_PROMPT backend failure text should stay out of summaries".to_string());
+
+    let request =
+        inference_diagnostic_event_ledger_append_request_with_duration(&context, &event, Some(75))
+            .expect("failed backend lifecycle with duration should map");
+
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("SECRET_PROMPT"));
+    assert_eq!(request.runtime_id.as_deref(), Some("pytorch.transformers"));
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.request_id, "req-a");
+            assert_eq!(payload.task_id, "text_generation");
+            assert_eq!(payload.duration_ms, Some(75));
+            assert_eq!(
+                payload.lifecycle_phase.as_deref(),
+                Some("backend_execution")
+            );
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("failed"));
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert!(payload.usage.is_none());
+            assert!(payload.cache_handle_id.is_none());
+            assert!(payload.kv_cache.is_none());
+            assert!(payload.compatibility_report.is_none());
+            assert_eq!(payload.compatibility_issue_count, 0);
+            assert!(payload.compatibility_issues.is_empty());
+            assert_eq!(payload.option_support_counts, Default::default());
+            assert!(payload.option_diagnostics.is_empty());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_diagnostic_event_adapter_persists_duration_only_non_backend_lifecycle() {
     let context = context();
     let mut event = inference_lifecycle_event(
@@ -600,6 +643,23 @@ fn inference_diagnostic_event_adapter_skips_durationless_cancelled_lifecycle_wit
         inference::InferenceRequestLifecycleEventKind::Cancelled,
         175,
     );
+    event.usage = None;
+    event.cache_handle_id = None;
+    event.compatibility_report = None;
+    event.compatibility_issues.clear();
+    event.option_diagnostics.clear();
+
+    assert!(
+        inference_diagnostic_event_ledger_append_request_with_duration(&context, &event, None)
+            .is_none()
+    );
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_skips_durationless_failed_lifecycle_without_diagnostics() {
+    let context = context();
+    let mut event =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Failed, 175);
     event.usage = None;
     event.cache_handle_id = None;
     event.compatibility_report = None;
