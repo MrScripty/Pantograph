@@ -2189,6 +2189,10 @@ Node-engine canonical `llm-inference` embedding execution now also builds an
 `InferenceExecutionRequest` from text, runtime hint, model alias, and Pumas
 model reference, then executes through `InferenceGateway::execute_typed` while
 preserving the graph-visible embedding output shape.
+Node-engine request-builder coverage now proves canonical embedding execution
+forwards `resolved_model_package_facts` from the Pumas package-facts fixture,
+and rerank/audio transcription builders reject malformed package-facts payloads
+through the same explicit parse boundary as text generation.
 Node-engine canonical `llm-inference` rerank execution now builds an
 `InferenceExecutionRequest` from query, documents, top-N options, return-document
 policy, runtime hint, and Pumas/model path identity, then executes through

@@ -625,6 +625,33 @@ fn test_build_embedding_execution_request_preserves_canonical_inputs() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_embedding_execution_request_forwards_package_facts() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("embedding package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert("text".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let request = build_embedding_execution_request(&inputs)
+        .expect("embedding package facts should be forwarded to typed request");
+
+    assert_eq!(
+        request
+            .resolved_model_package_facts
+            .as_ref()
+            .map(|facts| facts.model_ref.model_id.as_str()),
+        Some("embedding/qwen3/tiny-embedding-gguf")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_embedding_execution_request_rejects_empty_text() {
     let mut inputs = HashMap::new();
     inputs.insert("text".to_string(), serde_json::json!("  "));
@@ -828,6 +855,30 @@ fn test_build_rerank_execution_request_rejects_empty_query() {
 }
 
 #[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_rerank_execution_request_rejects_malformed_package_facts() {
+    let mut inputs = HashMap::new();
+    inputs.insert("query".to_string(), serde_json::json!("search"));
+    inputs.insert("documents".to_string(), serde_json::json!(["first"]));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::json!({
+            "contract_version": "pantograph.inference.package-facts.v1"
+        }),
+    );
+
+    let err = build_rerank_execution_request(&inputs)
+        .expect_err("malformed package facts should fail explicitly");
+
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Invalid resolved_model_package_facts input"));
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
 #[tokio::test]
 async fn test_canonical_llm_embedding_uses_typed_gateway_boundary() {
     let embedding_requests = Arc::new(Mutex::new(Vec::new()));
@@ -963,6 +1014,33 @@ fn test_build_audio_transcription_execution_request_accepts_artifact_ref() {
                 request.audio_ref.as_deref(),
                 Some("artifact-read://audio.wav")
             );
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_audio_transcription_execution_request_rejects_malformed_package_facts() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "audio".to_string(),
+        serde_json::json!("artifact-read://audio.wav"),
+    );
+    inputs.insert("model".to_string(), serde_json::json!("whisper-tiny"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::json!({
+            "contract_version": "pantograph.inference.package-facts.v1"
+        }),
+    );
+
+    let err = build_audio_transcription_execution_request(&inputs)
+        .expect_err("malformed package facts should fail explicitly");
+
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Invalid resolved_model_package_facts input"));
         }
         other => panic!("unexpected input variant: {other:?}"),
     }
