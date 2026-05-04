@@ -466,8 +466,38 @@ impl WorkflowService {
                 &required_models,
                 &error,
             )?;
-            let diagnostic_outcome =
-                self.record_workflow_diagnostic_error_if_configured(diagnostic_request)?;
+            let diagnostic_outcome = match self
+                .record_workflow_diagnostic_error_if_configured(diagnostic_request)
+            {
+                Ok(outcome) => outcome,
+                Err(record_error) => {
+                    self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
+                    let terminal_result =
+                        Err(error.with_diagnostics(WorkflowErrorDiagnosticsLink {
+                            workflow_run_id: Some(workflow_run_id.clone()),
+                            diagnostic_event_id: None,
+                            diagnostics_unavailable: Some(record_error.message().to_string()),
+                        }));
+                    let _terminal_record_result = self.record_run_terminal_event_if_configured(
+                        &session,
+                        run_snapshot.as_ref(),
+                        &workflow_run_id,
+                        Some(&queued_workflow_semantic_version),
+                        &terminal_result,
+                    );
+                    let _reservation_record_result = self
+                        .record_scheduler_reservation_event_if_configured(
+                            &session,
+                            run_snapshot.as_ref(),
+                            &workflow_run_id,
+                            &queued_workflow_semantic_version,
+                            &reservation_context,
+                            SchedulerReservationTransition::Released,
+                            Some("runtime load failed after admission"),
+                        );
+                    return terminal_result;
+                }
+            };
             let canonical_error_event_id = diagnostic_outcome.event_id.as_deref();
             let error_text = sanitize_diagnostic_error_text(&error.to_string());
             self.record_scheduler_model_lifecycle_events_if_configured(

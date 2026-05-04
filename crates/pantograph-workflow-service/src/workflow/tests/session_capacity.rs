@@ -75,6 +75,82 @@ async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candid
 }
 
 #[tokio::test]
+async fn workflow_execution_session_capacity_rebalance_preserves_unload_error_when_diagnostics_unavailable(
+) {
+    let service = WorkflowService::with_capacity_limits(3, 2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let diagnostics_ledger = service
+        .diagnostics_ledger
+        .as_ref()
+        .expect("diagnostics ledger configured")
+        .clone();
+    let host = FailingUnloadWithPoisonedDiagnosticsHost::new(diagnostics_ledger);
+
+    service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-capacity-loaded-a".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            },
+        )
+        .await
+        .expect("create first keep-alive session");
+    service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-capacity-loaded-b".to_string(),
+                usage_profile: Some("batch".to_string()),
+                keep_alive: true,
+            },
+        )
+        .await
+        .expect("create second keep-alive session");
+    let target = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-capacity-target".to_string(),
+                usage_profile: Some("batch".to_string()),
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create target session");
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: target.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("capacity rebalance should preserve runtime unload failure");
+
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
+    assert!(error.message().contains("runtime unload failed"));
+    assert!(!error.message().contains("diagnostics ledger lock poisoned"));
+    let diagnostics = error
+        .diagnostics()
+        .expect("diagnostics unavailable link should be attached");
+    assert!(diagnostics.diagnostic_event_id.is_none());
+    assert!(diagnostics
+        .diagnostics_unavailable
+        .as_deref()
+        .unwrap_or_default()
+        .contains("diagnostics ledger lock poisoned"));
+}
+
+#[tokio::test]
 async fn workflow_execution_session_capacity_rebalance_preserves_affine_idle_runtime_by_default() {
     let unloads = Arc::new(Mutex::new(Vec::new()));
     let host = AffinityRuntimeHost::new(unloads.clone());

@@ -189,16 +189,18 @@ impl WorkflowService {
                             }
                             Err(error) => {
                                 let error_text = error.to_string();
-                                self.record_capacity_rebalance_model_lifecycle_events_if_configured(
+                                let _diagnostic_result = self
+                                    .record_capacity_rebalance_model_lifecycle_events_if_configured(
                                     CapacityRebalanceModelLifecycleEventRequest {
                                         context,
                                         candidate: &candidate,
                                         transition: SchedulerModelLifecycleTransition::UnloadFailed,
-                                        reason: "capacity rebalance failed to unload selected session",
+                                        reason:
+                                            "capacity rebalance failed to unload selected session",
                                         duration_ms: Some(unload_duration_ms),
                                         error: Some(error_text.as_str()),
                                     },
-                                )?;
+                                );
                             }
                         }
                     }

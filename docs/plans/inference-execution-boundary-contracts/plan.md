@@ -2289,7 +2289,10 @@ inference write ledger events directly.
   secondary ledger append failure; workflow-service append-failure projection
   now preserves the original workflow-run error and attaches
   `diagnostics_unavailable` when node execution, output validation, artifact
-  conversion, or terminal diagnostic append fails.
+  conversion, or terminal diagnostic append fails. Runtime unload failures now
+  remain authoritative when keep-alive shutdown or capacity-rebalance lifecycle
+  diagnostic appends are unavailable, including the runtime-load admission
+  error path used to surface capacity-rebalance unload failures.
 - [ ] Keep prompts, chat messages, raw media, generated content, embeddings,
   token arrays, logits, tensors, Python kwargs, backend CLI flags, full local
   paths where stable ids exist, and unbounded stderr/stdout out of ledger
@@ -2408,6 +2411,11 @@ one-off conversions.
   start can persist bounded `inference.execution_diagnostic_observed` duration
   summaries while keeping failure detail in the node-status/error path instead
   of copying it into inference diagnostic payloads.
+- 2026-05-04: Capacity-rebalance unload diagnostics follow-up preserved the
+  original runtime unload error when recording the scheduler model lifecycle or
+  runtime-load admission diagnostics is unavailable, matching the post-run
+  keep-alive unload behavior and preventing diagnostics-ledger availability
+  from replacing the execution failure.
 
 ## Execution Notes
 
