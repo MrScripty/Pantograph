@@ -1910,7 +1910,8 @@ any backend/input-kind dispatch.
 Public inference contract JSON keys now have guardrail coverage against
 scheduler-policy terminology such as admission, reservation, priority,
 eviction, scheduler-policy, and selected-best-backend in representative
-runtime, lifecycle, capability, and model-source DTOs.
+runtime, lifecycle, capability, model-source, and typed execution
+request/result DTOs.
 
 ### Milestone 11: Canonical Workflow Node Migration
 

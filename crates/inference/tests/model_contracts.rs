@@ -4,17 +4,19 @@ use inference::{
     default_task_registry_entries, normalize_modality_label, normalize_task_label,
     resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, BackendCapabilityFacts,
     BackendHintLabel, BackendTaskCapability, GenerationOptionSource, GenerationOptions,
-    InferenceLifecyclePhase, InferenceModality, InferenceRequestLifecycleEvent,
-    InferenceRequestLifecycleEventKind, InferenceTaskId, InferenceUsage, ModelArtifactKind,
-    ModelExecutionDescriptor, ModelExecutionStorageKind, ModelExecutionValidationState,
-    ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
-    ModelLibraryUpdateFeed, ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy,
-    ModelPackageDiagnostic, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
-    ModelRemoteCodePolicy, ModelStorageKind, ModelValidationState, OptionCompatibilityDiagnostic,
-    OptionSupportState, PackageFactStatus, ProcessorComponentKind, PumasModelRef,
-    ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
-    RuntimeLifecycleSnapshot, SupportTier, TaskEvidence, TaskExecutionBehavior, TaskFamily,
-    TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
+    InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionRequest,
+    InferenceExecutionResult, InferenceLifecyclePhase, InferenceModality,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind, InferenceTaskId,
+    InferenceUsage, ModelArtifactKind, ModelExecutionDescriptor, ModelExecutionStorageKind,
+    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
+    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
+    ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy, ModelPackageDiagnostic,
+    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy,
+    ModelStorageKind, ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
+    PackageFactStatus, ProcessorComponentKind, PumasModelRef, ResolvedModelPackageFacts,
+    ResolvedModelSource, ResolvedModelSourceKind, RuntimeLifecycleSnapshot, SupportTier,
+    TaskEvidence, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry,
+    TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
     MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
@@ -334,6 +336,45 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
         companion_artifacts: Vec::new(),
         diagnostics: Vec::new(),
     };
+    let typed_request = InferenceExecutionRequest {
+        request_id: Some("req-typed".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: None,
+        model_name: Some("tiny".to_string()),
+        runtime_hint: Some("pytorch".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: false,
+        },
+        generation_options: Some(GenerationOptions::default()),
+        extra_options: serde_json::Value::Null,
+    };
+    let typed_text_result = InferenceExecutionResult::TextGeneration {
+        text: "hello".to_string(),
+        usage: Some(InferenceUsage {
+            prompt_tokens: Some(1),
+            completion_tokens: Some(1),
+            total_tokens: Some(2),
+        }),
+        cache_handle_id: Some("kv-typed".to_string()),
+        option_diagnostics: Vec::new(),
+    };
+    let typed_embedding_result = InferenceExecutionResult::Embedding {
+        embeddings: vec![InferenceEmbeddingResult {
+            vector: vec![0.25, 0.75],
+            token_count: Some(2),
+            index: Some(0),
+        }],
+        usage: Some(InferenceUsage {
+            prompt_tokens: Some(2),
+            completion_tokens: None,
+            total_tokens: Some(2),
+        }),
+        option_diagnostics: Vec::new(),
+    };
 
     for (name, value) in [
         (
@@ -351,6 +392,18 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
         (
             "resolved_model_source",
             serde_json::to_value(source).expect("encode source"),
+        ),
+        (
+            "inference_execution_request",
+            serde_json::to_value(typed_request).expect("encode typed request"),
+        ),
+        (
+            "inference_execution_text_result",
+            serde_json::to_value(typed_text_result).expect("encode typed text result"),
+        ),
+        (
+            "inference_execution_embedding_result",
+            serde_json::to_value(typed_embedding_result).expect("encode typed embedding result"),
         ),
     ] {
         assert_json_keys_avoid_scheduler_policy_language(name, &value);
