@@ -786,6 +786,17 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   and do not affect dependency command request normalization.
 - Revisit trigger: clean up or gate the unused Tauri workflow execution runtime
   helpers before requiring warning-free desktop command test builds.
+- 2026-05-04: Full `cargo test -p pantograph-embedded-runtime` validation for
+  the KV-cache option-diagnostics slice surfaced a deterministic unrelated
+  failure in
+  `tests::runtime_preflight_tests::workflow_preflight_reports_candle_runtime_as_available`.
+  Focused KV-cache ledger validation and `cargo check -p
+  pantograph-embedded-runtime` pass.
+- Reason: the failure is in Candle runtime preflight availability
+  (`response.blocking_runtime_issues` is not empty) and is outside the KV-cache
+  progress/ledger option-diagnostics boundary touched by this slice.
+- Revisit trigger: inspect Candle runtime capability/preflight aliasing before
+  requiring full embedded-runtime suite success for inference diagnostics work.
 
 ## Definition of Done
 
@@ -2446,8 +2457,10 @@ inference write ledger events directly.
   the canonical typed result accessor and covers audio transcription result
   diagnostics as well as text, embedding, rerank, and image. Serde contract
   coverage now freezes image-generation and audio-transcription result
-  diagnostics alongside embedding/rerank diagnostics. Video and KV-cache
-  task-specific options remain open.
+  diagnostics alongside embedding/rerank diagnostics. KV-cache task progress
+  now carries bounded option diagnostics for truncate marker/token-position
+  handling, and embedded-runtime maps those summaries into durable
+  option-support metadata. Video task-specific options remain open.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup. Diagnostic-observed
@@ -3121,6 +3134,11 @@ Update during implementation:
   into typed gateway lifecycle events, task-validation and backend-execution
   compatibility summaries are emitted with package-derived model identity, and
   package-resolution completion remains compatibility-summary free.
+- 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
+  truncate marker/token-position controls. Marker truncation is reported as
+  honored, token-position truncation is reported as ignored when both are
+  supplied, and embedded-runtime maps those facts into durable option-support
+  summaries without storing cache bytes, token arrays, or backend handles.
 
 ## Commit Cadence Notes
 

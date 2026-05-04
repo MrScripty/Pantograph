@@ -143,6 +143,7 @@ fn test_task_progress_with_detail_sets_structured_detail() {
             reuse_source: Some("llamacpp_slot".to_string()),
             token_count: Some(64),
             reason: Some("restored_input_handle".to_string()),
+            option_diagnostics: Vec::new(),
         }),
     );
 

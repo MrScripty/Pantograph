@@ -50,6 +50,7 @@ pub(crate) async fn restore_pytorch_input_handle(
                 reuse_source: None,
                 token_count: None,
                 reason: Some("no_input_handle".to_string()),
+                option_diagnostics: Vec::new(),
             },
         );
         return Ok(false);
@@ -75,6 +76,7 @@ pub(crate) async fn restore_pytorch_input_handle(
                 reuse_source: None,
                 token_count: None,
                 reason: Some("live_reuse_unsupported_for_model_type".to_string()),
+                option_diagnostics: Vec::new(),
             },
         );
         return Ok(false);
@@ -107,6 +109,7 @@ pub(crate) async fn restore_pytorch_input_handle(
                 reuse_source: None,
                 token_count: None,
                 reason: Some("incompatible_runtime_or_model".to_string()),
+                option_diagnostics: Vec::new(),
             },
         );
         return Ok(false);
@@ -141,6 +144,7 @@ pub(crate) async fn restore_pytorch_input_handle(
                     reuse_source: None,
                     token_count: None,
                     reason: Some("load_failed".to_string()),
+                    option_diagnostics: Vec::new(),
                 },
             );
             return Ok(false);
@@ -188,6 +192,7 @@ pub(crate) async fn restore_pytorch_input_handle(
                     reuse_source: kv_reuse_source(&entry.metadata),
                     token_count: Some(entry.metadata.token_count),
                     reason: Some("restore_failed".to_string()),
+                    option_diagnostics: Vec::new(),
                 },
             );
             return Ok(false);
@@ -218,6 +223,7 @@ pub(crate) async fn restore_pytorch_input_handle(
                 reuse_source: kv_reuse_source(&entry.metadata),
                 token_count: Some(entry.metadata.token_count),
                 reason: Some("restored_snapshot_mismatch".to_string()),
+                option_diagnostics: Vec::new(),
             },
         );
         return Ok(false);
@@ -276,6 +282,7 @@ pub(crate) async fn capture_pytorch_output_handle(
                 reuse_source: None,
                 token_count: None,
                 reason: Some("live_reuse_unsupported_for_model_type".to_string()),
+                option_diagnostics: Vec::new(),
             },
         );
         return Ok(serde_json::Value::Null);
@@ -350,6 +357,7 @@ pub(crate) async fn capture_pytorch_output_handle(
             reuse_source: kv_reuse_source(&metadata),
             token_count: Some(metadata.token_count),
             reason: Some("captured_output_handle".to_string()),
+            option_diagnostics: Vec::new(),
         },
     );
     serde_json::to_value(&handle).map_err(Into::into)

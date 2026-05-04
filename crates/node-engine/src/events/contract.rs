@@ -23,6 +23,26 @@ pub enum KvCacheEventOutcome {
     Truncated,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KvCacheOptionSupportState {
+    Honored,
+    Ignored,
+    Rejected,
+    Conflict,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct KvCacheOptionDiagnostic {
+    pub option_path: String,
+    pub state: KvCacheOptionSupportState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct KvCacheExecutionDiagnostics {
@@ -38,6 +58,8 @@ pub struct KvCacheExecutionDiagnostics {
     pub token_count: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub option_diagnostics: Vec<KvCacheOptionDiagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

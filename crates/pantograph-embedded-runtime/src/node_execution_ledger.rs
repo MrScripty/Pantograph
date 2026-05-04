@@ -600,8 +600,13 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
                 compatibility_report: None,
                 compatibility_issue_count: 0,
                 compatibility_issues: Vec::new(),
-                option_support_counts: InferenceOptionSupportCounts::default(),
-                option_diagnostics: Vec::new(),
+                option_support_counts: kv_cache_option_support_counts(&detail.option_diagnostics),
+                option_diagnostics: detail
+                    .option_diagnostics
+                    .iter()
+                    .take(MAX_INFERENCE_OPTION_DIAGNOSTICS)
+                    .map(kv_cache_option_diagnostic_summary)
+                    .collect(),
             },
         ),
     })
@@ -862,6 +867,43 @@ fn option_support_counts(
         }
     }
     counts
+}
+
+fn kv_cache_option_support_counts(
+    diagnostics: &[node_engine::KvCacheOptionDiagnostic],
+) -> InferenceOptionSupportCounts {
+    let mut counts = InferenceOptionSupportCounts::default();
+    for diagnostic in diagnostics {
+        match diagnostic.state {
+            node_engine::KvCacheOptionSupportState::Honored => counts.honored += 1,
+            node_engine::KvCacheOptionSupportState::Ignored => counts.ignored += 1,
+            node_engine::KvCacheOptionSupportState::Rejected => counts.rejected += 1,
+            node_engine::KvCacheOptionSupportState::Conflict => counts.conflict += 1,
+        }
+    }
+    counts
+}
+
+fn kv_cache_option_diagnostic_summary(
+    diagnostic: &node_engine::KvCacheOptionDiagnostic,
+) -> InferenceOptionDiagnosticSummary {
+    InferenceOptionDiagnosticSummary {
+        option_path: diagnostic.option_path.clone(),
+        state: kv_cache_option_support_state_label(diagnostic.state).to_string(),
+        backend_key: diagnostic.backend_key.clone(),
+        message: diagnostic.message.clone(),
+    }
+}
+
+fn kv_cache_option_support_state_label(
+    state: node_engine::KvCacheOptionSupportState,
+) -> &'static str {
+    match state {
+        node_engine::KvCacheOptionSupportState::Honored => "honored",
+        node_engine::KvCacheOptionSupportState::Ignored => "ignored",
+        node_engine::KvCacheOptionSupportState::Rejected => "rejected",
+        node_engine::KvCacheOptionSupportState::Conflict => "conflict",
+    }
 }
 
 fn option_diagnostic_summary(

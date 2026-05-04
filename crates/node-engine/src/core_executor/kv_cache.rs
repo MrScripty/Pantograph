@@ -14,7 +14,7 @@ use crate::core_executor::require_gateway;
 use crate::error::{NodeEngineError, Result};
 use crate::events::{
     EventSink, KvCacheEventAction, KvCacheEventOutcome, KvCacheExecutionDiagnostics,
-    TaskProgressDetail, WorkflowEvent,
+    KvCacheOptionDiagnostic, KvCacheOptionSupportState, TaskProgressDetail, WorkflowEvent,
 };
 use crate::extensions::ExecutorExtensions;
 
@@ -45,6 +45,39 @@ fn emit_kv_cache_detail(
         Some(message.into()),
         TaskProgressDetail::KvCache(detail),
     ));
+}
+
+fn truncate_option_diagnostics(
+    marker_name: Option<&str>,
+    token_position: Option<usize>,
+    backend_key: &str,
+) -> Vec<KvCacheOptionDiagnostic> {
+    let mut diagnostics = Vec::new();
+    if marker_name.is_some() {
+        diagnostics.push(KvCacheOptionDiagnostic {
+            option_path: "kv_cache.marker_name".to_string(),
+            state: KvCacheOptionSupportState::Honored,
+            backend_key: Some(backend_key.to_string()),
+            message: Some("used as the truncation target".to_string()),
+        });
+    }
+    if token_position.is_some() {
+        diagnostics.push(KvCacheOptionDiagnostic {
+            option_path: "kv_cache.token_position".to_string(),
+            state: if marker_name.is_some() {
+                KvCacheOptionSupportState::Ignored
+            } else {
+                KvCacheOptionSupportState::Honored
+            },
+            backend_key: Some(backend_key.to_string()),
+            message: Some(if marker_name.is_some() {
+                "ignored because marker_name takes precedence".to_string()
+            } else {
+                "used as the truncation target".to_string()
+            }),
+        });
+    }
+    diagnostics
 }
 
 #[path = "kv_cache_llamacpp.rs"]
@@ -316,6 +349,11 @@ pub(super) async fn execute_truncate(
             reuse_source: kv_reuse_source(&metadata),
             token_count: Some(metadata.token_count),
             reason: Some("truncated_cache".to_string()),
+            option_diagnostics: truncate_option_diagnostics(
+                marker_name,
+                token_position,
+                &metadata.backend_hint,
+            ),
         },
     );
 

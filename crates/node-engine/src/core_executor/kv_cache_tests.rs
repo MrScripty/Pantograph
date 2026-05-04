@@ -344,3 +344,94 @@ async fn execute_truncate_delegates_to_backend_owned_codec() {
         .expect("truncated entry should load");
     assert_eq!(truncated.data, vec![1, 2]);
 }
+
+#[tokio::test]
+async fn execute_truncate_emits_option_diagnostics_for_marker_precedence() {
+    let store = Arc::new(KvCacheStore::memory_only());
+    let entry = KvCacheEntry {
+        metadata: KvCacheMetadata {
+            cache_id: String::new(),
+            label: Some("test".to_string()),
+            model_fingerprint: ModelFingerprint {
+                model_id: "model".to_string(),
+                config_hash: "cfg".to_string(),
+            },
+            runtime_fingerprint: Some(KvCacheRuntimeFingerprint {
+                runtime_id: "mock".to_string(),
+                backend_key: "mock".to_string(),
+                tokenizer_fingerprint: "tok".to_string(),
+                prompt_format_fingerprint: Some("prompt".to_string()),
+                runtime_build_fingerprint: Some("build".to_string()),
+            }),
+            backend_hint: "mock".to_string(),
+            token_count: 4,
+            markers: vec![CacheMarker {
+                name: "branch".to_string(),
+                token_position: 3,
+                description: None,
+            }],
+            created_at: 0,
+            updated_at: 0,
+            compressed: false,
+            extra: serde_json::json!({"source": "test"}),
+        },
+        data: vec![1, 2, 3, 4],
+    };
+    let cache_id = store
+        .save(entry, Some(StoragePolicy::MemoryOnly))
+        .await
+        .expect("cache entry should save");
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(crate::extension_keys::KV_CACHE_STORE, store.clone());
+
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockKvBackend {
+            bytes: vec![9, 9, 9],
+            restored: Arc::new(Mutex::new(Vec::new())),
+        }),
+        "mock-kv",
+    ));
+    gateway.set_spawner(Arc::new(MockKvProcessSpawner)).await;
+
+    let event_sink = Arc::new(crate::events::VecEventSink::new());
+    let event_sink_trait: Arc<dyn crate::events::EventSink> = event_sink.clone();
+    let mut inputs = HashMap::new();
+    inputs.insert("cache_id".to_string(), serde_json::json!(cache_id));
+    inputs.insert("marker_name".to_string(), serde_json::json!("branch"));
+    inputs.insert("token_position".to_string(), serde_json::json!(2));
+
+    execute_truncate(
+        &inputs,
+        &extensions,
+        Some(&gateway),
+        "task-a",
+        "exec-a",
+        Some(&event_sink_trait),
+    )
+    .await
+    .expect("truncate should succeed");
+
+    let events = event_sink.events();
+    assert_eq!(events.len(), 1);
+    match &events[0] {
+        crate::events::WorkflowEvent::TaskProgress {
+            detail: Some(crate::events::TaskProgressDetail::KvCache(detail)),
+            ..
+        } => {
+            assert_eq!(
+                detail.outcome,
+                crate::events::KvCacheEventOutcome::Truncated
+            );
+            assert_eq!(detail.option_diagnostics.len(), 2);
+            assert!(detail.option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "kv_cache.marker_name"
+                    && diagnostic.state == crate::events::KvCacheOptionSupportState::Honored
+            }));
+            assert!(detail.option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "kv_cache.token_position"
+                    && diagnostic.state == crate::events::KvCacheOptionSupportState::Ignored
+            }));
+        }
+        other => panic!("expected kv-cache task progress detail, got {other:?}"),
+    }
+}

@@ -173,10 +173,10 @@ delegating methods; scheduler authority and diagnostics events stay in
   lifecycle events may additionally project bounded option-support summaries,
   compatibility summaries, usage counts, cache-handle ids, and matched
   lifecycle duration. Structured KV-cache progress may project bounded
-  action/outcome/cache-id references through the host-owned workflow event sink;
-  prompt/result bodies, embeddings, tensors, token arrays, backend kwargs, raw
-  backend output, cache bytes, cache fingerprints, and temp paths remain outside
-  durable diagnostic payloads.
+  action/outcome/cache-id references and task-local KV option-support summaries
+  through the host-owned workflow event sink; prompt/result bodies, embeddings,
+  tensors, token arrays, backend kwargs, raw backend output, cache bytes, cache
+  fingerprints, and temp paths remain outside durable diagnostic payloads.
 - Public embedded-runtime graph persistence, edit-session, mutation,
   connection, and insert-preview facade methods stay in
   `embedded_workflow_graph_api.rs` so graph API forwarding remains separate

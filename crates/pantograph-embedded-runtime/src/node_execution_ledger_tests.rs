@@ -776,13 +776,19 @@ fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
             message: Some("cache restored".to_string()),
             detail: Some(node_engine::TaskProgressDetail::KvCache(
                 node_engine::KvCacheExecutionDiagnostics {
-                    action: node_engine::KvCacheEventAction::RestoreInput,
-                    outcome: node_engine::KvCacheEventOutcome::Hit,
+                    action: node_engine::KvCacheEventAction::Truncate,
+                    outcome: node_engine::KvCacheEventOutcome::Truncated,
                     cache_id: Some("cache-1".to_string()),
                     backend_key: Some("llamacpp".to_string()),
                     reuse_source: Some("llamacpp_slot".to_string()),
                     token_count: Some(64),
-                    reason: Some("restored_input_handle".to_string()),
+                    reason: Some("truncated_cache".to_string()),
+                    option_diagnostics: vec![node_engine::KvCacheOptionDiagnostic {
+                        option_path: "kv_cache.token_position".to_string(),
+                        state: node_engine::KvCacheOptionSupportState::Honored,
+                        backend_key: Some("llamacpp".to_string()),
+                        message: Some("used as the truncation target".to_string()),
+                    }],
                 },
             )),
             occurred_at_ms: Some(175),
@@ -800,13 +806,20 @@ fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
             assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("progress"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("llamacpp"));
             let kv_cache = payload.kv_cache.expect("kv cache summary");
-            assert_eq!(kv_cache.action, "restore_input");
-            assert_eq!(kv_cache.outcome, "hit");
+            assert_eq!(kv_cache.action, "truncate");
+            assert_eq!(kv_cache.outcome, "truncated");
             assert_eq!(kv_cache.cache_id.as_deref(), Some("cache-1"));
             assert_eq!(kv_cache.backend_key.as_deref(), Some("llamacpp"));
             assert_eq!(kv_cache.reuse_source.as_deref(), Some("llamacpp_slot"));
             assert_eq!(kv_cache.token_count, Some(64));
-            assert_eq!(kv_cache.reason.as_deref(), Some("restored_input_handle"));
+            assert_eq!(kv_cache.reason.as_deref(), Some("truncated_cache"));
+            assert_eq!(payload.option_support_counts.honored, 1);
+            assert_eq!(payload.option_diagnostics.len(), 1);
+            assert_eq!(
+                payload.option_diagnostics[0].option_path,
+                "kv_cache.token_position"
+            );
+            assert_eq!(payload.option_diagnostics[0].state, "honored");
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }

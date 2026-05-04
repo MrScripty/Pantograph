@@ -95,5 +95,9 @@ sink.send(WorkflowEvent::task_progress("node-a", "exec-1", 0.5, None))
   absence on older producers.
 - Workflow cancellation is a first-class event variant and must not be encoded
   as a cancellation-shaped failure string at transport boundaries.
+- KV-cache progress details may include bounded option diagnostics for
+  task-local cache controls such as marker and token-position truncation.
+  Diagnostics must describe honored, ignored, rejected, or conflicting options
+  without copying cache bytes, token arrays, prompts, or backend-local handles.
 - Event variants and field names should evolve append-only where practical so
   transport and binding consumers can stay compatible.
