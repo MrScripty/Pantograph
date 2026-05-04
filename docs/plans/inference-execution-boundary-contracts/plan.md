@@ -2526,6 +2526,10 @@ drift back into inference.
   Node-engine and workflow-nodes source READMEs now document executable
   canonical image-generation as part of the typed `llm-inference` boundary and
   preserve the diagnostic hygiene rules for prompt/generated image payloads.
+  Frontend workflow service and shared svelte-graph backend READMEs now
+  document mock `inference_payloads` as registry contract facts for executable
+  task families and explicitly reject backend/runtime policy fields on the
+  canonical mock `llm-inference` surface.
 - [ ] Record any deferred consumer migrations in this plan.
 
 **Verification:**
@@ -3487,6 +3491,10 @@ Update during implementation:
   image-generation, and audio-transcription task families, with frontend test
   coverage proving the mock surface carries payload facts without adding
   backend/runtime policy inputs.
+- 2026-05-04: Updated the touched frontend workflow-service and shared
+  svelte-graph backend README contract sections so mock `inference_payloads`
+  are documented as task payload facts only, not backend choice, runtime
+  residency, or scheduler policy.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are

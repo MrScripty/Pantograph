@@ -114,6 +114,10 @@ const candidates = await backend.getConnectionCandidates(
   transport/session failures should surface as thrown errors.
 - Compatibility policy is additive: new backend methods should extend the
   interface without breaking older graph-editing paths immediately.
+- Mock `llm-inference` definitions expose `inference_payloads` as registry
+  contract facts for executable text/chat, embedding, rerank, image, and audio
+  task families. Consumers may render or validate those payload roles, but must
+  not treat them as backend selection, runtime residency, or scheduler policy.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - Candidate responses always include `graph_revision`, `revision_matches`,
@@ -126,5 +130,9 @@ const candidates = await backend.getConnectionCandidates(
 - Rejection reasons use stable snake_case labels shared with Rust/Tauri DTOs.
 - Graph revisions are volatile snapshots; consumers must refresh candidates when
   the revision changes.
+- Mock node definitions must keep `inference_payloads` in Rust-compatible
+  snake_case and may only carry task/model-reference/options/input/output,
+  usage, and diagnostics role facts. They must not add backend/runtime policy
+  inputs such as `backend_key` or `runtime_id` to canonical `llm-inference`.
 - If response field names or rejection enums change, update the README and the
   mirrored Rust/TypeScript types in the same change.

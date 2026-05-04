@@ -268,6 +268,11 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   atomically replaces one existing edge with two when a valid bridge exists.
 - Mock mode may return placeholder data for some methods; callers should not
   assume mock behavior fully matches native runtime semantics.
+- Mock `llm-inference` node definitions expose `inference_payloads` only as
+  contract metadata for executable text/chat, embedding, rerank, image, and
+  audio task families. Callers may use those facts for display and validation,
+  but must not infer backend choice, runtime id, scheduler policy, or model
+  residency from mock definitions.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - Service DTOs in `types.ts` mirror Rust field names and rejection enums.
@@ -314,3 +319,8 @@ const preview = await workflowService.previewNodeInsertOnEdge(
 - Mock retention policy responses include the same first-pass settings groups
   as native responses so policy panels exercise one DTO shape in mock and
   native modes.
+- Mock node definitions must preserve Rust-style snake_case
+  `inference_payloads` entries for task/model-reference/options/input/output,
+  usage, and diagnostics roles. Mock producers must not add backend/runtime
+  policy fields such as `backend_key` or `runtime_id` to canonical
+  `llm-inference` inputs.
