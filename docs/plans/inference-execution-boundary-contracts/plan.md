@@ -1170,6 +1170,10 @@ rule that payload compatibility comes from the registry contract rather than
 backend names or raw task strings. Neighboring consumer-migration slices should
 continue moving graph/runtime consumers to the exported contract before marking
 the broader task request/registry tasks complete.
+Typed execution request validation now rejects whitespace-only text prompts,
+blank embedding items, blank rerank queries, and blank rerank documents at the
+contract boundary, with indexed validation errors for list payloads so
+backends do not receive semantically empty task inputs.
 The first neighboring node-engine consumer slice now uses the exported
 `TaskRequestContract` to decide whether a canonical task can be built through
 the text-generation typed request path. Text/chat aliases still map to the text
@@ -2573,6 +2577,9 @@ Update during implementation:
   OpenAI-chat edge mapper. Internal typed execution can now reject task/input
   mismatches, missing text inputs, empty embedding batches, and invalid rerank
   payloads before backend adapters see the request.
+- 2026-05-04: Tightened typed execution request validation to reject
+  whitespace-only prompt, embedding, query, and rerank-document payload strings
+  before backend adapters see them.
 - 2026-05-03: Added canonical requested-option path enumeration and PyTorch
   coverage proving every requested generation option gets a typed compatibility
   diagnostic. This closes the report contract while leaving equivalent

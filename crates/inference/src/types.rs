@@ -154,7 +154,11 @@ impl InferenceExecutionRequest {
             InferenceExecutionInput::TextGeneration {
                 prompt, messages, ..
             } => {
-                if prompt.as_deref().is_none_or(str::is_empty) && messages.is_empty() {
+                if prompt
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+                    && messages.is_empty()
+                {
                     return Err(InferenceExecutionRequestValidationError::MissingTextInput);
                 }
                 Ok(())
@@ -163,16 +167,34 @@ impl InferenceExecutionRequest {
                 if texts.is_empty() {
                     return Err(InferenceExecutionRequestValidationError::EmptyEmbeddingTexts);
                 }
+                if let Some((index, _)) = texts
+                    .iter()
+                    .enumerate()
+                    .find(|(_, text)| text.trim().is_empty())
+                {
+                    return Err(
+                        InferenceExecutionRequestValidationError::BlankEmbeddingText { index },
+                    );
+                }
                 Ok(())
             }
             InferenceExecutionInput::Rerank {
                 query, documents, ..
             } => {
-                if query.is_empty() {
+                if query.trim().is_empty() {
                     return Err(InferenceExecutionRequestValidationError::EmptyRerankQuery);
                 }
                 if documents.is_empty() {
                     return Err(InferenceExecutionRequestValidationError::EmptyRerankDocuments);
+                }
+                if let Some((index, _)) = documents
+                    .iter()
+                    .enumerate()
+                    .find(|(_, document)| document.trim().is_empty())
+                {
+                    return Err(
+                        InferenceExecutionRequestValidationError::BlankRerankDocument { index },
+                    );
                 }
                 Ok(())
             }
@@ -188,10 +210,14 @@ pub enum InferenceExecutionRequestValidationError {
     MissingTextInput,
     #[error("embedding execution requires at least one text input")]
     EmptyEmbeddingTexts,
+    #[error("embedding text at index {index} must not be blank")]
+    BlankEmbeddingText { index: usize },
     #[error("rerank execution requires a query")]
     EmptyRerankQuery,
     #[error("rerank execution requires at least one document")]
     EmptyRerankDocuments,
+    #[error("rerank document at index {index} must not be blank")]
+    BlankRerankDocument { index: usize },
     #[error("task {task_id:?} does not match input type {input_type}")]
     TaskInputMismatch {
         task_id: InferenceTaskId,
@@ -1071,6 +1097,73 @@ mod tests {
                 assert_eq!(input_type, "text_generation");
             }
             other => panic!("expected task/input mismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn typed_execution_request_validation_rejects_blank_payload_strings() {
+        let text_request = InferenceExecutionRequest {
+            request_id: Some("req-blank-text".to_string()),
+            task_id: InferenceTaskId::TextGeneration,
+            model_ref: None,
+            model_name: Some("tiny".to_string()),
+            runtime_hint: None,
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::TextGeneration {
+                prompt: Some("   ".to_string()),
+                system_prompt: None,
+                messages: Vec::new(),
+                stream: false,
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+        assert!(matches!(
+            text_request.validate(),
+            Err(InferenceExecutionRequestValidationError::MissingTextInput)
+        ));
+
+        let embedding_request = InferenceExecutionRequest {
+            request_id: Some("req-blank-embedding".to_string()),
+            task_id: InferenceTaskId::Embedding,
+            model_ref: None,
+            model_name: Some("tiny".to_string()),
+            runtime_hint: None,
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::Embedding {
+                texts: vec!["alpha".to_string(), " \t ".to_string()],
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+        match embedding_request.validate() {
+            Err(InferenceExecutionRequestValidationError::BlankEmbeddingText { index }) => {
+                assert_eq!(index, 1);
+            }
+            other => panic!("expected blank embedding text error, got {other:?}"),
+        }
+
+        let rerank_request = InferenceExecutionRequest {
+            request_id: Some("req-blank-rerank".to_string()),
+            task_id: InferenceTaskId::Rerank,
+            model_ref: None,
+            model_name: Some("tiny".to_string()),
+            runtime_hint: None,
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::Rerank {
+                query: "find this".to_string(),
+                documents: vec!["doc-a".to_string(), "\n".to_string()],
+                top_n: None,
+                return_documents: false,
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+        match rerank_request.validate() {
+            Err(InferenceExecutionRequestValidationError::BlankRerankDocument { index }) => {
+                assert_eq!(index, 1);
+            }
+            other => panic!("expected blank rerank document error, got {other:?}"),
         }
     }
 
