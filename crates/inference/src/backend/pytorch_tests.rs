@@ -32,6 +32,7 @@ fn test_capabilities() {
     assert!(caps.streaming);
     assert!(!caps.tool_calling);
     assert!(caps.supports_task(InferenceTaskId::TextGeneration));
+    assert!(caps.supports_task(InferenceTaskId::AudioTranscription));
     assert!(!caps.supports_task(InferenceTaskId::Embedding));
     assert_eq!(
         caps.facts.features.kv_cache,
@@ -941,6 +942,27 @@ fn test_pytorch_task_profile_uses_canonical_registry_aliases() {
     assert!(profile
         .required_components
         .contains(&ProcessorComponentKind::Tokenizer));
+}
+
+#[test]
+fn test_pytorch_task_profile_maps_audio_transcription_aliases() {
+    let profile = PyTorchBackend::transformers_task_profile_from_evidence(&TaskEvidence {
+        pipeline_tag: Some("automatic-speech-recognition".to_string()),
+        task_type_primary: Some("audio_transcription".to_string()),
+        input_modalities: vec!["audio".to_string()],
+        output_modalities: vec!["text".to_string()],
+    })
+    .expect("audio transcription aliases should resolve through task registry");
+
+    assert_eq!(profile.task_id, InferenceTaskId::AudioTranscription);
+    assert_eq!(profile.canonical_task_label, "audio_transcription");
+    assert_eq!(
+        profile.loader,
+        PyTorchTransformersModelLoader::AutomaticSpeechRecognition
+    );
+    assert!(profile
+        .required_components
+        .contains(&ProcessorComponentKind::AudioFeatureExtractor));
 }
 
 #[test]

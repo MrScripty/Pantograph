@@ -100,6 +100,7 @@ pub(super) struct PyTorchTransformersTaskProfile {
 #[serde(rename_all = "snake_case")]
 pub(super) enum PyTorchTransformersModelLoader {
     CausalLm,
+    AutomaticSpeechRecognition,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

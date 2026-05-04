@@ -1722,6 +1722,10 @@ PyTorch/Transformers load envelopes also include a backend-local task profile
 derived from the canonical task registry, mapping validated text/chat tasks to
 the current causal-LM loader and rejecting registry-resolved tasks that do not
 yet have a PyTorch loader instead of matching raw task strings ad hoc.
+PyTorch static backend capability facts now advertise audio transcription
+alongside text generation, and the backend-local Transformers task profile maps
+canonical `audio_transcription` / `automatic-speech-recognition` evidence to an
+ASR loader family without changing live Python loading behavior.
 The Rust package-derived load envelope now reaches the PyTorch backend load
 edge through `load_transformers_package`: package facts build and validate the
 worker envelope, then Rust sends that envelope to a backend-local Python

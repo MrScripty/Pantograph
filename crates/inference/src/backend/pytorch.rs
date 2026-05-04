@@ -231,11 +231,18 @@ impl PyTorchBackend {
             tool_calling: false,
             external_connection: false,
             facts: BackendCapabilityFacts {
-                tasks: vec![BackendTaskCapability::stable(
-                    InferenceTaskId::TextGeneration,
-                    vec![InferenceModality::Text],
-                    vec![InferenceModality::Text],
-                )],
+                tasks: vec![
+                    BackendTaskCapability::stable(
+                        InferenceTaskId::TextGeneration,
+                        vec![InferenceModality::Text],
+                        vec![InferenceModality::Text],
+                    ),
+                    BackendTaskCapability::stable(
+                        InferenceTaskId::AudioTranscription,
+                        vec![InferenceModality::Audio],
+                        vec![InferenceModality::Text],
+                    ),
+                ],
                 preprocessing: BackendComponentCapability::RequiresPackageComponent,
                 postprocessing: BackendComponentCapability::BackendManaged,
                 model_sources: BackendModelSourceCapabilityFacts {
@@ -633,6 +640,12 @@ impl PyTorchBackend {
                     required_components: entry.required_components.clone(),
                 })
             }
+            InferenceTaskId::AudioTranscription => Ok(PyTorchTransformersTaskProfile {
+                task_id: entry.task_id.clone(),
+                canonical_task_label: entry.canonical_label().to_string(),
+                loader: PyTorchTransformersModelLoader::AutomaticSpeechRecognition,
+                required_components: entry.required_components.clone(),
+            }),
             ref task_id => Err(BackendError::Config(format!(
                 "PyTorch/Transformers load does not support canonical task {} yet",
                 task_id.canonical_label()
