@@ -2497,6 +2497,11 @@ drift back into inference.
   execution now routes through the same typed gateway boundary, projects
   generated image results plus bounded metadata/diagnostics onto existing graph
   outputs, and keeps prompt text plus generated image bytes out of diagnostics.
+  Frontend and shared svelte-graph mock `llm-inference` definitions now expose
+  the same image-generation payload roles for prompt, model-reference,
+  results, metadata, and diagnostics ports, keeping mock-backed tests aligned
+  with the Rust registry contract without introducing backend/runtime policy
+  fields.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
@@ -3469,6 +3474,11 @@ Update during implementation:
   facts over raw record metadata whenever summaries are available. Remaining
   metadata fallbacks are recorded under Milestone 2 as consumer-boundary gaps
   until Pumas exposes equivalent summary/detail facts or Pantograph omits them.
+- 2026-05-04: Aligned frontend and shared svelte-graph mock
+  `llm-inference` node definitions with the Rust image-generation
+  `inference_payloads` contract for prompt/model-reference/results/diagnostic
+  ports, with frontend test coverage proving the mock surface carries payload
+  facts without adding backend/runtime policy inputs.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are

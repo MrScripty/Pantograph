@@ -25,6 +25,7 @@ import type {
   WorkflowEditSessionRunResponse,
   GraphNode,
   GraphEdge,
+  InferencePortPayloadContract,
 } from '../types/workflow.js';
 import type { NodeGroup, PortMapping } from '../types/groups.js';
 import { isPortTypeCompatible } from '../portTypeCompatibility.js';
@@ -38,6 +39,19 @@ import {
 } from './mockConnectionIntent.js';
 
 /** Default mock node definitions */
+const IMAGE_GENERATION_MODEL_REFERENCE_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'image_generation', role: 'model_reference' },
+];
+const IMAGE_GENERATION_PROMPT_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'image_generation', role: 'task_input', input_kind: 'image_generation' },
+];
+const IMAGE_GENERATION_RESULT_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'image_generation', role: 'task_output', result_kind: 'image_generation' },
+];
+const IMAGE_GENERATION_DIAGNOSTIC_PAYLOADS: InferencePortPayloadContract[] = [
+  { task_id: 'image_generation', role: 'diagnostics' },
+];
+
 export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
   {
     node_type: 'text-input',
@@ -103,14 +117,14 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     inputs: [
       { id: 'task_kind', label: 'Task Kind', data_type: 'string', required: false, multiple: false },
       { id: 'runtime_hint', label: 'Runtime Hint', data_type: 'string', required: false, multiple: false },
-      { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false },
-      { id: 'resolved_model_source', label: 'Resolved Model Source', data_type: 'json', required: false, multiple: false },
-      { id: 'resolved_model_package_facts', label: 'Resolved Model Package Facts', data_type: 'json', required: false, multiple: false },
+      { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_MODEL_REFERENCE_PAYLOADS },
+      { id: 'resolved_model_source', label: 'Resolved Model Source', data_type: 'json', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_MODEL_REFERENCE_PAYLOADS },
+      { id: 'resolved_model_package_facts', label: 'Resolved Model Package Facts', data_type: 'json', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_MODEL_REFERENCE_PAYLOADS },
       { id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false },
       { id: 'query', label: 'Query', data_type: 'string', required: false, multiple: false },
       { id: 'documents', label: 'Documents', data_type: 'json', required: false, multiple: false },
       { id: 'documents_json', label: 'Documents JSON', data_type: 'string', required: false, multiple: false },
-      { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: false, multiple: false },
+      { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_PROMPT_PAYLOADS },
       { id: 'audio', label: 'Audio', data_type: 'audio', required: false, multiple: false },
       { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },
       { id: 'context', label: 'Context', data_type: 'string', required: false, multiple: false },
@@ -122,18 +136,18 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     ],
     outputs: [
       { id: 'response', label: 'Response', data_type: 'string', required: false, multiple: false },
-      { id: 'results', label: 'Results', data_type: 'json', required: false, multiple: false },
+      { id: 'results', label: 'Results', data_type: 'json', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_RESULT_PAYLOADS },
       { id: 'scores', label: 'Scores', data_type: 'json', required: false, multiple: false },
       { id: 'top_document', label: 'Top Document', data_type: 'string', required: false, multiple: false },
       { id: 'top_score', label: 'Top Score', data_type: 'number', required: false, multiple: false },
       { id: 'embedding', label: 'Embedding', data_type: 'embedding', required: false, multiple: false },
-      { id: 'metadata', label: 'Metadata', data_type: 'json', required: false, multiple: false },
+      { id: 'metadata', label: 'Metadata', data_type: 'json', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_DIAGNOSTIC_PAYLOADS },
       { id: 'model_ref', label: 'Model Ref', data_type: 'json', required: false, multiple: false },
       { id: 'tool_calls', label: 'Tool Calls', data_type: 'json', required: false, multiple: false },
       { id: 'has_tool_calls', label: 'Has Tool Calls', data_type: 'boolean', required: false, multiple: false },
       { id: 'kv_cache_out', label: 'KV Cache Out', data_type: 'kv_cache', required: false, multiple: false },
       { id: 'stream', label: 'Stream', data_type: 'stream', required: false, multiple: false },
-      { id: 'diagnostics', label: 'Diagnostics', data_type: 'json', required: false, multiple: false },
+      { id: 'diagnostics', label: 'Diagnostics', data_type: 'json', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_DIAGNOSTIC_PAYLOADS },
       { id: 'usage', label: 'Usage', data_type: 'json', required: false, multiple: false },
     ],
     execution_mode: 'stream',
