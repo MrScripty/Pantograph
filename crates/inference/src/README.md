@@ -282,7 +282,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   they preserve typed `GenerationOptions` semantics for gateway consumers.
 - `ServerModeInfo` is the backend-owned runtime status contract for GUI and host
   adapters; hosts should consume it directly instead of deriving reduced local
-  status shapes.
+  status shapes. Runtime fact snapshots projected from `ServerModeInfo` may
+  include explicit non-`auto` resolved device facts from backend config without
+  extending `RuntimeLifecycleSnapshot` itself.
 - Gateway lifecycle and capability payloads are backend-owned runtime facts; a
   higher Pantograph policy layer may interpret them, but this crate must not
   publish scheduler-policy conclusions as if they were raw backend facts.

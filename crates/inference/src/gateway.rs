@@ -700,12 +700,15 @@ impl InferenceGateway {
         let is_reranking = self.is_reranking_mode().await;
         let is_external = self.is_external_mode().await;
         let url = self.base_url().await;
-        let active_model_target = self
-            .current_runtime_config
-            .read()
-            .await
-            .as_ref()
-            .and_then(config_model_target);
+        let (active_model_target, active_resolved_device) = {
+            let current_runtime_config = self.current_runtime_config.read().await;
+            (
+                current_runtime_config
+                    .as_ref()
+                    .and_then(config_model_target),
+                selected_device_id_from_config(current_runtime_config.as_ref()),
+            )
+        };
         let backend_key = canonical_backend_key(&backend_name);
 
         ServerModeInfo {
@@ -727,7 +730,9 @@ impl InferenceGateway {
             model_path: None,
             is_embedding_mode: is_embedding,
             active_model_target,
+            active_resolved_device,
             embedding_model_target: None,
+            embedding_resolved_device: None,
             active_runtime: Some(self.runtime_lifecycle_snapshot().await),
             embedding_runtime: None,
         }

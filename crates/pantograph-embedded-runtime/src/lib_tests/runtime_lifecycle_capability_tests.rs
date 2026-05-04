@@ -19,7 +19,9 @@ async fn hosted_runtime_constructor_syncs_registry_and_derives_capabilities_from
         model_path: None,
         is_embedding_mode: false,
         active_model_target: Some("/models/qwen.gguf".to_string()),
+        active_resolved_device: Some("cuda:0".to_string()),
         embedding_model_target: Some("/models/embed.gguf".to_string()),
+        embedding_resolved_device: Some("cpu".to_string()),
         active_runtime: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-main-2".to_string()),
@@ -105,7 +107,9 @@ async fn embedded_runtime_shutdown_reconciles_registry_to_stopped() {
         model_path: None,
         is_embedding_mode: false,
         active_model_target: Some("/models/qwen.gguf".to_string()),
+        active_resolved_device: None,
         embedding_model_target: None,
+        embedding_resolved_device: None,
         active_runtime: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-main-9".to_string()),

@@ -933,7 +933,7 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   compatibility reports, lifecycle diagnostics, and canonical inference nodes.
 - [ ] Identify current fields that are raw facts versus fields that risk
   policy interpretation.
-- [ ] Decide whether runtime facts extend `RuntimeLifecycleSnapshot` directly
+- [x] Decide whether runtime facts extend `RuntimeLifecycleSnapshot` directly
   or use a new wrapper DTO.
 - [ ] Define naming rules that avoid scheduler-language fields such as
   priority, reservation, admission, eviction, or selected-best-backend.
@@ -957,6 +957,9 @@ docs, and crate-local executable fixtures/tests for package facts, task
 evidence, generation defaults, option diagnostics, lifecycle phases,
 Pantograph-local technical-fit candidate facts, compact
 `ModelExecutionDescriptor`, and Pumas model-library cache invalidation events.
+Runtime facts now use the wrapper `RuntimeFactSnapshot` projected from
+`ServerModeInfo`/`RuntimeLifecycleSnapshot`; explicit non-`auto` device facts
+are carried through the wrapper instead of extending the lifecycle snapshot.
 
 ### Milestone 2: Align Pumas as Canonical Model Source
 

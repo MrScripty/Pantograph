@@ -785,7 +785,9 @@ impl LlamaServer {
             },
             is_embedding_mode: self.is_embedding_mode(),
             active_model_target: None,
+            active_resolved_device: None,
             embedding_model_target: None,
+            embedding_resolved_device: None,
             active_runtime: None,
             embedding_runtime: None,
         }

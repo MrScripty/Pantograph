@@ -1522,6 +1522,42 @@ async fn test_lifecycle_events_do_not_report_auto_as_selected_device() {
 }
 
 #[tokio::test]
+async fn test_mode_info_runtime_facts_report_explicit_resolved_device() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway
+        .start(&BackendConfig {
+            device: Some("cuda:0".to_string()),
+            ..BackendConfig::default()
+        })
+        .await
+        .expect("gateway should start with explicit device");
+
+    let facts = gateway.mode_info().await.runtime_fact_snapshots();
+
+    assert_eq!(facts.len(), 1);
+    assert_eq!(facts[0].resolved_device.as_deref(), Some("cuda:0"));
+}
+
+#[tokio::test]
+async fn test_mode_info_runtime_facts_do_not_report_auto_as_resolved_device() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway
+        .start(&BackendConfig {
+            device: Some("auto".to_string()),
+            ..BackendConfig::default()
+        })
+        .await
+        .expect("gateway should start with auto device");
+
+    let facts = gateway.mode_info().await.runtime_fact_snapshots();
+
+    assert_eq!(facts.len(), 1);
+    assert_eq!(facts[0].resolved_device, None);
+}
+
+#[tokio::test]
 async fn test_execute_typed_with_lifecycle_records_validation_and_backend_completion() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let sink = Arc::new(RecordingLifecycleSink::default());

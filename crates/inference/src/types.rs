@@ -967,9 +967,15 @@ pub struct ServerModeInfo {
     /// Backend-owned target descriptor for the active runtime model.
     #[serde(default)]
     pub active_model_target: Option<String>,
+    /// Backend-owned explicit non-auto device fact for the active runtime.
+    #[serde(default)]
+    pub active_resolved_device: Option<String>,
     /// Backend-owned target descriptor for the dedicated embedding runtime model.
     #[serde(default)]
     pub embedding_model_target: Option<String>,
+    /// Backend-owned explicit non-auto device fact for the dedicated embedding runtime.
+    #[serde(default)]
+    pub embedding_resolved_device: Option<String>,
     /// Backend-owned lifecycle snapshot for the active runtime.
     #[serde(default)]
     pub active_runtime: Option<RuntimeLifecycleSnapshot>,
@@ -988,7 +994,7 @@ impl ServerModeInfo {
                 self.active_model_target
                     .clone()
                     .or_else(|| self.model_path.clone()),
-                None,
+                self.active_resolved_device.clone(),
                 active_runtime,
             ));
         } else if self.ready {
@@ -1007,7 +1013,7 @@ impl ServerModeInfo {
             facts.push(RuntimeFactSnapshot::from_lifecycle(
                 self.backend_key.clone(),
                 self.embedding_model_target.clone(),
-                None,
+                self.embedding_resolved_device.clone(),
                 embedding_runtime,
             ));
         }
@@ -2285,7 +2291,9 @@ mod tests {
             model_path: Some("/models/from-mode.gguf".to_string()),
             is_embedding_mode: false,
             active_model_target: Some("/models/qwen.gguf".to_string()),
+            active_resolved_device: Some("cuda:0".to_string()),
             embedding_model_target: Some("/models/embed.gguf".to_string()),
+            embedding_resolved_device: Some("cpu".to_string()),
             active_runtime: Some(RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama.cpp".to_string()),
                 runtime_instance_id: Some("llama-main-1".to_string()),
@@ -2314,11 +2322,13 @@ mod tests {
             facts[0].active_model_target.as_deref(),
             Some("/models/qwen.gguf")
         );
+        assert_eq!(facts[0].resolved_device.as_deref(), Some("cuda:0"));
         assert_eq!(facts[0].readiness, RuntimeFactReadiness::Ready);
         assert_eq!(
             facts[1].active_model_target.as_deref(),
             Some("/models/embed.gguf")
         );
+        assert_eq!(facts[1].resolved_device.as_deref(), Some("cpu"));
         assert_eq!(facts[1].reuse_result, RuntimeFactReuseResult::Reused);
     }
 
@@ -2333,7 +2343,9 @@ mod tests {
             model_path: None,
             is_embedding_mode: false,
             active_model_target: None,
+            active_resolved_device: None,
             embedding_model_target: None,
+            embedding_resolved_device: None,
             active_runtime: None,
             embedding_runtime: None,
         };
