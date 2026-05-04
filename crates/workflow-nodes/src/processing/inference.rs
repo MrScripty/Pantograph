@@ -98,6 +98,8 @@ impl InferenceTask {
     pub const PORT_PUMAS_MODEL_REF: &'static str = "pumas_model_ref";
     /// Port ID for resolved model-source facts input
     pub const PORT_RESOLVED_MODEL_SOURCE: &'static str = "resolved_model_source";
+    /// Port ID for resolved Pumas package-facts input
+    pub const PORT_RESOLVED_MODEL_PACKAGE_FACTS: &'static str = "resolved_model_package_facts";
     /// Port ID for canonical generation option input
     pub const PORT_GENERATION_OPTIONS: &'static str = "generation_options";
     /// Port ID for canonical task option input
@@ -196,6 +198,11 @@ impl TaskDescriptor for InferenceTask {
                 PortMetadata::optional(
                     Self::PORT_RESOLVED_MODEL_SOURCE,
                     "Resolved Model Source",
+                    PortDataType::Json,
+                ),
+                PortMetadata::optional(
+                    Self::PORT_RESOLVED_MODEL_PACKAGE_FACTS,
+                    "Resolved Model Package Facts",
                     PortDataType::Json,
                 ),
                 PortMetadata::optional(Self::PORT_TEXT, "Text", PortDataType::String),
@@ -552,6 +559,12 @@ mod tests {
             .iter()
             .any(|p| p.id == InferenceTask::PORT_RESOLVED_MODEL_SOURCE
                 && p.data_type == PortDataType::Json));
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_RESOLVED_MODEL_PACKAGE_FACTS
+                && p.data_type == PortDataType::Json
+                && !p.required));
         assert!(meta
             .inputs
             .iter()

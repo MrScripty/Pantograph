@@ -2475,6 +2475,10 @@ Update during implementation:
   `resolved_model_package_facts` JSON output for downstream `llm-inference`
   nodes. `workflow-nodes` exposes the matching optional JSON output port so
   workflows can connect facts explicitly instead of relying on option metadata.
+- 2026-05-03: Canonical `llm-inference` node descriptors and authoring
+  contracts now expose `resolved_model_package_facts` as an optional JSON input
+  with model-reference payload semantics, completing the graph-visible edge
+  between `puma-lib` package-fact output and node-engine typed request parsing.
 - 2026-05-03: Added typed PyTorch worker failure normalization into
   Pantograph `BackendError` categories, preserving request ids and canonical
   worker error codes without exposing raw Python exception payloads.

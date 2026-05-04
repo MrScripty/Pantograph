@@ -100,6 +100,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   `resolved_model_package_facts` as optional JSON outputs so canonical
   inference nodes can receive Pumas identity and package facts through graph
   dataflow rather than scraping model-list option metadata.
+- The canonical `llm-inference` descriptor accepts `resolved_model_package_facts`
+  as an optional JSON input alongside `pumas_model_ref` and
+  `resolved_model_source`; this keeps package-fact compatibility evidence on
+  the normal graph edge contract.
 - Defaults: optional metadata must have documented default behavior.
 - Enums and labels: node categories and port data types carry execution
   semantics.
