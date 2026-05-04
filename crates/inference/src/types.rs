@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::model_contracts::{
-    resolve_task_registry_entry, GenerationOptions, InferenceExecutionInputKind,
-    InferenceExecutionResultKind, InferenceLifecyclePhase, InferenceTaskId,
-    OptionCompatibilityDiagnostic, PumasModelRef, ResolvedModelPackageFacts,
+    resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, GenerationOptions,
+    InferenceExecutionInputKind, InferenceExecutionResultKind, InferenceLifecyclePhase,
+    InferenceTaskId, OptionCompatibilityDiagnostic, PumasModelRef, ResolvedModelPackageFacts,
 };
 
 /// Chat message with multimodal content support
@@ -155,6 +155,20 @@ impl InferenceExecutionRequest {
                 },
             );
         }
+        if let Some(package_facts) = &self.resolved_model_package_facts {
+            if let Ok(package_task) = resolve_task_registry_entry_from_evidence(&package_facts.task)
+            {
+                if package_task.task_id != self.task_id {
+                    return Err(
+                        InferenceExecutionRequestValidationError::PackageTaskMismatch {
+                            request_task_id: self.task_id.clone(),
+                            package_task_id: package_task.task_id,
+                            model_id: package_facts.model_ref.model_id.clone(),
+                        },
+                    );
+                }
+            }
+        }
 
         match &self.input {
             InferenceExecutionInput::TextGeneration {
@@ -234,6 +248,14 @@ pub enum InferenceExecutionRequestValidationError {
     },
     #[error("task {task_id:?} is not supported by the typed execution request contract")]
     UnsupportedTask { task_id: InferenceTaskId },
+    #[error(
+        "request task {request_task_id:?} does not match resolved package task {package_task_id:?} for model {model_id}"
+    )]
+    PackageTaskMismatch {
+        request_task_id: InferenceTaskId,
+        package_task_id: InferenceTaskId,
+        model_id: String,
+    },
 }
 
 /// Canonical task input payloads, separated from backend transport formats.

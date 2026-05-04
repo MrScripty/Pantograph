@@ -1738,6 +1738,77 @@ async fn test_execute_typed_with_lifecycle_records_validation_failure_without_ba
 }
 
 #[tokio::test]
+async fn test_execute_typed_with_lifecycle_rejects_package_task_mismatch_before_backend_phase() {
+    let fixture =
+        include_str!("../tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json");
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("embedding package facts fixture");
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-package-task-mismatch".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: Some(package_facts.model_ref.clone()),
+        model_name: Some("mock-text".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: Some(package_facts),
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: false,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let error = gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect_err("typed validation should reject package task mismatch");
+
+    match error {
+        GatewayError::Validation(
+            crate::types::InferenceExecutionRequestValidationError::PackageTaskMismatch {
+                request_task_id,
+                package_task_id,
+                model_id,
+            },
+        ) => {
+            assert_eq!(request_task_id, InferenceTaskId::TextGeneration);
+            assert_eq!(package_task_id, InferenceTaskId::Embedding);
+            assert_eq!(model_id, "embedding/qwen3/tiny-embedding-gguf");
+        }
+        other => panic!("unexpected gateway error: {other:?}"),
+    }
+
+    let events = sink.events();
+    assert_eq!(events.len(), 6);
+    assert!(events[..3].iter().all(|event| {
+        event.phase == InferenceLifecyclePhase::ModelPackageResolution
+            && event.model_id.as_deref() == Some("embedding/qwen3/tiny-embedding-gguf")
+    }));
+    assert!(events[3..].iter().all(|event| {
+        event.phase == InferenceLifecyclePhase::TaskValidation
+            && event.model_id.as_deref() == Some("embedding/qwen3/tiny-embedding-gguf")
+    }));
+    assert!(!events
+        .iter()
+        .any(|event| event.phase == InferenceLifecyclePhase::BackendExecution));
+    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[4].kind, InferenceRequestLifecycleEventKind::Failed);
+    assert!(events[4].detail.as_deref().is_some_and(|detail| {
+        detail.contains("TextGeneration")
+            && detail.contains("Embedding")
+            && detail.contains("embedding/qwen3/tiny-embedding-gguf")
+    }));
+    assert_eq!(
+        events[5].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+}
+
+#[tokio::test]
 async fn test_rerank_forwards_to_active_backend() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let result = gateway

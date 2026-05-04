@@ -3106,6 +3106,11 @@ Update during implementation:
   both non-streaming and streaming typed text paths. Streaming backend lifecycle
   events reuse the package-derived model id so task-validation and backend
   execution diagnostics do not drift back to transport-local model names.
+- 2026-05-04: Typed request validation now rejects clean package/task
+  mismatches before backend execution. Package facts with sparse or unresolved
+  task evidence still flow to compatibility diagnostics, but a text request
+  carrying embedding package facts fails during task validation with bounded
+  request task, package task, and model identity.
 
 ## Commit Cadence Notes
 
