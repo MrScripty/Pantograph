@@ -1,0 +1,81 @@
+{
+  "package_facts_contract_version": 1,
+  "model_ref": {
+    "model_id": "embedding/example/tiny-candle-embedding",
+    "revision": "abc123",
+    "selected_artifact_id": "main",
+    "selected_artifact_path": "embedding/example/tiny-candle-embedding"
+  },
+  "artifact": {
+    "artifact_kind": "hf_compatible_directory",
+    "entry_path": "embedding/example/tiny-candle-embedding",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "config.json",
+      "model.safetensors",
+      "tokenizer.json"
+    ],
+    "sibling_files": [
+      "README.md",
+      "config.json",
+      "model.safetensors",
+      "tokenizer.json"
+    ]
+  },
+  "components": [
+    {
+      "kind": "config",
+      "status": "present",
+      "relative_path": "config.json"
+    },
+    {
+      "kind": "weights",
+      "status": "present",
+      "relative_path": "model.safetensors"
+    },
+    {
+      "kind": "tokenizer",
+      "status": "present",
+      "relative_path": "tokenizer.json"
+    }
+  ],
+  "transformers": {
+    "config_status": "present",
+    "config_model_type": "bert",
+    "architectures": [
+      "BertModel"
+    ],
+    "torch_dtype": "float32",
+    "generation_config_status": "missing",
+    "source_repo_id": "org/tiny-candle-embedding",
+    "source_revision": "abc123",
+    "selected_files": [
+      "config.json"
+    ]
+  },
+  "task": {
+    "pipeline_tag": "feature-extraction",
+    "task_type_primary": "embedding",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "embedding"
+    ]
+  },
+  "generation_defaults": {
+    "status": "missing"
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "candle"
+    ],
+    "raw": [
+      "candle"
+    ]
+  }
+}

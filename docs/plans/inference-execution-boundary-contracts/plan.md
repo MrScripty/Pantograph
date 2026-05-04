@@ -2136,7 +2136,7 @@ without broad scheduler or Transformers duplication.
   documented model format and tokenizer requirement.
 - [x] Add backend-local Candle model load facts, resolved device facts, and
   explicit unsupported capability behavior.
-- [ ] Map selected Pumas-resolved HF-compatible safetensors/config/tokenizer
+- [x] Map selected Pumas-resolved HF-compatible safetensors/config/tokenizer
   packages through the Rust model-source contract.
 - [ ] Use Candle safetensors, tokenizer, device, dtype, and model loading
   patterns without creating a general model scheduler.
@@ -2157,19 +2157,25 @@ without broad scheduler or Transformers duplication.
 **Status:** In progress.
 
 The first Candle staging slice keeps embeddings as the only advertised task
-family for HF-compatible local package directories and records unsupported
-streaming, external-connection, custom-code, device-selection, and KV-cache
-facts. The `backend-candle` feature remains optional and compiles, but the
-registry reports Candle unavailable because executable safetensors/tokenizer
-model loading is not implemented yet; this prevents runtime selection from
-treating a staged backend as executable while the model-source mapper remains
-open.
+family for HF-compatible local package directories containing safetensors
+weights, config, and tokenizer files, and records unsupported streaming,
+external-connection, custom-code, device-selection, and KV-cache facts. The
+`backend-candle` feature remains optional and compiles, but the registry reports
+Candle unavailable because executable safetensors/tokenizer model loading is
+not implemented yet; this prevents runtime selection from treating a staged
+backend as executable.
 
 Update during implementation:
 - 2026-05-03: Candle backend availability now fails closed behind
   `backend-candle` until executable model loading exists. Registry and backend
   tests cover the staged embedding-only capability facts and unavailable state,
   while README feature docs call out the CUDA-oriented optional dependency cost.
+- 2026-05-04: Candle now has a staged embedding package mapper from canonical
+  Pumas package facts into `ResolvedModelSource`. The mapper accepts only valid
+  HF-compatible embedding package directories with safetensors weights, a
+  present tokenizer, and no custom-code requirement; rejects
+  GGUF/non-embedding/missing-tokenizer/custom-code packages; and still does not
+  advertise executable model loading.
 
 ### Milestone 13: Evaluate vLLM and MLX Roadmap Boundaries
 

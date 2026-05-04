@@ -15,7 +15,11 @@ use super::{
     BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
     EmbeddingResult, InferenceBackend,
 };
-use crate::model_contracts::{InferenceModality, InferenceTaskId};
+use crate::model_contracts::{
+    resolve_task_registry_entry_from_evidence, InferenceModality, InferenceTaskId,
+    ModelValidationState, PackageFactStatus, ProcessorComponentKind, ResolvedModelPackageFacts,
+    ResolvedModelSource,
+};
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
 use crate::{BackendHintLabel, ModelArtifactKind};
@@ -99,6 +103,78 @@ impl CandleBackend {
             )
         }
     }
+
+    /// Validate a Pumas package for the staged Candle embedding loader and
+    /// project it into the shared backend-load model-source contract.
+    pub fn embedding_model_source_from_package(
+        package: &ResolvedModelPackageFacts,
+    ) -> Result<ResolvedModelSource, BackendError> {
+        if !package.uses_current_contract() {
+            return Err(BackendError::Config(format!(
+                "Candle package facts contract version {} is unsupported",
+                package.package_facts_contract_version
+            )));
+        }
+        if matches!(
+            package.artifact.validation_state,
+            ModelValidationState::Invalid | ModelValidationState::Unknown
+        ) {
+            return Err(BackendError::Config(
+                "Candle package artifact is not valid".to_string(),
+            ));
+        }
+        if !matches!(
+            package.artifact.artifact_kind,
+            ModelArtifactKind::HfCompatibleDirectory
+        ) {
+            return Err(BackendError::Config(format!(
+                "Candle embedding cannot load {:?} artifacts; expected an HF-compatible directory containing safetensors weights and tokenizer files",
+                package.artifact.artifact_kind
+            )));
+        }
+
+        let task =
+            resolve_task_registry_entry_from_evidence(&package.task).map_err(|diagnostic| {
+                BackendError::Config(format!(
+                    "Candle package task evidence is not loadable: {}",
+                    diagnostic.message
+                ))
+            })?;
+        if task.task_id != InferenceTaskId::Embedding {
+            return Err(BackendError::Config(format!(
+                "Candle staged loader only accepts embedding packages, got '{}'",
+                task.canonical_label()
+            )));
+        }
+        if package.custom_code.requires_custom_code {
+            return Err(BackendError::Config(
+                "Candle staged loader does not execute custom model code".to_string(),
+            ));
+        }
+        if !has_present_tokenizer(package) {
+            return Err(BackendError::Config(
+                "Candle embedding package requires a present tokenizer component".to_string(),
+            ));
+        }
+
+        let source = ResolvedModelSource::from_package_facts(package);
+        source.validate_for_backend_load().map_err(|diagnostics| {
+            let codes = diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.code.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            BackendError::Config(format!("Invalid Candle model source: {codes}"))
+        })?;
+        Ok(source)
+    }
+}
+
+fn has_present_tokenizer(package: &ResolvedModelPackageFacts) -> bool {
+    package.components.iter().any(|component| {
+        component.kind == ProcessorComponentKind::Tokenizer
+            && component.status == PackageFactStatus::Present
+    })
 }
 
 impl Default for CandleBackend {
@@ -238,6 +314,10 @@ impl InferenceBackend for CandleBackend {
 mod tests {
     use super::*;
 
+    fn package_fixture(raw: &str) -> ResolvedModelPackageFacts {
+        serde_json::from_str(raw).expect("package facts fixture should decode")
+    }
+
     #[test]
     fn test_backend_name() {
         let backend = CandleBackend::new();
@@ -275,5 +355,105 @@ mod tests {
         assert!(reason
             .as_deref()
             .is_some_and(|value| value.contains("executable model loading is not implemented")));
+    }
+
+    #[test]
+    fn embedding_model_source_accepts_hf_embedding_package_facts() {
+        let package = package_fixture(include_str!(
+            "../../tests/fixtures/inference_package_facts/hf_candle_embedding_package_facts.json"
+        ));
+
+        let source = CandleBackend::embedding_model_source_from_package(&package)
+            .expect("Candle embedding package facts should map to model source");
+
+        assert_eq!(
+            source.artifact_kind,
+            ModelArtifactKind::HfCompatibleDirectory
+        );
+        assert_eq!(source.entry_path, package.artifact.entry_path);
+        assert_eq!(source.model_ref, Some(package.model_ref));
+        source
+            .validate_for_backend_load()
+            .expect("mapped source should remain backend-load valid");
+    }
+
+    #[test]
+    fn embedding_model_source_rejects_gguf_packages() {
+        let package = package_fixture(include_str!(
+            "../../tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json"
+        ));
+
+        let error = CandleBackend::embedding_model_source_from_package(&package)
+            .expect_err("Candle should not accept GGUF packages");
+
+        assert!(error
+            .to_string()
+            .contains("Candle embedding cannot load Gguf artifacts"));
+    }
+
+    #[test]
+    fn embedding_model_source_rejects_non_embedding_task_facts() {
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+        ))
+        .expect("fixture json should decode");
+        value["custom_code"] = serde_json::json!({
+            "requires_custom_code": false
+        });
+        let package: ResolvedModelPackageFacts =
+            serde_json::from_value(value).expect("fixture should decode");
+
+        let error = CandleBackend::embedding_model_source_from_package(&package)
+            .expect_err("Candle staged loader should only accept embedding tasks");
+
+        assert!(error
+            .to_string()
+            .contains("only accepts embedding packages"));
+    }
+
+    #[test]
+    fn embedding_model_source_rejects_missing_tokenizer() {
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/inference_package_facts/missing_tokenizer_package_facts.json"
+        ))
+        .expect("fixture json should decode");
+        value["task"] = serde_json::json!({
+            "pipeline_tag": "feature-extraction",
+            "task_type_primary": "embedding",
+            "input_modalities": ["text"],
+            "output_modalities": ["embedding"]
+        });
+        let package: ResolvedModelPackageFacts =
+            serde_json::from_value(value).expect("fixture should decode");
+
+        let error = CandleBackend::embedding_model_source_from_package(&package)
+            .expect_err("Candle should require a present tokenizer");
+
+        assert!(error
+            .to_string()
+            .contains("requires a present tokenizer component"));
+    }
+
+    #[test]
+    fn embedding_model_source_rejects_custom_code_packages() {
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+        ))
+        .expect("fixture json should decode");
+        value["task"] = serde_json::json!({
+            "pipeline_tag": "feature-extraction",
+            "task_type_primary": "embedding",
+            "input_modalities": ["text"],
+            "output_modalities": ["embedding"]
+        });
+        let package: ResolvedModelPackageFacts =
+            serde_json::from_value(value).expect("fixture should decode");
+
+        let error = CandleBackend::embedding_model_source_from_package(&package)
+            .expect_err("Candle should fail closed on custom code packages");
+
+        assert!(error
+            .to_string()
+            .contains("does not execute custom model code"));
     }
 }
