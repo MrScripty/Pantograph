@@ -1299,6 +1299,12 @@ pub struct GenerationOptions {
     pub output: OutputGenerationOptions,
     #[serde(default)]
     pub special_tokens: SpecialTokenGenerationOptions,
+    /// Backend-local escape hatch for adapter-specific options.
+    ///
+    /// Public callers should prefer the typed option groups above. Extension
+    /// keys must be scoped as `<backend-or-adapter>:<option>` so backend
+    /// adapters can reject foreign scopes without accepting raw kwargs as
+    /// stable Pantograph contract fields.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub backend_extensions: BTreeMap<String, Value>,
 }
@@ -2279,5 +2285,63 @@ mod tests {
             );
             assert_eq!(contract.output_modalities, entry.modality_signature.outputs);
         }
+    }
+
+    #[test]
+    fn generation_options_separate_stable_fields_from_backend_extensions() {
+        let options = GenerationOptions {
+            length: LengthGenerationOptions {
+                max_new_tokens: Some(128),
+                ..Default::default()
+            },
+            sampling: SamplingGenerationOptions {
+                temperature: Some(0.4),
+                ..Default::default()
+            },
+            backend_extensions: [
+                (
+                    "transformers:renormalize_logits".to_string(),
+                    serde_json::json!(true),
+                ),
+                ("llama.cpp:mirostat".to_string(), serde_json::json!(2)),
+            ]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        };
+
+        let requested = options.requested_option_paths();
+
+        assert!(requested.contains(&"length.max_new_tokens".to_string()));
+        assert!(requested.contains(&"sampling.temperature".to_string()));
+        assert!(
+            requested.contains(&"backend_extensions.transformers:renormalize_logits".to_string())
+        );
+        assert!(requested.contains(&"backend_extensions.llama.cpp:mirostat".to_string()));
+    }
+
+    #[test]
+    fn generation_options_wire_shape_is_additive_and_defaults_missing_groups() {
+        let encoded = serde_json::json!({
+            "length": {
+                "max_new_tokens": 32
+            },
+            "backend_extensions": {
+                "transformers:renormalize_logits": true
+            },
+            "future_generation_group": {
+                "speculative_decoding": true
+            }
+        });
+
+        let decoded: GenerationOptions = serde_json::from_value(encoded).unwrap();
+
+        assert_eq!(decoded.length.max_new_tokens, Some(32));
+        assert_eq!(decoded.sampling.temperature, None);
+        assert_eq!(decoded.search.num_beams, None);
+        assert_eq!(
+            decoded.backend_extensions["transformers:renormalize_logits"],
+            serde_json::json!(true)
+        );
     }
 }

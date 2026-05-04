@@ -132,6 +132,11 @@ selection must use supported runtimes through Pumas model references.
   option compatibility diagnostics, lifecycle phases, Pumas package-facts
   summary snapshots, and model-library update feeds are structured
   producer/consumer contracts for later inference slices.
+- Stable generation behavior belongs in typed `GenerationOptions` groups.
+  Backend-local generation escape hatches are limited to
+  `backend_extensions` keys scoped as `<backend-or-adapter>:<option>`, and
+  adapters must report support diagnostics instead of accepting unscoped raw
+  kwargs as public contract fields.
 - Reason: these payloads describe install state, runtime readiness, reuse, and
   backend attachment facts.
 - Revisit trigger: payloads become externally versioned schemas or are consumed
