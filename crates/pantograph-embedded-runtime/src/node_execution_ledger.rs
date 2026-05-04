@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
 use std::sync::Mutex;
 
 use pantograph_diagnostics_ledger::{
@@ -697,7 +698,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                     .compatibility_issues
                     .iter()
                     .take(MAX_INFERENCE_COMPATIBILITY_ISSUES)
-                    .map(compatibility_issue_summary)
+                    .map(|issue| compatibility_issue_summary(issue, event.model_id.as_deref()))
                     .collect(),
                 option_support_counts: option_support_counts(&event.option_diagnostics),
                 option_diagnostics: event
@@ -840,14 +841,33 @@ fn compatibility_report_summary(
 
 fn compatibility_issue_summary(
     issue: &inference::InferenceCompatibilityIssueSummary,
+    event_model_id: Option<&str>,
 ) -> InferenceCompatibilityIssueDiagnosticSummary {
     InferenceCompatibilityIssueDiagnosticSummary {
         kind: issue.kind.clone(),
         phase: inference_lifecycle_phase_key(&issue.phase).to_string(),
         message: issue.message.clone(),
         model_id: issue.model_id.clone(),
-        path: issue.path.clone(),
+        path: bounded_compatibility_issue_path(issue, event_model_id),
     }
+}
+
+fn bounded_compatibility_issue_path(
+    issue: &inference::InferenceCompatibilityIssueSummary,
+    event_model_id: Option<&str>,
+) -> Option<String> {
+    let has_stable_model_id = issue
+        .model_id
+        .as_deref()
+        .or(event_model_id)
+        .is_some_and(|model_id| !model_id.trim().is_empty());
+    issue.path.as_ref().and_then(|path| {
+        if has_stable_model_id && Path::new(path).is_absolute() {
+            None
+        } else {
+            Some(path.clone())
+        }
+    })
 }
 
 fn option_support_counts(

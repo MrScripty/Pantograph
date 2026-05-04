@@ -2611,7 +2611,9 @@ inference write ledger events directly.
   paths where stable ids exist, and unbounded stderr/stdout out of ledger
   payloads. Usage/cache diagnostic adapter coverage now asserts that raw-looking
   lifecycle detail markers are not serialized into durable inference diagnostic
-  payloads.
+  payloads. Embedded-runtime compatibility issue projection now omits absolute
+  local issue paths when a stable model id is already present, while preserving
+  relative component paths for bounded compatibility diagnostics.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle

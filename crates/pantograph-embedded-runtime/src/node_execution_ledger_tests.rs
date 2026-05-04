@@ -390,6 +390,10 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
                 payload.compatibility_issues[0].phase,
                 "model_package_resolution"
             );
+            assert_eq!(
+                payload.compatibility_issues[0].path.as_deref(),
+                Some("model.gguf")
+            );
             assert_eq!(payload.option_support_counts.mapped, 1);
             assert_eq!(payload.option_support_counts.unsupported, 1);
             assert_eq!(payload.option_diagnostics.len(), 2);
@@ -398,6 +402,48 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
                 "sampling.temperature"
             );
             assert_eq!(payload.option_diagnostics[0].state, "mapped");
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_omits_absolute_issue_path_when_model_id_is_stable() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        176,
+    );
+    event.compatibility_report = Some(inference::InferenceCompatibilityReportSummary {
+        status: "rejected".to_string(),
+        compatible: false,
+        task: "supported".to_string(),
+        model_source: "unsupported".to_string(),
+        preprocessing: "supported".to_string(),
+        postprocessing: "supported".to_string(),
+    });
+    event.compatibility_issues = vec![inference::InferenceCompatibilityIssueSummary {
+        kind: "unsupported_model_artifact".to_string(),
+        phase: inference::InferenceLifecyclePhase::ModelPackageResolution,
+        message: "backend does not declare support for this artifact".to_string(),
+        model_id: Some("pumas://models/tiny-transformers".to_string()),
+        path: Some("/media/models/private/tiny-transformers/model.gguf".to_string()),
+    }];
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("compatibility lifecycle summary should map");
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.compatibility_issue_count, 1);
+            assert_eq!(
+                payload.compatibility_issues[0].model_id.as_deref(),
+                Some("pumas://models/tiny-transformers")
+            );
+            assert!(
+                payload.compatibility_issues[0].path.is_none(),
+                "stable model ids should replace absolute local compatibility issue paths"
+            );
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }
