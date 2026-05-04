@@ -1669,7 +1669,7 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
         .expect("typed request should execute");
 
     let events = sink.events();
-    assert_eq!(events.len(), 6);
+    assert_eq!(events.len(), 15);
     assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
     assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
     assert_eq!(events[0].task_id.as_deref(), Some("image_generation"));
@@ -1683,30 +1683,67 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
         events[2].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
     );
-    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[3].phase, InferenceLifecyclePhase::Preprocessing);
     assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
     assert_eq!(events[3].task_id.as_deref(), Some("image_generation"));
-    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[4].phase, InferenceLifecyclePhase::Preprocessing);
     assert_eq!(
         events[4].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
-    assert!(events[4].option_diagnostics.iter().any(|diagnostic| {
+    assert_eq!(events[5].phase, InferenceLifecyclePhase::Preprocessing);
+    assert_eq!(
+        events[5].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert_eq!(events[6].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[6].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[6].task_id.as_deref(), Some("image_generation"));
+    assert_eq!(events[7].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(
+        events[7].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "image.width"
             && diagnostic.state == OptionSupportState::Honored
             && diagnostic.backend_key.as_deref() == Some("mock")
     }));
-    assert!(events[4].option_diagnostics.iter().any(|diagnostic| {
+    assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "image.extra_options.safety_checker"
             && diagnostic.state == OptionSupportState::Mapped
     }));
-    assert!(events[4].option_diagnostics.iter().any(|diagnostic| {
+    assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "extra_options.audit"
             && diagnostic.state == OptionSupportState::Mapped
     }));
-    assert_eq!(events[5].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[8].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(
-        events[5].kind,
+        events[8].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert_eq!(events[9].phase, InferenceLifecyclePhase::Postprocessing);
+    assert_eq!(events[9].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[10].phase, InferenceLifecyclePhase::Postprocessing);
+    assert_eq!(
+        events[10].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[11].phase, InferenceLifecyclePhase::Postprocessing);
+    assert_eq!(
+        events[11].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert_eq!(events[12].phase, InferenceLifecyclePhase::ResultProjection);
+    assert_eq!(events[12].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[13].phase, InferenceLifecyclePhase::ResultProjection);
+    assert_eq!(
+        events[13].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[14].phase, InferenceLifecyclePhase::ResultProjection);
+    assert_eq!(
+        events[14].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
     );
     assert!(events.iter().all(|event| {
@@ -1755,7 +1792,7 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
         .expect("typed audio request should execute");
 
     let events = sink.events();
-    assert_eq!(events.len(), 6);
+    assert_eq!(events.len(), 15);
     let validation_completed = events
         .iter()
         .find(|event| {

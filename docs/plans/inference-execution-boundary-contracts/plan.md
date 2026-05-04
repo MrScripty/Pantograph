@@ -2515,8 +2515,11 @@ inference write ledger events directly.
   id over backend transport model names. Typed non-streaming text generation
   now emits duration-observable preprocessing, postprocessing, and
   result-projection lifecycle phases around the validated backend execution
-  path, giving ledger adapters producer coverage for those Transformers-aligned
-  boundaries without storing prompts or generated text.
+  path. The same explicit preprocessing, postprocessing, and result-projection
+  producer coverage now applies to typed embedding, rerank, image generation,
+  and audio transcription requests, giving ledger adapters coverage for those
+  Transformers-aligned boundaries without storing prompts, raw media,
+  embeddings, documents, or generated content.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -3067,6 +3070,11 @@ Update during implementation:
   preprocessing, postprocessing, and result projection, reusing existing
   duration-only durable inference diagnostic mapping without adding ledger
   schema fields.
+- 2026-05-04: Extended the same typed non-streaming lifecycle producer coverage
+  to embedding, rerank, image generation, and audio transcription so all
+  currently executable typed tasks expose preprocessing, backend execution,
+  postprocessing, and result projection phases through one inference-boundary
+  path.
 - 2026-05-04: Validation of the typed text lifecycle slice exposed a Rust
   inference ambiguity in llama.cpp managed-runtime file-name path joins;
   binding the lossy file name as `&str` keeps the platform copy path explicit

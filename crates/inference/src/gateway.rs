@@ -1207,10 +1207,7 @@ impl InferenceGateway {
         let request_id = request.request_id.clone();
         let model_id = typed_request_lifecycle_model_id(&request);
         let task_id = Some(request.task_id.canonical_label().to_string());
-        let emit_text_boundary_lifecycle = matches!(
-            &request.input,
-            InferenceExecutionInput::TextGeneration { .. }
-        );
+        let emit_typed_boundary_lifecycle = typed_request_has_boundary_lifecycle(&request);
         record_model_package_resolution_lifecycle_if_present(
             lifecycle_sink.as_ref(),
             &request,
@@ -1278,7 +1275,7 @@ impl InferenceGateway {
             compatibility_diagnostics.compatibility_report.clone(),
             compatibility_diagnostics.compatibility_issues.clone(),
         );
-        if emit_text_boundary_lifecycle {
+        if emit_typed_boundary_lifecycle {
             record_successful_non_streaming_lifecycle_phase(
                 lifecycle_sink.as_ref(),
                 InferenceLifecyclePhase::Preprocessing,
@@ -1321,7 +1318,7 @@ impl InferenceGateway {
             compatibility_diagnostics.compatibility_report,
             compatibility_diagnostics.compatibility_issues,
         );
-        if emit_text_boundary_lifecycle && result.is_ok() {
+        if emit_typed_boundary_lifecycle && result.is_ok() {
             record_successful_non_streaming_lifecycle_phase(
                 lifecycle_sink.as_ref(),
                 InferenceLifecyclePhase::Postprocessing,
@@ -1556,6 +1553,17 @@ fn typed_request_is_streaming(request: &InferenceExecutionRequest) -> bool {
     matches!(
         &request.input,
         InferenceExecutionInput::TextGeneration { stream: true, .. }
+    )
+}
+
+fn typed_request_has_boundary_lifecycle(request: &InferenceExecutionRequest) -> bool {
+    matches!(
+        &request.input,
+        InferenceExecutionInput::TextGeneration { .. }
+            | InferenceExecutionInput::Embedding { .. }
+            | InferenceExecutionInput::Rerank { .. }
+            | InferenceExecutionInput::ImageGeneration { .. }
+            | InferenceExecutionInput::AudioTranscription { .. }
     )
 }
 
