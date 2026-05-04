@@ -126,14 +126,39 @@ pub fn supports_live_kv_reuse(model_type: &str) -> bool {
     model_type == "dllm"
 }
 
+fn kv_worker_failure_from_message(
+    request_id: &str,
+    canonical_code: &'static str,
+    message: String,
+) -> BackendError {
+    PyTorchWorkerFailure {
+        request_id: request_id.to_string(),
+        error: PyTorchWorkerError {
+            kind: PyTorchWorkerErrorKind::GenerationFailed,
+            message,
+            canonical_code: Some(canonical_code.to_string()),
+        },
+    }
+    .into_backend_error()
+}
+
 pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError> {
+    let request_id = format!("pytorch-kv-loaded-info-{}", Uuid::new_v4().simple());
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                BackendError::Inference(format!("Failed to get worker module: {}", e))
+                kv_worker_failure_from_message(
+                    &request_id,
+                    "pytorch_worker_kv_loaded_info_failed",
+                    format!("Failed to get worker module: {}", e),
+                )
             })?;
             let result = worker.call_method0("get_loaded_info").map_err(|e| {
-                BackendError::Inference(format!("PyTorch get_loaded_info failed: {}", e))
+                kv_worker_failure_from_message(
+                    &request_id,
+                    "pytorch_worker_kv_loaded_info_failed",
+                    format!("PyTorch get_loaded_info failed: {}", e),
+                )
             })?;
             if result.is_none() {
                 return Err(BackendError::Inference(
@@ -149,14 +174,25 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
 
 pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
     let path = path.to_path_buf();
+    let request_id = format!("pytorch-kv-save-{}", Uuid::new_v4().simple());
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                BackendError::Inference(format!("Failed to get worker module: {}", e))
+                kv_worker_failure_from_message(
+                    &request_id,
+                    "pytorch_worker_kv_save_failed",
+                    format!("Failed to get worker module: {}", e),
+                )
             })?;
             let result = worker
                 .call_method1("save_live_kv_cache", (path.to_string_lossy().to_string(),))
-                .map_err(|e| BackendError::Inference(format!("PyTorch KV save failed: {}", e)))?;
+                .map_err(|e| {
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_save_failed",
+                        format!("PyTorch KV save failed: {}", e),
+                    )
+                })?;
             pytorch_worker::extract_live_kv_info(&result)
         })
     })
@@ -166,10 +202,15 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
 
 pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
     let path = path.to_path_buf();
+    let request_id = format!("pytorch-kv-restore-{}", Uuid::new_v4().simple());
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                BackendError::Inference(format!("Failed to get worker module: {}", e))
+                kv_worker_failure_from_message(
+                    &request_id,
+                    "pytorch_worker_kv_restore_failed",
+                    format!("Failed to get worker module: {}", e),
+                )
             })?;
             let result = worker
                 .call_method1(
@@ -177,7 +218,11 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
                     (path.to_string_lossy().to_string(),),
                 )
                 .map_err(|e| {
-                    BackendError::Inference(format!("PyTorch KV restore failed: {}", e))
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_restore_failed",
+                        format!("PyTorch KV restore failed: {}", e),
+                    )
                 })?;
             pytorch_worker::extract_live_kv_info(&result)
         })
@@ -187,14 +232,23 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
 }
 
 pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
+    let request_id = format!("pytorch-kv-clear-{}", Uuid::new_v4().simple());
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<(), BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                BackendError::Inference(format!("Failed to get worker module: {}", e))
+                kv_worker_failure_from_message(
+                    &request_id,
+                    "pytorch_worker_kv_clear_failed",
+                    format!("Failed to get worker module: {}", e),
+                )
             })?;
-            worker
-                .call_method0("clear_live_kv_cache")
-                .map_err(|e| BackendError::Inference(format!("PyTorch KV clear failed: {}", e)))?;
+            worker.call_method0("clear_live_kv_cache").map_err(|e| {
+                kv_worker_failure_from_message(
+                    &request_id,
+                    "pytorch_worker_kv_clear_failed",
+                    format!("PyTorch KV clear failed: {}", e),
+                )
+            })?;
             Ok(())
         })
     })

@@ -1090,6 +1090,22 @@ fn test_pytorch_worker_unload_transport_error_normalizes_to_backend_error() {
 }
 
 #[test]
+fn test_pytorch_worker_live_kv_transport_error_normalizes_to_backend_error() {
+    match kv_worker_failure_from_message(
+        "req-kv-save",
+        "pytorch_worker_kv_save_failed",
+        "PyTorch KV save failed: cache export failed.".to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_kv_save_failed"));
+            assert!(message.contains("req-kv-save"));
+            assert!(message.contains("cache export failed"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_envelope_rejects_missing_required_fields() {
     let fixture = include_str!(
         "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"
