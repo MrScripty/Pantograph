@@ -141,6 +141,35 @@ impl PortDefinition {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pantograph_node_contracts::{
+        ContractInferenceTaskId, InferencePortPayloadContract, InferencePortPayloadRole, PortKind,
+    };
+
+    #[test]
+    fn port_definition_round_trip_preserves_inference_payloads() {
+        let definition = PortDefinition {
+            id: "diagnostics".to_string(),
+            label: "Diagnostics".to_string(),
+            data_type: PortDataType::Json,
+            required: false,
+            multiple: false,
+            inference_payloads: vec![InferencePortPayloadContract::task_role(
+                ContractInferenceTaskId::TextGeneration,
+                InferencePortPayloadRole::Diagnostics,
+            )],
+        };
+
+        let contract = definition
+            .to_contract_port(PortKind::Output)
+            .expect("port definition should project to contract");
+
+        assert_eq!(contract.inference_payloads, definition.inference_payloads);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeCategory {

@@ -2455,7 +2455,8 @@ drift back into inference.
 - [ ] Update runtime registry, workflow service, node engine, Tauri, or
   frontend consumers only as needed to consume the new facts. Workflow-service
   graph registry conversion now preserves canonical port `inference_payloads`
-  and the frontend/shared graph types expose the append-only payload contract.
+  and reverse `PortDefinition` contract projection keeps those payloads intact;
+  the frontend/shared graph types expose the append-only payload contract.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
