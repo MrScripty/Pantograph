@@ -2500,7 +2500,10 @@ drift back into inference.
   `inference_payloads`. Workflow-nodes canonical contract projection now
   includes executable image-generation task metadata and prompt/results payload
   annotations, and workflow-service registry coverage verifies the projected
-  payloads still round-trip without backend/runtime policy fields.
+  diagnostics payloads still round-trip without backend/runtime policy fields.
+  Workflow-service registry coverage now also verifies image-generation
+  prompt/result payload metadata survives the node-definition projection as
+  snake_case task/result labels.
 - [x] Add tests proving scheduler/runtime-registry policy remains outside
   inference.
 - [ ] Update source READMEs and any ADR links affected by boundary changes.
@@ -3444,6 +3447,9 @@ Update during implementation:
   `llm-inference` task contracts, prompt input payloads, Pumas model-reference
   payloads, and `results` output payloads, with workflow-service registry
   projection coverage.
+- 2026-05-04: Added workflow-service registry coverage for image-generation
+  payload projection so prompt input and `results` output metadata survive the
+  graph registry boundary with snake_case task/result labels.
 - 2026-05-04: KV-cache task progress now carries bounded option diagnostics for
   truncate marker/token-position controls. Marker truncation is reported as
   honored, token-position truncation is reported as ignored when both are

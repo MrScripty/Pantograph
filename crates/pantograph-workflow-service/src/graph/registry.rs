@@ -140,7 +140,10 @@ impl Default for NodeRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pantograph_node_contracts::{ContractInferenceTaskId, InferencePortPayloadRole};
+    use pantograph_node_contracts::{
+        ContractInferenceExecutionInputKind, ContractInferenceExecutionResultKind,
+        ContractInferenceTaskId, InferencePortPayloadRole,
+    };
 
     #[test]
     fn node_definition_preserves_inference_payload_contracts_for_llm_diagnostics() {
@@ -168,5 +171,43 @@ mod tests {
         assert!(payload.get("backend_key").is_none());
         assert!(payload.get("runtime_id").is_none());
         assert!(payload.get("scheduler_policy").is_none());
+    }
+
+    #[test]
+    fn node_definition_preserves_image_generation_payload_contracts() {
+        let registry = NodeRegistry::new();
+        let definition = registry
+            .get_definition("llm-inference")
+            .expect("llm-inference definition");
+        let prompt = definition
+            .inputs
+            .iter()
+            .find(|port| port.id == "prompt")
+            .expect("prompt input");
+        let results = definition
+            .outputs
+            .iter()
+            .find(|port| port.id == "results")
+            .expect("results output");
+
+        assert!(prompt.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::ImageGeneration
+                && payload.input_kind == Some(ContractInferenceExecutionInputKind::ImageGeneration)
+        }));
+        assert!(results.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::ImageGeneration
+                && payload.result_kind
+                    == Some(ContractInferenceExecutionResultKind::ImageGeneration)
+        }));
+
+        let encoded = serde_json::to_value(results).expect("encode results port");
+        assert!(encoded["inference_payloads"]
+            .as_array()
+            .is_some_and(|payloads| {
+                payloads.iter().any(|payload| {
+                    payload["task_id"] == serde_json::json!("image_generation")
+                        && payload["result_kind"] == serde_json::json!("image_generation")
+                })
+            }));
     }
 }
