@@ -51,6 +51,10 @@ worker names.
 - Module-level loaded state must be cleared by unload paths before switching
   model families.
 - Generated audio and text payloads must remain serializable for Rust callers.
+- `transformers_kwargs` accepted by worker envelopes are adapter-local and
+  allowlisted. New kwargs must first be represented in Rust typed generation
+  options and diagnostics before the Python worker forwards them to
+  Transformers.
 - Sibling helper modules must not own process lifecycle or backend selection.
 - Private helper modules must be added to both Rust embedded-loader paths when
   `worker.py` imports them.

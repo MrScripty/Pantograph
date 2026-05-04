@@ -6,6 +6,7 @@ WORKER_CONTRACT_VERSION = 1
 LOAD_TRANSFORMERS_MODEL_OPERATION = "load_transformers_model"
 GENERATE_TEXT_OPERATION = "generate_text"
 GENERATE_TEXT_STREAM_OPERATION = "generate_text_stream"
+ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k"}
 
 
 def load_transformers_model_kwargs_from_envelope(envelope):
@@ -69,6 +70,14 @@ def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEX
     transformers_kwargs = payload.get("transformers_kwargs") or {}
     if not isinstance(transformers_kwargs, dict):
         raise ValueError("PyTorch worker generate_text transformers_kwargs must be an object")
+    unsupported_kwargs = sorted(
+        key for key in transformers_kwargs if key not in ALLOWED_TRANSFORMERS_GENERATE_KWARGS
+    )
+    if unsupported_kwargs:
+        joined = ", ".join(unsupported_kwargs)
+        raise ValueError(
+            f"PyTorch worker generate_text transformers_kwargs contains unsupported key(s): {joined}"
+        )
 
     kwargs = {
         "prompt": prompt,

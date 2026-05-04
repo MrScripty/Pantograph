@@ -51,6 +51,8 @@ mod pytorch_worker;
 #[path = "pytorch_worker_contract.rs"]
 mod pytorch_worker_contract;
 
+const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] = &["top_k"];
+
 /// PyTorch backend using in-process PyO3 embedded Python.
 ///
 /// Loads models via HuggingFace transformers with `trust_remote_code=True`,
@@ -558,6 +560,16 @@ impl PyTorchBackend {
             return Err(BackendError::Config(
                 "PyTorch worker generate_text envelope requires a prompt".to_string(),
             ));
+        }
+        if let Some(unsupported_key) = envelope
+            .payload
+            .transformers_kwargs
+            .keys()
+            .find(|key| !ALLOWED_TRANSFORMERS_GENERATE_KWARGS.contains(&key.as_str()))
+        {
+            return Err(BackendError::Config(format!(
+                "PyTorch worker generate_text envelope contains unsupported transformers_kwargs key '{unsupported_key}'"
+            )));
         }
         Ok(())
     }

@@ -378,6 +378,60 @@ fn test_pytorch_generate_text_envelopes_thread_top_k_for_generate_and_stream() {
 }
 
 #[test]
+fn test_pytorch_generate_text_envelope_rejects_unscoped_transformers_kwargs() {
+    let mut generate_envelope = PyTorchBackend::generate_text_envelope(
+        "req-generate-raw-kwarg",
+        PyTorchWorkerOperation::GenerateText,
+        "Explain adapters.".to_string(),
+        None,
+        48,
+        0.3,
+        0.9,
+        None,
+        None,
+    );
+    generate_envelope
+        .payload
+        .transformers_kwargs
+        .insert("raw_max_batch_size".to_string(), serde_json::json!(8));
+
+    match PyTorchBackend::validate_generate_text_envelope(&generate_envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("unsupported transformers_kwargs key"));
+            assert!(message.contains("raw_max_batch_size"));
+        }
+        other => panic!("expected unsupported kwargs config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs() {
+    let mut stream_envelope = PyTorchBackend::generate_text_envelope(
+        "req-stream-policy-kwarg",
+        PyTorchWorkerOperation::GenerateTextStream,
+        "Explain adapters.".to_string(),
+        None,
+        48,
+        0.3,
+        0.9,
+        None,
+        None,
+    );
+    stream_envelope
+        .payload
+        .transformers_kwargs
+        .insert("priority".to_string(), serde_json::json!("high"));
+
+    match PyTorchBackend::validate_generate_text_stream_envelope(&stream_envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("unsupported transformers_kwargs key"));
+            assert!(message.contains("priority"));
+        }
+        other => panic!("expected unsupported stream kwargs config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_generate_text_request_omits_absent_top_k_kwarg() {
     let request = PyTorchBackend::generate_text_request(
         "Explain adapters.".to_string(),

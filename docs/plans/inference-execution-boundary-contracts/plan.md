@@ -1788,6 +1788,11 @@ PyTorch text generation request builders now thread the typed `sampling.top_k`
 generation option into backend-local Transformers kwargs for both streaming and
 non-streaming worker envelopes, while leaving broader option threading as a
 follow-up.
+PyTorch generation envelope validation now rejects unallowlisted
+`transformers_kwargs` in both Rust and torch-free Python worker-contract
+projection. `top_k` remains the only current adapter-local forwarded kwarg, so
+raw Transformers kwargs and scheduler-like policy keys cannot bypass the typed
+Rust generation option boundary.
 Python-specific compatibility shims and Transformers kwargs are now bounded to
 the PyTorch backend worker surface: Rust worker DTOs remain `pub(super)`,
 backend-local mappers create Transformers kwargs, `worker_contract.py` projects
