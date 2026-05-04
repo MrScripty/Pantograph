@@ -1243,6 +1243,20 @@ async fn test_execute_typed_with_lifecycle_reports_package_compatibility() {
         .expect("typed request should execute");
 
     let events = sink.events();
+    let package_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::ModelPackageResolution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("model package resolution completion event");
+    assert_eq!(
+        package_completed.model_id.as_deref(),
+        Some("llm/llama/tiny-gguf")
+    );
+    assert!(package_completed.compatibility_report.is_none());
+    assert!(package_completed.option_diagnostics.is_empty());
+
     let validation_completed = events
         .iter()
         .find(|event| {
@@ -1825,50 +1839,71 @@ async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_ph
 
     assert_eq!(response, "hello");
     let events = sink.events();
-    assert_eq!(events.len(), 6);
-    assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events.len(), 9);
+    assert_eq!(
+        events[0].phase,
+        InferenceLifecyclePhase::ModelPackageResolution
+    );
     assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
-    assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[1].phase,
+        InferenceLifecyclePhase::ModelPackageResolution
+    );
     assert_eq!(
         events[1].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
-    let validation_compatibility_report = events[1]
+    assert_eq!(
+        events[2].phase,
+        InferenceLifecyclePhase::ModelPackageResolution
+    );
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert_eq!(events[3].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[4].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[4].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    let validation_compatibility_report = events[4]
         .compatibility_report
         .as_ref()
         .expect("task validation compatibility report");
     assert_eq!(validation_compatibility_report.status, "rejected");
     assert!(!validation_compatibility_report.compatible);
-    assert!(!events[1].compatibility_issues.is_empty());
-    assert_eq!(events[2].phase, InferenceLifecyclePhase::TaskValidation);
+    assert!(!events[4].compatibility_issues.is_empty());
+    assert_eq!(events[5].phase, InferenceLifecyclePhase::TaskValidation);
     assert_eq!(
-        events[2].kind,
+        events[5].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
     );
-    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
-    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
-    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[6].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[6].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[7].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(
-        events[4].kind,
+        events[7].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
-    let backend_compatibility_report = events[4]
+    let backend_compatibility_report = events[7]
         .compatibility_report
         .as_ref()
         .expect("backend execution compatibility report");
     assert_eq!(backend_compatibility_report.status, "rejected");
     assert!(!backend_compatibility_report.compatible);
-    assert!(!events[4].compatibility_issues.is_empty());
-    assert_eq!(events[5].phase, InferenceLifecyclePhase::BackendExecution);
+    assert!(!events[7].compatibility_issues.is_empty());
+    assert_eq!(events[8].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(
-        events[5].kind,
+        events[8].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
     );
     assert!(events.iter().all(|event| {
         event.request_id.as_deref() == Some("req-typed-stream")
             && event.task_id.as_deref() == Some("text_generation")
             && event.backend_key.as_deref() == Some("mock")
-            && event.model_id.as_deref() == Some("typed-model")
+            && event.model_id.as_deref() == Some("llm/llama/tiny-gguf")
     }));
 }
 
@@ -1957,22 +1992,25 @@ async fn test_stream_typed_text_with_lifecycle_records_failed_backend_compatibil
     ));
 
     let events = sink.events();
-    assert_eq!(events.len(), 6);
-    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
-    assert_eq!(events[4].kind, InferenceRequestLifecycleEventKind::Failed);
-    let backend_compatibility_report = events[4]
+    assert_eq!(events.len(), 9);
+    assert_eq!(events[7].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[7].kind, InferenceRequestLifecycleEventKind::Failed);
+    let backend_compatibility_report = events[7]
         .compatibility_report
         .as_ref()
         .expect("failed backend execution compatibility report");
     assert_eq!(backend_compatibility_report.status, "rejected");
     assert!(!backend_compatibility_report.compatible);
-    assert!(!events[4].compatibility_issues.is_empty());
+    assert!(!events[7].compatibility_issues.is_empty());
     assert_eq!(
-        events[4].detail.as_deref(),
+        events[7].detail.as_deref(),
         Some("Inference error: mock stream failure")
     );
-    assert!(events[5].compatibility_report.is_none());
-    assert!(events[5].compatibility_issues.is_empty());
+    assert!(events[8].compatibility_report.is_none());
+    assert!(events[8].compatibility_issues.is_empty());
+    assert!(events
+        .iter()
+        .all(|event| event.model_id.as_deref() == Some("llm/llama/tiny-gguf")));
 }
 
 #[tokio::test]

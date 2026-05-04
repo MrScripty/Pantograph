@@ -2461,7 +2461,11 @@ inference write ledger events directly.
   cancellation and failed events plus cleanup remain non-persisted to avoid
   ledger noise. Failed lifecycle events with matched duration now persist
   duration-only bounded diagnostic summaries without copying failure detail into
-  the inference diagnostic payload.
+  the inference diagnostic payload. Typed non-streaming and streaming gateway
+  requests that carry resolved Pumas package facts now emit explicit
+  model-package-resolution started/completed/cleanup lifecycle facts before
+  task validation, and lifecycle model identity prefers the package-facts model
+  id over backend transport model names.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -3097,6 +3101,11 @@ Update during implementation:
   the original unload error when the secondary scheduler lifecycle diagnostic
   append fails, preventing diagnostics ledger availability from replacing the
   runtime failure returned to the caller.
+- 2026-05-04: Typed gateway lifecycle now emits package-resolution phase facts
+  when `InferenceExecutionRequest` carries resolved Pumas package facts, for
+  both non-streaming and streaming typed text paths. Streaming backend lifecycle
+  events reuse the package-derived model id so task-validation and backend
+  execution diagnostics do not drift back to transport-local model names.
 
 ## Commit Cadence Notes
 

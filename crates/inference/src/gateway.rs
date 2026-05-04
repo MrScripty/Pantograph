@@ -770,6 +770,7 @@ impl InferenceGateway {
             None,
             lifecycle_sink,
             None,
+            None,
             Vec::new(),
         )
         .await
@@ -782,6 +783,7 @@ impl InferenceGateway {
         request_id: Option<String>,
         task_id: Option<String>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+        model_id_override: Option<String>,
         compatibility_report: Option<InferenceCompatibilityReportSummary>,
         compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
@@ -790,7 +792,7 @@ impl InferenceGateway {
         let runtime_snapshot = self.runtime_lifecycle_snapshot().await;
         let runtime_id = runtime_snapshot.runtime_id.clone();
         let runtime_instance_id = runtime_snapshot.runtime_instance_id.clone();
-        let model_id = chat_request_model_id(&request_json);
+        let model_id = model_id_override.or_else(|| chat_request_model_id(&request_json));
 
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
@@ -872,8 +874,18 @@ impl InferenceGateway {
     {
         let (backend_key, runtime_id, runtime_instance_id) = self.lifecycle_event_context().await;
         let request_id = request.request_id.clone();
-        let model_id = non_empty_model_id(&typed_request_model_name(&request));
+        let model_id = typed_request_lifecycle_model_id(&request);
         let task_id = Some(request.task_id.canonical_label().to_string());
+        record_model_package_resolution_lifecycle_if_present(
+            lifecycle_sink.as_ref(),
+            &request,
+            request_id.clone(),
+            task_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            model_id.clone(),
+        );
         record_inference_lifecycle_phase_event(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
@@ -934,6 +946,7 @@ impl InferenceGateway {
             request_id,
             task_id,
             lifecycle_sink,
+            model_id,
             compatibility_diagnostics.compatibility_report,
             compatibility_diagnostics.compatibility_issues,
         )
@@ -1132,8 +1145,18 @@ impl InferenceGateway {
     ) -> Result<InferenceExecutionResult, GatewayError> {
         let (backend_key, runtime_id, runtime_instance_id) = self.lifecycle_event_context().await;
         let request_id = request.request_id.clone();
-        let model_id = non_empty_model_id(&typed_request_model_name(&request));
+        let model_id = typed_request_lifecycle_model_id(&request);
         let task_id = Some(request.task_id.canonical_label().to_string());
+        record_model_package_resolution_lifecycle_if_present(
+            lifecycle_sink.as_ref(),
+            &request,
+            request_id.clone(),
+            task_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            model_id.clone(),
+        );
         record_inference_lifecycle_phase_event(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
@@ -1540,6 +1563,21 @@ fn typed_request_model_name(request: &InferenceExecutionRequest) -> String {
                 .map(|model_ref| model_ref.model_id.clone())
         })
         .unwrap_or_default()
+}
+
+fn typed_request_lifecycle_model_id(request: &InferenceExecutionRequest) -> Option<String> {
+    request
+        .resolved_model_package_facts
+        .as_ref()
+        .map(|facts| facts.model_ref.model_id.clone())
+        .or_else(|| {
+            request
+                .model_ref
+                .as_ref()
+                .map(|model_ref| model_ref.model_id.clone())
+        })
+        .or_else(|| request.model_name.clone())
+        .and_then(|value| non_empty_model_id(&value))
 }
 
 fn chat_request_model_id(request_json: &str) -> Option<String> {
@@ -2098,6 +2136,46 @@ fn record_inference_lifecycle_phase_event(
         kind,
         detail,
         Vec::new(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_model_package_resolution_lifecycle_if_present(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    request: &InferenceExecutionRequest,
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    model_id: Option<String>,
+) {
+    if request.resolved_model_package_facts.is_none() {
+        return;
+    }
+
+    record_inference_lifecycle_phase_event(
+        sink,
+        InferenceLifecyclePhase::ModelPackageResolution,
+        request_id.clone(),
+        task_id.clone(),
+        backend_key.clone(),
+        runtime_id.clone(),
+        runtime_instance_id.clone(),
+        model_id.clone(),
+        InferenceRequestLifecycleEventKind::Started,
+        None,
+    );
+    record_non_streaming_lifecycle_phase_result(
+        sink,
+        InferenceLifecyclePhase::ModelPackageResolution,
+        request_id,
+        task_id,
+        backend_key,
+        runtime_id,
+        runtime_instance_id,
+        model_id,
+        &Ok::<(), GatewayError>(()),
     );
 }
 
