@@ -1121,7 +1121,10 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
 - [ ] Define serde/wire casing, enum tagging, optional field defaults, and
   unknown-field behavior for every contract that crosses Rust/Python,
   Rust/Tauri/TypeScript, Pumas/inference, saved workflow, or external HTTP
-  runtime boundaries.
+  runtime boundaries. Public inference integration coverage now freezes the
+  canonical `InferenceExecutionRequest` wire shape for snake_case fields,
+  internally tagged task input payloads, absent optional fields, null
+  `extra_options`, and additive unknown request/input fields.
 - [x] Add validation rules so internal code consumes parsed model/task types
   rather than raw strings or ad hoc JSON.
 - [x] Document that Python Transformers is one implementation of these

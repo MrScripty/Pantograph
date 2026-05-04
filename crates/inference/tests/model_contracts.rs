@@ -237,6 +237,62 @@ fn package_fact_fixtures_resolve_task_evidence_through_registry() {
 }
 
 #[test]
+fn inference_execution_request_wire_contract_preserves_tags_defaults_and_unknown_fields() {
+    let raw = serde_json::json!({
+        "request_id": "req-rerank-1",
+        "task_id": "rerank",
+        "model_name": "reranker-model",
+        "input": {
+            "input_type": "rerank",
+            "query": "search term",
+            "documents": ["alpha", "beta"],
+            "top_n": 1,
+            "return_documents": true,
+            "future_input_field": "ignored"
+        },
+        "future_request_field": {"ignored": true}
+    });
+
+    let request: InferenceExecutionRequest =
+        serde_json::from_value(raw).expect("canonical request should decode");
+
+    assert_eq!(request.request_id.as_deref(), Some("req-rerank-1"));
+    assert_eq!(request.task_id, InferenceTaskId::Rerank);
+    assert_eq!(request.model_name.as_deref(), Some("reranker-model"));
+    assert!(request.model_ref.is_none());
+    assert!(request.runtime_hint.is_none());
+    assert!(request.resolved_model_package_facts.is_none());
+    assert!(request.generation_options.is_none());
+    assert!(request.extra_options.is_null());
+    match &request.input {
+        InferenceExecutionInput::Rerank {
+            query,
+            documents,
+            top_n,
+            return_documents,
+        } => {
+            assert_eq!(query, "search term");
+            assert_eq!(documents, &vec!["alpha".to_string(), "beta".to_string()]);
+            assert_eq!(*top_n, Some(1));
+            assert!(*return_documents);
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+
+    let encoded = serde_json::to_value(&request).expect("request should encode");
+    assert_eq!(encoded["task_id"], serde_json::json!("rerank"));
+    assert_eq!(encoded["input"]["input_type"], serde_json::json!("rerank"));
+    assert!(
+        encoded.get("model_ref").is_none(),
+        "none-valued optional fields should stay absent on the wire"
+    );
+    assert!(
+        encoded.get("extra_options").is_none(),
+        "null extra options should stay absent on the wire"
+    );
+}
+
+#[test]
 fn compact_model_execution_descriptor_stays_smaller_than_package_facts() {
     let raw = serde_json::json!({
         "execution_contract_version": 1,
