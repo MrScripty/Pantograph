@@ -278,7 +278,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   options plus the canonical task id so host adapters can persist support
   summaries without seeing backend-local payloads. Lifecycle facts may also
   carry bounded usage counts and backend-local cache-handle ids when typed
-  execution results provide them; prompt text, messages, generated content,
+  execution results provide them. Embedding execution aggregates backend
+  embedding item token counts into bounded prompt/total usage summaries without
+  exposing vectors or input text; prompt text, messages, generated content,
   embeddings, tensors, token arrays, Python kwargs, and raw process output stay
   outside lifecycle diagnostics.
 - `InferenceGateway::stream_typed_text` and

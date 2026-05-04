@@ -146,10 +146,16 @@ impl InferenceBackend for MockImageBackend {
 
     async fn embeddings(
         &self,
-        _texts: Vec<String>,
+        texts: Vec<String>,
         _model: &str,
     ) -> Result<Vec<EmbeddingResult>, BackendError> {
-        Ok(Vec::new())
+        Ok(texts
+            .into_iter()
+            .map(|text| EmbeddingResult {
+                vector: vec![text.len() as f32],
+                token_count: text.split_whitespace().count().max(1),
+            })
+            .collect())
     }
 
     async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
@@ -1110,6 +1116,20 @@ async fn test_execute_typed_embedding_lifecycle_reports_extra_option_diagnostics
                 && diagnostic.state == OptionSupportState::Mapped
                 && diagnostic.backend_key.as_deref() == Some("mock")
         ));
+    assert_eq!(
+        backend_completed
+            .usage
+            .as_ref()
+            .and_then(|usage| usage.prompt_tokens),
+        Some(1)
+    );
+    assert_eq!(
+        backend_completed
+            .usage
+            .as_ref()
+            .and_then(|usage| usage.total_tokens),
+        Some(1)
+    );
 }
 
 #[tokio::test]

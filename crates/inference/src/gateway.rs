@@ -1226,19 +1226,19 @@ impl InferenceGateway {
                 })
             }
             InferenceExecutionInput::Embedding { texts } => {
-                let embeddings = self.embeddings(texts, &model).await?;
-                Ok(InferenceExecutionResult::Embedding {
-                    embeddings: embeddings
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, embedding)| InferenceEmbeddingResult {
-                            vector: embedding.vector,
-                            token_count: Some(embedding.token_count),
-                            index: Some(index),
-                        })
-                        .collect(),
-                    usage: None,
-                })
+                let embeddings: Vec<InferenceEmbeddingResult> = self
+                    .embeddings(texts, &model)
+                    .await?
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, embedding)| InferenceEmbeddingResult {
+                        vector: embedding.vector,
+                        token_count: Some(embedding.token_count),
+                        index: Some(index),
+                    })
+                    .collect();
+                let usage = embedding_usage_from_results(&embeddings);
+                Ok(InferenceExecutionResult::Embedding { embeddings, usage })
             }
             InferenceExecutionInput::Rerank {
                 query,
@@ -2223,6 +2223,29 @@ fn usage_from_execution_result(
         | Ok(InferenceExecutionResult::Embedding { usage, .. }) => usage.clone(),
         _ => None,
     }
+}
+
+fn embedding_usage_from_results(results: &[InferenceEmbeddingResult]) -> Option<InferenceUsage> {
+    let mut saw_count = false;
+    let mut total = 0u64;
+
+    for result in results {
+        if let Some(token_count) = result.token_count {
+            saw_count = true;
+            total = total.saturating_add(token_count as u64);
+        }
+    }
+
+    if !saw_count {
+        return None;
+    }
+
+    let total = total.min(u64::from(u32::MAX)) as u32;
+    Some(InferenceUsage {
+        prompt_tokens: Some(total),
+        completion_tokens: None,
+        total_tokens: Some(total),
+    })
 }
 
 fn cache_handle_from_execution_result(

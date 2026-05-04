@@ -2197,7 +2197,9 @@ inference write ledger events directly.
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
   durable inference diagnostic payloads now carry bounded usage counts and
-  cache-handle ids. Host-owned workflow event sinks now persist structured
+  cache-handle ids. Typed embedding execution now aggregates backend embedding
+  item token counts into bounded prompt/total usage summaries without storing
+  vectors or input text. Host-owned workflow event sinks now persist structured
   KV-cache progress references for action, outcome, cache id, backend key, reuse
   source, token count, and reason without cache bytes/fingerprints/temp paths;
   I/O artifact projection now exposes selected-backend context and derives
@@ -2680,6 +2682,9 @@ Update during implementation:
   execution events without storing prompt, output, token-array, tensor, or raw
   artifact payloads. Backend-specific usage producers, KV checkpoint ids, and
   artifact refs remain follow-up work.
+- 2026-05-03: Typed embedding backend execution now aggregates embedding item
+  token counts into bounded prompt/total usage summaries for lifecycle
+  diagnostics without storing vectors or input text.
 - 2026-05-03: Failed inference lifecycle detail is now sanitized and capped
   before it is copied into `node.execution_status` diagnostics, reducing the
   chance that secondary diagnostic appends fail because a backend surfaced
