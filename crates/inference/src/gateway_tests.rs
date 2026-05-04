@@ -928,9 +928,9 @@ async fn test_execute_typed_forwards_audio_transcription_to_active_backend() {
                 audio: None,
                 audio_ref: Some("artifact://audio.wav".to_string()),
                 language: Some("en".to_string()),
-                prompt: None,
+                prompt: Some("domain hint".to_string()),
                 task: Some("transcribe".to_string()),
-                chunk_length_s: None,
+                chunk_length_s: Some(30.0),
                 extra_options: serde_json::json!({
                     "return_timestamps": true,
                 }),
@@ -953,6 +953,26 @@ async fn test_execute_typed_forwards_audio_transcription_to_active_backend() {
             assert_eq!(result.text, "transcribed mock-asr");
             assert_eq!(result.language.as_deref(), Some("en"));
             assert_eq!(result.duration_seconds, Some(1.5));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "audio_transcription.language"
+                    && diagnostic.state == OptionSupportState::Honored
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "audio_transcription.prompt"
+                    && diagnostic.state == OptionSupportState::Honored
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "audio_transcription.task"
+                    && diagnostic.state == OptionSupportState::Honored
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "audio_transcription.chunk_length_s"
+                    && diagnostic.state == OptionSupportState::Honored
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
             assert!(option_diagnostics.iter().any(|diagnostic| {
                 diagnostic.option_path == "audio_transcription.extra_options.return_timestamps"
                     && diagnostic.state == OptionSupportState::Mapped
@@ -1387,9 +1407,9 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
                 }),
                 audio_ref: None,
                 language: Some("en".to_string()),
-                prompt: None,
+                prompt: Some("domain hint".to_string()),
                 task: Some("transcribe".to_string()),
-                chunk_length_s: None,
+                chunk_length_s: Some(30.0),
                 extra_options: serde_json::json!({
                     "return_timestamps": true,
                 }),
@@ -1422,6 +1442,38 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
         .option_diagnostics
         .iter()
         .any(|diagnostic| {
+            diagnostic.option_path == "audio_transcription.language"
+                && diagnostic.state == OptionSupportState::Honored
+                && diagnostic.backend_key.as_deref() == Some("mock")
+        }));
+    assert!(backend_completed
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| {
+            diagnostic.option_path == "audio_transcription.prompt"
+                && diagnostic.state == OptionSupportState::Honored
+                && diagnostic.backend_key.as_deref() == Some("mock")
+        }));
+    assert!(backend_completed
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| {
+            diagnostic.option_path == "audio_transcription.task"
+                && diagnostic.state == OptionSupportState::Honored
+                && diagnostic.backend_key.as_deref() == Some("mock")
+        }));
+    assert!(backend_completed
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| {
+            diagnostic.option_path == "audio_transcription.chunk_length_s"
+                && diagnostic.state == OptionSupportState::Honored
+                && diagnostic.backend_key.as_deref() == Some("mock")
+        }));
+    assert!(backend_completed
+        .option_diagnostics
+        .iter()
+        .any(|diagnostic| {
             diagnostic.option_path == "audio_transcription.extra_options.return_timestamps"
                 && diagnostic.state == OptionSupportState::Mapped
                 && diagnostic.backend_key.as_deref() == Some("mock")
@@ -1429,6 +1481,7 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
 
     let serialized_events = serde_json::to_string(&events).unwrap();
     assert!(!serialized_events.contains("UklGRg=="));
+    assert!(!serialized_events.contains("domain hint"));
 }
 
 #[tokio::test]

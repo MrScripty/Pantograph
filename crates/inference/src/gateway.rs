@@ -1293,11 +1293,14 @@ impl InferenceGateway {
             }
             InferenceExecutionInput::AudioTranscription { request } => {
                 let backend_key = canonical_backend_key(&self.current_backend_name().await);
-                let option_diagnostics = extra_option_diagnostics(
+                let mut option_diagnostics =
+                    typed_audio_transcription_option_diagnostics(&request, Some(&backend_key));
+                option_diagnostics.extend(extra_option_diagnostics(
                     &request.extra_options,
                     Some(&backend_key),
                     "audio_transcription.extra_options",
-                );
+                ));
+                dedupe_option_diagnostics(&mut option_diagnostics);
                 let result = self.transcribe_audio(request).await?;
                 Ok(InferenceExecutionResult::AudioTranscription {
                     result,
@@ -1645,11 +1648,16 @@ fn typed_non_generation_option_diagnostics(
             ));
             diagnostics
         }
-        InferenceExecutionInput::AudioTranscription { request } => extra_option_diagnostics(
-            &request.extra_options,
-            backend_key,
-            "audio_transcription.extra_options",
-        ),
+        InferenceExecutionInput::AudioTranscription { request } => {
+            let mut diagnostics =
+                typed_audio_transcription_option_diagnostics(request, backend_key);
+            diagnostics.extend(extra_option_diagnostics(
+                &request.extra_options,
+                backend_key,
+                "audio_transcription.extra_options",
+            ));
+            diagnostics
+        }
         InferenceExecutionInput::TextGeneration { .. } => Vec::new(),
     };
 
@@ -1659,6 +1667,70 @@ fn typed_non_generation_option_diagnostics(
         "extra_options",
     ));
     diagnostics
+}
+
+fn typed_audio_transcription_option_diagnostics(
+    request: &AudioTranscriptionRequest,
+    backend_key: Option<&str>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    let mut diagnostics = Vec::new();
+    push_audio_transcription_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "audio_transcription.language",
+        request
+            .language
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        "typed audio gateway forwards language hints",
+    );
+    push_audio_transcription_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "audio_transcription.prompt",
+        request
+            .prompt
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        "typed audio gateway forwards prompt hints without diagnostics payload values",
+    );
+    push_audio_transcription_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "audio_transcription.task",
+        request
+            .task
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        "typed audio gateway forwards task hints",
+    );
+    push_audio_transcription_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "audio_transcription.chunk_length_s",
+        request.chunk_length_s.is_some(),
+        "typed audio gateway forwards chunk length hints",
+    );
+    diagnostics
+}
+
+fn push_audio_transcription_option_diagnostic(
+    diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
+    backend_key: Option<&str>,
+    option_path: &str,
+    requested: bool,
+    message: &str,
+) {
+    if !requested {
+        return;
+    }
+
+    diagnostics.push(OptionCompatibilityDiagnostic {
+        option_path: option_path.to_string(),
+        state: OptionSupportState::Honored,
+        backend_key: backend_key.map(ToOwned::to_owned),
+        message: Some(message.to_string()),
+    });
 }
 
 fn typed_image_generation_option_diagnostics(

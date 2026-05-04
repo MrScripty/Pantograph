@@ -2343,8 +2343,10 @@ inference write ledger events directly.
   after those task option diagnostics are emitted by the corresponding typed
   execution paths. Embedding/rerank/image-generation typed gateway diagnostics
   now emit bounded option support for extra options, rerank controls, and
-  first-class image request settings; video/audio and KV-cache task-specific
-  options remain open.
+  first-class image request settings. Audio transcription diagnostics now cover
+  first-class language, prompt, task, and chunk-length request settings without
+  copying prompt text or audio payload values into lifecycle events. Video and
+  KV-cache task-specific options remain open.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup. Diagnostic-observed
