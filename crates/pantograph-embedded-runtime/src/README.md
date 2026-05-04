@@ -167,12 +167,13 @@ delegating methods; scheduler authority and diagnostics events stay in
   restore coordination are isolated from the root facade.
 - Inference lifecycle events are host-owned diagnostics facts. Execution paths
   may inject an `INFERENCE_LIFECYCLE_SINK` that projects bounded backend,
-  runtime, model, task, selected backend, phase, status, and duration metadata
-  into workflow-service diagnostics, but inference and node-engine must not
-  import or write the diagnostics ledger directly. Completed backend-execution
-  lifecycle events may additionally project bounded option-support summaries,
-  compatibility summaries, usage counts, cache-handle ids, and matched
-  lifecycle duration. Structured KV-cache progress may project bounded
+  runtime, model, task, selected backend, resolved artifact kind, phase, status,
+  and duration metadata into workflow-service diagnostics, but inference and
+  node-engine must not import or write the diagnostics ledger directly.
+  Completed backend-execution lifecycle events may additionally project bounded
+  option-support summaries, compatibility summaries, usage counts,
+  cache-handle ids, and matched lifecycle duration. Structured KV-cache progress
+  may project bounded
   action/outcome/cache-id references and task-local KV option-support summaries
   through the host-owned workflow event sink; prompt/result bodies, embeddings,
   tensors, token arrays, backend kwargs, raw backend output, cache bytes, cache

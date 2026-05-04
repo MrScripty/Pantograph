@@ -71,17 +71,19 @@ Node-status projection rows include selected runtime id, canonical inference
 task id, selected backend key, and model id when producers provide them, so UI
 and API consumers do not need to parse raw diagnostic payload JSON for common
 inference execution context.
-Run-list and run-detail projections also roll up node-derived selected backend
-key, selected model id, and selected task id where the scheduler/run payloads do
-not already provide those facts. Scheduler-owned selected runtime, device, and
-network-node fields keep their native lifecycle semantics and are not inferred
-from inference payloads.
+Run-list and run-detail projections also roll up node- and
+inference-diagnostic-derived selected runtime id, selected backend key,
+selected model id, and selected task id where scheduler/run payloads do not
+already provide those facts. Scheduler-owned selected runtime, device, and
+network-node fields keep their native lifecycle semantics and are not
+overwritten by inference payloads.
 Inference option-support summaries use
 `inference.execution_diagnostic_observed` events. These rows are bounded
 system metadata for request id, task id, lifecycle phase/kind, selected backend,
-support-state counts, backend/model compatibility summaries, per-option
-compatibility summaries, usage-count summaries, cache-handle ids, and
-structured KV-cache action/outcome references. Duration-only completed
+resolved artifact kind, support-state counts, backend/model compatibility
+summaries, per-option compatibility summaries, usage-count summaries,
+cache-handle ids, and structured KV-cache action/outcome references.
+Duration-only completed
 lifecycle rows are allowed for bounded phase timing even when a phase carries no
 usage or compatibility details; they must not carry prompt text, messages,
 generated content, embeddings, tensors, token arrays, Python kwargs, raw backend
@@ -310,8 +312,9 @@ let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
   version/digest facts are machine-consumed by diagnostics projections.
 - Inference diagnostic summary fields are bounded metadata only: request id,
   task id, lifecycle phase/kind, duration when known, selected backend
-  key/family, compatibility summaries, option-support summaries, usage counts,
-  cache-handle ids, and KV-cache action/outcome references.
+  key/family, resolved artifact kind, compatibility summaries, option-support
+  summaries, usage counts, cache-handle ids, and KV-cache action/outcome
+  references.
   Producers may emit duration-only completed lifecycle summaries for phase
   timing when a matching start/terminal pair exists.
   Producers must keep raw request/result bodies, embeddings, tensors, token

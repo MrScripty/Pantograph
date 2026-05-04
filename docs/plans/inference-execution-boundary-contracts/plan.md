@@ -2538,11 +2538,11 @@ inference write ledger events directly.
   projection fields. Source README updates now cover inference lifecycle
   usage/cache fields, durable inference diagnostic summaries, node-derived
   run-list/run-detail selected backend/model/task rollups, embedded-runtime
-  lifecycle sink projection rules, and workflow-service
-  `diagnostics_unavailable` behavior. Frontend TypeScript contracts and I/O
-  Inspector presenter docs now cover projected runtime/backend/model artifact
-  context; broader UI/API documentation remains open as additional surfaces
-  change.
+  lifecycle sink projection rules, bounded resolved artifact kind diagnostics,
+  and workflow-service `diagnostics_unavailable` behavior. Frontend TypeScript
+  contracts and I/O Inspector presenter docs now cover projected
+  runtime/backend/model artifact context; broader UI/API documentation remains
+  open as additional surfaces change.
 
 **Verification:**
 - `cargo test -p pantograph-diagnostics-ledger` for new event/projection fields,
