@@ -1089,7 +1089,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   postprocessing, result projection, and diagnostics are public facts; tensors,
   token ids, raw framework objects, logits processors, loaded handles, and
   backend command flags are hidden adapter details.
-- [ ] Define which fields are stable Pantograph contracts versus backend-local
+- [x] Define which fields are stable Pantograph contracts versus backend-local
   extras.
 - [ ] Define serde/wire casing, enum tagging, optional field defaults, and
   unknown-field behavior for every contract that crosses Rust/Python,
@@ -1187,6 +1187,11 @@ Typed request serde coverage now freezes the stable wire shape for current
 executable text, embedding, rerank, image-generation, and audio-transcription
 inputs, including tagged `input_type` payloads and append-only `extra_options`
 where backend-local options are still needed.
+Request wire-shape coverage now also freezes the top-level stable
+`InferenceExecutionRequest` fields and keeps backend-local escape hatches under
+`generation_options.backend_extensions` or `extra_options`, preventing raw
+Transformers kwargs, backend CLI flags, or scheduler policy fields from
+becoming public request contract keys.
 Executable task-registry invariant coverage now freezes the complete public
 shape for every seeded task entry: unique canonical ids, known family,
 execution-behavior, streaming, and support-tier classifications, non-empty

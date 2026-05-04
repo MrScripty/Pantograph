@@ -1014,6 +1014,8 @@ pub struct MaskedPrompt {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
 
     #[test]
@@ -1328,6 +1330,68 @@ mod tests {
             serde_json::json!("euler")
         );
         assert_eq!(decoded, request);
+    }
+
+    #[test]
+    fn typed_execution_request_wire_shape_separates_stable_and_backend_local_fields() {
+        let request = InferenceExecutionRequest {
+            request_id: Some("req-boundary-1".to_string()),
+            task_id: InferenceTaskId::TextGeneration,
+            model_ref: None,
+            model_name: Some("tiny-model".to_string()),
+            runtime_hint: Some("pytorch".to_string()),
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::TextGeneration {
+                prompt: Some("Hello".to_string()),
+                system_prompt: None,
+                messages: Vec::new(),
+                stream: false,
+            },
+            generation_options: Some(GenerationOptions {
+                backend_extensions: [(
+                    "transformers:renormalize_logits".to_string(),
+                    serde_json::json!(true),
+                )]
+                .into_iter()
+                .collect(),
+                ..Default::default()
+            }),
+            extra_options: serde_json::json!({
+                "adapter:opaque_option": true
+            }),
+        };
+
+        let encoded = serde_json::to_value(&request).unwrap();
+        let top_level_keys: BTreeSet<&str> = encoded
+            .as_object()
+            .expect("request should encode as object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+
+        assert_eq!(
+            top_level_keys,
+            BTreeSet::from([
+                "extra_options",
+                "generation_options",
+                "input",
+                "model_name",
+                "request_id",
+                "runtime_hint",
+                "task_id",
+            ])
+        );
+        assert_eq!(
+            encoded["generation_options"]["backend_extensions"]["transformers:renormalize_logits"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            encoded["extra_options"]["adapter:opaque_option"],
+            serde_json::json!(true)
+        );
+        assert!(encoded.get("transformers_kwargs").is_none());
+        assert!(encoded.get("backend_cli_flags").is_none());
+        assert!(encoded.get("scheduler_policy").is_none());
     }
 
     #[test]
