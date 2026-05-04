@@ -1784,10 +1784,11 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   Non-streaming PyTorch generate-text worker transport failures now also retain
   the generated request id and canonical `pytorch_worker_generate_text_failed`
   code instead of returning raw Python bridge errors.
-  PyTorch streaming setup call failures, generator creation failures, iterator
-  failures, token extraction failures, and generator item errors now also route
-  through the same canonical stream worker failure code and generated request id
-  instead of returning ad hoc raw Python exception strings.
+  PyTorch streaming worker lookup failures, setup call failures, generator
+  creation failures, iterator failures, token extraction failures, and
+  generator item errors now also route through the same canonical stream worker
+  failure code and generated request id instead of returning ad hoc raw Python
+  exception strings.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.

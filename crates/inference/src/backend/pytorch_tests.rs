@@ -960,6 +960,21 @@ fn test_pytorch_worker_stream_generator_error_normalizes_to_backend_error() {
 }
 
 #[test]
+fn test_pytorch_worker_stream_module_error_normalizes_to_backend_error() {
+    match PyTorchBackend::stream_worker_failure_from_message(
+        "req-stream-module",
+        "Failed to get worker module: import failed.".to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_generate_text_stream_failed"));
+            assert!(message.contains("req-stream-module"));
+            assert!(message.contains("import failed"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_stream_token_extraction_error_normalizes_to_backend_error() {
     match PyTorchBackend::stream_worker_failure_from_message(
         "req-stream-token",

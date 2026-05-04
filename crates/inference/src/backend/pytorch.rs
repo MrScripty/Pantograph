@@ -1239,10 +1239,10 @@ impl PyTorchBackend {
                 let worker = match pytorch_worker::worker_module(py) {
                     Ok(w) => w,
                     Err(e) => {
-                        let _ = tx.blocking_send(Err(BackendError::Inference(format!(
-                            "Failed to get worker module: {}",
-                            e
-                        ))));
+                        let _ = tx.blocking_send(Err(Self::stream_worker_failure_from_message(
+                            &request_id,
+                            format!("Failed to get worker module: {}", e),
+                        )));
                         return;
                     }
                 };
