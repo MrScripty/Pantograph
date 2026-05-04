@@ -194,6 +194,47 @@ fn record_entry_path(record: &pumas_library::ModelRecord) -> Option<String> {
         .filter(|path| !path.trim().is_empty())
 }
 
+fn usable_task_type_primary(value: &str) -> Option<String> {
+    let task = value.trim();
+    if task.is_empty() || task.eq_ignore_ascii_case("unknown") {
+        None
+    } else {
+        Some(task.to_string())
+    }
+}
+
+fn metadata_task_type_primary(
+    metadata: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> Option<String> {
+    let metadata = metadata?;
+    metadata_string(
+        metadata,
+        &[
+            "task_type_primary",
+            "taskTypePrimary",
+            "task_type",
+            "taskType",
+        ],
+    )
+    .and_then(|task| usable_task_type_primary(&task))
+    .or_else(|| {
+        metadata_string(metadata, &["pipeline_tag", "pipelineTag"])
+            .map(|tag| map_pipeline_tag_to_task(&tag))
+    })
+}
+
+pub(super) fn task_type_primary_from_descriptor_metadata_or_request(
+    request_task_type_primary: &str,
+    execution_descriptor: Option<&pumas_library::models::ModelExecutionDescriptor>,
+    metadata: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> String {
+    execution_descriptor
+        .and_then(|descriptor| usable_task_type_primary(&descriptor.task_type_primary))
+        .or_else(|| metadata_task_type_primary(metadata))
+        .or_else(|| usable_task_type_primary(request_task_type_primary))
+        .unwrap_or_else(|| "text-generation".to_string())
+}
+
 pub(super) fn descriptor_lookup_fallback_allowed(error: &pumas_library::PumasError) -> bool {
     matches!(
         error,
@@ -343,27 +384,11 @@ pub(super) async fn resolve_descriptor(
             .as_ref()
             .map(|descriptor| descriptor.model_type.clone())
             .or_else(|| Some(record.model_type.clone()));
-        if let Some(descriptor) = resolved.execution_descriptor.as_ref() {
-            let task = descriptor.task_type_primary.trim();
-            if !task.is_empty() && task != "unknown" {
-                task_type_primary = task.to_string();
-            }
-        }
-        if let Some(meta) = record.metadata.as_object() {
-            if let Some(task) = metadata_string(
-                meta,
-                &[
-                    "task_type_primary",
-                    "taskTypePrimary",
-                    "task_type",
-                    "taskType",
-                ],
-            ) {
-                task_type_primary = task;
-            } else if let Some(tag) = metadata_string(meta, &["pipeline_tag", "pipelineTag"]) {
-                task_type_primary = map_pipeline_tag_to_task(&tag);
-            }
-        }
+        task_type_primary = task_type_primary_from_descriptor_metadata_or_request(
+            &task_type_primary,
+            resolved.execution_descriptor.as_ref(),
+            record.metadata.as_object(),
+        );
     }
 
     let model_id_resolved = request

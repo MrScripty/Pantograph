@@ -1007,7 +1007,11 @@ Detailed Pumas-side work is split into
   compatibility fallback when Pumas lookup is unavailable. The model-list
   option provider now also prefers the Pumas execution descriptor's
   `task_type_primary` over projected record metadata so stale metadata cannot
-  override the versioned DTO.
+  override the versioned DTO. Embedded-runtime model dependency descriptors now
+  also treat Pumas `ModelExecutionDescriptor.task_type_primary` as
+  authoritative over stale record metadata, falling back to metadata only when
+  the descriptor task is missing or `unknown`, and falling back to saved request
+  data only when Pumas facts are absent.
 - [x] Treat Pumas HF search MLX/vLLM tags as remote discovery hints only.
   Installed-model compatibility and workflow preflight must use resolved local
   Pumas package facts plus Pantograph inference/backend checks.

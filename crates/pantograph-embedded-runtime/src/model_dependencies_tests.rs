@@ -468,6 +468,73 @@ fn descriptor_lookup_fallback_is_allowed_only_for_missing_descriptor_cases() {
 }
 
 #[test]
+fn task_type_primary_uses_execution_descriptor_before_stale_metadata() {
+    let descriptor: pumas_library::models::ModelExecutionDescriptor =
+        serde_json::from_value(serde_json::json!({
+            "execution_contract_version": 1,
+            "model_id": "vision/imported/test-model",
+            "entry_path": "/models/test-model/model.safetensors",
+            "model_type": "llm",
+            "task_type_primary": "image-to-text",
+            "recommended_backend": "pytorch",
+            "runtime_engine_hints": ["transformers", "pytorch"],
+            "storage_kind": "library_owned",
+            "validation_state": "valid",
+            "dependency_resolution": null
+        }))
+        .expect("execution descriptor fixture should decode");
+    let metadata = serde_json::json!({
+        "task_type_primary": "text-generation",
+        "pipeline_tag": "text-generation"
+    });
+
+    let task = descriptors::task_type_primary_from_descriptor_metadata_or_request(
+        "reranking",
+        Some(&descriptor),
+        metadata.as_object(),
+    );
+
+    assert_eq!(task, "image-to-text");
+}
+
+#[test]
+fn task_type_primary_uses_metadata_only_when_descriptor_task_is_missing() {
+    let descriptor: pumas_library::models::ModelExecutionDescriptor =
+        serde_json::from_value(serde_json::json!({
+            "execution_contract_version": 1,
+            "model_id": "vision/imported/test-model",
+            "entry_path": "/models/test-model/model.safetensors",
+            "model_type": "llm",
+            "task_type_primary": "unknown",
+            "recommended_backend": "pytorch",
+            "runtime_engine_hints": ["transformers", "pytorch"],
+            "storage_kind": "library_owned",
+            "validation_state": "valid",
+            "dependency_resolution": null
+        }))
+        .expect("execution descriptor fixture should decode");
+    let metadata = serde_json::json!({
+        "pipeline_tag": "automatic-speech-recognition"
+    });
+
+    let task = descriptors::task_type_primary_from_descriptor_metadata_or_request(
+        "reranking",
+        Some(&descriptor),
+        metadata.as_object(),
+    );
+
+    assert_eq!(task, "audio-to-text");
+}
+
+#[test]
+fn task_type_primary_uses_request_when_pumas_facts_are_absent() {
+    let task =
+        descriptors::task_type_primary_from_descriptor_metadata_or_request("reranking", None, None);
+
+    assert_eq!(task, "reranking");
+}
+
+#[test]
 fn override_patches_apply_binding_level_python_and_indexes() {
     let python_path = std::env::current_exe()
         .expect("current exe should exist")
