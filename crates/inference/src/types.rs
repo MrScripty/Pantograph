@@ -1514,6 +1514,87 @@ mod tests {
     }
 
     #[test]
+    fn typed_embedding_result_serde_keeps_diagnostics_and_usage() {
+        let result = InferenceExecutionResult::Embedding {
+            embeddings: vec![InferenceEmbeddingResult {
+                vector: vec![0.1, 0.2, 0.3],
+                token_count: Some(3),
+                index: Some(0),
+            }],
+            usage: Some(InferenceUsage {
+                prompt_tokens: Some(3),
+                completion_tokens: None,
+                total_tokens: Some(3),
+            }),
+            option_diagnostics: vec![OptionCompatibilityDiagnostic {
+                option_path: "extra_options.normalize".to_string(),
+                state: crate::model_contracts::OptionSupportState::Mapped,
+                backend_key: Some("candle".to_string()),
+                message: Some("mapped to embedding backend options".to_string()),
+            }],
+        };
+
+        let encoded = serde_json::to_value(&result).unwrap();
+        let decoded: InferenceExecutionResult = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["result_type"], serde_json::json!("embedding"));
+        assert_eq!(encoded["usage"]["prompt_tokens"], serde_json::json!(3));
+        assert_eq!(
+            encoded["embeddings"][0]["token_count"],
+            serde_json::json!(3)
+        );
+        assert_eq!(
+            encoded["option_diagnostics"][0]["option_path"],
+            serde_json::json!("extra_options.normalize")
+        );
+        assert_eq!(
+            decoded.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::Embedding
+        );
+        assert_eq!(decoded, result);
+    }
+
+    #[test]
+    fn typed_rerank_result_serde_keeps_option_diagnostics() {
+        let result = InferenceExecutionResult::Rerank {
+            response: RerankResponse {
+                results: vec![RerankResult {
+                    index: 1,
+                    score: 0.92,
+                    document: Some("ranked document".to_string()),
+                }],
+                metadata: serde_json::json!({
+                    "backend": "pytorch"
+                }),
+            },
+            option_diagnostics: vec![OptionCompatibilityDiagnostic {
+                option_path: "rerank.top_n".to_string(),
+                state: crate::model_contracts::OptionSupportState::Honored,
+                backend_key: Some("pytorch".to_string()),
+                message: Some("passed through rerank request".to_string()),
+            }],
+        };
+
+        let encoded = serde_json::to_value(&result).unwrap();
+        let decoded: InferenceExecutionResult = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["result_type"], serde_json::json!("rerank"));
+        assert_eq!(
+            encoded["response"]["results"][0]["index"],
+            serde_json::json!(1)
+        );
+        assert_eq!(
+            encoded["option_diagnostics"][0]["state"],
+            serde_json::json!("honored")
+        );
+        assert_eq!(
+            decoded.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::Rerank
+        );
+        assert_eq!(decoded, result);
+    }
+
+    #[test]
     fn inference_request_lifecycle_event_serde_uses_stable_contract() {
         let event = InferenceRequestLifecycleEvent {
             request_id: Some("req-1".to_string()),

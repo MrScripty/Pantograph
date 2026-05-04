@@ -2369,8 +2369,10 @@ inference write ledger events directly.
   well as backend-execution completion so node validation views can surface the
   same bounded option facts before execution. Embedding and rerank typed result
   DTOs now also return bounded option diagnostics so direct `execute_typed`
-  callers see the same option facts as lifecycle consumers. Video and KV-cache
-  task-specific options remain open.
+  callers see the same option facts as lifecycle consumers, with serde
+  contract coverage freezing the embedding/rerank result fields for generated
+  bindings and host consumers. Video and KV-cache task-specific options remain
+  open.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup. Diagnostic-observed
