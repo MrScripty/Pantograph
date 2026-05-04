@@ -2420,8 +2420,34 @@ fn error_projection_facts(
     event: &DiagnosticEventRecord,
     payload: &DiagnosticEventPayload,
 ) -> ErrorProjectionFacts {
-    let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) = payload else {
-        return ErrorProjectionFacts {
+    match payload {
+        DiagnosticEventPayload::DiagnosticErrorOccurred(payload) => ErrorProjectionFacts {
+            latest_error_event_id: Some(event.event_id.clone()),
+            latest_error_severity: Some(payload.severity),
+            latest_error_phase: Some(payload.phase.clone()),
+            latest_error_code: Some(payload.code.clone()),
+            latest_error_message: Some(payload.message.clone()),
+            fatal_error_event_id: (payload.severity == DiagnosticErrorSeverity::Fatal)
+                .then(|| event.event_id.clone()),
+            error_increment: (payload.severity != DiagnosticErrorSeverity::Warning) as i64,
+            warning_increment: (payload.severity == DiagnosticErrorSeverity::Warning) as i64,
+        },
+        DiagnosticEventPayload::RunTerminal(payload)
+            if payload.status != crate::event::RunTerminalStatus::Completed
+                && payload.canonical_error_event_id.is_some() =>
+        {
+            ErrorProjectionFacts {
+                latest_error_event_id: payload.canonical_error_event_id.clone(),
+                latest_error_severity: None,
+                latest_error_phase: None,
+                latest_error_code: None,
+                latest_error_message: payload.error.clone(),
+                fatal_error_event_id: None,
+                error_increment: 0,
+                warning_increment: 0,
+            }
+        }
+        _ => ErrorProjectionFacts {
             latest_error_event_id: None,
             latest_error_severity: None,
             latest_error_phase: None,
@@ -2430,19 +2456,7 @@ fn error_projection_facts(
             fatal_error_event_id: None,
             error_increment: 0,
             warning_increment: 0,
-        };
-    };
-
-    ErrorProjectionFacts {
-        latest_error_event_id: Some(event.event_id.clone()),
-        latest_error_severity: Some(payload.severity),
-        latest_error_phase: Some(payload.phase.clone()),
-        latest_error_code: Some(payload.code.clone()),
-        latest_error_message: Some(payload.message.clone()),
-        fatal_error_event_id: (payload.severity == DiagnosticErrorSeverity::Fatal)
-            .then(|| event.event_id.clone()),
-        error_increment: (payload.severity != DiagnosticErrorSeverity::Warning) as i64,
-        warning_increment: (payload.severity == DiagnosticErrorSeverity::Warning) as i64,
+        },
     }
 }
 

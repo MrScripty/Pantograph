@@ -2515,7 +2515,10 @@ inference write ledger events directly.
   validation phases are insufficient.
 - [ ] Preserve canonical error links from run terminal, node status, model
   lifecycle, and inference lifecycle summaries where the direct causal event is
-  known.
+  known. Run terminal projection now carries `canonical_error_event_id` into
+  run-list and run-detail `latest_error_event_id` without duplicating the
+  detailed error payload or incrementing error counters; node and scheduler
+  model lifecycle links remain open.
 - [ ] Ensure ledger append failure returns or projects `diagnostics_unavailable`
   while preserving the original inference/preflight/execution error. Failed
   inference lifecycle detail is now sanitized and bounded before node-status
