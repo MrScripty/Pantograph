@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
 import { WorkflowServiceError } from './workflowServiceErrors.ts';
-import type { WorkflowLocalNetworkStatusQueryResponse } from './types.ts';
+import type { NodeDefinition, WorkflowLocalNetworkStatusQueryResponse } from './types.ts';
 import type {
   WorkflowLibraryUsageQueryResponse,
   WorkflowIoArtifactQueryResponse,
@@ -43,6 +43,43 @@ function loadWorkbenchSettingsNetworkContractFixture(): WorkbenchSettingsNetwork
   );
   return JSON.parse(readFileSync(fixtureUrl, 'utf8')) as WorkbenchSettingsNetworkContractFixture;
 }
+
+test('node definition ports preserve inference payload role metadata without backend internals', () => {
+  const definition: NodeDefinition = {
+    node_type: 'llm-inference',
+    category: 'processing',
+    label: 'LLM Inference',
+    description: 'Canonical inference node',
+    io_binding_origin: 'integrated',
+    execution_mode: 'reactive',
+    inputs: [],
+    outputs: [
+      {
+        id: 'diagnostics',
+        label: 'Diagnostics',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+        inference_payloads: [
+          {
+            task_id: 'text_generation',
+            role: 'diagnostics',
+          },
+        ],
+      },
+    ],
+  };
+
+  const payload = definition.outputs[0].inference_payloads?.[0] as
+    | (Record<string, unknown> & { role: string; task_id: string })
+    | undefined;
+
+  assert.equal(payload?.role, 'diagnostics');
+  assert.equal(payload?.task_id, 'text_generation');
+  assert.equal(payload?.backend_key, undefined);
+  assert.equal(payload?.runtime_id, undefined);
+  assert.equal(payload?.scheduler_policy, undefined);
+});
 
 test('queryRunList preserves backend projection rows and facets', async () => {
   installWindowMock();

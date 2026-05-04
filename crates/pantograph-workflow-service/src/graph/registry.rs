@@ -70,6 +70,7 @@ pub(super) fn convert_port(port: &pantograph_node_contracts::PortContract) -> Po
             port.cardinality,
             pantograph_node_contracts::PortCardinality::Multiple
         ),
+        inference_payloads: port.inference_payloads.clone(),
     }
 }
 
@@ -133,5 +134,39 @@ impl NodeRegistry {
 impl Default for NodeRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pantograph_node_contracts::{ContractInferenceTaskId, InferencePortPayloadRole};
+
+    #[test]
+    fn node_definition_preserves_inference_payload_contracts_for_llm_diagnostics() {
+        let registry = NodeRegistry::new();
+        let definition = registry
+            .get_definition("llm-inference")
+            .expect("llm-inference definition");
+        let diagnostics = definition
+            .outputs
+            .iter()
+            .find(|port| port.id == "diagnostics")
+            .expect("diagnostics output");
+
+        assert!(diagnostics.inference_payloads.iter().any(|payload| {
+            payload.role == InferencePortPayloadRole::Diagnostics
+                && payload.task_id == ContractInferenceTaskId::TextGeneration
+                && payload.input_kind.is_none()
+                && payload.result_kind.is_none()
+        }));
+
+        let encoded = serde_json::to_value(diagnostics).expect("encode diagnostics port");
+        let payload = &encoded["inference_payloads"][0];
+        assert_eq!(payload["role"], serde_json::json!("diagnostics"));
+        assert_eq!(payload["task_id"], serde_json::json!("text_generation"));
+        assert!(payload.get("backend_key").is_none());
+        assert!(payload.get("runtime_id").is_none());
+        assert!(payload.get("scheduler_policy").is_none());
     }
 }

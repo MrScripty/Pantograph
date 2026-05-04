@@ -2035,7 +2035,10 @@ canonical inference shape instead of preserving backend-specific node contracts.
   and `metadata` output payloads as backend-neutral task diagnostics roles for
   every supported task, with contract coverage proving those payload markers do
   not surface backend keys, runtime ids, scheduler language, or reservation
-  language. UI/node-validation display wiring remains open.
+  language. Workflow-service node definitions and frontend/shared TypeScript
+  port DTOs now preserve those `inference_payloads`, giving UI/node-validation
+  consumers the canonical role metadata without reaching into backend internals.
+  UI display wiring remains open.
 - [x] Define saved-workflow schema versioning and append-only migration records
   for the canonical inference node shape.
 - [x] Define executable migration fixtures for old and new saved workflow
@@ -2449,7 +2452,9 @@ drift back into inference.
 
 **Tasks:**
 - [ ] Update runtime registry, workflow service, node engine, Tauri, or
-  frontend consumers only as needed to consume the new facts.
+  frontend consumers only as needed to consume the new facts. Workflow-service
+  graph registry conversion now preserves canonical port `inference_payloads`
+  and the frontend/shared graph types expose the append-only payload contract.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
@@ -2457,7 +2462,9 @@ drift back into inference.
   consumes machine-readable inference/Pumas/workflow DTOs.
 - [ ] Update generated bindings, host-language types, or shared schemas in the
   same implementation slice as native DTO changes when those bindings are
-  public contract surface.
+  public contract surface. Frontend workflow service and shared svelte-graph
+  TypeScript `PortDefinition` types now mirror workflow-service
+  `inference_payloads`.
 - [x] Add tests proving scheduler/runtime-registry policy remains outside
   inference.
 - [ ] Update source READMEs and any ADR links affected by boundary changes.

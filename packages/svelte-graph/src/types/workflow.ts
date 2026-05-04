@@ -21,12 +21,52 @@ export type PortDataType =
   | 'number'
   | 'vector_db';
 
+export type InferenceTaskId =
+  | 'text_generation'
+  | 'chat_completion'
+  | 'embedding'
+  | 'rerank'
+  | 'image_generation'
+  | 'image_understanding'
+  | 'audio_transcription'
+  | 'video_understanding'
+  | 'multimodal_generation'
+  | 'unknown';
+
+export type InferencePortPayloadRole =
+  | 'task_input'
+  | 'task_output'
+  | 'model_reference'
+  | 'options'
+  | 'diagnostics'
+  | 'usage';
+
+export type InferenceExecutionInputKind =
+  | 'text_generation'
+  | 'embedding'
+  | 'rerank'
+  | 'image_generation'
+  | 'image_understanding'
+  | 'audio_transcription'
+  | 'video_understanding'
+  | 'multimodal_generation';
+
+export type InferenceExecutionResultKind = InferenceExecutionInputKind;
+
+export interface InferencePortPayloadContract {
+  task_id: InferenceTaskId;
+  role: InferencePortPayloadRole;
+  input_kind?: InferenceExecutionInputKind;
+  result_kind?: InferenceExecutionResultKind;
+}
+
 export interface PortDefinition {
   id: string;
   label: string;
   data_type: PortDataType;
   required: boolean;
   multiple: boolean;
+  inference_payloads?: InferencePortPayloadContract[];
   description?: string;
   default_value?: unknown;
   constraints?: {
