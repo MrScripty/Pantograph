@@ -112,16 +112,23 @@ selection must use supported runtimes through Pumas model references.
 
 ## API Consumer Contract
 - Inputs: backend configuration, process spawner implementations, managed
-  runtime IDs, and inference requests.
-- Outputs: chat, embedding, rerank, KV-cache, runtime lifecycle, managed
-  runtime DTOs, neutral managed-dependency DTO projections, additive
+  runtime IDs, Pumas-resolved model/package facts, typed execution requests,
+  and legacy facade requests that have not yet migrated.
+- Outputs: typed execution results, chat, embedding, rerank, audio
+  transcription, KV-cache, runtime lifecycle, backend compatibility summaries,
+  managed runtime DTOs, neutral managed-dependency DTO projections, additive
   managed-binary facade DTOs, and model/package fact DTOs.
 - Lifecycle: callers configure a gateway, inject host process behavior, start
   or attach backends, and stop them through the gateway.
 - Errors: backend and lifecycle failures are surfaced as typed or structured
   errors; unsupported capabilities must not return successful placeholder data.
-- Versioning: Cargo features, backend capability fields, and runtime lifecycle
+- Versioning: Cargo features, backend capability fields, typed execution
+  request/result payloads, model/package fact DTOs, and runtime lifecycle
   payloads are public contracts for workspace consumers.
+- Policy: runtime placement, scheduler admission, reservation, priority,
+  eviction, and final backend choice are caller-owned policy. This crate emits
+  factual capabilities, compatibility diagnostics, lifecycle events, and
+  backend execution results.
 
 ## Structured Producer Contract
 - Managed runtime state and runtime lifecycle payloads are structured producer
@@ -132,6 +139,10 @@ selection must use supported runtimes through Pumas model references.
   option compatibility diagnostics, lifecycle phases, Pumas package-facts
   summary snapshots, and model-library update feeds are structured
   producer/consumer contracts for later inference slices.
+- `InferenceExecutionRequest`, `InferenceExecutionInput`, and
+  `InferenceExecutionResult` are the canonical task execution wire contracts.
+  They use task ids and input/result tags from the task registry and keep
+  backend-local extensions under typed generation options or `extra_options`.
 - Stable generation behavior belongs in typed `GenerationOptions` groups.
   Backend-local generation escape hatches are limited to
   `backend_extensions` keys scoped as `<backend-or-adapter>:<option>`, and

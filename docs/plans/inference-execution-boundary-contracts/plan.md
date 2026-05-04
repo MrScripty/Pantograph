@@ -1912,6 +1912,11 @@ scheduler-policy terminology such as admission, reservation, priority,
 eviction, scheduler-policy, and selected-best-backend in representative
 runtime, lifecycle, capability, model-source, and typed execution
 request/result DTOs.
+The inference crate READMEs now document typed execution requests/results,
+Pumas package facts, compatibility diagnostics, and the policy boundary that
+keeps scheduler admission, reservation, priority, eviction, and final backend
+choice outside the inference crate. Other touched consumer directories still
+need README updates as their migration slices land.
 
 ### Milestone 11: Canonical Workflow Node Migration
 

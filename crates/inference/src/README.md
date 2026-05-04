@@ -95,6 +95,9 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
 ## Invariants
 
 - `InferenceGateway` is the only facade new callers should use for inference.
+- New task execution consumers should prefer `InferenceExecutionRequest` and
+  `InferenceExecutionResult` over backend-specific request shapes. Legacy
+  facade methods remain adapter edges until their callers migrate.
 - Backend capability flags must reflect contract support, not aspirational
   future support.
 - Shared request/response types are append-only unless a coordinated breaking
@@ -234,6 +237,14 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 
 - Callers talk to `InferenceGateway`, not backend implementations directly.
 - Backend startup must happen before inference calls.
+- Typed task execution callers pass `InferenceExecutionRequest` values whose
+  `task_id`, tagged `input`, Pumas model reference, resolved package facts,
+  generation options, and scoped backend extras have already been validated at
+  the adapter edge.
+- Typed task execution results return `InferenceExecutionResult` variants plus
+  bounded usage, cache-handle, and option-diagnostic facts. Callers should not
+  infer scheduler admission, reservation, priority, eviction, or final backend
+  selection from these payloads.
 - `generate_image()` is synchronous-at-contract-level and returns final images;
   streaming progress is not yet part of the facade.
 - `rerank()` accepts one query plus candidate documents and returns scored,
