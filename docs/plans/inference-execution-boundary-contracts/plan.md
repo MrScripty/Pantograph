@@ -2363,8 +2363,10 @@ inference write ledger events directly.
   copying prompt text or audio payload values into lifecycle events. Typed
   non-generation option diagnostics now appear on task-validation completion as
   well as backend-execution completion so node validation views can surface the
-  same bounded option facts before execution. Video and KV-cache task-specific
-  options remain open.
+  same bounded option facts before execution. Embedding and rerank typed result
+  DTOs now also return bounded option diagnostics so direct `execute_typed`
+  callers see the same option facts as lifecycle consumers. Video and KV-cache
+  task-specific options remain open.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup. Diagnostic-observed

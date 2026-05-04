@@ -984,6 +984,103 @@ async fn test_execute_typed_forwards_audio_transcription_to_active_backend() {
 }
 
 #[tokio::test]
+async fn test_execute_typed_embedding_returns_task_option_diagnostics() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-embedding-result-options".to_string()),
+        task_id: InferenceTaskId::Embedding,
+        model_ref: None,
+        model_name: Some("mock-embedding".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::Embedding {
+            texts: vec!["alpha beta".to_string()],
+        },
+        generation_options: None,
+        extra_options: serde_json::json!({
+            "normalize": true
+        }),
+    };
+
+    let result = gateway
+        .execute_typed(request)
+        .await
+        .expect("typed embedding request should execute");
+
+    match result {
+        InferenceExecutionResult::Embedding {
+            embeddings,
+            usage,
+            option_diagnostics,
+        } => {
+            assert_eq!(embeddings.len(), 1);
+            assert_eq!(usage.and_then(|usage| usage.total_tokens), Some(2));
+            assert!(option_diagnostics
+                .iter()
+                .any(
+                    |diagnostic| diagnostic.option_path == "extra_options.normalize"
+                        && diagnostic.state == OptionSupportState::Mapped
+                        && diagnostic.backend_key.as_deref() == Some("mock")
+                ));
+        }
+        other => panic!("expected embedding result, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_execute_typed_rerank_returns_task_option_diagnostics() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-rerank-result-options".to_string()),
+        task_id: InferenceTaskId::Rerank,
+        model_ref: None,
+        model_name: Some("mock-rerank".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::Rerank {
+            query: "alpha".to_string(),
+            documents: vec!["a".to_string(), "b".to_string()],
+            top_n: Some(1),
+            return_documents: false,
+        },
+        generation_options: None,
+        extra_options: serde_json::json!({
+            "score_threshold": 0.25,
+        }),
+    };
+
+    let result = gateway
+        .execute_typed(request)
+        .await
+        .expect("typed rerank request should execute");
+
+    match result {
+        InferenceExecutionResult::Rerank {
+            option_diagnostics, ..
+        } => {
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "rerank.top_n"
+                    && diagnostic.state == OptionSupportState::Honored
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "rerank.return_documents"
+                    && diagnostic.state == OptionSupportState::Honored
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
+            assert!(option_diagnostics
+                .iter()
+                .any(
+                    |diagnostic| diagnostic.option_path == "extra_options.score_threshold"
+                        && diagnostic.state == OptionSupportState::Mapped
+                        && diagnostic.backend_key.as_deref() == Some("mock")
+                ));
+        }
+        other => panic!("expected rerank result, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn test_execute_typed_text_reports_generation_option_diagnostics() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
     let sink = Arc::new(RecordingLifecycleSink::default());

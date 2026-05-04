@@ -304,9 +304,13 @@ pub enum InferenceExecutionResult {
         embeddings: Vec<InferenceEmbeddingResult>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         usage: Option<InferenceUsage>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
     },
     Rerank {
         response: RerankResponse,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
     },
     ImageGeneration {
         result: ImageGenerationResult,

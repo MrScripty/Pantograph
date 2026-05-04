@@ -1223,6 +1223,9 @@ impl InferenceGateway {
         request: InferenceExecutionRequest,
     ) -> Result<InferenceExecutionResult, GatewayError> {
         let model = typed_request_model_name(&request);
+        let backend_key = canonical_backend_key(&self.current_backend_name().await);
+        let request_option_diagnostics =
+            typed_request_option_diagnostics(&request, Some(&backend_key));
 
         match request.input {
             InferenceExecutionInput::TextGeneration {
@@ -1231,10 +1234,6 @@ impl InferenceGateway {
                 messages,
                 stream,
             } => {
-                let option_diagnostics = typed_text_generation_option_diagnostics(
-                    request.generation_options.as_ref(),
-                    Some(&canonical_backend_key(&self.current_backend_name().await)),
-                );
                 let chat_request = typed_text_generation_to_chat_request(
                     model,
                     prompt,
@@ -1263,7 +1262,7 @@ impl InferenceGateway {
                     text,
                     usage: None,
                     cache_handle_id: None,
-                    option_diagnostics,
+                    option_diagnostics: request_option_diagnostics,
                 })
             }
             InferenceExecutionInput::Embedding { texts } => {
@@ -1279,7 +1278,11 @@ impl InferenceGateway {
                     })
                     .collect();
                 let usage = embedding_usage_from_results(&embeddings);
-                Ok(InferenceExecutionResult::Embedding { embeddings, usage })
+                Ok(InferenceExecutionResult::Embedding {
+                    embeddings,
+                    usage,
+                    option_diagnostics: request_option_diagnostics,
+                })
             }
             InferenceExecutionInput::Rerank {
                 query,
@@ -1297,10 +1300,12 @@ impl InferenceGateway {
                         extra_options: request.extra_options,
                     })
                     .await?;
-                Ok(InferenceExecutionResult::Rerank { response })
+                Ok(InferenceExecutionResult::Rerank {
+                    response,
+                    option_diagnostics: request_option_diagnostics,
+                })
             }
             InferenceExecutionInput::ImageGeneration { request } => {
-                let backend_key = canonical_backend_key(&self.current_backend_name().await);
                 let mut option_diagnostics =
                     typed_image_generation_option_diagnostics(&request, Some(&backend_key));
                 option_diagnostics.extend(extra_option_diagnostics(
@@ -1316,7 +1321,6 @@ impl InferenceGateway {
                 })
             }
             InferenceExecutionInput::AudioTranscription { request } => {
-                let backend_key = canonical_backend_key(&self.current_backend_name().await);
                 let mut option_diagnostics =
                     typed_audio_transcription_option_diagnostics(&request, Some(&backend_key));
                 option_diagnostics.extend(extra_option_diagnostics(
@@ -2439,8 +2443,14 @@ fn option_diagnostics_from_execution_result(
     match result {
         Ok(InferenceExecutionResult::TextGeneration {
             option_diagnostics, ..
-        }) => option_diagnostics.clone(),
-        Ok(InferenceExecutionResult::ImageGeneration {
+        })
+        | Ok(InferenceExecutionResult::Embedding {
+            option_diagnostics, ..
+        })
+        | Ok(InferenceExecutionResult::Rerank {
+            option_diagnostics, ..
+        })
+        | Ok(InferenceExecutionResult::ImageGeneration {
             option_diagnostics, ..
         }) => option_diagnostics.clone(),
         _ => Vec::new(),
