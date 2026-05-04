@@ -38,6 +38,14 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
         include_str!("fixtures/inference_package_facts/hf_multimodal_processor_package_facts.json"),
     ),
     (
+        "diffusers_bundle_package_facts.json",
+        include_str!("fixtures/inference_package_facts/diffusers_bundle_package_facts.json"),
+    ),
+    (
+        "onnx_package_facts.json",
+        include_str!("fixtures/inference_package_facts/onnx_package_facts.json"),
+    ),
+    (
         "custom_code_required_package_facts.json",
         include_str!("fixtures/inference_package_facts/custom_code_required_package_facts.json"),
     ),
@@ -77,6 +85,52 @@ fn package_fact_fixtures_decode_through_public_contracts() {
             MODEL_PACKAGE_FACTS_CONTRACT_VERSION
         );
         assert_eq!(decoded.model_ref.model_id, facts.model_ref.model_id);
+    }
+}
+
+#[test]
+fn package_fact_fixtures_cover_diffusers_and_onnx_artifact_kinds() {
+    for (fixture_name, expected_kind, expected_backend_hint) in [
+        (
+            "diffusers_bundle_package_facts.json",
+            ModelArtifactKind::DiffusersBundle,
+            BackendHintLabel::Diffusers,
+        ),
+        (
+            "onnx_package_facts.json",
+            ModelArtifactKind::Onnx,
+            BackendHintLabel::OnnxRuntime,
+        ),
+    ] {
+        let raw = PACKAGE_FACT_FIXTURES
+            .iter()
+            .find_map(|(name, raw)| (*name == fixture_name).then_some(*raw))
+            .unwrap_or_else(|| panic!("fixture {fixture_name} should be registered"));
+        let facts: ResolvedModelPackageFacts =
+            serde_json::from_str(raw).expect("decode package facts fixture");
+        let source = ResolvedModelSource::from_package_facts(&facts);
+
+        assert!(facts.uses_current_contract());
+        assert_eq!(
+            facts.package_facts_contract_version,
+            MODEL_PACKAGE_FACTS_CONTRACT_VERSION
+        );
+        assert_eq!(facts.artifact.artifact_kind, expected_kind);
+        assert!(
+            !facts.artifact.entry_path.trim().is_empty(),
+            "fixture {fixture_name} should expose a backend-loadable entry path"
+        );
+        assert!(
+            facts
+                .backend_hints
+                .accepted
+                .contains(&expected_backend_hint),
+            "fixture {fixture_name} should preserve its Pumas backend hint"
+        );
+        assert!(
+            source.validate_for_backend_load().is_ok(),
+            "fixture {fixture_name} should project into a backend-loadable Pumas source"
+        );
     }
 }
 

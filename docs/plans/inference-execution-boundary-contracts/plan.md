@@ -1014,10 +1014,13 @@ Detailed Pumas-side work is split into
 contracts/fixtures that decode the canonical Pumas full-detail producer shape
 and an embedded-runtime projection that derives `pumas_package_facts`
 technical-fit candidates from those facts. Remote MLX/vLLM search tags do not
-project into executable candidates. Inference now exposes Pumas-aligned update
-feed and package-fact summary snapshot DTOs. Model-list cache and update-event
-consumption remain pending. The `puma-lib` model-list option cache now has a
-bounded `ModelLibraryUpdateFeed` invalidation helper: fresh cursors invalidate
+project into executable candidates. The executable package-fact fixture set now
+includes current-contract diffusers bundle and ONNX artifact cases, closing a
+previous Pantograph fixture gap against the Milestone 2 cross-repo review list.
+Inference now exposes Pumas-aligned update feed and package-fact summary
+snapshot DTOs. Model-list cache and update-event consumption remain pending.
+The `puma-lib` model-list option cache now has a bounded
+`ModelLibraryUpdateFeed` invalidation helper: fresh cursors invalidate
 summary/detail-scoped model ids and always invalidate removed models, while
 stale cursors or snapshot-required feeds clear the cache so the next population
 uses a new Pumas snapshot. The `puma-lib` option cache polls Pumas after the

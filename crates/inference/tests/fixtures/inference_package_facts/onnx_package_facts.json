@@ -1,0 +1,67 @@
+{
+  "package_facts_contract_version": 1,
+  "model_ref": {
+    "model_id": "embedding/example/tiny-onnx",
+    "revision": "abc123",
+    "selected_artifact_id": "main",
+    "selected_artifact_path": "embedding/example/tiny-onnx/model.onnx"
+  },
+  "artifact": {
+    "artifact_kind": "onnx",
+    "entry_path": "embedding/example/tiny-onnx/model.onnx",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "model.onnx",
+      "config.json",
+      "tokenizer.json"
+    ],
+    "sibling_files": [
+      "README.md",
+      "model.onnx",
+      "config.json",
+      "tokenizer.json"
+    ]
+  },
+  "components": [
+    {
+      "kind": "config",
+      "status": "present",
+      "relative_path": "config.json"
+    },
+    {
+      "kind": "weights",
+      "status": "present",
+      "relative_path": "model.onnx"
+    },
+    {
+      "kind": "tokenizer",
+      "status": "present",
+      "relative_path": "tokenizer.json"
+    }
+  ],
+  "task": {
+    "pipeline_tag": "feature-extraction",
+    "task_type_primary": "embedding",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "embedding"
+    ]
+  },
+  "generation_defaults": {
+    "status": "missing"
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "onnx-runtime"
+    ],
+    "raw": [
+      "onnx-runtime"
+    ]
+  }
+}

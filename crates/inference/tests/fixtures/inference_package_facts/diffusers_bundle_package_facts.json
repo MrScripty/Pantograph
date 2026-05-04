@@ -1,0 +1,78 @@
+{
+  "package_facts_contract_version": 1,
+  "model_ref": {
+    "model_id": "image/example/tiny-diffusers",
+    "revision": "abc123",
+    "selected_artifact_id": "main",
+    "selected_artifact_path": "image/example/tiny-diffusers"
+  },
+  "artifact": {
+    "artifact_kind": "diffusers_bundle",
+    "entry_path": "image/example/tiny-diffusers",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "model_index.json",
+      "scheduler/scheduler_config.json",
+      "unet/diffusion_pytorch_model.safetensors",
+      "vae/diffusion_pytorch_model.safetensors",
+      "tokenizer/tokenizer.json",
+      "text_encoder/model.safetensors"
+    ],
+    "sibling_files": [
+      "README.md",
+      "model_index.json",
+      "scheduler/scheduler_config.json",
+      "unet/diffusion_pytorch_model.safetensors",
+      "vae/diffusion_pytorch_model.safetensors",
+      "tokenizer/tokenizer.json",
+      "text_encoder/model.safetensors"
+    ]
+  },
+  "components": [
+    {
+      "kind": "model_index",
+      "status": "present",
+      "relative_path": "model_index.json"
+    },
+    {
+      "kind": "tokenizer",
+      "status": "present",
+      "relative_path": "tokenizer/tokenizer.json"
+    },
+    {
+      "kind": "weights",
+      "status": "present",
+      "relative_path": "unet/diffusion_pytorch_model.safetensors"
+    }
+  ],
+  "task": {
+    "pipeline_tag": "text-to-image",
+    "task_type_primary": "image_generation",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "image"
+    ]
+  },
+  "generation_defaults": {
+    "status": "present",
+    "source_path": "scheduler/scheduler_config.json",
+    "defaults": {
+      "num_inference_steps": 20,
+      "guidance_scale": 7.5
+    }
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "diffusers"
+    ],
+    "raw": [
+      "diffusers"
+    ]
+  }
+}
