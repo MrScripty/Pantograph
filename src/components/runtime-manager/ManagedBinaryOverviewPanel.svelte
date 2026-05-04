@@ -78,7 +78,7 @@
     </div>
   {:else}
     <div class="overflow-hidden rounded border border-neutral-800">
-      {#each Object.keys(CATEGORY_LABELS) as categoryKey}
+      {#each Object.keys(CATEGORY_LABELS) as categoryKey (categoryKey)}
         {@const category = categoryKey as ManagedBinaryCategory}
         {@const categoryBinaries = binariesForCategory(category)}
         <div class="border-b border-neutral-900 last:border-b-0">
@@ -89,7 +89,7 @@
             <div class="px-3 py-2 text-sm text-neutral-500">No backend entries reported.</div>
           {:else}
             <div class="divide-y divide-neutral-900">
-              {#each categoryBinaries as binary}
+              {#each categoryBinaries as binary (binary.key)}
                 <div class="grid gap-2 px-3 py-2 text-sm text-neutral-300 md:grid-cols-[minmax(9rem,1fr)_7rem_minmax(8rem,1fr)_minmax(10rem,2fr)] md:items-center">
                   <div class="font-medium text-neutral-100">{binary.display_name}</div>
                   <div class="capitalize text-neutral-400">{statusLabel(binary)}</div>
