@@ -521,7 +521,10 @@ fn inference_diagnostic_event_adapter_persists_cancelled_lifecycle_duration() {
             );
             assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("cancelled"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
-            assert_eq!(payload.selected_backend_family.as_deref(), Some("pytorch"));
+            assert_eq!(
+                payload.selected_backend_family.as_deref(),
+                Some("transformers_pytorch")
+            );
             assert!(payload.usage.is_none());
             assert!(payload.cache_handle_id.is_none());
             assert!(payload.kv_cache.is_none());
@@ -530,6 +533,36 @@ fn inference_diagnostic_event_adapter_persists_cancelled_lifecycle_duration() {
             assert!(payload.compatibility_issues.is_empty());
             assert_eq!(payload.option_support_counts, Default::default());
             assert!(payload.option_diagnostics.is_empty());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_normalizes_selected_backend_family() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        176,
+    );
+    event.backend_key = Some("llama.cpp".to_string());
+    event.runtime_id = Some("runtime.llamacpp.1".to_string());
+    event.usage = Some(inference::InferenceUsage {
+        prompt_tokens: Some(3),
+        completion_tokens: Some(2),
+        total_tokens: Some(5),
+    });
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("completed backend lifecycle with usage metadata should map");
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("llama.cpp"));
+            assert_eq!(
+                payload.selected_backend_family.as_deref(),
+                Some("llama_cpp")
+            );
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }

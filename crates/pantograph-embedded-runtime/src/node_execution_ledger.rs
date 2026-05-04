@@ -590,7 +590,10 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
                 lifecycle_event_kind: Some("progress".to_string()),
                 duration_ms: None,
                 selected_backend_key: detail.backend_key.clone(),
-                selected_backend_family: detail.backend_key.clone(),
+                selected_backend_family: selected_backend_family(
+                    detail.backend_key.as_deref(),
+                    None,
+                ),
                 usage: None,
                 cache_handle_id: None,
                 kv_cache: Some(kv_cache_diagnostic_summary(detail)),
@@ -665,7 +668,10 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 ),
                 duration_ms,
                 selected_backend_key: event.backend_key.clone(),
-                selected_backend_family: event.backend_key.clone(),
+                selected_backend_family: selected_backend_family(
+                    event.backend_key.as_deref(),
+                    event.runtime_id.as_deref(),
+                ),
                 usage: event.usage.as_ref().map(inference_usage_summary),
                 cache_handle_id: event.cache_handle_id.clone(),
                 kv_cache: None,
@@ -691,6 +697,49 @@ fn build_inference_diagnostic_event_ledger_append_request(
             },
         ),
     })
+}
+
+fn selected_backend_family(backend_key: Option<&str>, runtime_id: Option<&str>) -> Option<String> {
+    let evidence = backend_key
+        .into_iter()
+        .chain(runtime_id)
+        .map(|value| value.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+
+    if evidence
+        .iter()
+        .any(|value| value.contains("llama.cpp") || value.contains("llamacpp"))
+    {
+        return Some("llama_cpp".to_string());
+    }
+    if evidence
+        .iter()
+        .any(|value| value.contains("transformers") || value.contains("pytorch"))
+    {
+        return Some("transformers_pytorch".to_string());
+    }
+    if evidence.iter().any(|value| value.contains("vllm")) {
+        return Some("vllm".to_string());
+    }
+    if evidence.iter().any(|value| value.contains("mlx")) {
+        return Some("mlx".to_string());
+    }
+    if evidence.iter().any(|value| value.contains("candle")) {
+        return Some("candle".to_string());
+    }
+    if evidence.iter().any(|value| value.contains("diffusers")) {
+        return Some("diffusers".to_string());
+    }
+    if evidence
+        .iter()
+        .any(|value| value.contains("onnxruntime") || value.contains("onnx-runtime"))
+    {
+        return Some("onnxruntime".to_string());
+    }
+
+    backend_key
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
 }
 
 fn inference_diagnostic_phase_is_persistable(

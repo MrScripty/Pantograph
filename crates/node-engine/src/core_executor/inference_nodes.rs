@@ -537,7 +537,7 @@ pub(crate) async fn execute_rerank_inference(
         })?;
     ensure_typed_result_kind(&result, expected_result_kind, "Typed rerank inference")?;
     let response = match result {
-        inference::InferenceExecutionResult::Rerank { response } => response,
+        inference::InferenceExecutionResult::Rerank { response, .. } => response,
         other => {
             return Err(NodeEngineError::ExecutionFailed(format!(
                 "Typed rerank inference returned unexpected result: {other:?}"

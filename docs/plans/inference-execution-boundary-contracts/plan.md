@@ -1870,6 +1870,10 @@ Typed execution request/result DTOs now cover text generation/chat, embeddings,
 rerank, and image generation while preserving the existing OpenAI-compatible
 and task-specific DTOs. Serde coverage proves stable task/input/result casing,
 usage fields, cache-handle ids, and option diagnostics.
+Implementation found and fixed a stale node-engine rerank typed-result match
+that still destructured the pre-diagnostic result shape; the canonical rerank
+execution path now ignores unknown/additive result fields instead of breaking
+when result diagnostics are present.
 OpenAI-compatible chat requests now map into typed execution requests at the
 adapter edge, and typed request validation rejects task/input mismatches and
 missing required payloads before backend execution.
@@ -2550,6 +2554,11 @@ one-off conversions.
   lifecycle facts. This keeps backend choice durable even when runtime ids such
   as `pytorch.transformers` are distinct from backend keys. Generation option
   support summaries remain a separate follow-up event/projection slice.
+- 2026-05-04: Inference diagnostic observation now normalizes
+  `selected_backend_family` from backend/runtime evidence while preserving the
+  raw `selected_backend_key`, so durable diagnostics distinguish families such
+  as `transformers_pytorch` and `llama_cpp` without making runtime id parsing a
+  UI or query-consumer responsibility.
 - 2026-05-03: Generation option diagnostics ledger slice added append-only
   `inference.execution_diagnostic_observed` ledger events with bounded
   option-support counts and per-option summaries. `InferenceRequestLifecycleEvent`
