@@ -3031,6 +3031,11 @@ Update during implementation:
   payloads, node-status projections, workflow-service contracts, and frontend
   run-graph/diagnostics focus helpers while keeping direct node fatal
   `error_event_id` projections distinct.
+- 2026-05-04: Fixed a workflow-service issue found during full validation:
+  edge-insert preview for canonical `llm-inference` could choose text-compatible
+  configuration/context ports before the primary `prompt` port after
+  task-registry expansion. Insert bridge resolution now prefers primary content
+  inputs before secondary context and configuration inputs.
 - 2026-05-04: Added typed audio transcription lifecycle coverage proving
   backend-execution events carry canonical `audio_transcription` task ids,
   selected model ids, bounded extra-option diagnostics, and no raw audio

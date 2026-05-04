@@ -5,8 +5,8 @@ use super::super::registry::NodeRegistry;
 use super::super::types::{
     ConnectionAnchor, ConnectionRejection, ConnectionRejectionReason, EdgeInsertionBridge,
     EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, InsertNodePositionHint, NodeDefinition, PortDataType, Position,
-    WorkflowGraph,
+    InsertNodeOnEdgeResponse, InsertNodePositionHint, NodeDefinition, PortDataType, PortDefinition,
+    Position, WorkflowGraph,
 };
 
 const EDGE_INSERT_PREVIEW_NODE_ID: &str = "__edge_insert_preview__";
@@ -84,6 +84,30 @@ fn edge_anchors(edge: &GraphEdge) -> (ConnectionAnchor, ConnectionAnchor) {
     )
 }
 
+fn edge_insert_input_priority(port: &PortDefinition) -> u8 {
+    match port.id.as_str() {
+        "prompt" => 0,
+        "task_kind"
+        | "runtime_hint"
+        | "model"
+        | "model_name"
+        | "model_id"
+        | "model_ref"
+        | "pumas_model_ref"
+        | "resolved_model_source"
+        | "resolved_model_package_facts" => 4,
+        "context" | "system_prompt" => 3,
+        _ if port.required => 1,
+        _ => 2,
+    }
+}
+
+fn compare_edge_insert_inputs(left: &PortDefinition, right: &PortDefinition) -> std::cmp::Ordering {
+    edge_insert_input_priority(left)
+        .cmp(&edge_insert_input_priority(right))
+        .then_with(|| left.id.cmp(&right.id))
+}
+
 fn preview_graph_without_edge(
     graph: &WorkflowGraph,
     inserted_node: &GraphNode,
@@ -108,7 +132,7 @@ fn resolve_edge_insertion_bridge(
     let source = super::resolve_output_anchor(graph, registry, &source_anchor)?;
     let target = super::resolve_input_anchor(graph, registry, &target_anchor)?;
 
-    let compatible_inputs = definition
+    let mut compatible_inputs = definition
         .inputs
         .iter()
         .filter(|port| super::validate_connection(&source.port.data_type, &port.data_type))
@@ -123,6 +147,7 @@ fn resolve_edge_insertion_bridge(
             contract_diagnostic: None,
         });
     }
+    compatible_inputs.sort_by(|left, right| compare_edge_insert_inputs(left, right));
 
     let preview_node = build_inserted_node(
         graph,
@@ -212,7 +237,7 @@ pub fn insert_node_and_connect(
     let source = super::resolve_output_anchor(graph, registry, source_anchor)?;
     let definition = resolve_insert_definition(registry, node_type)?;
 
-    let compatible_inputs = definition
+    let mut compatible_inputs = definition
         .inputs
         .iter()
         .filter(|port| super::validate_connection(&source.port.data_type, &port.data_type))
@@ -227,6 +252,7 @@ pub fn insert_node_and_connect(
             contract_diagnostic: None,
         });
     }
+    compatible_inputs.sort_by(|left, right| compare_edge_insert_inputs(left, right));
 
     let target_port = preferred_input_port_id
         .and_then(|preferred| {
