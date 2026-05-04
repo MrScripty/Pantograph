@@ -1842,6 +1842,10 @@ Audio transcription now has stable typed input/result DTOs, serde coverage,
 and validation that requires either encoded audio or a host-owned audio
 artifact reference, but `audio_transcription` remains contract-only until a
 later PyTorch/Transformers execution slice wires the gateway and backend path.
+`InferenceBackend` and `InferenceGateway` now expose a typed
+`transcribe_audio` method that fails closed by default, giving future PyTorch
+and external-runtime slices a single backend edge without advertising canonical
+task execution support yet.
 The embedded Python runtime bridge now recognizes canonical
 `audio_transcription`, Hugging Face `automatic-speech-recognition`, and legacy
 `audio-to-text` labels at a single PyTorch ASR branch so future gateway work

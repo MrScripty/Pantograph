@@ -146,7 +146,9 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   embedding runtime state remains a backend-local residency strategy.
 - Audio transcription now has stable typed request/result DTOs, but remains a
   contract-only task until a backend slice explicitly wires execution support
-  through the gateway and updates capability facts.
+  through typed request dispatch and updates capability facts. The backend trait
+  and gateway expose a speech-to-text method that fails closed by default so
+  implementers have one typed boundary to fill in later slices.
 - Gateway lifecycle, request forwarding, runtime reuse, and shared mock-backend
   fixtures stay in `gateway_tests.rs`, while oversized behavior families split
   under `gateway_tests/` so `gateway.rs` remains focused on production gateway

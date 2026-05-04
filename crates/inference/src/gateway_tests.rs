@@ -14,8 +14,9 @@ use crate::model_contracts::{
     StoppingGenerationOptions,
 };
 use crate::types::{
-    ImageGenerationRequest, InferenceExecutionInput, InferenceExecutionRequest,
-    InferenceExecutionResult, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    AudioTranscriptionRequest, AudioTranscriptionResult, ImageGenerationRequest,
+    InferenceExecutionInput, InferenceExecutionRequest, InferenceExecutionResult,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, RuntimeFactReadiness,
 };
 
@@ -177,6 +178,19 @@ impl InferenceBackend for MockImageBackend {
                 height: Some(512),
             }],
             seed_used: Some(7),
+            metadata: serde_json::Value::Null,
+        })
+    }
+
+    async fn transcribe_audio(
+        &self,
+        request: AudioTranscriptionRequest,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        Ok(AudioTranscriptionResult {
+            text: format!("transcribed {}", request.model),
+            language: request.language,
+            duration_seconds: Some(1.5),
+            segments: Vec::new(),
             metadata: serde_json::Value::Null,
         })
     }
@@ -810,6 +824,28 @@ async fn test_generate_image_forwards_to_active_backend() {
     assert_eq!(result.seed_used, Some(7));
     assert_eq!(result.images.len(), 1);
     assert_eq!(result.images[0].data_base64, "paper lantern");
+}
+
+#[tokio::test]
+async fn test_transcribe_audio_forwards_to_active_backend() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let result = gateway
+        .transcribe_audio(AudioTranscriptionRequest {
+            model: "mock-asr".to_string(),
+            audio: None,
+            audio_ref: Some("artifact://audio.wav".to_string()),
+            language: Some("en".to_string()),
+            prompt: None,
+            task: Some("transcribe".to_string()),
+            chunk_length_s: None,
+            extra_options: serde_json::Value::Null,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.text, "transcribed mock-asr");
+    assert_eq!(result.language.as_deref(), Some("en"));
+    assert_eq!(result.duration_seconds, Some(1.5));
 }
 
 #[tokio::test]

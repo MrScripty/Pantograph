@@ -31,7 +31,10 @@ use crate::model_contracts::{
     ModelArtifactKind, SupportTier, TaskModalitySignature,
 };
 use crate::process::ProcessSpawner;
-use crate::types::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
+use crate::types::{
+    AudioTranscriptionRequest, AudioTranscriptionResult, ImageGenerationRequest,
+    ImageGenerationResult, RerankRequest, RerankResponse,
+};
 
 #[cfg(feature = "backend-llamacpp")]
 pub use llamacpp::LlamaCppBackend;
@@ -820,6 +823,16 @@ pub trait InferenceBackend: Send + Sync {
     ) -> Result<ImageGenerationResult, BackendError> {
         Err(BackendError::Inference(
             "Image generation not supported by this backend".to_string(),
+        ))
+    }
+
+    /// Transcribe audio through a speech-to-text capable backend.
+    async fn transcribe_audio(
+        &self,
+        _request: AudioTranscriptionRequest,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        Err(BackendError::Inference(
+            "Audio transcription not supported by this backend".to_string(),
         ))
     }
 

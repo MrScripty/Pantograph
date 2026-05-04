@@ -27,10 +27,10 @@ use crate::model_contracts::{
 };
 use crate::process::ProcessSpawner;
 use crate::types::{
-    ChatMessage, ChatRequest, ContentPart, ImageGenerationRequest, ImageGenerationResult,
-    InferenceCompatibilityIssueSummary, InferenceCompatibilityReportSummary,
-    InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionRequest,
-    InferenceExecutionRequestValidationError, InferenceExecutionResult,
+    AudioTranscriptionRequest, AudioTranscriptionResult, ChatMessage, ChatRequest, ContentPart,
+    ImageGenerationRequest, ImageGenerationResult, InferenceCompatibilityIssueSummary,
+    InferenceCompatibilityReportSummary, InferenceEmbeddingResult, InferenceExecutionInput,
+    InferenceExecutionRequest, InferenceExecutionRequestValidationError, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, InferenceUsage, RerankRequest, RerankResponse,
     RuntimeLifecycleSnapshot, ServerModeInfo,
@@ -1027,6 +1027,21 @@ impl InferenceGateway {
         }
         guard
             .generate_image(request)
+            .await
+            .map_err(GatewayError::Backend)
+    }
+
+    /// Transcribe audio through the active backend.
+    pub async fn transcribe_audio(
+        &self,
+        request: AudioTranscriptionRequest,
+    ) -> Result<AudioTranscriptionResult, GatewayError> {
+        let guard = self.backend.read().await;
+        if !guard.is_ready() {
+            return Err(GatewayError::Backend(BackendError::NotReady));
+        }
+        guard
+            .transcribe_audio(request)
             .await
             .map_err(GatewayError::Backend)
     }
