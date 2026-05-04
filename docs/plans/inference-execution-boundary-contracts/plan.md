@@ -1963,11 +1963,11 @@ canonical inference shape instead of preserving backend-specific node contracts.
   chat/generation tasks without keeping Ollama execution support. If no
   replacement Pumas model reference is known, emit an unresolved model-reference
   diagnostic instead of retaining an Ollama node.
-- [ ] Migrate old llama.cpp nodes to canonical inference with
+- [x] Migrate old llama.cpp nodes to canonical inference with
   a Pumas model reference where the GGUF can resolve through Pumas. Preserve GGUF
   path, optional mmproj path, task options, and KV cache ports through
   Pumas-resolved artifact facts where compatible.
-- [ ] Migrate old PyTorch nodes to canonical inference with a
+- [x] Migrate old PyTorch nodes to canonical inference with a
   Transformers/PyTorch runtime hint and a Pumas model reference where the
   HF-compatible source can resolve through Pumas.
 - [x] Migrate old embedding nodes to canonical inference with
@@ -2205,6 +2205,13 @@ them.
 The `unload-model` node no longer contains a live Ollama HTTP unload path:
 Ollama `model_ref` inputs now fail locally with a canonical/Pumas migration
 message, and supported-engine diagnostics no longer list Ollama.
+Milestone 11 checklist status now reflects validated workflow-service
+canonicalization coverage for legacy llama.cpp and PyTorch nodes:
+`canonicalize_workflow_graph_migrates_legacy_llamacpp_nodes`,
+`canonicalize_workflow_graph_migrates_legacy_pytorch_nodes`, and
+`legacy_inference_migration_inventory_maps_model_sources_and_task_options`
+all pass and cover the old-to-canonical model source and task option mapping
+requirements.
 
 ### Milestone 12: Prepare Native Candle Slice
 
