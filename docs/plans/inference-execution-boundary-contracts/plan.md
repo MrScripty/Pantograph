@@ -2416,7 +2416,7 @@ inference write ledger events directly.
   `selected_backend_key` or `selected_backend_family` field when
   `selected_runtime_id` does not clearly identify llama.cpp,
   Transformers/PyTorch, Candle, vLLM, or MLX.
-- [ ] Map Pumas model id, resolved artifact kind, canonical task id, selected
+- [x] Map Pumas model id, resolved artifact kind, canonical task id, selected
   runtime id, selected backend key/family, selected device id, selected network
   node id, and scheduler policy id into durable run/node/runtime diagnostics.
   Durable `InferenceExecutionDiagnosticObserved` events now feed run-list and
@@ -2427,9 +2427,10 @@ inference write ledger events directly.
   carry explicit non-`auto` selected device ids from backend start config;
   embedded-runtime copies them into
   `InferenceExecutionDiagnosticObserved.selected_device_id`, and run-list/detail
-  projections persist them in the existing selected-device columns. Remaining
-  follow-up: execution-observed network node facts need an explicit producer DTO
-  field before they can be projected.
+  projections persist them in the existing selected-device columns. Inference
+  lifecycle events and durable diagnostic payloads now also carry optional
+  execution-observed selected network node ids, and run-list/detail projections
+  persist them in the existing selected-network-node columns when supplied.
 - [x] Map lifecycle-carried inference compatibility summaries into durable
   bounded metadata: accepted/rejected/degraded status dimensions, missing
   components, unsupported backend/task pairs, custom-code/trust blockers, and
@@ -3045,6 +3046,10 @@ Update during implementation:
 - 2026-05-04: Added contract-only typed payload DTOs for image understanding,
   video understanding, and multimodal generation so the registry's roadmap task
   contracts have stable request/result wire shapes without enabling execution.
+- 2026-05-04: Added optional execution-observed selected network node facts to
+  inference lifecycle events and durable inference diagnostic payloads, with
+  run-list/run-detail projection into the existing selected-network-node
+  columns.
 - 2026-05-04: Fixed a workflow-service issue found during full validation:
   edge-insert preview for canonical `llm-inference` could choose text-compatible
   configuration/context ports before the primary `prompt` port after

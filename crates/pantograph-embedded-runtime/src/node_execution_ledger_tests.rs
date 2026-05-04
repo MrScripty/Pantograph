@@ -133,6 +133,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         selected_device_id: Some("cuda:0".to_string()),
+        selected_network_node_id: Some("local-node-alpha".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         resolved_artifact_kind: None,
         usage: None,
@@ -188,6 +189,7 @@ fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure(
         runtime_id: Some("vllm".to_string()),
         runtime_instance_id: None,
         selected_device_id: None,
+        selected_network_node_id: None,
         model_id: Some("pumas://models/video-understanding".to_string()),
         resolved_artifact_kind: None,
         usage: None,
@@ -285,6 +287,7 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         selected_device_id: None,
+        selected_network_node_id: None,
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         resolved_artifact_kind: None,
         usage: None,
@@ -343,6 +346,7 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
     event.cache_handle_id = Some("kv-checkpoint-1".to_string());
     event.resolved_artifact_kind = Some("gguf".to_string());
     event.selected_device_id = Some("cuda:0".to_string());
+    event.selected_network_node_id = Some("local-node-alpha".to_string());
 
     let request = inference_diagnostic_event_ledger_append_request(&context, &event)
         .expect("completed backend lifecycle with option diagnostics should map");
@@ -364,6 +368,10 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
             assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
             assert_eq!(payload.selected_device_id.as_deref(), Some("cuda:0"));
+            assert_eq!(
+                payload.selected_network_node_id.as_deref(),
+                Some("local-node-alpha")
+            );
             assert_eq!(payload.resolved_artifact_kind.as_deref(), Some("gguf"));
             assert_eq!(
                 payload.usage.as_ref().and_then(|usage| usage.total_tokens),
@@ -1171,6 +1179,7 @@ fn inference_lifecycle_event(
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         selected_device_id: None,
+        selected_network_node_id: None,
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         resolved_artifact_kind: None,
         usage: None,

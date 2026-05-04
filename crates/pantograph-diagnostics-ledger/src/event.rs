@@ -1330,6 +1330,8 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_network_node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved_artifact_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<InferenceUsageDiagnosticSummary>,
@@ -1376,6 +1378,11 @@ impl InferenceExecutionDiagnosticObservedPayload {
         validate_optional_text(
             "selected_device_id",
             self.selected_device_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_network_node_id",
+            self.selected_network_node_id.as_deref(),
             MAX_ID_LEN,
         )?;
         validate_optional_text(

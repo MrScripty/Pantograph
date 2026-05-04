@@ -2422,6 +2422,7 @@ fn record_inference_lifecycle_phase_event_with_references(
         runtime_id,
         runtime_instance_id,
         selected_device_id,
+        selected_network_node_id: None,
         model_id,
         resolved_artifact_kind,
         usage,

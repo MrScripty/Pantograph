@@ -145,7 +145,8 @@ selection must use supported runtimes through Pumas model references.
   backend-local extensions under typed generation options or `extra_options`.
 - `InferenceRequestLifecycleEvent` carries bounded lifecycle facts, including
   direct `canonical_error_event_id` links when a caller already recorded the
-  detailed canonical diagnostic error elsewhere.
+  detailed canonical diagnostic error elsewhere and optional selected
+  network-node ids when execution observed a concrete Pantograph node.
 - Stable generation behavior belongs in typed `GenerationOptions` groups.
   Backend-local generation escape hatches are limited to
   `backend_extensions` keys scoped as `<backend-or-adapter>:<option>`, and

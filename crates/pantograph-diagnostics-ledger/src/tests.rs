@@ -1104,6 +1104,10 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
         Some("text_generation")
     );
     assert_eq!(list_record.selected_device_id.as_deref(), Some("cuda:0"));
+    assert_eq!(
+        list_record.selected_network_node_id.as_deref(),
+        Some("local-node-alpha")
+    );
 
     let detail_state = ledger
         .drain_run_detail_projection(10)
@@ -1132,6 +1136,10 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
         Some("text_generation")
     );
     assert_eq!(detail_record.selected_device_id.as_deref(), Some("cuda:0"));
+    assert_eq!(
+        detail_record.selected_network_node_id.as_deref(),
+        Some("local-node-alpha")
+    );
 }
 
 #[test]
@@ -4660,6 +4668,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                 selected_backend_key: Some("pytorch".to_string()),
                 selected_backend_family: Some("pytorch".to_string()),
                 selected_device_id: Some("cuda:0".to_string()),
+                selected_network_node_id: Some("local-node-alpha".to_string()),
                 resolved_artifact_kind: Some("gguf".to_string()),
                 usage: Some(InferenceUsageDiagnosticSummary {
                     prompt_tokens: Some(8),

@@ -2385,15 +2385,17 @@ fn apply_run_list_projection_inference_diagnostic_facts(
              selected_model_id = COALESCE(?3, selected_model_id),
              selected_task_id = COALESCE(?4, selected_task_id),
              selected_device_id = COALESCE(?5, selected_device_id),
-             last_event_seq = ?6,
-             last_updated_at_ms = ?7
-         WHERE workflow_run_id = ?8",
+             selected_network_node_id = COALESCE(?6, selected_network_node_id),
+             last_event_seq = ?7,
+             last_updated_at_ms = ?8
+         WHERE workflow_run_id = ?9",
         params![
             event.runtime_id.as_deref(),
             payload.selected_backend_key.as_deref(),
             event.model_id.as_deref(),
             Some(payload.task_id.as_str()),
             payload.selected_device_id.as_deref(),
+            payload.selected_network_node_id.as_deref(),
             event.event_seq,
             event.occurred_at_ms,
             workflow_run_id.as_str(),
@@ -2905,15 +2907,17 @@ fn apply_run_detail_projection_inference_diagnostic_facts(
              selected_model_id = COALESCE(?3, selected_model_id),
              selected_task_id = COALESCE(?4, selected_task_id),
              selected_device_id = COALESCE(?5, selected_device_id),
-             last_event_seq = ?6,
-             last_updated_at_ms = ?7
-         WHERE workflow_run_id = ?8",
+             selected_network_node_id = COALESCE(?6, selected_network_node_id),
+             last_event_seq = ?7,
+             last_updated_at_ms = ?8
+         WHERE workflow_run_id = ?9",
         params![
             event.runtime_id.as_deref(),
             payload.selected_backend_key.as_deref(),
             event.model_id.as_deref(),
             Some(payload.task_id.as_str()),
             payload.selected_device_id.as_deref(),
+            payload.selected_network_node_id.as_deref(),
             event.event_seq,
             event.occurred_at_ms,
             workflow_run_id.as_str(),

@@ -755,6 +755,7 @@ fn record_dependency_preflight_failure_lifecycle(
             runtime_id: runtime_id.clone(),
             runtime_instance_id: None,
             selected_device_id: None,
+            selected_network_node_id: None,
             model_id: context.model_id.clone(),
             resolved_artifact_kind: None,
             usage: None,
