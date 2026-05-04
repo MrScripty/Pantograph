@@ -587,6 +587,18 @@ impl PyTorchBackend {
         .into_backend_error()
     }
 
+    fn unload_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
+        PyTorchWorkerFailure {
+            request_id: request_id.to_string(),
+            error: PyTorchWorkerError {
+                kind: PyTorchWorkerErrorKind::GenerationFailed,
+                message,
+                canonical_code: Some("pytorch_worker_unload_failed".to_string()),
+            },
+        }
+        .into_backend_error()
+    }
+
     fn generate_text_from_worker_response(response_json: &str) -> Result<String, BackendError> {
         let response: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
             serde_json::from_str(response_json).map_err(|error| {
@@ -1064,14 +1076,21 @@ impl PyTorchBackend {
 
     /// Unload the current model and free GPU memory.
     pub async fn unload_model(&mut self) -> Result<(), BackendError> {
-        tokio::task::spawn_blocking(|| {
+        let request_id = format!("pytorch-unload-{}", Uuid::new_v4().simple());
+        tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<(), BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                    Self::unload_worker_failure_from_message(
+                        &request_id,
+                        format!("Failed to get worker module: {}", e),
+                    )
                 })?;
-                worker
-                    .call_method0("unload_model")
-                    .map_err(|e| BackendError::Inference(format!("Unload failed: {}", e)))?;
+                worker.call_method0("unload_model").map_err(|e| {
+                    Self::unload_worker_failure_from_message(
+                        &request_id,
+                        format!("Unload failed: {}", e),
+                    )
+                })?;
                 Ok(())
             })
         })
