@@ -775,6 +775,50 @@ fn test_pytorch_worker_generate_text_transport_error_normalizes_to_backend_error
 }
 
 #[test]
+fn test_pytorch_worker_transport_errors_strip_tracebacks_and_local_paths() {
+    let traceback = r#"PyTorch worker generate_text envelope failed:
+Traceback (most recent call last):
+  File "/home/jeremy/private/model/worker.py", line 42, in generate
+    raise RuntimeError("bad prompt")
+RuntimeError: failed while reading /home/jeremy/private/model/config.json
+"#;
+
+    match PyTorchBackend::generate_text_worker_failure_from_message(
+        "req-generate-traceback",
+        traceback.to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_generate_text_failed"));
+            assert!(message.contains("req-generate-traceback"));
+            assert!(message.contains("PyTorch worker generate_text envelope failed"));
+            assert!(message.contains("RuntimeError: failed while reading [local-path]"));
+            assert!(!message.contains("Traceback"));
+            assert!(!message.contains("/home/jeremy/private"));
+            assert!(!message.contains("worker.py"));
+            assert!(!message.contains("bad prompt"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_kv_worker_transport_errors_strip_local_paths() {
+    match kv_worker_failure_from_message(
+        "req-kv-save",
+        "pytorch_worker_kv_save_failed",
+        "PyTorch KV save failed: could not write /tmp/pantograph-cache.bin".to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_kv_save_failed"));
+            assert!(message.contains("req-kv-save"));
+            assert!(message.contains("could not write [local-path]"));
+            assert!(!message.contains("/tmp/pantograph-cache.bin"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_generate_text_transport_no_model_normalizes_to_not_running() {
     match PyTorchBackend::generate_text_worker_failure_from_message(
         "req-generate-no-model",

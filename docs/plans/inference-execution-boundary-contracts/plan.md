@@ -1862,7 +1862,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   exception strings. PyTorch worker error-kind normalization coverage now
   freezes every worker error kind's mapped `BackendError` variant while
   preserving request ids, canonical codes, and bounded worker messages across
-  load, stream setup, and generate response boundaries.
+  load, stream setup, and generate response boundaries. PyTorch worker
+  transport exception messages now also strip Python traceback frames and
+  redact local path tokens before becoming backend errors, while retaining
+  request ids, canonical worker codes, and bounded exception summaries.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -2886,7 +2889,9 @@ inference write ledger events directly.
   transcription artifact-ref projection now filters local path-shaped
   `audio_ref` values, including absolute/relative home paths, `file://` URLs,
   and Windows drive paths, before lifecycle events can reach durable
-  diagnostics.
+  diagnostics. PyTorch backend transport error normalization now strips Python
+  traceback frames and local path tokens before those backend errors can be
+  projected into workflow diagnostics.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle
@@ -2982,6 +2987,10 @@ one-off conversions.
   so local path-shaped `audio_ref` values are not copied into lifecycle events
   or durable diagnostics; stable refs such as `artifact://...` remain available
   as bounded artifact metadata.
+- 2026-05-05: PyTorch worker transport error normalization now strips embedded
+  Python traceback frames and redacts local path tokens before transport
+  exceptions become canonical backend errors, while preserving request ids and
+  worker error codes.
 - 2026-05-05: Inference lifecycle sink append-failure slice changed
   `InferenceRequestLifecycleEventSink::record` to return a structured sink
   error, added a `diagnostics_unavailable` error contract, and made the

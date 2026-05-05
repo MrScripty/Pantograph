@@ -157,6 +157,10 @@ fn create_backend() {
 - PyTorch Rust/Python envelope DTOs stay in `pytorch_worker_contract.rs`.
   They are backend-local implementation contracts, not public Pantograph graph
   node shapes or scheduler/runtime-registry policy.
+- PyTorch transport exceptions from the embedded Python boundary must be
+  normalized before becoming `BackendError` messages: keep request ids,
+  canonical worker codes, and bounded exception summaries, but strip Python
+  traceback frames and redact local path tokens.
 - Backend-native generation fields and kwargs must stay inside backend-local
   mapping helpers. PyTorch maps canonical generation options to
   Transformers-style kwargs, while llama.cpp maps them to bounded
