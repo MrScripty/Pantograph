@@ -454,6 +454,7 @@ export type WorkflowInferenceTaskId =
   | 'rerank'
   | 'image_generation'
   | 'image_understanding'
+  | 'depth_estimation'
   | 'audio_transcription'
   | 'video_understanding'
   | 'multimodal_generation'
@@ -464,6 +465,15 @@ export type WorkflowSupportTier =
   | 'experimental'
   | 'roadmap'
   | 'unsupported'
+  | 'unknown';
+
+export type WorkflowInferenceExecutionInputKind = InferenceExecutionInputKind;
+export type WorkflowInferenceExecutionResultKind = InferenceExecutionResultKind;
+
+export type WorkflowTaskStreamingSupport =
+  | 'supported'
+  | 'unsupported'
+  | 'backend_dependent'
   | 'unknown';
 
 export type WorkflowBackendComponentCapability =
@@ -482,6 +492,17 @@ export interface WorkflowBackendTaskCapability {
   task_id: WorkflowInferenceTaskId;
   support_tier: WorkflowSupportTier;
   modality_signature: WorkflowTaskModalitySignature;
+  request_contract?: WorkflowTaskRequestContract;
+}
+
+export interface WorkflowTaskRequestContract {
+  task_id: WorkflowInferenceTaskId;
+  input_kind: WorkflowInferenceExecutionInputKind;
+  result_kind: WorkflowInferenceExecutionResultKind;
+  execution_supported: boolean;
+  streaming_support: WorkflowTaskStreamingSupport;
+  required_input_modalities: WorkflowInferenceModality[];
+  output_modalities: WorkflowInferenceModality[];
 }
 
 export type WorkflowBackendFeatureSupport =

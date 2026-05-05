@@ -24,6 +24,7 @@ import type {
   WorkflowExecutionSessionCloseResponse,
   WorkflowExecutionSessionCreateResponse,
   InferencePortPayloadContract,
+  WorkflowBackendTaskCapability,
   WorkflowManagedMediaDependencyStatus,
   WorkflowRunResponse,
   WorkflowSessionQueueCancelResponse,
@@ -208,6 +209,44 @@ test('frontend inference payload contract accepts roadmap depth execution kinds'
       result_kind: 'depth_estimation',
     },
   ]);
+});
+
+test('frontend workflow capability facts accept roadmap depth task contracts', () => {
+  const capability: WorkflowBackendTaskCapability = {
+    task_id: 'depth_estimation',
+    support_tier: 'roadmap',
+    modality_signature: {
+      inputs: ['image'],
+      outputs: ['image', 'point_cloud'],
+    },
+    request_contract: {
+      task_id: 'depth_estimation',
+      input_kind: 'depth_estimation',
+      result_kind: 'depth_estimation',
+      execution_supported: false,
+      streaming_support: 'unsupported',
+      required_input_modalities: ['image'],
+      output_modalities: ['image', 'point_cloud'],
+    },
+  };
+
+  assert.deepEqual(capability, {
+    task_id: 'depth_estimation',
+    support_tier: 'roadmap',
+    modality_signature: {
+      inputs: ['image'],
+      outputs: ['image', 'point_cloud'],
+    },
+    request_contract: {
+      task_id: 'depth_estimation',
+      input_kind: 'depth_estimation',
+      result_kind: 'depth_estimation',
+      execution_supported: false,
+      streaming_support: 'unsupported',
+      required_input_modalities: ['image'],
+      output_modalities: ['image', 'point_cloud'],
+    },
+  });
 });
 
 test('updateRetentionPolicy returns backend policy state without client-side optimistic replacement', async () => {
