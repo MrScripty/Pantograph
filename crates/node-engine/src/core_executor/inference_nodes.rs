@@ -894,7 +894,12 @@ pub(crate) fn build_audio_transcription_execution_request(
     let audio_value = read_optional_input_value(inputs, "audio")
         .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing audio input".to_string()))?;
     let (audio, audio_ref) = parse_audio_transcription_input(audio_value)?;
-    let model_ref = parse_pumas_model_ref(inputs);
+    let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
+    let model_ref = parse_pumas_model_ref(inputs).or_else(|| {
+        resolved_model_package_facts
+            .as_ref()
+            .map(|facts| facts.model_ref.clone())
+    });
     let model_name = read_audio_model_name(inputs, model_ref.as_ref())?;
     let mut extra_settings = build_extra_settings(inputs);
     extra_settings.remove("audio");
@@ -913,7 +918,7 @@ pub(crate) fn build_audio_transcription_execution_request(
         model_ref,
         model_name: model_name.clone(),
         runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
-        resolved_model_package_facts: parse_resolved_model_package_facts(inputs)?,
+        resolved_model_package_facts,
         input: inference::InferenceExecutionInput::AudioTranscription {
             request: inference::AudioTranscriptionRequest {
                 model: model_name.unwrap_or_else(|| "default".to_string()),

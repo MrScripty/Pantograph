@@ -2367,7 +2367,10 @@ preserving the graph-visible embedding output shape.
 Node-engine request-builder coverage now proves canonical embedding execution
 forwards `resolved_model_package_facts` from the Pumas package-facts fixture,
 and rerank/audio transcription builders reject malformed package-facts payloads
-through the same explicit parse boundary as text generation.
+through the same explicit parse boundary as text generation. Audio transcription
+request-builder coverage now also proves package facts supply the model
+identity when no explicit model field is supplied, avoiding backend-local
+`"default"` fallbacks for Pumas-backed ASR workflows.
 Node-engine canonical `llm-inference` rerank execution now builds an
 `InferenceExecutionRequest` from query, documents, top-N options, return-document
 policy, runtime hint, and Pumas/model path identity, then executes through
@@ -2724,8 +2727,11 @@ inference write ledger events directly.
   and have graph-visible `llm-inference` coverage proving audio request
   construction forwards package facts while task-validation and
   backend-execution lifecycle events carry bounded compatibility summaries with
-  the stable Pumas model id. Diffusers image-generation package-facts fixtures
-  now have graph-visible `llm-inference` coverage proving image-generation
+  the stable Pumas model id. Audio transcription request construction now also
+  derives `model_ref`, `model_name`, and backend request model identity from
+  resolved package facts when no explicit model input is present. Diffusers
+  image-generation package-facts fixtures now have graph-visible
+  `llm-inference` coverage proving image-generation
   request construction forwards package facts while task-validation and
   backend-execution lifecycle events carry bounded compatibility summaries with
   the stable Pumas model id.
@@ -3003,6 +3009,10 @@ one-off conversions.
   lifecycle artifact refs again at the ledger boundary, preventing future
   producers from persisting local path-shaped refs if they bypass upstream
   gateway filtering.
+- 2026-05-05: Node-engine audio transcription request construction now uses
+  resolved package facts as the model identity fallback, so ASR workflows with
+  Pumas facts no longer send `"default"` to the typed backend request when no
+  explicit model input is supplied.
 - 2026-05-05: PyTorch worker transport error normalization now strips embedded
   Python traceback frames and redacts local path tokens before transport
   exceptions become canonical backend errors, while preserving request ids and

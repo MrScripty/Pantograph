@@ -1728,7 +1728,6 @@ fn test_build_audio_transcription_execution_request_forwards_package_facts() {
         "audio".to_string(),
         serde_json::json!("artifact-read://audio.wav"),
     );
-    inputs.insert("model_name".to_string(), serde_json::json!("whisper-tiny"));
     inputs.insert(
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
@@ -1738,12 +1737,29 @@ fn test_build_audio_transcription_execution_request_forwards_package_facts() {
         .expect("audio package facts should be forwarded to typed request");
 
     assert_eq!(
+        request.model_name.as_deref(),
+        Some("audio/whisper/tiny-asr")
+    );
+    assert_eq!(
+        request
+            .model_ref
+            .as_ref()
+            .map(|model_ref| model_ref.model_id.as_str()),
+        Some("audio/whisper/tiny-asr")
+    );
+    assert_eq!(
         request
             .resolved_model_package_facts
             .as_ref()
             .map(|facts| facts.model_ref.model_id.as_str()),
         Some("audio/whisper/tiny-asr")
     );
+    match request.input {
+        InferenceExecutionInput::AudioTranscription { request } => {
+            assert_eq!(request.model, "audio/whisper/tiny-asr");
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
 }
 
 #[cfg(feature = "inference-nodes")]
