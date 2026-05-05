@@ -1006,7 +1006,7 @@ Detailed Pumas-side work is split into
   the Pumas startup snapshot cursor, polls `ModelLibraryUpdateFeed` before and
   after sparse-row regeneration, invalidates affected rows, and clears the cache
   when Pumas reports a stale cursor requiring a fresh snapshot.
-- [ ] Ensure Pantograph consumes versioned Pumas DTO/API outputs only. It must
+- [x] Ensure Pantograph consumes versioned Pumas DTO/API outputs only. It must
   not depend on Pumas `models.metadata_json`, SQLite table layouts, or
   search-cache internals. Embedded-runtime `puma-lib` execution no longer reads
   task/backend facts directly from `ModelRecord.metadata`; model entry path,
@@ -1015,17 +1015,12 @@ Detailed Pumas-side work is split into
   compatibility fallback when Pumas lookup is unavailable. The model-list
   option provider now also prefers the Pumas execution descriptor's
   non-`unknown` `task_type_primary` over projected record metadata so stale
-  metadata cannot override the versioned DTO while sparse descriptor task
-  evidence can still fall back to public record facts. Embedded-runtime model
-  dependency descriptors now
-  also treat Pumas `ModelExecutionDescriptor.task_type_primary` as
-  authoritative over stale record metadata, falling back to metadata only when
-  the descriptor task is missing or `unknown`, and falling back to saved request
-  data only when Pumas facts are absent. Model-list display metadata now also
-  treats sparse, missing, or invalid package-summary API results as authoritative
-  DTO outputs: backend hints, custom-code flags, custom-code sources, and review
-  reasons use bounded empty/default values instead of falling through to raw
-  `ModelRecord.metadata`. Embedded-runtime `puma-lib` execution now also
+  metadata cannot override the versioned DTO. Model-list display metadata now
+  also treats sparse, missing, or invalid package-summary API results as
+  authoritative DTO outputs: backend hints, custom-code flags,
+  custom-code sources, and review reasons use bounded empty/default values
+  instead of falling through to raw `ModelRecord.metadata`. Embedded-runtime
+  `puma-lib` execution now also
   rebinds stale saved `recommended_backend` values from the Pumas public
   `ModelExecutionDescriptor` when the descriptor provides a concrete backend.
   Workflow-nodes Puma-Lib model-list option metadata now ignores raw
