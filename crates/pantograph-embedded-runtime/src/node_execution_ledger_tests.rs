@@ -138,6 +138,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         resolved_artifact_kind: None,
         usage: None,
         cache_handle_id: None,
+        artifact_refs: Vec::new(),
         detail: Some("backend failed".to_string()),
         canonical_error_event_id: Some("diagnostic-error-inference-a".to_string()),
         compatibility_report: None,
@@ -194,6 +195,7 @@ fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure(
         resolved_artifact_kind: None,
         usage: None,
         cache_handle_id: None,
+        artifact_refs: Vec::new(),
         detail: Some(
             "Canonical inference task 'video_understanding' is contract-only at this execution boundary: task request contract has execution_supported=false for input kind 'video_understanding'."
                 .to_string(),
@@ -292,6 +294,7 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         resolved_artifact_kind: None,
         usage: None,
         cache_handle_id: None,
+        artifact_refs: Vec::new(),
         detail: None,
         canonical_error_event_id: None,
         compatibility_report: None,
@@ -350,6 +353,7 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
         total_tokens: Some(13),
     });
     event.cache_handle_id = Some("kv-checkpoint-1".to_string());
+    event.artifact_refs = vec!["artifact://audio.wav".to_string()];
     event.resolved_artifact_kind = Some("gguf".to_string());
     event.selected_device_id = Some("cuda:0".to_string());
     event.selected_network_node_id = Some("local-node-alpha".to_string());
@@ -390,6 +394,10 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
                 Some(13)
             );
             assert_eq!(payload.cache_handle_id.as_deref(), Some("kv-checkpoint-1"));
+            assert_eq!(
+                payload.artifact_refs,
+                vec!["artifact://audio.wav".to_string()]
+            );
             assert_eq!(
                 payload
                     .compatibility_report
@@ -1449,6 +1457,7 @@ fn inference_lifecycle_event(
         resolved_artifact_kind: None,
         usage: None,
         cache_handle_id: None,
+        artifact_refs: Vec::new(),
         detail,
         canonical_error_event_id: None,
         compatibility_report: None,

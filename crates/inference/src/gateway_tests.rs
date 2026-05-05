@@ -1878,7 +1878,7 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
                     mime_type: "audio/wav".to_string(),
                     sample_rate_hz: Some(16000),
                 }),
-                audio_ref: None,
+                audio_ref: Some("artifact://audio.wav".to_string()),
                 language: Some("en".to_string()),
                 prompt: Some("domain hint".to_string()),
                 task: Some("transcribe".to_string()),
@@ -1942,6 +1942,10 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
         Some("audio_transcription")
     );
     assert_eq!(backend_completed.model_id.as_deref(), Some("mock-asr"));
+    assert_eq!(
+        backend_completed.artifact_refs,
+        vec!["artifact://audio.wav".to_string()]
+    );
     assert!(backend_completed
         .option_diagnostics
         .iter()

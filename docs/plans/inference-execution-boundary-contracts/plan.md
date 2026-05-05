@@ -2804,7 +2804,11 @@ inference write ledger events directly.
   now projects bounded terminal token usage to the existing graph `usage` port
   and stable backend-local cache-handle ids to `kv_cache_out` for streaming and
   non-streaming paths without storing prompt text, generated content, KV bytes,
-  tensors, temp paths, or scheduler/runtime reuse decisions.
+  tensors, temp paths, or scheduler/runtime reuse decisions. Typed audio
+  transcription now propagates bounded `audio_ref` artifact references through
+  backend-execution lifecycle events and durable inference diagnostics while
+  keeping encoded audio bytes, prompt text, generated content, local paths, and
+  scheduler/runtime selection state out of the payload.
 - [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
@@ -2941,6 +2945,13 @@ one-off conversions.
   diagnostic observations. The gateway derives it only from explicit backend
   start config device values, omits `auto`, and the diagnostics-ledger projects
   it into the existing run-list and run-detail selected-device columns.
+- 2026-05-05: Inference artifact-reference diagnostics slice added bounded
+  `artifact_refs` to inference lifecycle events and durable
+  `inference.execution_diagnostic_observed` payloads. The gateway initially
+  derives artifact refs only from typed audio transcription `audio_ref` values,
+  and embedded-runtime projects those refs into diagnostics-ledger rows without
+  storing encoded media, prompts, generated content, local paths, or scheduler
+  decisions.
 - 2026-05-03: Generation option diagnostics ledger slice added append-only
   `inference.execution_diagnostic_observed` ledger events with bounded
   option-support counts and per-option summaries. `InferenceRequestLifecycleEvent`

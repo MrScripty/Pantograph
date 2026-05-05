@@ -159,6 +159,10 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
 - PyTorch audio transcription currently accepts only encoded in-memory audio at
   the backend edge. `audio_ref` resolution remains host-owned so artifact
   lookup and media payload handling do not move into the inference crate.
+- Typed audio transcription lifecycle events may carry bounded `audio_ref`
+  artifact references for host-owned diagnostics. They must not carry encoded
+  audio bytes, prompt text, generated content, local filesystem paths, or
+  scheduler/runtime selection state.
 - Gateway lifecycle, request forwarding, runtime reuse, and shared mock-backend
   fixtures stay in `gateway_tests.rs`, while oversized behavior families split
   under `gateway_tests/` so `gateway.rs` remains focused on production gateway

@@ -82,7 +82,8 @@ Inference option-support summaries use
 system metadata for request id, task id, lifecycle phase/kind, selected backend,
 resolved artifact kind, support-state counts, backend/model compatibility
 summaries, per-option compatibility summaries, usage-count summaries,
-cache-handle ids, and structured KV-cache action/outcome references.
+cache-handle ids, artifact refs, and structured KV-cache action/outcome
+references.
 Duration-only completed
 lifecycle rows are allowed for bounded phase timing even when a phase carries no
 usage or compatibility details; they must not carry prompt text, messages,

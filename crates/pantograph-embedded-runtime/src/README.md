@@ -172,8 +172,8 @@ delegating methods; scheduler authority and diagnostics events stay in
   node-engine must not import or write the diagnostics ledger directly.
   Completed backend-execution lifecycle events may additionally project bounded
   option-support summaries, compatibility summaries, usage counts,
-  cache-handle ids, and matched lifecycle duration. Structured KV-cache progress
-  may project bounded
+  cache-handle ids, artifact refs, and matched lifecycle duration. Structured
+  KV-cache progress may project bounded
   action/outcome/cache-id references and task-local KV option-support summaries
   through the host-owned workflow event sink. KV-cache diagnostic append
   failures are returned as `diagnostics_unavailable` event-sink errors after the

@@ -857,6 +857,8 @@ pub struct InferenceRequestLifecycleEvent {
     pub usage: Option<InferenceUsage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_handle_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_refs: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2299,6 +2301,7 @@ mod tests {
                 total_tokens: Some(13),
             }),
             cache_handle_id: Some("kv-checkpoint-1".to_string()),
+            artifact_refs: vec!["artifact://audio.wav".to_string()],
             detail: Some("stream dropped by consumer".to_string()),
             canonical_error_event_id: Some("diagnostic-error-inference-1".to_string()),
             compatibility_report: Some(InferenceCompatibilityReportSummary {
@@ -2341,6 +2344,10 @@ mod tests {
         assert_eq!(
             encoded["cache_handle_id"],
             serde_json::json!("kv-checkpoint-1")
+        );
+        assert_eq!(
+            encoded["artifact_refs"],
+            serde_json::json!(["artifact://audio.wav"])
         );
         assert_eq!(
             encoded["canonical_error_event_id"],

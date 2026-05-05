@@ -615,6 +615,7 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
                 resolved_artifact_kind: None,
                 usage: None,
                 cache_handle_id: None,
+                artifact_refs: Vec::new(),
                 kv_cache: Some(kv_cache_diagnostic_summary(detail)),
                 compatibility_report: None,
                 compatibility_issue_count: 0,
@@ -641,6 +642,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
         || !event.compatibility_issues.is_empty()
         || event.usage.is_some()
         || event.cache_handle_id.is_some()
+        || !event.artifact_refs.is_empty()
         || duration_ms.is_some();
     if !has_bounded_diagnostics
         || !inference_diagnostic_phase_is_persistable(event)
@@ -701,6 +703,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 resolved_artifact_kind: event.resolved_artifact_kind.clone(),
                 usage: event.usage.as_ref().map(inference_usage_summary),
                 cache_handle_id: event.cache_handle_id.clone(),
+                artifact_refs: event.artifact_refs.clone(),
                 kv_cache: None,
                 compatibility_report: event
                     .compatibility_report

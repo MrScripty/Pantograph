@@ -26,6 +26,7 @@ pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
 pub const MAX_INFERENCE_OPTION_DIAGNOSTICS: usize = 64;
 pub const MAX_INFERENCE_COMPATIBILITY_ISSUES: usize = 32;
 pub const MAX_INFERENCE_KV_CACHE_REASON_LEN: usize = 1_024;
+pub const MAX_INFERENCE_ARTIFACT_REFS: usize = 16;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1337,6 +1338,8 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     pub usage: Option<InferenceUsageDiagnosticSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_handle_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_refs: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kv_cache: Option<InferenceKvCacheDiagnosticSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1395,6 +1398,15 @@ impl InferenceExecutionDiagnosticObservedPayload {
             self.cache_handle_id.as_deref(),
             MAX_ID_LEN,
         )?;
+        if self.artifact_refs.len() > MAX_INFERENCE_ARTIFACT_REFS {
+            return Err(DiagnosticsLedgerError::FieldTooLong {
+                field: "artifact_refs",
+                max_len: MAX_INFERENCE_ARTIFACT_REFS,
+            });
+        }
+        for artifact_ref in &self.artifact_refs {
+            validate_required_text("artifact_refs", artifact_ref, MAX_ID_LEN)?;
+        }
         if self.option_diagnostics.len() > MAX_INFERENCE_OPTION_DIAGNOSTICS {
             return Err(DiagnosticsLedgerError::FieldTooLong {
                 field: "option_diagnostics",

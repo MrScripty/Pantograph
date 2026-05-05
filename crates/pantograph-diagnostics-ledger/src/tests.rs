@@ -1063,6 +1063,10 @@ fn diagnostic_event_ledger_appends_inference_execution_diagnostic_summary() {
                 "sampling.temperature"
             );
             assert_eq!(payload.option_diagnostics[0].state, "mapped");
+            assert_eq!(
+                payload.artifact_refs,
+                vec!["artifact://audio.wav".to_string()]
+            );
         }
         other => panic!("expected inference diagnostic payload, got {other:?}"),
     }
@@ -4676,6 +4680,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                     total_tokens: Some(13),
                 }),
                 cache_handle_id: Some("kv-checkpoint-1".to_string()),
+                artifact_refs: vec!["artifact://audio.wav".to_string()],
                 kv_cache: Some(InferenceKvCacheDiagnosticSummary {
                     action: "restore_input".to_string(),
                     outcome: "hit".to_string(),

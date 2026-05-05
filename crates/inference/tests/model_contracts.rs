@@ -387,6 +387,7 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
             total_tokens: Some(5),
         }),
         cache_handle_id: Some("kv-1".to_string()),
+        artifact_refs: vec!["artifact://audio.wav".to_string()],
         detail: None,
         canonical_error_event_id: None,
         compatibility_report: None,

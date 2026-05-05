@@ -601,6 +601,7 @@ fn record_task_validation_failure_lifecycle(
             resolved_artifact_kind: None,
             usage: None,
             cache_handle_id: None,
+            artifact_refs: Vec::new(),
             detail,
             canonical_error_event_id: None,
             compatibility_report: None,

@@ -1207,6 +1207,7 @@ impl InferenceGateway {
         let request_id = request.request_id.clone();
         let model_id = typed_request_lifecycle_model_id(&request);
         let task_id = Some(request.task_id.canonical_label().to_string());
+        let artifact_refs = artifact_refs_from_typed_request(&request);
         let emit_typed_boundary_lifecycle = typed_request_has_boundary_lifecycle(&request);
         record_model_package_resolution_lifecycle_if_present(
             lifecycle_sink.as_ref(),
@@ -1317,6 +1318,7 @@ impl InferenceGateway {
             option_diagnostics,
             compatibility_diagnostics.compatibility_report,
             compatibility_diagnostics.compatibility_issues,
+            artifact_refs,
         );
         if emit_typed_boundary_lifecycle && result.is_ok() {
             record_successful_non_streaming_lifecycle_phase(
@@ -1658,6 +1660,7 @@ impl LifecycleStream {
             self.compatibility_issues.clone(),
             self.usage.clone(),
             self.cache_handle_id.clone(),
+            Vec::new(),
             None,
         );
     }
@@ -2356,6 +2359,7 @@ fn record_model_package_resolution_lifecycle_if_present(
         Vec::new(),
         None,
         None,
+        Vec::new(),
         resolved_artifact_kind.clone(),
     );
     record_non_streaming_lifecycle_phase_result_with_references(
@@ -2374,6 +2378,7 @@ fn record_model_package_resolution_lifecycle_if_present(
         Vec::new(),
         None,
         None,
+        Vec::new(),
         resolved_artifact_kind,
     );
 }
@@ -2458,6 +2463,7 @@ fn record_inference_lifecycle_phase_event_with_diagnostics(
         compatibility_issues,
         None,
         None,
+        Vec::new(),
         None,
     );
 }
@@ -2480,6 +2486,7 @@ fn record_inference_lifecycle_phase_event_with_references(
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     usage: Option<InferenceUsage>,
     cache_handle_id: Option<String>,
+    artifact_refs: Vec<String>,
     resolved_artifact_kind: Option<String>,
 ) {
     sink.record(InferenceRequestLifecycleEvent {
@@ -2497,6 +2504,7 @@ fn record_inference_lifecycle_phase_event_with_references(
         resolved_artifact_kind,
         usage,
         cache_handle_id,
+        artifact_refs,
         detail,
         canonical_error_event_id: None,
         compatibility_report,
@@ -2545,6 +2553,7 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
     compatibility_report: Option<InferenceCompatibilityReportSummary>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+    artifact_refs: Vec<String>,
 ) {
     record_non_streaming_lifecycle_phase_result_with_references(
         sink,
@@ -2562,6 +2571,7 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
         compatibility_issues,
         usage_from_execution_result(result),
         cache_handle_from_execution_result(result),
+        artifact_refs,
         None,
     );
 }
@@ -2725,6 +2735,7 @@ fn record_non_streaming_lifecycle_phase_result_with_diagnostics<T>(
         compatibility_issues,
         None,
         None,
+        Vec::new(),
         None,
     );
 }
@@ -2746,6 +2757,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     usage: Option<InferenceUsage>,
     cache_handle_id: Option<String>,
+    artifact_refs: Vec<String>,
     resolved_artifact_kind: Option<String>,
 ) {
     match result {
@@ -2766,6 +2778,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
             compatibility_issues,
             usage,
             cache_handle_id,
+            artifact_refs,
             resolved_artifact_kind.clone(),
         ),
         Err(error) => record_inference_lifecycle_phase_event(
@@ -2845,6 +2858,27 @@ fn cache_handle_from_execution_result(
     match result {
         Ok(result) => result.cache_handle_id().map(ToOwned::to_owned),
         _ => None,
+    }
+}
+
+fn artifact_refs_from_typed_request(request: &InferenceExecutionRequest) -> Vec<String> {
+    match &request.input {
+        InferenceExecutionInput::AudioTranscription { request } => request
+            .audio_ref
+            .as_deref()
+            .and_then(bounded_artifact_ref)
+            .into_iter()
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn bounded_artifact_ref(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
     }
 }
 
