@@ -2049,15 +2049,24 @@ async fn test_execute_typed_audio_lifecycle_omits_local_path_artifact_refs() {
 #[test]
 fn test_bounded_artifact_ref_filters_local_path_shapes() {
     assert_eq!(
-        bounded_artifact_ref("artifact://audio.wav"),
+        crate::bounded_inference_artifact_ref("artifact://audio.wav"),
         Some("artifact://audio.wav".to_string())
     );
-    assert_eq!(bounded_artifact_ref("/tmp/audio.wav"), None);
-    assert_eq!(bounded_artifact_ref("./audio.wav"), None);
-    assert_eq!(bounded_artifact_ref("../audio.wav"), None);
-    assert_eq!(bounded_artifact_ref("~/audio.wav"), None);
-    assert_eq!(bounded_artifact_ref("file:///tmp/audio.wav"), None);
-    assert_eq!(bounded_artifact_ref("C:\\Users\\audio.wav"), None);
+    assert_eq!(
+        crate::bounded_inference_artifact_ref("/tmp/audio.wav"),
+        None
+    );
+    assert_eq!(crate::bounded_inference_artifact_ref("./audio.wav"), None);
+    assert_eq!(crate::bounded_inference_artifact_ref("../audio.wav"), None);
+    assert_eq!(crate::bounded_inference_artifact_ref("~/audio.wav"), None);
+    assert_eq!(
+        crate::bounded_inference_artifact_ref("file:///tmp/audio.wav"),
+        None
+    );
+    assert_eq!(
+        crate::bounded_inference_artifact_ref("C:\\Users\\audio.wav"),
+        None
+    );
 }
 
 #[tokio::test]

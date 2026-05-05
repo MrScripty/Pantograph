@@ -871,6 +871,41 @@ pub struct InferenceRequestLifecycleEvent {
     pub option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
 }
 
+/// Return a bounded artifact reference suitable for lifecycle diagnostics.
+///
+/// Stable logical refs such as `artifact://...` are preserved. Local path-like
+/// values are dropped so producers and ledger adapters do not persist absolute
+/// paths, relative paths, home paths, file URLs, or Windows drive paths.
+#[must_use]
+pub fn bounded_inference_artifact_ref(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || looks_like_local_artifact_ref(value) {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+#[must_use]
+pub fn looks_like_local_artifact_ref(value: &str) -> bool {
+    value.starts_with('/')
+        || value.starts_with("./")
+        || value.starts_with("../")
+        || value.starts_with("~/")
+        || value
+            .get(..7)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("file://"))
+        || value.as_bytes().get(1) == Some(&b':')
+            && value
+                .as_bytes()
+                .get(2)
+                .is_some_and(|byte| *byte == b'/' || *byte == b'\\')
+            && value
+                .as_bytes()
+                .first()
+                .is_some_and(|byte| byte.is_ascii_alphabetic())
+}
+
 /// Error returned by a host-owned lifecycle sink when it cannot persist or
 /// forward a lifecycle fact.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2390,6 +2425,34 @@ mod tests {
             serde_json::json!("unsupported_option")
         );
         assert_eq!(decoded, event);
+    }
+
+    #[test]
+    fn bounded_inference_artifact_ref_filters_local_path_shapes() {
+        assert_eq!(
+            bounded_inference_artifact_ref(" artifact://audio.wav ").as_deref(),
+            Some("artifact://audio.wav")
+        );
+        assert_eq!(
+            bounded_inference_artifact_ref("https://cdn.example/audio.wav").as_deref(),
+            Some("https://cdn.example/audio.wav")
+        );
+
+        for value in [
+            "",
+            "/tmp/private.wav",
+            "./private.wav",
+            "../private.wav",
+            "~/private.wav",
+            "file:///tmp/private.wav",
+            "C:\\Users\\jeremy\\private.wav",
+            "D:/Users/jeremy/private.wav",
+        ] {
+            assert_eq!(bounded_inference_artifact_ref(value), None, "{value}");
+            if !value.is_empty() {
+                assert!(looks_like_local_artifact_ref(value), "{value}");
+            }
+        }
     }
 
     #[test]

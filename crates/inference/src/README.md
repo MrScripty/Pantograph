@@ -261,6 +261,10 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - `InferenceRequestLifecycleEventSink` returns a structured sink error when a
   host cannot persist or forward lifecycle diagnostics. Gateway producers log
   sink failures and continue returning the original inference result or error.
+- `bounded_inference_artifact_ref` is the shared filter for lifecycle artifact
+  references that may reach diagnostics. Producers and host ledger adapters
+  should use it for stable refs such as `artifact://...` and drop local
+  path-shaped values before they can become durable metadata.
 - `generate_image()` is synchronous-at-contract-level and returns final images;
   streaming progress is not yet part of the facade.
 - `rerank()` accepts one query plus candidate documents and returns scored,
@@ -282,6 +286,8 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - `types.rs` defines the stable machine-consumed request and response shapes.
   Its lifecycle sink error contract uses `diagnostics_unavailable` for
   secondary diagnostics failures and must not carry prompt/result payload text.
+  It also owns bounded artifact-ref filtering for lifecycle diagnostics so
+  gateway producers and host adapters do not duplicate local-path rules.
 - `model_contracts.rs` defines additive producer/consumer facts for
   Transformers-aligned package evidence, canonical task ids, generation
   defaults, option compatibility, lifecycle phases, and model-library cache

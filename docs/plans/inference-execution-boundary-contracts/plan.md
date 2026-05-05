@@ -2909,10 +2909,11 @@ inference write ledger events directly.
   and Windows drive paths, before lifecycle events can reach durable
   diagnostics. Embedded-runtime ledger projection now defensively reapplies
   the same artifact-ref safety filter before persistence, so unsafe-only
-  producer refs are dropped and stable refs remain bounded. PyTorch backend
-  transport error normalization now strips Python traceback frames and local
-  path tokens before those backend errors can be projected into workflow
-  diagnostics.
+  producer refs are dropped and stable refs remain bounded. The shared
+  artifact-ref filter now lives in the inference contract surface so gateway
+  producers and host ledger adapters use one rule. PyTorch backend transport
+  error normalization now strips Python traceback frames and local path tokens
+  before those backend errors can be projected into workflow diagnostics.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle
@@ -3012,6 +3013,10 @@ one-off conversions.
   lifecycle artifact refs again at the ledger boundary, preventing future
   producers from persisting local path-shaped refs if they bypass upstream
   gateway filtering.
+- 2026-05-05: Moved bounded lifecycle artifact-ref filtering into the inference
+  public contract surface and switched both gateway lifecycle production and
+  embedded-runtime ledger projection to the shared helper, avoiding duplicated
+  local-path rules.
 - 2026-05-05: Node-engine audio transcription request construction now uses
   resolved package facts as the model identity fallback, so ASR workflows with
   Pumas facts no longer send `"default"` to the typed backend request when no

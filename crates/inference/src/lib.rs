@@ -156,11 +156,12 @@ pub use pantograph_managed_dependencies::{
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
 pub use types::{
-    AudioTranscriptionRequest, AudioTranscriptionResult, AudioTranscriptionSegment, ChatMessage,
-    ChatRequest, ContentPart, Delta, EncodedAudio, EncodedImage, ImageGenerationRequest,
-    ImageGenerationResult, ImageUrlData, InferenceCompatibilityIssueSummary,
-    InferenceCompatibilityReportSummary, InferenceEmbeddingResult, InferenceExecutionInput,
-    InferenceExecutionRequest, InferenceExecutionRequestValidationError, InferenceExecutionResult,
+    bounded_inference_artifact_ref, looks_like_local_artifact_ref, AudioTranscriptionRequest,
+    AudioTranscriptionResult, AudioTranscriptionSegment, ChatMessage, ChatRequest, ContentPart,
+    Delta, EncodedAudio, EncodedImage, ImageGenerationRequest, ImageGenerationResult, ImageUrlData,
+    InferenceCompatibilityIssueSummary, InferenceCompatibilityReportSummary,
+    InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionRequest,
+    InferenceExecutionRequestValidationError, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, InferenceRequestLifecycleEventSinkError, InferenceUsage,
     MaskedPrompt, PromptSegment, RerankRequest, RerankResponse, RerankResult,

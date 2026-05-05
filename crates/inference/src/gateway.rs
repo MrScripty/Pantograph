@@ -28,10 +28,11 @@ use crate::model_contracts::{
 };
 use crate::process::ProcessSpawner;
 use crate::types::{
-    AudioTranscriptionRequest, AudioTranscriptionResult, ChatMessage, ChatRequest, ContentPart,
-    ImageGenerationRequest, ImageGenerationResult, InferenceCompatibilityIssueSummary,
-    InferenceCompatibilityReportSummary, InferenceEmbeddingResult, InferenceExecutionInput,
-    InferenceExecutionRequest, InferenceExecutionRequestValidationError, InferenceExecutionResult,
+    bounded_inference_artifact_ref, AudioTranscriptionRequest, AudioTranscriptionResult,
+    ChatMessage, ChatRequest, ContentPart, ImageGenerationRequest, ImageGenerationResult,
+    InferenceCompatibilityIssueSummary, InferenceCompatibilityReportSummary,
+    InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionRequest,
+    InferenceExecutionRequestValidationError, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, InferenceUsage, RerankRequest, RerankResponse,
     RuntimeLifecycleSnapshot, ServerModeInfo,
@@ -2920,39 +2921,11 @@ fn artifact_refs_from_typed_request(request: &InferenceExecutionRequest) -> Vec<
         InferenceExecutionInput::AudioTranscription { request } => request
             .audio_ref
             .as_deref()
-            .and_then(bounded_artifact_ref)
+            .and_then(bounded_inference_artifact_ref)
             .into_iter()
             .collect(),
         _ => Vec::new(),
     }
-}
-
-fn bounded_artifact_ref(value: &str) -> Option<String> {
-    let value = value.trim();
-    if value.is_empty() || looks_like_local_path(value) {
-        None
-    } else {
-        Some(value.to_string())
-    }
-}
-
-fn looks_like_local_path(value: &str) -> bool {
-    value.starts_with('/')
-        || value.starts_with("./")
-        || value.starts_with("../")
-        || value.starts_with("~/")
-        || value
-            .get(..7)
-            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("file://"))
-        || value.as_bytes().get(1) == Some(&b':')
-            && value
-                .as_bytes()
-                .get(2)
-                .is_some_and(|byte| *byte == b'/' || *byte == b'\\')
-            && value
-                .as_bytes()
-                .first()
-                .is_some_and(|byte| byte.is_ascii_alphabetic())
 }
 
 fn dedupe_option_diagnostics(diagnostics: &mut Vec<OptionCompatibilityDiagnostic>) {
