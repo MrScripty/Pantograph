@@ -1386,6 +1386,7 @@ impl PyTorchBackend {
                                     .blocking_send(Ok(ChatChunk {
                                         content: Some(token),
                                         done: false,
+                                        usage: None,
                                     }))
                                     .is_err()
                                 {
@@ -1417,6 +1418,7 @@ impl PyTorchBackend {
                 let _ = tx.blocking_send(Ok(ChatChunk {
                     content: None,
                     done: true,
+                    usage: None,
                 }));
             });
         });

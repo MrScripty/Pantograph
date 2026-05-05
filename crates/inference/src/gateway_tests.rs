@@ -17,7 +17,7 @@ use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, EncodedAudio, ImageGenerationRequest,
     InferenceExecutionInput, InferenceExecutionRequest, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, RuntimeFactReadiness,
+    InferenceRequestLifecycleEventSink, InferenceUsage, RuntimeFactReadiness,
 };
 
 #[path = "gateway_tests/start_config.rs"]
@@ -142,7 +142,22 @@ impl InferenceBackend for MockImageBackend {
         _request_json: String,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
     {
-        Ok(Box::pin(stream::empty()))
+        Ok(Box::pin(stream::iter([
+            Ok(ChatChunk {
+                content: Some("mock text".to_string()),
+                done: false,
+                usage: None,
+            }),
+            Ok(ChatChunk {
+                content: None,
+                done: true,
+                usage: Some(InferenceUsage {
+                    prompt_tokens: Some(3),
+                    completion_tokens: Some(2),
+                    total_tokens: Some(5),
+                }),
+            }),
+        ])))
     }
 
     async fn embeddings(
@@ -597,10 +612,12 @@ impl InferenceBackend for MockLifecycleStreamBackend {
             Ok(ChatChunk {
                 content: Some("hello".to_string()),
                 done: false,
+                usage: None,
             }),
             Ok(ChatChunk {
                 content: None,
                 done: true,
+                usage: None,
             }),
         ])))
     }
@@ -1278,6 +1295,78 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
             |diagnostic| diagnostic.option_path == "cache.kv_cache_checkpoint_requested"
                 && diagnostic.state == OptionSupportState::Mapped
         ));
+}
+
+#[tokio::test]
+async fn test_execute_typed_text_lifecycle_reports_usage_from_terminal_chunk() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-text-usage".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: None,
+        model_name: Some("mock-text".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("SECRET_PROMPT should not reach lifecycle diagnostics".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: false,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let result = gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed text request should execute");
+
+    match result {
+        InferenceExecutionResult::TextGeneration { text, usage, .. } => {
+            assert_eq!(text, "mock text");
+            let usage = usage.expect("terminal chunk usage should become typed result usage");
+            assert_eq!(usage.prompt_tokens, Some(3));
+            assert_eq!(usage.completion_tokens, Some(2));
+            assert_eq!(usage.total_tokens, Some(5));
+        }
+        other => panic!("expected text generation result, got {other:?}"),
+    }
+
+    let events = sink.events();
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("completed backend event");
+    assert_eq!(
+        backend_completed
+            .usage
+            .as_ref()
+            .and_then(|usage| usage.prompt_tokens),
+        Some(3)
+    );
+    assert_eq!(
+        backend_completed
+            .usage
+            .as_ref()
+            .and_then(|usage| usage.completion_tokens),
+        Some(2)
+    );
+    assert_eq!(
+        backend_completed
+            .usage
+            .as_ref()
+            .and_then(|usage| usage.total_tokens),
+        Some(5)
+    );
+    let lifecycle_json =
+        serde_json::to_string(backend_completed).expect("lifecycle event should serialize");
+    assert!(!lifecycle_json.contains("SECRET_PROMPT"));
+    assert!(!lifecycle_json.contains("mock text"));
 }
 
 #[tokio::test]

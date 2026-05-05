@@ -1377,8 +1377,12 @@ impl InferenceGateway {
                 })?;
                 let mut stream = self.chat_completion_stream(request_json).await?;
                 let mut text = String::new();
+                let mut usage = None;
                 while let Some(chunk) = stream.next().await {
                     let chunk = chunk.map_err(GatewayError::Backend)?;
+                    if let Some(chunk_usage) = chunk.usage.clone() {
+                        usage = Some(chunk_usage);
+                    }
                     if let Some(content) = chunk.content {
                         text.push_str(&content);
                     }
@@ -1388,7 +1392,7 @@ impl InferenceGateway {
                 }
                 Ok(InferenceExecutionResult::TextGeneration {
                     text,
-                    usage: None,
+                    usage,
                     cache_handle_id: None,
                     option_diagnostics: request_option_diagnostics,
                 })

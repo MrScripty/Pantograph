@@ -3078,10 +3078,12 @@ impl InferenceBackend for MockTypedTextBackend {
             Ok(ChatChunk {
                 content: Some("typed response".to_string()),
                 done: false,
+                usage: None,
             }),
             Ok(ChatChunk {
                 content: None,
                 done: true,
+                usage: None,
             }),
         ])))
     }

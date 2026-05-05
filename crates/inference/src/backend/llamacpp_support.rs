@@ -348,6 +348,7 @@ pub fn parse_sse_stream(
                         return Ok(ChatChunk {
                             content: None,
                             done: true,
+                            usage: None,
                         });
                     }
 
@@ -362,6 +363,7 @@ pub fn parse_sse_stream(
                             return Ok(ChatChunk {
                                 content: Some(content.to_string()),
                                 done: false,
+                                usage: None,
                             });
                         }
                     }
@@ -371,6 +373,7 @@ pub fn parse_sse_stream(
             Ok(ChatChunk {
                 content: None,
                 done: false,
+                usage: None,
             })
         }
         Err(e) => Err(BackendError::Http(e)),

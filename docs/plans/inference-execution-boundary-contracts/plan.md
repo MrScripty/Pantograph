@@ -2742,8 +2742,11 @@ inference write ledger events directly.
   source, token count, and reason without cache bytes/fingerprints/temp paths;
   I/O artifact projection now exposes selected-backend context and derives
   missing runtime/model/backend facts only from the latest raw producer-node
-  execution status event at or before the artifact observation. Additional
-  backend producers remain open. Canonical `llm-inference` embedding execution
+  execution status event at or before the artifact observation. Typed text
+  generation now propagates optional bounded usage counts from terminal backend
+  stream chunks into typed results and backend-execution lifecycle events
+  without storing prompt text or generated content. Additional backend
+  producers remain open. Canonical `llm-inference` embedding execution
   now projects typed embedding `usage` and bounded `option_diagnostics` onto
   graph output ports while keeping input text and embedding vectors out of
   those metadata outputs; node lifecycle tests now match the explicit
@@ -3539,6 +3542,10 @@ Update during implementation:
   `ModelExecutionDescriptor.recommended_backend` fact when descriptor lookup
   succeeds, while preserving saved fallback behavior when Pumas facts are
   unavailable.
+- 2026-05-04: Added append-only terminal `ChatChunk` usage counts and threaded
+  typed text-generation usage into result and backend-execution lifecycle
+  summaries, with regression coverage proving prompt/result text stays out of
+  lifecycle diagnostics.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

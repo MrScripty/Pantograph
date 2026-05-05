@@ -33,7 +33,7 @@ use crate::model_contracts::{
 use crate::process::ProcessSpawner;
 use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, ImageGenerationRequest,
-    ImageGenerationResult, RerankRequest, RerankResponse,
+    ImageGenerationResult, InferenceUsage, RerankRequest, RerankResponse,
 };
 
 #[cfg(feature = "backend-llamacpp")]
@@ -735,6 +735,9 @@ pub struct ChatChunk {
     pub content: Option<String>,
     /// Whether this is the final chunk
     pub done: bool,
+    /// Optional bounded usage counts, usually emitted on the terminal chunk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<InferenceUsage>,
 }
 
 /// Embedding result
