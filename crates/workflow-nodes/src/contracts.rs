@@ -229,6 +229,7 @@ fn contract_task_id(task_id: &InferenceTaskId) -> ContractInferenceTaskId {
         InferenceTaskId::Rerank => ContractInferenceTaskId::Rerank,
         InferenceTaskId::ImageGeneration => ContractInferenceTaskId::ImageGeneration,
         InferenceTaskId::ImageUnderstanding => ContractInferenceTaskId::ImageUnderstanding,
+        InferenceTaskId::DepthEstimation => ContractInferenceTaskId::DepthEstimation,
         InferenceTaskId::AudioTranscription => ContractInferenceTaskId::AudioTranscription,
         InferenceTaskId::VideoUnderstanding => ContractInferenceTaskId::VideoUnderstanding,
         InferenceTaskId::MultimodalGeneration => ContractInferenceTaskId::MultimodalGeneration,
@@ -250,6 +251,9 @@ fn contract_input_kind(
         }
         InferenceExecutionInputKind::ImageUnderstanding => {
             ContractInferenceExecutionInputKind::ImageUnderstanding
+        }
+        InferenceExecutionInputKind::DepthEstimation => {
+            ContractInferenceExecutionInputKind::DepthEstimation
         }
         InferenceExecutionInputKind::AudioTranscription => {
             ContractInferenceExecutionInputKind::AudioTranscription
@@ -277,6 +281,9 @@ fn contract_result_kind(
         }
         InferenceExecutionResultKind::ImageUnderstanding => {
             ContractInferenceExecutionResultKind::ImageUnderstanding
+        }
+        InferenceExecutionResultKind::DepthEstimation => {
+            ContractInferenceExecutionResultKind::DepthEstimation
         }
         InferenceExecutionResultKind::AudioTranscription => {
             ContractInferenceExecutionResultKind::AudioTranscription

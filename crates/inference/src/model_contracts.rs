@@ -171,6 +171,7 @@ pub enum InferenceTaskId {
     Rerank,
     ImageGeneration,
     ImageUnderstanding,
+    DepthEstimation,
     AudioTranscription,
     VideoUnderstanding,
     MultimodalGeneration,
@@ -189,6 +190,7 @@ impl InferenceTaskId {
             Self::Rerank => "rerank",
             Self::ImageGeneration => "image_generation",
             Self::ImageUnderstanding => "image_understanding",
+            Self::DepthEstimation => "depth_estimation",
             Self::AudioTranscription => "audio_transcription",
             Self::VideoUnderstanding => "video_understanding",
             Self::MultimodalGeneration => "multimodal_generation",
@@ -206,6 +208,7 @@ pub enum InferenceExecutionInputKind {
     Rerank,
     ImageGeneration,
     ImageUnderstanding,
+    DepthEstimation,
     AudioTranscription,
     VideoUnderstanding,
     MultimodalGeneration,
@@ -221,6 +224,7 @@ impl InferenceExecutionInputKind {
             Self::Rerank => "rerank",
             Self::ImageGeneration => "image_generation",
             Self::ImageUnderstanding => "image_understanding",
+            Self::DepthEstimation => "depth_estimation",
             Self::AudioTranscription => "audio_transcription",
             Self::VideoUnderstanding => "video_understanding",
             Self::MultimodalGeneration => "multimodal_generation",
@@ -237,6 +241,7 @@ pub enum InferenceExecutionResultKind {
     Rerank,
     ImageGeneration,
     ImageUnderstanding,
+    DepthEstimation,
     AudioTranscription,
     VideoUnderstanding,
     MultimodalGeneration,
@@ -252,6 +257,7 @@ impl InferenceExecutionResultKind {
             Self::Rerank => "rerank",
             Self::ImageGeneration => "image_generation",
             Self::ImageUnderstanding => "image_understanding",
+            Self::DepthEstimation => "depth_estimation",
             Self::AudioTranscription => "audio_transcription",
             Self::VideoUnderstanding => "video_understanding",
             Self::MultimodalGeneration => "multimodal_generation",
@@ -336,6 +342,15 @@ impl TaskRequestContract {
                 streaming_support: TaskStreamingSupport::BackendDependent,
                 required_input_modalities: vec![InferenceModality::Image, InferenceModality::Text],
                 output_modalities: vec![InferenceModality::Text],
+            },
+            InferenceTaskId::DepthEstimation => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::DepthEstimation,
+                result_kind: InferenceExecutionResultKind::DepthEstimation,
+                execution_supported: false,
+                streaming_support: TaskStreamingSupport::Unsupported,
+                required_input_modalities: vec![InferenceModality::Image],
+                output_modalities: vec![InferenceModality::Image, InferenceModality::PointCloud],
             },
             InferenceTaskId::AudioTranscription => Self {
                 task_id: task_id.clone(),
@@ -748,6 +763,26 @@ pub fn default_task_registry_entries() -> Vec<TaskRegistryEntry> {
                 "visual-question-answering".to_string(),
                 "image-text-to-text".to_string(),
             ],
+        },
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::DepthEstimation,
+            aliases: vec![
+                "depth-estimation".to_string(),
+                "depth_estimation".to_string(),
+                "depth".to_string(),
+                "monocular-depth-estimation".to_string(),
+            ],
+            task_family: TaskFamily::Perception,
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Image],
+                vec![InferenceModality::Image, InferenceModality::PointCloud],
+            ),
+            result_family: "depth_map".to_string(),
+            execution_behavior: TaskExecutionBehavior::ClassifiesOrDescribes,
+            streaming_support: TaskStreamingSupport::Unsupported,
+            support_tier: SupportTier::Roadmap,
+            required_components: vec![ProcessorComponentKind::ImageProcessor],
+            upstream_task_ids: vec!["depth-estimation".to_string()],
         },
         TaskRegistryEntry {
             task_id: InferenceTaskId::AudioTranscription,
@@ -2338,6 +2373,25 @@ mod tests {
             InferenceExecutionResultKind::ImageGeneration
         );
         assert!(image.execution_supported);
+
+        let depth = registry_contract(InferenceTaskId::DepthEstimation);
+        assert_eq!(
+            depth.input_kind,
+            InferenceExecutionInputKind::DepthEstimation
+        );
+        assert_eq!(
+            depth.result_kind,
+            InferenceExecutionResultKind::DepthEstimation
+        );
+        assert_eq!(
+            depth.required_input_modalities,
+            vec![InferenceModality::Image]
+        );
+        assert_eq!(
+            depth.output_modalities,
+            vec![InferenceModality::Image, InferenceModality::PointCloud]
+        );
+        assert!(!depth.execution_supported);
     }
 
     #[test]

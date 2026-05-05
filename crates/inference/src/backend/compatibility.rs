@@ -543,6 +543,13 @@ fn package_components_available_for_task(
                 ProcessorComponentKind::ImageProcessor,
             ],
         ),
+        InferenceTaskId::DepthEstimation => component_family_available(
+            package,
+            &[
+                ProcessorComponentKind::Processor,
+                ProcessorComponentKind::ImageProcessor,
+            ],
+        ),
         InferenceTaskId::AudioTranscription => component_family_available(
             package,
             &[

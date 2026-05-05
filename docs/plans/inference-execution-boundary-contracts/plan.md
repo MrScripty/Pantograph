@@ -1142,7 +1142,10 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   `image_generation` request-construction slice for canonical `llm-inference`,
   including direct and `task_options` image controls, Pumas package-facts
   forwarding, and typed gateway projection without diagnostic prompt/image
-  payload leakage.
+  payload leakage. The contract matrix now also includes a roadmap
+  `depth_estimation` task aligned to image input and depth-map/point-cloud
+  output semantics without making the existing DepthPro node an inference
+  backend path.
 - [x] Define the strong task registry shape, including canonical task id,
   aliases, task family, input modalities, output modalities, result schema,
   processor/component requirements, streaming support, generative/scoring
@@ -3612,6 +3615,10 @@ Update during implementation:
   `technical_fit` tests verified Pumas package facts, backend capabilities,
   runtime registry state, and workflow requirements project through Pantograph
   contracts without moving selection policy into Pumas or inference.
+- 2026-05-05: Added roadmap `depth_estimation` task/request contract coverage
+  to the inference registry and node-contract projection enums. The task is
+  image-input, image/point-cloud-output, non-streaming, and not executable
+  through the typed inference gateway yet.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

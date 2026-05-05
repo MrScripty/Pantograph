@@ -832,6 +832,15 @@ fn task_request_contracts_publish_transformers_aligned_execution_matrix() {
             vec![InferenceModality::Text],
         ),
         (
+            InferenceTaskId::DepthEstimation,
+            InferenceExecutionInputKind::DepthEstimation,
+            InferenceExecutionResultKind::DepthEstimation,
+            false,
+            TaskStreamingSupport::Unsupported,
+            vec![InferenceModality::Image],
+            vec![InferenceModality::Image, InferenceModality::PointCloud],
+        ),
+        (
             InferenceTaskId::AudioTranscription,
             InferenceExecutionInputKind::AudioTranscription,
             InferenceExecutionResultKind::AudioTranscription,
@@ -986,6 +995,18 @@ fn task_registry_labels_normalize_without_leaking_backend_policy() {
     let video = resolve_task_registry_entry("video-text-to-text").expect("video roadmap task");
     assert_eq!(video.task_id, InferenceTaskId::VideoUnderstanding);
     assert_eq!(video.support_tier, SupportTier::Roadmap);
+
+    let depth = resolve_task_registry_entry("depth-estimation").expect("depth roadmap task");
+    assert_eq!(depth.task_id, InferenceTaskId::DepthEstimation);
+    assert_eq!(depth.support_tier, SupportTier::Roadmap);
+    assert_eq!(
+        depth.modality_signature.inputs,
+        vec![InferenceModality::Image]
+    );
+    assert_eq!(
+        depth.modality_signature.outputs,
+        vec![InferenceModality::Image, InferenceModality::PointCloud]
+    );
 }
 
 #[test]
