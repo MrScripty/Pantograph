@@ -2823,8 +2823,8 @@ inference write ledger events directly.
   tensors, temp paths, or scheduler/runtime reuse decisions. Typed audio
   transcription now propagates bounded `audio_ref` artifact references through
   backend-execution lifecycle events and durable inference diagnostics while
-  keeping encoded audio bytes, prompt text, generated content, local paths, and
-  scheduler/runtime selection state out of the payload.
+  keeping encoded audio bytes, prompt text, generated content, local paths,
+  `file://` URLs, and scheduler/runtime selection state out of the payload.
 - [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
@@ -2877,7 +2877,11 @@ inference write ledger events directly.
   now drop producer message text for both typed inference and KV-cache progress
   summaries, retaining bounded option path/state/backend keys and support
   counts while closing a remaining channel for prompts, Python kwargs, backend
-  CLI flags, token arrays, logits, tensors, and local paths.
+  CLI flags, token arrays, logits, tensors, and local paths. Typed audio
+  transcription artifact-ref projection now filters local path-shaped
+  `audio_ref` values, including absolute/relative home paths, `file://` URLs,
+  and Windows drive paths, before lifecycle events can reach durable
+  diagnostics.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle
@@ -2969,6 +2973,10 @@ one-off conversions.
   and embedded-runtime projects those refs into diagnostics-ledger rows without
   storing encoded media, prompts, generated content, local paths, or scheduler
   decisions.
+- 2026-05-05: Audio artifact-ref hygiene slice tightened the gateway projection
+  so local path-shaped `audio_ref` values are not copied into lifecycle events
+  or durable diagnostics; stable refs such as `artifact://...` remain available
+  as bounded artifact metadata.
 - 2026-05-05: Inference lifecycle sink append-failure slice changed
   `InferenceRequestLifecycleEventSink::record` to return a structured sink
   error, added a `diagnostics_unavailable` error contract, and made the

@@ -1998,6 +1998,69 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
 }
 
 #[tokio::test]
+async fn test_execute_typed_audio_lifecycle_omits_local_path_artifact_refs() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-audio-local-path-lifecycle".to_string()),
+        task_id: InferenceTaskId::AudioTranscription,
+        model_ref: None,
+        model_name: Some("mock-asr".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::AudioTranscription {
+            request: AudioTranscriptionRequest {
+                model: "mock-asr".to_string(),
+                audio: Some(EncodedAudio {
+                    data_base64: "UklGRg==".to_string(),
+                    mime_type: "audio/wav".to_string(),
+                    sample_rate_hz: Some(16000),
+                }),
+                audio_ref: Some("/tmp/SECRET_AUDIO_PATH.wav".to_string()),
+                language: None,
+                prompt: None,
+                task: None,
+                chunk_length_s: None,
+                extra_options: serde_json::Value::Null,
+            },
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed audio request should execute");
+
+    let events = sink.events();
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend completion event should be recorded");
+    assert!(backend_completed.artifact_refs.is_empty());
+    let serialized_events = serde_json::to_string(&events).expect("events serialize");
+    assert!(!serialized_events.contains("SECRET_AUDIO_PATH"));
+}
+
+#[test]
+fn test_bounded_artifact_ref_filters_local_path_shapes() {
+    assert_eq!(
+        bounded_artifact_ref("artifact://audio.wav"),
+        Some("artifact://audio.wav".to_string())
+    );
+    assert_eq!(bounded_artifact_ref("/tmp/audio.wav"), None);
+    assert_eq!(bounded_artifact_ref("./audio.wav"), None);
+    assert_eq!(bounded_artifact_ref("../audio.wav"), None);
+    assert_eq!(bounded_artifact_ref("~/audio.wav"), None);
+    assert_eq!(bounded_artifact_ref("file:///tmp/audio.wav"), None);
+    assert_eq!(bounded_artifact_ref("C:\\Users\\audio.wav"), None);
+}
+
+#[tokio::test]
 async fn test_execute_typed_with_lifecycle_records_validation_failure_without_backend_phase() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let sink = Arc::new(RecordingLifecycleSink::default());

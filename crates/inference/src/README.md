@@ -161,8 +161,8 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   lookup and media payload handling do not move into the inference crate.
 - Typed audio transcription lifecycle events may carry bounded `audio_ref`
   artifact references for host-owned diagnostics. They must not carry encoded
-  audio bytes, prompt text, generated content, local filesystem paths, or
-  scheduler/runtime selection state.
+  audio bytes, prompt text, generated content, local filesystem paths,
+  `file://` URLs, or scheduler/runtime selection state.
 - Typed text/chat streaming lifecycle events expose preprocessing,
   backend-execution, postprocessing, and result-projection phases around the
   typed request boundary. Legacy raw chat streaming remains a backend-execution
