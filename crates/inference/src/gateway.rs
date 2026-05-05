@@ -1378,10 +1378,14 @@ impl InferenceGateway {
                 let mut stream = self.chat_completion_stream(request_json).await?;
                 let mut text = String::new();
                 let mut usage = None;
+                let mut cache_handle_id = None;
                 while let Some(chunk) = stream.next().await {
                     let chunk = chunk.map_err(GatewayError::Backend)?;
                     if let Some(chunk_usage) = chunk.usage.clone() {
                         usage = Some(chunk_usage);
+                    }
+                    if let Some(chunk_cache_handle_id) = chunk.cache_handle_id.clone() {
+                        cache_handle_id = Some(chunk_cache_handle_id);
                     }
                     if let Some(content) = chunk.content {
                         text.push_str(&content);
@@ -1393,7 +1397,7 @@ impl InferenceGateway {
                 Ok(InferenceExecutionResult::TextGeneration {
                     text,
                     usage,
-                    cache_handle_id: None,
+                    cache_handle_id,
                     option_diagnostics: request_option_diagnostics,
                 })
             }
@@ -1584,6 +1588,7 @@ struct LifecycleStream {
     compatibility_report: Option<InferenceCompatibilityReportSummary>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     usage: Option<InferenceUsage>,
+    cache_handle_id: Option<String>,
     finished: bool,
 }
 
@@ -1615,6 +1620,7 @@ impl LifecycleStream {
             compatibility_report,
             compatibility_issues,
             usage: None,
+            cache_handle_id: None,
             finished: false,
         }
     }
@@ -1651,7 +1657,7 @@ impl LifecycleStream {
             self.compatibility_report.clone(),
             self.compatibility_issues.clone(),
             self.usage.clone(),
-            None,
+            self.cache_handle_id.clone(),
             None,
         );
     }
@@ -1675,6 +1681,9 @@ impl Stream for LifecycleStream {
             Poll::Ready(Some(Ok(chunk))) => {
                 if let Some(usage) = chunk.usage.clone() {
                     self.usage = Some(usage);
+                }
+                if let Some(cache_handle_id) = chunk.cache_handle_id.clone() {
+                    self.cache_handle_id = Some(cache_handle_id);
                 }
                 if chunk.done {
                     self.finish(InferenceRequestLifecycleEventKind::Completed, None);

@@ -36,6 +36,7 @@ struct MockFailAfterFirstStartBackend {
 struct MockLifecycleStreamBackend {
     fail_on_stream: bool,
     usage_on_terminal: Option<InferenceUsage>,
+    cache_handle_on_terminal: Option<String>,
 }
 struct MockKvBackend;
 
@@ -149,6 +150,7 @@ impl InferenceBackend for MockImageBackend {
                 content: Some("mock text".to_string()),
                 done: false,
                 usage: None,
+                cache_handle_id: None,
             }),
             Ok(ChatChunk {
                 content: None,
@@ -158,6 +160,7 @@ impl InferenceBackend for MockImageBackend {
                     completion_tokens: Some(2),
                     total_tokens: Some(5),
                 }),
+                cache_handle_id: Some("kv-mock-text".to_string()),
             }),
         ])))
     }
@@ -615,11 +618,13 @@ impl InferenceBackend for MockLifecycleStreamBackend {
                 content: Some("hello".to_string()),
                 done: false,
                 usage: None,
+                cache_handle_id: None,
             }),
             Ok(ChatChunk {
                 content: None,
                 done: true,
                 usage: self.usage_on_terminal.clone(),
+                cache_handle_id: self.cache_handle_on_terminal.clone(),
             }),
         ])))
     }
@@ -1326,12 +1331,18 @@ async fn test_execute_typed_text_lifecycle_reports_usage_from_terminal_chunk() {
         .expect("typed text request should execute");
 
     match result {
-        InferenceExecutionResult::TextGeneration { text, usage, .. } => {
+        InferenceExecutionResult::TextGeneration {
+            text,
+            usage,
+            cache_handle_id,
+            ..
+        } => {
             assert_eq!(text, "mock text");
             let usage = usage.expect("terminal chunk usage should become typed result usage");
             assert_eq!(usage.prompt_tokens, Some(3));
             assert_eq!(usage.completion_tokens, Some(2));
             assert_eq!(usage.total_tokens, Some(5));
+            assert_eq!(cache_handle_id.as_deref(), Some("kv-mock-text"));
         }
         other => panic!("expected text generation result, got {other:?}"),
     }
@@ -1364,6 +1375,10 @@ async fn test_execute_typed_text_lifecycle_reports_usage_from_terminal_chunk() {
             .as_ref()
             .and_then(|usage| usage.total_tokens),
         Some(5)
+    );
+    assert_eq!(
+        backend_completed.cache_handle_id.as_deref(),
+        Some("kv-mock-text")
     );
     let lifecycle_json =
         serde_json::to_string(backend_completed).expect("lifecycle event should serialize");
@@ -2287,6 +2302,7 @@ async fn test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage() {
                 completion_tokens: Some(5),
                 total_tokens: Some(13),
             }),
+            cache_handle_on_terminal: Some("kv-stream-checkpoint".to_string()),
         }),
         "mock",
     );
@@ -2342,6 +2358,10 @@ async fn test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage() {
     assert_eq!(usage.prompt_tokens, Some(8));
     assert_eq!(usage.completion_tokens, Some(5));
     assert_eq!(usage.total_tokens, Some(13));
+    assert_eq!(
+        backend_completed.cache_handle_id.as_deref(),
+        Some("kv-stream-checkpoint")
+    );
     let event_json = serde_json::to_string(backend_completed).expect("event serializes");
     assert!(!event_json.contains("SECRET_STREAM_PROMPT"));
     assert!(!event_json.contains("hello"));

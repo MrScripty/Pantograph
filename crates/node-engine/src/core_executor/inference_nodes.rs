@@ -124,13 +124,14 @@ pub(crate) async fn execute_llm_inference(
                 NodeEngineError::ExecutionFailed(format!("Typed LLM inference failed: {error}"))
             })?;
         ensure_typed_result_kind(&result, expected_result_kind, "Typed LLM inference")?;
-        let (response, usage, option_diagnostics) = match result {
+        let (response, usage, cache_handle_id, option_diagnostics) = match result {
             inference::InferenceExecutionResult::TextGeneration {
                 text,
                 usage,
+                cache_handle_id,
                 option_diagnostics,
                 ..
-            } => (text, usage, option_diagnostics),
+            } => (text, usage, cache_handle_id, option_diagnostics),
             other => {
                 return Err(NodeEngineError::ExecutionFailed(format!(
                     "Typed LLM inference returned unexpected result: {other:?}"
@@ -147,6 +148,12 @@ pub(crate) async fn execute_llm_inference(
                 serde_json::to_value(usage).unwrap_or(serde_json::Value::Null),
             );
         }
+        if let Some(cache_handle_id) = cache_handle_id {
+            outputs.insert(
+                "kv_cache_out".to_string(),
+                serde_json::json!({ "cache_id": cache_handle_id }),
+            );
+        }
         outputs.insert(
             "diagnostics".to_string(),
             serde_json::to_value(option_diagnostics).unwrap_or(serde_json::Value::Null),
@@ -154,7 +161,7 @@ pub(crate) async fn execute_llm_inference(
         return Ok(outputs);
     }
 
-    let (response, usage) = if let Some(sink) = event_sink {
+    let (response, usage, cache_handle_id) = if let Some(sink) = event_sink {
         let mut request = build_text_generation_execution_request(inputs)?;
         assign_typed_request_id(&mut request, task_id, execution_id);
         if let inference::InferenceExecutionInput::TextGeneration { stream, .. } =
@@ -174,12 +181,16 @@ pub(crate) async fn execute_llm_inference(
 
         let mut full_response = String::new();
         let mut usage = None;
+        let mut cache_handle_id = None;
         while let Some(chunk_result) = token_stream.next().await {
             let chunk = chunk_result.map_err(|error| {
                 NodeEngineError::ExecutionFailed(format!("Stream read error: {error}"))
             })?;
             if let Some(chunk_usage) = chunk.usage {
                 usage = Some(chunk_usage);
+            }
+            if let Some(chunk_cache_handle_id) = chunk.cache_handle_id {
+                cache_handle_id = Some(chunk_cache_handle_id);
             }
             if let Some(token) = chunk.content.filter(|token| !token.is_empty()) {
                 full_response.push_str(&token);
@@ -195,7 +206,7 @@ pub(crate) async fn execute_llm_inference(
             }
         }
 
-        (full_response, usage)
+        (full_response, usage, cache_handle_id)
     } else {
         unreachable!("non-streaming typed inference returns before streaming request construction")
     };
@@ -207,6 +218,12 @@ pub(crate) async fn execute_llm_inference(
         outputs.insert(
             "usage".to_string(),
             serde_json::to_value(usage).unwrap_or(serde_json::Value::Null),
+        );
+    }
+    if let Some(cache_handle_id) = cache_handle_id {
+        outputs.insert(
+            "kv_cache_out".to_string(),
+            serde_json::json!({ "cache_id": cache_handle_id }),
         );
     }
     Ok(outputs)

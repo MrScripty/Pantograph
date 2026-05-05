@@ -415,6 +415,12 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
             "total_tokens": 9
         }))
     );
+    assert_eq!(
+        outputs.get("kv_cache_out"),
+        Some(&serde_json::json!({
+            "cache_id": "kv-typed-text"
+        }))
+    );
 
     let captured = requests.lock().expect("requests lock");
     assert_eq!(captured.len(), 1);
@@ -487,6 +493,12 @@ async fn test_execute_llm_inference_streaming_uses_gateway_stream_boundary() {
             "prompt_tokens": 7,
             "completion_tokens": 2,
             "total_tokens": 9
+        }))
+    );
+    assert_eq!(
+        outputs.get("kv_cache_out"),
+        Some(&serde_json::json!({
+            "cache_id": "kv-typed-text"
         }))
     );
     let captured = requests.lock().expect("requests lock");
@@ -3191,6 +3203,7 @@ impl InferenceBackend for MockTypedTextBackend {
                 content: Some("typed response".to_string()),
                 done: false,
                 usage: None,
+                cache_handle_id: None,
             }),
             Ok(ChatChunk {
                 content: None,
@@ -3200,6 +3213,7 @@ impl InferenceBackend for MockTypedTextBackend {
                     completion_tokens: Some(2),
                     total_tokens: Some(9),
                 }),
+                cache_handle_id: Some("kv-typed-text".to_string()),
             }),
         ])))
     }

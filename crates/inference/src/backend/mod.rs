@@ -738,6 +738,10 @@ pub struct ChatChunk {
     /// Optional bounded usage counts, usually emitted on the terminal chunk.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<InferenceUsage>,
+    /// Optional backend-local KV cache handle id, usually emitted on the
+    /// terminal chunk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_handle_id: Option<String>,
 }
 
 /// Embedding result
@@ -904,6 +908,7 @@ mod tests {
             content: Some("hello".to_string()),
             done: false,
             usage: None,
+            cache_handle_id: None,
         };
 
         let encoded = serde_json::to_value(&chunk).expect("chat chunk serializes");
@@ -913,6 +918,10 @@ mod tests {
         assert!(
             encoded.get("usage").is_none(),
             "absent usage should stay omitted for append-only compatibility"
+        );
+        assert!(
+            encoded.get("cache_handle_id").is_none(),
+            "absent cache handle should stay omitted for append-only compatibility"
         );
     }
 
@@ -926,6 +935,7 @@ mod tests {
                 completion_tokens: Some(5),
                 total_tokens: Some(13),
             }),
+            cache_handle_id: Some("kv-checkpoint-1".to_string()),
         };
 
         let encoded = serde_json::to_value(&chunk).expect("chat chunk serializes");
@@ -935,5 +945,9 @@ mod tests {
         assert_eq!(encoded["usage"]["prompt_tokens"], serde_json::json!(8));
         assert_eq!(encoded["usage"]["completion_tokens"], serde_json::json!(5));
         assert_eq!(encoded["usage"]["total_tokens"], serde_json::json!(13));
+        assert_eq!(
+            encoded["cache_handle_id"],
+            serde_json::json!("kv-checkpoint-1")
+        );
     }
 }

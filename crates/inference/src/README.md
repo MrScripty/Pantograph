@@ -306,12 +306,13 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   Pumas package facts. Lifecycle facts may also carry explicit non-`auto`
   selected device ids from backend start config, bounded usage counts, and
   backend-local cache-handle ids when typed execution results provide them.
-  Text generation may receive bounded stream usage from backend `ChatChunk`
-  metadata, and embedding execution aggregates backend embedding item token
-  counts into bounded prompt/total usage summaries without exposing vectors or
-  input text; prompt text, messages, generated content, embeddings, tensors,
-  token arrays, Python kwargs, backend CLI flags, local paths, and raw process
-  output stay outside lifecycle diagnostics.
+  Text generation may receive bounded stream usage and backend-local cache
+  handle ids from backend `ChatChunk` metadata, and embedding execution
+  aggregates backend embedding item token counts into bounded prompt/total usage
+  summaries without exposing vectors or input text; prompt text, messages,
+  generated content, embeddings, tensors, token arrays, Python kwargs, backend
+  CLI flags, local paths, raw KV state, and raw process output stay outside
+  lifecycle diagnostics.
 - `InferenceGateway::stream_typed_text` and
   `InferenceGateway::stream_typed_text_with_lifecycle` keep streaming
   text/chat requests on the same canonical `InferenceExecutionRequest` boundary

@@ -1190,7 +1190,10 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   allowlist enforcement. Backend stream chunk coverage now freezes
   append-only `ChatChunk.usage` serialization so absent usage is omitted and
   bounded token counts remain nested metadata rather than prompt/result
-  payloads.
+  payloads. The same append-only stream contract now covers
+  `ChatChunk.cache_handle_id`, with absent handles omitted and present handles
+  serialized as stable backend-local ids rather than KV bytes, prompt/result
+  text, or runtime reuse policy.
 - [x] Add validation rules so internal code consumes parsed model/task types
   rather than raw strings or ad hoc JSON.
 - [x] Document that Python Transformers is one implementation of these
@@ -2759,8 +2762,12 @@ inference write ledger events directly.
   item token counts into bounded prompt/total usage summaries without storing
   vectors or input text. Gateway lifecycle projection now reads usage and
   cache-handle summaries through canonical typed result accessors instead of
-  duplicating result-shape matches in producer code. Host-owned workflow event
-  sinks now persist structured
+  duplicating result-shape matches in producer code. Typed text/chat streaming
+  now carries backend terminal cache-handle ids through `ChatChunk`, typed
+  `TextGeneration` results, backend-execution lifecycle completion events, and
+  the canonical `llm-inference.kv_cache_out` graph port without storing
+  prompt/result text, KV bytes, tensors, temp paths, or scheduling decisions.
+  Host-owned workflow event sinks now persist structured
   KV-cache progress references for action, outcome, cache id, backend key, reuse
   source, token count, and reason without cache bytes/fingerprints/temp paths;
   I/O artifact projection now exposes selected-backend context and derives
@@ -3601,6 +3608,11 @@ Update during implementation:
 - 2026-05-05: Updated node-engine source and core-executor README contracts for
   canonical text/chat `usage` output, documenting bounded token-count metadata
   hygiene and the rule against deriving usage from prompt or generated content.
+- 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
+  threaded terminal text/chat cache-handle ids through typed gateway results,
+  backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`
+  projection while keeping raw KV state and prompt/result bodies out of durable
+  diagnostics.
 - 2026-05-05: Removed workflow-nodes Puma-Lib model-list raw
   `ModelRecord.metadata` fallbacks for executable option metadata. Task,
   backend-hint, custom-code, review, and dependency-binding facts now come from

@@ -129,6 +129,10 @@ fn create_backend() {
   counts. Backends may emit it on content chunks or usage-only terminal
   payloads; consumers must not expect prompts, generated text, logits, tensors,
   Python kwargs, CLI flags, or local paths in this field.
+- `ChatChunk.cache_handle_id` is optional append-only stream metadata for
+  backend-local KV checkpoint handles. Backends should emit stable handle ids
+  only, never KV bytes, prompt text, generated text, tensors, temp paths, or
+  scheduler/runtime reuse policy.
 - Streaming response parsers should use `strip_prefix` for SSE `data:` lines
   so prefix handling stays explicit and warning-clean under the Rust clippy
   audit.

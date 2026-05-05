@@ -354,6 +354,7 @@ pub fn parse_sse_stream(
                 content: None,
                 done: false,
                 usage: None,
+                cache_handle_id: None,
             })
         }
         Err(e) => Err(BackendError::Http(e)),
@@ -368,6 +369,7 @@ fn chat_chunk_from_sse_data(data: &str) -> Option<ChatChunk> {
             content: None,
             done: true,
             usage: None,
+            cache_handle_id: None,
         });
     }
 
@@ -389,6 +391,7 @@ fn chat_chunk_from_sse_data(data: &str) -> Option<ChatChunk> {
         content,
         done: false,
         usage,
+        cache_handle_id: None,
     })
 }
 

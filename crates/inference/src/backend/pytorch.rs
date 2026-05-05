@@ -1387,6 +1387,7 @@ impl PyTorchBackend {
                                         content: Some(token),
                                         done: false,
                                         usage: None,
+                                        cache_handle_id: None,
                                     }))
                                     .is_err()
                                 {
@@ -1419,6 +1420,7 @@ impl PyTorchBackend {
                     content: None,
                     done: true,
                     usage: None,
+                    cache_handle_id: None,
                 }));
             });
         });
