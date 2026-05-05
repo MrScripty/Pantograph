@@ -978,12 +978,15 @@ Detailed Pumas-side work is split into
   source for model identity, artifact facts, task evidence, generation defaults,
   custom-code/security facts, backend hints, legacy reference resolution, and
   Pumas/Pantograph fixture expectations.
-- [ ] Define Pantograph-owned technical-fit candidate derivation from canonical
+- [x] Define Pantograph-owned technical-fit candidate derivation from canonical
   Pumas package facts, Pumas dependency facts, backend capabilities, runtime
   registry state, and workflow requirements. Pumas supplies facts only;
   Pantograph owns model/backend candidate projection, exclusion diagnostics,
   live runtime selection, loaded-state interpretation, memory admission, and
-  final backend choice.
+  final backend choice. Workflow-service owns the technical-fit request and
+  decision DTOs, embedded-runtime projects Pumas package facts plus backend
+  capabilities into runtime-registry candidate facts, and runtime-registry
+  selection remains the live runtime/admission authority.
 - [x] Keep the Pantograph inference plan focused on consuming Pumas package
   facts rather than specifying Pumas indexing, import, deduplication,
   migration, dependency binding, or storage implementation details.
@@ -3604,6 +3607,11 @@ Update during implementation:
   `ModelRecord.metadata` fallbacks for entry-path matching and task fallback.
   Dependency lookup now matches public execution-descriptor entry paths and
   unknown descriptor tasks fall back to saved request facts.
+- 2026-05-05: Marked the Pantograph-owned technical-fit candidate derivation
+  item complete after focused embedded-runtime and workflow-service
+  `technical_fit` tests verified Pumas package facts, backend capabilities,
+  runtime registry state, and workflow requirements project through Pantograph
+  contracts without moving selection policy into Pumas or inference.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
