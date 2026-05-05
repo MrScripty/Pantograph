@@ -25,6 +25,7 @@ const TASK_LABELS: Record<InferenceTaskId, string> = {
   rerank: 'Rerank',
   image_generation: 'Image',
   image_understanding: 'Vision',
+  depth_estimation: 'Depth',
   audio_transcription: 'Audio',
   video_understanding: 'Video',
   multimodal_generation: 'Multimodal',

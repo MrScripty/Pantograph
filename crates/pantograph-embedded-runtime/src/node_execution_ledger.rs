@@ -235,7 +235,10 @@ impl NodeExecutionWorkflowLedgerSink {
         })
     }
 
-    fn record_kv_cache_diagnostic(&self, event: &node_engine::WorkflowEvent) {
+    fn record_kv_cache_diagnostic(
+        &self,
+        event: &node_engine::WorkflowEvent,
+    ) -> Result<(), node_engine::EventError> {
         let Some(request) = build_kv_cache_diagnostic_event_ledger_append_request(
             &self.workflow_id,
             &self.workflow_run_id,
@@ -243,15 +246,13 @@ impl NodeExecutionWorkflowLedgerSink {
             &self.contexts_by_node_id,
             event,
         ) else {
-            return;
+            return Ok(());
         };
 
-        if let Err(error) = self
-            .workflow_service
+        self.workflow_service
             .workflow_diagnostic_event_record(request)
-        {
-            log::warn!("failed to record KV cache diagnostic event: {error}");
-        }
+            .map(|_| ())
+            .map_err(|error| diagnostics_unavailable_event_error("KV cache diagnostic", &error))
     }
 }
 
@@ -292,13 +293,26 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
 
 impl node_engine::EventSink for NodeExecutionWorkflowLedgerSink {
     fn send(&self, event: node_engine::WorkflowEvent) -> Result<(), node_engine::EventError> {
-        self.record_kv_cache_diagnostic(&event);
+        let diagnostic_result = self.record_kv_cache_diagnostic(&event);
 
         if let Some(inner) = &self.inner {
             inner.send(event)?;
         }
 
-        Ok(())
+        diagnostic_result
+    }
+}
+
+fn diagnostics_unavailable_event_error(
+    diagnostic_kind: &str,
+    error: &pantograph_workflow_service::WorkflowServiceError,
+) -> node_engine::EventError {
+    log::warn!("failed to record {diagnostic_kind}: {error}");
+    node_engine::EventError {
+        message: format!(
+            "diagnostics_unavailable: failed to record {diagnostic_kind}: {}",
+            sanitize_diagnostic_error_text(&error.to_string(), MAX_DIAGNOSTIC_ERROR_TEXT_LEN)
+        ),
     }
 }
 

@@ -42,8 +42,8 @@ packages.
 | `node_execution_capabilities.rs` | Defines managed capability route contracts and typed capability wrappers for model, resource, cache, progress, diagnostics, and external-tool access. |
 | `node_execution_diagnostics.rs` | Adapts node-engine workflow events into enriched transient runtime-owned node diagnostics with attribution, contract, lineage, and guarantee context, plus an event-sink recorder for collecting adapted diagnostics along execution paths. |
 | `node_execution_diagnostics_tests.rs` | Focused diagnostics adapter tests for lifecycle, output summary, progress, stream, failure, cancellation, and filtering behavior. |
-| `node_execution_ledger.rs` | Owns runtime submission of managed model usage facts, inference lifecycle facts, canonical task/backend/model/device projection context, bounded inference option-support summaries, usage summaries, cache-handle ids, KV-cache diagnostic references, and sanitized failed-detail copies into the durable diagnostics ledger through workflow-service/node-execution boundaries. |
-| `node_execution_ledger_tests.rs` | Focused runtime ledger submission tests for context matching, unavailable capability rejection, output-measurement guarantee downgrades, inference lifecycle projection, option-support summary projection, usage/cache summary hygiene, bounded failed-detail projection, and persisted usage submission. |
+| `node_execution_ledger.rs` | Owns runtime submission of managed model usage facts, inference lifecycle facts, canonical task/backend/model/device projection context, bounded inference option-support summaries, usage summaries, cache-handle ids, KV-cache diagnostic references, diagnostics-unavailable projection for workflow-event append failures, and sanitized failed-detail copies into the durable diagnostics ledger through workflow-service/node-execution boundaries. |
+| `node_execution_ledger_tests.rs` | Focused runtime ledger submission tests for context matching, unavailable capability rejection, output-measurement guarantee downgrades, inference lifecycle projection, option-support summary projection, usage/cache summary hygiene, diagnostics-unavailable append-failure behavior, bounded failed-detail projection, and persisted usage submission. |
 | `node_execution_tests.rs` | Focused runtime-created node execution context, managed capability routing, cancellation, progress, output summary, and guarantee classification tests. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
 | `task_executor.rs` | Hosts the Pantograph-specific task executor facade, construction, extension keys, and node-type dispatch while preserving core-node fallthrough. |
@@ -175,9 +175,12 @@ delegating methods; scheduler authority and diagnostics events stay in
   cache-handle ids, and matched lifecycle duration. Structured KV-cache progress
   may project bounded
   action/outcome/cache-id references and task-local KV option-support summaries
-  through the host-owned workflow event sink; prompt/result bodies, embeddings,
-  tensors, token arrays, backend kwargs, raw backend output, cache bytes, cache
-  fingerprints, and temp paths remain outside durable diagnostic payloads.
+  through the host-owned workflow event sink. KV-cache diagnostic append
+  failures are returned as `diagnostics_unavailable` event-sink errors after the
+  original workflow event is forwarded to the inner sink. Prompt/result bodies,
+  embeddings, tensors, token arrays, backend kwargs, raw backend output, cache
+  bytes, cache fingerprints, and temp paths remain outside durable diagnostic
+  payloads.
 - Public embedded-runtime graph persistence, edit-session, mutation,
   connection, and insert-preview facade methods stay in
   `embedded_workflow_graph_api.rs` so graph API forwarding remains separate

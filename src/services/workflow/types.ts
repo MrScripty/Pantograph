@@ -29,6 +29,7 @@ export type InferenceTaskId =
   | 'rerank'
   | 'image_generation'
   | 'image_understanding'
+  | 'depth_estimation'
   | 'audio_transcription'
   | 'video_understanding'
   | 'multimodal_generation'

@@ -410,6 +410,7 @@ fn task_result_family(task_id: &inference::InferenceTaskId) -> &'static str {
         inference::InferenceTaskId::Embedding => "embedding",
         inference::InferenceTaskId::Rerank => "ranking",
         inference::InferenceTaskId::ImageGeneration => "image",
+        inference::InferenceTaskId::DepthEstimation => "depth",
         inference::InferenceTaskId::AudioTranscription => "text",
         inference::InferenceTaskId::VideoUnderstanding
         | inference::InferenceTaskId::ImageUnderstanding

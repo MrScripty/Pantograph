@@ -592,6 +592,9 @@ fn workflow_input_kind(
         inference::InferenceExecutionInputKind::ImageUnderstanding => {
             WorkflowInferenceExecutionInputKind::ImageUnderstanding
         }
+        inference::InferenceExecutionInputKind::DepthEstimation => {
+            WorkflowInferenceExecutionInputKind::DepthEstimation
+        }
         inference::InferenceExecutionInputKind::AudioTranscription => {
             WorkflowInferenceExecutionInputKind::AudioTranscription
         }
@@ -622,6 +625,9 @@ fn workflow_result_kind(
         }
         inference::InferenceExecutionResultKind::ImageUnderstanding => {
             WorkflowInferenceExecutionResultKind::ImageUnderstanding
+        }
+        inference::InferenceExecutionResultKind::DepthEstimation => {
+            WorkflowInferenceExecutionResultKind::DepthEstimation
         }
         inference::InferenceExecutionResultKind::AudioTranscription => {
             WorkflowInferenceExecutionResultKind::AudioTranscription
@@ -673,6 +679,7 @@ fn workflow_task_id(task_id: &inference::InferenceTaskId) -> WorkflowInferenceTa
         inference::InferenceTaskId::ImageUnderstanding => {
             WorkflowInferenceTaskId::ImageUnderstanding
         }
+        inference::InferenceTaskId::DepthEstimation => WorkflowInferenceTaskId::DepthEstimation,
         inference::InferenceTaskId::AudioTranscription => {
             WorkflowInferenceTaskId::AudioTranscription
         }
@@ -1179,6 +1186,51 @@ mod tests {
         );
 
         assert!(capabilities.is_empty());
+    }
+
+    #[test]
+    fn backend_capability_projection_preserves_depth_estimation_task_contract() {
+        let facts = project_backend_capability_facts(&inference::BackendCapabilityFacts {
+            tasks: vec![inference::BackendTaskCapability {
+                task_id: inference::InferenceTaskId::DepthEstimation,
+                support_tier: inference::SupportTier::Roadmap,
+                modality_signature: inference::TaskModalitySignature::new(
+                    vec![inference::InferenceModality::Image],
+                    vec![
+                        inference::InferenceModality::Image,
+                        inference::InferenceModality::PointCloud,
+                    ],
+                ),
+            }],
+            ..inference::BackendCapabilityFacts::default()
+        });
+
+        assert_eq!(facts.tasks.len(), 1);
+        assert_eq!(
+            facts.tasks[0].task_id,
+            WorkflowInferenceTaskId::DepthEstimation
+        );
+        assert_eq!(
+            facts.tasks[0]
+                .request_contract
+                .as_ref()
+                .map(|contract| contract.input_kind),
+            Some(WorkflowInferenceExecutionInputKind::DepthEstimation)
+        );
+        assert_eq!(
+            facts.tasks[0]
+                .request_contract
+                .as_ref()
+                .map(|contract| contract.result_kind),
+            Some(WorkflowInferenceExecutionResultKind::DepthEstimation)
+        );
+        assert_eq!(
+            facts.tasks[0].modality_signature.outputs,
+            vec![
+                WorkflowInferenceModality::Image,
+                WorkflowInferenceModality::PointCloud
+            ]
+        );
     }
 
     #[test]

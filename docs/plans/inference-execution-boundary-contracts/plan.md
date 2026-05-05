@@ -1145,7 +1145,10 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   payload leakage. The contract matrix now also includes a roadmap
   `depth_estimation` task aligned to image input and depth-map/point-cloud
   output semantics without making the existing DepthPro node an inference
-  backend path.
+  backend path. Follow-up validation found embedded-runtime workflow capability
+  and technical-fit projections were not yet exhaustive over the new task id;
+  those mappings now preserve `depth_estimation` as a roadmap workflow task
+  contract and classify its result family separately from generated images.
 - [x] Define the strong task registry shape, including canonical task id,
   aliases, task family, input modalities, output modalities, result schema,
   processor/component requirements, streaming support, generative/scoring
@@ -2831,7 +2834,13 @@ inference write ledger events directly.
   error path used to surface capacity-rebalance unload failures. Frontend
   workflow-service error parsing now has explicit coverage proving
   `diagnostics_unavailable` links survive backend error envelopes even when no
-  diagnostic event id exists.
+  diagnostic event id exists. Embedded-runtime KV-cache workflow-event sinks now
+  return a `diagnostics_unavailable` event-sink error when durable KV diagnostic
+  append fails, after forwarding the original workflow event to the inner sink
+  so stream/progress delivery is preserved. Inference lifecycle sink append
+  failures remain logged only because the current inference lifecycle sink trait
+  is fire-and-forget; a later slice must add a return channel or host-side
+  unavailable projection for that path.
 - [ ] Keep prompts, chat messages, raw media, generated content, embeddings,
   token arrays, logits, tensors, Python kwargs, backend CLI flags, full local
   paths where stable ids exist, and unbounded stderr/stdout out of ledger
@@ -3631,6 +3640,13 @@ Update during implementation:
 - 2026-05-05: Aligned app-level workflow service TypeScript types, mocks, and
   inference payload display presenters with the `cache_handle` payload role so
   frontend mock `kv_cache_out` metadata no longer drifts from Rust contracts.
+- 2026-05-05: Embedded-runtime KV-cache workflow-event sinks now surface
+  durable diagnostic append failures as `diagnostics_unavailable` event-sink
+  errors after forwarding the original workflow event, and the plan records the
+  remaining fire-and-forget inference lifecycle sink limitation explicitly.
+- 2026-05-05: Fixed embedded-runtime workflow capability and technical-fit
+  projections for the roadmap `depth_estimation` task after validation exposed
+  non-exhaustive matches introduced by the depth task contract slice.
 - 2026-05-05: Removed workflow-nodes Puma-Lib model-list raw
   `ModelRecord.metadata` fallbacks for executable option metadata. Task,
   backend-hint, custom-code, review, and dependency-binding facts now come from

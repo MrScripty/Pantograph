@@ -18,7 +18,7 @@ use pantograph_workflow_service::{WorkflowNodeStatusQueryRequest, WorkflowServic
 use super::{
     build_kv_cache_diagnostic_event_ledger_append_request,
     inference_diagnostic_event_ledger_append_request_with_duration,
-    NodeExecutionWorkflowLedgerNodeContext,
+    NodeExecutionWorkflowLedgerNodeContext, NodeExecutionWorkflowLedgerSink,
 };
 use crate::{
     inference_diagnostic_event_ledger_append_request,
@@ -1085,6 +1085,60 @@ fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }
+}
+
+#[test]
+fn kv_cache_workflow_sink_returns_diagnostics_unavailable_and_forwards_event_on_append_failure() {
+    let service =
+        std::sync::Arc::new(WorkflowService::with_ephemeral_diagnostics_ledger().expect("service"));
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![node_engine::GraphNode {
+            id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        }],
+        edges: Vec::new(),
+        groups: Vec::new(),
+    };
+    let inner = std::sync::Arc::new(node_engine::VecEventSink::new());
+    let sink = NodeExecutionWorkflowLedgerSink::try_new(
+        service,
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+        Some(inner.clone()),
+    )
+    .expect("sink");
+    let event = node_engine::WorkflowEvent::TaskProgress {
+        task_id: "node-a".to_string(),
+        execution_id: "run-a".to_string(),
+        progress: 0.4,
+        message: Some("cache restore attempted".to_string()),
+        detail: Some(node_engine::TaskProgressDetail::KvCache(
+            node_engine::KvCacheExecutionDiagnostics {
+                action: node_engine::KvCacheEventAction::RestoreInput,
+                outcome: node_engine::KvCacheEventOutcome::Unsupported,
+                cache_id: Some("cache-1".to_string()),
+                backend_key: Some("llamacpp".to_string()),
+                reuse_source: None,
+                token_count: None,
+                reason: Some("x".repeat(2_048)),
+                option_diagnostics: Vec::new(),
+            },
+        )),
+        occurred_at_ms: Some(175),
+    };
+
+    let error =
+        node_engine::EventSink::send(&sink, event.clone()).expect_err("append failure is returned");
+
+    assert!(error.message.contains("diagnostics_unavailable"));
+    assert!(error.message.contains("KV cache diagnostic"));
+    assert_eq!(inner.events(), vec![event]);
 }
 
 #[test]
