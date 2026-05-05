@@ -90,6 +90,10 @@ stable public facade and dispatch owner.
   or become a new inference path.
 - Gateway-backed inference handlers stay in `inference_nodes.rs`; PyTorch and
   audio Python-worker handlers remain separate feature families.
+- Canonical `llm-inference` request builders in `inference_nodes.rs` should
+  promote resolved Pumas package facts into typed request `model_ref` when an
+  explicit graph `pumas_model_ref` or `model_ref` is not wired, so stable model
+  identity still reaches backend lifecycle and transport contracts.
 - Canonical `llm-inference` task/request compatibility checks should consume
   inference task registry request contracts instead of hard-coded backend names
   or raw task labels.

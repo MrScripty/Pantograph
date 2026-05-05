@@ -9,7 +9,7 @@ entrypoint while preserving the current public API.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `dependency_inputs.rs` | Dependency-output to node-input mapping helpers, including Puma-Lib model-path context propagation. |
+| `dependency_inputs.rs` | Dependency-output to node-input mapping helpers, including Puma-Lib model-path and package-facts context propagation. |
 | `execution_core.rs` | Private recursive demand-orchestration owner that coordinates dependency recursion, cache reuse, node preparation, event emission, and completed-output finalization through the borrowed runtime context. |
 | `execution_events.rs` | Backend-owned task event emission helpers for started, waiting, and completed demand states. |
 | `graph_state.rs` | Workflow graph mutation, snapshot, and restore helpers behind the public executor facade. |
@@ -36,6 +36,10 @@ changing the public executor surface.
 - Graph-modification and incremental-run semantics stay backend-owned in Rust.
 - Dependency-input assembly and model-context propagation stay backend-owned in
   Rust.
+- Direct `resolved_model_package_facts` and `model_package_facts` edges must
+  carry the same Pumas model context as `model_path` and `pumas_model_ref`
+  edges, including stable model ref, selected binding ids, platform context,
+  and dependency facts.
 - Static node-data injection and human-input pause detection stay backend-owned
   in Rust.
 - Cache hit resolution and completed-output version finalization stay

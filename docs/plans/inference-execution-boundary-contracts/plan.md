@@ -2641,7 +2641,10 @@ drift back into inference.
   payload roles as graph metadata facts rather than runtime policy or generated
   result payloads. Workflow service frontend READMEs and inference payload
   presenter docs now mirror that cache-handle role boundary for app-level
-  mocks and display rows.
+  mocks and display rows. Inference and node-engine source READMEs now document
+  package-facts model identity fallback for typed gateway transport,
+  canonical `llm-inference` request builders, and direct package-facts
+  dependency-input edges.
 - [ ] Record any deferred consumer migrations in this plan.
 
 **Verification:**
@@ -3775,6 +3778,9 @@ Update during implementation:
 - 2026-05-05: Inference gateway typed model-name projection now falls back to
   resolved Pumas package facts after explicit `model_name` and `model_ref`,
   covering direct typed callers that bypass node-engine request builders.
+- 2026-05-05: Updated inference and node-engine source READMEs for the
+  package-facts model identity fallback and dependency-input context
+  propagation contracts.
 - 2026-05-05: Embedded-runtime KV-cache workflow-event sinks now surface
   durable diagnostic append failures as `diagnostics_unavailable` event-sink
   errors after forwarding the original workflow event, and the plan records the

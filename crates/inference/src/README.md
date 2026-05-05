@@ -98,6 +98,11 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
 - New task execution consumers should prefer `InferenceExecutionRequest` and
   `InferenceExecutionResult` over backend-specific request shapes. Legacy
   facade methods remain adapter edges until their callers migrate.
+- Typed gateway transport projection resolves model identity in this order:
+  explicit `model_name`, explicit `model_ref.model_id`, then
+  `resolved_model_package_facts.model_ref.model_id`. Direct typed callers must
+  not depend on backend-specific empty-model fallbacks when Pumas package facts
+  are available.
 - Backend capability flags must reflect contract support, not aspirational
   future support.
 - Shared request/response types are append-only unless a coordinated breaking
