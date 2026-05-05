@@ -1583,6 +1583,7 @@ struct LifecycleStream {
     model_id: Option<String>,
     compatibility_report: Option<InferenceCompatibilityReportSummary>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+    usage: Option<InferenceUsage>,
     finished: bool,
 }
 
@@ -1613,6 +1614,7 @@ impl LifecycleStream {
             model_id,
             compatibility_report,
             compatibility_issues,
+            usage: None,
             finished: false,
         }
     }
@@ -1633,7 +1635,7 @@ impl LifecycleStream {
     }
 
     fn record_terminal(&self, kind: InferenceRequestLifecycleEventKind, detail: Option<String>) {
-        record_inference_lifecycle_phase_event_with_diagnostics(
+        record_inference_lifecycle_phase_event_with_references(
             self.lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::BackendExecution,
             self.request_id.clone(),
@@ -1648,6 +1650,9 @@ impl LifecycleStream {
             Vec::new(),
             self.compatibility_report.clone(),
             self.compatibility_issues.clone(),
+            self.usage.clone(),
+            None,
+            None,
         );
     }
 
@@ -1668,6 +1673,9 @@ impl Stream for LifecycleStream {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.inner.as_mut().poll_next(cx) {
             Poll::Ready(Some(Ok(chunk))) => {
+                if let Some(usage) = chunk.usage.clone() {
+                    self.usage = Some(usage);
+                }
                 if chunk.done {
                     self.finish(InferenceRequestLifecycleEventKind::Completed, None);
                 }

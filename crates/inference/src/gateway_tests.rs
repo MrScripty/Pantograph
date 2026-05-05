@@ -32,8 +32,10 @@ struct MockFailAfterFirstStartBackend {
     starts: usize,
     ready: bool,
 }
+#[derive(Default)]
 struct MockLifecycleStreamBackend {
     fail_on_stream: bool,
+    usage_on_terminal: Option<InferenceUsage>,
 }
 struct MockKvBackend;
 
@@ -617,7 +619,7 @@ impl InferenceBackend for MockLifecycleStreamBackend {
             Ok(ChatChunk {
                 content: None,
                 done: true,
-                usage: None,
+                usage: self.usage_on_terminal.clone(),
             }),
         ])))
     }
@@ -2125,6 +2127,7 @@ async fn test_chat_completion_stream_with_lifecycle_records_completion() {
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
             fail_on_stream: false,
+            ..Default::default()
         }),
         "mock",
     );
@@ -2164,6 +2167,7 @@ async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_ph
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
             fail_on_stream: false,
+            ..Default::default()
         }),
         "mock",
     );
@@ -2274,10 +2278,81 @@ async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_ph
 }
 
 #[tokio::test]
+async fn test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: false,
+            usage_on_terminal: Some(InferenceUsage {
+                prompt_tokens: Some(8),
+                completion_tokens: Some(5),
+                total_tokens: Some(13),
+            }),
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let fixture = include_str!(
+        "../tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("package facts fixture");
+
+    let request = InferenceExecutionRequest {
+        request_id: Some("req-typed-stream-usage".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: Some(package_facts.model_ref.clone()),
+        model_name: Some("typed-model".to_string()),
+        runtime_hint: None,
+        resolved_model_package_facts: Some(package_facts),
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("SECRET_STREAM_PROMPT should not reach lifecycle".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: true,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let mut stream = gateway
+        .stream_typed_text_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed stream should start");
+    let mut response = String::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.expect("stream chunk");
+        if let Some(content) = chunk.content {
+            response.push_str(&content);
+        }
+    }
+
+    assert_eq!(response, "hello");
+    let events = sink.events();
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion");
+    let usage = backend_completed
+        .usage
+        .as_ref()
+        .expect("terminal stream chunk usage should be persisted on lifecycle completion");
+    assert_eq!(usage.prompt_tokens, Some(8));
+    assert_eq!(usage.completion_tokens, Some(5));
+    assert_eq!(usage.total_tokens, Some(13));
+    let event_json = serde_json::to_string(backend_completed).expect("event serializes");
+    assert!(!event_json.contains("SECRET_STREAM_PROMPT"));
+    assert!(!event_json.contains("hello"));
+}
+
+#[tokio::test]
 async fn test_chat_completion_stream_with_lifecycle_records_stream_failure() {
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
             fail_on_stream: true,
+            ..Default::default()
         }),
         "mock",
     );
@@ -2320,6 +2395,7 @@ async fn test_stream_typed_text_with_lifecycle_records_failed_backend_compatibil
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
             fail_on_stream: true,
+            ..Default::default()
         }),
         "mock",
     );
@@ -2384,6 +2460,7 @@ async fn test_chat_completion_stream_with_lifecycle_records_drop_cancellation() 
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
             fail_on_stream: false,
+            ..Default::default()
         }),
         "mock",
     );
@@ -2461,6 +2538,7 @@ async fn test_generate_image_with_lifecycle_records_failure() {
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
             fail_on_stream: false,
+            ..Default::default()
         }),
         "mock",
     );

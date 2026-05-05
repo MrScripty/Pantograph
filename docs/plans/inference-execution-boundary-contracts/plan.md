@@ -2750,8 +2750,11 @@ inference write ledger events directly.
   stream chunks into typed results and backend-execution lifecycle events
   without storing prompt text or generated content. The llama.cpp SSE parser
   now retains OpenAI-compatible bounded usage payloads from content or
-  usage-only stream events while dropping oversized counts. Additional backend
-  producers remain open. Canonical `llm-inference` embedding execution
+  usage-only stream events while dropping oversized counts. Typed streaming
+  lifecycle completion now also carries the last bounded stream-chunk usage
+  summary onto the terminal backend-execution event without storing prompt or
+  generated text. Additional backend producers remain open. Canonical
+  `llm-inference` embedding execution
   now projects typed embedding `usage` and bounded `option_diagnostics` onto
   graph output ports while keeping input text and embedding vectors out of
   those metadata outputs; node lifecycle tests now match the explicit
@@ -3557,6 +3560,9 @@ Update during implementation:
 - 2026-05-04: Updated inference source and backend README contracts for
   append-only stream usage metadata and llama.cpp SSE usage parsing, keeping
   Milestone 14 documentation aligned with the public chunk/result contracts.
+- 2026-05-04: Threaded terminal typed-stream chunk usage into backend-execution
+  lifecycle completion events, with regression coverage proving prompt and
+  generated stream content remain absent from lifecycle diagnostics.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
