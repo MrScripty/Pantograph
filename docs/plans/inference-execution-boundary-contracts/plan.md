@@ -2566,7 +2566,10 @@ drift back into inference.
   can round-trip the Rust workflow-service task registry. The same TypeScript
   mirror now carries workflow task request contracts on backend task
   capabilities, including execution input/result kinds, streaming support, and
-  required/output modalities. Workflow-service registry and frontend mock tests
+  required/output modalities. Workflow-service host capability contract
+  snapshots now also freeze a roadmap `depth_estimation` task request contract
+  next to executable embedding, proving contract-only task metadata uses the
+  same snake_case wire shape. Workflow-service registry and frontend mock tests
   now also scan every canonical `llm-inference.inference_payloads` entry for
   forbidden backend/runtime/scheduler policy fields such as backend keys,
   runtime ids, admission, reservation, eviction, and priority.
@@ -3741,6 +3744,9 @@ Update during implementation:
   `WorkflowBackendTaskCapability.request_contract` as host capability task
   metadata and to require TypeScript mirrors to carry append-only task ids such
   as `depth_estimation` with Rust DTO changes.
+- 2026-05-05: Strengthened the workflow-service host capability contract
+  snapshot with a roadmap `depth_estimation` task request contract so Rust
+  fixture coverage matches the TypeScript capability DTO mirror.
 - 2026-05-05: Embedded-runtime KV-cache workflow-event sinks now surface
   durable diagnostic append failures as `diagnostics_unavailable` event-sink
   errors after forwarding the original workflow event, and the plan records the

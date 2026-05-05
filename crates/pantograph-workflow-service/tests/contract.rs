@@ -96,23 +96,48 @@ impl WorkflowHost for ContractHost {
                 selected_version: None,
                 supports_external_connection: true,
                 backend_capability_facts: Some(WorkflowBackendCapabilityFacts {
-                    tasks: vec![WorkflowBackendTaskCapability {
-                        task_id: WorkflowInferenceTaskId::Embedding,
-                        support_tier: WorkflowSupportTier::Stable,
-                        modality_signature: WorkflowTaskModalitySignature {
-                            inputs: vec![WorkflowInferenceModality::Text],
-                            outputs: vec![WorkflowInferenceModality::Embedding],
-                        },
-                        request_contract: Some(WorkflowTaskRequestContract {
+                    tasks: vec![
+                        WorkflowBackendTaskCapability {
                             task_id: WorkflowInferenceTaskId::Embedding,
-                            input_kind: WorkflowInferenceExecutionInputKind::Embedding,
-                            result_kind: WorkflowInferenceExecutionResultKind::Embedding,
-                            execution_supported: true,
-                            streaming_support: WorkflowTaskStreamingSupport::Unsupported,
-                            required_input_modalities: vec![WorkflowInferenceModality::Text],
-                            output_modalities: vec![WorkflowInferenceModality::Embedding],
-                        }),
-                    }],
+                            support_tier: WorkflowSupportTier::Stable,
+                            modality_signature: WorkflowTaskModalitySignature {
+                                inputs: vec![WorkflowInferenceModality::Text],
+                                outputs: vec![WorkflowInferenceModality::Embedding],
+                            },
+                            request_contract: Some(WorkflowTaskRequestContract {
+                                task_id: WorkflowInferenceTaskId::Embedding,
+                                input_kind: WorkflowInferenceExecutionInputKind::Embedding,
+                                result_kind: WorkflowInferenceExecutionResultKind::Embedding,
+                                execution_supported: true,
+                                streaming_support: WorkflowTaskStreamingSupport::Unsupported,
+                                required_input_modalities: vec![WorkflowInferenceModality::Text],
+                                output_modalities: vec![WorkflowInferenceModality::Embedding],
+                            }),
+                        },
+                        WorkflowBackendTaskCapability {
+                            task_id: WorkflowInferenceTaskId::DepthEstimation,
+                            support_tier: WorkflowSupportTier::Roadmap,
+                            modality_signature: WorkflowTaskModalitySignature {
+                                inputs: vec![WorkflowInferenceModality::Image],
+                                outputs: vec![
+                                    WorkflowInferenceModality::Image,
+                                    WorkflowInferenceModality::PointCloud,
+                                ],
+                            },
+                            request_contract: Some(WorkflowTaskRequestContract {
+                                task_id: WorkflowInferenceTaskId::DepthEstimation,
+                                input_kind: WorkflowInferenceExecutionInputKind::DepthEstimation,
+                                result_kind: WorkflowInferenceExecutionResultKind::DepthEstimation,
+                                execution_supported: false,
+                                streaming_support: WorkflowTaskStreamingSupport::Unsupported,
+                                required_input_modalities: vec![WorkflowInferenceModality::Image],
+                                output_modalities: vec![
+                                    WorkflowInferenceModality::Image,
+                                    WorkflowInferenceModality::PointCloud,
+                                ],
+                            }),
+                        },
+                    ],
                     preprocessing: WorkflowBackendComponentCapability::RequiresPackageComponent,
                     postprocessing: WorkflowBackendComponentCapability::NotRequired,
                     model_sources: WorkflowBackendModelSourceCapabilityFacts {
@@ -337,6 +362,22 @@ async fn workflow_capabilities_contract_snapshot() {
                         "streaming_support": "unsupported",
                         "required_input_modalities": ["text"],
                         "output_modalities": ["embedding"]
+                    }
+                }, {
+                    "task_id": "depth_estimation",
+                    "support_tier": "roadmap",
+                    "modality_signature": {
+                        "inputs": ["image"],
+                        "outputs": ["image", "point_cloud"]
+                    },
+                    "request_contract": {
+                        "task_id": "depth_estimation",
+                        "input_kind": "depth_estimation",
+                        "result_kind": "depth_estimation",
+                        "execution_supported": false,
+                        "streaming_support": "unsupported",
+                        "required_input_modalities": ["image"],
+                        "output_modalities": ["image", "point_cloud"]
                     }
                 }],
                 "preprocessing": "requires_package_component",
