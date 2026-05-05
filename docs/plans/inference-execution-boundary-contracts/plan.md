@@ -2561,7 +2561,10 @@ drift back into inference.
   canonical mock `llm-inference` surface. Inference source and backend READMEs
   now document append-only `ChatChunk.usage` stream metadata and the llama.cpp
   SSE usage parser boundary as bounded diagnostics facts that must not carry
-  prompt/result payloads, Python kwargs, CLI flags, or local paths.
+  prompt/result payloads, Python kwargs, CLI flags, or local paths. Node-engine
+  source and core-executor READMEs now document canonical text/chat `usage`
+  output as bounded token-count metadata copied from typed gateway results or
+  terminal stream chunks, never recomputed from prompt/generated text.
 - [ ] Record any deferred consumer migrations in this plan.
 
 **Verification:**
@@ -3585,6 +3588,9 @@ Update during implementation:
   bounded text/chat token usage from typed gateway results and terminal stream
   chunks on the existing `usage` graph port, with tests for both streaming and
   non-streaming paths.
+- 2026-05-05: Updated node-engine source and core-executor README contracts for
+  canonical text/chat `usage` output, documenting bounded token-count metadata
+  hygiene and the rule against deriving usage from prompt or generated content.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

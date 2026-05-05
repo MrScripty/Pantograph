@@ -93,6 +93,9 @@ stable public facade and dispatch owner.
 - Canonical `llm-inference` task/request compatibility checks should consume
   inference task registry request contracts instead of hard-coded backend names
   or raw task labels.
+- Canonical text/chat usage projection in `inference_nodes.rs` is bounded
+  graph metadata copied from typed gateway results or terminal stream chunks.
+  It must not be recomputed from prompt or generated text.
 - Llama.cpp completion execution stays in `llamacpp_nodes.rs`; reranking and
   embedding execution stay in `retrieval_nodes.rs`.
 - PyTorch Python-worker execution stays in `pytorch_nodes.rs`; Stable Audio

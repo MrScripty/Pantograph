@@ -194,6 +194,10 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Hosts that need durable typed inference diagnostics may provide
   `extension_keys::INFERENCE_LIFECYCLE_SINK`; node-engine only forwards bounded
   lifecycle facts and does not import or write the diagnostics ledger.
+- Canonical `llm-inference` text/chat `usage` output is bounded token-count
+  metadata from typed gateway results or terminal stream chunks. It must not
+  contain prompt text, generated text, token arrays, logits, tensors, backend
+  kwargs, or local paths.
 
 ## Structured Producer Contract
 - Built-in node descriptors, canonical contract projection, and execution
@@ -210,3 +214,7 @@ use node_engine::core_executor::CoreNodeExecutor;
   bounded metadata/diagnostics. Diagnostics must not include prompt text,
   generated image bytes, tensors, backend kwargs, or backend-local command
   flags.
+- Text/chat outputs may include the existing graph `usage` port when the
+  backend reports bounded prompt/completion/total token counts. Missing usage
+  remains a valid backend-default case and must not be synthesized by
+  node-engine from prompt or response content.
