@@ -2773,7 +2773,11 @@ inference write ledger events directly.
   coverage now also proves image-generation backend-execution lifecycle
   summaries persist bounded task/backend/artifact/compatibility/option facts
   while omitting prompt text, encoded image bytes, backend flags, and local
-  paths.
+  paths. Typed text/chat streaming now emits explicit preprocessing lifecycle
+  events around OpenAI-compatible request projection and emits postprocessing
+  plus result-projection lifecycle events after successful stream completion,
+  while failed or cancelled streams stop at backend-execution terminal/cleanup
+  and legacy raw chat streaming remains unchanged.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -2966,6 +2970,12 @@ one-off conversions.
   bounded inference diagnostic appends fail. Gateway and node-engine producers
   keep those secondary diagnostics failures out of the primary inference and
   preflight result path.
+- 2026-05-05: Typed streaming lifecycle boundary slice added preprocessing,
+  postprocessing, and result-projection lifecycle phases to
+  `stream_typed_text_with_lifecycle`. Successful typed streams now expose the
+  same Transformers-aligned public lifecycle boundaries as non-streaming typed
+  text execution; failed and cancelled streams do not emit postprocessing or
+  result-projection, and legacy raw chat streaming is unchanged.
 - 2026-05-03: Generation option diagnostics ledger slice added append-only
   `inference.execution_diagnostic_observed` ledger events with bounded
   option-support counts and per-option summaries. `InferenceRequestLifecycleEvent`

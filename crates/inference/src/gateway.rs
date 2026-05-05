@@ -815,6 +815,7 @@ impl InferenceGateway {
             None,
             None,
             Vec::new(),
+            false,
         )
         .await
     }
@@ -829,6 +830,7 @@ impl InferenceGateway {
         model_id_override: Option<String>,
         compatibility_report: Option<InferenceCompatibilityReportSummary>,
         compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+        emit_typed_boundary_lifecycle: bool,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
     {
         let (backend_key, runtime_id, runtime_instance_id, selected_device_id) =
@@ -861,6 +863,7 @@ impl InferenceGateway {
                 model_id,
                 compatibility_report,
                 compatibility_issues,
+                emit_typed_boundary_lifecycle,
             ))),
             Err(error) => {
                 record_inference_lifecycle_phase_event_with_diagnostics(
@@ -990,7 +993,33 @@ impl InferenceGateway {
             compatibility_diagnostics.compatibility_report.clone(),
             compatibility_diagnostics.compatibility_issues.clone(),
         );
-        let request_json = typed_text_generation_stream_request_json(request)?;
+        record_inference_lifecycle_phase_event(
+            lifecycle_sink.as_ref(),
+            InferenceLifecyclePhase::Preprocessing,
+            request_id.clone(),
+            task_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            selected_device_id.clone(),
+            model_id.clone(),
+            InferenceRequestLifecycleEventKind::Started,
+            None,
+        );
+        let request_json_result = typed_text_generation_stream_request_json(request);
+        record_non_streaming_lifecycle_phase_result(
+            lifecycle_sink.as_ref(),
+            InferenceLifecyclePhase::Preprocessing,
+            request_id.clone(),
+            task_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            selected_device_id.clone(),
+            model_id.clone(),
+            &request_json_result,
+        );
+        let request_json = request_json_result?;
         self.chat_completion_stream_with_lifecycle_for_task(
             request_json,
             request_id,
@@ -999,6 +1028,7 @@ impl InferenceGateway {
             model_id,
             compatibility_diagnostics.compatibility_report,
             compatibility_diagnostics.compatibility_issues,
+            true,
         )
         .await
     }
@@ -1591,6 +1621,7 @@ struct LifecycleStream {
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     usage: Option<InferenceUsage>,
     cache_handle_id: Option<String>,
+    emit_typed_boundary_lifecycle: bool,
     finished: bool,
 }
 
@@ -1608,6 +1639,7 @@ impl LifecycleStream {
         model_id: Option<String>,
         compatibility_report: Option<InferenceCompatibilityReportSummary>,
         compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+        emit_typed_boundary_lifecycle: bool,
     ) -> Self {
         Self {
             inner,
@@ -1623,6 +1655,7 @@ impl LifecycleStream {
             compatibility_issues,
             usage: None,
             cache_handle_id: None,
+            emit_typed_boundary_lifecycle,
             finished: false,
         }
     }
@@ -1670,9 +1703,28 @@ impl LifecycleStream {
             return;
         }
 
+        let completed = kind == InferenceRequestLifecycleEventKind::Completed;
         self.record_terminal(kind, detail);
         self.record(InferenceRequestLifecycleEventKind::CleanupCompleted, None);
+        if self.emit_typed_boundary_lifecycle && completed {
+            self.record_successful_boundary_phase(InferenceLifecyclePhase::Postprocessing);
+            self.record_successful_boundary_phase(InferenceLifecyclePhase::ResultProjection);
+        }
         self.finished = true;
+    }
+
+    fn record_successful_boundary_phase(&self, phase: InferenceLifecyclePhase) {
+        record_successful_non_streaming_lifecycle_phase(
+            self.lifecycle_sink.as_ref(),
+            phase,
+            self.request_id.clone(),
+            self.task_id.clone(),
+            self.backend_key.clone(),
+            self.runtime_id.clone(),
+            self.runtime_instance_id.clone(),
+            self.selected_device_id.clone(),
+            self.model_id.clone(),
+        );
     }
 }
 

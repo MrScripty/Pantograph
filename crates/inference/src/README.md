@@ -163,6 +163,10 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   artifact references for host-owned diagnostics. They must not carry encoded
   audio bytes, prompt text, generated content, local filesystem paths, or
   scheduler/runtime selection state.
+- Typed text/chat streaming lifecycle events expose preprocessing,
+  backend-execution, postprocessing, and result-projection phases around the
+  typed request boundary. Legacy raw chat streaming remains a backend-execution
+  lifecycle only.
 - Gateway lifecycle, request forwarding, runtime reuse, and shared mock-backend
   fixtures stay in `gateway_tests.rs`, while oversized behavior families split
   under `gateway_tests/` so `gateway.rs` remains focused on production gateway
