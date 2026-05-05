@@ -11,7 +11,7 @@ use crate::model_contracts::{
     GenerationOptions, OptionCompatibilityDiagnostic, OptionSupportState,
 };
 use crate::server::ServerMode;
-use crate::types::{RerankResponse, RerankResult};
+use crate::types::{InferenceUsage, RerankResponse, RerankResult};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 
 #[allow(dead_code)]
@@ -344,28 +344,8 @@ pub fn parse_sse_stream(
 
             for line in text.lines() {
                 if let Some(data) = line.strip_prefix("data: ") {
-                    if data == "[DONE]" {
-                        return Ok(ChatChunk {
-                            content: None,
-                            done: true,
-                            usage: None,
-                        });
-                    }
-
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                        if let Some(content) = json
-                            .get("choices")
-                            .and_then(|c| c.get(0))
-                            .and_then(|c| c.get("delta"))
-                            .and_then(|d| d.get("content"))
-                            .and_then(|c| c.as_str())
-                        {
-                            return Ok(ChatChunk {
-                                content: Some(content.to_string()),
-                                done: false,
-                                usage: None,
-                            });
-                        }
+                    if let Some(chunk) = chat_chunk_from_sse_data(data) {
+                        return Ok(chunk);
                     }
                 }
             }
@@ -380,6 +360,63 @@ pub fn parse_sse_stream(
     });
 
     Box::pin(stream)
+}
+
+fn chat_chunk_from_sse_data(data: &str) -> Option<ChatChunk> {
+    if data == "[DONE]" {
+        return Some(ChatChunk {
+            content: None,
+            done: true,
+            usage: None,
+        });
+    }
+
+    let json = serde_json::from_str::<serde_json::Value>(data).ok()?;
+    let content = json
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("delta"))
+        .and_then(|d| d.get("content"))
+        .and_then(|c| c.as_str())
+        .map(ToOwned::to_owned);
+    let usage = inference_usage_from_openai_payload(json.get("usage"));
+
+    if content.is_none() && usage.is_none() {
+        return None;
+    }
+
+    Some(ChatChunk {
+        content,
+        done: false,
+        usage,
+    })
+}
+
+fn inference_usage_from_openai_payload(
+    value: Option<&serde_json::Value>,
+) -> Option<InferenceUsage> {
+    let usage = value?;
+    let usage = InferenceUsage {
+        prompt_tokens: bounded_u32_field(usage, "prompt_tokens"),
+        completion_tokens: bounded_u32_field(usage, "completion_tokens"),
+        total_tokens: bounded_u32_field(usage, "total_tokens"),
+    };
+
+    if usage.prompt_tokens.is_none()
+        && usage.completion_tokens.is_none()
+        && usage.total_tokens.is_none()
+    {
+        None
+    } else {
+        Some(usage)
+    }
+}
+
+fn bounded_u32_field(value: &serde_json::Value, field: &str) -> Option<u32> {
+    value
+        .get(field)
+        .and_then(|field_value| field_value.as_u64())
+        .and_then(|count| u32::try_from(count).ok())
 }
 
 pub fn kv_cache_runtime_fingerprint_for_mode(
@@ -504,6 +541,36 @@ mod tests {
             BackendError::ManagedBinary(message)
                 if message == "llama.cpp is not ready for launch"
         ));
+    }
+
+    #[test]
+    fn llama_cpp_sse_parser_keeps_usage_only_chunks() {
+        let chunk = chat_chunk_from_sse_data(
+            r#"{"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":5,"total_tokens":12}}"#,
+        )
+        .expect("usage-only chunk should parse");
+
+        assert_eq!(chunk.content, None);
+        assert!(!chunk.done);
+        let usage = chunk.usage.expect("usage should be retained");
+        assert_eq!(usage.prompt_tokens, Some(7));
+        assert_eq!(usage.completion_tokens, Some(5));
+        assert_eq!(usage.total_tokens, Some(12));
+    }
+
+    #[test]
+    fn llama_cpp_sse_parser_keeps_content_and_bounded_usage() {
+        let chunk = chat_chunk_from_sse_data(
+            r#"{"choices":[{"delta":{"content":"hi"}}],"usage":{"prompt_tokens":3,"completion_tokens":18446744073709551615,"total_tokens":4}}"#,
+        )
+        .expect("content chunk should parse");
+
+        assert_eq!(chunk.content.as_deref(), Some("hi"));
+        assert!(!chunk.done);
+        let usage = chunk.usage.expect("usage should be retained");
+        assert_eq!(usage.prompt_tokens, Some(3));
+        assert_eq!(usage.completion_tokens, None);
+        assert_eq!(usage.total_tokens, Some(4));
     }
 
     #[test]

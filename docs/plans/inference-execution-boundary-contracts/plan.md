@@ -2745,7 +2745,9 @@ inference write ledger events directly.
   execution status event at or before the artifact observation. Typed text
   generation now propagates optional bounded usage counts from terminal backend
   stream chunks into typed results and backend-execution lifecycle events
-  without storing prompt text or generated content. Additional backend
+  without storing prompt text or generated content. The llama.cpp SSE parser
+  now retains OpenAI-compatible bounded usage payloads from content or
+  usage-only stream events while dropping oversized counts. Additional backend
   producers remain open. Canonical `llm-inference` embedding execution
   now projects typed embedding `usage` and bounded `option_diagnostics` onto
   graph output ports while keeping input text and embedding vectors out of
@@ -3546,6 +3548,9 @@ Update during implementation:
   typed text-generation usage into result and backend-execution lifecycle
   summaries, with regression coverage proving prompt/result text stays out of
   lifecycle diagnostics.
+- 2026-05-04: Preserved OpenAI-compatible llama.cpp SSE usage payloads in
+  backend stream chunks, including usage-only terminal events, while bounding
+  token counts to the public `InferenceUsage` contract.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
