@@ -1177,7 +1177,10 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   tolerance at the crate boundary. PyTorch Rust/Python worker contract coverage
   now also freezes additive unknown-field tolerance for load, generate, and
   response envelopes while preserving backend-local `transformers_kwargs`
-  allowlist enforcement.
+  allowlist enforcement. Backend stream chunk coverage now freezes
+  append-only `ChatChunk.usage` serialization so absent usage is omitted and
+  bounded token counts remain nested metadata rather than prompt/result
+  payloads.
 - [x] Add validation rules so internal code consumes parsed model/task types
   rather than raw strings or ad hoc JSON.
 - [x] Document that Python Transformers is one implementation of these
@@ -3571,6 +3574,9 @@ Update during implementation:
   package facts for backend/task/model facts after explicit hints and before
   legacy `llm-inference` heuristics, keeping preflight factual and out of
   scheduler/runtime selection.
+- 2026-05-05: Added backend stream `ChatChunk` serde coverage for omitted
+  usage and bounded usage-count metadata, freezing the append-only stream
+  diagnostics contract introduced by typed text streaming.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

@@ -893,3 +893,47 @@ pub trait InferenceBackend: Send + Sync {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chat_chunk_serde_omits_absent_usage() {
+        let chunk = ChatChunk {
+            content: Some("hello".to_string()),
+            done: false,
+            usage: None,
+        };
+
+        let encoded = serde_json::to_value(&chunk).expect("chat chunk serializes");
+
+        assert_eq!(encoded["content"], serde_json::json!("hello"));
+        assert_eq!(encoded["done"], serde_json::json!(false));
+        assert!(
+            encoded.get("usage").is_none(),
+            "absent usage should stay omitted for append-only compatibility"
+        );
+    }
+
+    #[test]
+    fn chat_chunk_serde_keeps_bounded_usage_counts() {
+        let chunk = ChatChunk {
+            content: None,
+            done: true,
+            usage: Some(InferenceUsage {
+                prompt_tokens: Some(8),
+                completion_tokens: Some(5),
+                total_tokens: Some(13),
+            }),
+        };
+
+        let encoded = serde_json::to_value(&chunk).expect("chat chunk serializes");
+
+        assert_eq!(encoded["content"], serde_json::Value::Null);
+        assert_eq!(encoded["done"], serde_json::json!(true));
+        assert_eq!(encoded["usage"]["prompt_tokens"], serde_json::json!(8));
+        assert_eq!(encoded["usage"]["completion_tokens"], serde_json::json!(5));
+        assert_eq!(encoded["usage"]["total_tokens"], serde_json::json!(13));
+    }
+}
