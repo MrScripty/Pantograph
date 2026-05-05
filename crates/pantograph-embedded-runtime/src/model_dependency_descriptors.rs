@@ -166,34 +166,6 @@ pub(super) fn map_pipeline_tag_to_task(pipeline_tag: &str) -> String {
     }
 }
 
-fn metadata_string(
-    metadata: &serde_json::Map<String, serde_json::Value>,
-    keys: &[&str],
-) -> Option<String> {
-    keys.iter().find_map(|key| {
-        metadata
-            .get(*key)
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-    })
-}
-
-fn record_metadata_object(
-    record: &pumas_library::ModelRecord,
-) -> Option<&serde_json::Map<String, serde_json::Value>> {
-    record.metadata.as_object()
-}
-
-fn record_metadata_string(record: &pumas_library::ModelRecord, keys: &[&str]) -> Option<String> {
-    let metadata = record_metadata_object(record)?;
-    metadata_string(metadata, keys)
-}
-
-fn record_entry_path(record: &pumas_library::ModelRecord) -> Option<String> {
-    record_metadata_string(record, &["entry_path", "entryPath"])
-        .filter(|path| !path.trim().is_empty())
-}
-
 fn usable_task_type_primary(value: &str) -> Option<String> {
     let task = value.trim();
     if task.is_empty() || task.eq_ignore_ascii_case("unknown") {
@@ -203,34 +175,12 @@ fn usable_task_type_primary(value: &str) -> Option<String> {
     }
 }
 
-fn metadata_task_type_primary(
-    metadata: Option<&serde_json::Map<String, serde_json::Value>>,
-) -> Option<String> {
-    let metadata = metadata?;
-    metadata_string(
-        metadata,
-        &[
-            "task_type_primary",
-            "taskTypePrimary",
-            "task_type",
-            "taskType",
-        ],
-    )
-    .and_then(|task| usable_task_type_primary(&task))
-    .or_else(|| {
-        metadata_string(metadata, &["pipeline_tag", "pipelineTag"])
-            .map(|tag| map_pipeline_tag_to_task(&tag))
-    })
-}
-
-pub(super) fn task_type_primary_from_descriptor_metadata_or_request(
+pub(super) fn task_type_primary_from_descriptor_or_request(
     request_task_type_primary: &str,
     execution_descriptor: Option<&pumas_library::models::ModelExecutionDescriptor>,
-    metadata: Option<&serde_json::Map<String, serde_json::Value>>,
 ) -> String {
     execution_descriptor
         .and_then(|descriptor| usable_task_type_primary(&descriptor.task_type_primary))
-        .or_else(|| metadata_task_type_primary(metadata))
         .or_else(|| usable_task_type_primary(request_task_type_primary))
         .unwrap_or_else(|| "text-generation".to_string())
 }
@@ -300,16 +250,24 @@ pub(super) fn make_requirements_id(
     )
 }
 
-async fn resolve_model_record_with_api(
+async fn resolve_model_with_api(
     api: &Arc<pumas_library::PumasApi>,
     request: &ModelDependencyRequest,
-) -> Result<Option<pumas_library::ModelRecord>, String> {
+) -> Result<Option<ResolvedPumasModel>, String> {
     if let Some(model_id) = request.model_id.as_deref() {
         if !model_id.trim().is_empty() {
-            return api
+            let Some(record) = api
                 .get_model(model_id)
                 .await
-                .map_err(|e| format!("Failed to query model '{model_id}': {e}"));
+                .map_err(|e| format!("Failed to query model '{model_id}': {e}"))?
+            else {
+                return Ok(None);
+            };
+            let execution_descriptor = resolve_execution_descriptor_with_api(api, &record).await?;
+            return Ok(Some(ResolvedPumasModel {
+                record,
+                execution_descriptor,
+            }));
         }
     }
 
@@ -318,34 +276,37 @@ async fn resolve_model_record_with_api(
         .await
         .map_err(|e| format!("Failed to list models: {e}"))?;
     let target = normalize_path(&request.model_path);
-    Ok(all.into_iter().find(|record| {
+    for record in all {
         let rp = normalize_path(&record.path);
         if rp == target || target == record.path || record.path == request.model_path {
-            return true;
+            let execution_descriptor = resolve_execution_descriptor_with_api(api, &record).await?;
+            return Ok(Some(ResolvedPumasModel {
+                record,
+                execution_descriptor,
+            }));
         }
 
-        let Some(entry_path) = record_entry_path(record) else {
-            return false;
+        let Ok(execution_descriptor) = resolve_execution_descriptor_with_api(api, &record).await
+        else {
+            continue;
         };
-        let ep = normalize_path(&entry_path);
-        ep == target || target == entry_path || entry_path == request.model_path
-    }))
-}
+        let Some(descriptor) = execution_descriptor.as_ref() else {
+            continue;
+        };
+        let entry_path = descriptor.entry_path.trim();
+        if entry_path.is_empty() {
+            continue;
+        }
+        let ep = normalize_path(entry_path);
+        if ep == target || target == entry_path || entry_path == request.model_path {
+            return Ok(Some(ResolvedPumasModel {
+                record,
+                execution_descriptor,
+            }));
+        }
+    }
 
-async fn resolve_model_with_api(
-    api: &Arc<pumas_library::PumasApi>,
-    request: &ModelDependencyRequest,
-) -> Result<Option<ResolvedPumasModel>, String> {
-    let Some(record) = resolve_model_record_with_api(api, request).await? else {
-        return Ok(None);
-    };
-
-    let execution_descriptor = resolve_execution_descriptor_with_api(api, &record).await?;
-
-    Ok(Some(ResolvedPumasModel {
-        record,
-        execution_descriptor,
-    }))
+    Ok(None)
 }
 
 pub(super) async fn resolve_descriptor(
@@ -384,10 +345,9 @@ pub(super) async fn resolve_descriptor(
             .as_ref()
             .map(|descriptor| descriptor.model_type.clone())
             .or_else(|| Some(record.model_type.clone()));
-        task_type_primary = task_type_primary_from_descriptor_metadata_or_request(
+        task_type_primary = task_type_primary_from_descriptor_or_request(
             &task_type_primary,
             resolved.execution_descriptor.as_ref(),
-            record.metadata.as_object(),
         );
     }
 

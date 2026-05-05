@@ -1033,6 +1033,10 @@ Detailed Pumas-side work is split into
   and dependency-binding facts; versioned execution descriptors and package
   summary DTOs are used when present, with conservative public-record defaults
   only when versioned facts are absent.
+  Embedded-runtime model dependency descriptors now also avoid raw
+  `ModelRecord.metadata` for entry-path matching and task fallback: path lookup
+  uses public Pumas execution-descriptor `entry_path`, and unknown descriptor
+  tasks fall back to saved request data rather than storage metadata.
 - [x] Treat Pumas HF search MLX/vLLM tags as remote discovery hints only.
   Installed-model compatibility and workflow preflight must use resolved local
   Pumas package facts plus Pantograph inference/backend checks.
@@ -3601,6 +3605,10 @@ Update during implementation:
   backend-hint, custom-code, review, and dependency-binding facts now come from
   versioned Pumas execution descriptors/package-summary DTOs or bounded
   public-record defaults.
+- 2026-05-05: Removed embedded-runtime model dependency descriptor raw
+  `ModelRecord.metadata` fallbacks for entry-path matching and task fallback.
+  Dependency lookup now matches public execution-descriptor entry paths and
+  unknown descriptor tasks fall back to saved request facts.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

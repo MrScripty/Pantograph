@@ -329,6 +329,44 @@ async fn resolve_descriptor_uses_entry_path_for_external_diffusers_bundle() {
 }
 
 #[tokio::test]
+async fn resolve_descriptor_matches_descriptor_entry_path_without_record_metadata() {
+    let temp_dir = create_test_env();
+    let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");
+    write_test_diffusers_bundle(&bundle_root);
+
+    let model_dir = temp_dir
+        .path()
+        .join("shared-resources/models/diffusion/imported/test-bundle");
+    write_imported_diffusion_metadata(&model_dir, &bundle_root);
+
+    let (resolver, api) = test_resolver_with_pumas(&temp_dir).await;
+    let request = ModelDependencyRequest {
+        node_type: "diffusion-inference".to_string(),
+        model_path: bundle_root.display().to_string(),
+        model_id: None,
+        model_type: Some("diffusion".to_string()),
+        task_type_primary: Some("text-to-image".to_string()),
+        backend_key: Some("diffusers".to_string()),
+        platform_context: Some(serde_json::json!({
+            "os": "linux",
+            "arch": "x86_64"
+        })),
+        selected_binding_ids: Vec::new(),
+        dependency_override_patches: Vec::new(),
+    };
+
+    let descriptor = resolver
+        .resolve_descriptor(&request, Some(&api))
+        .await
+        .expect("descriptor should resolve by public execution descriptor entry path");
+
+    assert_eq!(descriptor.model_id, "diffusion/imported/test-bundle");
+    assert_eq!(descriptor.model_path, bundle_root.display().to_string());
+    assert_eq!(descriptor.task_type_primary, "text-to-image");
+    assert!(descriptor.model_id_resolved);
+}
+
+#[tokio::test]
 async fn resolve_descriptor_uses_primary_file_for_library_owned_file_model() {
     let temp_dir = create_test_env();
     let model_dir = temp_dir
@@ -483,22 +521,15 @@ fn task_type_primary_uses_execution_descriptor_before_stale_metadata() {
             "dependency_resolution": null
         }))
         .expect("execution descriptor fixture should decode");
-    let metadata = serde_json::json!({
-        "task_type_primary": "text-generation",
-        "pipeline_tag": "text-generation"
-    });
 
-    let task = descriptors::task_type_primary_from_descriptor_metadata_or_request(
-        "reranking",
-        Some(&descriptor),
-        metadata.as_object(),
-    );
+    let task =
+        descriptors::task_type_primary_from_descriptor_or_request("reranking", Some(&descriptor));
 
     assert_eq!(task, "image-to-text");
 }
 
 #[test]
-fn task_type_primary_uses_metadata_only_when_descriptor_task_is_missing() {
+fn task_type_primary_uses_request_when_descriptor_task_is_missing() {
     let descriptor: pumas_library::models::ModelExecutionDescriptor =
         serde_json::from_value(serde_json::json!({
             "execution_contract_version": 1,
@@ -513,23 +544,16 @@ fn task_type_primary_uses_metadata_only_when_descriptor_task_is_missing() {
             "dependency_resolution": null
         }))
         .expect("execution descriptor fixture should decode");
-    let metadata = serde_json::json!({
-        "pipeline_tag": "automatic-speech-recognition"
-    });
 
-    let task = descriptors::task_type_primary_from_descriptor_metadata_or_request(
-        "reranking",
-        Some(&descriptor),
-        metadata.as_object(),
-    );
+    let task =
+        descriptors::task_type_primary_from_descriptor_or_request("reranking", Some(&descriptor));
 
-    assert_eq!(task, "audio-to-text");
+    assert_eq!(task, "reranking");
 }
 
 #[test]
 fn task_type_primary_uses_request_when_pumas_facts_are_absent() {
-    let task =
-        descriptors::task_type_primary_from_descriptor_metadata_or_request("reranking", None, None);
+    let task = descriptors::task_type_primary_from_descriptor_or_request("reranking", None);
 
     assert_eq!(task, "reranking");
 }
