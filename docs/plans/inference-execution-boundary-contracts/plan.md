@@ -2538,7 +2538,10 @@ drift back into inference.
   image-generation, and audio-transcription task families across
   task/model-reference/options/input/output/usage/diagnostic ports, keeping
   mock-backed tests aligned with the Rust registry contract without introducing
-  backend/runtime policy fields.
+  backend/runtime policy fields. Rust node-contract and mirrored TypeScript
+  payload role contracts now distinguish `cache_handle` from generic
+  `task_output`, so `llm-inference.kv_cache_out` stays cache-handle metadata
+  instead of a generated content/result payload.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient. Embedded-runtime host capability projection now uses the shared
   Python-sidecar runtime-id set instead of a direct `pytorch` backend-key
@@ -2578,6 +2581,9 @@ drift back into inference.
   source and core-executor READMEs now document canonical text/chat `usage`
   output as bounded token-count metadata copied from typed gateway results or
   terminal stream chunks, never recomputed from prompt/generated text.
+  Workflow-nodes and svelte-graph backend READMEs now document cache-handle
+  payload roles as graph metadata facts rather than runtime policy or generated
+  result payloads.
 - [ ] Record any deferred consumer migrations in this plan.
 
 **Verification:**
@@ -2788,9 +2794,9 @@ inference write ledger events directly.
   preprocessing, postprocessing, and result-projection phase model for
   non-streaming typed execution. Canonical `llm-inference` text/chat execution
   now projects bounded terminal token usage to the existing graph `usage` port
-  for streaming and non-streaming paths without storing prompt or generated
-  content; cache-handle graph projection remains deferred until a typed text
-  backend returns a validated cache handle.
+  and stable backend-local cache-handle ids to `kv_cache_out` for streaming and
+  non-streaming paths without storing prompt text, generated content, KV bytes,
+  tensors, temp paths, or scheduler/runtime reuse decisions.
 - [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
@@ -3613,6 +3619,10 @@ Update during implementation:
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`
   projection while keeping raw KV state and prompt/result bodies out of durable
   diagnostics.
+- 2026-05-05: Added the backend-neutral `cache_handle` inference payload role
+  to Rust node contracts and mirrored svelte-graph types, then moved
+  `llm-inference.kv_cache_out` contract metadata from generic task output to
+  cache-handle metadata with workflow-nodes and TypeScript mock coverage.
 - 2026-05-05: Removed workflow-nodes Puma-Lib model-list raw
   `ModelRecord.metadata` fallbacks for executable option metadata. Task,
   backend-hint, custom-code, review, and dependency-binding facts now come from

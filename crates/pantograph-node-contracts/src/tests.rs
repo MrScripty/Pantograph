@@ -250,6 +250,10 @@ fn inference_task_payload_contracts_round_trip_as_snake_case_json() {
         ContractInferenceTaskId::Embedding,
         ContractInferenceExecutionInputKind::Embedding,
     )];
+    contract.outputs[0].inference_payloads = vec![InferencePortPayloadContract::task_role(
+        ContractInferenceTaskId::TextGeneration,
+        InferencePortPayloadRole::CacheHandle,
+    )];
 
     let value = serde_json::to_value(&contract).expect("serialize");
 
@@ -258,6 +262,10 @@ fn inference_task_payload_contracts_round_trip_as_snake_case_json() {
     assert_eq!(
         value["inputs"][0]["inference_payloads"][0]["role"],
         "task_input"
+    );
+    assert_eq!(
+        value["outputs"][0]["inference_payloads"][0]["role"],
+        "cache_handle"
     );
 
     let parsed: NodeTypeContract = serde_json::from_value(value).expect("deserialize");
@@ -268,6 +276,10 @@ fn inference_task_payload_contracts_round_trip_as_snake_case_json() {
     assert_eq!(
         parsed.inputs[0].inference_payloads[0].input_kind,
         Some(ContractInferenceExecutionInputKind::Embedding)
+    );
+    assert_eq!(
+        parsed.outputs[0].inference_payloads[0].role,
+        InferencePortPayloadRole::CacheHandle
     );
 }
 

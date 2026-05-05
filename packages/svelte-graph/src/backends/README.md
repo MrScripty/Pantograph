@@ -132,7 +132,8 @@ const candidates = await backend.getConnectionCandidates(
   the revision changes.
 - Mock node definitions must keep `inference_payloads` in Rust-compatible
   snake_case and may only carry task/model-reference/options/input/output,
-  usage, and diagnostics role facts. They must not add backend/runtime policy
-  inputs such as `backend_key` or `runtime_id` to canonical `llm-inference`.
+  usage, cache-handle, and diagnostics role facts. They must not add
+  backend/runtime policy inputs such as `backend_key` or `runtime_id` to
+  canonical `llm-inference`.
 - If response field names or rejection enums change, update the README and the
   mirrored Rust/TypeScript types in the same change.

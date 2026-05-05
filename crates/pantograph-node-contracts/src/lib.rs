@@ -478,6 +478,7 @@ pub enum InferencePortPayloadRole {
     Options,
     Diagnostics,
     Usage,
+    CacheHandle,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

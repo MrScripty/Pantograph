@@ -440,7 +440,7 @@ fn llm_output_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
                 ContractInferenceTaskId::TextGeneration,
                 ContractInferenceTaskId::ChatCompletion,
             ],
-            InferencePortPayloadRole::TaskOutput,
+            InferencePortPayloadRole::CacheHandle,
         ),
         "embedding" => vec![InferencePortPayloadContract::task_output(
             ContractInferenceTaskId::Embedding,
@@ -813,6 +813,19 @@ mod tests {
                 && payload.role == InferencePortPayloadRole::Usage
                 && payload.result_kind.is_none()
         }));
+
+        let kv_cache_out = llm
+            .output(&port_id("kv_cache_out").expect("kv cache out port id"))
+            .unwrap();
+        assert!(kv_cache_out.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::TextGeneration
+                && payload.role == InferencePortPayloadRole::CacheHandle
+                && payload.result_kind.is_none()
+        }));
+        assert!(kv_cache_out
+            .inference_payloads
+            .iter()
+            .all(|payload| { payload.role == InferencePortPayloadRole::CacheHandle }));
 
         let response = llm
             .output(&port_id("response").expect("response port id"))
