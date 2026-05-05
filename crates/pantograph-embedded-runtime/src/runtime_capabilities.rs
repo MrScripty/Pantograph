@@ -23,6 +23,9 @@ use pantograph_workflow_service::{
     WorkflowTaskRequestContract, WorkflowTaskStreamingSupport,
 };
 
+const PYTHON_SIDECAR_RUNTIME_IDS: &[&str] =
+    &["pytorch", "diffusers", "onnx-runtime", "stable_audio"];
+
 pub fn managed_runtime_capabilities(
     runtimes: &[inference::ManagedRuntimeSnapshot],
     available_backends: &[inference::BackendInfo],
@@ -170,55 +173,39 @@ pub fn python_runtime_capabilities(
         Ok(_) => (true, None),
         Err(reason) => (false, Some(reason)),
     };
-    [
-        (
-            runtime_display_name("pytorch").unwrap_or("PyTorch (Python sidecar)"),
-            "pytorch",
-        ),
-        (
-            runtime_display_name("diffusers").unwrap_or("Diffusers (Python sidecar)"),
-            "diffusers",
-        ),
-        (
-            runtime_display_name("onnx-runtime").unwrap_or("ONNX Runtime (Python sidecar)"),
-            "onnx-runtime",
-        ),
-        (
-            runtime_display_name("stable_audio").unwrap_or("Stable Audio (Python sidecar)"),
-            "stable_audio",
-        ),
-    ]
-    .into_iter()
-    .map(|(display_name, runtime_id)| {
-        let backend_keys = runtime_backend_key_aliases(display_name, runtime_id);
-        WorkflowRuntimeCapability {
-            runtime_id: runtime_id.to_string(),
-            display_name: display_name.to_string(),
-            install_state: if available {
-                WorkflowRuntimeInstallState::SystemProvided
-            } else {
-                WorkflowRuntimeInstallState::Missing
-            },
-            available,
-            configured: available,
-            can_install: false,
-            can_remove: false,
-            source_kind: WorkflowRuntimeSourceKind::System,
-            selected: runtime_matches_backend(&backend_keys, selected_backend_key),
-            readiness_state: Some(if available {
-                WorkflowRuntimeReadinessState::Ready
-            } else {
-                WorkflowRuntimeReadinessState::Missing
-            }),
-            selected_version: None,
-            supports_external_connection: false,
-            backend_capability_facts: None,
-            backend_keys,
-            missing_files: Vec::new(),
-            unavailable_reason: unavailable_reason.clone(),
-        }
-    })
-    .collect()
+    PYTHON_SIDECAR_RUNTIME_IDS
+        .iter()
+        .map(|runtime_id| {
+            let display_name = runtime_display_name(runtime_id).unwrap_or("Python sidecar runtime");
+            let backend_keys = runtime_backend_key_aliases(display_name, runtime_id);
+            WorkflowRuntimeCapability {
+                runtime_id: runtime_id.to_string(),
+                display_name: display_name.to_string(),
+                install_state: if available {
+                    WorkflowRuntimeInstallState::SystemProvided
+                } else {
+                    WorkflowRuntimeInstallState::Missing
+                },
+                available,
+                configured: available,
+                can_install: false,
+                can_remove: false,
+                source_kind: WorkflowRuntimeSourceKind::System,
+                selected: runtime_matches_backend(&backend_keys, selected_backend_key),
+                readiness_state: Some(if available {
+                    WorkflowRuntimeReadinessState::Ready
+                } else {
+                    WorkflowRuntimeReadinessState::Missing
+                }),
+                selected_version: None,
+                supports_external_connection: false,
+                backend_capability_facts: None,
+                backend_keys,
+                missing_files: Vec::new(),
+                unavailable_reason: unavailable_reason.clone(),
+            }
+        })
+        .collect()
 }
 
 pub fn capability_runtime_lifecycle_snapshot(
@@ -700,7 +687,10 @@ fn workflow_task_id(task_id: &inference::InferenceTaskId) -> WorkflowInferenceTa
 }
 
 fn is_python_sidecar_backend(backend: &inference::BackendInfo) -> bool {
-    backend.backend_key == "pytorch"
+    let backend_key = canonical_runtime_backend_key(&backend.backend_key);
+    PYTHON_SIDECAR_RUNTIME_IDS
+        .iter()
+        .any(|runtime_id| canonical_runtime_backend_key(runtime_id) == backend_key)
 }
 
 fn host_runtime_capability(
@@ -1154,6 +1144,41 @@ mod tests {
             phase.phase == WorkflowInferenceLifecyclePhase::Postprocessing
                 && phase.cleanup == WorkflowBackendRequestCleanupSemantics::NotRequired
         }));
+    }
+
+    #[test]
+    fn host_runtime_capabilities_do_not_duplicate_python_sidecar_backends() {
+        let capabilities = host_runtime_capabilities(
+            &[
+                inference::BackendInfo {
+                    name: "Torch".to_string(),
+                    backend_key: "torch".to_string(),
+                    description: "Transformers through Python".to_string(),
+                    capabilities: BackendCapabilities::default(),
+                    default_start_mode: BackendDefaultStartMode::Inference,
+                    active: false,
+                    available: true,
+                    unavailable_reason: None,
+                    can_install: false,
+                    runtime_binary_id: None,
+                },
+                inference::BackendInfo {
+                    name: "Diffusers".to_string(),
+                    backend_key: "diffusers".to_string(),
+                    description: "Diffusers through Python".to_string(),
+                    capabilities: BackendCapabilities::default(),
+                    default_start_mode: BackendDefaultStartMode::Inference,
+                    active: false,
+                    available: true,
+                    unavailable_reason: None,
+                    can_install: false,
+                    runtime_binary_id: None,
+                },
+            ],
+            "pytorch",
+        );
+
+        assert!(capabilities.is_empty());
     }
 
     #[test]

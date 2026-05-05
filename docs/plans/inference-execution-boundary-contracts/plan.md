@@ -2522,7 +2522,10 @@ drift back into inference.
   mock-backed tests aligned with the Rust registry contract without introducing
   backend/runtime policy fields.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
-  sufficient.
+  sufficient. Embedded-runtime host capability projection now uses the shared
+  Python-sidecar runtime-id set instead of a direct `pytorch` backend-key
+  comparison, so aliases such as `torch` and neighboring Python sidecar
+  backends are excluded from duplicate host-runtime projection consistently.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs.
@@ -3525,6 +3528,10 @@ Update during implementation:
   versioned Pumas summary API outputs with missing or invalid summary payloads
   suppress stale raw record metadata for backend hints, custom-code facts,
   custom-code sources, and review reasons.
+- 2026-05-04: Removed a direct PyTorch backend-name conditional from
+  embedded-runtime host capability projection by deriving Python-sidecar
+  exclusion from the same runtime-id set used to publish Python runtime
+  capabilities, with alias coverage for `torch` and neighboring sidecars.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
