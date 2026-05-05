@@ -273,6 +273,11 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   audio task families. Callers may use those facts for display and validation,
   but must not infer backend choice, runtime id, scheduler policy, or model
   residency from mock definitions.
+- `WorkflowBackendTaskCapability.request_contract` mirrors the Rust workflow
+  service task contract for host capability facts. Callers may use it to render
+  task input/result families, modality signatures, streaming support, and
+  executable versus roadmap status; runtime selection, admission, batching, and
+  residency remain scheduler/runtime-registry concerns.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - Service DTOs in `types.ts` mirror Rust field names and rejection enums.
@@ -324,3 +329,8 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   usage, cache-handle, and diagnostics roles. Mock producers must not add
   backend/runtime policy fields such as `backend_key` or `runtime_id` to
   canonical `llm-inference` inputs.
+- TypeScript mirrors for workflow backend capability facts must carry
+  append-only task ids and optional `WorkflowTaskRequestContract` objects in
+  the same slice as Rust DTO changes. Roadmap tasks such as `depth_estimation`
+  remain valid capability metadata even when no typed gateway execution path is
+  available yet.

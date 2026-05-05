@@ -2585,7 +2585,10 @@ drift back into inference.
   heuristics for sparse saved graphs.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
-  consumes machine-readable inference/Pumas/workflow DTOs.
+  consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
+  service README contract sections now document workflow backend capability
+  `request_contract` DTOs as task/modality/execution metadata, not scheduler or
+  runtime selection policy.
 - [ ] Update generated bindings, host-language types, or shared schemas in the
   same implementation slice as native DTO changes when those bindings are
   public contract surface. Frontend workflow service and shared svelte-graph
@@ -3729,6 +3732,10 @@ Update during implementation:
 - 2026-05-05: Aligned app-level workflow service TypeScript types, mocks, and
   inference payload display presenters with the `cache_handle` payload role so
   frontend mock `kv_cache_out` metadata no longer drifts from Rust contracts.
+- 2026-05-05: Updated the frontend workflow service source README to document
+  `WorkflowBackendTaskCapability.request_contract` as host capability task
+  metadata and to require TypeScript mirrors to carry append-only task ids such
+  as `depth_estimation` with Rust DTO changes.
 - 2026-05-05: Embedded-runtime KV-cache workflow-event sinks now surface
   durable diagnostic append failures as `diagnostics_unavailable` event-sink
   errors after forwarding the original workflow event, and the plan records the
