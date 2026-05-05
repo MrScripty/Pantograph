@@ -86,7 +86,7 @@ impl TauriTaskExecutor {
         );
         let backend_key =
             Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"]);
-        let recommended_backend = Self::read_optional_input_string_aliases(
+        let mut recommended_backend = Self::read_optional_input_string_aliases(
             inputs,
             &["recommended_backend", "recommendedBackend"],
         );
@@ -127,6 +127,14 @@ impl TauriTaskExecutor {
                             let task = descriptor.task_type_primary.trim();
                             if !task.is_empty() && task != "unknown" {
                                 task_type_primary = Some(task.to_string());
+                            }
+                            if let Some(backend) = descriptor
+                                .recommended_backend
+                                .as_deref()
+                                .map(str::trim)
+                                .filter(|backend| !backend.is_empty())
+                            {
+                                recommended_backend = Some(backend.to_string());
                             }
                         }
                         Err(error) => {

@@ -1025,7 +1025,9 @@ Detailed Pumas-side work is split into
   treats sparse, missing, or invalid package-summary API results as authoritative
   DTO outputs: backend hints, custom-code flags, custom-code sources, and review
   reasons use bounded empty/default values instead of falling through to raw
-  `ModelRecord.metadata`.
+  `ModelRecord.metadata`. Embedded-runtime `puma-lib` execution now also
+  rebinds stale saved `recommended_backend` values from the Pumas public
+  `ModelExecutionDescriptor` when the descriptor provides a concrete backend.
 - [x] Treat Pumas HF search MLX/vLLM tags as remote discovery hints only.
   Installed-model compatibility and workflow preflight must use resolved local
   Pumas package facts plus Pantograph inference/backend checks.
@@ -3532,6 +3534,11 @@ Update during implementation:
   embedded-runtime host capability projection by deriving Python-sidecar
   exclusion from the same runtime-id set used to publish Python runtime
   capabilities, with alias coverage for `torch` and neighboring sidecars.
+- 2026-05-04: Tightened embedded-runtime `puma-lib` execution DTO consumption
+  so stale saved `recommended_backend` node data is replaced by the Pumas
+  `ModelExecutionDescriptor.recommended_backend` fact when descriptor lookup
+  succeeds, while preserving saved fallback behavior when Pumas facts are
+  unavailable.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

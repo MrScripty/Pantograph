@@ -37,7 +37,7 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
             "model_id": "diffusion/imported/test-bundle",
             "model_type": "diffusion",
             "task_type_primary": "text-to-image",
-            "recommended_backend": "diffusers",
+            "recommended_backend": "llamacpp",
             "inference_settings": []
         }),
     );
@@ -70,6 +70,12 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
             .get("pumas_model_ref")
             .and_then(|value| value.get("model_path")),
         Some(&serde_json::json!(bundle_root.display().to_string()))
+    );
+    assert_eq!(
+        outputs
+            .get("pumas_model_ref")
+            .and_then(|value| value.get("recommended_backend")),
+        Some(&serde_json::json!("diffusers"))
     );
     assert_eq!(
         outputs
