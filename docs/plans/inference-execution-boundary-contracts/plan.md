@@ -974,7 +974,7 @@ Detailed Pumas-side work is split into
 [pumas-library-plan.md](pumas-library-plan.md).
 
 **Tasks:**
-- [ ] Treat [pumas-library-plan.md](pumas-library-plan.md) as the Pumas-side
+- [x] Treat [pumas-library-plan.md](pumas-library-plan.md) as the Pumas-side
   source for model identity, artifact facts, task evidence, generation defaults,
   custom-code/security facts, backend hints, legacy reference resolution, and
   Pumas/Pantograph fixture expectations.
@@ -984,7 +984,7 @@ Detailed Pumas-side work is split into
   Pantograph owns model/backend candidate projection, exclusion diagnostics,
   live runtime selection, loaded-state interpretation, memory admission, and
   final backend choice.
-- [ ] Keep the Pantograph inference plan focused on consuming Pumas package
+- [x] Keep the Pantograph inference plan focused on consuming Pumas package
   facts rather than specifying Pumas indexing, import, deduplication,
   migration, dependency binding, or storage implementation details.
 - [x] Replace the initial Pantograph-side `PumasModelRef` and
@@ -999,10 +999,13 @@ Detailed Pumas-side work is split into
   package-fact summaries, Pantograph-derived technical-fit summaries where
   needed, and selected detail facts during application startup or library-page
   population.
-- [ ] Subscribe to or poll Pumas model-library update events/cursors so
+- [x] Subscribe to or poll Pumas model-library update events/cursors so
   Pantograph refreshes affected cached rows when models are added, removed, or
   modified, package facts are invalidated or regenerated, or dependency
-  bindings change.
+  bindings change. `workflow-nodes` now populates package-facts summaries from
+  the Pumas startup snapshot cursor, polls `ModelLibraryUpdateFeed` before and
+  after sparse-row regeneration, invalidates affected rows, and clears the cache
+  when Pumas reports a stale cursor requiring a fresh snapshot.
 - [ ] Ensure Pantograph consumes versioned Pumas DTO/API outputs only. It must
   not depend on Pumas `models.metadata_json`, SQLite table layouts, or
   search-cache internals. Embedded-runtime `puma-lib` execution no longer reads
@@ -3503,6 +3506,11 @@ Update during implementation:
 - 2026-05-04: Added PyTorch Rust/Python worker envelope additive-field
   tolerance coverage for load, generate, and response contracts while keeping
   backend-owned `transformers_kwargs` allowlist enforcement strict.
+- 2026-05-04: Reconciled Milestone 2 with the implemented Pumas package-summary
+  cache path: Pantograph treats the Pumas plan as the producer-side source,
+  keeps Pumas storage/indexing out of inference scope, and `workflow-nodes`
+  consumes startup snapshot cursors plus update feeds to invalidate or refresh
+  cached package-facts summaries.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
