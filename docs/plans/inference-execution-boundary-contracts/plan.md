@@ -2551,7 +2551,10 @@ drift back into inference.
   Frontend workflow service and shared svelte-graph backend READMEs now
   document mock `inference_payloads` as registry contract facts for executable
   task families and explicitly reject backend/runtime policy fields on the
-  canonical mock `llm-inference` surface.
+  canonical mock `llm-inference` surface. Inference source and backend READMEs
+  now document append-only `ChatChunk.usage` stream metadata and the llama.cpp
+  SSE usage parser boundary as bounded diagnostics facts that must not carry
+  prompt/result payloads, Python kwargs, CLI flags, or local paths.
 - [ ] Record any deferred consumer migrations in this plan.
 
 **Verification:**
@@ -3551,6 +3554,9 @@ Update during implementation:
 - 2026-05-04: Preserved OpenAI-compatible llama.cpp SSE usage payloads in
   backend stream chunks, including usage-only terminal events, while bounding
   token counts to the public `InferenceUsage` contract.
+- 2026-05-04: Updated inference source and backend README contracts for
+  append-only stream usage metadata and llama.cpp SSE usage parsing, keeping
+  Milestone 14 documentation aligned with the public chunk/result contracts.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

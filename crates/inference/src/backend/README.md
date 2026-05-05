@@ -14,7 +14,7 @@ isolated here.
 | `mod.rs` | The backend trait, capability model, shared config, and backend error contract. |
 | `registry.rs` | Compile-time backend registration and backend discovery helpers. |
 | `llamacpp.rs` | llama.cpp backend adapter for chat, embeddings, and sidecar reranking. |
-| `llamacpp_support.rs` | Shared llama.cpp request parsing, rerank response normalization, sidecar start helpers, and KV-cache fingerprint helpers used by `llamacpp.rs`. |
+| `llamacpp_support.rs` | Shared llama.cpp request parsing, SSE usage parsing, rerank response normalization, sidecar start helpers, and KV-cache fingerprint helpers used by `llamacpp.rs`. |
 | `candle.rs` | Feature-gated Candle backend staging for embedding-only HF-compatible safetensors package facts, including capability declaration, package-source mapping, and local load-plan validation while executable model loading remains disabled. |
 | `pytorch.rs` | PyTorch backend implementation used for HuggingFace-style runtimes. |
 | `pytorch_worker.rs` | Embedded PyTorch worker loader, sibling-module registration, and Python result extraction helpers used by `pytorch.rs`. |
@@ -125,6 +125,10 @@ fn create_backend() {
 - Backend `start()` results own lifecycle reuse facts when a backend can attach
   to an already-loaded runtime. Callers should consume that outcome instead of
   inferring reuse from adapter-local state.
+- `ChatChunk.usage` is optional append-only stream metadata for bounded token
+  counts. Backends may emit it on content chunks or usage-only terminal
+  payloads; consumers must not expect prompts, generated text, logits, tensors,
+  Python kwargs, CLI flags, or local paths in this field.
 - Streaming response parsers should use `strip_prefix` for SSE `data:` lines
   so prefix handling stays explicit and warning-clean under the Rust clippy
   audit.
