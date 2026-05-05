@@ -1864,6 +1864,38 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
     }));
 }
 
+#[test]
+fn test_typed_text_request_model_name_falls_back_to_package_facts() {
+    let fixture = include_str!(
+        "../tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("package facts fixture");
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-text-package-model".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: None,
+        model_name: None,
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: Some(package_facts),
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: true,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    assert_eq!(typed_request_model_name(&request), "llm/llama/tiny-gguf");
+    let request_json =
+        typed_text_generation_stream_request_json(request).expect("stream request should encode");
+    let request_value: serde_json::Value =
+        serde_json::from_str(&request_json).expect("request json should decode");
+    assert_eq!(request_value["model"], "llm/llama/tiny-gguf");
+}
+
 #[tokio::test]
 async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");

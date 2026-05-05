@@ -2594,7 +2594,10 @@ drift back into inference.
   resolved Pumas package facts into typed `model_ref` when no explicit
   `pumas_model_ref`/`model_ref` input is wired, and dependency input merging now
   carries model context through direct `resolved_model_package_facts` and
-  `model_package_facts` edges.
+  `model_package_facts` edges. The inference gateway itself now has the same
+  package-facts model-id fallback for direct typed callers, so backend chat
+  transport projection no longer depends on every caller pre-populating
+  `model_ref`.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
@@ -3769,6 +3772,9 @@ Update during implementation:
   through direct package-facts edges. Node-engine validation also exposed one
   remaining PyTorch KV-cache diagnostic initializer missing the append-only
   `option_diagnostics` field, which was aligned in the same validated slice.
+- 2026-05-05: Inference gateway typed model-name projection now falls back to
+  resolved Pumas package facts after explicit `model_name` and `model_ref`,
+  covering direct typed callers that bypass node-engine request builders.
 - 2026-05-05: Embedded-runtime KV-cache workflow-event sinks now surface
   durable diagnostic append failures as `diagnostics_unavailable` event-sink
   errors after forwarding the original workflow event, and the plan records the

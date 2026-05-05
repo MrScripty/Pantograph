@@ -1781,6 +1781,12 @@ fn typed_request_model_name(request: &InferenceExecutionRequest) -> String {
                 .as_ref()
                 .map(|model_ref| model_ref.model_id.clone())
         })
+        .or_else(|| {
+            request
+                .resolved_model_package_facts
+                .as_ref()
+                .map(|facts| facts.model_ref.model_id.clone())
+        })
         .unwrap_or_default()
 }
 
