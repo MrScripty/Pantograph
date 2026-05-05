@@ -38,6 +38,7 @@ const ROLE_LABELS: Record<InferencePortPayloadRole, string> = {
   options: 'Options',
   diagnostics: 'Diagnostics',
   usage: 'Usage',
+  cache_handle: 'Cache handles',
 };
 
 const ROLE_ORDER: InferencePortPayloadRole[] = [
@@ -45,6 +46,7 @@ const ROLE_ORDER: InferencePortPayloadRole[] = [
   'options',
   'diagnostics',
   'usage',
+  'cache_handle',
   'task_input',
   'task_output',
 ];
@@ -107,7 +109,12 @@ function isDisplayRole(role: InferencePortPayloadContract['role'], direction: Po
     return role === 'model_reference' || role === 'options';
   }
 
-  return role === 'model_reference' || role === 'diagnostics' || role === 'usage';
+  return (
+    role === 'model_reference' ||
+    role === 'diagnostics' ||
+    role === 'usage' ||
+    role === 'cache_handle'
+  );
 }
 
 function taskLabelFor(taskId: InferenceTaskId): string | null {

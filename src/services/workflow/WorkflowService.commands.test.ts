@@ -89,6 +89,7 @@ test('mock node definitions expose canonical Pumas inference ports', () => {
   const results = llmInference.outputs.find((port) => port.id === 'results');
   const embedding = llmInference.outputs.find((port) => port.id === 'embedding');
   const scores = llmInference.outputs.find((port) => port.id === 'scores');
+  const kvCacheOut = llmInference.outputs.find((port) => port.id === 'kv_cache_out');
   const diagnostics = llmInference.outputs.find((port) => port.id === 'diagnostics');
   assert.ok(
     prompt?.inference_payloads?.some(
@@ -133,6 +134,14 @@ test('mock node definitions expose canonical Pumas inference ports', () => {
   assert.deepEqual(scores?.inference_payloads, [
     { task_id: 'rerank', role: 'task_output', result_kind: 'rerank' },
   ]);
+  assert.ok(
+    kvCacheOut?.inference_payloads?.some(
+      (payload) => payload.task_id === 'chat_completion' && payload.role === 'cache_handle',
+    ),
+  );
+  assert.ok(
+    kvCacheOut?.inference_payloads?.every((payload) => payload.role === 'cache_handle'),
+  );
   assert.ok(
     diagnostics?.inference_payloads?.some(
       (payload) => payload.task_id === 'image_generation' && payload.role === 'diagnostics',

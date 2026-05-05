@@ -69,6 +69,14 @@ function llmDefinition(overrides: Partial<NodeDefinition> = {}): NodeDefinition 
         multiple: false,
         inference_payloads: [{ task_id: 'chat_completion', role: 'usage' }],
       },
+      {
+        id: 'kv_cache_out',
+        label: 'KV Cache Out',
+        data_type: 'kv_cache',
+        required: false,
+        multiple: false,
+        inference_payloads: [{ task_id: 'text_generation', role: 'cache_handle' }],
+      },
     ],
     ...overrides,
   };
@@ -83,6 +91,7 @@ test('buildInferencePayloadDisplay formats task and role labels from inference p
     { label: 'Options', value: 'Generation Options' },
     { label: 'Diagnostics', value: 'Diagnostics, Metadata' },
     { label: 'Usage', value: 'Usage' },
+    { label: 'Cache handles', value: 'KV Cache Out' },
   ]);
 });
 

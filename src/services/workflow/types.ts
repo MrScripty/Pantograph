@@ -40,7 +40,8 @@ export type InferencePortPayloadRole =
   | 'model_reference'
   | 'options'
   | 'diagnostics'
-  | 'usage';
+  | 'usage'
+  | 'cache_handle';
 
 export type InferenceExecutionInputKind =
   | 'text_generation'

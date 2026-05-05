@@ -57,7 +57,7 @@ const LLM_MODEL_REFERENCE_PAYLOADS = taskRolePayloads(LLM_TASK_IDS, 'model_refer
 const LLM_OPTIONS_PAYLOADS = taskRolePayloads(LLM_TASK_IDS, 'options');
 const TEXT_CHAT_OPTIONS_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'options');
 const TEXT_CHAT_USAGE_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'usage');
-const TEXT_CHAT_KV_OUTPUT_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'task_output');
+const TEXT_CHAT_KV_OUTPUT_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'cache_handle');
 const LLM_DIAGNOSTIC_PAYLOADS = taskRolePayloads(LLM_TASK_IDS, 'diagnostics');
 const PROMPT_PAYLOADS: InferencePortPayloadContract[] = [
   ...TEXT_CHAT_INPUT_PAYLOADS,

@@ -2541,7 +2541,10 @@ drift back into inference.
   backend/runtime policy fields. Rust node-contract and mirrored TypeScript
   payload role contracts now distinguish `cache_handle` from generic
   `task_output`, so `llm-inference.kv_cache_out` stays cache-handle metadata
-  instead of a generated content/result payload.
+  instead of a generated content/result payload. App-level workflow service
+  TypeScript types, mocks, and inference payload display presenters now mirror
+  the same `cache_handle` role rather than treating `kv_cache_out` as generic
+  task output.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient. Embedded-runtime host capability projection now uses the shared
   Python-sidecar runtime-id set instead of a direct `pytorch` backend-key
@@ -2583,7 +2586,9 @@ drift back into inference.
   terminal stream chunks, never recomputed from prompt/generated text.
   Workflow-nodes and svelte-graph backend READMEs now document cache-handle
   payload roles as graph metadata facts rather than runtime policy or generated
-  result payloads.
+  result payloads. Workflow service frontend READMEs and inference payload
+  presenter docs now mirror that cache-handle role boundary for app-level
+  mocks and display rows.
 - [ ] Record any deferred consumer migrations in this plan.
 
 **Verification:**
@@ -3623,6 +3628,9 @@ Update during implementation:
   to Rust node contracts and mirrored svelte-graph types, then moved
   `llm-inference.kv_cache_out` contract metadata from generic task output to
   cache-handle metadata with workflow-nodes and TypeScript mock coverage.
+- 2026-05-05: Aligned app-level workflow service TypeScript types, mocks, and
+  inference payload display presenters with the `cache_handle` payload role so
+  frontend mock `kv_cache_out` metadata no longer drifts from Rust contracts.
 - 2026-05-05: Removed workflow-nodes Puma-Lib model-list raw
   `ModelRecord.metadata` fallbacks for executable option metadata. Task,
   backend-hint, custom-code, review, and dependency-binding facts now come from

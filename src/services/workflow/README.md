@@ -321,6 +321,6 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   native modes.
 - Mock node definitions must preserve Rust-style snake_case
   `inference_payloads` entries for task/model-reference/options/input/output,
-  usage, and diagnostics roles. Mock producers must not add backend/runtime
-  policy fields such as `backend_key` or `runtime_id` to canonical
-  `llm-inference` inputs.
+  usage, cache-handle, and diagnostics roles. Mock producers must not add
+  backend/runtime policy fields such as `backend_key` or `runtime_id` to
+  canonical `llm-inference` inputs.

@@ -42,7 +42,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `AudioGenerationNode.svelte` | Shows execution and dependency status for Stable Audio generation nodes. |
 | `RerankerNode.svelte` | Retired specialized renderer retained only for saved-workflow migration reference; new rerank workflows render through `LLMInferenceNode.svelte`. |
 | `GenericNode.svelte` | Fallback renderer for workflow node types that do not need specialized UI. |
-| `inferencePayloadDisplay.ts` | Projects backend-neutral inference payload role metadata into compact task, diagnostics, usage, model-fact, and option display rows for canonical inference nodes. |
+| `inferencePayloadDisplay.ts` | Projects backend-neutral inference payload role metadata into compact task, diagnostics, usage, cache-handle, model-fact, and option display rows for canonical inference nodes. |
 
 ## Problem
 Workflow execution mixes durable node configuration with transient runtime data
