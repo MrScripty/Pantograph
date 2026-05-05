@@ -28,6 +28,7 @@ fn node_progress_detail_is_exposed_in_diagnostics_snapshot() {
                     reuse_source: Some("llamacpp_slot".to_string()),
                     token_count: Some(48),
                     reason: Some("restored_input_handle".to_string()),
+                    option_diagnostics: Vec::new(),
                 },
             )),
             workflow_run_id: "exec-1".to_string(),

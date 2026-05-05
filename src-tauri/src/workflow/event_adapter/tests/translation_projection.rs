@@ -112,6 +112,7 @@ fn translated_task_progress_detail_updates_backend_diagnostics_projection() {
                     reuse_source: Some("llamacpp_slot".to_string()),
                     token_count: Some(32),
                     reason: Some("restored_input_handle".to_string()),
+                    option_diagnostics: Vec::new(),
                 },
             )),
             occurred_at_ms: Some(25),

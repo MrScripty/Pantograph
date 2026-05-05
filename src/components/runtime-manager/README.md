@@ -2,7 +2,7 @@
 
 ## Purpose
 This directory contains the dedicated Settings-side runtime-manager UI for
-Pantograph-managed redistributables such as `llama.cpp` and `Ollama`. It exists
+Pantograph-managed redistributables such as `llama.cpp`. It exists
 so version-aware runtime inspection, selection, install progress, and retained
 artifact controls live in one mounted Settings surface instead of being split
 between compact backend-picker widgets and unmounted one-off components.

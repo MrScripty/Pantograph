@@ -219,7 +219,6 @@ pub async fn index_docs_with_switch(
             Some(resolved_embedding_model_path.clone()),
             candle_model_path,
             &device,
-            Some("nomic-embed-text".to_string()),
         ))
         .await
         .map_err(|e| format!("Failed to start embedding server: {}", e))?;
@@ -250,11 +249,8 @@ pub async fn index_docs_with_switch(
                 );
             }
             sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
-            return Err(format!(
-                "The {} backend does not support RAG indexing through the GUI. \
-                 It runs in-process without an HTTP API. \
-                 Please use llama.cpp or Ollama for RAG/embedding functionality.",
-                prepared.backend_name
+            return Err(rag_indexing_unsupported_backend_message(
+                &prepared.backend_name,
             ));
         }
     };
@@ -401,4 +397,29 @@ pub async fn create_vector_database(
         .create_database(&name)
         .await
         .map_err(|e| format!("Failed to create database: {}", e))
+}
+
+fn rag_indexing_unsupported_backend_message(backend_name: &str) -> String {
+    format!(
+        "The {backend_name} backend does not support RAG indexing through the GUI. \
+         It runs in-process without an HTTP API. \
+         Please use llama.cpp for RAG/embedding functionality."
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rag_indexing_unsupported_backend_message;
+
+    #[test]
+    fn rag_indexing_unsupported_backend_message_omits_retired_ollama() {
+        let message = rag_indexing_unsupported_backend_message("Candle");
+
+        assert!(message.contains("The Candle backend does not support RAG indexing"));
+        assert!(message.contains("Please use llama.cpp"));
+        assert!(
+            !message.contains("Ollama"),
+            "retired Ollama backend must not be recommended by app-facing RAG errors"
+        );
+    }
 }

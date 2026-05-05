@@ -39,7 +39,6 @@ pub(crate) fn build_explicit_llamacpp_inference_request(
         external_url: None,
         file_model_path: Some(PathBuf::from(model_path)),
         mmproj_path: Some(PathBuf::from(mmproj_path)),
-        ollama_model_name: None,
         device: Some(device.device.clone()),
         gpu_layers: Some(device.gpu_layers),
     }
@@ -50,7 +49,6 @@ pub(crate) fn build_configured_inference_request(config: &AppConfig) -> Inferenc
         external_url: None,
         file_model_path: config.models.vlm_model_path.as_ref().map(PathBuf::from),
         mmproj_path: config.models.vlm_mmproj_path.as_ref().map(PathBuf::from),
-        ollama_model_name: None,
         device: Some(config.device.device.clone()),
         gpu_layers: Some(config.device.gpu_layers),
     }
@@ -60,12 +58,10 @@ pub(crate) fn build_resolved_embedding_request(
     gguf_model_path: Option<PathBuf>,
     candle_model_path: Option<PathBuf>,
     device: &DeviceConfig,
-    ollama_model_name: Option<String>,
 ) -> EmbeddingStartRequest {
     EmbeddingStartRequest {
         gguf_model_path,
         candle_model_path,
-        ollama_model_name,
         device: Some(device.device.clone()),
         gpu_layers: Some(device.gpu_layers),
     }
@@ -87,7 +83,6 @@ pub(crate) fn build_configured_embedding_request(
             .as_ref()
             .map(PathBuf::from),
         &config.device,
-        None,
     ))
 }
 
@@ -152,7 +147,6 @@ mod tests {
             request.mmproj_path.as_deref(),
             Some(Path::new("/models/qwen.mmproj"))
         );
-        assert!(request.ollama_model_name.is_none());
         assert_eq!(request.device.as_deref(), Some("Vulkan0"));
         assert_eq!(request.gpu_layers, Some(99));
     }
@@ -189,7 +183,6 @@ mod tests {
                 device: "Vulkan0".to_string(),
                 gpu_layers: 24,
             },
-            Some("nomic-embed-text".to_string()),
         );
 
         assert_eq!(
@@ -199,10 +192,6 @@ mod tests {
         assert_eq!(
             request.candle_model_path.as_deref(),
             Some(Path::new("/models/candle"))
-        );
-        assert_eq!(
-            request.ollama_model_name.as_deref(),
-            Some("nomic-embed-text")
         );
         assert_eq!(request.device.as_deref(), Some("Vulkan0"));
         assert_eq!(request.gpu_layers, Some(24));

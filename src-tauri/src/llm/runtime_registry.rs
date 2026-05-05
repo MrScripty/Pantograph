@@ -457,7 +457,9 @@ mod tests {
             model_path: None,
             is_embedding_mode: false,
             active_model_target: Some("/models/main".to_string()),
+            active_resolved_device: None,
             embedding_model_target: Some("/models/embed.gguf".to_string()),
+            embedding_resolved_device: None,
             active_runtime: Some(inference::RuntimeLifecycleSnapshot {
                 runtime_id: Some("PyTorch".to_string()),
                 runtime_instance_id: Some("pytorch-1".to_string()),

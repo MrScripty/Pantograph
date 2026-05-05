@@ -2585,7 +2585,11 @@ drift back into inference.
   Node-engine dependency preflight now keeps explicit workflow/backend hints
   first, then derives advisory backend key, task type, and model id from
   resolved package facts before falling back to legacy `llm-inference`
-  heuristics for sparse saved graphs.
+  heuristics for sparse saved graphs. Tauri RAG indexing errors no longer
+  recommend retired Ollama when a backend lacks a GUI-compatible embedding HTTP
+  endpoint; the related Tauri startup helpers no longer construct removed
+  Ollama model-name fields, and the app-facing runtime-manager README now names
+  supported managed redistributables without implying Ollama is available.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
@@ -3747,6 +3751,12 @@ Update during implementation:
 - 2026-05-05: Strengthened the workflow-service host capability contract
   snapshot with a roadmap `depth_estimation` task request contract so Rust
   fixture coverage matches the TypeScript capability DTO mirror.
+- 2026-05-05: Removed stale app-facing Ollama guidance from the Tauri RAG
+  indexing fallback and runtime-manager README after consumer migration review
+  found Ollama still named as a recommended RAG/embedding option. Validation
+  also exposed Tauri test-build drift from removed Ollama start-request fields,
+  new resolved-device runtime mode fields, and KV-cache option diagnostics; the
+  same slice aligned those fixtures with current Rust DTOs.
 - 2026-05-05: Embedded-runtime KV-cache workflow-event sinks now surface
   durable diagnostic append failures as `diagnostics_unavailable` event-sink
   errors after forwarding the original workflow event, and the plan records the
