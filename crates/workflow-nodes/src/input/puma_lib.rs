@@ -141,12 +141,6 @@ mod options_provider {
             .unwrap_or(serde_json::Value::Null)
     }
 
-    fn metadata_string(record: &pumas_library::ModelRecord, keys: &[&str]) -> Option<String> {
-        let obj = record.metadata.as_object()?;
-        keys.iter()
-            .find_map(|k| obj.get(*k).and_then(|v| v.as_str()).map(|s| s.to_string()))
-    }
-
     pub(crate) fn runtime_engine_hints_from_summary(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
     ) -> Option<serde_json::Value> {
@@ -176,22 +170,15 @@ mod options_provider {
     }
 
     pub(crate) fn custom_code_sources_for_option_metadata(
-        summary_result: Option<&ModelPackageFactsSummaryResult>,
-        record: &pumas_library::ModelRecord,
+        _summary_result: Option<&ModelPackageFactsSummaryResult>,
+        _record: &pumas_library::ModelRecord,
     ) -> serde_json::Value {
-        if summary_result.is_some() {
-            return serde_json::Value::Array(Vec::new());
-        }
-        record
-            .metadata
-            .get("custom_code_sources")
-            .cloned()
-            .unwrap_or(serde_json::Value::Array(Vec::new()))
+        serde_json::Value::Array(Vec::new())
     }
 
     pub(crate) fn review_reasons_for_option_metadata(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
-        record: &pumas_library::ModelRecord,
+        _record: &pumas_library::ModelRecord,
     ) -> serde_json::Value {
         if let Some(result) = summary_result {
             let Some(summary) = result.summary.as_ref() else {
@@ -200,20 +187,12 @@ mod options_provider {
             return serde_json::to_value(&summary.diagnostic_codes)
                 .unwrap_or(serde_json::Value::Array(Vec::new()));
         }
-        record
-            .metadata
-            .get("review_reasons")
-            .cloned()
-            .unwrap_or_else(|| {
-                metadata_string(record, &["review_reason", "reviewReason"])
-                    .map(|reason| serde_json::json!([reason]))
-                    .unwrap_or_else(|| serde_json::Value::Array(Vec::new()))
-            })
+        serde_json::Value::Array(Vec::new())
     }
 
     pub(crate) fn dependency_bindings_for_option_metadata(
         execution_descriptor: Option<&ModelExecutionDescriptor>,
-        record: &pumas_library::ModelRecord,
+        _record: &pumas_library::ModelRecord,
     ) -> serde_json::Value {
         if let Some(descriptor) = execution_descriptor {
             return descriptor
@@ -222,46 +201,57 @@ mod options_provider {
                 .and_then(|resolution| resolution.get("bindings").cloned())
                 .unwrap_or(serde_json::Value::Array(Vec::new()));
         }
-        record
-            .metadata
-            .get("dependency_bindings")
-            .cloned()
-            .unwrap_or(serde_json::Value::Array(Vec::new()))
+        serde_json::Value::Array(Vec::new())
+    }
+
+    fn pipeline_tag_from_summary(
+        summary_result: Option<&ModelPackageFactsSummaryResult>,
+    ) -> Option<String> {
+        summary_result
+            .and_then(|result| result.summary.as_ref())
+            .and_then(|summary| summary.task.pipeline_tag.as_deref())
+            .map(str::trim)
+            .filter(|tag| !tag.is_empty())
+            .map(ToOwned::to_owned)
+    }
+
+    fn task_type_primary_from_summary(
+        summary_result: Option<&ModelPackageFactsSummaryResult>,
+    ) -> Option<String> {
+        summary_result
+            .and_then(|result| result.summary.as_ref())
+            .and_then(|summary| summary.task.task_type_primary.as_deref())
+            .map(str::trim)
+            .filter(|task| !task.is_empty() && !task.eq_ignore_ascii_case("unknown"))
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                pipeline_tag_from_summary(summary_result)
+                    .as_deref()
+                    .map(pipeline_tag_to_task)
+            })
+    }
+
+    fn default_task_type_primary_from_record(record: &pumas_library::ModelRecord) -> String {
+        if record.model_type.eq_ignore_ascii_case("audio") {
+            "text-to-audio".to_string()
+        } else if record.model_type.eq_ignore_ascii_case("diffusion") {
+            "text-to-image".to_string()
+        } else {
+            "text-generation".to_string()
+        }
     }
 
     pub(crate) fn task_type_primary_from_descriptor_or_record(
         execution_descriptor: Option<&ModelExecutionDescriptor>,
+        summary_result: Option<&ModelPackageFactsSummaryResult>,
         record: &pumas_library::ModelRecord,
     ) -> String {
         execution_descriptor
             .map(|descriptor| descriptor.task_type_primary.trim())
             .filter(|task| !task.is_empty() && !task.eq_ignore_ascii_case("unknown"))
             .map(ToOwned::to_owned)
-            .or_else(|| {
-                metadata_string(
-                    record,
-                    &[
-                        "task_type_primary",
-                        "taskTypePrimary",
-                        "task_type",
-                        "taskType",
-                    ],
-                )
-            })
-            .or_else(|| {
-                metadata_string(record, &["pipeline_tag", "pipelineTag"])
-                    .as_deref()
-                    .map(pipeline_tag_to_task)
-            })
-            .unwrap_or_else(|| {
-                if record.model_type.eq_ignore_ascii_case("audio") {
-                    "text-to-audio".to_string()
-                } else if record.model_type.eq_ignore_ascii_case("diffusion") {
-                    "text-to-image".to_string()
-                } else {
-                    "text-generation".to_string()
-                }
-            })
+            .or_else(|| task_type_primary_from_summary(summary_result))
+            .unwrap_or_else(|| default_task_type_primary_from_record(record))
     }
 
     pub(crate) async fn resolve_execution_descriptor(
@@ -447,22 +437,24 @@ mod options_provider {
                 });
                 // Prefer the Pumas execution descriptor whenever the record can
                 // resolve one so runtime-facing paths come from the executable
-                // contract rather than projected metadata.
+                // contract rather than generic record metadata.
                 let execution_descriptor = resolve_execution_descriptor(api, m).await;
                 let inference_settings = api
                     .get_inference_settings(&m.id)
                     .await
                     .map(|settings| serde_json::to_value(settings).unwrap_or_default())
                     .unwrap_or_else(|_| resolve_inference_settings_fallback(m));
-                let pipeline_tag = metadata_string(m, &["pipeline_tag", "pipelineTag"]);
-                let task_type_primary =
-                    task_type_primary_from_descriptor_or_record(execution_descriptor.as_ref(), m);
+                let pipeline_tag = pipeline_tag_from_summary(summary_result);
+                let task_type_primary = task_type_primary_from_descriptor_or_record(
+                    execution_descriptor.as_ref(),
+                    summary_result,
+                    m,
+                );
                 let dependency_bindings =
                     dependency_bindings_for_option_metadata(execution_descriptor.as_ref(), m);
                 let recommended_backend = execution_descriptor
                     .as_ref()
-                    .and_then(|descriptor| descriptor.recommended_backend.clone())
-                    .or_else(|| metadata_string(m, &["recommended_backend", "recommendedBackend"]));
+                    .and_then(|descriptor| descriptor.recommended_backend.clone());
                 let runtime_engine_hints = execution_descriptor
                     .as_ref()
                     .map(|descriptor| {
@@ -470,14 +462,8 @@ mod options_provider {
                             .unwrap_or(serde_json::Value::Array(Vec::new()))
                     })
                     .or_else(|| runtime_engine_hints_from_summary(summary_result))
-                    .unwrap_or_else(|| {
-                        m.metadata
-                            .get("runtime_engine_hints")
-                            .cloned()
-                            .unwrap_or(serde_json::Value::Array(Vec::new()))
-                    });
+                    .unwrap_or(serde_json::Value::Array(Vec::new()));
                 let requires_custom_code = requires_custom_code_from_summary(summary_result)
-                    .or_else(|| m.metadata.get("requires_custom_code").cloned())
                     .unwrap_or(serde_json::Value::Bool(false));
                 let custom_code_sources =
                     custom_code_sources_for_option_metadata(summary_result, m);
@@ -902,22 +888,40 @@ mod model_library_tests {
             "task_type_primary": "text-generation",
             "pipeline_tag": "text-generation"
         }));
+        let summary = package_summary_result("llm/imported/test-model", "cached");
         let descriptor = model_execution_descriptor_with_task("image-to-text");
 
-        let task_type = task_type_primary_from_descriptor_or_record(Some(&descriptor), &record);
+        let task_type =
+            task_type_primary_from_descriptor_or_record(Some(&descriptor), Some(&summary), &record);
 
         assert_eq!(task_type, "image-to-text");
     }
 
     #[test]
-    fn test_task_type_primary_uses_metadata_when_execution_descriptor_task_is_unknown() {
+    fn test_task_type_primary_uses_summary_when_execution_descriptor_task_is_unknown() {
         let record = model_record_with_metadata(serde_json::json!({
-            "task_type_primary": "text-generation",
-            "pipeline_tag": "text-generation"
+            "task_type_primary": "stale-metadata-task",
+            "pipeline_tag": "image-to-text"
+        }));
+        let summary = package_summary_result("llm/imported/test-model", "cached");
+        let descriptor = model_execution_descriptor_with_task("unknown");
+
+        let task_type =
+            task_type_primary_from_descriptor_or_record(Some(&descriptor), Some(&summary), &record);
+
+        assert_eq!(task_type, "text-generation");
+    }
+
+    #[test]
+    fn test_task_type_primary_uses_record_type_default_when_versioned_facts_absent() {
+        let record = model_record_with_metadata(serde_json::json!({
+            "task_type_primary": "stale-metadata-task",
+            "pipeline_tag": "image-to-text"
         }));
         let descriptor = model_execution_descriptor_with_task("unknown");
 
-        let task_type = task_type_primary_from_descriptor_or_record(Some(&descriptor), &record);
+        let task_type =
+            task_type_primary_from_descriptor_or_record(Some(&descriptor), None, &record);
 
         assert_eq!(task_type, "text-generation");
     }

@@ -1028,6 +1028,11 @@ Detailed Pumas-side work is split into
   `ModelRecord.metadata`. Embedded-runtime `puma-lib` execution now also
   rebinds stale saved `recommended_backend` values from the Pumas public
   `ModelExecutionDescriptor` when the descriptor provides a concrete backend.
+  Workflow-nodes Puma-Lib model-list option metadata now ignores raw
+  `ModelRecord.metadata` fallbacks for task, backend hint, custom-code, review,
+  and dependency-binding facts; versioned execution descriptors and package
+  summary DTOs are used when present, with conservative public-record defaults
+  only when versioned facts are absent.
 - [x] Treat Pumas HF search MLX/vLLM tags as remote discovery hints only.
   Installed-model compatibility and workflow preflight must use resolved local
   Pumas package facts plus Pantograph inference/backend checks.
@@ -3591,6 +3596,11 @@ Update during implementation:
 - 2026-05-05: Updated node-engine source and core-executor README contracts for
   canonical text/chat `usage` output, documenting bounded token-count metadata
   hygiene and the rule against deriving usage from prompt or generated content.
+- 2026-05-05: Removed workflow-nodes Puma-Lib model-list raw
+  `ModelRecord.metadata` fallbacks for executable option metadata. Task,
+  backend-hint, custom-code, review, and dependency-binding facts now come from
+  versioned Pumas execution descriptors/package-summary DTOs or bounded
+  public-record defaults.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
