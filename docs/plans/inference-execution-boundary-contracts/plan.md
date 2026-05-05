@@ -2553,7 +2553,10 @@ drift back into inference.
   instead of a generated content/result payload. App-level workflow service
   TypeScript types, mocks, and inference payload display presenters now mirror
   the same `cache_handle` role rather than treating `kv_cache_out` as generic
-  task output.
+  task output. Workflow-service registry and frontend mock tests now also scan
+  every canonical `llm-inference.inference_payloads` entry for forbidden
+  backend/runtime/scheduler policy fields such as backend keys, runtime ids,
+  admission, reservation, eviction, and priority.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient. Embedded-runtime host capability projection now uses the shared
   Python-sidecar runtime-id set instead of a direct `pytorch` backend-key
@@ -3706,6 +3709,11 @@ Update during implementation:
   image-generation, and audio-transcription task families, with frontend test
   coverage proving the mock surface carries payload facts without adding
   backend/runtime policy inputs.
+- 2026-05-05: Strengthened Rust workflow-service registry and frontend mock
+  tests to scan every canonical `llm-inference.inference_payloads` payload for
+  forbidden backend/runtime/scheduler policy fields, preventing payload metadata
+  from growing backend key, runtime id, admission, reservation, eviction, or
+  priority semantics.
 - 2026-05-04: Updated the touched frontend workflow-service and shared
   svelte-graph backend README contract sections so mock `inference_payloads`
   are documented as task payload facts only, not backend choice, runtime

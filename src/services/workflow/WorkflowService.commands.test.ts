@@ -154,6 +154,31 @@ test('mock node definitions expose canonical Pumas inference ports', () => {
   );
   assert.ok(!llmInference.inputs.some((port) => port.id === 'backend_key'));
   assert.ok(!llmInference.inputs.some((port) => port.id === 'runtime_id'));
+
+  const policyFields = [
+    'backend_key',
+    'runtime_id',
+    'runtime_instance_id',
+    'selected_backend_key',
+    'selected_runtime_id',
+    'scheduler_policy',
+    'scheduler_policy_id',
+    'admission',
+    'reservation',
+    'eviction',
+    'priority',
+  ];
+  for (const port of [...llmInference.inputs, ...llmInference.outputs]) {
+    for (const payload of port.inference_payloads ?? []) {
+      for (const field of policyFields) {
+        assert.equal(
+          Object.prototype.hasOwnProperty.call(payload, field),
+          false,
+          `${port.id} inference payload unexpectedly exposes ${field}`,
+        );
+      }
+    }
+  }
 });
 
 test('updateRetentionPolicy returns backend policy state without client-side optimistic replacement', async () => {

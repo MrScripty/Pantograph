@@ -168,9 +168,7 @@ mod tests {
         let payload = &encoded["inference_payloads"][0];
         assert_eq!(payload["role"], serde_json::json!("diagnostics"));
         assert_eq!(payload["task_id"], serde_json::json!("text_generation"));
-        assert!(payload.get("backend_key").is_none());
-        assert!(payload.get("runtime_id").is_none());
-        assert!(payload.get("scheduler_policy").is_none());
+        assert_llm_inference_payloads_do_not_expose_runtime_policy(&definition);
     }
 
     #[test]
@@ -209,5 +207,38 @@ mod tests {
                         && payload["result_kind"] == serde_json::json!("image_generation")
                 })
             }));
+    }
+
+    fn assert_llm_inference_payloads_do_not_expose_runtime_policy(definition: &NodeDefinition) {
+        let policy_fields = [
+            "backend_key",
+            "runtime_id",
+            "runtime_instance_id",
+            "selected_backend_key",
+            "selected_runtime_id",
+            "scheduler_policy",
+            "scheduler_policy_id",
+            "admission",
+            "reservation",
+            "eviction",
+            "priority",
+        ];
+
+        for port in definition.inputs.iter().chain(definition.outputs.iter()) {
+            let encoded =
+                serde_json::to_value(&port.inference_payloads).expect("encode inference payloads");
+            let payloads = encoded.as_array().expect("payloads encode as array");
+            for payload in payloads {
+                for field in policy_fields {
+                    assert!(
+                        payload.get(field).is_none(),
+                        "port '{}' payload unexpectedly exposes policy field '{}': {}",
+                        port.id,
+                        field,
+                        payload
+                    );
+                }
+            }
+        }
     }
 }
