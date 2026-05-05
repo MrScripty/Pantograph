@@ -2528,6 +2528,10 @@ drift back into inference.
   Python-sidecar runtime-id set instead of a direct `pytorch` backend-key
   comparison, so aliases such as `torch` and neighboring Python sidecar
   backends are excluded from duplicate host-runtime projection consistently.
+  Node-engine dependency preflight now keeps explicit workflow/backend hints
+  first, then derives advisory backend key, task type, and model id from
+  resolved package facts before falling back to legacy `llm-inference`
+  heuristics for sparse saved graphs.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs.
@@ -3563,6 +3567,10 @@ Update during implementation:
 - 2026-05-04: Threaded terminal typed-stream chunk usage into backend-execution
   lifecycle completion events, with regression coverage proving prompt and
   generated stream content remain absent from lifecycle diagnostics.
+- 2026-05-04: Updated node-engine dependency preflight to prefer resolved Pumas
+  package facts for backend/task/model facts after explicit hints and before
+  legacy `llm-inference` heuristics, keeping preflight factual and out of
+  scheduler/runtime selection.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

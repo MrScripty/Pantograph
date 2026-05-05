@@ -2741,6 +2741,102 @@ fn test_build_model_dependency_request_uses_resolved_model_source_identity() {
     assert_eq!(request.model_path, "/models/tiny/model.gguf");
 }
 
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_model_dependency_request_uses_package_facts_before_llm_heuristics() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: inference::ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("text package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+
+    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
+    assert_eq!(
+        request.task_type_primary.as_deref(),
+        Some("text_generation")
+    );
+    assert_eq!(request.model_id.as_deref(), Some("llm/llama/tiny-gguf"));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_model_dependency_request_keeps_explicit_backend_before_package_facts() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: inference::ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("text package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+
+    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
+    assert_eq!(
+        request.task_type_primary.as_deref(),
+        Some("text_generation")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_model_dependency_request_uses_embedding_package_facts() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_embedding_package_facts.json"
+    );
+    let package_facts: inference::ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("embedding package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let request = build_model_dependency_request("llm-inference", "/tmp/embed.gguf", &inputs);
+
+    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
+    assert_eq!(request.task_type_primary.as_deref(), Some("embedding"));
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("embedding/qwen3/tiny-embedding-gguf")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_model_dependency_request_uses_rerank_package_facts() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/rerank_package_facts.json"
+    );
+    let package_facts: inference::ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("rerank package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let request = build_model_dependency_request("llm-inference", "/tmp/rerank.gguf", &inputs);
+
+    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
+    assert_eq!(request.task_type_primary.as_deref(), Some("reranking"));
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("rerank/bge/tiny-reranker-gguf")
+    );
+}
+
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[test]
 fn test_build_model_dependency_request_maps_canonical_embedding_task() {

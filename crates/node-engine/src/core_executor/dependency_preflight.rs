@@ -9,9 +9,10 @@ use pantograph_runtime_identity::canonical_engine_backend_key;
 
 #[cfg(feature = "inference-nodes")]
 use inference::{
-    resolve_task_registry_entry, InferenceExecutionInputKind, InferenceLifecyclePhase,
-    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, InferenceTaskId, TaskRegistryEntry,
+    resolve_task_registry_entry, BackendHintLabel, InferenceExecutionInputKind,
+    InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink, InferenceTaskId, ResolvedModelPackageFacts,
+    TaskRegistryEntry,
 };
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -347,18 +348,26 @@ pub(crate) fn build_model_dependency_request(
     model_path: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelDependencyRequest {
-    let backend_key =
-        preferred_backend_key(node_type, inputs).or_else(|| infer_backend_key(node_type, inputs));
+    let package_facts = read_resolved_model_package_facts_for_preflight(inputs);
+    let backend_key = preferred_backend_key(node_type, inputs)
+        .or_else(|| {
+            package_facts
+                .as_ref()
+                .and_then(backend_key_from_package_facts)
+        })
+        .or_else(|| infer_backend_key(node_type, inputs));
 
     let task_type_primary =
         read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
             .filter(|s| !s.trim().is_empty())
+            .or_else(|| task_type_primary_from_package_facts(package_facts.as_ref()))
             .unwrap_or_else(|| infer_task_type_primary(node_type, inputs));
 
     ModelDependencyRequest {
         node_type: node_type.to_string(),
         model_path: model_path.to_string(),
         model_id: read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
+            .or_else(|| model_id_from_package_facts(package_facts.as_ref()))
             .or_else(|| read_resolved_model_source_model_id(inputs)),
         model_type: read_optional_input_string_aliases(inputs, &["model_type", "modelType"]),
         task_type_primary: Some(task_type_primary),
@@ -369,6 +378,83 @@ pub(crate) fn build_model_dependency_request(
         ),
         selected_binding_ids: read_input_selected_binding_ids(inputs),
         dependency_override_patches: Vec::new(),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_resolved_model_package_facts_for_preflight(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<ResolvedModelPackageFacts> {
+    read_optional_input_value_aliases(
+        inputs,
+        &[
+            "resolved_model_package_facts",
+            "resolvedModelPackageFacts",
+            "model_package_facts",
+            "modelPackageFacts",
+        ],
+    )
+    .filter(|raw| !raw.is_null())
+    .and_then(|raw| serde_json::from_value(raw).ok())
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn read_resolved_model_package_facts_for_preflight(
+    _inputs: &HashMap<String, serde_json::Value>,
+) -> Option<()> {
+    None
+}
+
+#[cfg(feature = "inference-nodes")]
+fn backend_key_from_package_facts(facts: &ResolvedModelPackageFacts) -> Option<String> {
+    facts
+        .backend_hints
+        .accepted
+        .iter()
+        .find_map(|hint| canonical_backend_key(Some(backend_hint_engine_key(*hint))))
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn backend_key_from_package_facts(_facts: &()) -> Option<String> {
+    None
+}
+
+#[cfg(feature = "inference-nodes")]
+fn task_type_primary_from_package_facts(
+    facts: Option<&ResolvedModelPackageFacts>,
+) -> Option<String> {
+    facts
+        .and_then(|facts| facts.task.task_type_primary.clone())
+        .filter(|task| !task.trim().is_empty())
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn task_type_primary_from_package_facts(_facts: Option<&()>) -> Option<String> {
+    None
+}
+
+#[cfg(feature = "inference-nodes")]
+fn model_id_from_package_facts(facts: Option<&ResolvedModelPackageFacts>) -> Option<String> {
+    facts
+        .map(|facts| facts.model_ref.model_id.clone())
+        .filter(|model_id| !model_id.trim().is_empty())
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn model_id_from_package_facts(_facts: Option<&()>) -> Option<String> {
+    None
+}
+
+#[cfg(feature = "inference-nodes")]
+fn backend_hint_engine_key(hint: BackendHintLabel) -> &'static str {
+    match hint {
+        BackendHintLabel::Transformers => "pytorch",
+        BackendHintLabel::LlamaCpp => "llama.cpp",
+        BackendHintLabel::Vllm => "vllm",
+        BackendHintLabel::Mlx => "mlx",
+        BackendHintLabel::Candle => "candle",
+        BackendHintLabel::Diffusers => "diffusers",
+        BackendHintLabel::OnnxRuntime => "onnx-runtime",
     }
 }
 

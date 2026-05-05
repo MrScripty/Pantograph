@@ -81,7 +81,10 @@ stable public facade and dispatch owner.
   treat those inference-only readers as live production paths.
 - Dependency preflight and model-reference construction stay in
   `dependency_preflight.rs` so runtime adapters share backend-key and
-  dependency-state validation without growing dispatch code.
+  dependency-state validation without growing dispatch code. Explicit
+  workflow/backend hints win, then resolved package facts may provide factual
+  backend/task/model inputs, and only sparse legacy graphs use backend-name
+  heuristics.
 - Retired Ollama-node handling stays in `ollama.rs` only to produce a clear
   migration error for stale saved workflows; it must not call an Ollama daemon
   or become a new inference path.
