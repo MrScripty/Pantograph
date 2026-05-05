@@ -754,6 +754,12 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - Reason: this warning is in the inference process helper surface and is
   unrelated to hiding the retired Ollama graph node or stale-node executor
   guard.
+- 2026-05-05: `cargo check -p pantograph-embedded-runtime` completed for the
+  inference lifecycle sink return-channel slice, but surfaced an existing
+  `crates/pantograph-embedded-runtime/src/model_dependency_descriptors.rs`
+  dead-code warning for `map_pipeline_tag_to_task`.
+- Reason: this warning is in the model dependency descriptor helper surface and
+  unrelated to the lifecycle sink `diagnostics_unavailable` return contract.
 - 2026-05-03: The node-engine text/chat request builder still treats `task_id`
   and `taskId` as task-kind aliases for direct inference-node inputs. The
   strict task-registry validation slice now rejects unknown supplied values, so
@@ -2825,7 +2831,7 @@ inference write ledger events directly.
   append-only `canonical_error_event_id` field, and embedded-runtime lifecycle
   ledger adapters pass it through to node-status payloads when a producer
   already knows the direct causal error event.
-- [ ] Ensure ledger append failure returns or projects `diagnostics_unavailable`
+- [x] Ensure ledger append failure returns or projects `diagnostics_unavailable`
   while preserving the original inference/preflight/execution error. Failed
   inference lifecycle detail is now sanitized and bounded before node-status
   diagnostic projection so oversized backend text does not itself cause a
@@ -2841,10 +2847,11 @@ inference write ledger events directly.
   diagnostic event id exists. Embedded-runtime KV-cache workflow-event sinks now
   return a `diagnostics_unavailable` event-sink error when durable KV diagnostic
   append fails, after forwarding the original workflow event to the inner sink
-  so stream/progress delivery is preserved. Inference lifecycle sink append
-  failures remain logged only because the current inference lifecycle sink trait
-  is fire-and-forget; a later slice must add a return channel or host-side
-  unavailable projection for that path.
+  so stream/progress delivery is preserved. Inference lifecycle sinks now return
+  structured `diagnostics_unavailable` errors when durable lifecycle or bounded
+  inference diagnostic appends fail; gateway and node-engine producer edges log
+  those secondary sink failures and preserve the original inference,
+  preflight, or execution result.
 - [ ] Keep prompts, chat messages, raw media, generated content, embeddings,
   token arrays, logits, tensors, Python kwargs, backend CLI flags, full local
   paths where stable ids exist, and unbounded stderr/stdout out of ledger
@@ -2952,6 +2959,13 @@ one-off conversions.
   and embedded-runtime projects those refs into diagnostics-ledger rows without
   storing encoded media, prompts, generated content, local paths, or scheduler
   decisions.
+- 2026-05-05: Inference lifecycle sink append-failure slice changed
+  `InferenceRequestLifecycleEventSink::record` to return a structured sink
+  error, added a `diagnostics_unavailable` error contract, and made the
+  embedded-runtime workflow ledger sink return it when durable lifecycle or
+  bounded inference diagnostic appends fail. Gateway and node-engine producers
+  keep those secondary diagnostics failures out of the primary inference and
+  preflight result path.
 - 2026-05-03: Generation option diagnostics ledger slice added append-only
   `inference.execution_diagnostic_observed` ledger events with bounded
   option-support counts and per-option summaries. `InferenceRequestLifecycleEvent`

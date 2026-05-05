@@ -106,7 +106,10 @@ let config = EmbeddedRuntimeConfig::new(
   close or drop it according to the runtime lifecycle contract as supervision
   hardening lands.
 - Errors: runtime setup, dependency resolution, host execution, and workflow
-  failures are propagated through service/runtime error types.
+  failures are propagated through service/runtime error types. Host-owned
+  inference lifecycle sinks return `diagnostics_unavailable` when durable
+  diagnostic appends fail, while gateway and node-engine producers preserve the
+  original inference/preflight/execution outcome.
 - Versioning: public runtime methods should be additive; changing feature
   defaults or response shapes requires binding and Tauri migration.
 

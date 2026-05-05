@@ -119,7 +119,10 @@ selection must use supported runtimes through Pumas model references.
   managed runtime DTOs, neutral managed-dependency DTO projections, additive
   managed-binary facade DTOs, and model/package fact DTOs.
 - Lifecycle: callers configure a gateway, inject host process behavior, start
-  or attach backends, and stop them through the gateway.
+  or attach backends, optionally inject an `InferenceRequestLifecycleEventSink`,
+  and stop them through the gateway. Lifecycle sinks return structured errors
+  such as `diagnostics_unavailable`; gateway producers log those errors so a
+  secondary diagnostics failure does not replace the original inference result.
 - Errors: backend and lifecycle failures are surfaced as typed or structured
   errors; unsupported capabilities must not return successful placeholder data.
 - Versioning: Cargo features, backend capability fields, typed execution

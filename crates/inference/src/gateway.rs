@@ -2489,7 +2489,7 @@ fn record_inference_lifecycle_phase_event_with_references(
     artifact_refs: Vec<String>,
     resolved_artifact_kind: Option<String>,
 ) {
-    sink.record(InferenceRequestLifecycleEvent {
+    if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
         request_id,
         phase,
         kind,
@@ -2510,7 +2510,9 @@ fn record_inference_lifecycle_phase_event_with_references(
         compatibility_report,
         compatibility_issues,
         option_diagnostics,
-    });
+    }) {
+        log::warn!("failed to record inference lifecycle event: {error}");
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

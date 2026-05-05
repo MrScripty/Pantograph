@@ -177,10 +177,13 @@ delegating methods; scheduler authority and diagnostics events stay in
   action/outcome/cache-id references and task-local KV option-support summaries
   through the host-owned workflow event sink. KV-cache diagnostic append
   failures are returned as `diagnostics_unavailable` event-sink errors after the
-  original workflow event is forwarded to the inner sink. Prompt/result bodies,
-  embeddings, tensors, token arrays, backend kwargs, raw backend output, cache
-  bytes, cache fingerprints, and temp paths remain outside durable diagnostic
-  payloads.
+  original workflow event is forwarded to the inner sink. Inference lifecycle
+  diagnostic append failures are returned through the lifecycle sink's
+  structured `diagnostics_unavailable` error while gateway and node-engine
+  producers preserve the original inference/preflight/execution outcome.
+  Prompt/result bodies, embeddings, tensors, token arrays, backend kwargs, raw
+  backend output, cache bytes, cache fingerprints, and temp paths remain
+  outside durable diagnostic payloads.
 - Public embedded-runtime graph persistence, edit-session, mutation,
   connection, and insert-preview facade methods stay in
   `embedded_workflow_graph_api.rs` so graph API forwarding remains separate

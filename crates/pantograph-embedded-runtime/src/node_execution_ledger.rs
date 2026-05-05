@@ -257,9 +257,12 @@ impl NodeExecutionWorkflowLedgerSink {
 }
 
 impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflowLedgerSink {
-    fn record(&self, event: inference::InferenceRequestLifecycleEvent) {
+    fn record(
+        &self,
+        event: inference::InferenceRequestLifecycleEvent,
+    ) -> Result<(), inference::InferenceRequestLifecycleEventSinkError> {
         let Some(context) = self.context_for_event(&event) else {
-            return;
+            return Ok(());
         };
         let Some(request) = self
             .recorder
@@ -267,15 +270,17 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
             .ok()
             .and_then(|mut recorder| recorder.append_request(&context, &event))
         else {
-            return;
+            return Ok(());
         };
         let duration_ms = inference_lifecycle_duration_ms_from_append_request(&request);
+        let mut diagnostic_append_error = None;
 
         if let Err(error) = self
             .workflow_service
             .workflow_diagnostic_event_record(request)
         {
             log::warn!("failed to record inference lifecycle diagnostic event: {error}");
+            diagnostic_append_error = Some(error);
         }
 
         if let Some(request) =
@@ -286,8 +291,15 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
                 .workflow_diagnostic_event_record(request)
             {
                 log::warn!("failed to record inference option diagnostic event: {error}");
+                diagnostic_append_error.get_or_insert(error);
             }
         }
+
+        if let Some(error) = diagnostic_append_error {
+            return Err(inference_lifecycle_diagnostics_unavailable_error(&error));
+        }
+
+        Ok(())
     }
 }
 
@@ -314,6 +326,15 @@ fn diagnostics_unavailable_event_error(
             sanitize_diagnostic_error_text(&error.to_string(), MAX_DIAGNOSTIC_ERROR_TEXT_LEN)
         ),
     }
+}
+
+fn inference_lifecycle_diagnostics_unavailable_error(
+    error: &pantograph_workflow_service::WorkflowServiceError,
+) -> inference::InferenceRequestLifecycleEventSinkError {
+    inference::InferenceRequestLifecycleEventSinkError::diagnostics_unavailable(format!(
+        "failed to record inference lifecycle diagnostic: {}",
+        sanitize_diagnostic_error_text(&error.to_string(), MAX_DIAGNOSTIC_ERROR_TEXT_LEN)
+    ))
 }
 
 #[derive(Debug, Clone)]

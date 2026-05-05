@@ -586,7 +586,7 @@ fn record_task_validation_failure_lifecycle(
         } else {
             Vec::new()
         };
-        sink.record(InferenceRequestLifecycleEvent {
+        if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
             request_id: request_id.clone(),
             phase: InferenceLifecyclePhase::TaskValidation,
             kind,
@@ -607,7 +607,9 @@ fn record_task_validation_failure_lifecycle(
             compatibility_report: None,
             compatibility_issues: Vec::new(),
             option_diagnostics: event_option_diagnostics,
-        });
+        }) {
+            log::warn!("failed to record inference task validation lifecycle event: {error}");
+        }
     }
 }
 

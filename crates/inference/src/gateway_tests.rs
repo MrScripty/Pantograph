@@ -17,7 +17,8 @@ use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, EncodedAudio, ImageGenerationRequest,
     InferenceExecutionInput, InferenceExecutionRequest, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, InferenceUsage, RuntimeFactReadiness,
+    InferenceRequestLifecycleEventSink, InferenceRequestLifecycleEventSinkError, InferenceUsage,
+    RuntimeFactReadiness,
 };
 
 #[path = "gateway_tests/start_config.rs"]
@@ -52,8 +53,12 @@ impl RecordingLifecycleSink {
 }
 
 impl InferenceRequestLifecycleEventSink for RecordingLifecycleSink {
-    fn record(&self, event: InferenceRequestLifecycleEvent) {
+    fn record(
+        &self,
+        event: InferenceRequestLifecycleEvent,
+    ) -> Result<(), InferenceRequestLifecycleEventSinkError> {
         self.events.lock().expect("events lock").push(event);
+        Ok(())
     }
 }
 

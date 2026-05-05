@@ -3629,10 +3629,14 @@ struct MockInferenceLifecycleSink {
 
 #[cfg(feature = "inference-nodes")]
 impl InferenceRequestLifecycleEventSink for MockInferenceLifecycleSink {
-    fn record(&self, event: InferenceRequestLifecycleEvent) {
+    fn record(
+        &self,
+        event: InferenceRequestLifecycleEvent,
+    ) -> std::result::Result<(), inference::InferenceRequestLifecycleEventSinkError> {
         self.events
             .lock()
             .expect("lifecycle events lock")
             .push(event);
+        Ok(())
     }
 }

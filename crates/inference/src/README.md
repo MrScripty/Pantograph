@@ -254,6 +254,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   bounded usage, cache-handle, and option-diagnostic facts. Callers should not
   infer scheduler admission, reservation, priority, eviction, or final backend
   selection from these payloads.
+- `InferenceRequestLifecycleEventSink` returns a structured sink error when a
+  host cannot persist or forward lifecycle diagnostics. Gateway producers log
+  sink failures and continue returning the original inference result or error.
 - `generate_image()` is synchronous-at-contract-level and returns final images;
   streaming progress is not yet part of the facade.
 - `rerank()` accepts one query plus candidate documents and returns scored,
@@ -273,6 +276,8 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 ## Structured Producer Contract
 
 - `types.rs` defines the stable machine-consumed request and response shapes.
+  Its lifecycle sink error contract uses `diagnostics_unavailable` for
+  secondary diagnostics failures and must not carry prompt/result payload text.
 - `model_contracts.rs` defines additive producer/consumer facts for
   Transformers-aligned package evidence, canonical task ids, generation
   defaults, option compatibility, lifecycle phases, and model-library cache

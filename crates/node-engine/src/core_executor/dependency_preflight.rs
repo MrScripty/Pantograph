@@ -831,7 +831,7 @@ fn record_dependency_preflight_failure_lifecycle(
         ),
         (InferenceRequestLifecycleEventKind::CleanupCompleted, None),
     ] {
-        sink.record(InferenceRequestLifecycleEvent {
+        if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
             request_id: request_id.clone(),
             phase: InferenceLifecyclePhase::ModelPackageResolution,
             kind,
@@ -852,7 +852,9 @@ fn record_dependency_preflight_failure_lifecycle(
             compatibility_report: None,
             compatibility_issues: Vec::new(),
             option_diagnostics: Vec::new(),
-        });
+        }) {
+            log::warn!("failed to record inference dependency preflight lifecycle event: {error}");
+        }
     }
 }
 

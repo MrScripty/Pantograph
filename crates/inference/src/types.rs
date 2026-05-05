@@ -871,9 +871,37 @@ pub struct InferenceRequestLifecycleEvent {
     pub option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
 }
 
+/// Error returned by a host-owned lifecycle sink when it cannot persist or
+/// forward a lifecycle fact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InferenceRequestLifecycleEventSinkError {
+    pub code: String,
+    pub message: String,
+}
+
+impl InferenceRequestLifecycleEventSinkError {
+    pub fn diagnostics_unavailable(message: impl Into<String>) -> Self {
+        Self {
+            code: "diagnostics_unavailable".to_string(),
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for InferenceRequestLifecycleEventSinkError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for InferenceRequestLifecycleEventSinkError {}
+
 /// Synchronous sink for request lifecycle facts.
 pub trait InferenceRequestLifecycleEventSink: Send + Sync {
-    fn record(&self, event: InferenceRequestLifecycleEvent);
+    fn record(
+        &self,
+        event: InferenceRequestLifecycleEvent,
+    ) -> Result<(), InferenceRequestLifecycleEventSinkError>;
 }
 
 /// Snapshot of an inference runtime lifecycle owned by the backend.
@@ -2400,6 +2428,27 @@ mod tests {
         assert_eq!(decoded.compatibility_report, None);
         assert!(decoded.compatibility_issues.is_empty());
         assert!(decoded.option_diagnostics.is_empty());
+    }
+
+    #[test]
+    fn inference_request_lifecycle_sink_error_serde_uses_stable_contract() {
+        let error = InferenceRequestLifecycleEventSinkError::diagnostics_unavailable(
+            "failed to record inference lifecycle diagnostic",
+        );
+
+        let encoded = serde_json::to_value(&error).expect("sink error encodes");
+        let decoded: InferenceRequestLifecycleEventSinkError =
+            serde_json::from_value(encoded.clone()).expect("sink error decodes");
+
+        assert_eq!(
+            encoded["code"],
+            serde_json::json!("diagnostics_unavailable")
+        );
+        assert_eq!(
+            encoded["message"],
+            serde_json::json!("failed to record inference lifecycle diagnostic")
+        );
+        assert_eq!(decoded, error);
     }
 
     #[test]

@@ -162,9 +162,9 @@ pub use types::{
     InferenceCompatibilityReportSummary, InferenceEmbeddingResult, InferenceExecutionInput,
     InferenceExecutionRequest, InferenceExecutionRequestValidationError, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, InferenceUsage, MaskedPrompt, PromptSegment, RerankRequest,
-    RerankResponse, RerankResult, RuntimeLifecycleSnapshot, ServerModeInfo, StreamChoice,
-    StreamChunk, StreamEvent,
+    InferenceRequestLifecycleEventSink, InferenceRequestLifecycleEventSinkError, InferenceUsage,
+    MaskedPrompt, PromptSegment, RerankRequest, RerankResponse, RerankResult,
+    RuntimeLifecycleSnapshot, ServerModeInfo, StreamChoice, StreamChunk, StreamEvent,
 };
 
 #[cfg(feature = "std-process")]

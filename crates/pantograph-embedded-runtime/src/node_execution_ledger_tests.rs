@@ -1271,14 +1271,16 @@ fn inference_lifecycle_workflow_sink_records_cancelled_node_status_to_workflow_l
     let mut started =
         inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Started, 100);
     started.request_id = Some("run-a:node-a:LLM".to_string());
-    inference::InferenceRequestLifecycleEventSink::record(&sink, started);
+    inference::InferenceRequestLifecycleEventSink::record(&sink, started)
+        .expect("started lifecycle records");
 
     let mut cancelled = inference_lifecycle_event(
         inference::InferenceRequestLifecycleEventKind::Cancelled,
         175,
     );
     cancelled.request_id = Some("run-a:node-a:LLM".to_string());
-    inference::InferenceRequestLifecycleEventSink::record(&sink, cancelled);
+    inference::InferenceRequestLifecycleEventSink::record(&sink, cancelled)
+        .expect("cancelled lifecycle records");
 
     let response = service
         .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
@@ -1334,14 +1336,16 @@ fn inference_lifecycle_workflow_sink_records_failed_node_status_to_workflow_ledg
     let mut started =
         inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Started, 100);
     started.request_id = Some("run-a:node-a:LLM".to_string());
-    inference::InferenceRequestLifecycleEventSink::record(&sink, started);
+    inference::InferenceRequestLifecycleEventSink::record(&sink, started)
+        .expect("started lifecycle records");
 
     let mut failed =
         inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Failed, 175);
     failed.request_id = Some("run-a:node-a:LLM".to_string());
     failed.detail = Some("backend failed".to_string());
     failed.canonical_error_event_id = Some("diagnostic-error-inference-workflow".to_string());
-    inference::InferenceRequestLifecycleEventSink::record(&sink, failed);
+    inference::InferenceRequestLifecycleEventSink::record(&sink, failed)
+        .expect("failed lifecycle records");
 
     let response = service
         .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
@@ -1367,6 +1371,51 @@ fn inference_lifecycle_workflow_sink_records_failed_node_status_to_workflow_ledg
         response.nodes[0].canonical_error_event_id.as_deref(),
         Some("diagnostic-error-inference-workflow")
     );
+}
+
+#[test]
+fn inference_lifecycle_workflow_sink_returns_diagnostics_unavailable_on_append_failure() {
+    let service =
+        std::sync::Arc::new(WorkflowService::with_ephemeral_diagnostics_ledger().expect("service"));
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![node_engine::GraphNode {
+            id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        }],
+        edges: Vec::new(),
+        groups: Vec::new(),
+    };
+    let sink = InferenceLifecycleWorkflowLedgerSink::try_new(
+        service.clone(),
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+    )
+    .expect("sink");
+
+    let mut completed = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    completed.request_id = Some(format!("run-a:node-a:{}", "x".repeat(512)));
+    completed.usage = Some(inference::InferenceUsage {
+        prompt_tokens: Some(8),
+        completion_tokens: Some(5),
+        total_tokens: Some(13),
+    });
+
+    let error = inference::InferenceRequestLifecycleEventSink::record(&sink, completed)
+        .expect_err("oversized diagnostic request id returns unavailable error");
+
+    assert_eq!(error.code, "diagnostics_unavailable");
+    assert!(error
+        .message
+        .contains("failed to record inference lifecycle diagnostic"));
 }
 
 #[test]
@@ -1397,14 +1446,16 @@ fn inference_lifecycle_workflow_sink_records_node_status_to_workflow_ledger() {
     let mut started =
         inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Started, 100);
     started.request_id = Some("run-a:node-a:LLM".to_string());
-    inference::InferenceRequestLifecycleEventSink::record(&sink, started);
+    inference::InferenceRequestLifecycleEventSink::record(&sink, started)
+        .expect("started lifecycle records");
 
     let mut completed = inference_lifecycle_event(
         inference::InferenceRequestLifecycleEventKind::Completed,
         175,
     );
     completed.request_id = Some("run-a:node-a:LLM".to_string());
-    inference::InferenceRequestLifecycleEventSink::record(&sink, completed);
+    inference::InferenceRequestLifecycleEventSink::record(&sink, completed)
+        .expect("completed lifecycle records");
 
     let response = service
         .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
