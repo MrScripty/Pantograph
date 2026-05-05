@@ -23,6 +23,7 @@ import type {
   WorkflowAdminQueueReprioritizeResponse,
   WorkflowExecutionSessionCloseResponse,
   WorkflowExecutionSessionCreateResponse,
+  InferencePortPayloadContract,
   WorkflowManagedMediaDependencyStatus,
   WorkflowRunResponse,
   WorkflowSessionQueueCancelResponse,
@@ -179,6 +180,34 @@ test('mock node definitions expose canonical Pumas inference ports', () => {
       }
     }
   }
+});
+
+test('frontend inference payload contract accepts roadmap depth execution kinds', () => {
+  const payloads: InferencePortPayloadContract[] = [
+    {
+      task_id: 'depth_estimation',
+      role: 'task_input',
+      input_kind: 'depth_estimation',
+    },
+    {
+      task_id: 'depth_estimation',
+      role: 'task_output',
+      result_kind: 'depth_estimation',
+    },
+  ];
+
+  assert.deepEqual(payloads, [
+    {
+      task_id: 'depth_estimation',
+      role: 'task_input',
+      input_kind: 'depth_estimation',
+    },
+    {
+      task_id: 'depth_estimation',
+      role: 'task_output',
+      result_kind: 'depth_estimation',
+    },
+  ]);
 });
 
 test('updateRetentionPolicy returns backend policy state without client-side optimistic replacement', async () => {

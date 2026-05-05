@@ -2553,13 +2553,16 @@ drift back into inference.
   instead of a generated content/result payload. App-level workflow service
   TypeScript types, mocks, and inference payload display presenters now mirror
   the same `cache_handle` role rather than treating `kv_cache_out` as generic
-  task output. Workflow-service registry and frontend mock tests now also scan
-  every canonical `llm-inference.inference_payloads` entry for forbidden
-  backend/runtime/scheduler policy fields such as backend keys, runtime ids,
-  admission, reservation, eviction, and priority. Workflow-service effective
-  definition coverage now proves saved `node.data.definition` dynamic port
-  overlays preserve structured `inference_payloads` task/result/role metadata
-  through both effective definition and effective contract projection.
+  task output. Frontend workflow service and shared svelte-graph TypeScript
+  execution-kind mirrors now include the roadmap `depth_estimation` input and
+  result kind that Rust already exposes. Workflow-service registry and frontend
+  mock tests now also scan every canonical `llm-inference.inference_payloads`
+  entry for forbidden backend/runtime/scheduler policy fields such as backend
+  keys, runtime ids, admission, reservation, eviction, and priority.
+  Workflow-service effective definition coverage now proves saved
+  `node.data.definition` dynamic port overlays preserve structured
+  `inference_payloads` task/result/role metadata through both effective
+  definition and effective contract projection.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient. Embedded-runtime host capability projection now uses the shared
   Python-sidecar runtime-id set instead of a direct `pytorch` backend-key
@@ -2576,7 +2579,9 @@ drift back into inference.
   same implementation slice as native DTO changes when those bindings are
   public contract surface. Frontend workflow service and shared svelte-graph
   TypeScript `PortDefinition` types now mirror workflow-service
-  `inference_payloads`. Workflow-nodes canonical contract projection now
+  `inference_payloads`, and their execution-kind unions now include
+  `depth_estimation` so public TypeScript contracts stay aligned with the Rust
+  roadmap task registry. Workflow-nodes canonical contract projection now
   includes executable image-generation task metadata and prompt/results payload
   annotations, and workflow-service registry coverage verifies the projected
   diagnostics payloads still round-trip without backend/runtime policy fields.
@@ -3714,6 +3719,10 @@ Update during implementation:
   to the inference registry and node-contract projection enums. The task is
   image-input, image/point-cloud-output, non-streaming, and not executable
   through the typed inference gateway yet.
+- 2026-05-05: Aligned frontend workflow-service and shared svelte-graph
+  TypeScript execution-kind mirrors with the Rust roadmap `depth_estimation`
+  task so public input/result payload contracts compile against the same task
+  registry labels.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
