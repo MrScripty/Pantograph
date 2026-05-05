@@ -1165,7 +1165,10 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   Public task request contract integration coverage now freezes snake_case
   task/input/result/streaming/modality labels, default omission of empty
   modality arrays, execution support preservation, and additive unknown-field
-  tolerance at the crate boundary.
+  tolerance at the crate boundary. PyTorch Rust/Python worker contract coverage
+  now also freezes additive unknown-field tolerance for load, generate, and
+  response envelopes while preserving backend-local `transformers_kwargs`
+  allowlist enforcement.
 - [x] Add validation rules so internal code consumes parsed model/task types
   rather than raw strings or ad hoc JSON.
 - [x] Document that Python Transformers is one implementation of these
@@ -3497,6 +3500,9 @@ Update during implementation:
   the public Pumas execution descriptor dependency-resolution DTO when
   available, and API-unavailable inference-settings fallback computes bounded
   model-type defaults without reading stored record metadata.
+- 2026-05-04: Added PyTorch Rust/Python worker envelope additive-field
+  tolerance coverage for load, generate, and response contracts while keeping
+  backend-owned `transformers_kwargs` allowlist enforcement strict.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

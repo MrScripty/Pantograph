@@ -261,6 +261,65 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
 }
 
 #[test]
+fn test_pytorch_worker_load_envelope_tolerates_additive_fields() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"
+    ))
+    .expect("decode worker load fixture");
+    let object = value.as_object_mut().expect("fixture is object");
+    object.insert(
+        "producer_trace".to_string(),
+        serde_json::json!({"span_id": "trace-load"}),
+    );
+    object
+        .get_mut("cancellation")
+        .and_then(|value| value.as_object_mut())
+        .expect("cancellation is object")
+        .insert(
+            "future_reason".to_string(),
+            serde_json::json!("client_cancel"),
+        );
+    let payload = object
+        .get_mut("payload")
+        .and_then(|value| value.as_object_mut())
+        .expect("payload is object");
+    payload.insert(
+        "future_payload_field".to_string(),
+        serde_json::json!({"ignored": true}),
+    );
+    payload
+        .get_mut("task_profile")
+        .and_then(|value| value.as_object_mut())
+        .expect("task profile is object")
+        .insert(
+            "future_task_profile_field".to_string(),
+            serde_json::json!("ignored"),
+        );
+    payload
+        .get_mut("trust_policy")
+        .and_then(|value| value.as_object_mut())
+        .expect("trust policy is object")
+        .insert(
+            "future_trust_field".to_string(),
+            serde_json::json!("ignored"),
+        );
+
+    let envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest> =
+        serde_json::from_value(value).expect("additive fields should be ignored");
+
+    assert_eq!(envelope.request_id, "req-load-001");
+    assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
+    assert_eq!(
+        envelope
+            .payload
+            .task_profile
+            .as_ref()
+            .map(|profile| profile.loader),
+        Some(PyTorchTransformersModelLoader::CausalLm)
+    );
+}
+
+#[test]
 fn test_python_worker_contract_projects_task_profile_loader() {
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
@@ -301,6 +360,65 @@ fn test_python_worker_contract_projects_task_profile_loader() {
             .expect("loader should be a string");
 
         assert_eq!(loader, "automatic_speech_recognition");
+    });
+}
+
+#[test]
+fn test_python_worker_contract_tolerates_additive_load_fields() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let envelope = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-additive-load",
+            "operation": "load_transformers_model",
+            "producer_trace": {"span_id": "trace-load"},
+            "cancellation": {"token": "cancel-1", "future_reason": "ignored"},
+            "payload": {
+                "model_ref": {"model_id": "llm/example/tiny"},
+                "artifact_kind": "hf_compatible_directory",
+                "entry_path": "/models/tiny",
+                "task_id": "text_generation",
+                "future_payload_field": {"ignored": true},
+                "task_profile": {
+                    "task_id": "text_generation",
+                    "canonical_task_label": "text_generation",
+                    "loader": "causal_lm",
+                    "required_components": ["tokenizer"],
+                    "future_task_profile_field": "ignored"
+                },
+                "trust_policy": {
+                    "allow_remote_code": false,
+                    "local_files_only": true,
+                    "cache_policy": "backend_default",
+                    "auth_token_source": "none",
+                    "future_trust_field": "ignored"
+                }
+            }
+        });
+
+        let kwargs = module
+            .call_method1(
+                "load_transformers_model_kwargs_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect("additive load fields should be ignored");
+
+        assert_eq!(
+            kwargs
+                .get_item("model_path")
+                .expect("model path key should exist")
+                .extract::<String>()
+                .expect("model path should be string"),
+            "/models/tiny"
+        );
+        assert_eq!(
+            kwargs
+                .get_item("loader")
+                .expect("loader key should exist")
+                .extract::<String>()
+                .expect("loader should be string"),
+            "causal_lm"
+        );
     });
 }
 
@@ -374,6 +492,38 @@ fn test_pytorch_worker_generate_text_envelope_decodes_fixture() {
 }
 
 #[test]
+fn test_pytorch_worker_generate_text_envelope_tolerates_additive_fields() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/generate_text_request.json"
+    ))
+    .expect("decode worker generate fixture");
+    let object = value.as_object_mut().expect("fixture is object");
+    object.insert(
+        "producer_trace".to_string(),
+        serde_json::json!("trace-generate"),
+    );
+    object
+        .get_mut("payload")
+        .and_then(|value| value.as_object_mut())
+        .expect("payload is object")
+        .insert(
+            "future_payload_field".to_string(),
+            serde_json::json!("ignored"),
+        );
+
+    let envelope: PyTorchWorkerEnvelope<PyTorchGenerateTextRequest> =
+        serde_json::from_value(value).expect("additive fields should be ignored");
+
+    assert_eq!(envelope.request_id, "req-generate-001");
+    assert_eq!(
+        envelope.payload.transformers_kwargs["top_k"],
+        serde_json::json!(40)
+    );
+    PyTorchBackend::validate_generate_text_envelope(&envelope)
+        .expect("additive fields should not affect validation");
+}
+
+#[test]
 fn test_pytorch_worker_generate_text_dllm_envelope_decodes_backend_local_controls() {
     let fixture = include_str!(
         "../../tests/fixtures/pytorch_worker_contract/generate_text_dllm_request.json"
@@ -430,6 +580,53 @@ fn test_python_worker_contract_projects_dllm_generation_controls() {
         assert!(masked_prompt_json.contains("\"mask\""));
         assert_eq!(denoising_steps, 8);
         assert_eq!(block_length, 64);
+    });
+}
+
+#[test]
+fn test_python_worker_contract_tolerates_additive_generate_fields() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let envelope = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-additive-generate",
+            "operation": "generate_text",
+            "producer_trace": {"span_id": "trace-generate"},
+            "payload": {
+                "prompt": "Explain additive worker fields.",
+                "max_tokens": 24,
+                "temperature": 0.2,
+                "top_p": 0.8,
+                "future_payload_field": "ignored",
+                "transformers_kwargs": {
+                    "top_k": 12
+                }
+            }
+        });
+
+        let kwargs = module
+            .call_method1(
+                "generate_text_kwargs_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect("additive generate fields should be ignored");
+
+        assert_eq!(
+            kwargs
+                .get_item("prompt")
+                .expect("prompt key should exist")
+                .extract::<String>()
+                .expect("prompt should be string"),
+            "Explain additive worker fields."
+        );
+        assert_eq!(
+            kwargs
+                .get_item("top_k")
+                .expect("top_k key should exist")
+                .extract::<i64>()
+                .expect("top_k should be integer"),
+            12
+        );
     });
 }
 
@@ -679,6 +876,33 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
 }
 
 #[test]
+fn test_python_worker_contract_rejects_additive_backend_kwargs() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let envelope = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-backend-policy-kwarg",
+            "operation": "generate_text",
+            "payload": {
+                "prompt": "Explain policy kwargs.",
+                "transformers_kwargs": {
+                    "priority": "high"
+                }
+            }
+        });
+
+        let error = module
+            .call_method1(
+                "generate_text_kwargs_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect_err("backend policy kwargs should still reject");
+
+        assert!(error.to_string().contains("unsupported key(s): priority"));
+    });
+}
+
+#[test]
 fn test_pytorch_generate_text_request_omits_absent_top_k_kwarg() {
     let request = PyTorchBackend::generate_text_request(
         "Explain adapters.".to_string(),
@@ -843,6 +1067,63 @@ fn test_pytorch_worker_error_response_preserves_request_correlation() {
         }
         other => panic!("expected worker error response, got {other:?}"),
     }
+}
+
+#[test]
+fn test_pytorch_worker_error_response_tolerates_additive_fields() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-load-additive",
+        "transport_trace": {"span_id": "trace-error"},
+        "error": {
+            "kind": "trust_policy_rejected",
+            "message": "trust policy is closed",
+            "canonical_code": "pytorch_transformers_trust_policy_rejected",
+            "future_error_field": "ignored"
+        }
+    });
+
+    let decoded: PyTorchWorkerResponse<serde_json::Value> =
+        serde_json::from_value(response).expect("additive response fields should be ignored");
+    let PyTorchWorkerResponse::Error(failure) = decoded else {
+        panic!("expected worker error response");
+    };
+
+    assert_eq!(failure.request_id, "req-load-additive");
+    assert_eq!(
+        failure.error.kind,
+        PyTorchWorkerErrorKind::TrustPolicyRejected
+    );
+    match failure.into_backend_error() {
+        BackendError::Config(message) => {
+            assert!(message.contains("pytorch_transformers_trust_policy_rejected"));
+            assert!(message.contains("req-load-additive"));
+        }
+        other => panic!("expected Config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_success_response_tolerates_additive_fields() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-generate-additive",
+        "response_trace": {"span_id": "trace-ok"},
+        "result": {
+            "text": "done",
+            "future_result_field": "ignored"
+        },
+        "future_success_field": "ignored"
+    });
+
+    let decoded: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
+        serde_json::from_value(response).expect("additive success fields should be ignored");
+    let PyTorchWorkerResponse::Ok(success) = decoded else {
+        panic!("expected worker success response");
+    };
+
+    assert_eq!(success.request_id, "req-generate-additive");
+    assert_eq!(success.result.text, "done");
 }
 
 #[test]
