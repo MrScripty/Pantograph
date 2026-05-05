@@ -2766,7 +2766,11 @@ inference write ledger events directly.
   graph output ports while keeping input text and embedding vectors out of
   those metadata outputs; node lifecycle tests now match the explicit
   preprocessing, postprocessing, and result-projection phase model for
-  non-streaming typed execution.
+  non-streaming typed execution. Canonical `llm-inference` text/chat execution
+  now projects bounded terminal token usage to the existing graph `usage` port
+  for streaming and non-streaming paths without storing prompt or generated
+  content; cache-handle graph projection remains deferred until a typed text
+  backend returns a validated cache handle.
 - [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
@@ -3577,6 +3581,10 @@ Update during implementation:
 - 2026-05-05: Added backend stream `ChatChunk` serde coverage for omitted
   usage and bounded usage-count metadata, freezing the append-only stream
   diagnostics contract introduced by typed text streaming.
+- 2026-05-05: Node-engine `llm-inference` output projection now preserves
+  bounded text/chat token usage from typed gateway results and terminal stream
+  chunks on the existing `usage` graph port, with tests for both streaming and
+  non-streaming paths.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,

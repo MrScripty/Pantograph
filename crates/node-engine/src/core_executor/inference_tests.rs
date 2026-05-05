@@ -22,9 +22,9 @@ use inference::{
     EmbeddingResult, EncodedImage, GenerationOptions, ImageGenerationRequest,
     ImageGenerationResult, InferenceBackend, InferenceExecutionInput, InferenceLifecyclePhase,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, InferenceTaskId, LengthGenerationOptions, ProcessSpawner,
-    PumasModelRef, RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts,
-    SamplingGenerationOptions,
+    InferenceRequestLifecycleEventSink, InferenceTaskId, InferenceUsage, LengthGenerationOptions,
+    ProcessSpawner, PumasModelRef, RerankRequest, RerankResponse, RerankResult,
+    ResolvedModelPackageFacts, SamplingGenerationOptions,
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
@@ -407,6 +407,14 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
         Some("typed response")
     );
     assert!(outputs.get("stream").is_some_and(|value| value.is_null()));
+    assert_eq!(
+        outputs.get("usage"),
+        Some(&serde_json::json!({
+            "prompt_tokens": 7,
+            "completion_tokens": 2,
+            "total_tokens": 9
+        }))
+    );
 
     let captured = requests.lock().expect("requests lock");
     assert_eq!(captured.len(), 1);
@@ -472,6 +480,14 @@ async fn test_execute_llm_inference_streaming_uses_gateway_stream_boundary() {
     assert_eq!(
         outputs.get("response").and_then(|value| value.as_str()),
         Some("typed response")
+    );
+    assert_eq!(
+        outputs.get("usage"),
+        Some(&serde_json::json!({
+            "prompt_tokens": 7,
+            "completion_tokens": 2,
+            "total_tokens": 9
+        }))
     );
     let captured = requests.lock().expect("requests lock");
     assert_eq!(captured.len(), 1);
@@ -3179,7 +3195,11 @@ impl InferenceBackend for MockTypedTextBackend {
             Ok(ChatChunk {
                 content: None,
                 done: true,
-                usage: None,
+                usage: Some(InferenceUsage {
+                    prompt_tokens: Some(7),
+                    completion_tokens: Some(2),
+                    total_tokens: Some(9),
+                }),
             }),
         ])))
     }
