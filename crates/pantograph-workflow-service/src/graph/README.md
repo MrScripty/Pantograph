@@ -142,6 +142,11 @@ for existing graph-edit callers.
   specific node instance through backend-owned effective contracts, but they
   must not invalidate the registry node type or silently remove unrelated
   static ports.
+- Dynamic `node.data.definition` overlays that carry `inference_payloads` must
+  preserve them as structured task/input/result/role metadata through effective
+  definition and contract projection. Those payloads remain backend-neutral
+  graph facts and must not encode backend choice, runtime residency, scheduler
+  admission, reservation, eviction, or priority.
 - Graph DTO defaults should derive from the declared enum default when the
   public default remains the first-class reactive mode.
 - Revision comparison and canonical definition fallbacks should use eager,

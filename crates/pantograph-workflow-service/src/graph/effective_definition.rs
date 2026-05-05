@@ -159,7 +159,10 @@ mod tests {
 
     use super::*;
     use crate::graph::{PortDataType, Position};
-    use pantograph_node_contracts::ContractExpansionReason;
+    use pantograph_node_contracts::{
+        ContractExpansionReason, ContractInferenceExecutionResultKind, ContractInferenceTaskId,
+        InferencePortPayloadRole,
+    };
 
     #[test]
     fn effective_node_definition_merges_dynamic_ports_without_dropping_static_ports() {
@@ -197,6 +200,77 @@ mod tests {
                 .find(|port| port.id == "temperature")
                 .map(|port| &port.data_type),
             Some(&PortDataType::Number)
+        );
+    }
+
+    #[test]
+    fn effective_node_definition_preserves_dynamic_inference_payload_contracts() {
+        let registry = NodeRegistry::new();
+        let node = GraphNode {
+            id: "llm".to_string(),
+            node_type: "llm-inference".to_string(),
+            position: Position::default(),
+            data: json!({
+                "definition": {
+                    "node_type": "llm-inference",
+                    "outputs": [
+                        {
+                            "id": "rerank_debug_results",
+                            "label": "Rerank Debug Results",
+                            "data_type": "json",
+                            "required": false,
+                            "multiple": false,
+                            "inference_payloads": [
+                                {
+                                    "task_id": "rerank",
+                                    "role": "task_output",
+                                    "result_kind": "rerank"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }),
+        };
+
+        let definition = effective_node_definition(&node, &registry).expect("definition");
+        let dynamic_output = definition
+            .outputs
+            .iter()
+            .find(|port| port.id == "rerank_debug_results")
+            .expect("dynamic output");
+        assert_eq!(dynamic_output.inference_payloads.len(), 1);
+        let payload = &dynamic_output.inference_payloads[0];
+        assert_eq!(payload.task_id, ContractInferenceTaskId::Rerank);
+        assert_eq!(payload.role, InferencePortPayloadRole::TaskOutput);
+        assert_eq!(
+            payload.result_kind,
+            Some(ContractInferenceExecutionResultKind::Rerank)
+        );
+
+        let effective = effective_node_contract(&node, &registry).expect("contract");
+        let contract_output = effective
+            .outputs
+            .iter()
+            .find(|port| port.base.id.as_str() == "rerank_debug_results")
+            .expect("dynamic contract output");
+        assert_eq!(
+            contract_output.base.inference_payloads,
+            dynamic_output.inference_payloads
+        );
+
+        let encoded = serde_json::to_value(dynamic_output).expect("dynamic output encodes");
+        assert_eq!(
+            encoded["inference_payloads"][0]["task_id"],
+            serde_json::json!("rerank")
+        );
+        assert_eq!(
+            encoded["inference_payloads"][0]["role"],
+            serde_json::json!("task_output")
+        );
+        assert_eq!(
+            encoded["inference_payloads"][0]["result_kind"],
+            serde_json::json!("rerank")
         );
     }
 

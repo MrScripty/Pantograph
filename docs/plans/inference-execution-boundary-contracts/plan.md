@@ -2556,7 +2556,10 @@ drift back into inference.
   task output. Workflow-service registry and frontend mock tests now also scan
   every canonical `llm-inference.inference_payloads` entry for forbidden
   backend/runtime/scheduler policy fields such as backend keys, runtime ids,
-  admission, reservation, eviction, and priority.
+  admission, reservation, eviction, and priority. Workflow-service effective
+  definition coverage now proves saved `node.data.definition` dynamic port
+  overlays preserve structured `inference_payloads` task/result/role metadata
+  through both effective definition and effective contract projection.
 - [ ] Remove backend-name conditionals where new capability/runtime facts are
   sufficient. Embedded-runtime host capability projection now uses the shared
   Python-sidecar runtime-id set instead of a direct `pytorch` backend-key
@@ -3714,6 +3717,11 @@ Update during implementation:
   forbidden backend/runtime/scheduler policy fields, preventing payload metadata
   from growing backend key, runtime id, admission, reservation, eviction, or
   priority semantics.
+- 2026-05-05: Added workflow-service effective-definition coverage for dynamic
+  saved-workflow port overlays that include `inference_payloads`, proving the
+  overlay path preserves snake_case task id, role, and result-kind metadata
+  through both API-facing node definitions and node-contract projection without
+  introducing backend/runtime/scheduler policy.
 - 2026-05-04: Updated the touched frontend workflow-service and shared
   svelte-graph backend README contract sections so mock `inference_payloads`
   are documented as task payload facts only, not backend choice, runtime
