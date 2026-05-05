@@ -736,6 +736,30 @@ fn test_pytorch_worker_generate_text_failure_normalizes_to_inference_error() {
 }
 
 #[test]
+fn test_pytorch_worker_generate_cancelled_response_maps_to_inference() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-generate-cancelled",
+        "error": {
+            "kind": "cancelled",
+            "message": "generation was cancelled by client token.",
+            "canonical_code": "pytorch_worker_generation_cancelled"
+        }
+    });
+
+    match PyTorchBackend::generate_text_from_worker_response(&response.to_string()) {
+        Err(error) => assert_worker_backend_error(
+            error,
+            ExpectedBackendErrorVariant::Inference,
+            "req-generate-cancelled",
+            "pytorch_worker_generation_cancelled",
+            "cancelled by client token",
+        ),
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_generate_text_transport_error_normalizes_to_backend_error() {
     match PyTorchBackend::generate_text_worker_failure_from_message(
         "req-generate-transport",
@@ -1146,6 +1170,85 @@ fn test_pytorch_worker_failure_normalizes_to_backend_error() {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ExpectedBackendErrorVariant {
+    Config,
+    Inference,
+    NotRunning,
+    StartupFailed,
+}
+
+fn assert_worker_backend_error(
+    error: BackendError,
+    expected_variant: ExpectedBackendErrorVariant,
+    request_id: &str,
+    canonical_code: &str,
+    worker_message: &str,
+) {
+    let message = match (expected_variant, error) {
+        (ExpectedBackendErrorVariant::Config, BackendError::Config(message))
+        | (ExpectedBackendErrorVariant::Inference, BackendError::Inference(message))
+        | (ExpectedBackendErrorVariant::NotRunning, BackendError::NotRunning(message))
+        | (ExpectedBackendErrorVariant::StartupFailed, BackendError::StartupFailed(message)) => {
+            message
+        }
+        (expected, other) => panic!("expected {expected:?} error, got {other:?}"),
+    };
+
+    assert!(message.contains(request_id));
+    assert!(message.contains(canonical_code));
+    assert!(message.contains(worker_message));
+}
+
+#[test]
+fn test_pytorch_worker_error_kind_mapping_matrix_preserves_request_and_code() {
+    let cases = [
+        ("invalid_request", ExpectedBackendErrorVariant::Config),
+        ("unsupported_task", ExpectedBackendErrorVariant::Config),
+        ("trust_policy_rejected", ExpectedBackendErrorVariant::Config),
+        (
+            "runtime_unavailable",
+            ExpectedBackendErrorVariant::NotRunning,
+        ),
+        (
+            "model_load_failed",
+            ExpectedBackendErrorVariant::StartupFailed,
+        ),
+        ("generation_failed", ExpectedBackendErrorVariant::Inference),
+        ("cancelled", ExpectedBackendErrorVariant::Inference),
+        ("internal", ExpectedBackendErrorVariant::Inference),
+    ];
+
+    for (kind, expected_variant) in cases {
+        let request_id = format!("req-{kind}");
+        let canonical_code = format!("pytorch_worker_{kind}");
+        let worker_message = format!("worker reported {kind}");
+        let response = serde_json::json!({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": kind,
+                "message": worker_message,
+                "canonical_code": canonical_code
+            }
+        });
+
+        let decoded: PyTorchWorkerResponse<serde_json::Value> =
+            serde_json::from_value(response).expect("decode worker error response");
+        let PyTorchWorkerResponse::Error(failure) = decoded else {
+            panic!("expected worker error response");
+        };
+
+        assert_worker_backend_error(
+            failure.into_backend_error(),
+            expected_variant,
+            &request_id,
+            &canonical_code,
+            &worker_message,
+        );
+    }
+}
+
 #[test]
 fn test_pytorch_worker_load_response_decodes_loaded_model_info() {
     let response = serde_json::json!({
@@ -1189,6 +1292,30 @@ fn test_pytorch_worker_load_error_response_normalizes_to_backend_error() {
 }
 
 #[test]
+fn test_pytorch_worker_load_model_load_failed_response_maps_to_startup_failed() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-load-failed",
+        "error": {
+            "kind": "model_load_failed",
+            "message": "Transformers could not load model weights.",
+            "canonical_code": "pytorch_transformers_model_load_failed"
+        }
+    });
+
+    match PyTorchBackend::load_info_from_worker_response(&response.to_string()) {
+        Err(error) => assert_worker_backend_error(
+            error,
+            ExpectedBackendErrorVariant::StartupFailed,
+            "req-load-failed",
+            "pytorch_transformers_model_load_failed",
+            "could not load model weights",
+        ),
+        other => panic!("expected StartupFailed error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_load_transport_error_normalizes_to_backend_error() {
     match PyTorchBackend::load_worker_failure_from_message(
         "req-load-transport",
@@ -1222,6 +1349,30 @@ fn test_pytorch_worker_stream_setup_error_response_normalizes_to_backend_error()
             assert!(message.contains("No model loaded"));
         }
         other => panic!("expected NotRunning error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_stream_invalid_request_response_maps_to_config() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-stream-invalid",
+        "error": {
+            "kind": "invalid_request",
+            "message": "stream request was missing prompt state.",
+            "canonical_code": "pytorch_worker_stream_invalid_request"
+        }
+    });
+
+    match PyTorchBackend::stream_setup_from_worker_response(&response.to_string()) {
+        Err(error) => assert_worker_backend_error(
+            error,
+            ExpectedBackendErrorVariant::Config,
+            "req-stream-invalid",
+            "pytorch_worker_stream_invalid_request",
+            "missing prompt state",
+        ),
+        other => panic!("expected Config error, got {other:?}"),
     }
 }
 

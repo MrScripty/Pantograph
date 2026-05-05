@@ -1828,7 +1828,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   creation failures, iterator failures, token extraction failures, and
   generator item errors now also route through the same canonical stream worker
   failure code and generated request id instead of returning ad hoc raw Python
-  exception strings.
+  exception strings. PyTorch worker error-kind normalization coverage now
+  freezes every worker error kind's mapped `BackendError` variant while
+  preserving request ids, canonical codes, and bounded worker messages across
+  load, stream setup, and generate response boundaries.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -3511,6 +3514,9 @@ Update during implementation:
   keeps Pumas storage/indexing out of inference scope, and `workflow-nodes`
   consumes startup snapshot cursors plus update feeds to invalidate or refresh
   cached package-facts summaries.
+- 2026-05-04: Added PyTorch worker error-kind normalization coverage for the
+  complete worker error enum, including load, stream setup, and generate
+  response-boundary tests that preserve request ids and canonical worker codes.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
