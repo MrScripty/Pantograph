@@ -131,47 +131,14 @@ mod options_provider {
     /// Provides available models from pumas-library for the `model_path` port.
     pub struct PumaLibOptionsProvider;
 
-    /// Extract inference settings from a model record, falling back to computed
-    /// defaults when the API-backed settings lookup is unavailable.
-    fn resolve_inference_settings_fallback(
+    /// Compute conservative inference settings when the API-backed settings
+    /// lookup is unavailable.
+    pub(crate) fn resolve_inference_settings_fallback(
         record: &pumas_library::ModelRecord,
     ) -> serde_json::Value {
-        // Try the stored value first
-        if let Some(stored) = record.metadata.get("inference_settings") {
-            if stored.as_array().is_some_and(|a| !a.is_empty()) {
-                return stored.clone();
-            }
-        }
-
-        // Lazy fallback: compute from model_type + file format.
-        // record.path is a directory; try to infer format from files in metadata.
-        let file_format = record
-            .metadata
-            .get("files")
-            .and_then(|f| f.as_array())
-            .and_then(|files| {
-                files.iter().find_map(|f| {
-                    let name = f.get("name")?.as_str()?;
-                    std::path::Path::new(name)
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .map(|s| s.to_lowercase())
-                })
-            })
-            .unwrap_or_default();
-        let subtype = record
-            .metadata
-            .get("subtype")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-
-        pumas_library::models::default_inference_settings(
-            &record.model_type,
-            &file_format,
-            subtype.as_deref(),
-        )
-        .map(|s| serde_json::to_value(s).unwrap_or_default())
-        .unwrap_or(serde_json::Value::Null)
+        pumas_library::models::default_inference_settings(&record.model_type, "", None)
+            .map(|s| serde_json::to_value(s).unwrap_or_default())
+            .unwrap_or(serde_json::Value::Null)
     }
 
     fn metadata_string(record: &pumas_library::ModelRecord, keys: &[&str]) -> Option<String> {
@@ -237,6 +204,24 @@ mod options_provider {
                     .map(|reason| serde_json::json!([reason]))
                     .unwrap_or_else(|| serde_json::Value::Array(Vec::new()))
             })
+    }
+
+    pub(crate) fn dependency_bindings_for_option_metadata(
+        execution_descriptor: Option<&ModelExecutionDescriptor>,
+        record: &pumas_library::ModelRecord,
+    ) -> serde_json::Value {
+        if let Some(descriptor) = execution_descriptor {
+            return descriptor
+                .dependency_resolution
+                .as_ref()
+                .and_then(|resolution| resolution.get("bindings").cloned())
+                .unwrap_or(serde_json::Value::Array(Vec::new()));
+        }
+        record
+            .metadata
+            .get("dependency_bindings")
+            .cloned()
+            .unwrap_or(serde_json::Value::Array(Vec::new()))
     }
 
     pub(crate) fn task_type_primary_from_descriptor_or_record(
@@ -467,11 +452,8 @@ mod options_provider {
                 let pipeline_tag = metadata_string(m, &["pipeline_tag", "pipelineTag"]);
                 let task_type_primary =
                     task_type_primary_from_descriptor_or_record(execution_descriptor.as_ref(), m);
-                let dependency_bindings = m
-                    .metadata
-                    .get("dependency_bindings")
-                    .cloned()
-                    .unwrap_or(serde_json::Value::Array(Vec::new()));
+                let dependency_bindings =
+                    dependency_bindings_for_option_metadata(execution_descriptor.as_ref(), m);
                 let recommended_backend = execution_descriptor
                     .as_ref()
                     .and_then(|descriptor| descriptor.recommended_backend.clone())
@@ -636,8 +618,9 @@ mod tests {
 #[cfg(all(test, feature = "model-library"))]
 mod model_library_tests {
     use super::options_provider::{
-        custom_code_sources_for_option_metadata, load_package_facts_summary_cache,
-        requires_custom_code_from_summary, resolve_execution_descriptor,
+        custom_code_sources_for_option_metadata, dependency_bindings_for_option_metadata,
+        load_package_facts_summary_cache, requires_custom_code_from_summary,
+        resolve_execution_descriptor, resolve_inference_settings_fallback,
         review_reasons_for_option_metadata, runtime_engine_hints_from_summary,
         task_type_primary_from_descriptor_or_record, PackageFactsSummaryCache,
     };
@@ -724,6 +707,35 @@ mod model_library_tests {
             "storage_kind": "library_owned",
             "validation_state": "valid",
             "dependency_resolution": null
+        }))
+        .expect("execution descriptor fixture should decode")
+    }
+
+    fn model_execution_descriptor_with_dependency_resolution() -> ModelExecutionDescriptor {
+        serde_json::from_value(serde_json::json!({
+            "execution_contract_version": 1,
+            "model_id": "llm/imported/test-model",
+            "entry_path": "/models/test-model/model.safetensors",
+            "model_type": "llm",
+            "task_type_primary": "text-generation",
+            "recommended_backend": "pytorch",
+            "runtime_engine_hints": ["transformers", "pytorch"],
+            "storage_kind": "library_owned",
+            "validation_state": "valid",
+            "dependency_resolution": {
+                "dependency_contract_version": 1,
+                "bindings": [
+                    {
+                        "binding_id": "binding-public",
+                        "profile_id": "profile-public",
+                        "profile_version": 1,
+                        "backend_key": "pytorch",
+                        "validation_state": "valid",
+                        "validation_errors": [],
+                        "requirements": []
+                    }
+                ]
+            }
         }))
         .expect("execution descriptor fixture should decode")
     }
@@ -941,6 +953,53 @@ mod model_library_tests {
         let custom_code_sources = custom_code_sources_for_option_metadata(Some(&summary), &record);
 
         assert_eq!(custom_code_sources, serde_json::json!([]));
+    }
+
+    #[test]
+    fn test_option_metadata_uses_execution_descriptor_dependency_bindings() {
+        let descriptor = model_execution_descriptor_with_dependency_resolution();
+        let record = model_record_with_metadata(serde_json::json!({
+            "dependency_bindings": [{"binding_id": "stale-record-binding"}]
+        }));
+
+        let dependency_bindings =
+            dependency_bindings_for_option_metadata(Some(&descriptor), &record);
+
+        assert_eq!(
+            dependency_bindings,
+            serde_json::json!([{
+                "binding_id": "binding-public",
+                "profile_id": "profile-public",
+                "profile_version": 1,
+                "backend_key": "pytorch",
+                "validation_state": "valid",
+                "validation_errors": [],
+                "requirements": []
+            }])
+        );
+    }
+
+    #[test]
+    fn test_inference_settings_fallback_ignores_record_metadata() {
+        let record = model_record_with_metadata(serde_json::json!({
+            "inference_settings": [{
+                "key": "stale_metadata_setting",
+                "label": "Stale Metadata Setting",
+                "param_type": "number",
+                "default": 1
+            }],
+            "files": [{"name": "model.gguf"}],
+            "subtype": "dllm"
+        }));
+
+        let settings = resolve_inference_settings_fallback(&record);
+
+        assert!(settings
+            .as_array()
+            .expect("fallback settings should be an array")
+            .iter()
+            .all(|setting| setting.get("key").and_then(|key| key.as_str())
+                != Some("stale_metadata_setting")));
     }
 
     #[tokio::test]

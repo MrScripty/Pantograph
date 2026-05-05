@@ -1087,14 +1087,13 @@ candidate projection now preserves bounded compatibility report and issue
 summaries on `RuntimeTechnicalFitCandidate` so rejected/degraded candidates can
 be explained without asking Pumas to own candidate derivation or scheduler
 selection. Continued model-list review found one remaining consumer-boundary
-gap: `workflow-nodes` still uses Pumas record metadata as a fallback for
-fields that are not yet present in the package-summary DTO, including
-dependency-binding display data and inference-settings fallback inputs.
-Runtime-facing backend hints, `requires_custom_code`, bounded review reasons
-from summary diagnostic codes, and bounded custom-code source omission now
-prefer Pumas summary DTO facts when available, but the remaining fallback
-fields need either summary/detail DTO coverage or bounded omission before the
-"no metadata internals" verification item can close.
+gap: `workflow-nodes` still uses Pumas record metadata as a last-resort
+fallback only when versioned summary/execution/settings DTOs are unavailable.
+Runtime-facing backend hints, dependency binding display facts,
+`requires_custom_code`, bounded review reasons from summary diagnostic codes,
+bounded custom-code source omission, and API-unavailable inference-settings
+fallbacks now prefer Pumas DTOs or bounded defaults over raw record metadata
+when those DTOs are available.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
@@ -3493,6 +3492,11 @@ Update during implementation:
   `review_reasons`, and raw record `custom_code_sources` are omitted whenever a
   package-summary DTO is available because Pumas does not expose source-level
   details through that summary contract yet.
+- 2026-05-04: Tightened the remaining `puma-lib` model-list boundary for
+  dependency/settings display facts: dependency binding metadata now comes from
+  the public Pumas execution descriptor dependency-resolution DTO when
+  available, and API-unavailable inference-settings fallback computes bounded
+  model-type defaults without reading stored record metadata.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
