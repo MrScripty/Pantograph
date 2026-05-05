@@ -2590,6 +2590,11 @@ drift back into inference.
   endpoint; the related Tauri startup helpers no longer construct removed
   Ollama model-name fields, and the app-facing runtime-manager README now names
   supported managed redistributables without implying Ollama is available.
+  Canonical text-generation, embedding, and rerank request builders now promote
+  resolved Pumas package facts into typed `model_ref` when no explicit
+  `pumas_model_ref`/`model_ref` input is wired, and dependency input merging now
+  carries model context through direct `resolved_model_package_facts` and
+  `model_package_facts` edges.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
@@ -3757,6 +3762,13 @@ Update during implementation:
   also exposed Tauri test-build drift from removed Ollama start-request fields,
   new resolved-device runtime mode fields, and KV-cache option diagnostics; the
   same slice aligned those fixtures with current Rust DTOs.
+- 2026-05-05: Canonical non-audio `llm-inference` package-facts request
+  builders now derive typed request `model_ref` from resolved Pumas package
+  facts for text generation, embedding, and rerank when no explicit model ref
+  input is present; dependency input merging now preserves the same context
+  through direct package-facts edges. Node-engine validation also exposed one
+  remaining PyTorch KV-cache diagnostic initializer missing the append-only
+  `option_diagnostics` field, which was aligned in the same validated slice.
 - 2026-05-05: Embedded-runtime KV-cache workflow-event sinks now surface
   durable diagnostic append failures as `diagnostics_unavailable` event-sink
   errors after forwarding the original workflow event, and the plan records the

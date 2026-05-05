@@ -243,6 +243,7 @@ pub(crate) async fn restore_pytorch_input_handle(
             reuse_source: kv_reuse_source(&entry.metadata),
             token_count: Some(entry.metadata.token_count),
             reason: Some("restored_input_handle".to_string()),
+            option_diagnostics: Vec::new(),
         },
     );
     Ok(true)

@@ -258,11 +258,13 @@ pub(crate) fn build_text_generation_execution_request(
     apply_graph_cache_generation_options(inputs, &mut generation_options);
 
     let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
+    let model_ref = parse_pumas_model_ref(inputs)
+        .or_else(|| model_ref_from_package_facts(&resolved_model_package_facts));
 
     Ok(inference::InferenceExecutionRequest {
         request_id: None,
         task_id: text_generation_task_id(inputs)?,
-        model_ref: parse_pumas_model_ref(inputs),
+        model_ref,
         model_name: read_optional_input_string_aliases(
             inputs,
             &["model_name", "modelName", "model", "model_id", "modelId"],
@@ -417,6 +419,13 @@ fn parse_pumas_model_ref(
 }
 
 #[cfg(feature = "inference-nodes")]
+fn model_ref_from_package_facts(
+    facts: &Option<inference::ResolvedModelPackageFacts>,
+) -> Option<inference::PumasModelRef> {
+    facts.as_ref().map(|facts| facts.model_ref.clone())
+}
+
+#[cfg(feature = "inference-nodes")]
 fn parse_resolved_model_source_ref(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Option<inference::PumasModelRef> {
@@ -536,11 +545,13 @@ pub(crate) fn build_embedding_execution_request(
     }
 
     let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
+    let model_ref = parse_pumas_model_ref(inputs)
+        .or_else(|| model_ref_from_package_facts(&resolved_model_package_facts));
 
     Ok(inference::InferenceExecutionRequest {
         request_id: None,
         task_id: inference::InferenceTaskId::Embedding,
-        model_ref: parse_pumas_model_ref(inputs),
+        model_ref,
         model_name: read_optional_input_string_aliases(
             inputs,
             &["model", "model_name", "modelName", "model_id", "modelId"],
@@ -669,13 +680,14 @@ pub(crate) fn build_rerank_execution_request(
         "return_documents",
     )
     .unwrap_or(true);
-    let model_ref = parse_pumas_model_ref(inputs);
-    let model_name = read_rerank_model_name(inputs, model_ref.as_ref())?;
     let mut extra_settings = build_extra_settings(inputs);
     extra_settings.remove("gpu_layers");
     extra_settings.remove("context_length");
 
     let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
+    let model_ref = parse_pumas_model_ref(inputs)
+        .or_else(|| model_ref_from_package_facts(&resolved_model_package_facts));
+    let model_name = read_rerank_model_name(inputs, model_ref.as_ref())?;
 
     Ok(inference::InferenceExecutionRequest {
         request_id: None,

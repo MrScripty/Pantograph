@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use crate::types::{NodeId, WorkflowGraph};
 
-const MODEL_CONTEXT_KEYS: [&str; 10] = [
+const MODEL_CONTEXT_KEYS: [&str; 11] = [
+    "pumas_model_ref",
     "model_id",
     "model_type",
     "task_type_primary",
@@ -33,7 +34,10 @@ pub(super) fn resolve_dependency_inputs(
 
         if matches!(
             edge.target_handle.as_str(),
-            "model_path" | "pumas_model_ref"
+            "model_path"
+                | "pumas_model_ref"
+                | "resolved_model_package_facts"
+                | "model_package_facts"
         ) {
             merge_model_context(&mut inputs, dep_outputs);
         }
@@ -219,6 +223,103 @@ mod tests {
         assert_eq!(
             inputs.get("resolved_model_package_facts"),
             Some(&package_facts)
+        );
+    }
+
+    #[test]
+    fn resolve_dependency_inputs_merges_package_facts_target_context() {
+        let graph = WorkflowGraph {
+            id: "workflow".to_string(),
+            name: "Workflow".to_string(),
+            nodes: vec![
+                GraphNode {
+                    id: "puma-lib".to_string(),
+                    node_type: "puma-lib".to_string(),
+                    data: serde_json::json!({}),
+                    position: (0.0, 0.0),
+                },
+                GraphNode {
+                    id: "runtime".to_string(),
+                    node_type: "llm-inference".to_string(),
+                    data: serde_json::json!({}),
+                    position: (100.0, 0.0),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "edge".to_string(),
+                source: "puma-lib".to_string(),
+                source_handle: "resolved_model_package_facts".to_string(),
+                target: "runtime".to_string(),
+                target_handle: "resolved_model_package_facts".to_string(),
+            }],
+            groups: Vec::new(),
+        };
+
+        let package_facts = serde_json::json!({
+            "package_facts_contract_version": 1,
+            "model_ref": {
+                "model_id": "family/model",
+                "selected_artifact_path": "family/model/model.gguf"
+            }
+        });
+        let dependency_outputs = HashMap::from([(
+            "puma-lib".to_string(),
+            HashMap::from([
+                (
+                    "pumas_model_ref".to_string(),
+                    serde_json::json!({
+                        "model_id": "family/model",
+                        "selected_artifact_path": "family/model/model.gguf"
+                    }),
+                ),
+                (
+                    "resolved_model_package_facts".to_string(),
+                    package_facts.clone(),
+                ),
+                ("model_id".to_string(), serde_json::json!("family/model")),
+                (
+                    "selected_binding_ids".to_string(),
+                    serde_json::json!(["q4"]),
+                ),
+                (
+                    "platform_context".to_string(),
+                    serde_json::json!({"os": "linux", "arch": "x86_64"}),
+                ),
+                (
+                    "dependency_bindings".to_string(),
+                    serde_json::json!([{"id": "llamacpp"}]),
+                ),
+            ]),
+        )]);
+
+        let inputs = resolve_dependency_inputs(&graph, &"runtime".to_string(), &dependency_outputs);
+
+        assert_eq!(
+            inputs.get("resolved_model_package_facts"),
+            Some(&package_facts)
+        );
+        assert_eq!(
+            inputs.get("pumas_model_ref"),
+            Some(&serde_json::json!({
+                "model_id": "family/model",
+                "selected_artifact_path": "family/model/model.gguf"
+            }))
+        );
+        assert_eq!(
+            inputs.get("model_id"),
+            Some(&serde_json::json!("family/model"))
+        );
+        assert_eq!(
+            inputs.get("selected_binding_ids"),
+            Some(&serde_json::json!(["q4"]))
+        );
+        assert_eq!(
+            inputs.get("platform_context"),
+            Some(&serde_json::json!({"os": "linux", "arch": "x86_64"}))
+        );
+        assert_eq!(
+            inputs.get("dependency_bindings"),
+            Some(&serde_json::json!([{"id": "llamacpp"}]))
         );
     }
 }

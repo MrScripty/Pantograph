@@ -219,6 +219,7 @@ fn test_build_text_generation_execution_request_forwards_package_facts() {
             .map(|facts| facts.model_ref.model_id.as_str()),
         Some("llm/llama/tiny-gguf")
     );
+    assert_eq!(request.model_ref, Some(package_facts.model_ref));
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -781,7 +782,20 @@ async fn test_canonical_llm_streaming_with_package_facts_emits_compatibility_lif
     assert_eq!(stream_events.len(), 1);
 
     let events = lifecycle_events.lock().expect("lifecycle events lock");
-    assert_eq!(events.len(), 9);
+    assert_eq!(events.len(), 18);
+    let package_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::ModelPackageResolution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("package resolution completion");
+    assert_eq!(
+        package_completed.model_id.as_deref(),
+        Some("llm/llama/tiny-gguf")
+    );
+    assert!(package_completed.compatibility_report.is_none());
+
     let validation_completed = events
         .iter()
         .find(|event| {
@@ -960,6 +974,7 @@ fn test_build_embedding_execution_request_forwards_package_facts() {
             .map(|facts| facts.model_ref.model_id.as_str()),
         Some("embedding/qwen3/tiny-embedding-gguf")
     );
+    assert_eq!(request.model_ref, Some(package_facts.model_ref));
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -1111,6 +1126,7 @@ fn test_build_rerank_execution_request_forwards_package_facts() {
             .map(|facts| facts.model_ref.model_id.as_str()),
         Some("rerank/bge/tiny-reranker-gguf")
     );
+    assert_eq!(request.model_ref, Some(package_facts.model_ref));
 }
 
 #[cfg(feature = "inference-nodes")]
