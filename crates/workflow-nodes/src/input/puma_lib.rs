@@ -147,16 +147,13 @@ mod options_provider {
             .find_map(|k| obj.get(*k).and_then(|v| v.as_str()).map(|s| s.to_string()))
     }
 
-    fn package_summary_result(
-        summary_result: Option<&ModelPackageFactsSummaryResult>,
-    ) -> Option<&pumas_library::models::ResolvedModelPackageFactsSummary> {
-        summary_result.and_then(|result| result.summary.as_ref())
-    }
-
     pub(crate) fn runtime_engine_hints_from_summary(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
     ) -> Option<serde_json::Value> {
-        let summary = package_summary_result(summary_result)?;
+        let summary_result = summary_result?;
+        let Some(summary) = summary_result.summary.as_ref() else {
+            return Some(serde_json::Value::Array(Vec::new()));
+        };
         if !summary.backend_hints.accepted.is_empty() {
             return serde_json::to_value(&summary.backend_hints.accepted).ok();
         }
@@ -169,15 +166,20 @@ mod options_provider {
     pub(crate) fn requires_custom_code_from_summary(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
     ) -> Option<serde_json::Value> {
-        package_summary_result(summary_result)
-            .map(|summary| serde_json::Value::Bool(summary.requires_custom_code))
+        summary_result.map(|result| {
+            result
+                .summary
+                .as_ref()
+                .map(|summary| serde_json::Value::Bool(summary.requires_custom_code))
+                .unwrap_or(serde_json::Value::Bool(false))
+        })
     }
 
     pub(crate) fn custom_code_sources_for_option_metadata(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
         record: &pumas_library::ModelRecord,
     ) -> serde_json::Value {
-        if package_summary_result(summary_result).is_some() {
+        if summary_result.is_some() {
             return serde_json::Value::Array(Vec::new());
         }
         record
@@ -191,7 +193,10 @@ mod options_provider {
         summary_result: Option<&ModelPackageFactsSummaryResult>,
         record: &pumas_library::ModelRecord,
     ) -> serde_json::Value {
-        if let Some(summary) = package_summary_result(summary_result) {
+        if let Some(result) = summary_result {
+            let Some(summary) = result.summary.as_ref() else {
+                return serde_json::Value::Array(Vec::new());
+            };
             return serde_json::to_value(&summary.diagnostic_codes)
                 .unwrap_or(serde_json::Value::Array(Vec::new()));
         }
@@ -681,6 +686,17 @@ mod model_library_tests {
         .expect("summary fixture should decode")
     }
 
+    fn sparse_package_summary_result(
+        model_id: &str,
+        status: ModelPackageFactsSummaryStatus,
+    ) -> ModelPackageFactsSummaryResult {
+        ModelPackageFactsSummaryResult {
+            model_id: model_id.to_string(),
+            status,
+            summary: None,
+        }
+    }
+
     fn model_record_with_metadata(metadata: serde_json::Value) -> ModelRecord {
         ModelRecord {
             id: "llm/imported/test-model".to_string(),
@@ -953,6 +969,37 @@ mod model_library_tests {
         let custom_code_sources = custom_code_sources_for_option_metadata(Some(&summary), &record);
 
         assert_eq!(custom_code_sources, serde_json::json!([]));
+    }
+
+    #[test]
+    fn test_option_metadata_does_not_fall_back_to_record_metadata_for_sparse_summary_result() {
+        let summary = sparse_package_summary_result(
+            "llm/imported/test-model",
+            ModelPackageFactsSummaryStatus::Missing,
+        );
+        let record = model_record_with_metadata(serde_json::json!({
+            "runtime_engine_hints": ["stale-metadata-engine"],
+            "requires_custom_code": true,
+            "custom_code_sources": ["metadata.json:trust_remote_code"],
+            "review_reasons": ["stale-record-review"]
+        }));
+
+        assert_eq!(
+            runtime_engine_hints_from_summary(Some(&summary)),
+            Some(serde_json::json!([]))
+        );
+        assert_eq!(
+            requires_custom_code_from_summary(Some(&summary)),
+            Some(serde_json::json!(false))
+        );
+        assert_eq!(
+            custom_code_sources_for_option_metadata(Some(&summary), &record),
+            serde_json::json!([])
+        );
+        assert_eq!(
+            review_reasons_for_option_metadata(Some(&summary), &record),
+            serde_json::json!([])
+        );
     }
 
     #[test]

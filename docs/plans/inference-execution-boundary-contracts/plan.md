@@ -1021,7 +1021,11 @@ Detailed Pumas-side work is split into
   also treat Pumas `ModelExecutionDescriptor.task_type_primary` as
   authoritative over stale record metadata, falling back to metadata only when
   the descriptor task is missing or `unknown`, and falling back to saved request
-  data only when Pumas facts are absent.
+  data only when Pumas facts are absent. Model-list display metadata now also
+  treats sparse, missing, or invalid package-summary API results as authoritative
+  DTO outputs: backend hints, custom-code flags, custom-code sources, and review
+  reasons use bounded empty/default values instead of falling through to raw
+  `ModelRecord.metadata`.
 - [x] Treat Pumas HF search MLX/vLLM tags as remote discovery hints only.
   Installed-model compatibility and workflow preflight must use resolved local
   Pumas package facts plus Pantograph inference/backend checks.
@@ -3517,6 +3521,10 @@ Update during implementation:
 - 2026-05-04: Added PyTorch worker error-kind normalization coverage for the
   complete worker error enum, including load, stream setup, and generate
   response-boundary tests that preserve request ids and canonical worker codes.
+- 2026-05-04: Tightened `puma-lib` model-list sparse-summary handling so
+  versioned Pumas summary API outputs with missing or invalid summary payloads
+  suppress stale raw record metadata for backend hints, custom-code facts,
+  custom-code sources, and review reasons.
 - 2026-05-04: Aligned frontend and shared svelte-graph mock
   `llm-inference` node definitions with the Rust executable
   `inference_payloads` contracts for text/chat, embedding, rerank,
