@@ -2898,9 +2898,12 @@ inference write ledger events directly.
   transcription artifact-ref projection now filters local path-shaped
   `audio_ref` values, including absolute/relative home paths, `file://` URLs,
   and Windows drive paths, before lifecycle events can reach durable
-  diagnostics. PyTorch backend transport error normalization now strips Python
-  traceback frames and local path tokens before those backend errors can be
-  projected into workflow diagnostics.
+  diagnostics. Embedded-runtime ledger projection now defensively reapplies
+  the same artifact-ref safety filter before persistence, so unsafe-only
+  producer refs are dropped and stable refs remain bounded. PyTorch backend
+  transport error normalization now strips Python traceback frames and local
+  path tokens before those backend errors can be projected into workflow
+  diagnostics.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle
@@ -2996,6 +2999,10 @@ one-off conversions.
   so local path-shaped `audio_ref` values are not copied into lifecycle events
   or durable diagnostics; stable refs such as `artifact://...` remain available
   as bounded artifact metadata.
+- 2026-05-05: Embedded-runtime inference diagnostic projection now filters
+  lifecycle artifact refs again at the ledger boundary, preventing future
+  producers from persisting local path-shaped refs if they bypass upstream
+  gateway filtering.
 - 2026-05-05: PyTorch worker transport error normalization now strips embedded
   Python traceback frames and redacts local path tokens before transport
   exceptions become canonical backend errors, while preserving request ids and

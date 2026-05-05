@@ -658,12 +658,13 @@ fn build_inference_diagnostic_event_ledger_append_request(
     event: &inference::InferenceRequestLifecycleEvent,
     duration_ms: Option<u64>,
 ) -> Option<DiagnosticEventAppendRequest> {
+    let artifact_refs = bounded_inference_artifact_refs(&event.artifact_refs);
     let has_bounded_diagnostics = !event.option_diagnostics.is_empty()
         || event.compatibility_report.is_some()
         || !event.compatibility_issues.is_empty()
         || event.usage.is_some()
         || event.cache_handle_id.is_some()
-        || !event.artifact_refs.is_empty()
+        || !artifact_refs.is_empty()
         || duration_ms.is_some();
     if !has_bounded_diagnostics
         || !inference_diagnostic_phase_is_persistable(event)
@@ -724,7 +725,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 resolved_artifact_kind: event.resolved_artifact_kind.clone(),
                 usage: event.usage.as_ref().map(inference_usage_summary),
                 cache_handle_id: event.cache_handle_id.clone(),
-                artifact_refs: event.artifact_refs.clone(),
+                artifact_refs,
                 kv_cache: None,
                 compatibility_report: event
                     .compatibility_report
@@ -748,6 +749,40 @@ fn build_inference_diagnostic_event_ledger_append_request(
             },
         ),
     })
+}
+
+fn bounded_inference_artifact_refs(refs: &[String]) -> Vec<String> {
+    refs.iter()
+        .filter_map(|value| bounded_inference_artifact_ref(value))
+        .collect()
+}
+
+fn bounded_inference_artifact_ref(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || looks_like_local_artifact_ref(value) {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn looks_like_local_artifact_ref(value: &str) -> bool {
+    value.starts_with('/')
+        || value.starts_with("./")
+        || value.starts_with("../")
+        || value.starts_with("~/")
+        || value
+            .get(..7)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("file://"))
+        || value.as_bytes().get(1) == Some(&b':')
+            && value
+                .as_bytes()
+                .get(2)
+                .is_some_and(|byte| *byte == b'/' || *byte == b'\\')
+            && value
+                .as_bytes()
+                .first()
+                .is_some_and(|byte| byte.is_ascii_alphabetic())
 }
 
 fn selected_backend_family(backend_key: Option<&str>, runtime_id: Option<&str>) -> Option<String> {

@@ -729,6 +729,54 @@ fn inference_diagnostic_event_adapter_persists_usage_and_cache_summary() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_filters_local_artifact_refs_before_ledger() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.artifact_refs = vec![
+        "artifact://audio.wav".to_string(),
+        "/tmp/private.wav".to_string(),
+        "file:///tmp/private.wav".to_string(),
+        "~/private.wav".to_string(),
+        "C:\\Users\\jeremy\\private.wav".to_string(),
+    ];
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("stable artifact ref should keep lifecycle diagnostic persistable");
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("/tmp/private.wav"));
+    assert!(!payload_json.contains("file:///tmp/private.wav"));
+    assert!(!payload_json.contains("~/private.wav"));
+    assert!(!payload_json.contains("C:\\Users\\jeremy\\private.wav"));
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.artifact_refs, vec!["artifact://audio.wav"]);
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_drops_unsafe_only_artifact_refs() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.artifact_refs = vec![
+        "/tmp/private.wav".to_string(),
+        "file:///tmp/private.wav".to_string(),
+        "~/private.wav".to_string(),
+        "C:\\Users\\jeremy\\private.wav".to_string(),
+    ];
+
+    assert!(inference_diagnostic_event_ledger_append_request(&context, &event).is_none());
+}
+
+#[test]
 fn inference_diagnostic_event_adapter_carries_known_lifecycle_duration() {
     let context = context();
     let mut event = inference_lifecycle_event(
