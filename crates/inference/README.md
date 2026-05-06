@@ -113,7 +113,8 @@ selection must use supported runtimes through Pumas model references.
 ## API Consumer Contract
 - Inputs: backend configuration, process spawner implementations, managed
   runtime IDs, Pumas-resolved model/package facts, typed execution requests,
-  and legacy facade requests that have not yet migrated.
+  and facade requests that are projected into typed backend contracts at the
+  gateway edge.
 - Outputs: typed execution results, chat, embedding, rerank, audio
   transcription, KV-cache, runtime lifecycle, backend compatibility summaries,
   managed runtime DTOs, neutral managed-dependency DTO projections, additive
@@ -123,6 +124,9 @@ selection must use supported runtimes through Pumas model references.
   and stop them through the gateway. Lifecycle sinks return structured errors
   such as `diagnostics_unavailable`; gateway producers log those errors so a
   secondary diagnostics failure does not replace the original inference result.
+- Backend access: workspace consumers must use `InferenceGateway` methods and
+  capability facts. The gateway does not expose the raw backend handle as a
+  public escape hatch.
 - Errors: backend and lifecycle failures are surfaced as typed or structured
   errors; unsupported capabilities must not return successful placeholder data.
 - Versioning: Cargo features, backend capability fields, typed execution

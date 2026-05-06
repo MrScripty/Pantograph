@@ -1513,16 +1513,6 @@ impl InferenceGateway {
         }
     }
 
-    // ─── LEGACY COMPATIBILITY ───────────────────────────────────────
-
-    /// Get a reference to the underlying backend for legacy code
-    ///
-    /// This is a temporary method for gradual migration. New code should
-    /// use the gateway methods directly.
-    pub fn backend(&self) -> Arc<RwLock<Box<dyn InferenceBackend>>> {
-        self.backend.clone()
-    }
-
     async fn lifecycle_event_context(
         &self,
     ) -> (

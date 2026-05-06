@@ -259,6 +259,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 ## API Consumer Contract
 
 - Callers talk to `InferenceGateway`, not backend implementations directly.
+- `InferenceGateway` does not expose a public raw-backend accessor. Consumers
+  must use typed gateway methods, backend capabilities, and lifecycle facts
+  instead of mutating backend instances directly.
 - Backend startup must happen before inference calls.
 - Typed task execution callers pass `InferenceExecutionRequest` values whose
   `task_id`, tagged `input`, Pumas model reference, resolved package facts,

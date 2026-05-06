@@ -2710,6 +2710,9 @@ drift back into inference.
   through to node-engine/inference, while the host Python adapter remains scoped
   to diffusion, audio generation, and ONNX nodes that still require
   host-managed Python resources.
+  The unused `InferenceGateway::backend()` legacy escape hatch has been
+  removed so repo consumers cannot bypass typed gateway methods and backend
+  capability contracts by taking a raw mutable backend reference.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
@@ -2760,6 +2763,9 @@ drift back into inference.
   dependency preflight request precedence: explicit workflow inputs first,
   Pumas resolved package facts second, then dependency-requirement or node-type
   legacy heuristics.
+  Inference crate README contract sections now document that consumers must use
+  typed `InferenceGateway` methods and capability facts rather than a raw
+  backend-handle accessor.
 - [ ] Record any deferred consumer migrations in this plan.
 
 **Verification:**
