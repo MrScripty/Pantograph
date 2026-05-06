@@ -94,7 +94,9 @@ are resolved through `pantograph-node-contracts` projections.
 - Core executor dependency preflight stays in
   `core_executor/dependency_preflight.rs` so model-reference construction,
   backend-key normalization, and resolver readiness checks remain separate from
-  dispatch and runtime request execution.
+  dispatch and runtime request execution. Explicit workflow/backend hints win,
+  then resolved Pumas package facts may supply factual backend/task/model
+  inputs before sparse legacy graph heuristics are considered.
 - Retired backend-specific inference node types in `core_executor.rs` must
   remain outside the live executor path. Saved graph upgrades are owned by
   workflow-service canonicalization; new runtime-backed behavior must enter via
@@ -185,6 +187,11 @@ use node_engine::core_executor::CoreNodeExecutor;
   backend/model compatibility summaries. Malformed package-facts payloads are
   execution input errors, not silently omitted optional facts. Node-engine must
   not derive those summaries locally.
+- Canonical `llm-inference` routing may use resolved Pumas backend hints to
+  choose the PyTorch/Transformers dependency preflight path when no explicit
+  `runtime_hint` or `backend_key` input is wired. This is factual preflight
+  routing only; runtime scheduling and admission policy remain outside
+  node-engine and inference.
 - Workflow dependency input resolution carries package-facts context from
   `puma-lib` model-reference edges into canonical inference inputs, so existing
   Pumas model-ref connections can benefit from package-facts diagnostics without

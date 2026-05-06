@@ -2771,7 +2771,11 @@ drift back into inference.
   dependency-input edges. Embedded-runtime task-executor README now documents
   dependency preflight request precedence: explicit workflow inputs first,
   Pumas resolved package facts second, then dependency-requirement or node-type
-  legacy heuristics.
+  legacy heuristics. Node-engine source README now mirrors that canonical
+  `llm-inference` routing may use resolved Pumas backend hints to enter the
+  PyTorch/Transformers dependency preflight path when no explicit runtime hint
+  or backend key is wired, without moving scheduling or admission policy into
+  node-engine/inference.
   Inference crate README contract sections now document that consumers must use
   typed `InferenceGateway` methods and capability facts rather than a raw
   backend-handle accessor.
