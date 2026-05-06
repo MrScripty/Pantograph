@@ -10,7 +10,10 @@ use crate::model_contracts::{
     ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus,
     ProcessorComponentKind, ResolvedModelPackageFacts, TaskRegistryEntry,
 };
-use crate::types::{InferenceCompatibilityIssueSummary, InferenceCompatibilityReportSummary};
+use crate::types::{
+    looks_like_local_artifact_ref, InferenceCompatibilityIssueSummary,
+    InferenceCompatibilityReportSummary,
+};
 
 use super::{BackendCapabilities, BackendComponentCapability, BackendFeatureSupport};
 
@@ -130,10 +133,25 @@ impl BackendCompatibilityReport {
                 phase: issue.phase.clone(),
                 message: issue.message.clone(),
                 model_id: issue.model_id.clone(),
-                path: issue.path.clone(),
+                path: lifecycle_safe_compatibility_issue_path(issue),
             })
             .collect()
     }
+}
+
+fn lifecycle_safe_compatibility_issue_path(issue: &BackendCompatibilityIssue) -> Option<String> {
+    let has_stable_model_id = issue
+        .model_id
+        .as_deref()
+        .is_some_and(|model_id| !model_id.trim().is_empty());
+
+    issue.path.as_ref().and_then(|path| {
+        if has_stable_model_id && looks_like_local_artifact_ref(path) {
+            None
+        } else {
+            Some(path.clone())
+        }
+    })
 }
 
 impl BackendCapabilities {
@@ -933,5 +951,57 @@ mod tests {
             issues[0].model_id.as_deref(),
             Some("llm/example/missing-tokenizer")
         );
+    }
+
+    #[test]
+    fn compatibility_issue_summary_drops_local_path_when_model_id_is_stable() {
+        let report = BackendCompatibilityReport {
+            compatible: false,
+            task: BackendCompatibilityStatus::Supported,
+            model_source: BackendCompatibilityStatus::Unsupported,
+            preprocessing: BackendCompatibilityStatus::Supported,
+            postprocessing: BackendCompatibilityStatus::Supported,
+            option_diagnostics: Vec::new(),
+            issues: vec![BackendCompatibilityIssue {
+                kind: BackendCompatibilityIssueKind::InvalidModelArtifact,
+                phase: InferenceLifecyclePhase::ModelPackageResolution,
+                message: "model artifact is not valid".to_string(),
+                model_id: Some("pumas://models/private".to_string()),
+                path: Some("/media/models/private/model.gguf".to_string()),
+            }],
+        };
+
+        let issues = report.to_inference_compatibility_issue_summaries(1);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(
+            issues[0].model_id.as_deref(),
+            Some("pumas://models/private")
+        );
+        assert!(issues[0].path.is_none());
+    }
+
+    #[test]
+    fn compatibility_issue_summary_keeps_relative_component_path() {
+        let report = BackendCompatibilityReport {
+            compatible: false,
+            task: BackendCompatibilityStatus::Supported,
+            model_source: BackendCompatibilityStatus::Supported,
+            preprocessing: BackendCompatibilityStatus::Unsupported,
+            postprocessing: BackendCompatibilityStatus::Supported,
+            option_diagnostics: Vec::new(),
+            issues: vec![BackendCompatibilityIssue {
+                kind: BackendCompatibilityIssueKind::MissingPreprocessingComponent,
+                phase: InferenceLifecyclePhase::Preprocessing,
+                message: "required tokenizer component is missing".to_string(),
+                model_id: Some("pumas://models/private".to_string()),
+                path: Some("tokenizer.json".to_string()),
+            }],
+        };
+
+        let issues = report.to_inference_compatibility_issue_summaries(1);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].path.as_deref(), Some("tokenizer.json"));
     }
 }

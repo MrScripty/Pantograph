@@ -3087,7 +3087,10 @@ inference write ledger events directly.
   async task-boundary failures do not bypass traceback-frame stripping or local
   path redaction. Embedded-runtime lifecycle-to-ledger projection now also
   filters unsafe `resolved_artifact_kind` values instead of copying path-shaped
-  strings into durable inference diagnostics.
+  strings into durable inference diagnostics. Inference compatibility issue
+  summary production now also drops local path-shaped issue paths before
+  lifecycle emission when a stable model id is present, while retaining bounded
+  relative component paths such as `tokenizer.json`.
 - [x] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle
