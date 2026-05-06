@@ -23,10 +23,11 @@ use self::pytorch_worker_contract::{
     normalize_worker_error_message, PyTorchAudioTranscriptionRequest,
     PyTorchAudioTranscriptionResult, PyTorchClearKvCacheRequest, PyTorchClearKvCacheResult,
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
-    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
-    PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest, PyTorchUnloadModelResult,
-    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
-    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchRestoreKvCacheRequest, PyTorchSaveKvCacheRequest, PyTorchTransformersLoadRequest,
+    PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy,
+    PyTorchUnloadModelRequest, PyTorchUnloadModelResult, PyTorchWorkerEnvelope, PyTorchWorkerError,
+    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -83,7 +84,7 @@ struct PyTorchTransformersLoadArgs {
     trust_policy: PyTorchTransformersTrustPolicy,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PyTorchLiveKvInfo {
     pub token_count: usize,
     pub model_path: String,
@@ -226,6 +227,142 @@ fn clear_kv_cache_result_from_worker_response(
     }
 }
 
+fn save_kv_cache_envelope(
+    request_id: impl Into<String>,
+    path: impl Into<String>,
+) -> PyTorchWorkerEnvelope<PyTorchSaveKvCacheRequest> {
+    PyTorchWorkerEnvelope::new(
+        request_id,
+        PyTorchWorkerOperation::SaveKvCache,
+        PyTorchSaveKvCacheRequest { path: path.into() },
+    )
+}
+
+fn restore_kv_cache_envelope(
+    request_id: impl Into<String>,
+    path: impl Into<String>,
+) -> PyTorchWorkerEnvelope<PyTorchRestoreKvCacheRequest> {
+    PyTorchWorkerEnvelope::new(
+        request_id,
+        PyTorchWorkerOperation::RestoreKvCache,
+        PyTorchRestoreKvCacheRequest { path: path.into() },
+    )
+}
+
+fn validate_save_kv_cache_envelope(
+    envelope: &PyTorchWorkerEnvelope<PyTorchSaveKvCacheRequest>,
+) -> Result<(), BackendError> {
+    if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+        return Err(BackendError::Config(format!(
+            "Unsupported PyTorch worker save_kv_cache envelope contract version {}",
+            envelope.contract_version
+        )));
+    }
+    if envelope.operation != PyTorchWorkerOperation::SaveKvCache {
+        return Err(BackendError::Config(format!(
+            "Unexpected PyTorch worker operation {:?} for save_kv_cache",
+            envelope.operation
+        )));
+    }
+    if envelope.payload.path.trim().is_empty() {
+        return Err(BackendError::Config(
+            "PyTorch worker save_kv_cache envelope path must be non-empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_restore_kv_cache_envelope(
+    envelope: &PyTorchWorkerEnvelope<PyTorchRestoreKvCacheRequest>,
+) -> Result<(), BackendError> {
+    if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+        return Err(BackendError::Config(format!(
+            "Unsupported PyTorch worker restore_kv_cache envelope contract version {}",
+            envelope.contract_version
+        )));
+    }
+    if envelope.operation != PyTorchWorkerOperation::RestoreKvCache {
+        return Err(BackendError::Config(format!(
+            "Unexpected PyTorch worker operation {:?} for restore_kv_cache",
+            envelope.operation
+        )));
+    }
+    if envelope.payload.path.trim().is_empty() {
+        return Err(BackendError::Config(
+            "PyTorch worker restore_kv_cache envelope path must be non-empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn live_kv_info_from_worker_response(
+    request_id: &str,
+    response_json: &str,
+    canonical_code: &'static str,
+    operation_label: &'static str,
+) -> Result<PyTorchLiveKvInfo, BackendError> {
+    let response: PyTorchWorkerResponse<PyTorchLiveKvInfo> = serde_json::from_str(response_json)
+        .map_err(|error| {
+            kv_worker_failure_from_message(
+                request_id,
+                canonical_code,
+                format!("Failed to decode PyTorch worker {operation_label} response: {error}"),
+            )
+        })?;
+    match response {
+        PyTorchWorkerResponse::Ok(success) => {
+            if success.request_id != request_id {
+                return Err(kv_worker_failure_from_message(
+                    request_id,
+                    canonical_code,
+                    format!(
+                        "PyTorch worker {operation_label} response request_id mismatch: expected {request_id}, got {}",
+                        success.request_id
+                    ),
+                ));
+            }
+            Ok(success.result)
+        }
+        PyTorchWorkerResponse::Error(failure) => {
+            if failure.request_id != request_id {
+                return Err(kv_worker_failure_from_message(
+                    request_id,
+                    canonical_code,
+                    format!(
+                        "PyTorch worker {operation_label} response request_id mismatch: expected {request_id}, got {}",
+                        failure.request_id
+                    ),
+                ));
+            }
+            Err(failure.into_backend_error())
+        }
+    }
+}
+
+fn save_kv_cache_result_from_worker_response(
+    request_id: &str,
+    response_json: &str,
+) -> Result<PyTorchLiveKvInfo, BackendError> {
+    live_kv_info_from_worker_response(
+        request_id,
+        response_json,
+        "pytorch_worker_kv_save_failed",
+        "save_kv_cache",
+    )
+}
+
+fn restore_kv_cache_result_from_worker_response(
+    request_id: &str,
+    response_json: &str,
+) -> Result<PyTorchLiveKvInfo, BackendError> {
+    live_kv_info_from_worker_response(
+        request_id,
+        response_json,
+        "pytorch_worker_kv_restore_failed",
+        "restore_kv_cache",
+    )
+}
+
 fn get_loaded_info_envelope(
     request_id: impl Into<String>,
 ) -> PyTorchWorkerEnvelope<PyTorchGetLoadedInfoRequest> {
@@ -296,17 +433,6 @@ fn loaded_model_info_from_worker_response(
     }
 }
 
-fn live_kv_info_from_worker_result(
-    request_id: &str,
-    canonical_code: &'static str,
-    context: &'static str,
-    result: &Bound<'_, PyAny>,
-) -> Result<PyTorchLiveKvInfo, BackendError> {
-    pytorch_worker::extract_live_kv_info(result).map_err(|error| {
-        kv_worker_failure_from_message(request_id, canonical_code, format!("{context}: {error}"))
-    })
-}
-
 fn task_join_error_message(error: impl std::fmt::Display) -> String {
     normalize_worker_error_message(
         &format!("Task join error: {error}"),
@@ -359,6 +485,13 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
 pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
     let path = path.to_path_buf();
     let request_id = format!("pytorch-kv-save-{}", Uuid::new_v4().simple());
+    let envelope = save_kv_cache_envelope(request_id.clone(), path.to_string_lossy().to_string());
+    validate_save_kv_cache_envelope(&envelope)?;
+    let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+        BackendError::Config(format!(
+            "Failed to encode PyTorch worker save_kv_cache envelope: {error}"
+        ))
+    })?;
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
@@ -368,21 +501,24 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
                     format!("Failed to get worker module: {}", e),
                 )
             })?;
-            let result = worker
-                .call_method1("save_live_kv_cache", (path.to_string_lossy().to_string(),))
+            let response_json = worker
+                .call_method1("save_live_kv_cache_from_envelope", (envelope_json,))
                 .map_err(|e| {
                     kv_worker_failure_from_message(
                         &request_id,
                         "pytorch_worker_kv_save_failed",
-                        format!("PyTorch KV save failed: {}", e),
+                        format!("PyTorch worker save_kv_cache envelope failed: {}", e),
+                    )
+                })?
+                .extract::<String>()
+                .map_err(|e| {
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_save_failed",
+                        format!("PyTorch worker save_kv_cache response was not JSON text: {e}"),
                     )
                 })?;
-            live_kv_info_from_worker_result(
-                &request_id,
-                "pytorch_worker_kv_save_failed",
-                "PyTorch KV save result was malformed",
-                &result,
-            )
+            save_kv_cache_result_from_worker_response(&request_id, &response_json)
         })
     })
     .await
@@ -392,6 +528,14 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
 pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
     let path = path.to_path_buf();
     let request_id = format!("pytorch-kv-restore-{}", Uuid::new_v4().simple());
+    let envelope =
+        restore_kv_cache_envelope(request_id.clone(), path.to_string_lossy().to_string());
+    validate_restore_kv_cache_envelope(&envelope)?;
+    let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+        BackendError::Config(format!(
+            "Failed to encode PyTorch worker restore_kv_cache envelope: {error}"
+        ))
+    })?;
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
@@ -401,24 +545,24 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
                     format!("Failed to get worker module: {}", e),
                 )
             })?;
-            let result = worker
-                .call_method1(
-                    "restore_live_kv_cache",
-                    (path.to_string_lossy().to_string(),),
-                )
+            let response_json = worker
+                .call_method1("restore_live_kv_cache_from_envelope", (envelope_json,))
                 .map_err(|e| {
                     kv_worker_failure_from_message(
                         &request_id,
                         "pytorch_worker_kv_restore_failed",
-                        format!("PyTorch KV restore failed: {}", e),
+                        format!("PyTorch worker restore_kv_cache envelope failed: {}", e),
+                    )
+                })?
+                .extract::<String>()
+                .map_err(|e| {
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_restore_failed",
+                        format!("PyTorch worker restore_kv_cache response was not JSON text: {e}"),
                     )
                 })?;
-            live_kv_info_from_worker_result(
-                &request_id,
-                "pytorch_worker_kv_restore_failed",
-                "PyTorch KV restore result was malformed",
-                &result,
-            )
+            restore_kv_cache_result_from_worker_response(&request_id, &response_json)
         })
     })
     .await
@@ -2177,63 +2321,12 @@ impl InferenceBackend for PyTorchBackend {
 
     async fn save_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
         Self::require_live_kv_slot(slot_id)?;
-        let path = path.to_path_buf();
-        let request_id = format!("pytorch-kv-slot-save-{}", Uuid::new_v4().simple());
-        tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<(), BackendError> {
-                let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    kv_worker_failure_from_message(
-                        &request_id,
-                        "pytorch_worker_kv_save_failed",
-                        format!("Failed to get worker module: {}", e),
-                    )
-                })?;
-                worker
-                    .call_method1("save_live_kv_cache", (path.to_string_lossy().to_string(),))
-                    .map_err(|e| {
-                        kv_worker_failure_from_message(
-                            &request_id,
-                            "pytorch_worker_kv_save_failed",
-                            format!("PyTorch KV save failed: {}", e),
-                        )
-                    })?;
-                Ok(())
-            })
-        })
-        .await
-        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
+        save_live_kv_snapshot(path).await.map(|_| ())
     }
 
     async fn restore_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
         Self::require_live_kv_slot(slot_id)?;
-        let path = path.to_path_buf();
-        let request_id = format!("pytorch-kv-slot-restore-{}", Uuid::new_v4().simple());
-        tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<(), BackendError> {
-                let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    kv_worker_failure_from_message(
-                        &request_id,
-                        "pytorch_worker_kv_restore_failed",
-                        format!("Failed to get worker module: {}", e),
-                    )
-                })?;
-                worker
-                    .call_method1(
-                        "restore_live_kv_cache",
-                        (path.to_string_lossy().to_string(),),
-                    )
-                    .map_err(|e| {
-                        kv_worker_failure_from_message(
-                            &request_id,
-                            "pytorch_worker_kv_restore_failed",
-                            format!("PyTorch KV restore failed: {}", e),
-                        )
-                    })?;
-                Ok(())
-            })
-        })
-        .await
-        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
+        restore_live_kv_snapshot(path).await.map(|_| ())
     }
 
     async fn clear_kv_cache_slot(&self, slot_id: u32) -> Result<(), BackendError> {

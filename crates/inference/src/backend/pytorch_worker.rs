@@ -3,8 +3,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
-use super::{BackendError, PyTorchLiveKvInfo};
-
 const WORKER_PY: &str = include_str!("../../torch/worker.py");
 const BLOCK_DIFFUSION_PY: &str = include_str!("../../torch/block_diffusion.py");
 const AUTOREGRESSIVE_PY: &str = include_str!("../../torch/autoregressive.py");
@@ -79,36 +77,4 @@ pub(super) fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
 pub(super) fn worker_module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     ensure_worker_initialised(py)?;
     py.import("pantograph_torch_worker")
-}
-
-pub(super) fn extract_live_kv_info(
-    value: &Bound<'_, PyAny>,
-) -> Result<PyTorchLiveKvInfo, BackendError> {
-    let token_count = value
-        .get_item("token_count")
-        .map_err(|e| BackendError::Inference(format!("Missing KV token_count: {}", e)))?
-        .extract::<usize>()
-        .map_err(|e| BackendError::Inference(format!("Invalid KV token_count: {}", e)))?;
-    let model_path = value
-        .get_item("model_path")
-        .map_err(|e| BackendError::Inference(format!("Missing KV model_path: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid KV model_path: {}", e)))?;
-    let model_type = value
-        .get_item("model_type")
-        .map_err(|e| BackendError::Inference(format!("Missing KV model_type: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid KV model_type: {}", e)))?;
-    let device = value
-        .get_item("device")
-        .map_err(|e| BackendError::Inference(format!("Missing KV device: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid KV device: {}", e)))?;
-
-    Ok(PyTorchLiveKvInfo {
-        token_count,
-        model_path,
-        model_type,
-        device,
-    })
 }

@@ -1907,6 +1907,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   PyTorch live-KV clear now crosses the Rust/Python boundary through a
   versioned `clear_kv_cache` worker envelope and typed response decoder shared
   by the free helper and trait slot-clear path after slot validation.
+  PyTorch live-KV save and restore now cross the Rust/Python boundary through
+  versioned `save_kv_cache` and `restore_kv_cache` worker envelopes and typed
+  live-KV metadata response decoders shared by the free helpers and trait
+  slot save/restore paths after slot validation.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -3854,6 +3858,11 @@ Update during implementation:
   decoder, with operation/version validation, request-id correlation, malformed
   response rejection, and canonical sanitized KV clear errors shared by the free
   helper and trait slot-clear path.
+- 2026-05-06: PyTorch live-KV save and restore now cross the embedded Python
+  boundary through versioned `save_kv_cache` and `restore_kv_cache` worker
+  envelopes and typed live-KV metadata response decoders, with path validation,
+  request-id correlation, malformed response rejection, and canonical sanitized
+  KV save/restore errors shared by the free helpers and trait slot paths.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

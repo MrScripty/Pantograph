@@ -183,6 +183,11 @@ fn create_backend() {
   and trait slot-clear path must share that contract after slot validation so
   clear behavior does not drift between node-engine preparation and backend
   trait consumers.
+- PyTorch live-KV save and restore cross the embedded Python boundary through
+  versioned worker envelopes and typed live-KV metadata response decoders. The
+  free helpers and trait slot save/restore paths share those contracts after
+  slot validation so request-id correlation and malformed metadata handling are
+  identical for node-engine preparation and backend trait consumers.
 - PyTorch transport exceptions from the embedded Python boundary must be
   normalized before becoming `BackendError` messages: keep request ids,
   canonical worker codes, and bounded exception summaries, but strip Python

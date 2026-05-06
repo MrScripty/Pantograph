@@ -4,10 +4,10 @@ use std::ffi::CString;
 use super::pytorch_worker_contract::{
     PyTorchAudioTranscriptionRequest, PyTorchAudioTranscriptionResult, PyTorchClearKvCacheRequest,
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
-    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy,
-    PyTorchUnloadModelRequest, PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind,
-    PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
-    PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchRestoreKvCacheRequest, PyTorchSaveKvCacheRequest, PyTorchTransformersLoadRequest,
+    PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest,
+    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
+    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -770,6 +770,127 @@ fn test_pytorch_worker_clear_kv_cache_envelope_rejects_wrong_contract_version() 
 }
 
 #[test]
+fn test_pytorch_worker_save_kv_cache_envelope_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/save_kv_cache_request.json");
+    let envelope: PyTorchWorkerEnvelope<PyTorchSaveKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker save_kv_cache fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-save-kv-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::SaveKvCache);
+    assert_eq!(envelope.payload.path, "/tmp/pantograph-kv-save.bin");
+
+    validate_save_kv_cache_envelope(&envelope).expect("save_kv_cache fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_save_kv_cache_envelope_rejects_wrong_operation() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/save_kv_cache_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchSaveKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker save_kv_cache fixture");
+    envelope.operation = PyTorchWorkerOperation::GenerateText;
+
+    match validate_save_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("GenerateText"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_save_kv_cache_envelope_rejects_wrong_contract_version() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/save_kv_cache_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchSaveKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker save_kv_cache fixture");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match validate_save_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("save_kv_cache envelope contract version"));
+        }
+        other => panic!("expected wrong-version config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_save_kv_cache_envelope_rejects_empty_path() {
+    let envelope = save_kv_cache_envelope("req-save-kv-empty-path", " ");
+
+    match validate_save_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("save_kv_cache envelope path must be non-empty"));
+        }
+        other => panic!("expected empty-path config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_restore_kv_cache_envelope_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/restore_kv_cache_request.json");
+    let envelope: PyTorchWorkerEnvelope<PyTorchRestoreKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker restore_kv_cache fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-restore-kv-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::RestoreKvCache);
+    assert_eq!(envelope.payload.path, "/tmp/pantograph-kv-restore.bin");
+
+    validate_restore_kv_cache_envelope(&envelope)
+        .expect("restore_kv_cache fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_restore_kv_cache_envelope_rejects_wrong_operation() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/restore_kv_cache_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchRestoreKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker restore_kv_cache fixture");
+    envelope.operation = PyTorchWorkerOperation::GenerateText;
+
+    match validate_restore_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("GenerateText"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_restore_kv_cache_envelope_rejects_wrong_contract_version() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/restore_kv_cache_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchRestoreKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker restore_kv_cache fixture");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match validate_restore_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("restore_kv_cache envelope contract version"));
+        }
+        other => panic!("expected wrong-version config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_restore_kv_cache_envelope_rejects_empty_path() {
+    let envelope = restore_kv_cache_envelope("req-restore-kv-empty-path", " ");
+
+    match validate_restore_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("restore_kv_cache envelope path must be non-empty"));
+        }
+        other => panic!("expected empty-path config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_python_worker_contract_projects_unload_envelope() {
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
@@ -900,6 +1021,135 @@ fn test_python_worker_contract_rejects_invalid_clear_kv_cache_envelope() {
         assert!(error
             .to_string()
             .contains("Unsupported PyTorch worker contract_version"));
+    });
+}
+
+#[test]
+fn test_python_worker_contract_projects_save_kv_cache_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture =
+            include_str!("../../tests/fixtures/pytorch_worker_contract/save_kv_cache_request.json");
+
+        let kwargs = module
+            .call_method1("save_kv_cache_kwargs_from_envelope", (fixture,))
+            .expect("save_kv_cache worker envelope should project to kwargs");
+
+        assert_eq!(
+            kwargs
+                .get_item("path")
+                .expect("path item should be readable")
+                .extract::<String>()
+                .expect("path should extract"),
+            "/tmp/pantograph-kv-save.bin"
+        );
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_invalid_save_kv_cache_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let wrong_operation = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-save-kv-operation",
+            "operation": "generate_text",
+            "payload": {"path": "/tmp/pantograph-kv-save.bin"}
+        });
+
+        let error = module
+            .call_method1(
+                "save_kv_cache_kwargs_from_envelope",
+                (wrong_operation.to_string(),),
+            )
+            .expect_err("wrong save_kv_cache operation should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unexpected PyTorch worker operation for save_kv_cache"));
+
+        let empty_path = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-save-kv-path",
+            "operation": "save_kv_cache",
+            "payload": {"path": " "}
+        });
+
+        let error = module
+            .call_method1(
+                "save_kv_cache_kwargs_from_envelope",
+                (empty_path.to_string(),),
+            )
+            .expect_err("empty save_kv_cache path should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("payload.path must be a non-empty string"));
+    });
+}
+
+#[test]
+fn test_python_worker_contract_projects_restore_kv_cache_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/restore_kv_cache_request.json"
+        );
+
+        let kwargs = module
+            .call_method1("restore_kv_cache_kwargs_from_envelope", (fixture,))
+            .expect("restore_kv_cache worker envelope should project to kwargs");
+
+        assert_eq!(
+            kwargs
+                .get_item("path")
+                .expect("path item should be readable")
+                .extract::<String>()
+                .expect("path should extract"),
+            "/tmp/pantograph-kv-restore.bin"
+        );
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_invalid_restore_kv_cache_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let wrong_operation = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-restore-kv-operation",
+            "operation": "generate_text",
+            "payload": {"path": "/tmp/pantograph-kv-restore.bin"}
+        });
+
+        let error = module
+            .call_method1(
+                "restore_kv_cache_kwargs_from_envelope",
+                (wrong_operation.to_string(),),
+            )
+            .expect_err("wrong restore_kv_cache operation should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unexpected PyTorch worker operation for restore_kv_cache"));
+
+        let empty_path = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-restore-kv-path",
+            "operation": "restore_kv_cache",
+            "payload": {"path": " "}
+        });
+
+        let error = module
+            .call_method1(
+                "restore_kv_cache_kwargs_from_envelope",
+                (empty_path.to_string(),),
+            )
+            .expect_err("empty restore_kv_cache path should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("payload.path must be a non-empty string"));
     });
 }
 
@@ -2762,6 +3012,213 @@ fn test_pytorch_worker_clear_kv_cache_invalid_request_maps_to_config_error() {
 }
 
 #[test]
+fn test_pytorch_worker_save_kv_cache_response_decodes_live_info() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-save-kv-ok",
+        "result": {
+            "token_count": 8,
+            "model_path": "/models/tiny",
+            "model_type": "dllm",
+            "device": "cpu"
+        }
+    });
+
+    let info = save_kv_cache_result_from_worker_response("req-save-kv-ok", &response.to_string())
+        .expect("save_kv_cache response decodes");
+
+    assert_eq!(info.token_count, 8);
+    assert_eq!(info.model_path, "/models/tiny");
+    assert_eq!(info.model_type, "dllm");
+    assert_eq!(info.device, "cpu");
+}
+
+#[test]
+fn test_pytorch_worker_save_kv_cache_response_rejects_request_id_mismatch() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-save-kv-other",
+        "result": {
+            "token_count": 8,
+            "model_path": "/models/tiny",
+            "model_type": "dllm",
+            "device": "cpu"
+        }
+    });
+
+    let error =
+        save_kv_cache_result_from_worker_response("req-save-kv-expected", &response.to_string())
+            .expect_err("mismatched save_kv_cache response id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-save-kv-expected",
+        "pytorch_worker_kv_save_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_save_kv_cache_malformed_response_normalizes_to_backend_error() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match save_kv_cache_result_from_worker_response("req-save-kv-malformed", malformed) {
+        Err(BackendError::Inference(message)) => {
+            assert!(message.contains("pytorch_worker_kv_save_failed"));
+            assert!(message.contains("req-save-kv-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker save_kv_cache response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_save_kv_cache_malformed_result_normalizes_to_backend_error() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-save-kv-bad-result",
+        "result": {
+            "token_count": "many",
+            "model_path": "/models/tiny",
+            "model_type": "dllm",
+            "device": "cpu"
+        }
+    });
+
+    let error =
+        save_kv_cache_result_from_worker_response("req-save-kv-bad-result", &response.to_string())
+            .expect_err("bad save_kv_cache result should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-save-kv-bad-result",
+        "pytorch_worker_kv_save_failed",
+        "invalid type",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_save_kv_cache_invalid_request_maps_to_config_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-save-kv-invalid",
+        "error": {
+            "kind": "invalid_request",
+            "message": "PyTorch worker save_kv_cache payload.path must be a non-empty string",
+            "canonical_code": "pytorch_worker_invalid_save_kv_cache_request"
+        }
+    });
+
+    let error =
+        save_kv_cache_result_from_worker_response("req-save-kv-invalid", &response.to_string())
+            .expect_err("invalid save_kv_cache request should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Config,
+        "req-save-kv-invalid",
+        "pytorch_worker_invalid_save_kv_cache_request",
+        "payload.path must be a non-empty string",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_restore_kv_cache_response_decodes_live_info() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-restore-kv-ok",
+        "result": {
+            "token_count": 8,
+            "model_path": "/models/tiny",
+            "model_type": "dllm",
+            "device": "cpu"
+        }
+    });
+
+    let info =
+        restore_kv_cache_result_from_worker_response("req-restore-kv-ok", &response.to_string())
+            .expect("restore_kv_cache response decodes");
+
+    assert_eq!(info.token_count, 8);
+    assert_eq!(info.model_path, "/models/tiny");
+    assert_eq!(info.model_type, "dllm");
+    assert_eq!(info.device, "cpu");
+}
+
+#[test]
+fn test_pytorch_worker_restore_kv_cache_response_rejects_request_id_mismatch() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-restore-kv-other",
+        "result": {
+            "token_count": 8,
+            "model_path": "/models/tiny",
+            "model_type": "dllm",
+            "device": "cpu"
+        }
+    });
+
+    let error = restore_kv_cache_result_from_worker_response(
+        "req-restore-kv-expected",
+        &response.to_string(),
+    )
+    .expect_err("mismatched restore_kv_cache response id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-restore-kv-expected",
+        "pytorch_worker_kv_restore_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_restore_kv_cache_malformed_response_normalizes_to_backend_error() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match restore_kv_cache_result_from_worker_response("req-restore-kv-malformed", malformed) {
+        Err(BackendError::Inference(message)) => {
+            assert!(message.contains("pytorch_worker_kv_restore_failed"));
+            assert!(message.contains("req-restore-kv-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker restore_kv_cache response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_restore_kv_cache_invalid_request_maps_to_config_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-restore-kv-invalid",
+        "error": {
+            "kind": "invalid_request",
+            "message": "PyTorch worker restore_kv_cache payload.path must be a non-empty string",
+            "canonical_code": "pytorch_worker_invalid_restore_kv_cache_request"
+        }
+    });
+
+    let error = restore_kv_cache_result_from_worker_response(
+        "req-restore-kv-invalid",
+        &response.to_string(),
+    )
+    .expect_err("invalid restore_kv_cache request should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Config,
+        "req-restore-kv-invalid",
+        "pytorch_worker_invalid_restore_kv_cache_request",
+        "payload.path must be a non-empty string",
+    );
+}
+
+#[test]
 fn test_pytorch_worker_get_loaded_info_response_decodes_loaded_model_info() {
     let response = serde_json::json!({
         "status": "ok",
@@ -2894,29 +3351,28 @@ fn test_pytorch_worker_get_loaded_info_malformed_result_normalizes_to_backend_er
 
 #[test]
 fn test_pytorch_kv_live_info_malformed_result_normalizes_to_backend_error() {
-    Python::with_gil(|py| {
-        let result = pyo3::types::PyDict::new(py);
-        result.set_item("token_count", "many").unwrap();
-        result.set_item("model_path", "/models/tiny").unwrap();
-        result.set_item("model_type", "dllm").unwrap();
-        result.set_item("device", "cpu").unwrap();
-
-        let error = live_kv_info_from_worker_result(
-            "req-kv-save-malformed",
-            "pytorch_worker_kv_save_failed",
-            "PyTorch KV save result was malformed",
-            result.as_any(),
-        )
-        .expect_err("invalid live KV token_count should fail closed");
-
-        assert_worker_backend_error(
-            error,
-            ExpectedBackendErrorVariant::Inference,
-            "req-kv-save-malformed",
-            "pytorch_worker_kv_save_failed",
-            "KV save result was malformed",
-        );
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-kv-save-malformed",
+        "result": {
+            "token_count": "many",
+            "model_path": "/models/tiny",
+            "model_type": "dllm",
+            "device": "cpu"
+        }
     });
+
+    let error =
+        save_kv_cache_result_from_worker_response("req-kv-save-malformed", &response.to_string())
+            .expect_err("invalid live KV token_count should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-kv-save-malformed",
+        "pytorch_worker_kv_save_failed",
+        "invalid type",
+    );
 }
 
 #[test]

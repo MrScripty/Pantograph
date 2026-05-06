@@ -10,6 +10,8 @@ GENERATE_TEXT_OPERATION = "generate_text"
 GENERATE_TEXT_STREAM_OPERATION = "generate_text_stream"
 TRANSCRIBE_AUDIO_OPERATION = "transcribe_audio"
 CLEAR_KV_CACHE_OPERATION = "clear_kv_cache"
+SAVE_KV_CACHE_OPERATION = "save_kv_cache"
+RESTORE_KV_CACHE_OPERATION = "restore_kv_cache"
 ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k"}
 CAUSAL_LM_LOADER = "causal_lm"
 AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
@@ -170,6 +172,50 @@ def clear_kv_cache_kwargs_from_envelope(envelope):
     if not isinstance(payload, dict):
         raise ValueError("PyTorch worker clear_kv_cache envelope payload must be an object")
     return {}
+
+
+def save_kv_cache_kwargs_from_envelope(envelope):
+    """Validate a Rust worker envelope and project it to KV save kwargs."""
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    if not isinstance(envelope, dict):
+        raise ValueError("PyTorch worker save_kv_cache envelope must be an object")
+    contract_version = envelope.get("contract_version")
+    if contract_version != WORKER_CONTRACT_VERSION:
+        raise ValueError(f"Unsupported PyTorch worker contract_version: {contract_version}")
+    operation = envelope.get("operation")
+    if operation != SAVE_KV_CACHE_OPERATION:
+        raise ValueError(f"Unexpected PyTorch worker operation for save_kv_cache: {operation}")
+
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("PyTorch worker save_kv_cache envelope payload must be an object")
+    path = payload.get("path")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("PyTorch worker save_kv_cache payload.path must be a non-empty string")
+    return {"path": path}
+
+
+def restore_kv_cache_kwargs_from_envelope(envelope):
+    """Validate a Rust worker envelope and project it to KV restore kwargs."""
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    if not isinstance(envelope, dict):
+        raise ValueError("PyTorch worker restore_kv_cache envelope must be an object")
+    contract_version = envelope.get("contract_version")
+    if contract_version != WORKER_CONTRACT_VERSION:
+        raise ValueError(f"Unsupported PyTorch worker contract_version: {contract_version}")
+    operation = envelope.get("operation")
+    if operation != RESTORE_KV_CACHE_OPERATION:
+        raise ValueError(f"Unexpected PyTorch worker operation for restore_kv_cache: {operation}")
+
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("PyTorch worker restore_kv_cache envelope payload must be an object")
+    path = payload.get("path")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("PyTorch worker restore_kv_cache payload.path must be a non-empty string")
+    return {"path": path}
 
 
 def transcribe_audio_kwargs_from_envelope(envelope):

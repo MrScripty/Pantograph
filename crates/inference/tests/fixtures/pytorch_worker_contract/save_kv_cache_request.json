@@ -1,0 +1,11 @@
+{
+  "contract_version": 1,
+  "request_id": "req-save-kv-001",
+  "operation": "save_kv_cache",
+  "cancellation": {
+    "drop_stream_cancels": false
+  },
+  "payload": {
+    "path": "/tmp/pantograph-kv-save.bin"
+  }
+}
