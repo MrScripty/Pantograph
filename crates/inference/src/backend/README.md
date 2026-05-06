@@ -168,6 +168,11 @@ fn create_backend() {
   normalized before becoming `BackendError` messages: keep request ids,
   canonical worker codes, and bounded exception summaries, but strip Python
   traceback frames and redact local path tokens.
+- PyTorch audio transcription worker results must decode through the typed
+  result helper so missing or malformed `text`, `language`, and
+  `duration_seconds` fields become canonical
+  `pytorch_worker_audio_transcription_failed` errors instead of silent default
+  transcript values.
 - Backend-native generation fields and kwargs must stay inside backend-local
   mapping helpers. PyTorch maps canonical generation options to
   Transformers-style kwargs, while llama.cpp maps them to bounded

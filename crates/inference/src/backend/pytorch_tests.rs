@@ -1662,6 +1662,112 @@ fn test_pytorch_worker_audio_transcription_transport_error_normalizes_to_backend
 }
 
 #[test]
+fn test_pytorch_audio_transcription_worker_result_decodes() {
+    Python::with_gil(|py| {
+        let result = pyo3::types::PyDict::new(py);
+        result.set_item("text", "hello from audio").unwrap();
+        result.set_item("language", "en").unwrap();
+        result.set_item("duration_seconds", 1.25_f32).unwrap();
+
+        let decoded = PyTorchBackend::audio_transcription_result_from_worker_output(
+            "req-audio-result-ok",
+            result.as_any(),
+        )
+        .expect("audio transcription worker result should decode");
+
+        assert_eq!(decoded.text, "hello from audio");
+        assert_eq!(decoded.language.as_deref(), Some("en"));
+        assert_eq!(decoded.duration_seconds, Some(1.25_f32));
+        assert!(decoded.segments.is_empty());
+        assert_eq!(decoded.metadata, serde_json::Value::Null);
+    });
+}
+
+#[test]
+fn test_pytorch_audio_transcription_worker_result_rejects_missing_text() {
+    Python::with_gil(|py| {
+        let result = pyo3::types::PyDict::new(py);
+
+        let error = PyTorchBackend::audio_transcription_result_from_worker_output(
+            "req-audio-missing-text",
+            result.as_any(),
+        )
+        .expect_err("missing text should fail closed");
+
+        assert_worker_backend_error(
+            error,
+            ExpectedBackendErrorVariant::Inference,
+            "req-audio-missing-text",
+            "pytorch_worker_audio_transcription_failed",
+            "missing text",
+        );
+    });
+}
+
+#[test]
+fn test_pytorch_audio_transcription_worker_result_rejects_non_string_text() {
+    Python::with_gil(|py| {
+        let result = pyo3::types::PyDict::new(py);
+        result.set_item("text", 42).unwrap();
+
+        let error = PyTorchBackend::audio_transcription_result_from_worker_output(
+            "req-audio-bad-text",
+            result.as_any(),
+        )
+        .expect_err("non-string text should fail closed");
+
+        assert_worker_backend_error(
+            error,
+            ExpectedBackendErrorVariant::Inference,
+            "req-audio-bad-text",
+            "pytorch_worker_audio_transcription_failed",
+            "text was not a string",
+        );
+    });
+}
+
+#[test]
+fn test_pytorch_audio_transcription_worker_result_rejects_bad_optional_metadata() {
+    Python::with_gil(|py| {
+        let bad_language = pyo3::types::PyDict::new(py);
+        bad_language.set_item("text", "hello").unwrap();
+        bad_language.set_item("language", 42).unwrap();
+
+        let error = PyTorchBackend::audio_transcription_result_from_worker_output(
+            "req-audio-bad-language",
+            bad_language.as_any(),
+        )
+        .expect_err("malformed language should fail closed");
+
+        assert_worker_backend_error(
+            error,
+            ExpectedBackendErrorVariant::Inference,
+            "req-audio-bad-language",
+            "pytorch_worker_audio_transcription_failed",
+            "language was not a string",
+        );
+
+        let bad_duration = pyo3::types::PyDict::new(py);
+        bad_duration.set_item("text", "hello").unwrap();
+        bad_duration.set_item("duration_seconds", "soon").unwrap();
+
+        let error = PyTorchBackend::audio_transcription_result_from_worker_output(
+            "req-audio-bad-duration",
+            bad_duration.as_any(),
+        )
+        .expect_err("malformed duration should fail closed");
+
+        assert_worker_backend_error(
+            error,
+            ExpectedBackendErrorVariant::Inference,
+            "req-audio-bad-duration",
+            "pytorch_worker_audio_transcription_failed",
+            "duration_seconds was not a number",
+        );
+    });
+}
+
+#[test]
 fn test_pytorch_worker_unload_transport_error_normalizes_to_backend_error() {
     match PyTorchBackend::unload_worker_failure_from_message(
         "req-unload",

@@ -655,6 +655,94 @@ impl PyTorchBackend {
         .into_backend_error()
     }
 
+    fn audio_transcription_result_from_worker_output(
+        request_id: &str,
+        result: &Bound<'_, PyAny>,
+    ) -> Result<AudioTranscriptionResult, BackendError> {
+        let result = result.downcast::<pyo3::types::PyDict>().map_err(|error| {
+            Self::audio_transcription_worker_failure_from_message(
+                request_id,
+                format!("PyTorch audio transcription response was not an object: {error}"),
+            )
+        })?;
+
+        let text = result
+            .get_item("text")
+            .map_err(|error| {
+                Self::audio_transcription_worker_failure_from_message(
+                    request_id,
+                    format!("PyTorch audio transcription response text lookup failed: {error}"),
+                )
+            })?
+            .ok_or_else(|| {
+                Self::audio_transcription_worker_failure_from_message(
+                    request_id,
+                    "PyTorch audio transcription response missing text".to_string(),
+                )
+            })?
+            .extract::<String>()
+            .map_err(|error| {
+                Self::audio_transcription_worker_failure_from_message(
+                    request_id,
+                    format!("PyTorch audio transcription response text was not a string: {error}"),
+                )
+            })?;
+
+        let language = result
+            .get_item("language")
+            .map_err(|error| {
+                Self::audio_transcription_worker_failure_from_message(
+                    request_id,
+                    format!(
+                        "PyTorch audio transcription response language lookup failed: {error}"
+                    ),
+                )
+            })?
+            .map(|value| {
+                value.extract::<Option<String>>().map_err(|error| {
+                    Self::audio_transcription_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch audio transcription response language was not a string: {error}"
+                        ),
+                    )
+                })
+            })
+            .transpose()?
+            .flatten();
+
+        let duration_seconds = result
+            .get_item("duration_seconds")
+            .map_err(|error| {
+                Self::audio_transcription_worker_failure_from_message(
+                    request_id,
+                    format!(
+                        "PyTorch audio transcription response duration_seconds lookup failed: {error}"
+                    ),
+                )
+            })?
+            .map(|value| {
+                value.extract::<Option<f32>>().map_err(|error| {
+                    Self::audio_transcription_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch audio transcription response duration_seconds was not a number: {error}"
+                        ),
+                    )
+                })
+            })
+            .transpose()?
+            .flatten();
+
+        Ok(AudioTranscriptionResult {
+            text,
+            language,
+            duration_seconds,
+            segments: Vec::new(),
+            metadata: serde_json::Value::Null,
+        })
+    }
+
     fn unload_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
         PyTorchWorkerFailure {
             request_id: request_id.to_string(),
@@ -1686,25 +1774,7 @@ impl InferenceBackend for PyTorchBackend {
                             format!("PyTorch audio transcription failed: {e}"),
                         )
                     })?;
-                Ok(AudioTranscriptionResult {
-                    text: result
-                        .get_item("text")
-                        .ok()
-                        .and_then(|value| value.extract::<String>().ok())
-                        .unwrap_or_default(),
-                    language: result
-                        .get_item("language")
-                        .ok()
-                        .and_then(|value| value.extract::<Option<String>>().ok())
-                        .flatten(),
-                    duration_seconds: result
-                        .get_item("duration_seconds")
-                        .ok()
-                        .and_then(|value| value.extract::<Option<f32>>().ok())
-                        .flatten(),
-                    segments: Vec::new(),
-                    metadata: serde_json::Value::Null,
-                })
+                Self::audio_transcription_result_from_worker_output(&request_id, result.as_any())
             })
         })
         .await
