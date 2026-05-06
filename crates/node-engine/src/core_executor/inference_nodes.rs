@@ -1527,23 +1527,14 @@ pub(crate) async fn execute_unload_model(
         }
         #[cfg(feature = "pytorch-nodes")]
         "pytorch" => {
-            use pyo3::types::PyAnyMethods;
-            // Unload via PyO3 in-process call to the Python worker
-            let model_id_owned = model_id.to_string();
-            tokio::task::spawn_blocking(move || {
-                pyo3::Python::with_gil(|py| {
-                    if let Ok(worker) = py.import("pantograph_torch_worker") {
-                        let _ = worker.call_method0("unload_model");
-                    }
-                });
-            })
-            .await
-            .map_err(|e| {
-                NodeEngineError::ExecutionFailed(format!(
-                    "Failed to unload PyTorch model '{}': {}",
-                    model_id_owned, e
-                ))
-            })?;
+            inference::backend::pytorch::unload_embedded_pytorch_model()
+                .await
+                .map_err(|error| {
+                    NodeEngineError::ExecutionFailed(format!(
+                        "Failed to unload PyTorch model '{}': {}",
+                        model_id, error
+                    ))
+                })?;
             log::info!("UnloadModel: PyTorch model '{}' unloaded", model_id);
         }
         #[cfg(feature = "audio-nodes")]

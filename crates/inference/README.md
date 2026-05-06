@@ -132,6 +132,10 @@ selection must use supported runtimes through Pumas model references.
   `load_transformers_model` worker envelope for both Pumas-resolved packages
   and direct local import/debug paths. Direct paths are represented as direct
   model sources and must not be treated as Pumas-owned stable model refs.
+- PyTorch embedded-worker lifecycle calls, including node-engine unload
+  requests, enter Python through inference-owned versioned worker envelopes.
+  Workspace consumers must not import `pantograph_torch_worker` directly for
+  lifecycle operations.
 - Candle's current `backend-candle` surface validates Pumas package facts,
   staged local load plans, tokenizers, dtype/device facts, and safetensors
   tensor resources, but it still reports unavailable until an executable model

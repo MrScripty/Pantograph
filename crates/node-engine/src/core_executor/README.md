@@ -110,6 +110,10 @@ stable public facade and dispatch owner.
   embedding execution stay in `retrieval_nodes.rs`.
 - PyTorch Python-worker execution stays in `pytorch_nodes.rs`; Stable Audio
   Python-worker execution stays in `audio_nodes.rs`.
+- PyTorch lifecycle operations invoked from shared canonical handlers, such as
+  model unload in `inference_nodes.rs`, must go through the inference crate's
+  typed worker-envelope helpers instead of importing the embedded Python worker
+  directly.
 - Python-worker handlers should pass worker parameters directly into their
   blocking closures and avoid redundant rebinding so the feature-gated path
   stays clippy-clean without changing runtime behavior.

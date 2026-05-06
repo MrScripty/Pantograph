@@ -3892,6 +3892,10 @@ Update during implementation:
   `init_worker` envelope and typed response decoder when the backend is ready,
   returning `false` on init-envelope failure instead of validating only raw
   Python module importability.
+- 2026-05-06: Node-engine PyTorch unload now calls the inference crate's
+  exported embedded-worker unload helper, so shared canonical unload handling
+  no longer imports `pantograph_torch_worker` or calls raw Python lifecycle
+  methods directly.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

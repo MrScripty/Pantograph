@@ -680,6 +680,16 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
     .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
 }
 
+pub async fn unload_embedded_pytorch_model() -> Result<(), BackendError> {
+    let request_id = format!("pytorch-unload-{}", Uuid::new_v4().simple());
+    let envelope_json = PyTorchBackend::unload_model_envelope_json(&request_id)?;
+    tokio::task::spawn_blocking(move || {
+        PyTorchBackend::unload_model_from_envelope_blocking(&request_id, envelope_json)
+    })
+    .await
+    .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
+}
+
 pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
     let path = path.to_path_buf();
     let request_id = format!("pytorch-kv-save-{}", Uuid::new_v4().simple());
