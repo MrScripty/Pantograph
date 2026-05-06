@@ -1246,16 +1246,10 @@ impl PyTorchBackend {
     }
 
     fn stream_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
-        let kind = if message.contains("No model loaded") {
-            PyTorchWorkerErrorKind::RuntimeUnavailable
-        } else {
-            PyTorchWorkerErrorKind::GenerationFailed
-        };
-
         PyTorchWorkerFailure {
             request_id: request_id.to_string(),
             error: PyTorchWorkerError {
-                kind,
+                kind: generation_worker_failure_kind(&message),
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_generate_text_stream_failed".to_string()),
             },
@@ -1313,16 +1307,10 @@ impl PyTorchBackend {
         request_id: &str,
         message: String,
     ) -> BackendError {
-        let kind = if message.contains("No model loaded") {
-            PyTorchWorkerErrorKind::RuntimeUnavailable
-        } else {
-            PyTorchWorkerErrorKind::GenerationFailed
-        };
-
         PyTorchWorkerFailure {
             request_id: request_id.to_string(),
             error: PyTorchWorkerError {
-                kind,
+                kind: generation_worker_failure_kind(&message),
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_generate_text_failed".to_string()),
             },
@@ -1337,7 +1325,7 @@ impl PyTorchBackend {
         PyTorchWorkerFailure {
             request_id: request_id.to_string(),
             error: PyTorchWorkerError {
-                kind: PyTorchWorkerErrorKind::GenerationFailed,
+                kind: generation_worker_failure_kind(&message),
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_audio_transcription_failed".to_string()),
             },
@@ -2320,6 +2308,14 @@ impl PyTorchBackend {
         });
 
         Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
+    }
+}
+
+fn generation_worker_failure_kind(message: &str) -> PyTorchWorkerErrorKind {
+    if message.contains("No model loaded") {
+        PyTorchWorkerErrorKind::RuntimeUnavailable
+    } else {
+        PyTorchWorkerErrorKind::GenerationFailed
     }
 }
 

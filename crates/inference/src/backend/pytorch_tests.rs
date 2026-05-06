@@ -2885,6 +2885,21 @@ fn test_pytorch_worker_audio_transcription_transport_error_normalizes_to_backend
 }
 
 #[test]
+fn test_pytorch_worker_audio_transcription_runtime_unavailable_maps_to_not_running() {
+    assert_worker_backend_error(
+        PyTorchBackend::audio_transcription_worker_failure_from_message(
+            "req-audio-no-model",
+            "PyTorch audio transcription failed: No model loaded. Call load_model() first."
+                .to_string(),
+        ),
+        ExpectedBackendErrorVariant::NotRunning,
+        "req-audio-no-model",
+        "pytorch_worker_audio_transcription_failed",
+        "No model loaded",
+    );
+}
+
+#[test]
 fn test_pytorch_audio_transcription_worker_response_decodes() {
     let response =
         PyTorchWorkerResponse::Ok(super::pytorch_worker_contract::PyTorchWorkerSuccess {
