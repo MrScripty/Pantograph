@@ -2423,6 +2423,89 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
     );
 }
 
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let captured_requests = Arc::new(Mutex::new(Vec::new()));
+    let resolver: Arc<dyn ModelDependencyResolver> =
+        Arc::new(CapturingDependencyResolver { captured_requests });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(extension_keys::INFERENCE_LIFECYCLE_SINK, lifecycle_sink);
+    extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
+
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "runtime_hint".to_string(),
+        serde_json::json!("transformers_pytorch"),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("text-generation"),
+    );
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_with_artifact_kind(
+            "pumas://models/tiny-hf",
+            "/models/tiny-hf",
+            "hf_compatible_directory",
+        ),
+    );
+
+    let context = DependencyPreflightLifecycleContext {
+        task_id: "llm-inference-1".to_string(),
+        execution_id: "exec-a".to_string(),
+        task_label: "text_generation".to_string(),
+        backend_key: Some("pytorch".to_string()),
+        model_id: Some("pumas://models/tiny-hf".to_string()),
+    };
+
+    let resolved = enforce_dependency_preflight_with_lifecycle(
+        "llm-inference",
+        &inputs,
+        &extensions,
+        Some(&context),
+    )
+    .await
+    .expect("dependency resolver should allow canonical PyTorch preflight")
+    .expect("resolver should return a model_ref");
+
+    assert_eq!(resolved.engine, "pytorch");
+    assert_eq!(resolved.model_id, "pumas://models/tiny-hf");
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 3);
+    assert!(events.iter().all(|event| {
+        event.phase == InferenceLifecyclePhase::ModelPackageResolution
+            && event.request_id.as_deref() == Some("exec-a:llm-inference-1:text_generation")
+            && event.backend_key.as_deref() == Some("pytorch")
+            && event.runtime_id.as_deref() == Some("pytorch")
+            && event.model_id.as_deref() == Some("pumas://models/tiny-hf")
+            && event.usage.is_none()
+            && event.cache_handle_id.is_none()
+            && event.artifact_refs.is_empty()
+            && event.compatibility_report.is_none()
+            && event.compatibility_issues.is_empty()
+            && event.option_diagnostics.is_empty()
+    }));
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[0].detail, None);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[1].detail, None);
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert_eq!(events[2].detail, None);
+}
+
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 struct CapturingDependencyResolver {
     captured_requests: Arc<Mutex<Vec<ModelDependencyRequest>>>,

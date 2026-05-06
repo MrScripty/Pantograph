@@ -85,6 +85,11 @@ stable public facade and dispatch owner.
   workflow/backend hints win, then resolved package facts may provide factual
   backend/task/model inputs, and only sparse legacy graphs use backend-name
   heuristics.
+- Dependency preflight lifecycle events are bounded model-package-resolution
+  observations. Successful canonical PyTorch preflight emits
+  started/completed/cleanup facts with request, task, backend/runtime, and
+  model identity, but no usage, cache, artifact, compatibility, option, tensor,
+  prompt, or local-path payloads.
 - Retired Ollama-node handling stays in `ollama.rs` only to produce a clear
   migration error for stale saved workflows; it must not call an Ollama daemon
   or become a new inference path.

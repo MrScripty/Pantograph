@@ -2831,7 +2831,11 @@ inference write ledger events directly.
   events around OpenAI-compatible request projection and emits postprocessing
   plus result-projection lifecycle events after successful stream completion,
   while failed or cancelled streams stop at backend-execution terminal/cleanup
-  and legacy raw chat streaming remains unchanged.
+  and legacy raw chat streaming remains unchanged. Node-engine dependency
+  preflight now also emits model-package-resolution started/completed/cleanup
+  lifecycle facts for successful canonical PyTorch preflight with bounded
+  request/task/backend/runtime/model identity and without usage, cache,
+  artifact, compatibility, option, tensor, prompt, or local-path payloads.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -3747,6 +3751,11 @@ Update during implementation:
 - 2026-05-05: Updated node-engine source and core-executor README contracts for
   canonical text/chat `usage` output, documenting bounded token-count metadata
   hygiene and the rule against deriving usage from prompt or generated content.
+- 2026-05-05: Node-engine dependency preflight now emits bounded
+  model-package-resolution lifecycle facts on successful canonical PyTorch
+  preflight, mirroring the existing failure lifecycle shape while keeping
+  scheduler/runtime selection and backend-local payloads out of the producer
+  contract.
 - 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
   threaded terminal text/chat cache-handle ids through typed gateway results,
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`

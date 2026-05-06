@@ -797,6 +797,7 @@ async fn enforce_dependency_preflight_inner(
         }
     }
 
+    record_dependency_preflight_success_lifecycle(extensions, lifecycle_context);
     Ok(resolved)
 }
 
@@ -805,6 +806,49 @@ fn record_dependency_preflight_failure_lifecycle(
     extensions: &ExecutorExtensions,
     lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
     detail: &str,
+) {
+    record_dependency_preflight_lifecycle(
+        extensions,
+        lifecycle_context,
+        InferenceRequestLifecycleEventKind::Failed,
+        Some(detail.to_string()),
+    );
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn record_dependency_preflight_failure_lifecycle(
+    _extensions: &ExecutorExtensions,
+    _lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+    _detail: &str,
+) {
+}
+
+#[cfg(feature = "inference-nodes")]
+fn record_dependency_preflight_success_lifecycle(
+    extensions: &ExecutorExtensions,
+    lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+) {
+    record_dependency_preflight_lifecycle(
+        extensions,
+        lifecycle_context,
+        InferenceRequestLifecycleEventKind::Completed,
+        None,
+    );
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn record_dependency_preflight_success_lifecycle(
+    _extensions: &ExecutorExtensions,
+    _lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+) {
+}
+
+#[cfg(feature = "inference-nodes")]
+fn record_dependency_preflight_lifecycle(
+    extensions: &ExecutorExtensions,
+    lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+    terminal_kind: InferenceRequestLifecycleEventKind,
+    terminal_detail: Option<String>,
 ) {
     let Some(context) = lifecycle_context else {
         return;
@@ -825,10 +869,7 @@ fn record_dependency_preflight_failure_lifecycle(
     let runtime_id = context.backend_key.clone();
     for (kind, detail) in [
         (InferenceRequestLifecycleEventKind::Started, None),
-        (
-            InferenceRequestLifecycleEventKind::Failed,
-            Some(detail.to_string()),
-        ),
+        (terminal_kind, terminal_detail),
         (InferenceRequestLifecycleEventKind::CleanupCompleted, None),
     ] {
         if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
@@ -856,14 +897,6 @@ fn record_dependency_preflight_failure_lifecycle(
             log::warn!("failed to record inference dependency preflight lifecycle event: {error}");
         }
     }
-}
-
-#[cfg(not(feature = "inference-nodes"))]
-fn record_dependency_preflight_failure_lifecycle(
-    _extensions: &ExecutorExtensions,
-    _lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
-    _detail: &str,
-) {
 }
 
 #[cfg(feature = "inference-nodes")]
