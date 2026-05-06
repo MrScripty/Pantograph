@@ -568,8 +568,30 @@ impl PyTorchBackend {
                 )
             })?;
         match response {
-            PyTorchWorkerResponse::Ok(success) => Ok(success.result),
-            PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
+            PyTorchWorkerResponse::Ok(success) => {
+                if success.request_id != request_id {
+                    return Err(Self::load_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker load response request_id mismatch: expected {request_id}, got {}",
+                            success.request_id
+                        ),
+                    ));
+                }
+                Ok(success.result)
+            }
+            PyTorchWorkerResponse::Error(failure) => {
+                if failure.request_id != request_id {
+                    return Err(Self::load_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker load response request_id mismatch: expected {request_id}, got {}",
+                            failure.request_id
+                        ),
+                    ));
+                }
+                Err(failure.into_backend_error())
+            }
         }
     }
 
@@ -585,8 +607,30 @@ impl PyTorchBackend {
                 )
             })?;
         match response {
-            PyTorchWorkerResponse::Ok(_) => Ok(()),
-            PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
+            PyTorchWorkerResponse::Ok(success) => {
+                if success.request_id != request_id {
+                    return Err(Self::stream_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker stream setup response request_id mismatch: expected {request_id}, got {}",
+                            success.request_id
+                        ),
+                    ));
+                }
+                Ok(())
+            }
+            PyTorchWorkerResponse::Error(failure) => {
+                if failure.request_id != request_id {
+                    return Err(Self::stream_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker stream setup response request_id mismatch: expected {request_id}, got {}",
+                            failure.request_id
+                        ),
+                    ));
+                }
+                Err(failure.into_backend_error())
+            }
         }
     }
 
@@ -670,14 +714,36 @@ impl PyTorchBackend {
                 )
             })?;
         match response {
-            PyTorchWorkerResponse::Ok(success) => Ok(AudioTranscriptionResult {
-                text: success.result.text,
-                language: success.result.language,
-                duration_seconds: success.result.duration_seconds,
-                segments: Vec::new(),
-                metadata: serde_json::Value::Null,
-            }),
-            PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
+            PyTorchWorkerResponse::Ok(success) => {
+                if success.request_id != request_id {
+                    return Err(Self::audio_transcription_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker audio_transcription response request_id mismatch: expected {request_id}, got {}",
+                            success.request_id
+                        ),
+                    ));
+                }
+                Ok(AudioTranscriptionResult {
+                    text: success.result.text,
+                    language: success.result.language,
+                    duration_seconds: success.result.duration_seconds,
+                    segments: Vec::new(),
+                    metadata: serde_json::Value::Null,
+                })
+            }
+            PyTorchWorkerResponse::Error(failure) => {
+                if failure.request_id != request_id {
+                    return Err(Self::audio_transcription_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker audio_transcription response request_id mismatch: expected {request_id}, got {}",
+                            failure.request_id
+                        ),
+                    ));
+                }
+                Err(failure.into_backend_error())
+            }
         }
     }
 
@@ -717,8 +783,30 @@ impl PyTorchBackend {
                 )
             })?;
         match response {
-            PyTorchWorkerResponse::Ok(success) => Ok(success.result.text),
-            PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
+            PyTorchWorkerResponse::Ok(success) => {
+                if success.request_id != request_id {
+                    return Err(Self::generate_text_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker generate_text response request_id mismatch: expected {request_id}, got {}",
+                            success.request_id
+                        ),
+                    ));
+                }
+                Ok(success.result.text)
+            }
+            PyTorchWorkerResponse::Error(failure) => {
+                if failure.request_id != request_id {
+                    return Err(Self::generate_text_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker generate_text response request_id mismatch: expected {request_id}, got {}",
+                            failure.request_id
+                        ),
+                    ));
+                }
+                Err(failure.into_backend_error())
+            }
         }
     }
 

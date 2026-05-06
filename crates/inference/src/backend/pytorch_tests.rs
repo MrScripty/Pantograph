@@ -832,6 +832,31 @@ fn test_pytorch_worker_generate_text_success_response_returns_text() {
 }
 
 #[test]
+fn test_pytorch_worker_response_request_id_mismatch_rejects_generate_success() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-generate-other",
+        "result": {
+            "text": "Generated through Transformers."
+        }
+    });
+
+    let error = PyTorchBackend::generate_text_from_worker_response(
+        "req-generate-expected",
+        &response.to_string(),
+    )
+    .expect_err("mismatched generate request id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-generate-expected",
+        "pytorch_worker_generate_text_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
 fn test_pytorch_worker_generate_text_runtime_unavailable_normalizes_to_backend_error() {
     let response = serde_json::json!({
         "status": "error",
@@ -1637,6 +1662,31 @@ fn test_pytorch_worker_load_response_decodes_loaded_model_info() {
 }
 
 #[test]
+fn test_pytorch_worker_response_request_id_mismatch_rejects_load_success() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-load-other",
+        "result": {
+            "model_path": "/models/tiny",
+            "model_type": "text-generation",
+            "device": "cpu"
+        }
+    });
+
+    let error =
+        PyTorchBackend::load_info_from_worker_response("req-load-expected", &response.to_string())
+            .expect_err("mismatched load request id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::StartupFailed,
+        "req-load-expected",
+        "pytorch_worker_model_load_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
 fn test_pytorch_worker_load_error_response_normalizes_to_backend_error() {
     let response = serde_json::json!({
         "status": "error",
@@ -1736,6 +1786,29 @@ fn test_pytorch_worker_stream_setup_error_response_normalizes_to_backend_error()
         }
         other => panic!("expected NotRunning error, got {other:?}"),
     }
+}
+
+#[test]
+fn test_pytorch_worker_response_request_id_mismatch_rejects_stream_setup_success() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-stream-other",
+        "result": {"ready": true}
+    });
+
+    let error = PyTorchBackend::stream_setup_from_worker_response(
+        "req-stream-expected",
+        &response.to_string(),
+    )
+    .expect_err("mismatched stream setup request id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-stream-expected",
+        "pytorch_worker_generate_text_stream_failed",
+        "request_id mismatch",
+    );
 }
 
 #[test]
@@ -1935,6 +2008,58 @@ fn test_pytorch_audio_transcription_worker_response_decodes() {
     assert_eq!(decoded.duration_seconds, Some(1.25_f32));
     assert!(decoded.segments.is_empty());
     assert_eq!(decoded.metadata, serde_json::Value::Null);
+}
+
+#[test]
+fn test_pytorch_worker_response_request_id_mismatch_rejects_audio_transcription_success() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-audio-other",
+        "result": {
+            "text": "hello from audio"
+        }
+    });
+
+    let error = PyTorchBackend::audio_transcription_result_from_worker_response(
+        "req-audio-expected",
+        &response.to_string(),
+    )
+    .expect_err("mismatched audio transcription request id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-audio-expected",
+        "pytorch_worker_audio_transcription_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_response_request_id_mismatch_rejects_structured_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-audio-other",
+        "error": {
+            "kind": "invalid_request",
+            "message": "payload.model_path must be a non-empty string",
+            "canonical_code": "pytorch_worker_invalid_audio_transcription_request"
+        }
+    });
+
+    let error = PyTorchBackend::audio_transcription_result_from_worker_response(
+        "req-audio-expected",
+        &response.to_string(),
+    )
+    .expect_err("mismatched structured error request id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-audio-expected",
+        "pytorch_worker_audio_transcription_failed",
+        "request_id mismatch",
+    );
 }
 
 #[test]

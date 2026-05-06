@@ -139,7 +139,9 @@ fn create_backend() {
   even when the failure is produced by Rust async task boundaries rather than a
   structured worker envelope. Malformed worker response JSON must also route
   through the canonical worker failure helpers instead of returning raw decode
-  errors without request ids.
+  errors without request ids. Typed worker responses must match the
+  caller-generated request id before success or structured error payloads are
+  trusted.
 - Streaming response parsers should use `strip_prefix` for SSE `data:` lines
   so prefix handling stays explicit and warning-clean under the Rust clippy
   audit.

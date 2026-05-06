@@ -1881,7 +1881,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   envelope so missing or malformed `text`, `language`, and `duration_seconds`
   fields, malformed response JSON, and structured Python worker failures route
   through canonical audio worker errors instead of silently returning
-  empty/default transcript data.
+  empty/default transcript data. Typed PyTorch worker response decoders now
+  enforce caller-generated request-id correlation for model load, generation,
+  stream setup, and audio transcription before trusting success or structured
+  error payloads.
   PyTorch audio transcription requests now cross the Rust/Python worker
   boundary through the same versioned envelope contract as load and generation,
   with Rust and torch-free Python projection tests covering operation/version
@@ -3811,6 +3814,11 @@ Update during implementation:
   Rust/Python worker envelope with typed Rust DTOs, torch-free Python projection,
   fixture coverage, required model/audio validation, additive-field tolerance,
   and explicit rejection of unsupported non-null audio `extra_options`.
+- 2026-05-06: Typed PyTorch worker response decoders now reject mismatched
+  response request ids for model load, non-streaming generation, stream setup,
+  and audio transcription through the operation-specific canonical worker
+  failure path, so stale or cross-wired worker responses cannot be trusted as
+  the active request.
 - 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
   threaded terminal text/chat cache-handle ids through typed gateway results,
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`
