@@ -1052,7 +1052,17 @@ Detailed Pumas-side work is split into
   hint, stale package facts, invalid generation config, missing tokenizer, and
   remote MLX/vLLM hint fixtures.
 - [ ] Record any cross-repo DTO or fixture drift in both plans before
-  implementation proceeds.
+  implementation proceeds. Cross-repo review found no active
+  `ResolvedModelPackageFacts`, summary, update-feed, or package-facts fixture
+  wire-shape drift between Pantograph and Pumas. One plan-level drift remains:
+  Pumas-Library still has a proposal-level
+  `docs/plans/feasible-execution-candidates-plan.md` that introduces
+  Pumas-owned feasible-candidate DTOs and possible execution-descriptor
+  candidate summaries, which conflicts with Pantograph's current ownership
+  boundary that derives technical-fit candidates inside Pantograph from Pumas
+  package/dependency facts plus runtime/workflow context. Treat that Pumas
+  plan as superseded or blocked for this inference boundary until the Pumas
+  plan records the same ownership split.
 
 **Verification:**
 - Review [pumas-library-plan.md](pumas-library-plan.md) against the Pumas
