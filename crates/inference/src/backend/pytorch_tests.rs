@@ -2754,6 +2754,52 @@ fn test_pytorch_worker_stream_token_extraction_error_normalizes_to_backend_error
 }
 
 #[test]
+fn test_pytorch_worker_stream_token_accepts_string_chunk() {
+    Python::with_gil(|py| {
+        let token = pyo3::types::PyString::new(py, "hello");
+        let chunk =
+            PyTorchBackend::stream_chunk_from_python_token("req-stream-token", token.as_any())
+                .expect("string stream token should decode");
+
+        assert_eq!(chunk.content.as_deref(), Some("hello"));
+        assert!(!chunk.done);
+    });
+}
+
+#[test]
+fn test_pytorch_worker_stream_token_accepts_replace_dict_chunk() {
+    Python::with_gil(|py| {
+        let token = pyo3::types::PyDict::new(py);
+        token.set_item("mode", "replace").expect("set mode");
+        token.set_item("text", "final text").expect("set text");
+
+        let chunk =
+            PyTorchBackend::stream_chunk_from_python_token("req-stream-token", token.as_any())
+                .expect("dict stream token should decode");
+
+        assert_eq!(chunk.content.as_deref(), Some("final text"));
+        assert!(!chunk.done);
+    });
+}
+
+#[test]
+fn test_pytorch_worker_stream_token_rejects_dict_without_text() {
+    Python::with_gil(|py| {
+        let token = pyo3::types::PyDict::new(py);
+        token.set_item("mode", "replace").expect("set mode");
+
+        match PyTorchBackend::stream_chunk_from_python_token("req-stream-token", token.as_any()) {
+            Err(BackendError::Inference(message)) => {
+                assert!(message.contains("pytorch_worker_generate_text_stream_failed"));
+                assert!(message.contains("req-stream-token"));
+                assert!(message.contains("missing text"));
+            }
+            other => panic!("expected Inference error, got {other:?}"),
+        }
+    });
+}
+
+#[test]
 fn test_pytorch_worker_stream_runtime_unavailable_normalizes_to_not_running() {
     match PyTorchBackend::stream_worker_failure_from_message(
         "req-stream-no-model",

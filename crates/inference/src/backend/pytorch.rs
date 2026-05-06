@@ -1263,6 +1263,52 @@ impl PyTorchBackend {
         .into_backend_error()
     }
 
+    fn stream_chunk_from_python_token(
+        request_id: &str,
+        token_obj: &Bound<'_, PyAny>,
+    ) -> Result<ChatChunk, BackendError> {
+        if let Ok(token) = token_obj.extract::<String>() {
+            return Ok(ChatChunk {
+                content: Some(token),
+                done: false,
+                usage: None,
+                cache_handle_id: None,
+            });
+        }
+
+        if let Ok(dict) = token_obj.downcast::<pyo3::types::PyDict>() {
+            let text_value = dict.get_item("text").map_err(|error| {
+                Self::stream_worker_failure_from_message(
+                    request_id,
+                    format!("Token text lookup failed: {}", error),
+                )
+            })?;
+            let Some(text_value) = text_value else {
+                return Err(Self::stream_worker_failure_from_message(
+                    request_id,
+                    "Token extraction failed: stream dictionary was missing text".to_string(),
+                ));
+            };
+            let text = text_value.extract::<String>().map_err(|error| {
+                Self::stream_worker_failure_from_message(
+                    request_id,
+                    format!("Token text extraction failed: {}", error),
+                )
+            })?;
+            return Ok(ChatChunk {
+                content: Some(text),
+                done: false,
+                usage: None,
+                cache_handle_id: None,
+            });
+        }
+
+        Err(Self::stream_worker_failure_from_message(
+            request_id,
+            "Token extraction failed: expected string or stream dictionary".to_string(),
+        ))
+    }
+
     fn generate_text_worker_failure_from_message(
         request_id: &str,
         message: String,
@@ -2238,30 +2284,20 @@ impl PyTorchBackend {
 
                 for item in iter {
                     match item {
-                        Ok(token_obj) => match token_obj.extract::<String>() {
-                            Ok(token) => {
-                                if tx
-                                    .blocking_send(Ok(ChatChunk {
-                                        content: Some(token),
-                                        done: false,
-                                        usage: None,
-                                        cache_handle_id: None,
-                                    }))
-                                    .is_err()
+                        Ok(token_obj) => {
+                            let chunk =
+                                match Self::stream_chunk_from_python_token(&request_id, &token_obj)
                                 {
-                                    return;
-                                }
-                            }
-                            Err(e) => {
-                                let _ = tx.blocking_send(Err(
-                                    Self::stream_worker_failure_from_message(
-                                        &request_id,
-                                        format!("Token extraction failed: {}", e),
-                                    ),
-                                ));
+                                    Ok(chunk) => chunk,
+                                    Err(error) => {
+                                        let _ = tx.blocking_send(Err(error));
+                                        return;
+                                    }
+                                };
+                            if tx.blocking_send(Ok(chunk)).is_err() {
                                 return;
                             }
-                        },
+                        }
                         Err(e) => {
                             let _ =
                                 tx.blocking_send(Err(Self::stream_worker_failure_from_message(
