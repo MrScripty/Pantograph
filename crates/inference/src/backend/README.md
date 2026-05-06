@@ -133,6 +133,9 @@ fn create_backend() {
   backend-local KV checkpoint handles. Backends should emit stable handle ids
   only, never KV bytes, prompt text, generated text, tensors, temp paths, or
   scheduler/runtime reuse policy.
+- PyTorch worker errors must preserve request ids and canonical worker codes
+  while sanitizing traceback frames and local path tokens before they become
+  `BackendError` messages.
 - Streaming response parsers should use `strip_prefix` for SSE `data:` lines
   so prefix handling stays explicit and warning-clean under the Rust clippy
   audit.

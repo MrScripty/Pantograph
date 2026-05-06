@@ -20,10 +20,11 @@ use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use self::pytorch_worker_contract::{
-    PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchTransformersLoadRequest,
-    PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy,
-    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
-    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    normalize_worker_error_message, PyTorchGenerateTextRequest, PyTorchGenerateTextResult,
+    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
+    PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope, PyTorchWorkerError,
+    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -135,7 +136,7 @@ fn kv_worker_failure_from_message(
         request_id: request_id.to_string(),
         error: PyTorchWorkerError {
             kind: PyTorchWorkerErrorKind::GenerationFailed,
-            message: normalize_worker_transport_error_message(&message),
+            message: normalize_worker_error_message(&message, "Python worker transport failed"),
             canonical_code: Some(canonical_code.to_string()),
         },
     }
@@ -580,7 +581,7 @@ impl PyTorchBackend {
             request_id: request_id.to_string(),
             error: PyTorchWorkerError {
                 kind: PyTorchWorkerErrorKind::ModelLoadFailed,
-                message: normalize_worker_transport_error_message(&message),
+                message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_model_load_failed".to_string()),
             },
         }
@@ -598,7 +599,7 @@ impl PyTorchBackend {
             request_id: request_id.to_string(),
             error: PyTorchWorkerError {
                 kind,
-                message: normalize_worker_transport_error_message(&message),
+                message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_generate_text_stream_failed".to_string()),
             },
         }
@@ -619,7 +620,7 @@ impl PyTorchBackend {
             request_id: request_id.to_string(),
             error: PyTorchWorkerError {
                 kind,
-                message: normalize_worker_transport_error_message(&message),
+                message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_generate_text_failed".to_string()),
             },
         }
@@ -634,7 +635,7 @@ impl PyTorchBackend {
             request_id: request_id.to_string(),
             error: PyTorchWorkerError {
                 kind: PyTorchWorkerErrorKind::GenerationFailed,
-                message: normalize_worker_transport_error_message(&message),
+                message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_audio_transcription_failed".to_string()),
             },
         }
@@ -646,7 +647,7 @@ impl PyTorchBackend {
             request_id: request_id.to_string(),
             error: PyTorchWorkerError {
                 kind: PyTorchWorkerErrorKind::GenerationFailed,
-                message: normalize_worker_transport_error_message(&message),
+                message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_unload_failed".to_string()),
             },
         }
@@ -658,7 +659,7 @@ impl PyTorchBackend {
             request_id: request_id.to_string(),
             error: PyTorchWorkerError {
                 kind: PyTorchWorkerErrorKind::ModelLoadFailed,
-                message: normalize_worker_transport_error_message(&message),
+                message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_init_failed".to_string()),
             },
         }
@@ -1873,79 +1874,6 @@ fn extract_system_prompt(request: &serde_json::Value) -> Option<String> {
                 .and_then(|m| m.get("content").and_then(|c| c.as_str()))
                 .map(|s| s.to_string())
         })
-}
-
-fn normalize_worker_transport_error_message(message: &str) -> String {
-    const MAX_PARTS: usize = 6;
-    const MAX_CHARS: usize = 512;
-
-    let mut parts = Vec::new();
-    for line in message.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || is_python_traceback_frame(line, trimmed) {
-            continue;
-        }
-        parts.push(redact_local_path_tokens(trimmed));
-        if parts.len() >= MAX_PARTS {
-            break;
-        }
-    }
-
-    let normalized = if parts.is_empty() {
-        "Python worker transport failed".to_string()
-    } else {
-        parts.join(" | ")
-    };
-    truncate_chars(normalized, MAX_CHARS)
-}
-
-fn is_python_traceback_frame(raw_line: &str, trimmed: &str) -> bool {
-    raw_line.starts_with(' ')
-        || raw_line.starts_with('\t')
-        || trimmed.starts_with("Traceback (most recent call last):")
-        || trimmed.starts_with("File \"")
-        || trimmed.starts_with("File '")
-        || trimmed.starts_with('^')
-        || trimmed.starts_with("During handling of the above exception")
-        || trimmed.starts_with("The above exception was the direct cause")
-}
-
-fn redact_local_path_tokens(line: &str) -> String {
-    line.split_whitespace()
-        .map(|token| {
-            if token_contains_local_path(token) {
-                "[local-path]"
-            } else {
-                token
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn token_contains_local_path(token: &str) -> bool {
-    let trimmed = token.trim_matches(|ch: char| {
-        matches!(
-            ch,
-            '"' | '\'' | '`' | ',' | ':' | ';' | ')' | '(' | '[' | ']' | '{' | '}'
-        )
-    });
-    trimmed.starts_with('/')
-        || trimmed.starts_with("~/")
-        || trimmed.starts_with("file://")
-        || (trimmed.len() > 2
-            && trimmed.as_bytes()[1] == b':'
-            && trimmed.as_bytes()[0].is_ascii_alphabetic()
-            && trimmed.as_bytes()[2] == b'\\')
-}
-
-fn truncate_chars(value: String, max_chars: usize) -> String {
-    if value.chars().count() <= max_chars {
-        return value;
-    }
-    let mut truncated = value.chars().take(max_chars).collect::<String>();
-    truncated.push_str("...");
-    truncated
 }
 
 #[cfg(test)]

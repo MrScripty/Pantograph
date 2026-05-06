@@ -1866,6 +1866,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   transport exception messages now also strip Python traceback frames and
   redact local path tokens before becoming backend errors, while retaining
   request ids, canonical worker codes, and bounded exception summaries.
+  Structured PyTorch worker error responses now apply the same traceback-frame
+  stripping, local-path redaction, and bounded summary rules before converting
+  to `BackendError`, closing the remaining path where Python worker
+  `error.message` text could carry traceback frames or local paths.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -3781,6 +3785,10 @@ Update during implementation:
 - 2026-05-05: Updated inference and node-engine source READMEs for the
   package-facts model identity fallback and dependency-input context
   propagation contracts.
+- 2026-05-05: Structured PyTorch worker error responses now sanitize traceback
+  frames and local path tokens before `PyTorchWorkerFailure::into_backend_error`
+  formats the backend error, matching the existing transport-exception
+  hygiene path.
 - 2026-05-05: Embedded-runtime KV-cache workflow-event sinks now surface
   durable diagnostic append failures as `diagnostics_unavailable` event-sink
   errors after forwarding the original workflow event, and the plan records the

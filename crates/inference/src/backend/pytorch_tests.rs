@@ -4,8 +4,8 @@ use std::ffi::CString;
 use super::pytorch_worker_contract::{
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchTransformersLoadRequest,
     PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
-    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
-    PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
+    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -1211,6 +1211,38 @@ fn test_pytorch_worker_failure_normalizes_to_backend_error() {
             assert!(message.contains("trust policy is closed"));
         }
         other => panic!("expected Config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_structured_errors_strip_tracebacks_and_local_paths() {
+    let failure = PyTorchWorkerFailure {
+        request_id: "req-worker-error-hygiene".to_string(),
+        error: PyTorchWorkerError {
+            kind: PyTorchWorkerErrorKind::GenerationFailed,
+            canonical_code: Some("pytorch_worker_generation_failed".to_string()),
+            message: r#"Generation failed:
+Traceback (most recent call last):
+  File "/home/jeremy/private/model/worker.py", line 12, in generate
+    raise RuntimeError("SECRET_PROMPT")
+RuntimeError: failed while reading /home/jeremy/private/model/config.json
+"#
+            .to_string(),
+        },
+    };
+
+    match failure.into_backend_error() {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_generation_failed"));
+            assert!(message.contains("req-worker-error-hygiene"));
+            assert!(message.contains("Generation failed"));
+            assert!(message.contains("RuntimeError: failed while reading [local-path]"));
+            assert!(!message.contains("Traceback"));
+            assert!(!message.contains("/home/jeremy/private"));
+            assert!(!message.contains("worker.py"));
+            assert!(!message.contains("SECRET_PROMPT"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
     }
 }
 

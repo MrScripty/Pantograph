@@ -225,11 +225,87 @@ pub(super) struct PyTorchWorkerError {
 
 impl PyTorchWorkerError {
     fn backend_message(&self, request_id: &str) -> String {
+        let message = normalize_worker_error_message(&self.message, "Python worker failed");
         match self.canonical_code.as_deref() {
-            Some(code) => format!("PyTorch worker {code} for {request_id}: {}", self.message),
-            None => format!("PyTorch worker error for {request_id}: {}", self.message),
+            Some(code) => format!("PyTorch worker {code} for {request_id}: {message}"),
+            None => format!("PyTorch worker error for {request_id}: {message}"),
         }
     }
+}
+
+pub(super) fn normalize_worker_error_message(message: &str, fallback: &str) -> String {
+    const MAX_PARTS: usize = 6;
+    const MAX_CHARS: usize = 512;
+
+    let mut parts = Vec::new();
+    for line in message.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || is_python_traceback_frame(line, trimmed) {
+            continue;
+        }
+        parts.push(redact_local_path_tokens(trimmed));
+        if parts.len() >= MAX_PARTS {
+            break;
+        }
+    }
+
+    let normalized = if parts.is_empty() {
+        fallback.to_string()
+    } else {
+        parts.join(" | ")
+    };
+    truncate_chars(normalized, MAX_CHARS)
+}
+
+fn is_python_traceback_frame(raw_line: &str, trimmed: &str) -> bool {
+    raw_line.starts_with(' ')
+        || raw_line.starts_with('\t')
+        || trimmed.starts_with("Traceback (most recent call last):")
+        || trimmed.starts_with("File \"")
+        || trimmed.starts_with("File '")
+        || trimmed.starts_with('^')
+        || trimmed.starts_with("During handling of the above exception")
+        || trimmed.starts_with("The above exception was the direct cause")
+}
+
+fn redact_local_path_tokens(line: &str) -> String {
+    line.split_whitespace()
+        .map(|token| {
+            if token_contains_local_path(token) {
+                "[local-path]"
+            } else {
+                token
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn token_contains_local_path(token: &str) -> bool {
+    let trimmed = token.trim_matches(|ch: char| {
+        matches!(
+            ch,
+            '"' | '\'' | '`' | ',' | ':' | ';' | ')' | '(' | '[' | ']' | '{' | '}'
+        )
+    });
+    trimmed.starts_with('/')
+        || trimmed.starts_with("~/")
+        || trimmed.starts_with("file://")
+        || trimmed.contains("\\\\")
+        || (trimmed.len() > 2
+            && trimmed.as_bytes()[1] == b':'
+            && trimmed.as_bytes()[0].is_ascii_alphabetic()
+            && (trimmed.as_bytes()[2] == b'\\' || trimmed.as_bytes()[2] == b'/'))
+}
+
+fn truncate_chars(value: String, max_chars: usize) -> String {
+    if value.chars().count() <= max_chars {
+        return value;
+    }
+
+    let mut truncated = value.chars().take(max_chars).collect::<String>();
+    truncated.push_str("...");
+    truncated
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
