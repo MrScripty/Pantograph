@@ -1073,8 +1073,10 @@ impl InferenceGateway {
         );
 
         let result = self.embeddings(texts, model).await;
-        record_non_streaming_lifecycle_result(
+        let usage = embedding_usage_from_backend_results(&result);
+        record_non_streaming_lifecycle_phase_result_with_references(
             lifecycle_sink.as_ref(),
+            InferenceLifecyclePhase::BackendExecution,
             request_id,
             Some("embedding".to_string()),
             backend_key,
@@ -1083,6 +1085,13 @@ impl InferenceGateway {
             selected_device_id,
             model_id,
             &result,
+            Vec::new(),
+            None,
+            Vec::new(),
+            usage,
+            None,
+            Vec::new(),
+            None,
         );
         result
     }
@@ -2893,6 +2902,30 @@ fn embedding_usage_from_results(results: &[InferenceEmbeddingResult]) -> Option<
             saw_count = true;
             total = total.saturating_add(token_count as u64);
         }
+    }
+
+    if !saw_count {
+        return None;
+    }
+
+    let total = total.min(u64::from(u32::MAX)) as u32;
+    Some(InferenceUsage {
+        prompt_tokens: Some(total),
+        completion_tokens: None,
+        total_tokens: Some(total),
+    })
+}
+
+fn embedding_usage_from_backend_results(
+    result: &Result<Vec<EmbeddingResult>, GatewayError>,
+) -> Option<InferenceUsage> {
+    let embeddings = result.as_ref().ok()?;
+    let mut saw_count = false;
+    let mut total = 0u64;
+
+    for embedding in embeddings {
+        saw_count = true;
+        total = total.saturating_add(embedding.token_count as u64);
     }
 
     if !saw_count {

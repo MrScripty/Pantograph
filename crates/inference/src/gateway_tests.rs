@@ -1702,6 +1702,45 @@ async fn test_lifecycle_events_do_not_report_auto_as_selected_device() {
 }
 
 #[tokio::test]
+async fn test_embeddings_with_lifecycle_records_token_usage_without_payloads() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway
+        .start(&BackendConfig::default())
+        .await
+        .expect("gateway should start");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    gateway
+        .embeddings_with_lifecycle(
+            vec!["alpha beta".to_string()],
+            "mock-embedding",
+            Some("embedding-usage".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("embedding request should execute");
+
+    let events = sink.events();
+    let completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion event");
+    let usage = completed.usage.as_ref().expect("embedding usage");
+    assert_eq!(usage.prompt_tokens, Some(2));
+    assert_eq!(usage.completion_tokens, None);
+    assert_eq!(usage.total_tokens, Some(2));
+
+    let serialized = serde_json::to_string(completed).expect("event should serialize");
+    assert!(!serialized.contains("alpha beta"));
+    assert!(!serialized.contains("[10.0]"));
+    assert!(!serialized.contains("vector"));
+}
+
+#[tokio::test]
 async fn test_mode_info_runtime_facts_report_explicit_resolved_device() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;

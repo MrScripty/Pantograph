@@ -3003,6 +3003,10 @@ inference write ledger events directly.
   backend-execution lifecycle events and durable inference diagnostics while
   keeping encoded audio bytes, prompt text, generated content, local paths,
   `file://` URLs, and scheduler/runtime selection state out of the payload.
+  Non-typed `embeddings_with_lifecycle` now also projects bounded token usage
+  from backend `EmbeddingResult.token_count` values onto the backend-execution
+  lifecycle completion event without serializing input text or embedding
+  vectors.
 - [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
