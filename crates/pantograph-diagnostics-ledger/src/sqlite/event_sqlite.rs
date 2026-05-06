@@ -278,6 +278,7 @@ pub(super) fn drain_scheduler_timeline_projection(
                     'run.terminal',
                     'run.snapshot_accepted',
                     'node.execution_status',
+                    'inference.execution_diagnostic_observed',
                     'diagnostic.error_occurred'
                )
              ORDER BY event_seq
@@ -1667,6 +1668,82 @@ fn scheduler_timeline_record_from_event(
             };
             (summary, detail)
         }
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            let phase = payload.lifecycle_phase.as_deref().unwrap_or("diagnostic");
+            let event_kind = payload
+                .lifecycle_event_kind
+                .as_deref()
+                .unwrap_or("observed");
+            let mut details = vec![format!("task {}", payload.task_id)];
+            if let Some(duration_ms) = payload.duration_ms {
+                details.push(format!("{duration_ms} ms"));
+            }
+            if let Some(backend_family) = payload.selected_backend_family.as_deref() {
+                details.push(format!("backend family {backend_family}"));
+            }
+            if let Some(backend_key) = payload.selected_backend_key.as_deref() {
+                details.push(format!("selected backend {backend_key}"));
+            }
+            if let Some(device_id) = payload.selected_device_id.as_deref() {
+                details.push(format!("selected device {device_id}"));
+            }
+            if let Some(network_node_id) = payload.selected_network_node_id.as_deref() {
+                details.push(format!("selected network node {network_node_id}"));
+            }
+            if let Some(artifact_kind) = payload.resolved_artifact_kind.as_deref() {
+                details.push(format!("artifact kind {artifact_kind}"));
+            }
+            if let Some(report) = payload.compatibility_report.as_ref() {
+                details.push(format!(
+                    "compatibility {} ({})",
+                    report.status,
+                    if report.compatible {
+                        "compatible"
+                    } else {
+                        "not compatible"
+                    }
+                ));
+            }
+            if payload.compatibility_issue_count > 0 {
+                details.push(format!(
+                    "compatibility issues {}",
+                    payload.compatibility_issue_count
+                ));
+            }
+            let option_summary =
+                inference_option_support_timeline_detail(&payload.option_support_counts);
+            if let Some(option_summary) = option_summary {
+                details.push(option_summary);
+            }
+            if let Some(usage) = payload.usage.as_ref() {
+                let mut usage_parts = Vec::new();
+                if let Some(prompt_tokens) = usage.prompt_tokens {
+                    usage_parts.push(format!("prompt {prompt_tokens}"));
+                }
+                if let Some(completion_tokens) = usage.completion_tokens {
+                    usage_parts.push(format!("completion {completion_tokens}"));
+                }
+                if let Some(total_tokens) = usage.total_tokens {
+                    usage_parts.push(format!("total {total_tokens}"));
+                }
+                if !usage_parts.is_empty() {
+                    details.push(format!("usage {}", usage_parts.join(", ")));
+                }
+            }
+            if payload.cache_handle_id.is_some() {
+                details.push("cache handle observed".to_string());
+            }
+            if !payload.artifact_refs.is_empty() {
+                details.push(format!("artifact refs {}", payload.artifact_refs.len()));
+            }
+            if let Some(kv_cache) = payload.kv_cache.as_ref() {
+                details.push(format!("kv cache {} {}", kv_cache.action, kv_cache.outcome));
+            }
+            (
+                format!("inference {phase} {event_kind}"),
+                Some(details.join("; ")),
+            )
+        }
         DiagnosticEventPayload::DiagnosticErrorOccurred(ref payload) => {
             let mut details = vec![
                 format!("phase {}", payload.phase),
@@ -1710,6 +1787,29 @@ fn scheduler_timeline_record_from_event(
         related_event_ids: error_fields.related_event_ids,
         payload_json: event.payload_json.clone(),
     }))
+}
+
+fn inference_option_support_timeline_detail(
+    counts: &crate::event::InferenceOptionSupportCounts,
+) -> Option<String> {
+    let parts = [
+        ("honored", counts.honored),
+        ("mapped", counts.mapped),
+        ("defaulted", counts.defaulted),
+        ("ignored", counts.ignored),
+        ("unsupported", counts.unsupported),
+        ("rejected", counts.rejected),
+        ("conflict", counts.conflict),
+        ("model unavailable", counts.model_unavailable),
+        ("backend unavailable", counts.backend_unavailable),
+        ("requires model support", counts.requires_model_support),
+        ("requires backend support", counts.requires_backend_support),
+    ]
+    .into_iter()
+    .filter_map(|(label, count)| (count > 0).then(|| format!("{label} {count}")))
+    .collect::<Vec<_>>();
+
+    (!parts.is_empty()).then(|| format!("option support {}", parts.join(", ")))
 }
 
 struct SchedulerTimelineErrorFields {

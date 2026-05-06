@@ -1073,6 +1073,52 @@ fn diagnostic_event_ledger_appends_inference_execution_diagnostic_summary() {
 }
 
 #[test]
+fn scheduler_timeline_projection_includes_inference_execution_diagnostics() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_inference_execution_diagnostic_event())
+        .expect("inference diagnostic event");
+
+    ledger
+        .drain_scheduler_timeline_projection(500)
+        .expect("scheduler timeline projection drains");
+    let timeline = ledger
+        .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            ..SchedulerTimelineProjectionQuery::default()
+        })
+        .expect("scheduler timeline projection loads");
+
+    assert_eq!(timeline.len(), 1);
+    let record = &timeline[0];
+    assert_eq!(
+        record.event_kind,
+        DiagnosticEventKind::InferenceExecutionDiagnosticObserved
+    );
+    assert_eq!(record.summary, "inference task_validation completed");
+    let detail = record.detail.as_deref().expect("timeline detail");
+    assert!(detail.contains("task text_generation"));
+    assert!(detail.contains("75 ms"));
+    assert!(detail.contains("selected backend pytorch"));
+    assert!(detail.contains("selected device cuda:0"));
+    assert!(detail.contains("artifact kind gguf"));
+    assert!(detail.contains("compatibility rejected (not compatible)"));
+    assert!(detail.contains("option support mapped 1, unsupported 1"));
+    assert!(detail.contains("usage prompt 8, completion 5, total 13"));
+    assert!(detail.contains("cache handle observed"));
+    assert!(detail.contains("artifact refs 1"));
+    assert!(detail.contains("kv cache restore_input hit"));
+    assert_eq!(
+        record
+            .payload_json
+            .contains("generated text should not appear"),
+        false
+    );
+}
+
+#[test]
 fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger

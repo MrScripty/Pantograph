@@ -2927,7 +2927,11 @@ inference write ledger events directly.
   lifecycle-to-ledger projection now treats `resolved_artifact_kind` as bounded
   label metadata: label-shaped values are persistable even without other
   payload metadata, while path-shaped or unsafe values are dropped before
-  durable diagnostics.
+  durable diagnostics. Diagnostics-ledger scheduler timeline projection now
+  also drains `inference.execution_diagnostic_observed` rows and formats
+  bounded lifecycle/task/backend/device/artifact/compatibility/option/usage/
+  cache-reference summaries without promoting prompt/result bodies, tensors,
+  raw media, Python kwargs, CLI flags, or local paths into timeline detail.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and

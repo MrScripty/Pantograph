@@ -163,6 +163,13 @@ with a ledger/storage failure.
 - Scheduler timeline projection may include `run.*` lifecycle and
   `node.execution_status` rows for audit visibility, but those rows remain
   their native lifecycle facts and must not be re-emitted as scheduler events.
+- Scheduler timeline projection may also include
+  `inference.execution_diagnostic_observed` rows for bounded inference
+  lifecycle visibility. Timeline summaries may use typed task, backend,
+  device, artifact-kind, compatibility, option-support, usage-count,
+  cache-handle, artifact-ref count, and KV-cache action/outcome facts, but must
+  not expose prompt/result bodies, tensors, raw media, Python kwargs, CLI flags,
+  or local paths.
 - Scheduler estimate and model lifecycle events carry typed model/cache state
   where known. Timeline projection details may include that state, but callers
   should still treat estimate facts and observed lifecycle facts as separate
