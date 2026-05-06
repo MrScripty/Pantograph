@@ -3914,6 +3914,10 @@ Update during implementation:
   common generation path onto the inference-owned `generate_text` worker
   envelope while retaining the direct worker path for custom kwargs until they
   are modeled as typed generation options.
+- 2026-05-06: Node-engine now also routes single-option `top_k` PyTorch
+  generation settings through the typed inference path by exposing
+  `PyTorchBackend::generate_with_top_k`; mixed or unsupported legacy kwargs
+  still use the compatibility fallback.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

@@ -2541,6 +2541,30 @@ fn test_dependency_preflight_lifecycle_context_reads_resolved_artifact_kind() {
     );
 }
 
+#[cfg(feature = "pytorch-nodes")]
+#[test]
+fn test_pytorch_typed_generation_top_k_accepts_empty_settings() {
+    let settings = HashMap::new();
+    assert_eq!(pytorch_typed_generation_top_k(&settings), Some(None));
+}
+
+#[cfg(feature = "pytorch-nodes")]
+#[test]
+fn test_pytorch_typed_generation_top_k_accepts_single_top_k() {
+    let mut settings = HashMap::new();
+    settings.insert("top_k".to_string(), serde_json::json!(40));
+    assert_eq!(pytorch_typed_generation_top_k(&settings), Some(Some(40)));
+}
+
+#[cfg(feature = "pytorch-nodes")]
+#[test]
+fn test_pytorch_typed_generation_top_k_rejects_legacy_custom_kwargs() {
+    let mut settings = HashMap::new();
+    settings.insert("top_k".to_string(), serde_json::json!(40));
+    settings.insert("block_length".to_string(), serde_json::json!(32));
+    assert_eq!(pytorch_typed_generation_top_k(&settings), None);
+}
+
 #[cfg(feature = "inference-nodes")]
 #[test]
 fn test_resolved_artifact_kind_prefers_package_facts_before_model_source() {

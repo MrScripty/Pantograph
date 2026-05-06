@@ -99,6 +99,22 @@ async fn pytorch_model_needs_load(model_path: &str) -> Result<bool> {
     }
 }
 
+pub(crate) fn pytorch_typed_generation_top_k(
+    extra_settings: &HashMap<String, serde_json::Value>,
+) -> Option<Option<u32>> {
+    if extra_settings.is_empty() {
+        return Some(None);
+    }
+    if extra_settings.len() != 1 {
+        return None;
+    }
+    let top_k = extra_settings
+        .get("top_k")?
+        .as_u64()
+        .and_then(|value| u32::try_from(value).ok())?;
+    Some(Some(top_k))
+}
+
 pub(crate) async fn execute_pytorch_inference(
     inputs: &HashMap<String, serde_json::Value>,
     task_id: &str,
@@ -338,9 +354,9 @@ pub(crate) async fn execute_pytorch_inference(
         let mpj = masked_prompt_json.clone();
         let extra = extra_settings;
 
-        if extra.is_empty() {
+        if let Some(top_k) = pytorch_typed_generation_top_k(&extra) {
             inference::backend::pytorch::PyTorchBackend::new()
-                .generate(p, sp, max_tokens, temperature, top_p, mpj)
+                .generate_with_top_k(p, sp, max_tokens, temperature, top_p, top_k, mpj)
                 .await
                 .map_err(|error| {
                     NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", error))

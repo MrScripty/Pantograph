@@ -120,9 +120,10 @@ stable public facade and dispatch owner.
   still-migrating streaming and custom-kwargs generation calls in
   `pytorch_nodes.rs`.
 - PyTorch non-streaming text generation without legacy custom
-  `inference_settings` must use `PyTorchBackend::generate`; the direct worker
-  generation path is retained only for custom-kwargs compatibility until those
-  settings are represented by typed generation options.
+  `inference_settings`, or with only typed `top_k`, must use
+  `PyTorchBackend::generate_with_top_k`; the direct worker generation path is
+  retained only for custom-kwargs compatibility until those settings are
+  represented by typed generation options.
 - Python-worker handlers should pass worker parameters directly into their
   blocking closures and avoid redundant rebinding so the feature-gated path
   stays clippy-clean without changing runtime behavior.

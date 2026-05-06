@@ -2048,7 +2048,7 @@ impl PyTorchBackend {
         .await
     }
 
-    async fn generate_with_top_k(
+    pub async fn generate_with_top_k(
         &self,
         prompt: String,
         system_prompt: Option<String>,
