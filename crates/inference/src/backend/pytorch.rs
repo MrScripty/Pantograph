@@ -2182,7 +2182,7 @@ impl PyTorchBackend {
         )
     }
 
-    fn generate_stream_with_top_k(
+    pub fn generate_stream_with_top_k(
         &self,
         prompt: String,
         system_prompt: Option<String>,

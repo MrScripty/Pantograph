@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use futures_util::StreamExt;
+
 use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
 use crate::extensions::ExecutorExtensions;
@@ -229,69 +231,91 @@ pub(crate) async fn execute_pytorch_inference(
         let mpj = masked_prompt_json.clone();
         let extra = extra_settings.clone();
 
-        tokio::task::spawn_blocking(move || {
-            pyo3::Python::with_gil(|py| {
-                use pyo3::types::{PyAnyMethods, PyDictMethods, PyTypeMethods};
-
-                if let Err(e) = ensure_torch_worker_initialised(py) {
-                    let _ = tx.blocking_send(Err(e));
-                    return;
+        if let Some(top_k) = pytorch_typed_generation_top_k(&extra) {
+            let mut stream = inference::backend::pytorch::PyTorchBackend::new()
+                .generate_stream_with_top_k(p, sp, max_tokens, temperature, top_p, top_k, mpj);
+            let mut full_response = String::new();
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = chunk_result.map_err(|error| {
+                    NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", error))
+                })?;
+                if let Some(text) = chunk.content.filter(|text| !text.is_empty()) {
+                    full_response.push_str(&text);
+                    let _ = sink.send(crate::WorkflowEvent::task_stream(
+                        task_id,
+                        execution_id,
+                        "stream",
+                        serde_json::json!({"mode": "append", "text": text}),
+                    ));
                 }
-                let worker = match py.import("pantograph_torch_worker") {
-                    Ok(w) => w,
-                    Err(e) => {
-                        let _ = tx.blocking_send(Err(format!("Failed to get worker: {}", e)));
+            }
+            full_response
+        } else {
+            tokio::task::spawn_blocking(move || {
+                pyo3::Python::with_gil(|py| {
+                    use pyo3::types::{PyAnyMethods, PyDictMethods, PyTypeMethods};
+
+                    if let Err(e) = ensure_torch_worker_initialised(py) {
+                        let _ = tx.blocking_send(Err(e));
                         return;
                     }
-                };
+                    let worker = match py.import("pantograph_torch_worker") {
+                        Ok(w) => w,
+                        Err(e) => {
+                            let _ = tx.blocking_send(Err(format!("Failed to get worker: {}", e)));
+                            return;
+                        }
+                    };
 
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("prompt", &p).unwrap();
-                if let Some(ref sys) = sp {
-                    kwargs.set_item("system_prompt", sys).unwrap();
-                }
-                kwargs.set_item("max_tokens", max_tokens).unwrap();
-                kwargs.set_item("temperature", temperature).unwrap();
-                kwargs.set_item("top_p", top_p).unwrap();
-                if let Some(ref mpj_val) = mpj {
-                    kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
-                }
-
-                // Forward model-specific inference settings as kwargs
-                for (key, value) in &extra {
-                    if let Some(n) = value.as_i64() {
-                        kwargs.set_item(key.as_str(), n).unwrap();
-                    } else if let Some(n) = value.as_f64() {
-                        kwargs.set_item(key.as_str(), n).unwrap();
-                    } else if let Some(s) = value.as_str() {
-                        kwargs.set_item(key.as_str(), s).unwrap();
-                    } else if let Some(b) = value.as_bool() {
-                        kwargs.set_item(key.as_str(), b).unwrap();
+                    let kwargs = pyo3::types::PyDict::new(py);
+                    kwargs.set_item("prompt", &p).unwrap();
+                    if let Some(ref sys) = sp {
+                        kwargs.set_item("system_prompt", sys).unwrap();
                     }
-                }
-
-                let generator = match worker.call_method("generate_tokens", (), Some(&kwargs)) {
-                    Ok(g) => g,
-                    Err(e) => {
-                        let _ = tx.blocking_send(Err(format!("Failed to create generator: {}", e)));
-                        return;
+                    kwargs.set_item("max_tokens", max_tokens).unwrap();
+                    kwargs.set_item("temperature", temperature).unwrap();
+                    kwargs.set_item("top_p", top_p).unwrap();
+                    if let Some(ref mpj_val) = mpj {
+                        kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
                     }
-                };
 
-                let iter = match generator.try_iter() {
-                    Ok(it) => it,
-                    Err(e) => {
-                        let _ = tx.blocking_send(Err(format!("Generator not iterable: {}", e)));
-                        return;
+                    // Forward model-specific inference settings as kwargs
+                    for (key, value) in &extra {
+                        if let Some(n) = value.as_i64() {
+                            kwargs.set_item(key.as_str(), n).unwrap();
+                        } else if let Some(n) = value.as_f64() {
+                            kwargs.set_item(key.as_str(), n).unwrap();
+                        } else if let Some(s) = value.as_str() {
+                            kwargs.set_item(key.as_str(), s).unwrap();
+                        } else if let Some(b) = value.as_bool() {
+                            kwargs.set_item(key.as_str(), b).unwrap();
+                        }
                     }
-                };
 
-                for item in iter {
-                    match item {
-                        Ok(token_obj) => {
-                            // Try dict first: {"mode": "append"|"replace", "text": "..."}
-                            let result =
-                                if let Ok(dict) = token_obj.downcast::<pyo3::types::PyDict>() {
+                    let generator = match worker.call_method("generate_tokens", (), Some(&kwargs)) {
+                        Ok(g) => g,
+                        Err(e) => {
+                            let _ =
+                                tx.blocking_send(Err(format!("Failed to create generator: {}", e)));
+                            return;
+                        }
+                    };
+
+                    let iter = match generator.try_iter() {
+                        Ok(it) => it,
+                        Err(e) => {
+                            let _ = tx.blocking_send(Err(format!("Generator not iterable: {}", e)));
+                            return;
+                        }
+                    };
+
+                    for item in iter {
+                        match item {
+                            Ok(token_obj) => {
+                                // Try dict first: {"mode": "append"|"replace", "text": "..."}
+                                let result = if let Ok(dict) =
+                                    token_obj.downcast::<pyo3::types::PyDict>()
+                                {
                                     let mode = dict
                                         .get_item("mode")
                                         .ok()
@@ -306,46 +330,47 @@ pub(crate) async fn execute_pytorch_inference(
                                         .unwrap_or_default();
                                     Ok((mode, text))
                                 } else if let Ok(text) = token_obj.extract::<String>() {
-                                    // Backwards compat: plain string → append
+                                    // Backwards compat: plain string -> append
                                     Ok(("append".to_string(), text))
                                 } else {
                                     Err(format!(
-                                    "Token extraction failed: expected dict or string, got {:?}",
-                                    token_obj.get_type().name()
-                                ))
+                                        "Token extraction failed: expected dict or string, got {:?}",
+                                        token_obj.get_type().name()
+                                    ))
                                 };
-                            if tx.blocking_send(result).is_err() {
+                                if tx.blocking_send(result).is_err() {
+                                    return;
+                                }
+                            }
+                            Err(e) => {
+                                let _ = tx.blocking_send(Err(format!("Generator error: {}", e)));
                                 return;
                             }
                         }
-                        Err(e) => {
-                            let _ = tx.blocking_send(Err(format!("Generator error: {}", e)));
-                            return;
-                        }
                     }
-                }
+                });
             });
-        });
 
-        let mut full_response = String::new();
-        while let Some(token_result) = rx.recv().await {
-            let (mode, text) = token_result.map_err(|e| {
-                NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", e))
-            })?;
-            if mode == "replace" {
-                full_response = text.clone();
-            } else {
-                full_response.push_str(&text);
+            let mut full_response = String::new();
+            while let Some(token_result) = rx.recv().await {
+                let (mode, text) = token_result.map_err(|e| {
+                    NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", e))
+                })?;
+                if mode == "replace" {
+                    full_response = text.clone();
+                } else {
+                    full_response.push_str(&text);
+                }
+                let _ = sink.send(crate::WorkflowEvent::task_stream(
+                    task_id,
+                    execution_id,
+                    "stream",
+                    serde_json::json!({"mode": mode, "text": text}),
+                ));
             }
-            let _ = sink.send(crate::WorkflowEvent::task_stream(
-                task_id,
-                execution_id,
-                "stream",
-                serde_json::json!({"mode": mode, "text": text}),
-            ));
-        }
 
-        full_response
+            full_response
+        }
     } else {
         // Non-streaming: use the inference-owned worker envelope when no
         // legacy custom kwargs need to be preserved.

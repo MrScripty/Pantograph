@@ -3922,6 +3922,10 @@ Update during implementation:
   chunks and worker dictionaries such as `{"mode": "replace", "text": ...}`,
   preventing the inference-owned stream adapter from rejecting dLLM replacement
   chunks before node-engine streaming can migrate.
+- 2026-05-06: Node-engine PyTorch streaming now uses
+  `PyTorchBackend::generate_stream_with_top_k` when settings are empty or only
+  typed `top_k`, leaving the direct `generate_tokens` compatibility path only
+  for mixed custom kwargs that still require legacy event-mode projection.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

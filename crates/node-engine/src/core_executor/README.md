@@ -122,8 +122,12 @@ stable public facade and dispatch owner.
 - PyTorch non-streaming text generation without legacy custom
   `inference_settings`, or with only typed `top_k`, must use
   `PyTorchBackend::generate_with_top_k`; the direct worker generation path is
-  retained only for custom-kwargs compatibility until those settings are
-  represented by typed generation options.
+  retained only for streaming or custom-kwargs compatibility until those
+  settings are represented by typed generation options.
+- PyTorch streaming text generation with no legacy custom settings, or only
+  typed `top_k`, must use `PyTorchBackend::generate_stream_with_top_k`; the
+  direct streaming worker path remains only for mixed custom kwargs that still
+  need legacy mode-preserving event projection.
 - Python-worker handlers should pass worker parameters directly into their
   blocking closures and avoid redundant rebinding so the feature-gated path
   stays clippy-clean without changing runtime behavior.
