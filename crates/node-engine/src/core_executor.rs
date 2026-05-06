@@ -42,7 +42,6 @@ mod kv_cache;
 #[cfg(feature = "inference-nodes")]
 mod llamacpp_nodes;
 mod model_nodes;
-mod ollama;
 mod processing_nodes;
 mod pure_nodes;
 #[cfg(feature = "pytorch-nodes")]
@@ -64,7 +63,6 @@ pub(crate) use inference_nodes::*;
 #[cfg(feature = "inference-nodes")]
 pub(crate) use llamacpp_nodes::*;
 pub(crate) use model_nodes::*;
-pub(crate) use ollama::*;
 pub(crate) use processing_nodes::*;
 pub(crate) use pure_nodes::*;
 #[cfg(feature = "pytorch-nodes")]
@@ -177,10 +175,6 @@ fn retired_inference_node_error(node_type: &str) -> Result<HashMap<String, serde
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Retired Ollama inference handler
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // TaskExecutor implementation
 // ---------------------------------------------------------------------------
 
@@ -242,9 +236,6 @@ impl TaskExecutor for CoreTaskExecutor {
             // Interaction nodes
             "human-input" => execute_human_input(&inputs),
             "tool-executor" => execute_tool_executor(&inputs),
-
-            // Retired inference nodes
-            "ollama-inference" => execute_ollama_inference(&inputs).await,
 
             // Gateway-backed inference nodes (require `inference-nodes` feature)
             #[cfg(feature = "inference-nodes")]
@@ -401,10 +392,6 @@ impl TaskExecutor for CoreTaskExecutor {
                 )
                 .await
             }
-
-            // PyTorch inference (in-process via PyO3)
-            #[cfg(feature = "pytorch-nodes")]
-            "pytorch-inference" => retired_inference_node_error("pytorch-inference"),
 
             // Audio generation (in-process via PyO3 + Stable Audio)
             #[cfg(feature = "audio-nodes")]

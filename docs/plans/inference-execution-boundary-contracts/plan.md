@@ -2451,6 +2451,10 @@ Workflow-node processing descriptors no longer preserve retired
 `ollama-inference` or `pytorch-inference` task structs as public graph-contract
 surface. Saved workflow upgrades remain owned by workflow-service
 canonicalization fixtures instead of local retired descriptors.
+Node-engine no longer keeps explicit executor branches for stale
+`ollama-inference` or `pytorch-inference` task ids; if an uncanonicalized graph
+reaches execution, it follows the normal unknown/host-specific executor error
+path rather than a preserved compatibility handler.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -3950,6 +3954,10 @@ Update during implementation:
   `ollama-inference` or `pytorch-inference` descriptor structs. Saved graph
   upgrade knowledge remains in workflow-service canonicalization fixtures,
   while the workflow-node crate exposes only current graph-visible contracts.
+- 2026-05-06: Node-engine removed the retained stale-node executor branches for
+  `ollama-inference` and `pytorch-inference`, including the retired Ollama guard
+  module. Canonicalization remains the saved-workflow upgrade path, and direct
+  stale task execution now follows the standard unsupported node branch.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

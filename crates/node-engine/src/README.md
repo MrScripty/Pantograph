@@ -95,11 +95,9 @@ are resolved through `pantograph-node-contracts` projections.
   `core_executor/dependency_preflight.rs` so model-reference construction,
   backend-key normalization, and resolver readiness checks remain separate from
   dispatch and runtime request execution.
-- Retired Ollama-node handling stays in `core_executor/ollama.rs` only to
-  return a migration error for stale workflow nodes; it must not call an
-  Ollama daemon or preserve direct HTTP generation.
 - Retired backend-specific inference node types in `core_executor.rs` must
-  return canonical migration errors. New runtime-backed behavior must enter via
+  remain outside the live executor path. Saved graph upgrades are owned by
+  workflow-service canonicalization; new runtime-backed behavior must enter via
   canonical `llm-inference` task/runtime evidence.
 - Gateway-backed inference execution stays in `core_executor/inference_nodes.rs`
   so OpenAI-compatible chat, vision, and unload-model handlers remain separate

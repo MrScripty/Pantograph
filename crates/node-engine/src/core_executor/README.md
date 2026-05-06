@@ -25,7 +25,6 @@ into frontend, transport, or descriptor crates.
 | `kv_cache_tests.rs` | Focused KV-cache store, handle restore/capture, and backend-owned truncation tests. |
 | `llamacpp_nodes.rs` | Feature-gated llama.cpp completion execution, streaming response parsing, and KV-cache integration. |
 | `model_nodes.rs` | Pure model-provider and Puma library payload projection handlers. |
-| `ollama.rs` | Retired Ollama-node execution guard that returns a migration-focused error for stale saved workflows. |
 | `processing_nodes.rs` | Pure processing handlers for code validation and JSON path extraction. |
 | `pure_nodes.rs` | Synchronous built-in node handlers for input/output passthrough, model provider payloads, control-flow helpers, validation, JSON filtering, human input, and disabled tool execution. |
 | `pytorch_nodes.rs` | Feature-gated PyTorch inference-boundary execution, streaming, typed setting validation, and KV-cache integration. |
@@ -91,9 +90,6 @@ stable public facade and dispatch owner.
   model identity plus the resolved artifact-kind label when known, but no
   usage, cache, artifact refs, compatibility, option, tensor, prompt, or
   local-path payloads.
-- Retired Ollama-node handling stays in `ollama.rs` only to produce a clear
-  migration error for stale saved workflows; it must not call an Ollama daemon
-  or become a new inference path.
 - Gateway-backed inference handlers stay in `inference_nodes.rs`; PyTorch and
   audio Python-worker handlers remain separate feature families.
 - Canonical `llm-inference` request builders in `inference_nodes.rs` should

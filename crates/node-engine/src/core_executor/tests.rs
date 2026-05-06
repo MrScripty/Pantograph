@@ -22,6 +22,28 @@ fn test_resolve_node_type_no_suffix() {
     assert_eq!(resolve_node_type("merge", &inputs), "merge");
 }
 
+#[tokio::test]
+async fn stale_backend_specific_inference_nodes_do_not_have_executor_branches() {
+    let executor = CoreTaskExecutor::new();
+    for task_id in ["ollama-inference-1", "pytorch-inference-1"] {
+        let error = executor
+            .execute_task(
+                task_id,
+                HashMap::new(),
+                &crate::Context::new(),
+                &ExecutorExtensions::new(),
+            )
+            .await
+            .expect_err("stale backend-specific node should not execute");
+        match error {
+            NodeEngineError::ExecutionFailed(message) => {
+                assert!(message.contains("requires host-specific executor"));
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+}
+
 #[test]
 fn test_text_input() {
     let mut inputs = HashMap::new();
@@ -123,17 +145,6 @@ fn test_text_output() {
     inputs.insert("text".to_string(), serde_json::json!("output text"));
     let result = execute_text_output(&inputs).unwrap();
     assert_eq!(result["text"], "output text");
-}
-
-#[tokio::test]
-async fn test_ollama_inference_is_retired() {
-    let inputs = HashMap::new();
-    let error = execute_ollama_inference(&inputs).await.unwrap_err();
-    let message = error.to_string();
-
-    assert!(message.contains("Ollama is no longer supported"));
-    assert!(message.contains("canonical inference node"));
-    assert!(message.contains("Pumas model reference"));
 }
 
 #[test]
