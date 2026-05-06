@@ -2486,15 +2486,31 @@ fn test_pytorch_kv_live_info_malformed_result_normalizes_to_backend_error() {
 
 #[test]
 fn test_pytorch_worker_kv_truncate_transport_error_normalizes_to_backend_error() {
-    match kv_worker_failure_from_message(
+    match kv_truncate_worker_failure_from_message(
         "req-kv-truncate",
-        "pytorch_worker_kv_truncate_failed",
         "PyTorch KV truncate failed: invalid marker.".to_string(),
     ) {
         BackendError::Inference(message) => {
             assert!(message.contains("pytorch_worker_kv_truncate_failed"));
             assert!(message.contains("req-kv-truncate"));
             assert!(message.contains("invalid marker"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_kv_truncate_temp_file_errors_strip_local_paths() {
+    match kv_truncate_worker_failure_from_message(
+        "req-kv-truncate-temp",
+        "Failed to write KV temp file: Permission denied at /tmp/pantograph-pytorch-kv-truncate-private.bin".to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_kv_truncate_failed"));
+            assert!(message.contains("req-kv-truncate-temp"));
+            assert!(message.contains("Failed to write KV temp file"));
+            assert!(message.contains("[local-path]"));
+            assert!(!message.contains("/tmp/pantograph-pytorch-kv-truncate-private.bin"));
         }
         other => panic!("expected Inference error, got {other:?}"),
     }

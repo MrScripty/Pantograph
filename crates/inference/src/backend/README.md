@@ -187,6 +187,9 @@ fn create_backend() {
   malformed loaded-model/live-KV metadata through the canonical
   `pytorch_worker_kv_*_failed` paths so request ids and bounded diagnostics are
   preserved even when Python returns an unexpected shape.
+- PyTorch KV-cache truncate temp-file read/write failures must use the
+  canonical `pytorch_worker_kv_truncate_failed` path so local temp paths are
+  sanitized before they can reach backend or workflow diagnostics.
 - Backend-native generation fields and kwargs must stay inside backend-local
   mapping helpers. PyTorch maps canonical generation options to
   Transformers-style kwargs, while llama.cpp maps them to bounded

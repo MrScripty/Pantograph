@@ -144,6 +144,10 @@ fn kv_worker_failure_from_message(
     .into_backend_error()
 }
 
+fn kv_truncate_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
+    kv_worker_failure_from_message(request_id, "pytorch_worker_kv_truncate_failed", message)
+}
+
 fn kv_loaded_info_unavailable_error(request_id: &str) -> BackendError {
     kv_worker_failure_from_message(
         request_id,
@@ -2106,21 +2110,25 @@ impl InferenceBackend for PyTorchBackend {
         token_position: usize,
         _active_config: Option<&BackendConfig>,
     ) -> Result<Vec<u8>, BackendError> {
+        let request_id = format!("pytorch-kv-truncate-{}", Uuid::new_v4().simple());
         let temp_path = std::env::temp_dir().join(format!(
             "pantograph-pytorch-kv-truncate-{}.bin",
             uuid::Uuid::new_v4()
         ));
-        std::fs::write(&temp_path, data)
-            .map_err(|e| BackendError::Inference(format!("Failed to write KV temp file: {}", e)))?;
+        std::fs::write(&temp_path, data).map_err(|e| {
+            kv_truncate_worker_failure_from_message(
+                &request_id,
+                format!("Failed to write KV temp file: {e}"),
+            )
+        })?;
         let truncate_result = tokio::task::spawn_blocking({
             let temp_path = temp_path.clone();
-            let request_id = format!("pytorch-kv-truncate-{}", Uuid::new_v4().simple());
+            let request_id = request_id.clone();
             move || {
                 Python::with_gil(|py| -> Result<(), BackendError> {
                     let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                        kv_worker_failure_from_message(
+                        kv_truncate_worker_failure_from_message(
                             &request_id,
-                            "pytorch_worker_kv_truncate_failed",
                             format!("Failed to get worker module: {}", e),
                         )
                     })?;
@@ -2130,9 +2138,8 @@ impl InferenceBackend for PyTorchBackend {
                             (temp_path.to_string_lossy().to_string(), token_position),
                         )
                         .map_err(|e| {
-                            kv_worker_failure_from_message(
+                            kv_truncate_worker_failure_from_message(
                                 &request_id,
-                                "pytorch_worker_kv_truncate_failed",
                                 format!("PyTorch KV truncate failed: {}", e),
                             )
                         })?;
@@ -2142,8 +2149,12 @@ impl InferenceBackend for PyTorchBackend {
         })
         .await
         .map_err(|e| BackendError::Inference(task_join_error_message(e)))?;
-        let read_result = std::fs::read(&temp_path)
-            .map_err(|e| BackendError::Inference(format!("Failed to read KV temp file: {}", e)));
+        let read_result = std::fs::read(&temp_path).map_err(|e| {
+            kv_truncate_worker_failure_from_message(
+                &request_id,
+                format!("Failed to read KV temp file: {e}"),
+            )
+        });
         let _ = std::fs::remove_file(&temp_path);
         truncate_result?;
         read_result
