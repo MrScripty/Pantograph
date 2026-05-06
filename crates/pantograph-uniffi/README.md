@@ -59,8 +59,7 @@ mapping, not workflow semantics.
 | `runtime-deps` | Internal glue | Activates optional embedded-runtime and inference dependencies for backend features. |
 
 Defaults expose the product-native embedded runtime plus supported local backend
-families. Ollama is retired as a first-party backend; frontend HTTP and
-Python-backed families remain explicit opt-ins.
+families. Frontend HTTP and Python-backed families remain explicit opt-ins.
 
 ## Revisit Triggers
 - A supported host language needs a different binding framework.

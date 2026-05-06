@@ -317,9 +317,3 @@ pub(crate) fn get_system_resources(resource: ResourceArc<PumasApiResource>) -> N
                 .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
         })
 }
-
-pub(crate) fn is_ollama_running(resource: ResourceArc<PumasApiResource>) -> bool {
-    resource
-        .runtime
-        .block_on(async { resource.api.is_ollama_running().await })
-}

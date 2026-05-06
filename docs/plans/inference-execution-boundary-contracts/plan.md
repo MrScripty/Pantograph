@@ -2463,6 +2463,9 @@ Tauri no longer models the retired `ollama_vlm_model` config field or carries a
 dedicated Ollama sidecar spawn rejection branch; unknown old config keys are
 ignored by serde, and unsupported sidecar names use the normal unsupported
 target error path.
+Pantograph UniFFI and Rustler bindings no longer re-export Pumas'
+`is_ollama_running` helper. Pumas may keep provider-agnostic facts internally,
+but Pantograph host bindings no longer expose Ollama-specific runtime probes.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -3975,6 +3978,10 @@ Update during implementation:
   `ollama_vlm_model` field or a dedicated Ollama sidecar rejection branch.
   Existing unknown config keys are ignored by serde, while process spawning
   routes old Ollama targets through the standard unsupported target error.
+- 2026-05-06: Pantograph UniFFI and Rustler bindings removed the Pumas
+  `is_ollama_running` wrapper and smoke binding entry, so host-language
+  Pantograph APIs no longer expose an Ollama-specific probe even if Pumas keeps
+  provider-neutral discovery helpers internally.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

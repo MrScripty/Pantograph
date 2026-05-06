@@ -749,11 +749,6 @@ impl FfiPumasApi {
             message: e.to_string(),
         })
     }
-
-    /// Check if Ollama is running.
-    pub async fn is_ollama_running(&self) -> bool {
-        self.api.is_ollama_running().await
-    }
 }
 
 impl FfiPumasApi {

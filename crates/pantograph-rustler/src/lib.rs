@@ -872,12 +872,6 @@ fn pumas_get_system_resources(resource: ResourceArc<PumasApiResource>) -> NifRes
     pumas_nifs::get_system_resources(resource)
 }
 
-/// Check if Ollama is running.
-#[rustler::nif(schedule = "DirtyCpu")]
-fn pumas_is_ollama_running(resource: ResourceArc<PumasApiResource>) -> bool {
-    pumas_nifs::is_ollama_running(resource)
-}
-
 // ============================================================================
 // Resource registration and NIF init
 // ============================================================================

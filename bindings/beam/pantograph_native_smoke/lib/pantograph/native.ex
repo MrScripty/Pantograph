@@ -67,8 +67,7 @@ defmodule Pantograph.Native do
     {:pumas_import_model, 2},
     {:pumas_import_batch, 2},
     {:pumas_get_disk_space, 1},
-    {:pumas_get_system_resources, 1},
-    {:pumas_is_ollama_running, 1}
+    {:pumas_get_system_resources, 1}
   ]
 
   def load_nif do
