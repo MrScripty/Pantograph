@@ -659,13 +659,17 @@ fn build_inference_diagnostic_event_ledger_append_request(
     duration_ms: Option<u64>,
 ) -> Option<DiagnosticEventAppendRequest> {
     let artifact_refs = bounded_inference_artifact_refs(&event.artifact_refs);
+    let cache_handle_id = event
+        .cache_handle_id
+        .as_deref()
+        .and_then(inference::bounded_inference_artifact_ref);
     let resolved_artifact_kind =
         bounded_resolved_artifact_kind(event.resolved_artifact_kind.as_deref());
     let has_bounded_diagnostics = !event.option_diagnostics.is_empty()
         || event.compatibility_report.is_some()
         || !event.compatibility_issues.is_empty()
         || event.usage.is_some()
-        || event.cache_handle_id.is_some()
+        || cache_handle_id.is_some()
         || resolved_artifact_kind.is_some()
         || !artifact_refs.is_empty()
         || duration_ms.is_some();
@@ -727,7 +731,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 selected_network_node_id: event.selected_network_node_id.clone(),
                 resolved_artifact_kind,
                 usage: event.usage.as_ref().map(inference_usage_summary),
-                cache_handle_id: event.cache_handle_id.clone(),
+                cache_handle_id,
                 artifact_refs,
                 kv_cache: None,
                 compatibility_report: event

@@ -3080,7 +3080,10 @@ inference write ledger events directly.
   and Windows drive paths, before lifecycle events can reach durable
   diagnostics. Embedded-runtime ledger projection now defensively reapplies
   the same artifact-ref safety filter before persistence, so unsafe-only
-  producer refs are dropped and stable refs remain bounded. The shared
+  producer refs are dropped and stable refs remain bounded. Embedded-runtime
+  ledger projection now also applies that bounded-ref filter to lifecycle
+  `cache_handle_id` values before persistence, so local temp-path-shaped cache
+  handles are not treated as durable metadata. The shared
   artifact-ref filter now lives in the inference contract surface so gateway
   producers and host ledger adapters use one rule. PyTorch backend transport
   error normalization now strips Python traceback frames and local path tokens

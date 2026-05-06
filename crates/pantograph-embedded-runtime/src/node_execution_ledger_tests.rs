@@ -729,6 +729,18 @@ fn inference_diagnostic_event_adapter_persists_usage_and_cache_summary() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_drops_local_path_cache_handle_id() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        177,
+    );
+    event.cache_handle_id = Some("/tmp/private/kv-cache.bin".to_string());
+
+    assert!(inference_diagnostic_event_ledger_append_request(&context, &event).is_none());
+}
+
+#[test]
 fn inference_diagnostic_event_adapter_filters_local_artifact_refs_before_ledger() {
     let context = context();
     let mut event = inference_lifecycle_event(
