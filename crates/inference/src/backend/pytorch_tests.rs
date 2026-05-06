@@ -5,9 +5,10 @@ use super::pytorch_worker_contract::{
     PyTorchAudioTranscriptionRequest, PyTorchAudioTranscriptionResult, PyTorchClearKvCacheRequest,
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
     PyTorchRestoreKvCacheRequest, PyTorchSaveKvCacheRequest, PyTorchTransformersLoadRequest,
-    PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest,
-    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
-    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy, PyTorchTruncateKvCacheRequest,
+    PyTorchUnloadModelRequest, PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind,
+    PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -891,6 +892,68 @@ fn test_pytorch_worker_restore_kv_cache_envelope_rejects_empty_path() {
 }
 
 #[test]
+fn test_pytorch_worker_truncate_kv_cache_envelope_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/truncate_kv_cache_request.json");
+    let envelope: PyTorchWorkerEnvelope<PyTorchTruncateKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker truncate_kv_cache fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-truncate-kv-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::TruncateKvCache);
+    assert_eq!(envelope.payload.path, "/tmp/pantograph-kv-truncate.bin");
+    assert_eq!(envelope.payload.token_position, 4);
+
+    validate_truncate_kv_cache_envelope(&envelope)
+        .expect("truncate_kv_cache fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_truncate_kv_cache_envelope_rejects_wrong_operation() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/truncate_kv_cache_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchTruncateKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker truncate_kv_cache fixture");
+    envelope.operation = PyTorchWorkerOperation::GenerateText;
+
+    match validate_truncate_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("GenerateText"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_truncate_kv_cache_envelope_rejects_wrong_contract_version() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/truncate_kv_cache_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchTruncateKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker truncate_kv_cache fixture");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match validate_truncate_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("truncate_kv_cache envelope contract version"));
+        }
+        other => panic!("expected wrong-version config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_truncate_kv_cache_envelope_rejects_empty_path() {
+    let envelope = truncate_kv_cache_envelope("req-truncate-kv-empty-path", " ", 4);
+
+    match validate_truncate_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("truncate_kv_cache envelope path must be non-empty"));
+        }
+        other => panic!("expected empty-path config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_python_worker_contract_projects_unload_envelope() {
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
@@ -1150,6 +1213,79 @@ fn test_python_worker_contract_rejects_invalid_restore_kv_cache_envelope() {
         assert!(error
             .to_string()
             .contains("payload.path must be a non-empty string"));
+    });
+}
+
+#[test]
+fn test_python_worker_contract_projects_truncate_kv_cache_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/truncate_kv_cache_request.json"
+        );
+
+        let kwargs = module
+            .call_method1("truncate_kv_cache_kwargs_from_envelope", (fixture,))
+            .expect("truncate_kv_cache worker envelope should project to kwargs");
+
+        assert_eq!(
+            kwargs
+                .get_item("path")
+                .expect("path item should be readable")
+                .extract::<String>()
+                .expect("path should extract"),
+            "/tmp/pantograph-kv-truncate.bin"
+        );
+        assert_eq!(
+            kwargs
+                .get_item("token_position")
+                .expect("token_position item should be readable")
+                .extract::<usize>()
+                .expect("token_position should extract"),
+            4
+        );
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_invalid_truncate_kv_cache_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let wrong_operation = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-truncate-kv-operation",
+            "operation": "generate_text",
+            "payload": {"path": "/tmp/pantograph-kv-truncate.bin", "token_position": 4}
+        });
+
+        let error = module
+            .call_method1(
+                "truncate_kv_cache_kwargs_from_envelope",
+                (wrong_operation.to_string(),),
+            )
+            .expect_err("wrong truncate_kv_cache operation should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unexpected PyTorch worker operation for truncate_kv_cache"));
+
+        let negative_position = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-truncate-kv-position",
+            "operation": "truncate_kv_cache",
+            "payload": {"path": "/tmp/pantograph-kv-truncate.bin", "token_position": -1}
+        });
+
+        let error = module
+            .call_method1(
+                "truncate_kv_cache_kwargs_from_envelope",
+                (negative_position.to_string(),),
+            )
+            .expect_err("negative truncate_kv_cache token_position should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("payload.token_position must be a non-negative integer"));
     });
 }
 
@@ -3388,6 +3524,115 @@ fn test_pytorch_worker_kv_truncate_transport_error_normalizes_to_backend_error()
         }
         other => panic!("expected Inference error, got {other:?}"),
     }
+}
+
+#[test]
+fn test_pytorch_worker_truncate_kv_cache_response_decodes() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-truncate-kv-ok",
+        "result": {
+            "token_count": 4
+        }
+    });
+
+    let result =
+        truncate_kv_cache_result_from_worker_response("req-truncate-kv-ok", &response.to_string())
+            .expect("truncate_kv_cache response decodes");
+
+    assert_eq!(result.token_count, 4);
+}
+
+#[test]
+fn test_pytorch_worker_truncate_kv_cache_response_rejects_request_id_mismatch() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-truncate-kv-other",
+        "result": {
+            "token_count": 4
+        }
+    });
+
+    let error = truncate_kv_cache_result_from_worker_response(
+        "req-truncate-kv-expected",
+        &response.to_string(),
+    )
+    .expect_err("mismatched truncate_kv_cache response id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-truncate-kv-expected",
+        "pytorch_worker_kv_truncate_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_truncate_kv_cache_malformed_response_normalizes_to_backend_error() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match truncate_kv_cache_result_from_worker_response("req-truncate-kv-malformed", malformed) {
+        Err(BackendError::Inference(message)) => {
+            assert!(message.contains("pytorch_worker_kv_truncate_failed"));
+            assert!(message.contains("req-truncate-kv-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker truncate_kv_cache response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_truncate_kv_cache_malformed_result_normalizes_to_backend_error() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-truncate-kv-bad-result",
+        "result": {
+            "token_count": "many"
+        }
+    });
+
+    let error = truncate_kv_cache_result_from_worker_response(
+        "req-truncate-kv-bad-result",
+        &response.to_string(),
+    )
+    .expect_err("bad truncate_kv_cache result should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-truncate-kv-bad-result",
+        "pytorch_worker_kv_truncate_failed",
+        "invalid type",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_truncate_kv_cache_invalid_request_maps_to_config_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-truncate-kv-invalid",
+        "error": {
+            "kind": "invalid_request",
+            "message": "PyTorch worker truncate_kv_cache payload.token_position must be a non-negative integer",
+            "canonical_code": "pytorch_worker_invalid_truncate_kv_cache_request"
+        }
+    });
+
+    let error = truncate_kv_cache_result_from_worker_response(
+        "req-truncate-kv-invalid",
+        &response.to_string(),
+    )
+    .expect_err("invalid truncate_kv_cache request should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Config,
+        "req-truncate-kv-invalid",
+        "pytorch_worker_invalid_truncate_kv_cache_request",
+        "payload.token_position must be a non-negative integer",
+    );
 }
 
 #[test]

@@ -25,8 +25,9 @@ use self::pytorch_worker_contract::{
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
     PyTorchRestoreKvCacheRequest, PyTorchSaveKvCacheRequest, PyTorchTransformersLoadRequest,
     PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy,
-    PyTorchUnloadModelRequest, PyTorchUnloadModelResult, PyTorchWorkerEnvelope, PyTorchWorkerError,
-    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PyTorchTruncateKvCacheRequest, PyTorchTruncateKvCacheResult, PyTorchUnloadModelRequest,
+    PyTorchUnloadModelResult, PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind,
+    PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
     PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
@@ -361,6 +362,83 @@ fn restore_kv_cache_result_from_worker_response(
         "pytorch_worker_kv_restore_failed",
         "restore_kv_cache",
     )
+}
+
+fn truncate_kv_cache_envelope(
+    request_id: impl Into<String>,
+    path: impl Into<String>,
+    token_position: usize,
+) -> PyTorchWorkerEnvelope<PyTorchTruncateKvCacheRequest> {
+    PyTorchWorkerEnvelope::new(
+        request_id,
+        PyTorchWorkerOperation::TruncateKvCache,
+        PyTorchTruncateKvCacheRequest {
+            path: path.into(),
+            token_position,
+        },
+    )
+}
+
+fn validate_truncate_kv_cache_envelope(
+    envelope: &PyTorchWorkerEnvelope<PyTorchTruncateKvCacheRequest>,
+) -> Result<(), BackendError> {
+    if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+        return Err(BackendError::Config(format!(
+            "Unsupported PyTorch worker truncate_kv_cache envelope contract version {}",
+            envelope.contract_version
+        )));
+    }
+    if envelope.operation != PyTorchWorkerOperation::TruncateKvCache {
+        return Err(BackendError::Config(format!(
+            "Unexpected PyTorch worker operation {:?} for truncate_kv_cache",
+            envelope.operation
+        )));
+    }
+    if envelope.payload.path.trim().is_empty() {
+        return Err(BackendError::Config(
+            "PyTorch worker truncate_kv_cache envelope path must be non-empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn truncate_kv_cache_result_from_worker_response(
+    request_id: &str,
+    response_json: &str,
+) -> Result<PyTorchTruncateKvCacheResult, BackendError> {
+    let response: PyTorchWorkerResponse<PyTorchTruncateKvCacheResult> =
+        serde_json::from_str(response_json).map_err(|error| {
+            kv_truncate_worker_failure_from_message(
+                request_id,
+                format!("Failed to decode PyTorch worker truncate_kv_cache response: {error}"),
+            )
+        })?;
+    match response {
+        PyTorchWorkerResponse::Ok(success) => {
+            if success.request_id != request_id {
+                return Err(kv_truncate_worker_failure_from_message(
+                    request_id,
+                    format!(
+                        "PyTorch worker truncate_kv_cache response request_id mismatch: expected {request_id}, got {}",
+                        success.request_id
+                    ),
+                ));
+            }
+            Ok(success.result)
+        }
+        PyTorchWorkerResponse::Error(failure) => {
+            if failure.request_id != request_id {
+                return Err(kv_truncate_worker_failure_from_message(
+                    request_id,
+                    format!(
+                        "PyTorch worker truncate_kv_cache response request_id mismatch: expected {request_id}, got {}",
+                        failure.request_id
+                    ),
+                ));
+            }
+            Err(failure.into_backend_error())
+        }
+    }
 }
 
 fn get_loaded_info_envelope(
@@ -2351,29 +2429,45 @@ impl InferenceBackend for PyTorchBackend {
                 format!("Failed to write KV temp file: {e}"),
             )
         })?;
+        let envelope = truncate_kv_cache_envelope(
+            request_id.clone(),
+            temp_path.to_string_lossy().to_string(),
+            token_position,
+        );
+        validate_truncate_kv_cache_envelope(&envelope)?;
+        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+            BackendError::Config(format!(
+                "Failed to encode PyTorch worker truncate_kv_cache envelope: {error}"
+            ))
+        })?;
         let truncate_result = tokio::task::spawn_blocking({
-            let temp_path = temp_path.clone();
             let request_id = request_id.clone();
             move || {
-                Python::with_gil(|py| -> Result<(), BackendError> {
+                Python::with_gil(|py| -> Result<PyTorchTruncateKvCacheResult, BackendError> {
                     let worker = pytorch_worker::worker_module(py).map_err(|e| {
                         kv_truncate_worker_failure_from_message(
                             &request_id,
                             format!("Failed to get worker module: {}", e),
                         )
                     })?;
-                    worker
-                        .call_method1(
-                            "truncate_kv_cache_file",
-                            (temp_path.to_string_lossy().to_string(), token_position),
-                        )
+                    let response_json = worker
+                        .call_method1("truncate_kv_cache_file_from_envelope", (envelope_json,))
                         .map_err(|e| {
                             kv_truncate_worker_failure_from_message(
                                 &request_id,
-                                format!("PyTorch KV truncate failed: {}", e),
+                                format!("PyTorch worker truncate_kv_cache envelope failed: {}", e),
+                            )
+                        })?
+                        .extract::<String>()
+                        .map_err(|e| {
+                            kv_truncate_worker_failure_from_message(
+                                &request_id,
+                                format!(
+                                    "PyTorch worker truncate_kv_cache response was not JSON text: {e}"
+                                ),
                             )
                         })?;
-                    Ok(())
+                    truncate_kv_cache_result_from_worker_response(&request_id, &response_json)
                 })
             }
         })
@@ -2386,7 +2480,7 @@ impl InferenceBackend for PyTorchBackend {
             )
         });
         let _ = std::fs::remove_file(&temp_path);
-        truncate_result?;
+        let _metadata = truncate_result?;
         read_result
     }
 }

@@ -188,6 +188,11 @@ fn create_backend() {
   free helpers and trait slot save/restore paths share those contracts after
   slot validation so request-id correlation and malformed metadata handling are
   identical for node-engine preparation and backend trait consumers.
+- PyTorch persisted KV truncation crosses the embedded Python boundary through
+  a versioned worker envelope and typed response decoder before the temporary
+  file is read back. The adapter validates the temp path and token position,
+  then requires response request-id correlation before trusting truncation
+  metadata.
 - PyTorch transport exceptions from the embedded Python boundary must be
   normalized before becoming `BackendError` messages: keep request ids,
   canonical worker codes, and bounded exception summaries, but strip Python

@@ -64,6 +64,7 @@ from worker_contract import (
     restore_kv_cache_kwargs_from_envelope,
     save_kv_cache_kwargs_from_envelope,
     transcribe_audio_kwargs_from_envelope,
+    truncate_kv_cache_kwargs_from_envelope,
     unload_model_kwargs_from_envelope,
 )
 
@@ -599,6 +600,52 @@ def restore_live_kv_cache_from_envelope(envelope):
                 "kind": "internal",
                 "message": str(exc),
                 "canonical_code": "pytorch_worker_kv_restore_internal",
+            },
+        })
+
+
+def truncate_kv_cache_file_from_envelope(envelope):
+    """Truncate persisted KV state from the Rust worker envelope contract."""
+    request_id = "unknown"
+    try:
+        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+        if isinstance(decoded, dict):
+            request_id = str(decoded.get("request_id") or request_id)
+        kwargs = truncate_kv_cache_kwargs_from_envelope(decoded)
+        result = truncate_kv_cache_file(**kwargs)
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": result,
+        })
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "invalid_request",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_invalid_truncate_kv_cache_request",
+            },
+        })
+    except RuntimeError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "generation_failed",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_kv_truncate_failed",
+            },
+        })
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "internal",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_kv_truncate_internal",
             },
         })
 

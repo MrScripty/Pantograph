@@ -12,6 +12,7 @@ TRANSCRIBE_AUDIO_OPERATION = "transcribe_audio"
 CLEAR_KV_CACHE_OPERATION = "clear_kv_cache"
 SAVE_KV_CACHE_OPERATION = "save_kv_cache"
 RESTORE_KV_CACHE_OPERATION = "restore_kv_cache"
+TRUNCATE_KV_CACHE_OPERATION = "truncate_kv_cache"
 ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k"}
 CAUSAL_LM_LOADER = "causal_lm"
 AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
@@ -216,6 +217,33 @@ def restore_kv_cache_kwargs_from_envelope(envelope):
     if not isinstance(path, str) or not path.strip():
         raise ValueError("PyTorch worker restore_kv_cache payload.path must be a non-empty string")
     return {"path": path}
+
+
+def truncate_kv_cache_kwargs_from_envelope(envelope):
+    """Validate a Rust worker envelope and project it to KV truncate kwargs."""
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    if not isinstance(envelope, dict):
+        raise ValueError("PyTorch worker truncate_kv_cache envelope must be an object")
+    contract_version = envelope.get("contract_version")
+    if contract_version != WORKER_CONTRACT_VERSION:
+        raise ValueError(f"Unsupported PyTorch worker contract_version: {contract_version}")
+    operation = envelope.get("operation")
+    if operation != TRUNCATE_KV_CACHE_OPERATION:
+        raise ValueError(f"Unexpected PyTorch worker operation for truncate_kv_cache: {operation}")
+
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("PyTorch worker truncate_kv_cache envelope payload must be an object")
+    path = payload.get("path")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("PyTorch worker truncate_kv_cache payload.path must be a non-empty string")
+    token_position = payload.get("token_position")
+    if not isinstance(token_position, int) or token_position < 0:
+        raise ValueError(
+            "PyTorch worker truncate_kv_cache payload.token_position must be a non-negative integer"
+        )
+    return {"path": path, "token_position": token_position}
 
 
 def transcribe_audio_kwargs_from_envelope(envelope):
