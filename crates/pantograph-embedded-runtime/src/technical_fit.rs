@@ -384,6 +384,9 @@ fn inference_task_id_from_label(label: &str) -> Option<inference::InferenceTaskI
             Some(inference::InferenceTaskId::AudioTranscription)
         }
         "video_understanding" => Some(inference::InferenceTaskId::VideoUnderstanding),
+        "depth_estimation" | "depth_estimation_pipeline" => {
+            Some(inference::InferenceTaskId::DepthEstimation)
+        }
         "multimodal_generation" => Some(inference::InferenceTaskId::MultimodalGeneration),
         _ => None,
     }
@@ -1049,6 +1052,18 @@ mod tests {
         assert_eq!(
             facts[0].backend_hints.accepted,
             vec![inference::BackendHintLabel::Transformers]
+        );
+    }
+
+    #[test]
+    fn inference_task_label_mapping_accepts_depth_estimation() {
+        assert_eq!(
+            inference_task_id_from_label("depth_estimation"),
+            Some(inference::InferenceTaskId::DepthEstimation)
+        );
+        assert_eq!(
+            inference_task_id_from_label("depth-estimation"),
+            Some(inference::InferenceTaskId::DepthEstimation)
         );
     }
 

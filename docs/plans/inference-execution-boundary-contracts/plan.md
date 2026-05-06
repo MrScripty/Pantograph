@@ -2683,7 +2683,11 @@ drift back into inference.
   `model_package_facts` edges. The inference gateway itself now has the same
   package-facts model-id fallback for direct typed callers, so backend chat
   transport projection no longer depends on every caller pre-populating
-  `model_ref`.
+  `model_ref`. Embedded-runtime dependency preflight now uses Pumas resolved
+  package facts for backend hint, task, and model id before falling back to
+  dependency-requirement or node-type heuristics, aligning the host Python
+  preflight path with node-engine canonical `llm-inference` preflight without
+  adding runtime selection policy.
   Embedded-runtime host execution no longer treats canonical PyTorch
   `llm-inference` as a Python-sidecar node: canonical LLM execution falls
   through to node-engine/inference, while the host Python adapter remains scoped
@@ -2735,7 +2739,10 @@ drift back into inference.
   mocks and display rows. Inference and node-engine source READMEs now document
   package-facts model identity fallback for typed gateway transport,
   canonical `llm-inference` request builders, and direct package-facts
-  dependency-input edges.
+  dependency-input edges. Embedded-runtime task-executor README now documents
+  dependency preflight request precedence: explicit workflow inputs first,
+  Pumas resolved package facts second, then dependency-requirement or node-type
+  legacy heuristics.
 - [ ] Record any deferred consumer migrations in this plan.
 
 **Verification:**

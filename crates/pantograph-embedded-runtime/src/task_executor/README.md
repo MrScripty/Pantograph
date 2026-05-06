@@ -55,6 +55,11 @@ same behavior without exposing helper paths outside this module boundary.
   execution families.
 - Dependency environment helpers may emit environment references and model
   refs, but they must not invoke Python runtime execution directly.
+- Dependency preflight request construction must prefer explicit workflow
+  backend/task/model inputs, then Pumas resolved package facts, then legacy
+  dependency-requirement or node-type heuristics. This keeps Pumas as the
+  canonical model source without moving runtime selection policy into the task
+  executor.
 - Python execution helpers may normalize runtime inputs and record health facts,
   but dependency gating must remain in dependency preflight helpers.
 - Puma-Lib helpers prepare model metadata outputs and must not own dependency

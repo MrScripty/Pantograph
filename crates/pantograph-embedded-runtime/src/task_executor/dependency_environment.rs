@@ -161,11 +161,25 @@ impl TauriTaskExecutor {
         inputs: &HashMap<String, serde_json::Value>,
     ) -> ModelDependencyRequest {
         let requirements = Self::parse_requirements_fallback(inputs);
-        let backend_key = Self::preferred_backend_key(node_type, inputs, requirements.as_ref())
+        let package_facts = Self::read_resolved_model_package_facts_for_preflight(inputs);
+        let backend_key = Self::preferred_backend_key(node_type, inputs, None)
+            .or_else(|| Self::backend_key_from_package_facts(package_facts.as_ref()))
+            .or_else(|| {
+                Self::canonical_backend_key(
+                    requirements.as_ref().and_then(|r| r.backend_key.as_deref()),
+                )
+            })
             .or_else(|| Self::infer_backend_key(node_type));
 
-        let task_type_primary = Self::infer_task_type_primary(node_type, inputs);
+        let task_type_primary = Self::read_optional_input_string_aliases(
+            inputs,
+            &["task_type_primary", "taskTypePrimary"],
+        )
+        .filter(|task| !task.trim().is_empty())
+        .or_else(|| Self::task_type_primary_from_package_facts(package_facts.as_ref()))
+        .unwrap_or_else(|| Self::infer_task_type_primary(node_type, inputs));
         let model_id = Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
+            .or_else(|| Self::model_id_from_package_facts(package_facts.as_ref()))
             .or_else(|| requirements.as_ref().map(|r| r.model_id.clone()));
         let platform_context = Self::read_optional_input_value_aliases(
             inputs,
@@ -197,6 +211,58 @@ impl TauriTaskExecutor {
             platform_context,
             selected_binding_ids,
             dependency_override_patches: Self::read_input_dependency_override_patches(inputs),
+        }
+    }
+
+    fn read_resolved_model_package_facts_for_preflight(
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Option<inference::ResolvedModelPackageFacts> {
+        Self::read_optional_input_value_aliases(
+            inputs,
+            &[
+                "resolved_model_package_facts",
+                "resolvedModelPackageFacts",
+                "model_package_facts",
+                "modelPackageFacts",
+            ],
+        )
+        .filter(|raw| !raw.is_null())
+        .and_then(|raw| serde_json::from_value(raw).ok())
+    }
+
+    fn backend_key_from_package_facts(
+        facts: Option<&inference::ResolvedModelPackageFacts>,
+    ) -> Option<String> {
+        facts?.backend_hints.accepted.iter().find_map(|hint| {
+            Self::canonical_backend_key(Some(Self::backend_hint_engine_key(*hint)))
+        })
+    }
+
+    fn task_type_primary_from_package_facts(
+        facts: Option<&inference::ResolvedModelPackageFacts>,
+    ) -> Option<String> {
+        facts
+            .and_then(|facts| facts.task.task_type_primary.clone())
+            .filter(|task| !task.trim().is_empty())
+    }
+
+    fn model_id_from_package_facts(
+        facts: Option<&inference::ResolvedModelPackageFacts>,
+    ) -> Option<String> {
+        facts
+            .map(|facts| facts.model_ref.model_id.clone())
+            .filter(|model_id| !model_id.trim().is_empty())
+    }
+
+    fn backend_hint_engine_key(hint: inference::BackendHintLabel) -> &'static str {
+        match hint {
+            inference::BackendHintLabel::Transformers => "pytorch",
+            inference::BackendHintLabel::LlamaCpp => "llama.cpp",
+            inference::BackendHintLabel::Vllm => "vllm",
+            inference::BackendHintLabel::Mlx => "mlx",
+            inference::BackendHintLabel::Candle => "candle",
+            inference::BackendHintLabel::Diffusers => "diffusers",
+            inference::BackendHintLabel::OnnxRuntime => "onnx-runtime",
         }
     }
 
