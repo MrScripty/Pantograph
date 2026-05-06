@@ -20,11 +20,12 @@ use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use self::pytorch_worker_contract::{
-    normalize_worker_error_message, PyTorchAudioTranscriptionRequest, PyTorchGenerateTextRequest,
-    PyTorchGenerateTextResult, PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader,
-    PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
-    PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
-    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    normalize_worker_error_message, PyTorchAudioTranscriptionRequest,
+    PyTorchAudioTranscriptionResult, PyTorchGenerateTextRequest, PyTorchGenerateTextResult,
+    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
+    PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope, PyTorchWorkerError,
+    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -655,92 +656,29 @@ impl PyTorchBackend {
         .into_backend_error()
     }
 
-    fn audio_transcription_result_from_worker_output(
+    fn audio_transcription_result_from_worker_response(
         request_id: &str,
-        result: &Bound<'_, PyAny>,
+        response_json: &str,
     ) -> Result<AudioTranscriptionResult, BackendError> {
-        let result = result.downcast::<pyo3::types::PyDict>().map_err(|error| {
-            Self::audio_transcription_worker_failure_from_message(
-                request_id,
-                format!("PyTorch audio transcription response was not an object: {error}"),
-            )
-        })?;
-
-        let text = result
-            .get_item("text")
-            .map_err(|error| {
+        let response: PyTorchWorkerResponse<PyTorchAudioTranscriptionResult> =
+            serde_json::from_str(response_json).map_err(|error| {
                 Self::audio_transcription_worker_failure_from_message(
                     request_id,
-                    format!("PyTorch audio transcription response text lookup failed: {error}"),
-                )
-            })?
-            .ok_or_else(|| {
-                Self::audio_transcription_worker_failure_from_message(
-                    request_id,
-                    "PyTorch audio transcription response missing text".to_string(),
-                )
-            })?
-            .extract::<String>()
-            .map_err(|error| {
-                Self::audio_transcription_worker_failure_from_message(
-                    request_id,
-                    format!("PyTorch audio transcription response text was not a string: {error}"),
+                    format!(
+                        "Failed to decode PyTorch worker audio_transcription response: {error}"
+                    ),
                 )
             })?;
-
-        let language = result
-            .get_item("language")
-            .map_err(|error| {
-                Self::audio_transcription_worker_failure_from_message(
-                    request_id,
-                    format!(
-                        "PyTorch audio transcription response language lookup failed: {error}"
-                    ),
-                )
-            })?
-            .map(|value| {
-                value.extract::<Option<String>>().map_err(|error| {
-                    Self::audio_transcription_worker_failure_from_message(
-                        request_id,
-                        format!(
-                            "PyTorch audio transcription response language was not a string: {error}"
-                        ),
-                    )
-                })
-            })
-            .transpose()?
-            .flatten();
-
-        let duration_seconds = result
-            .get_item("duration_seconds")
-            .map_err(|error| {
-                Self::audio_transcription_worker_failure_from_message(
-                    request_id,
-                    format!(
-                        "PyTorch audio transcription response duration_seconds lookup failed: {error}"
-                    ),
-                )
-            })?
-            .map(|value| {
-                value.extract::<Option<f32>>().map_err(|error| {
-                    Self::audio_transcription_worker_failure_from_message(
-                        request_id,
-                        format!(
-                            "PyTorch audio transcription response duration_seconds was not a number: {error}"
-                        ),
-                    )
-                })
-            })
-            .transpose()?
-            .flatten();
-
-        Ok(AudioTranscriptionResult {
-            text,
-            language,
-            duration_seconds,
-            segments: Vec::new(),
-            metadata: serde_json::Value::Null,
-        })
+        match response {
+            PyTorchWorkerResponse::Ok(success) => Ok(AudioTranscriptionResult {
+                text: success.result.text,
+                language: success.result.language,
+                duration_seconds: success.result.duration_seconds,
+                segments: Vec::new(),
+                metadata: serde_json::Value::Null,
+            }),
+            PyTorchWorkerResponse::Error(failure) => Err(failure.into_backend_error()),
+        }
     }
 
     fn unload_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
@@ -1816,15 +1754,24 @@ impl InferenceBackend for PyTorchBackend {
                     )
                 })?;
 
-                let result = worker
+                let response_json = worker
                     .call_method1("transcribe_audio_from_envelope", (envelope_json,))
                     .map_err(|e| {
                         Self::audio_transcription_worker_failure_from_message(
                             &request_id,
                             format!("PyTorch worker audio_transcription envelope failed: {e}"),
                         )
+                    })?
+                    .extract::<String>()
+                    .map_err(|e| {
+                        Self::audio_transcription_worker_failure_from_message(
+                            &request_id,
+                            format!(
+                                "PyTorch worker audio_transcription response was not JSON text: {e}"
+                            ),
+                        )
                     })?;
-                Self::audio_transcription_result_from_worker_output(&request_id, result.as_any())
+                Self::audio_transcription_result_from_worker_response(&request_id, &response_json)
             })
         })
         .await

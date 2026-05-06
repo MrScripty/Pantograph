@@ -1877,10 +1877,11 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   through canonical worker failure helpers for model load, non-streaming
   generation, and stream setup, preserving generated request ids and canonical
   worker codes instead of returning raw decode errors. PyTorch audio
-  transcription worker results now decode through a typed result helper that
-  rejects missing or malformed `text`, `language`, and `duration_seconds`
-  fields through canonical `pytorch_worker_audio_transcription_failed` errors
-  instead of silently returning empty/default transcript data.
+  transcription worker responses now decode through the typed worker response
+  envelope so missing or malformed `text`, `language`, and `duration_seconds`
+  fields, malformed response JSON, and structured Python worker failures route
+  through canonical audio worker errors instead of silently returning
+  empty/default transcript data.
   PyTorch audio transcription requests now cross the Rust/Python worker
   boundary through the same versioned envelope contract as load and generation,
   with Rust and torch-free Python projection tests covering operation/version
@@ -3801,10 +3802,11 @@ Update during implementation:
   stream setup, preserving request ids and avoiding raw malformed response
   payload text in `BackendError` messages.
 - 2026-05-06: PyTorch audio transcription worker result decoding now fails
-  closed through canonical `pytorch_worker_audio_transcription_failed` errors
-  when required transcript text is missing or optional language/duration fields
-  are present with malformed types, preventing silent empty/default transcript
-  values from malformed Python worker output.
+  closed through the typed worker response envelope and canonical
+  `pytorch_worker_audio_transcription_failed` errors when required transcript
+  text is missing, optional language/duration fields are malformed, response
+  JSON is malformed, or Python returns a structured worker error, preventing
+  silent empty/default transcript values from malformed Python worker output.
 - 2026-05-06: PyTorch audio transcription request inputs now use a versioned
   Rust/Python worker envelope with typed Rust DTOs, torch-free Python projection,
   fixture coverage, required model/audio validation, additive-field tolerance,

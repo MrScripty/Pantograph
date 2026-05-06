@@ -173,8 +173,9 @@ fn create_backend() {
   canonical worker codes, and bounded exception summaries, but strip Python
   traceback frames and redact local path tokens.
 - PyTorch audio transcription worker results must decode through the typed
-  result helper so missing or malformed `text`, `language`, and
-  `duration_seconds` fields become canonical
+  worker response envelope so missing or malformed `text`, `language`, and
+  `duration_seconds` fields, malformed response JSON, and structured Python
+  worker errors become canonical
   `pytorch_worker_audio_transcription_failed` errors instead of silent default
   transcript values.
 - Backend-native generation fields and kwargs must stay inside backend-local
