@@ -1835,7 +1835,7 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   masked prompt JSON, denoising step, and block length controls through
   Rust/Python worker fixtures and projection tests while public Rust callers
   continue to default those fields to absent.
-- [ ] Normalize Transformers/Python errors into Pantograph backend errors and
+- [x] Normalize Transformers/Python errors into Pantograph backend errors and
   runtime facts. The non-streaming PyTorch generate-text worker response now
   decodes through the same typed worker-response normalization pattern as model
   load and stream setup: `runtime_unavailable` maps to `BackendError::NotRunning`,
@@ -1858,6 +1858,13 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   to `BackendError::NotRunning` with request id and canonical
   `pytorch_worker_audio_transcription_failed` code rather than a generic
   inference failure.
+  PyTorch Python load-envelope validation is now separated from actual
+  Transformers loading: envelope/projection `ValueError`s remain
+  `invalid_request`, while loader-time `ValueError`, `OSError`, `ImportError`,
+  missing-file failures, and unexpected loader-time exceptions return
+  `model_load_failed` with canonical `pytorch_worker_model_load_failed` so
+  tokenizer/model `from_pretrained` failures surface as startup failures rather
+  than config drift.
   PyTorch audio-transcription worker lookup and ASR invocation failures now
   retain a generated request id and canonical
   `pytorch_worker_audio_transcription_failed` code.

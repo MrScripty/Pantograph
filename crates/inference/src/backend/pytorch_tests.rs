@@ -27,6 +27,106 @@ fn load_worker_contract_module<'py>(py: Python<'py>) -> Bound<'py, pyo3::types::
         .expect("worker_contract module should load")
 }
 
+fn load_worker_module_with_stubbed_dependencies<'py>(
+    py: Python<'py>,
+) -> Bound<'py, pyo3::types::PyModule> {
+    let setup = CString::new(
+        r#"
+import json
+import sys
+import types
+from pathlib import Path
+
+def _noop(*args, **kwargs):
+    return None
+
+for name in ["numpy", "soundfile"]:
+    sys.modules[name] = types.ModuleType(name)
+
+torch = types.ModuleType("torch")
+torch.float16 = "float16"
+torch.float32 = "float32"
+torch.bfloat16 = "bfloat16"
+torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+torch.backends = types.SimpleNamespace(mps=types.SimpleNamespace(is_available=lambda: False))
+torch.device = lambda value: types.SimpleNamespace(type=str(value))
+sys.modules["torch"] = torch
+
+block_diffusion = types.ModuleType("block_diffusion")
+block_diffusion._generate_dllm_masked = _noop
+block_diffusion._generate_dllm_masked_streaming = lambda *args, **kwargs: iter(())
+sys.modules["block_diffusion"] = block_diffusion
+
+autoregressive = types.ModuleType("autoregressive")
+for attr in [
+    "_generate_autoregressive",
+    "_continue_sdar_cached",
+    "_generate_sdar_cached",
+]:
+    setattr(autoregressive, attr, _noop)
+autoregressive._generate_autoregressive_streaming = lambda *args, **kwargs: iter(())
+sys.modules["autoregressive"] = autoregressive
+
+worker_runtime = types.ModuleType("worker_runtime")
+worker_runtime._decode_base64_image = _noop
+worker_runtime._detect_diffusion_load_overrides = lambda config: {}
+worker_runtime._detect_model_type = lambda path: "text-generation"
+worker_runtime._dtype_name = str
+worker_runtime._encode_image = lambda image: "encoded"
+worker_runtime._resolve_device = lambda device: torch.device("cpu")
+worker_runtime._resolve_model_directory = lambda path: Path(path)
+worker_runtime._resolve_torch_dtype = lambda device, requested_dtype=None: torch.float32
+sys.modules["worker_runtime"] = worker_runtime
+
+worker_transformers = types.ModuleType("worker_transformers")
+worker_transformers.apply_compatibility_shims = _noop
+sys.modules["worker_transformers"] = worker_transformers
+
+worker_contract = types.ModuleType("worker_contract")
+worker_contract.AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
+worker_contract.CAUSAL_LM_LOADER = "causal_lm"
+worker_contract.GENERATE_TEXT_STREAM_OPERATION = "generate_text_stream"
+
+def _load_kwargs(envelope):
+    decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+    payload = decoded.get("payload", {})
+    profile = payload.get("task_profile") or {}
+    return {
+        "model_path": payload.get("entry_path"),
+        "loader": profile.get("loader", "causal_lm"),
+    }
+
+worker_contract.load_transformers_model_kwargs_from_envelope = _load_kwargs
+for attr in [
+    "clear_kv_cache_kwargs_from_envelope",
+    "generate_text_kwargs_from_envelope",
+    "get_loaded_info_kwargs_from_envelope",
+    "init_worker_kwargs_from_envelope",
+    "restore_kv_cache_kwargs_from_envelope",
+    "save_kv_cache_kwargs_from_envelope",
+    "transcribe_audio_kwargs_from_envelope",
+    "truncate_kv_cache_kwargs_from_envelope",
+    "unload_model_kwargs_from_envelope",
+]:
+    setattr(worker_contract, attr, lambda envelope: {})
+sys.modules["worker_contract"] = worker_contract
+"#,
+    )
+    .expect("stub setup source should not contain nul bytes");
+    py.run(&setup, None, None)
+        .expect("stubbed worker dependencies should load");
+
+    let source = CString::new(include_str!("../../torch/worker.py"))
+        .expect("worker source should not contain nul bytes");
+    pyo3::types::PyModule::from_code(
+        py,
+        &source,
+        c"pantograph_torch_worker_test.py",
+        c"pantograph_torch_worker_test",
+    )
+    .expect("worker module should load with stubs")
+}
+
 #[test]
 fn test_backend_name() {
     let backend = PyTorchBackend::new();
@@ -481,6 +581,161 @@ fn test_python_worker_contract_rejects_unsupported_task_profile_loader() {
         assert!(error
             .to_string()
             .contains("Unsupported PyTorch worker Transformers loader: image_to_text"));
+    });
+}
+
+#[test]
+fn test_python_worker_load_value_error_after_projection_maps_to_model_load_failed() {
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_stubbed_dependencies(py);
+        let patch = CString::new(
+            r#"
+def fail_load_model(**kwargs):
+    raise ValueError("Transformers tokenizer rejected config")
+module.load_model = fail_load_model
+"#,
+        )
+        .expect("patch source should not contain nul bytes");
+        let globals = pyo3::types::PyDict::new(py);
+        globals
+            .set_item("module", &module)
+            .expect("module global should be set");
+        py.run(&patch, Some(&globals), None)
+            .expect("worker load_model should be patched");
+
+        let envelope = serde_json::json!({
+            "request_id": "req-worker-load-value-error",
+            "payload": {
+                "entry_path": "/models/tiny",
+                "task_profile": {"loader": "causal_lm"}
+            }
+        });
+        let response_json = module
+            .call_method1(
+                "load_transformers_model_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect("worker load should return a JSON response")
+            .extract::<String>()
+            .expect("worker response should be JSON text");
+        let response: serde_json::Value =
+            serde_json::from_str(&response_json).expect("worker response should decode");
+
+        assert_eq!(response["status"], serde_json::json!("error"));
+        assert_eq!(
+            response["request_id"],
+            serde_json::json!("req-worker-load-value-error")
+        );
+        assert_eq!(
+            response["error"]["kind"],
+            serde_json::json!("model_load_failed")
+        );
+        assert_eq!(
+            response["error"]["canonical_code"],
+            serde_json::json!("pytorch_worker_model_load_failed")
+        );
+        assert!(response["error"]["message"]
+            .as_str()
+            .is_some_and(|message| { message.contains("Transformers tokenizer rejected config") }));
+    });
+}
+
+#[test]
+fn test_python_worker_load_unexpected_loader_exception_maps_to_model_load_failed() {
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_stubbed_dependencies(py);
+        let patch = CString::new(
+            r#"
+def fail_load_model(**kwargs):
+    raise KeyError("missing architectures")
+module.load_model = fail_load_model
+"#,
+        )
+        .expect("patch source should not contain nul bytes");
+        let globals = pyo3::types::PyDict::new(py);
+        globals
+            .set_item("module", &module)
+            .expect("module global should be set");
+        py.run(&patch, Some(&globals), None)
+            .expect("worker load_model should be patched");
+
+        let envelope = serde_json::json!({
+            "request_id": "req-worker-load-key-error",
+            "payload": {
+                "entry_path": "/models/tiny",
+                "task_profile": {"loader": "causal_lm"}
+            }
+        });
+        let response_json = module
+            .call_method1(
+                "load_transformers_model_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect("worker load should return a JSON response")
+            .extract::<String>()
+            .expect("worker response should be JSON text");
+        let response: serde_json::Value =
+            serde_json::from_str(&response_json).expect("worker response should decode");
+
+        assert_eq!(response["status"], serde_json::json!("error"));
+        assert_eq!(
+            response["request_id"],
+            serde_json::json!("req-worker-load-key-error")
+        );
+        assert_eq!(
+            response["error"]["kind"],
+            serde_json::json!("model_load_failed")
+        );
+        assert_eq!(
+            response["error"]["canonical_code"],
+            serde_json::json!("pytorch_worker_model_load_failed")
+        );
+        assert!(response["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("missing architectures")));
+    });
+}
+
+#[test]
+fn test_python_worker_load_invalid_loader_stays_invalid_request() {
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_stubbed_dependencies(py);
+        let envelope = serde_json::json!({
+            "request_id": "req-worker-load-invalid-loader",
+            "payload": {
+                "entry_path": "/models/tiny",
+                "task_profile": {"loader": "image_to_text"}
+            }
+        });
+        let response_json = module
+            .call_method1(
+                "load_transformers_model_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect("worker load should return a JSON response")
+            .extract::<String>()
+            .expect("worker response should be JSON text");
+        let response: serde_json::Value =
+            serde_json::from_str(&response_json).expect("worker response should decode");
+
+        assert_eq!(response["status"], serde_json::json!("error"));
+        assert_eq!(
+            response["request_id"],
+            serde_json::json!("req-worker-load-invalid-loader")
+        );
+        assert_eq!(
+            response["error"]["kind"],
+            serde_json::json!("invalid_request")
+        );
+        assert_eq!(
+            response["error"]["canonical_code"],
+            serde_json::json!("pytorch_worker_invalid_load_request")
+        );
+        assert!(response["error"]["message"]
+            .as_str()
+            .is_some_and(|message| {
+                message.contains("Unsupported PyTorch worker Transformers loader")
+            }));
     });
 }
 

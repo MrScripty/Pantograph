@@ -293,23 +293,7 @@ def load_transformers_model_from_envelope(envelope):
         if not kwargs.get("model_path"):
             raise ValueError("PyTorch worker load envelope missing payload.entry_path")
         loader = kwargs.pop("loader", CAUSAL_LM_LOADER)
-        if loader == CAUSAL_LM_LOADER:
-            info = load_model(**kwargs)
-        elif loader == AUTOMATIC_SPEECH_RECOGNITION_LOADER:
-            kwargs.pop("model_type", None)
-            info = load_asr_model_with_policy(**kwargs)
-            info = {
-                "model_path": info.get("model_path"),
-                "model_type": "audio_transcription",
-                "device": info.get("device"),
-            }
-        else:
-            raise ValueError(f"Unsupported PyTorch worker Transformers loader: {loader}")
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": info,
-        })
+        _validate_transformers_loader(loader)
     except ValueError as exc:
         return json.dumps({
             "status": "error",
@@ -319,6 +303,14 @@ def load_transformers_model_from_envelope(envelope):
                 "message": str(exc),
                 "canonical_code": "pytorch_worker_invalid_load_request",
             },
+        })
+
+    try:
+        info = _load_transformers_model_from_kwargs(loader, kwargs)
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": info,
         })
     except RuntimeError as exc:
         message = str(exc)
@@ -337,7 +329,7 @@ def load_transformers_model_from_envelope(envelope):
                 "canonical_code": canonical_code,
             },
         })
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError, OSError, ImportError) as exc:
         return json.dumps({
             "status": "error",
             "request_id": request_id,
@@ -352,11 +344,32 @@ def load_transformers_model_from_envelope(envelope):
             "status": "error",
             "request_id": request_id,
             "error": {
-                "kind": "internal",
+                "kind": "model_load_failed",
                 "message": str(exc),
-                "canonical_code": "pytorch_worker_load_internal",
+                "canonical_code": "pytorch_worker_model_load_failed",
             },
         })
+
+
+def _validate_transformers_loader(loader):
+    if loader not in {CAUSAL_LM_LOADER, AUTOMATIC_SPEECH_RECOGNITION_LOADER}:
+        raise ValueError(f"Unsupported PyTorch worker Transformers loader: {loader}")
+
+
+def _load_transformers_model_from_kwargs(loader, kwargs):
+    if loader == CAUSAL_LM_LOADER:
+        return load_model(**kwargs)
+
+    if loader == AUTOMATIC_SPEECH_RECOGNITION_LOADER:
+        kwargs.pop("model_type", None)
+        info = load_asr_model_with_policy(**kwargs)
+        return {
+            "model_path": info.get("model_path"),
+            "model_type": "audio_transcription",
+            "device": info.get("device"),
+        }
+
+    _validate_transformers_loader(loader)
 
 
 def generate_text_from_envelope(envelope):
