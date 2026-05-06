@@ -14,82 +14,6 @@ use super::{build_extra_settings, build_model_ref_v2, infer_task_type_primary, k
 // PyTorch handlers (behind pytorch-nodes feature)
 // ---------------------------------------------------------------------------
 
-/// Ensure the PyTorch worker module (and its sibling modules) are loaded into
-/// the Python interpreter.  Safe to call multiple times -- only the first call
-/// actually loads.
-pub(crate) fn ensure_torch_worker_initialised(
-    py: pyo3::Python<'_>,
-) -> std::result::Result<(), String> {
-    if py.import("pantograph_torch_worker").is_ok() {
-        return Ok(());
-    }
-
-    use pyo3::types::PyAnyMethods;
-
-    let sys = py
-        .import("sys")
-        .map_err(|e| format!("Failed to import sys: {}", e))?;
-    let modules = sys
-        .getattr("modules")
-        .map_err(|e| format!("Failed to get sys.modules: {}", e))?;
-
-    // Register sibling modules first so worker.py's imports resolve.
-    for (name, source, file_name, module_name) in [
-        (
-            "block_diffusion",
-            include_str!("../../../inference/torch/block_diffusion.py"),
-            c"block_diffusion.py",
-            c"block_diffusion",
-        ),
-        (
-            "autoregressive",
-            include_str!("../../../inference/torch/autoregressive.py"),
-            c"autoregressive.py",
-            c"autoregressive",
-        ),
-        (
-            "worker_runtime",
-            include_str!("../../../inference/torch/worker_runtime.py"),
-            c"worker_runtime.py",
-            c"worker_runtime",
-        ),
-        (
-            "worker_transformers",
-            include_str!("../../../inference/torch/worker_transformers.py"),
-            c"worker_transformers.py",
-            c"worker_transformers",
-        ),
-        (
-            "worker_contract",
-            include_str!("../../../inference/torch/worker_contract.py"),
-            c"worker_contract.py",
-            c"worker_contract",
-        ),
-    ] {
-        let module_code = std::ffi::CString::new(source)
-            .map_err(|e| format!("Invalid {} source: {}", name, e))?;
-        let module = pyo3::types::PyModule::from_code(py, &module_code, file_name, module_name)
-            .map_err(|e| format!("Failed to load {}: {}", name, e))?;
-        modules
-            .set_item(name, &module)
-            .map_err(|e| format!("Failed to register {}: {}", name, e))?;
-    }
-
-    // Now load the worker module.
-    let code = std::ffi::CString::new(include_str!("../../../inference/torch/worker.py"))
-        .map_err(|e| format!("Invalid worker source: {}", e))?;
-    pyo3::types::PyModule::from_code(
-        py,
-        &code,
-        c"pantograph_torch_worker",
-        c"pantograph_torch_worker",
-    )
-    .map_err(|e| format!("Failed to load worker: {}", e))?;
-
-    log::info!("PyTorch worker module initialised with embedded sibling modules");
-    Ok(())
-}
-
 async fn pytorch_model_needs_load(model_path: &str) -> Result<bool> {
     match inference::backend::pytorch::active_loaded_model_info().await {
         Ok(info) => Ok(info.model_path != model_path),
@@ -103,18 +27,37 @@ async fn pytorch_model_needs_load(model_path: &str) -> Result<bool> {
 
 pub(crate) fn pytorch_typed_generation_top_k(
     extra_settings: &HashMap<String, serde_json::Value>,
-) -> Option<Option<u32>> {
-    if extra_settings.is_empty() {
-        return Some(None);
+) -> Result<Option<u32>> {
+    let mut top_k = None;
+    for (key, value) in extra_settings {
+        match key.as_str() {
+            "top_k" => {
+                let value = value.as_u64().and_then(|value| u32::try_from(value).ok());
+                let Some(value) = value else {
+                    return Err(NodeEngineError::ExecutionFailed(
+                        "PyTorch top_k must be a non-negative integer within u32 range".to_string(),
+                    ));
+                };
+                top_k = Some(value);
+            }
+            // top_p is already read from typed inputs above and remains allowed
+            // here so existing canonical schemas do not become backend kwargs.
+            "top_p" => {
+                if value.as_f64().is_none() {
+                    return Err(NodeEngineError::ExecutionFailed(
+                        "PyTorch top_p must be numeric".to_string(),
+                    ));
+                }
+            }
+            unsupported => {
+                return Err(NodeEngineError::ExecutionFailed(format!(
+                    "Unsupported PyTorch generation setting '{}'. Add it to typed GenerationOptions before using it.",
+                    unsupported
+                )));
+            }
+        }
     }
-    if extra_settings.len() != 1 {
-        return None;
-    }
-    let top_k = extra_settings
-        .get("top_k")?
-        .as_u64()
-        .and_then(|value| u32::try_from(value).ok())?;
-    Some(Some(top_k))
+    Ok(top_k)
 }
 
 pub(crate) async fn execute_pytorch_inference(
@@ -220,220 +163,51 @@ pub(crate) async fn execute_pytorch_inference(
         .or_else(|| extra_settings.get("top_p").and_then(|v| v.as_f64()))
         .unwrap_or(0.95);
 
-    // Phase 2: Generate — streaming or non-streaming
+    let top_k = pytorch_typed_generation_top_k(&extra_settings)?;
+
+    // Phase 2: Generate through the inference-owned PyTorch worker envelope.
     let response_text = if let Some(sink) = event_sink {
-        // Streaming: iterate Python generator via mpsc channel
-        // Channel carries (mode, text) tuples: mode is "append" or "replace"
-        let (tx, mut rx) =
-            tokio::sync::mpsc::channel::<std::result::Result<(String, String), String>>(32);
-        let p = prompt.clone();
-        let sp = system_prompt.clone();
-        let mpj = masked_prompt_json.clone();
-        let extra = extra_settings.clone();
-
-        if let Some(top_k) = pytorch_typed_generation_top_k(&extra) {
-            let mut stream = inference::backend::pytorch::PyTorchBackend::new()
-                .generate_stream_with_top_k(p, sp, max_tokens, temperature, top_p, top_k, mpj);
-            let mut full_response = String::new();
-            while let Some(chunk_result) = stream.next().await {
-                let chunk = chunk_result.map_err(|error| {
-                    NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", error))
-                })?;
-                if let Some(text) = chunk.content.filter(|text| !text.is_empty()) {
-                    full_response.push_str(&text);
-                    let _ = sink.send(crate::WorkflowEvent::task_stream(
-                        task_id,
-                        execution_id,
-                        "stream",
-                        serde_json::json!({"mode": "append", "text": text}),
-                    ));
-                }
-            }
-            full_response
-        } else {
-            tokio::task::spawn_blocking(move || {
-                pyo3::Python::with_gil(|py| {
-                    use pyo3::types::{PyAnyMethods, PyDictMethods, PyTypeMethods};
-
-                    if let Err(e) = ensure_torch_worker_initialised(py) {
-                        let _ = tx.blocking_send(Err(e));
-                        return;
-                    }
-                    let worker = match py.import("pantograph_torch_worker") {
-                        Ok(w) => w,
-                        Err(e) => {
-                            let _ = tx.blocking_send(Err(format!("Failed to get worker: {}", e)));
-                            return;
-                        }
-                    };
-
-                    let kwargs = pyo3::types::PyDict::new(py);
-                    kwargs.set_item("prompt", &p).unwrap();
-                    if let Some(ref sys) = sp {
-                        kwargs.set_item("system_prompt", sys).unwrap();
-                    }
-                    kwargs.set_item("max_tokens", max_tokens).unwrap();
-                    kwargs.set_item("temperature", temperature).unwrap();
-                    kwargs.set_item("top_p", top_p).unwrap();
-                    if let Some(ref mpj_val) = mpj {
-                        kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
-                    }
-
-                    // Forward model-specific inference settings as kwargs
-                    for (key, value) in &extra {
-                        if let Some(n) = value.as_i64() {
-                            kwargs.set_item(key.as_str(), n).unwrap();
-                        } else if let Some(n) = value.as_f64() {
-                            kwargs.set_item(key.as_str(), n).unwrap();
-                        } else if let Some(s) = value.as_str() {
-                            kwargs.set_item(key.as_str(), s).unwrap();
-                        } else if let Some(b) = value.as_bool() {
-                            kwargs.set_item(key.as_str(), b).unwrap();
-                        }
-                    }
-
-                    let generator = match worker.call_method("generate_tokens", (), Some(&kwargs)) {
-                        Ok(g) => g,
-                        Err(e) => {
-                            let _ =
-                                tx.blocking_send(Err(format!("Failed to create generator: {}", e)));
-                            return;
-                        }
-                    };
-
-                    let iter = match generator.try_iter() {
-                        Ok(it) => it,
-                        Err(e) => {
-                            let _ = tx.blocking_send(Err(format!("Generator not iterable: {}", e)));
-                            return;
-                        }
-                    };
-
-                    for item in iter {
-                        match item {
-                            Ok(token_obj) => {
-                                // Try dict first: {"mode": "append"|"replace", "text": "..."}
-                                let result = if let Ok(dict) =
-                                    token_obj.downcast::<pyo3::types::PyDict>()
-                                {
-                                    let mode = dict
-                                        .get_item("mode")
-                                        .ok()
-                                        .flatten()
-                                        .and_then(|v| v.extract::<String>().ok())
-                                        .unwrap_or_else(|| "append".to_string());
-                                    let text = dict
-                                        .get_item("text")
-                                        .ok()
-                                        .flatten()
-                                        .and_then(|v| v.extract::<String>().ok())
-                                        .unwrap_or_default();
-                                    Ok((mode, text))
-                                } else if let Ok(text) = token_obj.extract::<String>() {
-                                    // Backwards compat: plain string -> append
-                                    Ok(("append".to_string(), text))
-                                } else {
-                                    Err(format!(
-                                        "Token extraction failed: expected dict or string, got {:?}",
-                                        token_obj.get_type().name()
-                                    ))
-                                };
-                                if tx.blocking_send(result).is_err() {
-                                    return;
-                                }
-                            }
-                            Err(e) => {
-                                let _ = tx.blocking_send(Err(format!("Generator error: {}", e)));
-                                return;
-                            }
-                        }
-                    }
-                });
-            });
-
-            let mut full_response = String::new();
-            while let Some(token_result) = rx.recv().await {
-                let (mode, text) = token_result.map_err(|e| {
-                    NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", e))
-                })?;
-                if mode == "replace" {
-                    full_response = text.clone();
-                } else {
-                    full_response.push_str(&text);
-                }
+        let mut stream = inference::backend::pytorch::PyTorchBackend::new()
+            .generate_stream_with_top_k(
+                prompt.clone(),
+                system_prompt.clone(),
+                max_tokens,
+                temperature,
+                top_p,
+                top_k,
+                masked_prompt_json.clone(),
+            );
+        let mut full_response = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result.map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", error))
+            })?;
+            if let Some(text) = chunk.content.filter(|text| !text.is_empty()) {
+                full_response.push_str(&text);
                 let _ = sink.send(crate::WorkflowEvent::task_stream(
                     task_id,
                     execution_id,
                     "stream",
-                    serde_json::json!({"mode": mode, "text": text}),
+                    serde_json::json!({"mode": "append", "text": text}),
                 ));
             }
-
-            full_response
         }
+        full_response
     } else {
-        // Non-streaming: use the inference-owned worker envelope when no
-        // legacy custom kwargs need to be preserved.
-        let p = prompt.clone();
-        let sp = system_prompt.clone();
-        let mpj = masked_prompt_json.clone();
-        let extra = extra_settings;
-
-        if let Some(top_k) = pytorch_typed_generation_top_k(&extra) {
-            inference::backend::pytorch::PyTorchBackend::new()
-                .generate_with_top_k(p, sp, max_tokens, temperature, top_p, top_k, mpj)
-                .await
-                .map_err(|error| {
-                    NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", error))
-                })?
-        } else {
-            tokio::task::spawn_blocking(move || {
-                pyo3::Python::with_gil(|py| -> std::result::Result<String, String> {
-                    use pyo3::types::{PyAnyMethods, PyDictMethods};
-
-                    ensure_torch_worker_initialised(py)?;
-                    let worker = py
-                        .import("pantograph_torch_worker")
-                        .map_err(|e| format!("Failed to get worker: {}", e))?;
-
-                    let kwargs = pyo3::types::PyDict::new(py);
-                    kwargs.set_item("prompt", &p).unwrap();
-                    if let Some(ref sys) = sp {
-                        kwargs.set_item("system_prompt", sys).unwrap();
-                    }
-                    kwargs.set_item("max_tokens", max_tokens).unwrap();
-                    kwargs.set_item("temperature", temperature).unwrap();
-                    kwargs.set_item("top_p", top_p).unwrap();
-                    if let Some(ref mpj_val) = mpj {
-                        kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
-                    }
-
-                    // Forward model-specific inference settings as kwargs
-                    for (key, value) in &extra {
-                        if let Some(n) = value.as_i64() {
-                            kwargs.set_item(key.as_str(), n).unwrap();
-                        } else if let Some(n) = value.as_f64() {
-                            kwargs.set_item(key.as_str(), n).unwrap();
-                        } else if let Some(s) = value.as_str() {
-                            kwargs.set_item(key.as_str(), s).unwrap();
-                        } else if let Some(b) = value.as_bool() {
-                            kwargs.set_item(key.as_str(), b).unwrap();
-                        }
-                    }
-
-                    let result = worker
-                        .call_method("generate", (), Some(&kwargs))
-                        .map_err(|e| format!("Generation failed: {}", e))?;
-
-                    result
-                        .extract::<String>()
-                        .map_err(|e| format!("Failed to extract result: {}", e))
-                })
-            })
+        inference::backend::pytorch::PyTorchBackend::new()
+            .generate_with_top_k(
+                prompt.clone(),
+                system_prompt.clone(),
+                max_tokens,
+                temperature,
+                top_p,
+                top_k,
+                masked_prompt_json.clone(),
+            )
             .await
-            .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
-            .map_err(NodeEngineError::ExecutionFailed)?
-        }
+            .map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", error))
+            })?
     };
 
     let mut outputs = HashMap::new();

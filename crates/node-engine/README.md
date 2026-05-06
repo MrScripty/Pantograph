@@ -63,7 +63,7 @@ host-agnostic application operations.
 | Feature | Default | Contract |
 | ------- | ------- | -------- |
 | `inference-nodes` | No | Enables gateway-backed LLM, vision, embedding, reranking, unload, and llama.cpp node handlers. |
-| `pytorch-nodes` | No | Extends inference nodes with PyTorch/PyO3 execution and live KV snapshot reuse. Requires Python/PyTorch runtime availability. |
+| `pytorch-nodes` | No | Extends inference nodes with PyTorch execution through the inference crate boundary and live KV snapshot reuse. Requires Python/PyTorch runtime availability through `inference/backend-pytorch`. |
 | `audio-nodes` | No | Enables Stable Audio Python-worker execution. Requires Python audio dependencies at runtime. |
 
 The base crate intentionally has no default features so graph DTOs,

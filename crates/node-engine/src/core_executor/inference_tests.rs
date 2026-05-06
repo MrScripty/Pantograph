@@ -2545,7 +2545,10 @@ fn test_dependency_preflight_lifecycle_context_reads_resolved_artifact_kind() {
 #[test]
 fn test_pytorch_typed_generation_top_k_accepts_empty_settings() {
     let settings = HashMap::new();
-    assert_eq!(pytorch_typed_generation_top_k(&settings), Some(None));
+    assert_eq!(
+        pytorch_typed_generation_top_k(&settings).expect("empty settings should be accepted"),
+        None
+    );
 }
 
 #[cfg(feature = "pytorch-nodes")]
@@ -2553,16 +2556,52 @@ fn test_pytorch_typed_generation_top_k_accepts_empty_settings() {
 fn test_pytorch_typed_generation_top_k_accepts_single_top_k() {
     let mut settings = HashMap::new();
     settings.insert("top_k".to_string(), serde_json::json!(40));
-    assert_eq!(pytorch_typed_generation_top_k(&settings), Some(Some(40)));
+    assert_eq!(
+        pytorch_typed_generation_top_k(&settings).expect("top_k should be accepted"),
+        Some(40)
+    );
 }
 
 #[cfg(feature = "pytorch-nodes")]
 #[test]
-fn test_pytorch_typed_generation_top_k_rejects_legacy_custom_kwargs() {
+fn test_pytorch_typed_generation_top_k_accepts_typed_top_p() {
+    let mut settings = HashMap::new();
+    settings.insert("top_p".to_string(), serde_json::json!(0.9));
+    assert_eq!(
+        pytorch_typed_generation_top_k(&settings).expect("typed top_p should be accepted"),
+        None
+    );
+}
+
+#[cfg(feature = "pytorch-nodes")]
+#[test]
+fn test_pytorch_typed_generation_top_k_rejects_invalid_top_p() {
+    let mut settings = HashMap::new();
+    settings.insert("top_p".to_string(), serde_json::json!("high"));
+    let error =
+        pytorch_typed_generation_top_k(&settings).expect_err("invalid top_p should be rejected");
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("PyTorch top_p must be numeric"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "pytorch-nodes")]
+#[test]
+fn test_pytorch_typed_generation_top_k_rejects_custom_kwargs() {
     let mut settings = HashMap::new();
     settings.insert("top_k".to_string(), serde_json::json!(40));
     settings.insert("block_length".to_string(), serde_json::json!(32));
-    assert_eq!(pytorch_typed_generation_top_k(&settings), None);
+    let error =
+        pytorch_typed_generation_top_k(&settings).expect_err("custom kwargs should be rejected");
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Unsupported PyTorch generation setting 'block_length'"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
 }
 
 #[cfg(feature = "inference-nodes")]

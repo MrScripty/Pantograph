@@ -3926,6 +3926,11 @@ Update during implementation:
   `PyTorchBackend::generate_stream_with_top_k` when settings are empty or only
   typed `top_k`, leaving the direct `generate_tokens` compatibility path only
   for mixed custom kwargs that still require legacy event-mode projection.
+- 2026-05-06: Project direction was clarified to cut old Pantograph-internal
+  compatibility paths instead of preserving them. Node-engine PyTorch execution
+  now rejects unsupported `inference_settings`, removes its embedded
+  `pantograph_torch_worker` loader and direct PyO3 generation calls, and relies
+  on the inference crate as the only PyTorch worker owner.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

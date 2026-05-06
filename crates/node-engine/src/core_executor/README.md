@@ -108,31 +108,24 @@ stable public facade and dispatch owner.
   It must not be recomputed from prompt or generated text.
 - Llama.cpp completion execution stays in `llamacpp_nodes.rs`; reranking and
   embedding execution stay in `retrieval_nodes.rs`.
-- PyTorch Python-worker execution stays in `pytorch_nodes.rs`; Stable Audio
-  Python-worker execution stays in `audio_nodes.rs`.
+- PyTorch execution in `pytorch_nodes.rs` must use the inference crate's
+  `PyTorchBackend` helpers; Stable Audio Python-worker execution stays in
+  `audio_nodes.rs`.
 - PyTorch lifecycle operations invoked from shared canonical handlers, such as
   model unload in `inference_nodes.rs`, must go through the inference crate's
   typed worker-envelope helpers instead of importing the embedded Python worker
   directly.
-- PyTorch loaded-model lookups in legacy node execution must use the inference
-  crate's typed `get_loaded_info` boundary, and model loading must use
-  `PyTorchBackend::load_model`; direct worker imports remain only for the
-  still-migrating streaming and custom-kwargs generation calls in
-  `pytorch_nodes.rs`.
-- PyTorch non-streaming text generation without legacy custom
-  `inference_settings`, or with only typed `top_k`, must use
-  `PyTorchBackend::generate_with_top_k`; the direct worker generation path is
-  retained only for streaming or custom-kwargs compatibility until those
-  settings are represented by typed generation options.
-- PyTorch streaming text generation with no legacy custom settings, or only
-  typed `top_k`, must use `PyTorchBackend::generate_stream_with_top_k`; the
-  direct streaming worker path remains only for mixed custom kwargs that still
-  need legacy mode-preserving event projection.
+- PyTorch loaded-model lookups must use the inference crate's typed
+  `get_loaded_info` boundary, and model loading must use
+  `PyTorchBackend::load_model`.
+- PyTorch streaming and non-streaming text generation must use
+  `PyTorchBackend::generate_with_top_k` or
+  `PyTorchBackend::generate_stream_with_top_k`. Unsupported
+  `inference_settings` must fail validation instead of being forwarded as
+  Python kwargs.
 - Python-worker handlers should pass worker parameters directly into their
   blocking closures and avoid redundant rebinding so the feature-gated path
   stays clippy-clean without changing runtime behavior.
-- PyTorch worker initialization must register every `worker.py` sibling module
-  used by the embedded source, mirroring the inference backend loader.
 - The public facade remains `CoreTaskExecutor`; helper modules are private
   implementation details unless a separate public contract is explicitly
   introduced.
