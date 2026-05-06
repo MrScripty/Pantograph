@@ -3015,9 +3015,10 @@ inference write ledger events directly.
   non-streaming paths without storing prompt text, generated content, KV bytes,
   tensors, temp paths, or scheduler/runtime reuse decisions. Typed audio
   transcription now propagates bounded `audio_ref` artifact references through
-  backend-execution lifecycle events and durable inference diagnostics while
-  keeping encoded audio bytes, prompt text, generated content, local paths,
-  `file://` URLs, and scheduler/runtime selection state out of the payload.
+  task-validation and backend-execution lifecycle events and durable inference
+  diagnostics while keeping encoded audio bytes, prompt text, generated
+  content, local paths, `file://` URLs, and scheduler/runtime selection state
+  out of the payload.
   Non-typed `embeddings_with_lifecycle` now also projects bounded token usage
   from backend `EmbeddingResult.token_count` values onto the backend-execution
   lifecycle completion event without serializing input text or embedding

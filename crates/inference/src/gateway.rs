@@ -1299,7 +1299,7 @@ impl InferenceGateway {
             compatibility_diagnostics.option_diagnostics.clone();
         validation_option_diagnostics.extend(request_option_diagnostics.clone());
         dedupe_option_diagnostics(&mut validation_option_diagnostics);
-        record_non_streaming_lifecycle_phase_result_with_diagnostics(
+        record_non_streaming_lifecycle_phase_result_with_references(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::TaskValidation,
             request_id.clone(),
@@ -1313,6 +1313,10 @@ impl InferenceGateway {
             validation_option_diagnostics,
             compatibility_diagnostics.compatibility_report.clone(),
             compatibility_diagnostics.compatibility_issues.clone(),
+            None,
+            None,
+            artifact_refs.clone(),
+            None,
         );
         if emit_typed_boundary_lifecycle {
             record_successful_non_streaming_lifecycle_phase(

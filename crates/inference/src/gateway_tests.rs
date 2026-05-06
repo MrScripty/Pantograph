@@ -2038,6 +2038,10 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
                 && event.kind == InferenceRequestLifecycleEventKind::Completed
         })
         .expect("task validation completion event should be recorded");
+    assert_eq!(
+        validation_completed.artifact_refs,
+        vec!["artifact://audio.wav".to_string()]
+    );
     assert!(validation_completed
         .option_diagnostics
         .iter()
@@ -2161,6 +2165,14 @@ async fn test_execute_typed_audio_lifecycle_omits_local_path_artifact_refs() {
         .expect("typed audio request should execute");
 
     let events = sink.events();
+    let validation_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::TaskValidation
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("task validation completion event should be recorded");
+    assert!(validation_completed.artifact_refs.is_empty());
     let backend_completed = events
         .iter()
         .find(|event| {

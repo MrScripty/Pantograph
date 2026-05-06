@@ -835,6 +835,7 @@ fn inference_diagnostic_phase_is_persistable(
             event.compatibility_report.is_some()
                 || !event.compatibility_issues.is_empty()
                 || !event.option_diagnostics.is_empty()
+                || !event.artifact_refs.is_empty()
         }
         inference::InferenceLifecyclePhase::BackendExecution => true,
     }

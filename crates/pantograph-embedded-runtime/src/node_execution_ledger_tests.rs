@@ -799,6 +799,31 @@ fn inference_diagnostic_event_adapter_filters_local_artifact_refs_before_ledger(
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_persists_task_validation_artifact_refs() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.phase = inference::InferenceLifecyclePhase::TaskValidation;
+    event.artifact_refs = vec![
+        "artifact://audio.wav".to_string(),
+        "/tmp/private.wav".to_string(),
+    ];
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("stable task-validation artifact ref should keep diagnostic persistable");
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.lifecycle_phase.as_deref(), Some("task_validation"));
+            assert_eq!(payload.artifact_refs, vec!["artifact://audio.wav"]);
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_diagnostic_event_adapter_drops_unsafe_only_artifact_refs() {
     let context = context();
     let mut event = inference_lifecycle_event(

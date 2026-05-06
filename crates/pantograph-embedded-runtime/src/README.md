@@ -170,9 +170,10 @@ delegating methods; scheduler authority and diagnostics events stay in
   runtime, model, task, selected backend, resolved artifact kind, phase, status,
   and duration metadata into workflow-service diagnostics, but inference and
   node-engine must not import or write the diagnostics ledger directly.
-  Completed backend-execution lifecycle events may additionally project bounded
-  option-support summaries, compatibility summaries, usage counts,
-  cache-handle ids, artifact refs, and matched lifecycle duration. Structured
+  Completed task-validation and backend-execution lifecycle events may
+  additionally project bounded option-support summaries, compatibility
+  summaries, usage counts, cache-handle ids, artifact refs, and matched
+  lifecycle duration. Structured
   KV-cache progress may project bounded
   action/outcome/cache-id references and task-local KV option-support summaries
   through the host-owned workflow event sink. KV-cache diagnostic append
