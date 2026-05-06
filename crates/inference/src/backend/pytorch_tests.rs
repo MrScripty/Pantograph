@@ -685,8 +685,11 @@ fn test_pytorch_worker_generate_text_success_response_returns_text() {
         }
     });
 
-    let text = PyTorchBackend::generate_text_from_worker_response(&response.to_string())
-        .expect("generate_text response decodes");
+    let text = PyTorchBackend::generate_text_from_worker_response(
+        "req-generate-ok",
+        &response.to_string(),
+    )
+    .expect("generate_text response decodes");
 
     assert_eq!(text, "Generated through Transformers.");
 }
@@ -703,7 +706,10 @@ fn test_pytorch_worker_generate_text_runtime_unavailable_normalizes_to_backend_e
         }
     });
 
-    match PyTorchBackend::generate_text_from_worker_response(&response.to_string()) {
+    match PyTorchBackend::generate_text_from_worker_response(
+        "req-generate-no-model",
+        &response.to_string(),
+    ) {
         Err(BackendError::NotRunning(message)) => {
             assert!(message.contains("pytorch_worker_generate_text_failed"));
             assert!(message.contains("req-generate-no-model"));
@@ -725,7 +731,10 @@ fn test_pytorch_worker_generate_text_failure_normalizes_to_inference_error() {
         }
     });
 
-    match PyTorchBackend::generate_text_from_worker_response(&response.to_string()) {
+    match PyTorchBackend::generate_text_from_worker_response(
+        "req-generate-failed",
+        &response.to_string(),
+    ) {
         Err(BackendError::Inference(message)) => {
             assert!(message.contains("pytorch_worker_generation_failed"));
             assert!(message.contains("req-generate-failed"));
@@ -747,7 +756,10 @@ fn test_pytorch_worker_generate_cancelled_response_maps_to_inference() {
         }
     });
 
-    match PyTorchBackend::generate_text_from_worker_response(&response.to_string()) {
+    match PyTorchBackend::generate_text_from_worker_response(
+        "req-generate-cancelled",
+        &response.to_string(),
+    ) {
         Err(error) => assert_worker_backend_error(
             error,
             ExpectedBackendErrorVariant::Inference,
@@ -755,6 +767,21 @@ fn test_pytorch_worker_generate_cancelled_response_maps_to_inference() {
             "pytorch_worker_generation_cancelled",
             "cancelled by client token",
         ),
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_generate_text_malformed_response_normalizes_to_inference_error() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match PyTorchBackend::generate_text_from_worker_response("req-generate-malformed", malformed) {
+        Err(BackendError::Inference(message)) => {
+            assert!(message.contains("pytorch_worker_generate_text_failed"));
+            assert!(message.contains("req-generate-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker generate_text response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
+        }
         other => panic!("expected Inference error, got {other:?}"),
     }
 }
@@ -1352,7 +1379,7 @@ fn test_pytorch_worker_load_response_decodes_loaded_model_info() {
         }
     });
 
-    let info = PyTorchBackend::load_info_from_worker_response(&response.to_string())
+    let info = PyTorchBackend::load_info_from_worker_response("req-load-ok", &response.to_string())
         .expect("load response decodes");
 
     assert_eq!(info.model_path, "/models/tiny");
@@ -1372,7 +1399,8 @@ fn test_pytorch_worker_load_error_response_normalizes_to_backend_error() {
         }
     });
 
-    match PyTorchBackend::load_info_from_worker_response(&response.to_string()) {
+    match PyTorchBackend::load_info_from_worker_response("req-load-rejected", &response.to_string())
+    {
         Err(BackendError::Config(message)) => {
             assert!(message.contains("pytorch_transformers_trust_policy_rejected"));
             assert!(message.contains("req-load-rejected"));
@@ -1394,7 +1422,7 @@ fn test_pytorch_worker_load_model_load_failed_response_maps_to_startup_failed() 
         }
     });
 
-    match PyTorchBackend::load_info_from_worker_response(&response.to_string()) {
+    match PyTorchBackend::load_info_from_worker_response("req-load-failed", &response.to_string()) {
         Err(error) => assert_worker_backend_error(
             error,
             ExpectedBackendErrorVariant::StartupFailed,
@@ -1402,6 +1430,21 @@ fn test_pytorch_worker_load_model_load_failed_response_maps_to_startup_failed() 
             "pytorch_transformers_model_load_failed",
             "could not load model weights",
         ),
+        other => panic!("expected StartupFailed error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_load_malformed_response_normalizes_to_startup_failed() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match PyTorchBackend::load_info_from_worker_response("req-load-malformed", malformed) {
+        Err(BackendError::StartupFailed(message)) => {
+            assert!(message.contains("pytorch_worker_model_load_failed"));
+            assert!(message.contains("req-load-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker load response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
+        }
         other => panic!("expected StartupFailed error, got {other:?}"),
     }
 }
@@ -1433,7 +1476,10 @@ fn test_pytorch_worker_stream_setup_error_response_normalizes_to_backend_error()
         }
     });
 
-    match PyTorchBackend::stream_setup_from_worker_response(&response.to_string()) {
+    match PyTorchBackend::stream_setup_from_worker_response(
+        "req-stream-no-model",
+        &response.to_string(),
+    ) {
         Err(BackendError::NotRunning(message)) => {
             assert!(message.contains("pytorch_worker_generate_text_stream_failed"));
             assert!(message.contains("req-stream-no-model"));
@@ -1455,7 +1501,10 @@ fn test_pytorch_worker_stream_invalid_request_response_maps_to_config() {
         }
     });
 
-    match PyTorchBackend::stream_setup_from_worker_response(&response.to_string()) {
+    match PyTorchBackend::stream_setup_from_worker_response(
+        "req-stream-invalid",
+        &response.to_string(),
+    ) {
         Err(error) => assert_worker_backend_error(
             error,
             ExpectedBackendErrorVariant::Config,
@@ -1464,6 +1513,21 @@ fn test_pytorch_worker_stream_invalid_request_response_maps_to_config() {
             "missing prompt state",
         ),
         other => panic!("expected Config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_stream_setup_malformed_response_normalizes_to_inference_error() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match PyTorchBackend::stream_setup_from_worker_response("req-stream-malformed", malformed) {
+        Err(BackendError::Inference(message)) => {
+            assert!(message.contains("pytorch_worker_generate_text_stream_failed"));
+            assert!(message.contains("req-stream-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker stream setup response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
     }
 }
 
@@ -1535,7 +1599,7 @@ fn test_pytorch_worker_stream_setup_success_response_decodes() {
         "result": {"ready": true}
     });
 
-    PyTorchBackend::stream_setup_from_worker_response(&response.to_string())
+    PyTorchBackend::stream_setup_from_worker_response("req-stream-ready", &response.to_string())
         .expect("stream setup success should decode");
 }
 

@@ -544,7 +544,7 @@ impl PyTorchBackend {
                         )
                     })?;
 
-                Self::load_info_from_worker_response(&response_json)
+                Self::load_info_from_worker_response(&request_id, &response_json)
             })
         })
         .await
@@ -556,13 +556,15 @@ impl PyTorchBackend {
     }
 
     fn load_info_from_worker_response(
+        request_id: &str,
         response_json: &str,
     ) -> Result<LoadedModelInfo, BackendError> {
         let response: PyTorchWorkerResponse<LoadedModelInfo> = serde_json::from_str(response_json)
             .map_err(|error| {
-                BackendError::Inference(format!(
-                    "Failed to decode PyTorch worker load response: {error}"
-                ))
+                Self::load_worker_failure_from_message(
+                    request_id,
+                    format!("Failed to decode PyTorch worker load response: {error}"),
+                )
             })?;
         match response {
             PyTorchWorkerResponse::Ok(success) => Ok(success.result),
@@ -570,12 +572,16 @@ impl PyTorchBackend {
         }
     }
 
-    fn stream_setup_from_worker_response(response_json: &str) -> Result<(), BackendError> {
+    fn stream_setup_from_worker_response(
+        request_id: &str,
+        response_json: &str,
+    ) -> Result<(), BackendError> {
         let response: PyTorchWorkerResponse<Value> =
             serde_json::from_str(response_json).map_err(|error| {
-                BackendError::Inference(format!(
-                    "Failed to decode PyTorch worker stream setup response: {error}"
-                ))
+                Self::stream_worker_failure_from_message(
+                    request_id,
+                    format!("Failed to decode PyTorch worker stream setup response: {error}"),
+                )
             })?;
         match response {
             PyTorchWorkerResponse::Ok(_) => Ok(()),
@@ -673,12 +679,16 @@ impl PyTorchBackend {
         .into_backend_error()
     }
 
-    fn generate_text_from_worker_response(response_json: &str) -> Result<String, BackendError> {
+    fn generate_text_from_worker_response(
+        request_id: &str,
+        response_json: &str,
+    ) -> Result<String, BackendError> {
         let response: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
             serde_json::from_str(response_json).map_err(|error| {
-                BackendError::Inference(format!(
-                    "Failed to decode PyTorch worker generate_text response: {error}"
-                ))
+                Self::generate_text_worker_failure_from_message(
+                    request_id,
+                    format!("Failed to decode PyTorch worker generate_text response: {error}"),
+                )
             })?;
         match response {
             PyTorchWorkerResponse::Ok(success) => Ok(success.result.text),
@@ -1256,7 +1266,7 @@ impl PyTorchBackend {
                         ),
                     )
                 })?;
-                Self::generate_text_from_worker_response(&response_json)
+                Self::generate_text_from_worker_response(&request_id, &response_json)
             })
         })
         .await
@@ -1356,7 +1366,9 @@ impl PyTorchBackend {
                         return;
                     }
                 };
-                if let Err(error) = Self::stream_setup_from_worker_response(&setup_response_json) {
+                if let Err(error) =
+                    Self::stream_setup_from_worker_response(&request_id, &setup_response_json)
+                {
                     let _ = tx.blocking_send(Err(error));
                     return;
                 }

@@ -137,7 +137,9 @@ fn create_backend() {
   while sanitizing traceback frames and local path tokens before they become
   `BackendError` messages. PyTorch task-join failures use the same sanitizer
   even when the failure is produced by Rust async task boundaries rather than a
-  structured worker envelope.
+  structured worker envelope. Malformed worker response JSON must also route
+  through the canonical worker failure helpers instead of returning raw decode
+  errors without request ids.
 - Streaming response parsers should use `strip_prefix` for SSE `data:` lines
   so prefix handling stays explicit and warning-clean under the Rust clippy
   audit.

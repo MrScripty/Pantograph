@@ -1873,7 +1873,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   PyTorch task-join failures now route through the same sanitizer before
   becoming `BackendError` messages, closing the Rust async task-boundary path
   where panic text or join diagnostics could otherwise carry traceback frames
-  or local paths.
+  or local paths. Malformed PyTorch worker response JSON now also routes
+  through canonical worker failure helpers for model load, non-streaming
+  generation, and stream setup, preserving generated request ids and canonical
+  worker codes instead of returning raw decode errors.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -3784,6 +3787,10 @@ Update during implementation:
   unsafe values before persistence, while allowing a bounded artifact-kind
   label to make completed lifecycle diagnostics persistable without artifact
   refs or local paths.
+- 2026-05-06: PyTorch worker response decode failures now normalize through
+  canonical worker failure codes for model load, non-streaming generation, and
+  stream setup, preserving request ids and avoiding raw malformed response
+  payload text in `BackendError` messages.
 - 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
   threaded terminal text/chat cache-handle ids through typed gateway results,
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`
