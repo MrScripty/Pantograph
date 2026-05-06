@@ -114,6 +114,9 @@ stable public facade and dispatch owner.
   model unload in `inference_nodes.rs`, must go through the inference crate's
   typed worker-envelope helpers instead of importing the embedded Python worker
   directly.
+- PyTorch loaded-model lookups in legacy node execution must use the inference
+  crate's typed `get_loaded_info` boundary; direct worker imports remain only
+  for the still-migrating load/generation calls in `pytorch_nodes.rs`.
 - Python-worker handlers should pass worker parameters directly into their
   blocking closures and avoid redundant rebinding so the feature-gated path
   stays clippy-clean without changing runtime behavior.

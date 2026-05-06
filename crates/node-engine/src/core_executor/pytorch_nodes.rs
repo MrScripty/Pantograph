@@ -88,6 +88,17 @@ pub(crate) fn ensure_torch_worker_initialised(
     Ok(())
 }
 
+async fn pytorch_model_needs_load(model_path: &str) -> Result<bool> {
+    match inference::backend::pytorch::active_loaded_model_info().await {
+        Ok(info) => Ok(info.model_path != model_path),
+        Err(inference::backend::BackendError::NotRunning(_)) => Ok(true),
+        Err(error) => Err(NodeEngineError::ExecutionFailed(format!(
+            "PyTorch loaded-model lookup failed: {}",
+            error
+        ))),
+    }
+}
+
 pub(crate) async fn execute_pytorch_inference(
     inputs: &HashMap<String, serde_json::Value>,
     task_id: &str,
@@ -162,7 +173,7 @@ pub(crate) async fn execute_pytorch_inference(
         .to_string();
 
     // Phase 1: Check if model is already loaded, load if needed
-    {
+    if pytorch_model_needs_load(&model_path).await? {
         let mp = model_path.clone();
         let dev = device.clone();
         let mt = model_type.clone();
@@ -177,35 +188,17 @@ pub(crate) async fn execute_pytorch_inference(
                     .import("pantograph_torch_worker")
                     .map_err(|e| format!("Failed to import worker: {}", e))?;
 
-                // Check if the correct model is already loaded
-                let info = worker
-                    .call_method0("get_loaded_info")
-                    .map_err(|e| format!("get_loaded_info failed: {}", e))?;
-
-                let needs_load = if info.is_none() {
-                    true
-                } else {
-                    let loaded_path: String = info
-                        .get_item("model_path")
-                        .ok()
-                        .and_then(|v| v.extract::<String>().ok())
-                        .unwrap_or_default();
-                    loaded_path != mp
-                };
-
-                if needs_load {
-                    log::info!("PyTorchInference: loading model from '{}'", mp);
-                    let kwargs = pyo3::types::PyDict::new(py);
-                    kwargs.set_item("model_path", &mp).unwrap();
-                    kwargs.set_item("device", &dev).unwrap();
-                    if let Some(ref mt_val) = mt {
-                        kwargs.set_item("model_type", mt_val).unwrap();
-                    }
-                    worker
-                        .call_method("load_model", (), Some(&kwargs))
-                        .map_err(|e| format!("Model load failed: {}", e))?;
-                    log::info!("PyTorchInference: model loaded successfully");
+                log::info!("PyTorchInference: loading model from '{}'", mp);
+                let kwargs = pyo3::types::PyDict::new(py);
+                kwargs.set_item("model_path", &mp).unwrap();
+                kwargs.set_item("device", &dev).unwrap();
+                if let Some(ref mt_val) = mt {
+                    kwargs.set_item("model_type", mt_val).unwrap();
                 }
+                worker
+                    .call_method("load_model", (), Some(&kwargs))
+                    .map_err(|e| format!("Model load failed: {}", e))?;
+                log::info!("PyTorchInference: model loaded successfully");
 
                 Ok(())
             })
