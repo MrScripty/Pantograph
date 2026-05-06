@@ -346,18 +346,26 @@ pub(crate) fn preferred_backend_key(
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+pub(crate) fn preferred_or_package_facts_backend_key(
+    node_type: &str,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    let package_facts = read_resolved_model_package_facts_for_preflight(inputs);
+    preferred_backend_key(node_type, inputs).or_else(|| {
+        package_facts
+            .as_ref()
+            .and_then(backend_key_from_package_facts)
+    })
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 pub(crate) fn build_model_dependency_request(
     node_type: &str,
     model_path: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelDependencyRequest {
     let package_facts = read_resolved_model_package_facts_for_preflight(inputs);
-    let backend_key = preferred_backend_key(node_type, inputs)
-        .or_else(|| {
-            package_facts
-                .as_ref()
-                .and_then(backend_key_from_package_facts)
-        })
+    let backend_key = preferred_or_package_facts_backend_key(node_type, inputs)
         .or_else(|| infer_backend_key(node_type, inputs));
 
     let task_type_primary =
@@ -735,9 +743,9 @@ async fn enforce_dependency_preflight_inner(
     #[cfg_attr(not(feature = "inference-nodes"), allow(unused_variables))]
     lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
 ) -> Result<Option<ModelRefV2>> {
+    let llm_backend_key = preferred_or_package_facts_backend_key(node_type, inputs);
     let should_preflight = matches!(node_type, "diffusion-inference" | "audio-generation")
-        || (node_type == "llm-inference"
-            && preferred_backend_key(node_type, inputs).as_deref() == Some("pytorch"));
+        || (node_type == "llm-inference" && llm_backend_key.as_deref() == Some("pytorch"));
     if !should_preflight {
         return Ok(None);
     }

@@ -2321,6 +2321,41 @@ async fn test_canonical_llm_pytorch_hint_dispatches_to_dependency_preflight() {
     }
 }
 
+#[cfg(all(feature = "inference-nodes", feature = "pytorch-nodes"))]
+#[tokio::test]
+async fn test_canonical_llm_pytorch_package_facts_dispatches_to_dependency_preflight() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let package_facts: inference::ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("text package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+    inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+
+    let executor = CoreTaskExecutor::new();
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("llm-inference-1", inputs, &context, &extensions)
+        .await
+        .expect_err("canonical Transformers package facts should require dependency preflight");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("dependency resolver is not configured"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[tokio::test]
 async fn test_dependency_preflight_skips_canonical_llamacpp() {

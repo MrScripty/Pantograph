@@ -2717,7 +2717,11 @@ drift back into inference.
   host-managed Python resources.
   The unused `InferenceGateway::backend()` legacy escape hatch has been
   removed so repo consumers cannot bypass typed gateway methods and backend
-  capability contracts by taking a raw mutable backend reference.
+  capability contracts by taking a raw mutable backend reference. Node-engine
+  dependency preflight dispatch now uses the same explicit-hint-then-Pumas
+  package-facts backend precedence as dependency request construction, so
+  Transformers/PyTorch package facts enter preflight even when no raw
+  `runtime_hint` input is present.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
