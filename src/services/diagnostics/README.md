@@ -84,6 +84,11 @@ panel because no active TypeScript boundary consumes them.
   and canonical terminal links are backend-authored facts. Frontend consumers
   may filter or highlight rows with those fields, but must not parse
   `payload_json` to reconstruct error causality.
+- Timeline DTOs include backend-authored inference diagnostic event kinds such
+  as `inference_execution_diagnostic_observed`. Frontend consumers may label
+  those rows, but usage, cache-handle, artifact-ref, option-support, and
+  compatibility details remain backend projection facts instead of client-side
+  payload parsing inputs.
 - Node-status DTOs carry inference execution context such as `runtime_id`,
   `task_id`, `selected_backend_key`, and `model_id` when the backend has those
   facts. Frontend consumers should use those typed fields for run/node display

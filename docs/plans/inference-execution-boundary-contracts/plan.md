@@ -3037,7 +3037,7 @@ inference write ledger events directly.
   path redaction. Embedded-runtime lifecycle-to-ledger projection now also
   filters unsafe `resolved_artifact_kind` values instead of copying path-shaped
   strings into durable inference diagnostics.
-- [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
+- [x] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle
   usage/cache fields, durable inference diagnostic summaries, node-derived
@@ -3047,8 +3047,12 @@ inference write ledger events directly.
   contracts and I/O Inspector presenter docs now cover projected
   runtime/backend/model artifact context. Inference, embedded-runtime, and
   diagnostics-ledger SQLite READMEs now document selected-device lifecycle and
-  projection behavior; broader UI/API documentation remains open as additional
-  surfaces change.
+  projection behavior. Frontend diagnostics TypeScript contracts, diagnostics
+  service README guidance, and workbench diagnostics README guidance now also
+  accept and document the backend-authored
+  `inference_execution_diagnostic_observed` timeline event kind without making
+  frontend consumers parse option, usage, cache, artifact, compatibility, or
+  lifecycle payload JSON.
 
 **Verification:**
 - `cargo test -p pantograph-diagnostics-ledger` for new event/projection fields,

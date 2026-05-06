@@ -26,6 +26,7 @@ export type DiagnosticEventKind =
   | 'retention_policy_changed'
   | 'runtime_capability_observed'
   | 'node_execution_status'
+  | 'inference_execution_diagnostic_observed'
   | 'diagnostic_error_occurred';
 
 export type DiagnosticEventSourceComponent =

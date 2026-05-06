@@ -158,6 +158,10 @@ transient UI state without becoming backend scheduler policy.
 - Diagnostics timeline rows render typed scheduler projection summaries and
   payload availability only; detailed payload parsing belongs in backend
   projections or future typed presenters.
+- Diagnostics timeline rows may show inference diagnostic event kinds such as
+  `inference_execution_diagnostic_observed`, but option, usage, cache,
+  artifact, compatibility, and lifecycle details remain backend-owned
+  projection facts rather than frontend payload-mining inputs.
 - Diagnostics comparison facets are derived from selected-run detail and
   run-list projections, preferring backend-owned run-list facet counts when
   present. They must not parse diagnostic event payloads or depend on sampled

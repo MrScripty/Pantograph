@@ -578,6 +578,10 @@ test('diagnostics comparison filters support accepted date ranges', () => {
 
 test('timeline label helpers format typed projection enums and payload presence', () => {
   assert.equal(formatDiagnosticEventKind('scheduler_queue_placement'), 'Scheduler Queue Placement');
+  assert.equal(
+    formatDiagnosticEventKind('inference_execution_diagnostic_observed'),
+    'Inference Execution Diagnostic Observed',
+  );
   assert.equal(formatDiagnosticSourceComponent('node_execution'), 'Node Execution');
   assert.equal(hasTimelinePayload({ payload_json: '{}' }), false);
   assert.equal(hasTimelinePayload({ payload_json: '{"decision":"delay"}' }), true);
