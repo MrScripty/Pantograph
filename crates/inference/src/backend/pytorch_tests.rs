@@ -65,6 +65,17 @@ fn test_no_loaded_model_initially() {
 }
 
 #[test]
+fn test_stop_without_loaded_model_clears_ready_state() {
+    let mut backend = PyTorchBackend::new();
+    backend.ready = true;
+
+    backend.stop();
+
+    assert!(!backend.ready);
+    assert!(backend.loaded_model.is_none());
+}
+
+#[test]
 fn test_can_reuse_loaded_model_requires_matching_request() {
     let mut backend = PyTorchBackend::new();
     backend.loaded_model = Some(LoadedModelInfo {
@@ -674,6 +685,20 @@ fn test_pytorch_worker_unload_envelope_decodes_fixture() {
 
     PyTorchBackend::validate_unload_model_envelope(&envelope)
         .expect("unload fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_unload_envelope_json_uses_unload_operation() {
+    let envelope_json = PyTorchBackend::unload_model_envelope_json("req-stop-unload-001")
+        .expect("unload envelope should encode");
+    let envelope: PyTorchWorkerEnvelope<PyTorchUnloadModelRequest> =
+        serde_json::from_str(&envelope_json).expect("decode encoded unload envelope");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-stop-unload-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::UnloadModel);
+    PyTorchBackend::validate_unload_model_envelope(&envelope)
+        .expect("encoded unload envelope should validate");
 }
 
 #[test]

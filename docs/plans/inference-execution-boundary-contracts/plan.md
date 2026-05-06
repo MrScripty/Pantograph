@@ -1914,6 +1914,9 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   PyTorch persisted KV truncation now crosses the Rust/Python boundary through
   a versioned `truncate_kv_cache` worker envelope and typed response decoder
   before the temporary KV file is read back.
+  PyTorch backend `stop()` now uses the same versioned unload worker envelope
+  as async model unload for best-effort synchronous cleanup, logging cleanup
+  failures instead of calling raw Python worker lifecycle functions directly.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -3871,6 +3874,10 @@ Update during implementation:
   response decoder, with temp-path and token-position validation, request-id
   correlation, malformed response rejection, and canonical sanitized KV
   truncate errors before the temporary KV file is read back.
+- 2026-05-06: PyTorch backend `stop()` now uses the same versioned unload
+  worker envelope and typed response decoder as async model unload for
+  best-effort synchronous cleanup, logging cleanup failures instead of calling
+  raw Python worker lifecycle functions directly.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

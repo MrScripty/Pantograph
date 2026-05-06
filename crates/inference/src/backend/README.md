@@ -173,6 +173,10 @@ fn create_backend() {
 - PyTorch model unload crosses the embedded Python boundary through a versioned
   worker envelope and typed response decoder. The adapter clears Rust-side
   loaded-model state only after a correlated structured unload success.
+- PyTorch backend `stop()` uses the same versioned unload worker envelope as
+  async model unload for best-effort cleanup. Because `stop()` is synchronous,
+  it logs cleanup failures instead of surfacing them, but it must not call raw
+  Python worker lifecycle functions directly.
 - PyTorch loaded-model info lookup crosses the embedded Python boundary through
   a versioned worker envelope and typed response decoder before node-engine
   KV-cache preparation consumes active model facts. The adapter validates

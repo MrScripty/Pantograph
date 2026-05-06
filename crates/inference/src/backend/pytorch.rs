@@ -1389,6 +1389,46 @@ impl PyTorchBackend {
         Ok(())
     }
 
+    fn unload_model_envelope_json(request_id: &str) -> Result<String, BackendError> {
+        let envelope = Self::unload_model_envelope(request_id.to_string());
+        Self::validate_unload_model_envelope(&envelope)?;
+        serde_json::to_string(&envelope).map_err(|error| {
+            BackendError::Config(format!(
+                "Failed to encode PyTorch worker unload envelope: {error}"
+            ))
+        })
+    }
+
+    fn unload_model_from_envelope_blocking(
+        request_id: &str,
+        envelope_json: String,
+    ) -> Result<(), BackendError> {
+        Python::with_gil(|py| -> Result<(), BackendError> {
+            let worker = pytorch_worker::worker_module(py).map_err(|e| {
+                Self::unload_worker_failure_from_message(
+                    request_id,
+                    format!("Failed to get worker module: {}", e),
+                )
+            })?;
+            let response_json = worker
+                .call_method1("unload_model_from_envelope", (envelope_json,))
+                .map_err(|e| {
+                    Self::unload_worker_failure_from_message(
+                        request_id,
+                        format!("PyTorch worker unload envelope failed: {}", e),
+                    )
+                })?
+                .extract::<String>()
+                .map_err(|e| {
+                    Self::unload_worker_failure_from_message(
+                        request_id,
+                        format!("PyTorch worker unload response was not JSON text: {e}"),
+                    )
+                })?;
+            Self::unload_model_result_from_worker_response(request_id, &response_json)
+        })
+    }
+
     fn validate_audio_transcription_envelope(
         envelope: &PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>,
     ) -> Result<(), BackendError> {
@@ -1842,38 +1882,9 @@ impl PyTorchBackend {
     /// Unload the current model and free GPU memory.
     pub async fn unload_model(&mut self) -> Result<(), BackendError> {
         let request_id = format!("pytorch-unload-{}", Uuid::new_v4().simple());
-        let envelope = Self::unload_model_envelope(request_id.clone());
-        Self::validate_unload_model_envelope(&envelope)?;
-        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
-            BackendError::Config(format!(
-                "Failed to encode PyTorch worker unload envelope: {error}"
-            ))
-        })?;
+        let envelope_json = Self::unload_model_envelope_json(&request_id)?;
         tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<(), BackendError> {
-                let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    Self::unload_worker_failure_from_message(
-                        &request_id,
-                        format!("Failed to get worker module: {}", e),
-                    )
-                })?;
-                let response_json = worker
-                    .call_method1("unload_model_from_envelope", (envelope_json,))
-                    .map_err(|e| {
-                        Self::unload_worker_failure_from_message(
-                            &request_id,
-                            format!("PyTorch worker unload envelope failed: {}", e),
-                        )
-                    })?
-                    .extract::<String>()
-                    .map_err(|e| {
-                        Self::unload_worker_failure_from_message(
-                            &request_id,
-                            format!("PyTorch worker unload response was not JSON text: {e}"),
-                        )
-                    })?;
-                Self::unload_model_result_from_worker_response(&request_id, &response_json)
-            })
+            Self::unload_model_from_envelope_blocking(&request_id, envelope_json)
         })
         .await
         .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
@@ -2245,13 +2256,21 @@ impl InferenceBackend for PyTorchBackend {
         self.ready = false;
 
         if had_model {
-            std::thread::spawn(|| {
-                Python::with_gil(|py| {
-                    if let Ok(worker) = pytorch_worker::worker_module(py) {
-                        let _ = worker.call_method0("unload_model");
-                    }
-                });
-            });
+            let request_id = format!("pytorch-stop-unload-{}", Uuid::new_v4().simple());
+            match Self::unload_model_envelope_json(&request_id) {
+                Ok(envelope_json) => {
+                    std::thread::spawn(move || {
+                        if let Err(error) =
+                            Self::unload_model_from_envelope_blocking(&request_id, envelope_json)
+                        {
+                            log::debug!("PyTorch stop best-effort unload failed: {error}");
+                        }
+                    });
+                }
+                Err(error) => {
+                    log::debug!("PyTorch stop best-effort unload envelope build failed: {error}");
+                }
+            }
         }
     }
 
