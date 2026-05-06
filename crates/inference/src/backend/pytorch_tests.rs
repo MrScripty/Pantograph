@@ -75,6 +75,13 @@ fn test_stop_without_loaded_model_clears_ready_state() {
     assert!(backend.loaded_model.is_none());
 }
 
+#[tokio::test]
+async fn test_health_check_returns_false_when_not_ready() {
+    let backend = PyTorchBackend::new();
+
+    assert!(!backend.health_check().await);
+}
+
 #[test]
 fn test_can_reuse_loaded_model_requires_matching_request() {
     let mut backend = PyTorchBackend::new();
@@ -713,6 +720,19 @@ fn test_pytorch_worker_init_envelope_decodes_fixture() {
     assert_eq!(envelope.operation, PyTorchWorkerOperation::InitWorker);
 
     validate_init_worker_envelope(&envelope).expect("init fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_init_envelope_json_uses_init_operation() {
+    let envelope_json =
+        init_worker_envelope_json("req-health-init-001").expect("init envelope should encode");
+    let envelope: PyTorchWorkerEnvelope<PyTorchInitWorkerRequest> =
+        serde_json::from_str(&envelope_json).expect("decode encoded init envelope");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-health-init-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::InitWorker);
+    validate_init_worker_envelope(&envelope).expect("encoded init envelope should validate");
 }
 
 #[test]

@@ -179,6 +179,16 @@ fn validate_init_worker_envelope(
     Ok(())
 }
 
+fn init_worker_envelope_json(request_id: &str) -> Result<String, BackendError> {
+    let envelope = init_worker_envelope(request_id.to_string());
+    validate_init_worker_envelope(&envelope)?;
+    serde_json::to_string(&envelope).map_err(|error| {
+        BackendError::Config(format!(
+            "Failed to encode PyTorch worker init_worker envelope: {error}"
+        ))
+    })
+}
+
 fn init_worker_result_from_worker_response(
     request_id: &str,
     response_json: &str,
@@ -223,6 +233,42 @@ fn init_worker_result_from_worker_response(
             Err(failure.into_backend_error())
         }
     }
+}
+
+fn init_worker_from_envelope_blocking(
+    request_id: &str,
+    envelope_json: String,
+) -> Result<(), BackendError> {
+    Python::with_gil(|py| {
+        pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
+            PyTorchBackend::init_worker_failure_from_message(
+                request_id,
+                format!("Failed to initialise Python worker: {}", e),
+            )
+        })?;
+        let worker = pytorch_worker::worker_module(py).map_err(|e| {
+            PyTorchBackend::init_worker_failure_from_message(
+                request_id,
+                format!("Failed to get worker module: {}", e),
+            )
+        })?;
+        let response_json = worker
+            .call_method1("init_worker_from_envelope", (envelope_json,))
+            .map_err(|e| {
+                PyTorchBackend::init_worker_failure_from_message(
+                    request_id,
+                    format!("PyTorch worker init_worker envelope failed: {}", e),
+                )
+            })?
+            .extract::<String>()
+            .map_err(|e| {
+                PyTorchBackend::init_worker_failure_from_message(
+                    request_id,
+                    format!("PyTorch worker init_worker response was not JSON text: {e}"),
+                )
+            })?;
+        init_worker_result_from_worker_response(request_id, &response_json)
+    })
 }
 
 fn clear_kv_cache_envelope(
@@ -2260,44 +2306,9 @@ impl InferenceBackend for PyTorchBackend {
 
         // Initialise the Python worker module
         let request_id = format!("pytorch-worker-init-{}", Uuid::new_v4().simple());
-        let envelope = init_worker_envelope(request_id.clone());
-        validate_init_worker_envelope(&envelope)?;
-        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
-            BackendError::Config(format!(
-                "Failed to encode PyTorch worker init_worker envelope: {error}"
-            ))
-        })?;
+        let envelope_json = init_worker_envelope_json(&request_id)?;
         tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| {
-                pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
-                    Self::init_worker_failure_from_message(
-                        &request_id,
-                        format!("Failed to initialise Python worker: {}", e),
-                    )
-                })?;
-                let worker = pytorch_worker::worker_module(py).map_err(|e| {
-                    Self::init_worker_failure_from_message(
-                        &request_id,
-                        format!("Failed to get worker module: {}", e),
-                    )
-                })?;
-                let response_json = worker
-                    .call_method1("init_worker_from_envelope", (envelope_json,))
-                    .map_err(|e| {
-                        Self::init_worker_failure_from_message(
-                            &request_id,
-                            format!("PyTorch worker init_worker envelope failed: {}", e),
-                        )
-                    })?
-                    .extract::<String>()
-                    .map_err(|e| {
-                        Self::init_worker_failure_from_message(
-                            &request_id,
-                            format!("PyTorch worker init_worker response was not JSON text: {e}"),
-                        )
-                    })?;
-                init_worker_result_from_worker_response(&request_id, &response_json)
-            })
+            init_worker_from_envelope_blocking(&request_id, envelope_json)
         })
         .await
         .map_err(|e| BackendError::StartupFailed(task_join_error_message(e)))??;
@@ -2385,8 +2396,16 @@ impl InferenceBackend for PyTorchBackend {
         if !self.ready {
             return false;
         }
-        tokio::task::spawn_blocking(|| {
-            Python::with_gil(|py| pytorch_worker::worker_module(py).is_ok())
+        let request_id = format!("pytorch-health-init-{}", Uuid::new_v4().simple());
+        let envelope_json = match init_worker_envelope_json(&request_id) {
+            Ok(envelope_json) => envelope_json,
+            Err(error) => {
+                log::debug!("PyTorch health init envelope build failed: {error}");
+                return false;
+            }
+        };
+        tokio::task::spawn_blocking(move || {
+            init_worker_from_envelope_blocking(&request_id, envelope_json).is_ok()
         })
         .await
         .unwrap_or(false)

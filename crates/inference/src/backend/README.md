@@ -170,6 +170,10 @@ fn create_backend() {
   versioned `init_worker` envelope and typed response decoder after sibling
   modules are registered. Startup failures must retain request ids and
   canonical worker codes without exposing raw Python payload text.
+- PyTorch backend health checks reuse the same versioned `init_worker` envelope
+  path when the backend is ready. Health checks return `false` on init-envelope
+  failures instead of exposing backend errors, but they must validate the typed
+  worker facade rather than checking only raw module importability.
 - PyTorch audio transcription request inputs cross the embedded Python boundary
   through the same versioned worker-envelope pattern as Transformers load and
   text generation. Unsupported non-null audio `extra_options` fail closed until

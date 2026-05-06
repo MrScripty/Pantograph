@@ -1841,7 +1841,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   `pytorch_worker_init_failed` code. PyTorch worker initialization now also
   validates a versioned `init_worker` envelope after sibling-module
   registration and decodes a typed initialization response before `start()`
-  proceeds to model loading or ready-state publication.
+  proceeds to model loading or ready-state publication. PyTorch backend health
+  checks now reuse the same typed init-worker boundary when the backend is
+  ready, returning `false` on init-envelope failure instead of treating raw
+  module importability as the only health signal.
   PyTorch model-load worker transport failures now also route through the typed
   worker failure shape with the load request id and canonical
   `pytorch_worker_model_load_failed` code.
@@ -3885,6 +3888,10 @@ Update during implementation:
   boundary through a versioned `init_worker` envelope and typed response decoder
   after sibling-module registration, preserving startup request ids and
   canonical sanitized init errors before backend ready-state publication.
+- 2026-05-06: PyTorch backend health checks now reuse the same versioned
+  `init_worker` envelope and typed response decoder when the backend is ready,
+  returning `false` on init-envelope failure instead of validating only raw
+  Python module importability.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference
