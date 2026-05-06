@@ -217,7 +217,12 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                     RuntimeRegistryStatus::Busy,
                     1,
                 ),
-                runtime_snapshot("runtime-b", vec!["ollama"], RuntimeRegistryStatus::Ready, 0),
+                runtime_snapshot(
+                    "runtime-b",
+                    vec!["pytorch"],
+                    RuntimeRegistryStatus::Ready,
+                    0,
+                ),
             ],
             reservations: Vec::new(),
         },
@@ -228,7 +233,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
         required_context_window_tokens: None,
         override_selection: Some(RuntimeTechnicalFitOverride {
             model_id: None,
-            backend_key: Some("ollama".to_string()),
+            backend_key: Some("pytorch".to_string()),
         }),
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: vec![
@@ -249,7 +254,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
             RuntimeTechnicalFitCandidate {
                 candidate_id: "runtime-b".to_string(),
                 runtime_id: Some("runtime-b".to_string()),
-                backend_key: Some("ollama".to_string()),
+                backend_key: Some("pytorch".to_string()),
                 model_id: None,
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                 context_window_tokens: Some(8192),
@@ -270,7 +275,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
             selection_mode: RuntimeTechnicalFitSelectionMode::ExplicitOverride,
             selected_candidate_id: Some("runtime-b".to_string()),
             selected_runtime_id: Some("runtime-b".to_string()),
-            selected_backend_key: Some("ollama".to_string()),
+            selected_backend_key: Some("pytorch".to_string()),
             selected_model_id: None,
             reasons: vec![RuntimeTechnicalFitReason {
                 code: RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,

@@ -56,12 +56,12 @@ fn observe_runtimes_stops_unobserved_runtimes_without_reservations() {
     }]);
 
     let snapshots = registry.observe_runtimes(vec![RuntimeObservation {
-        runtime_id: "ollama".to_string(),
-        display_name: "ollama".to_string(),
-        backend_keys: vec!["ollama".to_string()],
-        model_id: Some("llava:13b".to_string()),
+        runtime_id: "pytorch".to_string(),
+        display_name: "PyTorch".to_string(),
+        backend_keys: vec!["pytorch".to_string()],
+        model_id: Some("/models/qwen-hf".to_string()),
         status: RuntimeRegistryStatus::Ready,
-        runtime_instance_id: Some("ollama-1".to_string()),
+        runtime_instance_id: Some("pytorch-1".to_string()),
         last_error: None,
     }]);
 
@@ -73,12 +73,12 @@ fn observe_runtimes_stops_unobserved_runtimes_without_reservations() {
     assert_eq!(llama.status, RuntimeRegistryStatus::Stopped);
     assert!(llama.models.is_empty());
 
-    let ollama = snapshots
+    let pytorch = snapshots
         .iter()
-        .find(|snapshot| snapshot.runtime_id == "ollama")
-        .expect("ollama snapshot");
-    assert_eq!(ollama.status, RuntimeRegistryStatus::Ready);
-    assert_eq!(ollama.models[0].model_id, "llava:13b");
+        .find(|snapshot| snapshot.runtime_id == "pytorch")
+        .expect("pytorch snapshot");
+    assert_eq!(pytorch.status, RuntimeRegistryStatus::Ready);
+    assert_eq!(pytorch.models[0].model_id, "/models/qwen-hf");
 }
 
 #[test]

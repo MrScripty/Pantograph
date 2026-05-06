@@ -81,13 +81,13 @@ fn reconcile_mode_info_stops_unobserved_runtimes_without_reservations() {
     let snapshots = reconcile_runtime_registry_mode_info(
         &registry,
         &HostRuntimeModeSnapshot {
-            backend_name: Some("ollama".to_string()),
-            backend_key: Some("ollama".to_string()),
-            active_model_target: Some("llava:13b".to_string()),
+            backend_name: Some("PyTorch".to_string()),
+            backend_key: Some("pytorch".to_string()),
+            active_model_target: Some("/models/qwen-hf".to_string()),
             embedding_model_target: None,
             active_runtime: Some(inference::RuntimeLifecycleSnapshot {
-                runtime_id: Some("ollama".to_string()),
-                runtime_instance_id: Some("ollama-1".to_string()),
+                runtime_id: Some("pytorch".to_string()),
+                runtime_instance_id: Some("pytorch-1".to_string()),
                 warmup_started_at_ms: Some(30),
                 warmup_completed_at_ms: Some(35),
                 warmup_duration_ms: Some(5),
@@ -108,12 +108,12 @@ fn reconcile_mode_info_stops_unobserved_runtimes_without_reservations() {
     assert_eq!(llama.status, RuntimeRegistryStatus::Stopped);
     assert!(llama.models.is_empty());
 
-    let ollama = snapshots
+    let pytorch = snapshots
         .iter()
-        .find(|snapshot| snapshot.runtime_id == "ollama")
-        .expect("ollama snapshot");
-    assert_eq!(ollama.status, RuntimeRegistryStatus::Ready);
-    assert_eq!(ollama.models[0].model_id, "llava:13b");
+        .find(|snapshot| snapshot.runtime_id == "pytorch")
+        .expect("pytorch snapshot");
+    assert_eq!(pytorch.status, RuntimeRegistryStatus::Ready);
+    assert_eq!(pytorch.models[0].model_id, "/models/qwen-hf");
 }
 
 #[test]

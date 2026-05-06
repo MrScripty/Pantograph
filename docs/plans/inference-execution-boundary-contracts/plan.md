@@ -2469,6 +2469,9 @@ but Pantograph host bindings no longer expose Ollama-specific runtime probes.
 Shared runtime identity no longer treats `ollama` as a known runtime or backend
 alias. Old Ollama workflow migration strings remain local to workflow-service
 canonicalization instead of global runtime identity.
+Runtime-registry and embedded-runtime registry tests no longer use `ollama` as
+generic live runtime sample data; supported PyTorch samples cover replacement
+observation and explicit override behavior instead.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -3988,6 +3991,10 @@ Update during implementation:
 - 2026-05-06: Shared runtime identity dropped Ollama from known runtime/backend
   alias normalization and display-name lookup. Workflow-service canonicalization
   remains the only owner of old Ollama saved-workflow migration semantics.
+- 2026-05-06: Runtime-registry and embedded-runtime registry tests replaced
+  generic live `ollama` runtime fixtures with supported PyTorch fixtures, so
+  registry observation and technical-fit override coverage no longer presents
+  Ollama as a selectable runtime candidate.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference
