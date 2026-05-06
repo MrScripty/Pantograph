@@ -60,6 +60,7 @@ from worker_contract import (
     GENERATE_TEXT_STREAM_OPERATION,
     generate_text_kwargs_from_envelope,
     get_loaded_info_kwargs_from_envelope,
+    init_worker_kwargs_from_envelope,
     load_transformers_model_kwargs_from_envelope,
     restore_kv_cache_kwargs_from_envelope,
     save_kv_cache_kwargs_from_envelope,
@@ -90,6 +91,41 @@ _asr_model_path = None
 
 _DIFFUSION_PREVIEW_MAX_EVENTS = 8
 _DIFFUSION_PREVIEW_MAX_DIMENSION = 384
+
+
+def init_worker_from_envelope(envelope):
+    """Validate worker initialization from the Rust worker envelope contract."""
+    request_id = "unknown"
+    try:
+        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+        if isinstance(decoded, dict):
+            request_id = str(decoded.get("request_id") or request_id)
+        init_worker_kwargs_from_envelope(decoded)
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": {"initialized": True},
+        })
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "invalid_request",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_invalid_init_request",
+            },
+        })
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "internal",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_init_internal",
+            },
+        })
 
 
 def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):

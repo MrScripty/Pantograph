@@ -23,12 +23,12 @@ use self::pytorch_worker_contract::{
     normalize_worker_error_message, PyTorchAudioTranscriptionRequest,
     PyTorchAudioTranscriptionResult, PyTorchClearKvCacheRequest, PyTorchClearKvCacheResult,
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
-    PyTorchRestoreKvCacheRequest, PyTorchSaveKvCacheRequest, PyTorchTransformersLoadRequest,
-    PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy,
-    PyTorchTruncateKvCacheRequest, PyTorchTruncateKvCacheResult, PyTorchUnloadModelRequest,
-    PyTorchUnloadModelResult, PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind,
-    PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
-    PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchInitWorkerRequest, PyTorchInitWorkerResult, PyTorchRestoreKvCacheRequest,
+    PyTorchSaveKvCacheRequest, PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader,
+    PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy, PyTorchTruncateKvCacheRequest,
+    PyTorchTruncateKvCacheResult, PyTorchUnloadModelRequest, PyTorchUnloadModelResult,
+    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
+    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -149,6 +149,80 @@ fn kv_worker_failure_from_message(
 
 fn kv_truncate_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
     kv_worker_failure_from_message(request_id, "pytorch_worker_kv_truncate_failed", message)
+}
+
+fn init_worker_envelope(
+    request_id: impl Into<String>,
+) -> PyTorchWorkerEnvelope<PyTorchInitWorkerRequest> {
+    PyTorchWorkerEnvelope::new(
+        request_id,
+        PyTorchWorkerOperation::InitWorker,
+        PyTorchInitWorkerRequest::default(),
+    )
+}
+
+fn validate_init_worker_envelope(
+    envelope: &PyTorchWorkerEnvelope<PyTorchInitWorkerRequest>,
+) -> Result<(), BackendError> {
+    if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+        return Err(BackendError::Config(format!(
+            "Unsupported PyTorch worker init_worker envelope contract version {}",
+            envelope.contract_version
+        )));
+    }
+    if envelope.operation != PyTorchWorkerOperation::InitWorker {
+        return Err(BackendError::Config(format!(
+            "Unexpected PyTorch worker operation {:?} for init_worker",
+            envelope.operation
+        )));
+    }
+    Ok(())
+}
+
+fn init_worker_result_from_worker_response(
+    request_id: &str,
+    response_json: &str,
+) -> Result<(), BackendError> {
+    let response: PyTorchWorkerResponse<PyTorchInitWorkerResult> =
+        serde_json::from_str(response_json).map_err(|error| {
+            PyTorchBackend::init_worker_failure_from_message(
+                request_id,
+                format!("Failed to decode PyTorch worker init_worker response: {error}"),
+            )
+        })?;
+    match response {
+        PyTorchWorkerResponse::Ok(success) => {
+            if success.request_id != request_id {
+                return Err(PyTorchBackend::init_worker_failure_from_message(
+                    request_id,
+                    format!(
+                        "PyTorch worker init_worker response request_id mismatch: expected {request_id}, got {}",
+                        success.request_id
+                    ),
+                ));
+            }
+            if !success.result.initialized {
+                return Err(PyTorchBackend::init_worker_failure_from_message(
+                    request_id,
+                    "PyTorch worker init_worker response did not confirm initialization"
+                        .to_string(),
+                ));
+            }
+            Ok(())
+        }
+        PyTorchWorkerResponse::Error(failure) => {
+            if failure.request_id != request_id {
+                return Err(PyTorchBackend::init_worker_failure_from_message(
+                    request_id,
+                    format!(
+                        "PyTorch worker init_worker response request_id mismatch: expected {request_id}, got {}",
+                        failure.request_id
+                    ),
+                ));
+            }
+            Err(failure.into_backend_error())
+        }
+    }
 }
 
 fn clear_kv_cache_envelope(
@@ -2186,6 +2260,13 @@ impl InferenceBackend for PyTorchBackend {
 
         // Initialise the Python worker module
         let request_id = format!("pytorch-worker-init-{}", Uuid::new_v4().simple());
+        let envelope = init_worker_envelope(request_id.clone());
+        validate_init_worker_envelope(&envelope)?;
+        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+            BackendError::Config(format!(
+                "Failed to encode PyTorch worker init_worker envelope: {error}"
+            ))
+        })?;
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| {
                 pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
@@ -2193,7 +2274,29 @@ impl InferenceBackend for PyTorchBackend {
                         &request_id,
                         format!("Failed to initialise Python worker: {}", e),
                     )
-                })
+                })?;
+                let worker = pytorch_worker::worker_module(py).map_err(|e| {
+                    Self::init_worker_failure_from_message(
+                        &request_id,
+                        format!("Failed to get worker module: {}", e),
+                    )
+                })?;
+                let response_json = worker
+                    .call_method1("init_worker_from_envelope", (envelope_json,))
+                    .map_err(|e| {
+                        Self::init_worker_failure_from_message(
+                            &request_id,
+                            format!("PyTorch worker init_worker envelope failed: {}", e),
+                        )
+                    })?
+                    .extract::<String>()
+                    .map_err(|e| {
+                        Self::init_worker_failure_from_message(
+                            &request_id,
+                            format!("PyTorch worker init_worker response was not JSON text: {e}"),
+                        )
+                    })?;
+                init_worker_result_from_worker_response(&request_id, &response_json)
             })
         })
         .await

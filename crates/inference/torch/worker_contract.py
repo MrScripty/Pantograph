@@ -3,6 +3,7 @@
 import json
 
 WORKER_CONTRACT_VERSION = 1
+INIT_WORKER_OPERATION = "init_worker"
 LOAD_TRANSFORMERS_MODEL_OPERATION = "load_transformers_model"
 UNLOAD_MODEL_OPERATION = "unload_model"
 GET_LOADED_INFO_OPERATION = "get_loaded_info"
@@ -20,6 +21,25 @@ SUPPORTED_TRANSFORMERS_LOADERS = {
     CAUSAL_LM_LOADER,
     AUTOMATIC_SPEECH_RECOGNITION_LOADER,
 }
+
+
+def init_worker_kwargs_from_envelope(envelope):
+    """Validate a Rust worker envelope and project it to init kwargs."""
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    if not isinstance(envelope, dict):
+        raise ValueError("PyTorch worker init_worker envelope must be an object")
+    contract_version = envelope.get("contract_version")
+    if contract_version != WORKER_CONTRACT_VERSION:
+        raise ValueError(f"Unsupported PyTorch worker contract_version: {contract_version}")
+    operation = envelope.get("operation")
+    if operation != INIT_WORKER_OPERATION:
+        raise ValueError(f"Unexpected PyTorch worker operation for init_worker: {operation}")
+
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("PyTorch worker init_worker envelope payload must be an object")
+    return {}
 
 
 def load_transformers_model_kwargs_from_envelope(envelope):

@@ -4,11 +4,11 @@ use std::ffi::CString;
 use super::pytorch_worker_contract::{
     PyTorchAudioTranscriptionRequest, PyTorchAudioTranscriptionResult, PyTorchClearKvCacheRequest,
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
-    PyTorchRestoreKvCacheRequest, PyTorchSaveKvCacheRequest, PyTorchTransformersLoadRequest,
-    PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy, PyTorchTruncateKvCacheRequest,
-    PyTorchUnloadModelRequest, PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind,
-    PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
-    PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchInitWorkerRequest, PyTorchRestoreKvCacheRequest, PyTorchSaveKvCacheRequest,
+    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy,
+    PyTorchTruncateKvCacheRequest, PyTorchUnloadModelRequest, PyTorchWorkerEnvelope,
+    PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
+    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -702,6 +702,53 @@ fn test_pytorch_worker_unload_envelope_json_uses_unload_operation() {
 }
 
 #[test]
+fn test_pytorch_worker_init_envelope_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/init_worker_request.json");
+    let envelope: PyTorchWorkerEnvelope<PyTorchInitWorkerRequest> =
+        serde_json::from_str(fixture).expect("decode worker init fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-init-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::InitWorker);
+
+    validate_init_worker_envelope(&envelope).expect("init fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_init_envelope_rejects_wrong_operation() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/init_worker_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchInitWorkerRequest> =
+        serde_json::from_str(fixture).expect("decode worker init fixture");
+    envelope.operation = PyTorchWorkerOperation::GenerateText;
+
+    match validate_init_worker_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("GenerateText"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_init_envelope_rejects_wrong_contract_version() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/init_worker_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchInitWorkerRequest> =
+        serde_json::from_str(fixture).expect("decode worker init fixture");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match validate_init_worker_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("init_worker envelope contract version"));
+        }
+        other => panic!("expected wrong-version config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_get_loaded_info_envelope_decodes_fixture() {
     let fixture =
         include_str!("../../tests/fixtures/pytorch_worker_contract/get_loaded_info_request.json");
@@ -991,6 +1038,64 @@ fn test_python_worker_contract_projects_unload_envelope() {
         let len = kwargs.len().expect("kwargs length should be readable");
 
         assert_eq!(len, 0);
+    });
+}
+
+#[test]
+fn test_python_worker_contract_projects_init_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture =
+            include_str!("../../tests/fixtures/pytorch_worker_contract/init_worker_request.json");
+
+        let kwargs = module
+            .call_method1("init_worker_kwargs_from_envelope", (fixture,))
+            .expect("init worker envelope should project to kwargs");
+        let len = kwargs.len().expect("kwargs length should be readable");
+
+        assert_eq!(len, 0);
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_invalid_init_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let wrong_operation = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-init-operation",
+            "operation": "generate_text",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "init_worker_kwargs_from_envelope",
+                (wrong_operation.to_string(),),
+            )
+            .expect_err("wrong init_worker operation should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unexpected PyTorch worker operation for init_worker"));
+
+        let wrong_version = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION + 1,
+            "request_id": "req-invalid-init-version",
+            "operation": "init_worker",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "init_worker_kwargs_from_envelope",
+                (wrong_version.to_string(),),
+            )
+            .expect_err("wrong init_worker contract version should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unsupported PyTorch worker contract_version"));
     });
 }
 
@@ -3031,6 +3136,103 @@ fn test_pytorch_worker_init_error_normalizes_to_startup_failed() {
         }
         other => panic!("expected StartupFailed error, got {other:?}"),
     }
+}
+
+#[test]
+fn test_pytorch_worker_init_response_decodes() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-init-ok",
+        "result": {
+            "initialized": true
+        }
+    });
+
+    init_worker_result_from_worker_response("req-init-ok", &response.to_string())
+        .expect("init_worker response should decode");
+}
+
+#[test]
+fn test_pytorch_worker_init_response_rejects_false_initialization() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-init-false",
+        "result": {
+            "initialized": false
+        }
+    });
+
+    let error = init_worker_result_from_worker_response("req-init-false", &response.to_string())
+        .expect_err("unconfirmed init should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::StartupFailed,
+        "req-init-false",
+        "pytorch_worker_init_failed",
+        "did not confirm initialization",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_init_response_rejects_request_id_mismatch() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-init-other",
+        "result": {
+            "initialized": true
+        }
+    });
+
+    let error = init_worker_result_from_worker_response("req-init-expected", &response.to_string())
+        .expect_err("mismatched init response id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::StartupFailed,
+        "req-init-expected",
+        "pytorch_worker_init_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_init_malformed_response_normalizes_to_startup_failed() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match init_worker_result_from_worker_response("req-init-malformed", malformed) {
+        Err(BackendError::StartupFailed(message)) => {
+            assert!(message.contains("pytorch_worker_init_failed"));
+            assert!(message.contains("req-init-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker init_worker response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
+        }
+        other => panic!("expected StartupFailed error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_init_invalid_request_maps_to_config_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-init-invalid",
+        "error": {
+            "kind": "invalid_request",
+            "message": "Unexpected PyTorch worker operation for init_worker: generate_text",
+            "canonical_code": "pytorch_worker_invalid_init_request"
+        }
+    });
+
+    let error = init_worker_result_from_worker_response("req-init-invalid", &response.to_string())
+        .expect_err("invalid init_worker request should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Config,
+        "req-init-invalid",
+        "pytorch_worker_invalid_init_request",
+        "Unexpected PyTorch worker operation for init_worker",
+    );
 }
 
 #[test]
