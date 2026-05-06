@@ -277,7 +277,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - `bounded_inference_artifact_ref` is the shared filter for lifecycle artifact
   references that may reach diagnostics. Producers and host ledger adapters
   should use it for stable refs such as `artifact://...` and drop local
-  path-shaped values before they can become durable metadata.
+  path-shaped values before they can become durable metadata. Typed text
+  generation applies the same rule to cache-handle projection before returning
+  non-streaming typed results or lifecycle cache-handle facts.
 - `generate_image()` is synchronous-at-contract-level and returns final images;
   streaming progress is not yet part of the facade.
 - `rerank()` accepts one query plus candidate documents and returns scored,

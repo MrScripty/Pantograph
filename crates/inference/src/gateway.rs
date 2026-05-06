@@ -1425,7 +1425,7 @@ impl InferenceGateway {
                         usage = Some(chunk_usage);
                     }
                     if let Some(chunk_cache_handle_id) = chunk.cache_handle_id.clone() {
-                        cache_handle_id = Some(chunk_cache_handle_id);
+                        cache_handle_id = bounded_inference_artifact_ref(&chunk_cache_handle_id);
                     }
                     if let Some(content) = chunk.content {
                         text.push_str(&content);
@@ -1737,7 +1737,7 @@ impl Stream for LifecycleStream {
                     self.usage = Some(usage);
                 }
                 if let Some(cache_handle_id) = chunk.cache_handle_id.clone() {
-                    self.cache_handle_id = Some(cache_handle_id);
+                    self.cache_handle_id = bounded_inference_artifact_ref(&cache_handle_id);
                 }
                 if chunk.done {
                     self.finish(InferenceRequestLifecycleEventKind::Completed, None);
@@ -2944,7 +2944,9 @@ fn cache_handle_from_execution_result(
     result: &Result<InferenceExecutionResult, GatewayError>,
 ) -> Option<String> {
     match result {
-        Ok(result) => result.cache_handle_id().map(ToOwned::to_owned),
+        Ok(result) => result
+            .cache_handle_id()
+            .and_then(bounded_inference_artifact_ref),
         _ => None,
     }
 }

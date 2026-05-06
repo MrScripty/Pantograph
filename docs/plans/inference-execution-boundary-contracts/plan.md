@@ -3083,7 +3083,14 @@ inference write ledger events directly.
   producer refs are dropped and stable refs remain bounded. Embedded-runtime
   ledger projection now also applies that bounded-ref filter to lifecycle
   `cache_handle_id` values before persistence, so local temp-path-shaped cache
-  handles are not treated as durable metadata. The shared
+  handles are not treated as durable metadata. Inference typed execution and
+  lifecycle producers now apply the same bounded-ref filter to text-generation
+  cache handles before returning non-streaming typed results or emitting
+  lifecycle cache facts. Node-engine streaming text collection now also drops
+  path-shaped terminal cache handles before exposing `kv_cache_out` to graph
+  outputs. While validating the streaming graph slice, a stale node-engine
+  lifecycle regression assertion was updated to match the full typed lifecycle
+  event sequence emitted by the current gateway boundary. The shared
   artifact-ref filter now lives in the inference contract surface so gateway
   producers and host ledger adapters use one rule. PyTorch backend transport
   error normalization now strips Python traceback frames and local path tokens

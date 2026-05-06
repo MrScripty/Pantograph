@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use inference::{InferenceGateway, InferenceRequestLifecycleEventSink};
+use inference::{
+    bounded_inference_artifact_ref, InferenceGateway, InferenceRequestLifecycleEventSink,
+};
 
 use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
@@ -190,7 +192,7 @@ pub(crate) async fn execute_llm_inference(
                 usage = Some(chunk_usage);
             }
             if let Some(chunk_cache_handle_id) = chunk.cache_handle_id {
-                cache_handle_id = Some(chunk_cache_handle_id);
+                cache_handle_id = bounded_inference_artifact_ref(&chunk_cache_handle_id);
             }
             if let Some(token) = chunk.content.filter(|token| !token.is_empty()) {
                 full_response.push_str(&token);

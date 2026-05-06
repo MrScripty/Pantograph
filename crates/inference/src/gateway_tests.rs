@@ -1392,6 +1392,62 @@ async fn test_execute_typed_text_lifecycle_reports_usage_from_terminal_chunk() {
 }
 
 #[tokio::test]
+async fn test_execute_typed_text_filters_path_shaped_cache_handle() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: false,
+            usage_on_terminal: None,
+            cache_handle_on_terminal: Some("/tmp/private/kv-cache.bin".to_string()),
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-text-cache-path".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: None,
+        model_name: Some("mock-text".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: false,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let result = gateway
+        .execute_typed_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed text request should execute");
+
+    match result {
+        InferenceExecutionResult::TextGeneration {
+            cache_handle_id, ..
+        } => {
+            assert!(cache_handle_id.is_none());
+        }
+        other => panic!("expected text generation result, got {other:?}"),
+    }
+
+    let events = sink.events();
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("completed backend event");
+    assert!(backend_completed.cache_handle_id.is_none());
+    let lifecycle_json =
+        serde_json::to_string(backend_completed).expect("lifecycle event should serialize");
+    assert!(!lifecycle_json.contains("/tmp/private/kv-cache.bin"));
+}
+
+#[tokio::test]
 async fn test_execute_typed_with_lifecycle_reports_package_compatibility() {
     let fixture = include_str!(
         "../tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
@@ -2553,6 +2609,64 @@ async fn test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage() {
     let event_json = serde_json::to_string(backend_completed).expect("event serializes");
     assert!(!event_json.contains("SECRET_STREAM_PROMPT"));
     assert!(!event_json.contains("hello"));
+}
+
+#[tokio::test]
+async fn test_stream_typed_text_with_lifecycle_filters_path_shaped_cache_handle() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: false,
+            usage_on_terminal: None,
+            cache_handle_on_terminal: Some("/tmp/private/kv-stream.bin".to_string()),
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let request = InferenceExecutionRequest {
+        request_id: Some("req-typed-stream-cache-path".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: None,
+        model_name: Some("typed-model".to_string()),
+        runtime_hint: None,
+        resolved_model_package_facts: None,
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: true,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let mut stream = gateway
+        .stream_typed_text_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed stream should start");
+    let mut terminal_cache_handle = None;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.expect("stream chunk");
+        if chunk.done {
+            terminal_cache_handle = chunk.cache_handle_id;
+            break;
+        }
+    }
+
+    assert_eq!(
+        terminal_cache_handle.as_deref(),
+        Some("/tmp/private/kv-stream.bin")
+    );
+    let events = sink.events();
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion");
+    assert!(backend_completed.cache_handle_id.is_none());
+    let event_json = serde_json::to_string(backend_completed).expect("event serializes");
+    assert!(!event_json.contains("/tmp/private/kv-stream.bin"));
 }
 
 #[tokio::test]

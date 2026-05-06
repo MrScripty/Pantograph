@@ -364,6 +364,7 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
     let gateway = Arc::new(InferenceGateway::with_backend(
         Box::new(MockTypedTextBackend {
             requests: requests.clone(),
+            cache_handle_on_terminal: Some("kv-typed-text".to_string()),
         }),
         "mock",
     ));
@@ -454,6 +455,7 @@ async fn test_execute_llm_inference_streaming_uses_gateway_stream_boundary() {
     let gateway = Arc::new(InferenceGateway::with_backend(
         Box::new(MockTypedTextBackend {
             requests: requests.clone(),
+            cache_handle_on_terminal: Some("kv-typed-text".to_string()),
         }),
         "mock",
     ));
@@ -524,7 +526,7 @@ async fn test_execute_llm_inference_streaming_uses_gateway_stream_boundary() {
         other => panic!("expected task stream event, got {other:?}"),
     }
     let events = lifecycle_events.lock().expect("lifecycle events lock");
-    assert_eq!(events.len(), 6);
+    assert_eq!(events.len(), 15);
     assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
     assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
     assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
@@ -532,11 +534,11 @@ async fn test_execute_llm_inference_streaming_uses_gateway_stream_boundary() {
         events[1].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
-    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
-    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
-    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[6].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[6].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[7].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(
-        events[4].kind,
+        events[7].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
     assert_eq!(
@@ -547,11 +549,49 @@ async fn test_execute_llm_inference_streaming_uses_gateway_stream_boundary() {
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_execute_llm_inference_streaming_drops_path_shaped_cache_output() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedTextBackend {
+            requests: requests.clone(),
+            cache_handle_on_terminal: Some("/tmp/private/kv-stream.bin".to_string()),
+        }),
+        "mock",
+    ));
+    let event_sink = Arc::new(crate::events::VecEventSink::new());
+    let event_sink_trait: Arc<dyn crate::events::EventSink> = event_sink.clone();
+    let extensions = ExecutorExtensions::new();
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("model_name".to_string(), serde_json::json!("typed-model"));
+
+    let outputs = execute_llm_inference(
+        Some(&gateway),
+        &inputs,
+        "llm-inference-1",
+        Some(&event_sink_trait),
+        "exec-a",
+        &extensions,
+    )
+    .await
+    .expect("streaming inference should execute through gateway stream");
+
+    assert_eq!(
+        outputs.get("response").and_then(|value| value.as_str()),
+        Some("typed response")
+    );
+    assert!(!outputs.contains_key("kv_cache_out"));
+    assert_eq!(requests.lock().expect("requests lock").len(), 1);
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_canonical_llm_text_uses_typed_lifecycle_sink_extension() {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let gateway = Arc::new(InferenceGateway::with_backend(
         Box::new(MockTypedTextBackend {
             requests: requests.clone(),
+            cache_handle_on_terminal: Some("kv-typed-text".to_string()),
         }),
         "mock",
     ));
@@ -629,6 +669,7 @@ async fn test_canonical_llm_text_with_package_facts_emits_compatibility_lifecycl
     let gateway = Arc::new(InferenceGateway::with_backend(
         Box::new(MockTypedTextBackend {
             requests: requests.clone(),
+            cache_handle_on_terminal: Some("kv-typed-text".to_string()),
         }),
         "mock",
     ));
@@ -735,6 +776,7 @@ async fn test_canonical_llm_streaming_with_package_facts_emits_compatibility_lif
     let gateway = Arc::new(InferenceGateway::with_backend(
         Box::new(MockTypedTextBackend {
             requests: requests.clone(),
+            cache_handle_on_terminal: Some("kv-typed-text".to_string()),
         }),
         "mock",
     ));
@@ -843,6 +885,7 @@ async fn test_canonical_llm_text_rejects_package_task_mismatch_before_backend() 
     let gateway = Arc::new(InferenceGateway::with_backend(
         Box::new(MockTypedTextBackend {
             requests: requests.clone(),
+            cache_handle_on_terminal: Some("kv-typed-text".to_string()),
         }),
         "mock",
     ));
@@ -3506,6 +3549,7 @@ fn resolved_model_source_with_companion_artifacts(
 #[cfg(feature = "inference-nodes")]
 struct MockTypedTextBackend {
     requests: Arc<Mutex<Vec<serde_json::Value>>>,
+    cache_handle_on_terminal: Option<String>,
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -3578,7 +3622,7 @@ impl InferenceBackend for MockTypedTextBackend {
                     completion_tokens: Some(2),
                     total_tokens: Some(9),
                 }),
-                cache_handle_id: Some("kv-typed-text".to_string()),
+                cache_handle_id: self.cache_handle_on_terminal.clone(),
             }),
         ])))
     }
