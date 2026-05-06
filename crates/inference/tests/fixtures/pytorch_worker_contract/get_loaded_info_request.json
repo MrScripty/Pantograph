@@ -1,0 +1,9 @@
+{
+  "contract_version": 1,
+  "request_id": "req-loaded-info-001",
+  "operation": "get_loaded_info",
+  "cancellation": {
+    "drop_stream_cancels": false
+  },
+  "payload": {}
+}

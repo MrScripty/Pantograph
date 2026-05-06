@@ -3,10 +3,10 @@ use std::ffi::CString;
 
 use super::pytorch_worker_contract::{
     PyTorchAudioTranscriptionRequest, PyTorchAudioTranscriptionResult, PyTorchGenerateTextRequest,
-    PyTorchGenerateTextResult, PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader,
-    PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest, PyTorchWorkerEnvelope,
-    PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
-    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest, PyTorchTransformersLoadRequest,
+    PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest,
+    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
+    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -675,6 +675,53 @@ fn test_pytorch_worker_unload_envelope_decodes_fixture() {
 }
 
 #[test]
+fn test_pytorch_worker_get_loaded_info_envelope_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/get_loaded_info_request.json");
+    let envelope: PyTorchWorkerEnvelope<PyTorchGetLoadedInfoRequest> =
+        serde_json::from_str(fixture).expect("decode worker get_loaded_info fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-loaded-info-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::GetLoadedInfo);
+
+    validate_get_loaded_info_envelope(&envelope).expect("get_loaded_info fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_get_loaded_info_envelope_rejects_wrong_operation() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/get_loaded_info_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchGetLoadedInfoRequest> =
+        serde_json::from_str(fixture).expect("decode worker get_loaded_info fixture");
+    envelope.operation = PyTorchWorkerOperation::GenerateText;
+
+    match validate_get_loaded_info_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("GenerateText"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_get_loaded_info_envelope_rejects_wrong_contract_version() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/get_loaded_info_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchGetLoadedInfoRequest> =
+        serde_json::from_str(fixture).expect("decode worker get_loaded_info fixture");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match validate_get_loaded_info_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("get_loaded_info envelope contract version"));
+        }
+        other => panic!("expected wrong-version config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_python_worker_contract_projects_unload_envelope() {
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
@@ -687,6 +734,65 @@ fn test_python_worker_contract_projects_unload_envelope() {
         let len = kwargs.len().expect("kwargs length should be readable");
 
         assert_eq!(len, 0);
+    });
+}
+
+#[test]
+fn test_python_worker_contract_projects_get_loaded_info_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/get_loaded_info_request.json"
+        );
+
+        let kwargs = module
+            .call_method1("get_loaded_info_kwargs_from_envelope", (fixture,))
+            .expect("get_loaded_info worker envelope should project to kwargs");
+        let len = kwargs.len().expect("kwargs length should be readable");
+
+        assert_eq!(len, 0);
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_invalid_get_loaded_info_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let wrong_operation = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-loaded-info-operation",
+            "operation": "generate_text",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "get_loaded_info_kwargs_from_envelope",
+                (wrong_operation.to_string(),),
+            )
+            .expect_err("wrong get_loaded_info operation should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unexpected PyTorch worker operation for get_loaded_info"));
+
+        let wrong_version = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION + 1,
+            "request_id": "req-invalid-loaded-info-version",
+            "operation": "get_loaded_info",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "get_loaded_info_kwargs_from_envelope",
+                (wrong_version.to_string(),),
+            )
+            .expect_err("wrong get_loaded_info contract version should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unsupported PyTorch worker contract_version"));
     });
 }
 
@@ -2426,35 +2532,134 @@ fn test_pytorch_worker_live_kv_transport_error_normalizes_to_backend_error() {
 }
 
 #[test]
-fn test_pytorch_kv_loaded_info_unavailable_uses_canonical_error() {
-    match kv_loaded_info_unavailable_error("req-kv-loaded-info") {
-        BackendError::Inference(message) => {
+fn test_pytorch_worker_get_loaded_info_response_decodes_loaded_model_info() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-loaded-info-ok",
+        "result": {
+            "model_path": "/models/tiny",
+            "model_type": "dllm",
+            "device": "cpu"
+        }
+    });
+
+    let info = loaded_model_info_from_worker_response("req-loaded-info-ok", &response.to_string())
+        .expect("get_loaded_info response decodes");
+
+    assert_eq!(info.model_path, "/models/tiny");
+    assert_eq!(info.model_type, "dllm");
+    assert_eq!(info.device, "cpu");
+}
+
+#[test]
+fn test_pytorch_worker_get_loaded_info_unavailable_response_maps_to_not_running() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-loaded-info-empty",
+        "error": {
+            "kind": "runtime_unavailable",
+            "message": "No model loaded. Call load_model() first.",
+            "canonical_code": "pytorch_worker_kv_loaded_info_failed"
+        }
+    });
+
+    match loaded_model_info_from_worker_response("req-loaded-info-empty", &response.to_string()) {
+        Err(BackendError::NotRunning(message)) => {
             assert!(message.contains("pytorch_worker_kv_loaded_info_failed"));
-            assert!(message.contains("req-kv-loaded-info"));
-            assert!(message.contains("active loaded model"));
+            assert!(message.contains("req-loaded-info-empty"));
+            assert!(message.contains("No model loaded"));
+        }
+        other => panic!("expected NotRunning error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_get_loaded_info_invalid_request_maps_to_config_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-loaded-info-invalid",
+        "error": {
+            "kind": "invalid_request",
+            "message": "Unexpected PyTorch worker operation for get_loaded_info: unload_model",
+            "canonical_code": "pytorch_worker_invalid_get_loaded_info_request"
+        }
+    });
+
+    let error =
+        loaded_model_info_from_worker_response("req-loaded-info-invalid", &response.to_string())
+            .expect_err("invalid get_loaded_info request should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Config,
+        "req-loaded-info-invalid",
+        "pytorch_worker_invalid_get_loaded_info_request",
+        "Unexpected PyTorch worker operation for get_loaded_info",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_get_loaded_info_response_rejects_request_id_mismatch() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-loaded-info-other",
+        "result": {
+            "model_path": "/models/tiny",
+            "model_type": "dllm",
+            "device": "cpu"
+        }
+    });
+
+    let error =
+        loaded_model_info_from_worker_response("req-loaded-info-expected", &response.to_string())
+            .expect_err("mismatched get_loaded_info response id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-loaded-info-expected",
+        "pytorch_worker_kv_loaded_info_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_get_loaded_info_malformed_response_normalizes_to_backend_error() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match loaded_model_info_from_worker_response("req-loaded-info-malformed", malformed) {
+        Err(BackendError::Inference(message)) => {
+            assert!(message.contains("pytorch_worker_kv_loaded_info_failed"));
+            assert!(message.contains("req-loaded-info-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker get_loaded_info response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
         }
         other => panic!("expected Inference error, got {other:?}"),
     }
 }
 
 #[test]
-fn test_pytorch_kv_loaded_model_info_malformed_result_normalizes_to_backend_error() {
-    Python::with_gil(|py| {
-        let result = pyo3::types::PyDict::new(py);
-        result.set_item("model_path", "/models/tiny").unwrap();
-
-        let error =
-            loaded_model_info_from_kv_worker_result("req-kv-loaded-malformed", result.as_any())
-                .expect_err("missing loaded model fields should fail closed");
-
-        assert_worker_backend_error(
-            error,
-            ExpectedBackendErrorVariant::Inference,
-            "req-kv-loaded-malformed",
-            "pytorch_worker_kv_loaded_info_failed",
-            "loaded model info result was malformed",
-        );
+fn test_pytorch_worker_get_loaded_info_malformed_result_normalizes_to_backend_error() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-loaded-info-bad-result",
+        "result": {
+            "model_path": "/models/tiny",
+            "model_type": "dllm"
+        }
     });
+
+    let error =
+        loaded_model_info_from_worker_response("req-loaded-info-bad-result", &response.to_string())
+            .expect_err("missing device should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-loaded-info-bad-result",
+        "pytorch_worker_kv_loaded_info_failed",
+        "missing field `device`",
+    );
 }
 
 #[test]

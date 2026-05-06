@@ -173,6 +173,11 @@ fn create_backend() {
 - PyTorch model unload crosses the embedded Python boundary through a versioned
   worker envelope and typed response decoder. The adapter clears Rust-side
   loaded-model state only after a correlated structured unload success.
+- PyTorch loaded-model info lookup crosses the embedded Python boundary through
+  a versioned worker envelope and typed response decoder before node-engine
+  KV-cache preparation consumes active model facts. The adapter validates
+  operation/version and request-id correlation instead of extracting raw PyO3
+  dictionaries as trusted loaded-model state.
 - PyTorch transport exceptions from the embedded Python boundary must be
   normalized before becoming `BackendError` messages: keep request ids,
   canonical worker codes, and bounded exception summaries, but strip Python

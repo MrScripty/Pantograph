@@ -183,6 +183,10 @@ pub(super) struct PyTorchUnloadModelResult {
     pub unloaded: bool,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchGetLoadedInfoRequest {}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchAudioTranscriptionRequest {

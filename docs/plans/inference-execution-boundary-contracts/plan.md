@@ -1900,6 +1900,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   a versioned envelope and typed response decoder, with request-id correlation,
   malformed-response rejection, structured invalid-request mapping, and
   Rust-side loaded-model state cleared only after a correlated unload success.
+  PyTorch loaded-model info now crosses the embedded Python boundary through a
+  versioned `get_loaded_info` worker envelope and typed response decoder,
+  preserving request-id correlation and canonical sanitized KV loaded-info
+  errors before node-engine KV-cache preparation consumes active model facts.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -3837,6 +3841,11 @@ Update during implementation:
   envelope and typed response decoder with request-id correlation,
   malformed-response rejection, and canonical sanitized unload errors before
   clearing Rust-side loaded-model state.
+- 2026-05-06: PyTorch loaded-model info now crosses the embedded Python
+  boundary through a versioned `get_loaded_info` worker envelope and typed
+  response decoder, preserving request-id correlation and canonical sanitized
+  KV loaded-info errors before node-engine KV-cache preparation consumes active
+  model facts.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

@@ -22,10 +22,11 @@ use uuid::Uuid;
 use self::pytorch_worker_contract::{
     normalize_worker_error_message, PyTorchAudioTranscriptionRequest,
     PyTorchAudioTranscriptionResult, PyTorchGenerateTextRequest, PyTorchGenerateTextResult,
-    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
-    PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest, PyTorchUnloadModelResult,
-    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
-    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchGetLoadedInfoRequest, PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader,
+    PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest,
+    PyTorchUnloadModelResult, PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind,
+    PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -148,25 +149,74 @@ fn kv_truncate_worker_failure_from_message(request_id: &str, message: String) ->
     kv_worker_failure_from_message(request_id, "pytorch_worker_kv_truncate_failed", message)
 }
 
-fn kv_loaded_info_unavailable_error(request_id: &str) -> BackendError {
-    kv_worker_failure_from_message(
+fn get_loaded_info_envelope(
+    request_id: impl Into<String>,
+) -> PyTorchWorkerEnvelope<PyTorchGetLoadedInfoRequest> {
+    PyTorchWorkerEnvelope::new(
         request_id,
-        "pytorch_worker_kv_loaded_info_failed",
-        "PyTorch KV operations require an active loaded model".to_string(),
+        PyTorchWorkerOperation::GetLoadedInfo,
+        PyTorchGetLoadedInfoRequest::default(),
     )
 }
 
-fn loaded_model_info_from_kv_worker_result(
+fn validate_get_loaded_info_envelope(
+    envelope: &PyTorchWorkerEnvelope<PyTorchGetLoadedInfoRequest>,
+) -> Result<(), BackendError> {
+    if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+        return Err(BackendError::Config(format!(
+            "Unsupported PyTorch worker get_loaded_info envelope contract version {}",
+            envelope.contract_version
+        )));
+    }
+    if envelope.operation != PyTorchWorkerOperation::GetLoadedInfo {
+        return Err(BackendError::Config(format!(
+            "Unexpected PyTorch worker operation {:?} for get_loaded_info",
+            envelope.operation
+        )));
+    }
+    Ok(())
+}
+
+fn loaded_model_info_from_worker_response(
     request_id: &str,
-    result: &Bound<'_, PyAny>,
+    response_json: &str,
 ) -> Result<LoadedModelInfo, BackendError> {
-    pytorch_worker::extract_loaded_model_info(result).map_err(|error| {
-        kv_worker_failure_from_message(
-            request_id,
-            "pytorch_worker_kv_loaded_info_failed",
-            format!("PyTorch KV loaded model info result was malformed: {error}"),
-        )
-    })
+    let response: PyTorchWorkerResponse<LoadedModelInfo> = serde_json::from_str(response_json)
+        .map_err(|error| {
+            kv_worker_failure_from_message(
+                request_id,
+                "pytorch_worker_kv_loaded_info_failed",
+                format!("Failed to decode PyTorch worker get_loaded_info response: {error}"),
+            )
+        })?;
+    match response {
+        PyTorchWorkerResponse::Ok(success) => {
+            if success.request_id != request_id {
+                return Err(kv_worker_failure_from_message(
+                    request_id,
+                    "pytorch_worker_kv_loaded_info_failed",
+                    format!(
+                        "PyTorch worker get_loaded_info response request_id mismatch: expected {request_id}, got {}",
+                        success.request_id
+                    ),
+                ));
+            }
+            Ok(success.result)
+        }
+        PyTorchWorkerResponse::Error(failure) => {
+            if failure.request_id != request_id {
+                return Err(kv_worker_failure_from_message(
+                    request_id,
+                    "pytorch_worker_kv_loaded_info_failed",
+                    format!(
+                        "PyTorch worker get_loaded_info response request_id mismatch: expected {request_id}, got {}",
+                        failure.request_id
+                    ),
+                ));
+            }
+            Err(failure.into_backend_error())
+        }
+    }
 }
 
 fn live_kv_info_from_worker_result(
@@ -189,6 +239,13 @@ fn task_join_error_message(error: impl std::fmt::Display) -> String {
 
 pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError> {
     let request_id = format!("pytorch-kv-loaded-info-{}", Uuid::new_v4().simple());
+    let envelope = get_loaded_info_envelope(request_id.clone());
+    validate_get_loaded_info_envelope(&envelope)?;
+    let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+        BackendError::Config(format!(
+            "Failed to encode PyTorch worker get_loaded_info envelope: {error}"
+        ))
+    })?;
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
@@ -198,17 +255,24 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
                     format!("Failed to get worker module: {}", e),
                 )
             })?;
-            let result = worker.call_method0("get_loaded_info").map_err(|e| {
-                kv_worker_failure_from_message(
-                    &request_id,
-                    "pytorch_worker_kv_loaded_info_failed",
-                    format!("PyTorch get_loaded_info failed: {}", e),
-                )
-            })?;
-            if result.is_none() {
-                return Err(kv_loaded_info_unavailable_error(&request_id));
-            }
-            loaded_model_info_from_kv_worker_result(&request_id, &result)
+            let response_json = worker
+                .call_method1("get_loaded_info_from_envelope", (envelope_json,))
+                .map_err(|e| {
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_loaded_info_failed",
+                        format!("PyTorch worker get_loaded_info envelope failed: {}", e),
+                    )
+                })?
+                .extract::<String>()
+                .map_err(|e| {
+                    kv_worker_failure_from_message(
+                        &request_id,
+                        "pytorch_worker_kv_loaded_info_failed",
+                        format!("PyTorch worker get_loaded_info response was not JSON text: {e}"),
+                    )
+                })?;
+            loaded_model_info_from_worker_response(&request_id, &response_json)
         })
     })
     .await

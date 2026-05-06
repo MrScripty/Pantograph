@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
-use super::{BackendError, LoadedModelInfo, PyTorchLiveKvInfo};
+use super::{BackendError, PyTorchLiveKvInfo};
 
 const WORKER_PY: &str = include_str!("../../torch/worker.py");
 const BLOCK_DIFFUSION_PY: &str = include_str!("../../torch/block_diffusion.py");
@@ -107,32 +107,6 @@ pub(super) fn extract_live_kv_info(
 
     Ok(PyTorchLiveKvInfo {
         token_count,
-        model_path,
-        model_type,
-        device,
-    })
-}
-
-pub(super) fn extract_loaded_model_info(
-    value: &Bound<'_, PyAny>,
-) -> Result<LoadedModelInfo, BackendError> {
-    let model_path = value
-        .get_item("model_path")
-        .map_err(|e| BackendError::Inference(format!("Missing loaded model_path: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid loaded model_path: {}", e)))?;
-    let model_type = value
-        .get_item("model_type")
-        .map_err(|e| BackendError::Inference(format!("Missing loaded model_type: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid loaded model_type: {}", e)))?;
-    let device = value
-        .get_item("device")
-        .map_err(|e| BackendError::Inference(format!("Missing loaded device: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid loaded device: {}", e)))?;
-
-    Ok(LoadedModelInfo {
         model_path,
         model_type,
         device,

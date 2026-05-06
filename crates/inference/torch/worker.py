@@ -58,6 +58,7 @@ from worker_contract import (
     CAUSAL_LM_LOADER,
     GENERATE_TEXT_STREAM_OPERATION,
     generate_text_kwargs_from_envelope,
+    get_loaded_info_kwargs_from_envelope,
     load_transformers_model_kwargs_from_envelope,
     transcribe_audio_kwargs_from_envelope,
     unload_model_kwargs_from_envelope,
@@ -408,6 +409,54 @@ def unload_model_from_envelope(envelope):
                 "kind": "internal",
                 "message": str(exc),
                 "canonical_code": "pytorch_worker_unload_internal",
+            },
+        })
+
+
+def get_loaded_info_from_envelope(envelope):
+    """Return loaded model info from the Rust worker envelope contract."""
+    request_id = "unknown"
+    try:
+        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+        if isinstance(decoded, dict):
+            request_id = str(decoded.get("request_id") or request_id)
+        get_loaded_info_kwargs_from_envelope(decoded)
+        info = get_loaded_info()
+        if info is None:
+            raise RuntimeError("No model loaded. Call load_model() first.")
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": info,
+        })
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "invalid_request",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_invalid_get_loaded_info_request",
+            },
+        })
+    except RuntimeError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "runtime_unavailable",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_kv_loaded_info_failed",
+            },
+        })
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "internal",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_kv_loaded_info_internal",
             },
         })
 
