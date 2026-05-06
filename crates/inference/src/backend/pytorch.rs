@@ -143,6 +143,13 @@ fn kv_worker_failure_from_message(
     .into_backend_error()
 }
 
+fn task_join_error_message(error: impl std::fmt::Display) -> String {
+    normalize_worker_error_message(
+        &format!("Task join error: {error}"),
+        "PyTorch worker task join failed",
+    )
+}
+
 pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError> {
     let request_id = format!("pytorch-kv-loaded-info-{}", Uuid::new_v4().simple());
     tokio::task::spawn_blocking(move || {
@@ -170,7 +177,7 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
         })
     })
     .await
-    .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+    .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
 }
 
 pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
@@ -198,7 +205,7 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
         })
     })
     .await
-    .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+    .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
 }
 
 pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
@@ -229,7 +236,7 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
         })
     })
     .await
-    .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+    .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
 }
 
 pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
@@ -254,7 +261,7 @@ pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
         })
     })
     .await
-    .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+    .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
 }
 
 impl PyTorchBackend {
@@ -541,7 +548,7 @@ impl PyTorchBackend {
             })
         })
         .await
-        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))??;
+        .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
 
         self.loaded_model = Some(info.clone());
         self.ready = true;
@@ -1162,7 +1169,7 @@ impl PyTorchBackend {
             })
         })
         .await
-        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))??;
+        .map_err(|e| BackendError::Inference(task_join_error_message(e)))??;
 
         self.loaded_model = None;
         Ok(())
@@ -1253,7 +1260,7 @@ impl PyTorchBackend {
             })
         })
         .await
-        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
     }
 
     /// Generate tokens as a stream via an mpsc channel.
@@ -1470,7 +1477,7 @@ impl InferenceBackend for PyTorchBackend {
             })
         })
         .await
-        .map_err(|e| BackendError::StartupFailed(format!("Task join error: {}", e)))??;
+        .map_err(|e| BackendError::StartupFailed(task_join_error_message(e)))??;
 
         // Log the transformers version for diagnostics
         let tf_version = tokio::task::spawn_blocking(|| {
@@ -1689,7 +1696,7 @@ impl InferenceBackend for PyTorchBackend {
             })
         })
         .await
-        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
     }
 
     async fn kv_cache_runtime_fingerprint(
@@ -1736,7 +1743,7 @@ impl InferenceBackend for PyTorchBackend {
             })
         })
         .await
-        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
     }
 
     async fn restore_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
@@ -1768,7 +1775,7 @@ impl InferenceBackend for PyTorchBackend {
             })
         })
         .await
-        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
     }
 
     async fn clear_kv_cache_slot(&self, slot_id: u32) -> Result<(), BackendError> {
@@ -1794,7 +1801,7 @@ impl InferenceBackend for PyTorchBackend {
             })
         })
         .await
-        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
     }
 
     async fn truncate_kv_cache_data(
@@ -1838,7 +1845,7 @@ impl InferenceBackend for PyTorchBackend {
             }
         })
         .await
-        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?;
+        .map_err(|e| BackendError::Inference(task_join_error_message(e)))?;
         let read_result = std::fs::read(&temp_path)
             .map_err(|e| BackendError::Inference(format!("Failed to read KV temp file: {}", e)));
         let _ = std::fs::remove_file(&temp_path);

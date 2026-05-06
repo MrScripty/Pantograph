@@ -819,6 +819,21 @@ fn test_pytorch_kv_worker_transport_errors_strip_local_paths() {
 }
 
 #[test]
+fn test_pytorch_task_join_errors_strip_tracebacks_and_local_paths() {
+    let message = task_join_error_message(
+        "worker panic at /home/jeremy/private/model/worker.py\nTraceback (most recent call last):\n  File \"/home/jeremy/private/model/worker.py\", line 42, in run\nRuntimeError: failed while reading /tmp/pantograph-cache.bin",
+    );
+
+    assert!(message.contains("Task join error"));
+    assert!(message.contains("worker panic at [local-path]"));
+    assert!(message.contains("RuntimeError: failed while reading [local-path]"));
+    assert!(!message.contains("Traceback"));
+    assert!(!message.contains("/home/jeremy/private"));
+    assert!(!message.contains("/tmp/pantograph-cache.bin"));
+    assert!(!message.contains("worker.py"));
+}
+
+#[test]
 fn test_pytorch_worker_generate_text_transport_no_model_normalizes_to_not_running() {
     match PyTorchBackend::generate_text_worker_failure_from_message(
         "req-generate-no-model",

@@ -135,7 +135,9 @@ fn create_backend() {
   scheduler/runtime reuse policy.
 - PyTorch worker errors must preserve request ids and canonical worker codes
   while sanitizing traceback frames and local path tokens before they become
-  `BackendError` messages.
+  `BackendError` messages. PyTorch task-join failures use the same sanitizer
+  even when the failure is produced by Rust async task boundaries rather than a
+  structured worker envelope.
 - Streaming response parsers should use `strip_prefix` for SSE `data:` lines
   so prefix handling stays explicit and warning-clean under the Rust clippy
   audit.

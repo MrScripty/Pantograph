@@ -1870,6 +1870,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   stripping, local-path redaction, and bounded summary rules before converting
   to `BackendError`, closing the remaining path where Python worker
   `error.message` text could carry traceback frames or local paths.
+  PyTorch task-join failures now route through the same sanitizer before
+  becoming `BackendError` messages, closing the Rust async task-boundary path
+  where panic text or join diagnostics could otherwise carry traceback frames
+  or local paths.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -2941,6 +2945,9 @@ inference write ledger events directly.
   producers and host ledger adapters use one rule. PyTorch backend transport
   error normalization now strips Python traceback frames and local path tokens
   before those backend errors can be projected into workflow diagnostics.
+  PyTorch task-join failure normalization now uses the same sanitizer, so Rust
+  async task-boundary failures do not bypass traceback-frame stripping or local
+  path redaction.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle
@@ -3762,6 +3769,10 @@ Update during implementation:
   `resolved_model_source`, so package-resolution diagnostics can distinguish
   HF-compatible directories from GGUF and other artifact families without
   adding artifact refs, local paths, compatibility summaries, or ledger writes.
+- 2026-05-05: PyTorch task-join failures now use the shared worker-message
+  sanitizer before becoming `BackendError` values, preserving the existing
+  error variants while stripping traceback frames and local path tokens from
+  async task-boundary failure text.
 - 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
   threaded terminal text/chat cache-handle ids through typed gateway results,
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`
