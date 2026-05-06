@@ -3022,10 +3022,17 @@ inference write ledger events directly.
   from backend `EmbeddingResult.token_count` values onto the backend-execution
   lifecycle completion event without serializing input text or embedding
   vectors.
-- [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
+- [x] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
-  validation phases are insufficient.
+  validation phases are insufficient. Workflow-service diagnostic registry
+  coverage now asserts no inference-prefixed canonical error phases or codes
+  exist while the runtime preflight, runtime model load, runtime launch, model
+  dependency, node execution, and output validation phases remain registered.
+  Embedded-runtime inference lifecycle ledger coverage now proves failed
+  lifecycle events preserve producer-supplied `canonical_error_event_id` links
+  through node-status projection without creating parallel
+  `diagnostic.error_occurred` payloads.
 - [x] Preserve canonical error links from run terminal, node status, model
   lifecycle, and inference lifecycle summaries where the direct causal event is
   known. Run terminal projection now carries `canonical_error_event_id` into

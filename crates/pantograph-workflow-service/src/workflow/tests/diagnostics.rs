@@ -324,6 +324,23 @@ fn workflow_diagnostic_error_registry_declares_phase_contracts() {
     let registry = registered_workflow_diagnostic_error_phases();
 
     assert_eq!(registry.len(), 13);
+    for entry in registry {
+        assert!(!entry.phase_id.starts_with("inference"));
+        assert!(!entry.code.starts_with("inference"));
+    }
+    for phase_id in [
+        "runtime_preflight",
+        "runtime_model_load",
+        "runtime_launch",
+        "model_dependency",
+        "node_execution",
+        "output_validation",
+    ] {
+        assert!(
+            registry.iter().any(|entry| entry.phase_id == phase_id),
+            "missing canonical diagnostic error phase {phase_id}"
+        );
+    }
     let runtime_model_load = registry
         .iter()
         .find(|entry| entry.phase == WorkflowDiagnosticErrorPhase::RuntimeModelLoad)

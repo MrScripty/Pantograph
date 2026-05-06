@@ -277,6 +277,33 @@ fn inference_lifecycle_event_adapter_bounds_failed_node_status_error() {
 }
 
 #[test]
+fn inference_lifecycle_failed_event_preserves_canonical_error_link() {
+    let context = context();
+    let mut event =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Failed, 125);
+    event.canonical_error_event_id = Some("diagnostic-error-runtime-model-load-1".to_string());
+
+    let request = inference_lifecycle_event_ledger_append_request(&context, &event)
+        .expect("failed lifecycle event should map to node status");
+
+    match request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            assert_eq!(
+                payload.canonical_error_event_id.as_deref(),
+                Some("diagnostic-error-runtime-model-load-1")
+            );
+            assert_eq!(payload.status, NodeExecutionProjectionStatus::Failed);
+            assert_eq!(payload.task_id.as_deref(), Some("text_generation"));
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+        }
+        DiagnosticEventPayload::DiagnosticErrorOccurred(_) => {
+            panic!("inference lifecycle adapter must not create a parallel diagnostic error event")
+        }
+        other => panic!("expected node execution status payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
     let context = context();
     let event = inference::InferenceRequestLifecycleEvent {
