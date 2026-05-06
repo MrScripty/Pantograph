@@ -1503,6 +1503,7 @@ impl InferenceGateway {
                 })
             }
             InferenceExecutionInput::ImageUnderstanding { .. }
+            | InferenceExecutionInput::DepthEstimation { .. }
             | InferenceExecutionInput::VideoUnderstanding { .. }
             | InferenceExecutionInput::MultimodalGeneration { .. } => {
                 Err(GatewayError::Validation(
@@ -2050,6 +2051,11 @@ fn typed_non_generation_option_diagnostics(
             &request.extra_options,
             backend_key,
             "image_understanding.extra_options",
+        ),
+        InferenceExecutionInput::DepthEstimation { request } => extra_option_diagnostics(
+            &request.extra_options,
+            backend_key,
+            "depth_estimation.extra_options",
         ),
         InferenceExecutionInput::VideoUnderstanding { request } => extra_option_diagnostics(
             &request.extra_options,

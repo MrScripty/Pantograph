@@ -1155,6 +1155,11 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   and technical-fit projections were not yet exhaustive over the new task id;
   those mappings now preserve `depth_estimation` as a roadmap workflow task
   contract and classify its result family separately from generated images.
+  The inference crate now exposes serializable `DepthEstimationRequest` and
+  `DepthEstimationResult` typed DTOs for that registry contract while keeping
+  the task `execution_supported=false`, and node-engine task-validation
+  lifecycle coverage now rejects canonical `depth_estimation` before backend
+  execution with bounded option diagnostics.
 - [x] Define the strong task registry shape, including canonical task id,
   aliases, task family, input modalities, output modalities, result schema,
   processor/component requirements, streaming support, generative/scoring

@@ -221,6 +221,7 @@ impl InferenceExecutionRequest {
             InferenceExecutionInput::ImageGeneration { .. } => Ok(()),
             InferenceExecutionInput::AudioTranscription { .. } => Ok(()),
             InferenceExecutionInput::ImageUnderstanding { .. }
+            | InferenceExecutionInput::DepthEstimation { .. }
             | InferenceExecutionInput::VideoUnderstanding { .. }
             | InferenceExecutionInput::MultimodalGeneration { .. } => Ok(()),
         }
@@ -295,6 +296,9 @@ pub enum InferenceExecutionInput {
     ImageUnderstanding {
         request: ImageUnderstandingRequest,
     },
+    DepthEstimation {
+        request: DepthEstimationRequest,
+    },
     VideoUnderstanding {
         request: VideoUnderstandingRequest,
     },
@@ -318,6 +322,7 @@ impl InferenceExecutionInput {
             Self::ImageGeneration { .. } => InferenceExecutionInputKind::ImageGeneration,
             Self::AudioTranscription { .. } => InferenceExecutionInputKind::AudioTranscription,
             Self::ImageUnderstanding { .. } => InferenceExecutionInputKind::ImageUnderstanding,
+            Self::DepthEstimation { .. } => InferenceExecutionInputKind::DepthEstimation,
             Self::VideoUnderstanding { .. } => InferenceExecutionInputKind::VideoUnderstanding,
             Self::MultimodalGeneration { .. } => InferenceExecutionInputKind::MultimodalGeneration,
         }
@@ -364,6 +369,11 @@ pub enum InferenceExecutionResult {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
     },
+    DepthEstimation {
+        result: DepthEstimationResult,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    },
     VideoUnderstanding {
         result: TextUnderstandingResult,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -386,6 +396,7 @@ impl InferenceExecutionResult {
             Self::ImageGeneration { .. } => InferenceExecutionResultKind::ImageGeneration,
             Self::AudioTranscription { .. } => InferenceExecutionResultKind::AudioTranscription,
             Self::ImageUnderstanding { .. } => InferenceExecutionResultKind::ImageUnderstanding,
+            Self::DepthEstimation { .. } => InferenceExecutionResultKind::DepthEstimation,
             Self::VideoUnderstanding { .. } => InferenceExecutionResultKind::VideoUnderstanding,
             Self::MultimodalGeneration { .. } => InferenceExecutionResultKind::MultimodalGeneration,
         }
@@ -412,6 +423,9 @@ impl InferenceExecutionResult {
             | Self::ImageUnderstanding {
                 option_diagnostics, ..
             }
+            | Self::DepthEstimation {
+                option_diagnostics, ..
+            }
             | Self::VideoUnderstanding {
                 option_diagnostics, ..
             }
@@ -429,6 +443,7 @@ impl InferenceExecutionResult {
             | Self::ImageGeneration { .. }
             | Self::AudioTranscription { .. }
             | Self::ImageUnderstanding { .. }
+            | Self::DepthEstimation { .. }
             | Self::VideoUnderstanding { .. }
             | Self::MultimodalGeneration { .. } => None,
         }
@@ -445,6 +460,7 @@ impl InferenceExecutionResult {
             | Self::ImageGeneration { .. }
             | Self::AudioTranscription { .. }
             | Self::ImageUnderstanding { .. }
+            | Self::DepthEstimation { .. }
             | Self::VideoUnderstanding { .. }
             | Self::MultimodalGeneration { .. } => None,
         }
@@ -528,6 +544,17 @@ pub struct ImageUnderstandingRequest {
     pub extra_options: Value,
 }
 
+/// Image depth-estimation request contract reserved for future depth backends.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DepthEstimationRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<EncodedImage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub extra_options: Value,
+}
+
 /// Video-to-text request contract reserved for future video-language backends.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VideoUnderstandingRequest {
@@ -577,6 +604,19 @@ pub struct MultimodalGenerationRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TextUnderstandingResult {
     pub text: String,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub metadata: Value,
+}
+
+/// Depth-estimation result contract reserved for future depth backends.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DepthEstimationResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth_map: Option<EncodedImage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth_map_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub point_cloud_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub metadata: Value,
 }
@@ -1759,6 +1799,25 @@ mod tests {
             generation_options: None,
             extra_options: Value::Null,
         };
+        let depth_request = InferenceExecutionRequest {
+            request_id: Some("req-depth-estimation".to_string()),
+            task_id: InferenceTaskId::DepthEstimation,
+            model_ref: None,
+            model_name: Some("depth-roadmap".to_string()),
+            runtime_hint: None,
+            resolved_model_package_facts: None,
+            input: InferenceExecutionInput::DepthEstimation {
+                request: DepthEstimationRequest {
+                    image: None,
+                    image_ref: Some("artifact://image-a.png".to_string()),
+                    extra_options: serde_json::json!({
+                        "output_format": "depth_map"
+                    }),
+                },
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
         let multimodal_request = InferenceExecutionRequest {
             request_id: Some("req-multimodal".to_string()),
             task_id: InferenceTaskId::MultimodalGeneration,
@@ -1793,8 +1852,24 @@ mod tests {
             },
             option_diagnostics: Vec::new(),
         };
+        let depth_result = InferenceExecutionResult::DepthEstimation {
+            result: DepthEstimationResult {
+                depth_map: None,
+                depth_map_ref: Some("artifact://depth-map.png".to_string()),
+                point_cloud_ref: Some("artifact://depth.ply".to_string()),
+                metadata: serde_json::json!({
+                    "depth_units": "relative"
+                }),
+            },
+            option_diagnostics: Vec::new(),
+        };
 
-        for request in [image_request, video_request, multimodal_request] {
+        for request in [
+            image_request,
+            video_request,
+            depth_request,
+            multimodal_request,
+        ] {
             let encoded = serde_json::to_value(&request).unwrap();
             let decoded: InferenceExecutionRequest = serde_json::from_value(encoded).unwrap();
 
@@ -1820,6 +1895,19 @@ mod tests {
             crate::model_contracts::InferenceExecutionResultKind::VideoUnderstanding
         );
         assert_eq!(decoded_result, result);
+
+        let encoded_depth_result = serde_json::to_value(&depth_result).unwrap();
+        let decoded_depth_result: InferenceExecutionResult =
+            serde_json::from_value(encoded_depth_result.clone()).unwrap();
+        assert_eq!(
+            encoded_depth_result["result_type"],
+            serde_json::json!("depth_estimation")
+        );
+        assert_eq!(
+            decoded_depth_result.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::DepthEstimation
+        );
+        assert_eq!(decoded_depth_result, depth_result);
     }
 
     #[test]
@@ -2040,6 +2128,7 @@ mod tests {
     fn typed_execution_rejects_registry_tasks_without_execution_contract() {
         for task_id in [
             InferenceTaskId::ImageUnderstanding,
+            InferenceTaskId::DepthEstimation,
             InferenceTaskId::VideoUnderstanding,
             InferenceTaskId::MultimodalGeneration,
         ] {

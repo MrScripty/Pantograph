@@ -99,6 +99,10 @@ stable public facade and dispatch owner.
 - Canonical `llm-inference` task/request compatibility checks should consume
   inference task registry request contracts instead of hard-coded backend names
   or raw task labels.
+- Contract-only canonical tasks such as `depth_estimation` and
+  `video_understanding` fail during task validation before backend execution.
+  Their lifecycle diagnostics may include bounded task option-support facts, but
+  must not fabricate executable backend behavior.
 - Canonical text/chat usage projection in `inference_nodes.rs` is bounded
   graph metadata copied from typed gateway results or terminal stream chunks.
   It must not be recomputed from prompt or generated text.

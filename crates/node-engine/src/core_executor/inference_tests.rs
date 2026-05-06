@@ -2604,7 +2604,7 @@ fn test_pytorch_typed_generation_settings_rejects_custom_kwargs() {
     }
 }
 
-#[cfg(feature = "inference-nodes")]
+#[cfg(feature = "pytorch-nodes")]
 #[test]
 fn test_resolved_artifact_kind_prefers_package_facts_before_model_source() {
     let fixture = include_str!(
@@ -2630,6 +2630,95 @@ fn test_resolved_artifact_kind_prefers_package_facts_before_model_source() {
         read_resolved_artifact_kind_from_inputs(&inputs).as_deref(),
         Some("gguf")
     );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_depth_estimation_rejects_contract_only_with_lifecycle() {
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(extension_keys::INFERENCE_LIFECYCLE_SINK, lifecycle_sink);
+
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("depth_estimation"),
+    );
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("pytorch"));
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/depth-estimation"
+        }),
+    );
+    inputs.insert(
+        "task_options".to_string(),
+        serde_json::json!({
+            "output_format": "depth_map",
+            "include_point_cloud": true
+        }),
+    );
+
+    let executor = CoreTaskExecutor::new().with_execution_id("exec-a".to_string());
+    let err = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect_err("contract-only depth task should fail before backend execution");
+
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("depth_estimation"));
+            assert!(message.contains("execution_supported=false"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 3);
+    assert!(events.iter().all(|event| {
+        event.phase == InferenceLifecyclePhase::TaskValidation
+            && event.request_id.as_deref() == Some("exec-a:llm-inference-1:depth_estimation")
+            && event.task_id.as_deref() == Some("depth_estimation")
+            && event.backend_key.as_deref() == Some("pytorch")
+            && event.runtime_id.as_deref() == Some("pytorch")
+            && event.model_id.as_deref() == Some("pumas://models/depth-estimation")
+    }));
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
+    assert!(events[1]
+        .detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("execution_supported=false")));
+    assert_eq!(events[1].option_diagnostics.len(), 2);
+    assert!(events[1].option_diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "depth_estimation.output_format"
+            && diagnostic.state == inference::OptionSupportState::BackendUnavailable
+            && diagnostic.backend_key.as_deref() == Some("pytorch")
+    }));
+    assert!(events[1].option_diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "depth_estimation.include_point_cloud"
+            && diagnostic.state == inference::OptionSupportState::BackendUnavailable
+            && diagnostic.backend_key.as_deref() == Some("pytorch")
+    }));
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert!(events[0].option_diagnostics.is_empty());
+    assert!(events[2].option_diagnostics.is_empty());
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

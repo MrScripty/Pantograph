@@ -161,6 +161,11 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   typed gateway dispatch. The backend trait exposes a speech-to-text method
   that fails closed by default, while implemented backends opt into the typed
   boundary explicitly.
+- Depth estimation has stable typed request/result DTOs matching the task
+  registry's roadmap contract, but remains `execution_supported=false` until a
+  backend implements the task. It is a serializable contract surface for
+  validation, diagnostics, and future backend mapping, not an executable
+  fallback through image-generation or video-understanding paths.
 - PyTorch audio transcription currently accepts only encoded in-memory audio at
   the backend edge. `audio_ref` resolution remains host-owned so artifact
   lookup and media payload handling do not move into the inference crate.

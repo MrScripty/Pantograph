@@ -456,6 +456,9 @@ fn contract_only_task_option_diagnostics(
     backend_key: Option<&str>,
 ) -> Vec<OptionCompatibilityDiagnostic> {
     match task_id {
+        InferenceTaskId::DepthEstimation => {
+            depth_estimation_task_option_diagnostics(inputs, backend_key)
+        }
         InferenceTaskId::VideoUnderstanding => {
             video_understanding_task_option_diagnostics(inputs, backend_key)
         }
@@ -464,12 +467,37 @@ fn contract_only_task_option_diagnostics(
 }
 
 #[cfg(feature = "inference-nodes")]
+fn depth_estimation_task_option_diagnostics(
+    inputs: &HashMap<String, serde_json::Value>,
+    backend_key: Option<&str>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    let mut diagnostics = Vec::new();
+    push_contract_only_option_diagnostic(
+        inputs,
+        &mut diagnostics,
+        backend_key,
+        "depth_estimation.output_format",
+        &["output_format", "outputFormat"],
+        "depth_estimation",
+    );
+    push_contract_only_option_diagnostic(
+        inputs,
+        &mut diagnostics,
+        backend_key,
+        "depth_estimation.include_point_cloud",
+        &["include_point_cloud", "includePointCloud"],
+        "depth_estimation",
+    );
+    diagnostics
+}
+
+#[cfg(feature = "inference-nodes")]
 fn video_understanding_task_option_diagnostics(
     inputs: &HashMap<String, serde_json::Value>,
     backend_key: Option<&str>,
 ) -> Vec<OptionCompatibilityDiagnostic> {
     let mut diagnostics = Vec::new();
-    push_video_understanding_option_diagnostic(
+    push_contract_only_option_diagnostic(
         inputs,
         &mut diagnostics,
         backend_key,
@@ -480,38 +508,43 @@ fn video_understanding_task_option_diagnostics(
             "sample_rate",
             "sampleRate",
         ],
+        "video_understanding",
     );
-    push_video_understanding_option_diagnostic(
+    push_contract_only_option_diagnostic(
         inputs,
         &mut diagnostics,
         backend_key,
         "video_understanding.max_frames",
         &["max_frames", "maxFrames"],
+        "video_understanding",
     );
-    push_video_understanding_option_diagnostic(
+    push_contract_only_option_diagnostic(
         inputs,
         &mut diagnostics,
         backend_key,
         "video_understanding.start_time_seconds",
         &["start_time_seconds", "startTimeSeconds"],
+        "video_understanding",
     );
-    push_video_understanding_option_diagnostic(
+    push_contract_only_option_diagnostic(
         inputs,
         &mut diagnostics,
         backend_key,
         "video_understanding.end_time_seconds",
         &["end_time_seconds", "endTimeSeconds"],
+        "video_understanding",
     );
     diagnostics
 }
 
 #[cfg(feature = "inference-nodes")]
-fn push_video_understanding_option_diagnostic(
+fn push_contract_only_option_diagnostic(
     inputs: &HashMap<String, serde_json::Value>,
     diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
     backend_key: Option<&str>,
     option_path: &str,
     aliases: &[&str],
+    task_label: &str,
 ) {
     if !task_option_present(inputs, aliases) {
         return;
@@ -522,8 +555,7 @@ fn push_video_understanding_option_diagnostic(
         state: OptionSupportState::BackendUnavailable,
         backend_key: backend_key.map(ToOwned::to_owned),
         message: Some(
-            "video_understanding is contract-only at this execution boundary; option support is deferred to an executable video backend"
-                .to_string(),
+            format!("{task_label} is contract-only at this execution boundary; option support is deferred to an executable backend"),
         ),
     });
 }
