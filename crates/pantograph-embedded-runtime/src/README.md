@@ -181,6 +181,9 @@ delegating methods; scheduler authority and diagnostics events stay in
   diagnostic append failures are returned through the lifecycle sink's
   structured `diagnostics_unavailable` error while gateway and node-engine
   producers preserve the original inference/preflight/execution outcome.
+  Resolved artifact-kind metadata must be label-shaped before persistence;
+  path-shaped or otherwise unsafe values are dropped at the ledger adapter
+  boundary just like unsafe artifact refs.
   Prompt/result bodies, embeddings, tensors, token arrays, backend kwargs, raw
   backend output, cache bytes, cache fingerprints, and temp paths remain
   outside durable diagnostic payloads.

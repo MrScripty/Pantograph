@@ -7,12 +7,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use pantograph_runtime_identity::canonical_engine_backend_key;
 
+#[cfg(feature = "pytorch-nodes")]
+use inference::ModelArtifactKind;
 #[cfg(feature = "inference-nodes")]
 use inference::{
     resolve_task_registry_entry, BackendHintLabel, InferenceExecutionInputKind,
     InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, InferenceTaskId, ModelArtifactKind,
-    ResolvedModelPackageFacts, TaskRegistryEntry,
+    InferenceRequestLifecycleEventSink, InferenceTaskId, ResolvedModelPackageFacts,
+    TaskRegistryEntry,
 };
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -406,7 +408,7 @@ fn read_resolved_model_package_facts_for_preflight(
     None
 }
 
-#[cfg(feature = "inference-nodes")]
+#[cfg(feature = "pytorch-nodes")]
 pub(crate) fn read_resolved_artifact_kind_from_inputs(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Option<String> {
@@ -420,7 +422,7 @@ pub(crate) fn read_resolved_artifact_kind_from_inputs(
         })
 }
 
-#[cfg(feature = "inference-nodes")]
+#[cfg(feature = "pytorch-nodes")]
 fn model_artifact_kind_label(kind: &ModelArtifactKind) -> &'static str {
     match kind {
         ModelArtifactKind::Gguf => "gguf",

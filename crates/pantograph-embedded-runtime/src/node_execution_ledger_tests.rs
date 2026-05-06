@@ -777,6 +777,72 @@ fn inference_diagnostic_event_adapter_drops_unsafe_only_artifact_refs() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_persists_bounded_resolved_artifact_kind() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.usage = None;
+    event.cache_handle_id = None;
+    event.compatibility_report = None;
+    event.compatibility_issues.clear();
+    event.option_diagnostics.clear();
+    event.artifact_refs.clear();
+    event.resolved_artifact_kind = Some("hf_compatible_directory".to_string());
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("bounded artifact kind should keep lifecycle diagnostic persistable");
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(
+                payload.resolved_artifact_kind.as_deref(),
+                Some("hf_compatible_directory")
+            );
+            assert!(payload.artifact_refs.is_empty());
+            assert!(payload.usage.is_none());
+            assert!(payload.cache_handle_id.is_none());
+            assert!(payload.compatibility_report.is_none());
+            assert!(payload.compatibility_issues.is_empty());
+            assert!(payload.option_diagnostics.is_empty());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_filters_unsafe_resolved_artifact_kind() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.usage = Some(inference::InferenceUsage {
+        prompt_tokens: Some(2),
+        completion_tokens: Some(3),
+        total_tokens: Some(5),
+    });
+    event.resolved_artifact_kind = Some("/tmp/private/model.gguf".to_string());
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("usage should keep lifecycle diagnostic persistable");
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("/tmp/private/model.gguf"));
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert!(payload.resolved_artifact_kind.is_none());
+            assert_eq!(
+                payload.usage.as_ref().and_then(|usage| usage.total_tokens),
+                Some(5)
+            );
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_diagnostic_event_adapter_carries_known_lifecycle_duration() {
     let context = context();
     let mut event = inference_lifecycle_event(

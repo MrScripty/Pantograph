@@ -659,11 +659,14 @@ fn build_inference_diagnostic_event_ledger_append_request(
     duration_ms: Option<u64>,
 ) -> Option<DiagnosticEventAppendRequest> {
     let artifact_refs = bounded_inference_artifact_refs(&event.artifact_refs);
+    let resolved_artifact_kind =
+        bounded_resolved_artifact_kind(event.resolved_artifact_kind.as_deref());
     let has_bounded_diagnostics = !event.option_diagnostics.is_empty()
         || event.compatibility_report.is_some()
         || !event.compatibility_issues.is_empty()
         || event.usage.is_some()
         || event.cache_handle_id.is_some()
+        || resolved_artifact_kind.is_some()
         || !artifact_refs.is_empty()
         || duration_ms.is_some();
     if !has_bounded_diagnostics
@@ -722,7 +725,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 ),
                 selected_device_id: event.selected_device_id.clone(),
                 selected_network_node_id: event.selected_network_node_id.clone(),
-                resolved_artifact_kind: event.resolved_artifact_kind.clone(),
+                resolved_artifact_kind,
                 usage: event.usage.as_ref().map(inference_usage_summary),
                 cache_handle_id: event.cache_handle_id.clone(),
                 artifact_refs,
@@ -755,6 +758,22 @@ fn bounded_inference_artifact_refs(refs: &[String]) -> Vec<String> {
     refs.iter()
         .filter_map(|value| inference::bounded_inference_artifact_ref(value))
         .collect()
+}
+
+fn bounded_resolved_artifact_kind(value: Option<&str>) -> Option<String> {
+    const MAX_RESOLVED_ARTIFACT_KIND_LEN: usize = 64;
+
+    let value = value?.trim();
+    if value.is_empty() || value.len() > MAX_RESOLVED_ARTIFACT_KIND_LEN {
+        return None;
+    }
+    if !value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
+    {
+        return None;
+    }
+    Some(value.to_string())
 }
 
 fn selected_backend_family(backend_key: Option<&str>, runtime_id: Option<&str>) -> Option<String> {

@@ -152,6 +152,7 @@ pub(super) fn infer_engine(
     }
 }
 
+#[cfg(test)]
 pub(super) fn map_pipeline_tag_to_task(pipeline_tag: &str) -> String {
     match pipeline_tag.to_lowercase().as_str() {
         "text-to-audio" | "text-to-speech" => "text-to-audio".to_string(),

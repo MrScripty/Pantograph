@@ -2840,7 +2840,11 @@ inference write ledger events directly.
   lifecycle facts for successful canonical PyTorch preflight with bounded
   request/task/backend/runtime/model identity plus the resolved artifact-kind
   label when known and without usage, cache, artifact refs, compatibility,
-  option, tensor, prompt, or local-path payloads.
+  option, tensor, prompt, or local-path payloads. Embedded-runtime
+  lifecycle-to-ledger projection now treats `resolved_artifact_kind` as bounded
+  label metadata: label-shaped values are persistable even without other
+  payload metadata, while path-shaped or unsafe values are dropped before
+  durable diagnostics.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -2947,7 +2951,9 @@ inference write ledger events directly.
   before those backend errors can be projected into workflow diagnostics.
   PyTorch task-join failure normalization now uses the same sanitizer, so Rust
   async task-boundary failures do not bypass traceback-frame stripping or local
-  path redaction.
+  path redaction. Embedded-runtime lifecycle-to-ledger projection now also
+  filters unsafe `resolved_artifact_kind` values instead of copying path-shaped
+  strings into durable inference diagnostics.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle
@@ -3773,6 +3779,11 @@ Update during implementation:
   sanitizer before becoming `BackendError` values, preserving the existing
   error variants while stripping traceback frames and local path tokens from
   async task-boundary failure text.
+- 2026-05-06: Embedded-runtime inference lifecycle ledger projection now keeps
+  only label-shaped `resolved_artifact_kind` values and drops path-shaped or
+  unsafe values before persistence, while allowing a bounded artifact-kind
+  label to make completed lifecycle diagnostics persistable without artifact
+  refs or local paths.
 - 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
   threaded terminal text/chat cache-handle ids through typed gateway results,
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`
