@@ -3120,7 +3120,10 @@ inference write ledger events directly.
   strings into durable inference diagnostics. Inference compatibility issue
   summary production now also drops local path-shaped issue paths before
   lifecycle emission when a stable model id is present, while retaining bounded
-  relative component paths such as `tokenizer.json`.
+  relative component paths such as `tokenizer.json`. Node-engine dependency
+  preflight now redacts local path-shaped tokens from lifecycle failure detail
+  before sink emission, while preserving the original execution error for the
+  caller.
 - [x] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
   projection fields. Source README updates now cover inference lifecycle

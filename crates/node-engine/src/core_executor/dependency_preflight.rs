@@ -850,8 +850,28 @@ fn record_dependency_preflight_failure_lifecycle(
         extensions,
         lifecycle_context,
         InferenceRequestLifecycleEventKind::Failed,
-        Some(detail.to_string()),
+        Some(sanitize_dependency_preflight_lifecycle_detail(detail)),
     );
+}
+
+#[cfg(feature = "inference-nodes")]
+fn sanitize_dependency_preflight_lifecycle_detail(detail: &str) -> String {
+    let mut sanitized = detail.to_string();
+    for candidate in detail
+        .split(|ch: char| {
+            ch.is_whitespace()
+                || matches!(
+                    ch,
+                    '"' | '\'' | ',' | ':' | ';' | '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>'
+                )
+        })
+        .filter(|candidate| !candidate.is_empty())
+    {
+        if inference::looks_like_local_artifact_ref(candidate) {
+            sanitized = sanitized.replace(candidate, "[local-path]");
+        }
+    }
+    sanitized
 }
 
 #[cfg(not(feature = "inference-nodes"))]

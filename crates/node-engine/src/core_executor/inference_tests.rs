@@ -2588,6 +2588,65 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
     assert_eq!(events[2].detail, None);
 }
 
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_dependency_preflight_lifecycle_failure_redacts_model_path() {
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(NotReadyDependencyResolver);
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(extension_keys::INFERENCE_LIFECYCLE_SINK, lifecycle_sink);
+    extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
+
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "runtime_hint".to_string(),
+        serde_json::json!("transformers_pytorch"),
+    );
+    inputs.insert(
+        "model_path".to_string(),
+        serde_json::json!("/tmp/private/tiny-hf"),
+    );
+
+    let context = DependencyPreflightLifecycleContext {
+        task_id: "llm-inference-1".to_string(),
+        execution_id: "exec-a".to_string(),
+        task_label: "text_generation".to_string(),
+        backend_key: Some("pytorch".to_string()),
+        model_id: Some("pumas://models/tiny-hf".to_string()),
+        resolved_artifact_kind: Some("hf_compatible_directory".to_string()),
+    };
+
+    let err = enforce_dependency_preflight_with_lifecycle(
+        "llm-inference",
+        &inputs,
+        &extensions,
+        Some(&context),
+    )
+    .await
+    .expect_err("not-ready dependencies should block execution");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("/tmp/private/tiny-hf"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    let failed = events
+        .iter()
+        .find(|event| event.kind == InferenceRequestLifecycleEventKind::Failed)
+        .expect("failed lifecycle event");
+    let detail = failed.detail.as_deref().expect("failure detail");
+    assert!(detail.contains("[local-path]"));
+    assert!(!detail.contains("/tmp/private/tiny-hf"));
+    let event_json = serde_json::to_string(&*events).expect("events serialize");
+    assert!(!event_json.contains("/tmp/private/tiny-hf"));
+}
+
 #[cfg(feature = "pytorch-nodes")]
 #[test]
 fn test_dependency_preflight_lifecycle_context_reads_resolved_artifact_kind() {
@@ -2804,6 +2863,9 @@ struct CapturingDependencyResolver {
     captured_requests: Arc<Mutex<Vec<ModelDependencyRequest>>>,
 }
 
+#[cfg(feature = "inference-nodes")]
+struct NotReadyDependencyResolver;
+
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[async_trait]
 impl ModelDependencyResolver for CapturingDependencyResolver {
@@ -2865,6 +2927,54 @@ impl ModelDependencyResolver for CapturingDependencyResolver {
             dependency_bindings: Vec::new(),
             dependency_requirements_id: Some("requirements.pytorch.hf".to_string()),
         }))
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[async_trait]
+impl ModelDependencyResolver for NotReadyDependencyResolver {
+    async fn resolve_model_dependency_requirements(
+        &self,
+        request: ModelDependencyRequest,
+    ) -> std::result::Result<ModelDependencyRequirements, String> {
+        Ok(model_dependency_requirements_for_request(&request))
+    }
+
+    async fn check_dependencies(
+        &self,
+        request: ModelDependencyRequest,
+    ) -> std::result::Result<ModelDependencyStatus, String> {
+        let requirements = model_dependency_requirements_for_request(&request);
+        Ok(ModelDependencyStatus {
+            state: DependencyState::Missing,
+            code: Some("missing_dependency".to_string()),
+            message: Some("install Python package before execution".to_string()),
+            requirements,
+            bindings: Vec::new(),
+            checked_at: None,
+        })
+    }
+
+    async fn install_dependencies(
+        &self,
+        request: ModelDependencyRequest,
+    ) -> std::result::Result<ModelDependencyInstallResult, String> {
+        Ok(ModelDependencyInstallResult {
+            state: DependencyState::Missing,
+            code: Some("missing_dependency".to_string()),
+            message: Some("install Python package before execution".to_string()),
+            requirements: model_dependency_requirements_for_request(&request),
+            bindings: Vec::new(),
+            installed_at: None,
+        })
+    }
+
+    async fn resolve_model_ref(
+        &self,
+        _request: ModelDependencyRequest,
+        _requirements: Option<ModelDependencyRequirements>,
+    ) -> std::result::Result<Option<ModelRefV2>, String> {
+        Ok(None)
     }
 }
 

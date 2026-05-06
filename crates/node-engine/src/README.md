@@ -199,6 +199,9 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Hosts that need durable typed inference diagnostics may provide
   `extension_keys::INFERENCE_LIFECYCLE_SINK`; node-engine only forwards bounded
   lifecycle facts and does not import or write the diagnostics ledger.
+- Dependency-preflight lifecycle failure details redact local path-shaped tokens
+  before they reach the lifecycle sink. The returned execution error may still
+  contain the full operational detail for the caller.
 - Canonical `llm-inference` text/chat `usage` output is bounded token-count
   metadata from typed gateway results or terminal stream chunks. It must not
   contain prompt text, generated text, token arrays, logits, tensors, backend
