@@ -1904,6 +1904,9 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   versioned `get_loaded_info` worker envelope and typed response decoder,
   preserving request-id correlation and canonical sanitized KV loaded-info
   errors before node-engine KV-cache preparation consumes active model facts.
+  PyTorch live-KV clear now crosses the Rust/Python boundary through a
+  versioned `clear_kv_cache` worker envelope and typed response decoder shared
+  by the free helper and trait slot-clear path after slot validation.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -3846,6 +3849,11 @@ Update during implementation:
   response decoder, preserving request-id correlation and canonical sanitized
   KV loaded-info errors before node-engine KV-cache preparation consumes active
   model facts.
+- 2026-05-06: PyTorch live-KV clear now crosses the embedded Python boundary
+  through a versioned `clear_kv_cache` worker envelope and typed response
+  decoder, with operation/version validation, request-id correlation, malformed
+  response rejection, and canonical sanitized KV clear errors shared by the free
+  helper and trait slot-clear path.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

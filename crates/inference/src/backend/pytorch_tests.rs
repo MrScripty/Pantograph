@@ -2,11 +2,12 @@ use std::collections::BTreeSet;
 use std::ffi::CString;
 
 use super::pytorch_worker_contract::{
-    PyTorchAudioTranscriptionRequest, PyTorchAudioTranscriptionResult, PyTorchGenerateTextRequest,
-    PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest, PyTorchTransformersLoadRequest,
-    PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest,
-    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
-    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchAudioTranscriptionRequest, PyTorchAudioTranscriptionResult, PyTorchClearKvCacheRequest,
+    PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
+    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy,
+    PyTorchUnloadModelRequest, PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind,
+    PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -722,6 +723,53 @@ fn test_pytorch_worker_get_loaded_info_envelope_rejects_wrong_contract_version()
 }
 
 #[test]
+fn test_pytorch_worker_clear_kv_cache_envelope_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/clear_kv_cache_request.json");
+    let envelope: PyTorchWorkerEnvelope<PyTorchClearKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker clear_kv_cache fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-clear-kv-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::ClearKvCache);
+
+    validate_clear_kv_cache_envelope(&envelope).expect("clear_kv_cache fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_clear_kv_cache_envelope_rejects_wrong_operation() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/clear_kv_cache_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchClearKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker clear_kv_cache fixture");
+    envelope.operation = PyTorchWorkerOperation::GenerateText;
+
+    match validate_clear_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("GenerateText"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_clear_kv_cache_envelope_rejects_wrong_contract_version() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/clear_kv_cache_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchClearKvCacheRequest> =
+        serde_json::from_str(fixture).expect("decode worker clear_kv_cache fixture");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match validate_clear_kv_cache_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("clear_kv_cache envelope contract version"));
+        }
+        other => panic!("expected wrong-version config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_python_worker_contract_projects_unload_envelope() {
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
@@ -789,6 +837,65 @@ fn test_python_worker_contract_rejects_invalid_get_loaded_info_envelope() {
                 (wrong_version.to_string(),),
             )
             .expect_err("wrong get_loaded_info contract version should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unsupported PyTorch worker contract_version"));
+    });
+}
+
+#[test]
+fn test_python_worker_contract_projects_clear_kv_cache_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/clear_kv_cache_request.json"
+        );
+
+        let kwargs = module
+            .call_method1("clear_kv_cache_kwargs_from_envelope", (fixture,))
+            .expect("clear_kv_cache worker envelope should project to kwargs");
+        let len = kwargs.len().expect("kwargs length should be readable");
+
+        assert_eq!(len, 0);
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_invalid_clear_kv_cache_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let wrong_operation = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-clear-kv-operation",
+            "operation": "generate_text",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "clear_kv_cache_kwargs_from_envelope",
+                (wrong_operation.to_string(),),
+            )
+            .expect_err("wrong clear_kv_cache operation should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unexpected PyTorch worker operation for clear_kv_cache"));
+
+        let wrong_version = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION + 1,
+            "request_id": "req-invalid-clear-kv-version",
+            "operation": "clear_kv_cache",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "clear_kv_cache_kwargs_from_envelope",
+                (wrong_version.to_string(),),
+            )
+            .expect_err("wrong clear_kv_cache contract version should fail validation");
 
         assert!(error
             .to_string()
@@ -2529,6 +2636,129 @@ fn test_pytorch_worker_live_kv_transport_error_normalizes_to_backend_error() {
         }
         other => panic!("expected Inference error, got {other:?}"),
     }
+}
+
+#[test]
+fn test_pytorch_worker_clear_kv_cache_response_decodes() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-clear-kv-ok",
+        "result": {
+            "cleared": true
+        }
+    });
+
+    clear_kv_cache_result_from_worker_response("req-clear-kv-ok", &response.to_string())
+        .expect("clear_kv_cache response decodes");
+}
+
+#[test]
+fn test_pytorch_worker_clear_kv_cache_response_rejects_false_cleanup() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-clear-kv-false",
+        "result": {
+            "cleared": false
+        }
+    });
+
+    let error =
+        clear_kv_cache_result_from_worker_response("req-clear-kv-false", &response.to_string())
+            .expect_err("uncleared KV response should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-clear-kv-false",
+        "pytorch_worker_kv_clear_failed",
+        "did not confirm cleanup",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_clear_kv_cache_response_rejects_request_id_mismatch() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-clear-kv-other",
+        "result": {
+            "cleared": true
+        }
+    });
+
+    let error =
+        clear_kv_cache_result_from_worker_response("req-clear-kv-expected", &response.to_string())
+            .expect_err("mismatched clear_kv_cache response id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-clear-kv-expected",
+        "pytorch_worker_kv_clear_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_clear_kv_cache_malformed_response_normalizes_to_backend_error() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match clear_kv_cache_result_from_worker_response("req-clear-kv-malformed", malformed) {
+        Err(BackendError::Inference(message)) => {
+            assert!(message.contains("pytorch_worker_kv_clear_failed"));
+            assert!(message.contains("req-clear-kv-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker clear_kv_cache response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_clear_kv_cache_malformed_result_normalizes_to_backend_error() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-clear-kv-bad-result",
+        "result": {}
+    });
+
+    let error = clear_kv_cache_result_from_worker_response(
+        "req-clear-kv-bad-result",
+        &response.to_string(),
+    )
+    .expect_err("missing cleared field should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-clear-kv-bad-result",
+        "pytorch_worker_kv_clear_failed",
+        "missing field `cleared`",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_clear_kv_cache_invalid_request_maps_to_config_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-clear-kv-invalid",
+        "error": {
+            "kind": "invalid_request",
+            "message": "Unexpected PyTorch worker operation for clear_kv_cache: unload_model",
+            "canonical_code": "pytorch_worker_invalid_clear_kv_cache_request"
+        }
+    });
+
+    let error =
+        clear_kv_cache_result_from_worker_response("req-clear-kv-invalid", &response.to_string())
+            .expect_err("invalid clear_kv_cache request should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Config,
+        "req-clear-kv-invalid",
+        "pytorch_worker_invalid_clear_kv_cache_request",
+        "Unexpected PyTorch worker operation for clear_kv_cache",
+    );
 }
 
 #[test]

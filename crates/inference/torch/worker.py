@@ -56,6 +56,7 @@ from worker_transformers import apply_compatibility_shims
 from worker_contract import (
     AUTOMATIC_SPEECH_RECOGNITION_LOADER,
     CAUSAL_LM_LOADER,
+    clear_kv_cache_kwargs_from_envelope,
     GENERATE_TEXT_STREAM_OPERATION,
     generate_text_kwargs_from_envelope,
     get_loaded_info_kwargs_from_envelope,
@@ -457,6 +458,53 @@ def get_loaded_info_from_envelope(envelope):
                 "kind": "internal",
                 "message": str(exc),
                 "canonical_code": "pytorch_worker_kv_loaded_info_internal",
+            },
+        })
+
+
+def clear_live_kv_cache_from_envelope(envelope):
+    """Clear live KV state from the Rust worker envelope contract."""
+    request_id = "unknown"
+    try:
+        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+        if isinstance(decoded, dict):
+            request_id = str(decoded.get("request_id") or request_id)
+        clear_kv_cache_kwargs_from_envelope(decoded)
+        result = clear_live_kv_cache()
+        cleared = bool(result.get("cleared")) if isinstance(result, dict) else False
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": {"cleared": cleared},
+        })
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "invalid_request",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_invalid_clear_kv_cache_request",
+            },
+        })
+    except RuntimeError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "generation_failed",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_kv_clear_failed",
+            },
+        })
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "internal",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_kv_clear_internal",
             },
         })
 

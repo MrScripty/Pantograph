@@ -187,6 +187,16 @@ pub(super) struct PyTorchUnloadModelResult {
 #[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchGetLoadedInfoRequest {}
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchClearKvCacheRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchClearKvCacheResult {
+    pub cleared: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchAudioTranscriptionRequest {

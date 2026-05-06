@@ -9,6 +9,7 @@ GET_LOADED_INFO_OPERATION = "get_loaded_info"
 GENERATE_TEXT_OPERATION = "generate_text"
 GENERATE_TEXT_STREAM_OPERATION = "generate_text_stream"
 TRANSCRIBE_AUDIO_OPERATION = "transcribe_audio"
+CLEAR_KV_CACHE_OPERATION = "clear_kv_cache"
 ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k"}
 CAUSAL_LM_LOADER = "causal_lm"
 AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
@@ -149,6 +150,25 @@ def get_loaded_info_kwargs_from_envelope(envelope):
     payload = envelope.get("payload")
     if not isinstance(payload, dict):
         raise ValueError("PyTorch worker get_loaded_info envelope payload must be an object")
+    return {}
+
+
+def clear_kv_cache_kwargs_from_envelope(envelope):
+    """Validate a Rust worker envelope and project it to KV clear kwargs."""
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    if not isinstance(envelope, dict):
+        raise ValueError("PyTorch worker clear_kv_cache envelope must be an object")
+    contract_version = envelope.get("contract_version")
+    if contract_version != WORKER_CONTRACT_VERSION:
+        raise ValueError(f"Unsupported PyTorch worker contract_version: {contract_version}")
+    operation = envelope.get("operation")
+    if operation != CLEAR_KV_CACHE_OPERATION:
+        raise ValueError(f"Unexpected PyTorch worker operation for clear_kv_cache: {operation}")
+
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("PyTorch worker clear_kv_cache envelope payload must be an object")
     return {}
 
 
