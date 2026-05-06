@@ -50,6 +50,7 @@ pub(super) enum PyTorchWorkerOperation {
     LoadTransformersModel,
     GenerateText,
     GenerateTextStream,
+    TranscribeAudio,
     SaveKvCache,
     RestoreKvCache,
     ClearKvCache,
@@ -169,6 +170,24 @@ pub(super) struct PyTorchGenerateTextRequest {
 #[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchGenerateTextResult {
     pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchAudioTranscriptionRequest {
+    pub model_path: String,
+    pub audio_base64: String,
+    pub device: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk_length_s: Option<f32>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub extra_options: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

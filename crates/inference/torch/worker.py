@@ -59,6 +59,7 @@ from worker_contract import (
     GENERATE_TEXT_STREAM_OPERATION,
     generate_text_kwargs_from_envelope,
     load_transformers_model_kwargs_from_envelope,
+    transcribe_audio_kwargs_from_envelope,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -423,6 +424,12 @@ def generate_text_stream_setup_from_envelope(envelope):
                 "canonical_code": "pytorch_worker_generate_text_stream_internal",
             },
         })
+
+
+def transcribe_audio_from_envelope(envelope):
+    """Transcribe audio from the Rust worker envelope contract."""
+    kwargs = transcribe_audio_kwargs_from_envelope(envelope)
+    return transcribe_audio(**kwargs)
 
 
 def load_model(

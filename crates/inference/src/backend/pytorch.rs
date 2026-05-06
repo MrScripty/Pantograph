@@ -20,11 +20,11 @@ use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use self::pytorch_worker_contract::{
-    normalize_worker_error_message, PyTorchGenerateTextRequest, PyTorchGenerateTextResult,
-    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
-    PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope, PyTorchWorkerError,
-    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
-    PYTORCH_WORKER_CONTRACT_VERSION,
+    normalize_worker_error_message, PyTorchAudioTranscriptionRequest, PyTorchGenerateTextRequest,
+    PyTorchGenerateTextResult, PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader,
+    PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
+    PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
+    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -864,6 +864,76 @@ impl PyTorchBackend {
             )));
         }
         Ok(())
+    }
+
+    fn validate_audio_transcription_envelope(
+        envelope: &PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>,
+    ) -> Result<(), BackendError> {
+        if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+            return Err(BackendError::Config(format!(
+                "Unsupported PyTorch worker audio_transcription envelope contract version {}",
+                envelope.contract_version
+            )));
+        }
+        if envelope.operation != PyTorchWorkerOperation::TranscribeAudio {
+            return Err(BackendError::Config(format!(
+                "Unexpected PyTorch worker operation {:?} for audio transcription",
+                envelope.operation
+            )));
+        }
+        if envelope.payload.model_path.trim().is_empty() {
+            return Err(BackendError::Config(
+                "PyTorch worker audio_transcription envelope requires a model_path".to_string(),
+            ));
+        }
+        if envelope.payload.audio_base64.trim().is_empty() {
+            return Err(BackendError::Config(
+                "PyTorch worker audio_transcription envelope requires audio_base64".to_string(),
+            ));
+        }
+        if !envelope.payload.extra_options.is_null() {
+            return Err(BackendError::Config(
+                "PyTorch worker audio_transcription envelope does not support extra_options yet"
+                    .to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn audio_transcription_envelope_from_request(
+        request_id: impl Into<String>,
+        request: AudioTranscriptionRequest,
+    ) -> Result<PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>, BackendError> {
+        let audio_base64 = Self::audio_base64_from_request(&request)?;
+        let model_path = request.model;
+        if model_path.trim().is_empty() {
+            return Err(BackendError::Config(
+                "PyTorch audio transcription requires a model".to_string(),
+            ));
+        }
+
+        let envelope = PyTorchWorkerEnvelope::new(
+            request_id,
+            PyTorchWorkerOperation::TranscribeAudio,
+            PyTorchAudioTranscriptionRequest {
+                model_path,
+                audio_base64,
+                device: "auto".to_string(),
+                language: request
+                    .language
+                    .and_then(|value| (!value.trim().is_empty()).then_some(value)),
+                prompt: request
+                    .prompt
+                    .and_then(|value| (!value.trim().is_empty()).then_some(value)),
+                task: request
+                    .task
+                    .and_then(|value| (!value.trim().is_empty()).then_some(value)),
+                chunk_length_s: request.chunk_length_s,
+                extra_options: request.extra_options,
+            },
+        );
+        Self::validate_audio_transcription_envelope(&envelope)?;
+        Ok(envelope)
     }
 
     fn generate_text_request(
@@ -1728,18 +1798,14 @@ impl InferenceBackend for PyTorchBackend {
             return Err(BackendError::NotReady);
         }
 
-        let model_path = request.model.clone();
-        if model_path.trim().is_empty() {
-            return Err(BackendError::Config(
-                "PyTorch audio transcription requires a model".to_string(),
-            ));
-        }
-        let audio_base64 = Self::audio_base64_from_request(&request)?;
-        let language = request.language.clone();
-        let prompt = request.prompt.clone();
-        let task = request.task.clone();
-        let chunk_length_s = request.chunk_length_s;
         let request_id = format!("pytorch-audio-transcription-{}", Uuid::new_v4().simple());
+        let envelope =
+            Self::audio_transcription_envelope_from_request(request_id.clone(), request)?;
+        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+            BackendError::Config(format!(
+                "Failed to encode PyTorch worker audio_transcription envelope: {error}"
+            ))
+        })?;
 
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<AudioTranscriptionResult, BackendError> {
@@ -1749,29 +1815,13 @@ impl InferenceBackend for PyTorchBackend {
                         format!("Failed to get worker module: {}", e),
                     )
                 })?;
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("model_path", model_path).unwrap();
-                kwargs.set_item("audio_base64", audio_base64).unwrap();
-                kwargs.set_item("device", "auto").unwrap();
-                if let Some(language) = language.filter(|value| !value.trim().is_empty()) {
-                    kwargs.set_item("language", language).unwrap();
-                }
-                if let Some(prompt) = prompt.filter(|value| !value.trim().is_empty()) {
-                    kwargs.set_item("prompt", prompt).unwrap();
-                }
-                if let Some(task) = task.filter(|value| !value.trim().is_empty()) {
-                    kwargs.set_item("task", task).unwrap();
-                }
-                if let Some(chunk_length_s) = chunk_length_s {
-                    kwargs.set_item("chunk_length_s", chunk_length_s).unwrap();
-                }
 
                 let result = worker
-                    .call_method("transcribe_audio", (), Some(&kwargs))
+                    .call_method1("transcribe_audio_from_envelope", (envelope_json,))
                     .map_err(|e| {
                         Self::audio_transcription_worker_failure_from_message(
                             &request_id,
-                            format!("PyTorch audio transcription failed: {e}"),
+                            format!("PyTorch worker audio_transcription envelope failed: {e}"),
                         )
                     })?;
                 Self::audio_transcription_result_from_worker_output(&request_id, result.as_any())

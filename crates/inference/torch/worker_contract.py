@@ -6,6 +6,7 @@ WORKER_CONTRACT_VERSION = 1
 LOAD_TRANSFORMERS_MODEL_OPERATION = "load_transformers_model"
 GENERATE_TEXT_OPERATION = "generate_text"
 GENERATE_TEXT_STREAM_OPERATION = "generate_text_stream"
+TRANSCRIBE_AUDIO_OPERATION = "transcribe_audio"
 ALLOWED_TRANSFORMERS_GENERATE_KWARGS = {"top_k"}
 CAUSAL_LM_LOADER = "causal_lm"
 AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
@@ -108,4 +109,72 @@ def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEX
     for key, value in transformers_kwargs.items():
         if value is not None:
             kwargs[key] = value
+    return kwargs
+
+
+def transcribe_audio_kwargs_from_envelope(envelope):
+    """Validate a Rust worker envelope and project it to audio transcription kwargs."""
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    if not isinstance(envelope, dict):
+        raise ValueError("PyTorch worker audio_transcription envelope must be an object")
+    contract_version = envelope.get("contract_version")
+    if contract_version != WORKER_CONTRACT_VERSION:
+        raise ValueError(f"Unsupported PyTorch worker contract_version: {contract_version}")
+    operation = envelope.get("operation")
+    if operation != TRANSCRIBE_AUDIO_OPERATION:
+        raise ValueError(
+            f"Unexpected PyTorch worker operation for audio transcription: {operation}"
+        )
+
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("PyTorch worker audio_transcription envelope payload must be an object")
+
+    model_path = payload.get("model_path")
+    if not isinstance(model_path, str) or not model_path.strip():
+        raise ValueError(
+            "PyTorch worker audio_transcription payload.model_path must be a non-empty string"
+        )
+    audio_base64 = payload.get("audio_base64")
+    if not isinstance(audio_base64, str) or not audio_base64.strip():
+        raise ValueError(
+            "PyTorch worker audio_transcription payload.audio_base64 must be a non-empty string"
+        )
+
+    device = payload.get("device") or "auto"
+    if not isinstance(device, str) or not device.strip():
+        raise ValueError(
+            "PyTorch worker audio_transcription payload.device must be a non-empty string"
+        )
+
+    extra_options = payload.get("extra_options")
+    if extra_options is not None:
+        raise ValueError("PyTorch worker audio_transcription extra_options are not supported yet")
+
+    kwargs = {
+        "model_path": model_path,
+        "audio_base64": audio_base64.strip(),
+        "device": device,
+        "language": payload.get("language"),
+        "prompt": payload.get("prompt"),
+        "task": payload.get("task"),
+        "chunk_length_s": payload.get("chunk_length_s"),
+    }
+
+    for optional_string in ("language", "prompt", "task"):
+        value = kwargs[optional_string]
+        if value is not None and not isinstance(value, str):
+            raise ValueError(
+                f"PyTorch worker audio_transcription payload.{optional_string} must be a string when present"
+            )
+    chunk_length_s = kwargs["chunk_length_s"]
+    if chunk_length_s is not None:
+        try:
+            kwargs["chunk_length_s"] = float(chunk_length_s)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "PyTorch worker audio_transcription payload.chunk_length_s must be a number when present"
+            ) from exc
+
     return kwargs

@@ -2,10 +2,10 @@ use std::collections::BTreeSet;
 use std::ffi::CString;
 
 use super::pytorch_worker_contract::{
-    PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchTransformersLoadRequest,
-    PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
-    PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
-    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchAudioTranscriptionRequest, PyTorchGenerateTextRequest, PyTorchGenerateTextResult,
+    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy,
+    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
+    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -659,6 +659,142 @@ fn test_pytorch_worker_generate_text_stream_envelope_decodes_fixture() {
 }
 
 #[test]
+fn test_pytorch_worker_audio_transcription_envelope_decodes_fixture() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+    );
+    let envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest> =
+        serde_json::from_str(fixture).expect("decode worker audio transcription fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-audio-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::TranscribeAudio);
+    assert_eq!(envelope.payload.model_path, "asr/example/tiny-whisper");
+    assert_eq!(envelope.payload.audio_base64, "UklGRg==");
+    assert_eq!(envelope.payload.device, "auto");
+    assert_eq!(envelope.payload.language.as_deref(), Some("en"));
+    assert_eq!(envelope.payload.prompt.as_deref(), Some("Meeting notes"));
+    assert_eq!(envelope.payload.task.as_deref(), Some("transcribe"));
+    assert_eq!(envelope.payload.chunk_length_s, Some(30.0));
+    assert!(envelope.payload.extra_options.is_null());
+
+    PyTorchBackend::validate_audio_transcription_envelope(&envelope)
+        .expect("audio transcription fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_audio_transcription_envelope_tolerates_additive_fields() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+    ))
+    .expect("decode worker audio transcription fixture");
+    let object = value.as_object_mut().expect("fixture is object");
+    object.insert(
+        "producer_trace".to_string(),
+        serde_json::json!({"span_id": "trace-audio"}),
+    );
+    object
+        .get_mut("payload")
+        .and_then(|value| value.as_object_mut())
+        .expect("payload is object")
+        .insert(
+            "future_payload_field".to_string(),
+            serde_json::json!("ignored"),
+        );
+
+    let envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest> =
+        serde_json::from_value(value).expect("additive fields should be ignored");
+
+    assert_eq!(envelope.request_id, "req-audio-001");
+    assert_eq!(envelope.payload.language.as_deref(), Some("en"));
+    PyTorchBackend::validate_audio_transcription_envelope(&envelope)
+        .expect("additive fields should not affect validation");
+}
+
+#[test]
+fn test_python_worker_contract_projects_audio_transcription_fields() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+        );
+
+        let kwargs = module
+            .call_method1("transcribe_audio_kwargs_from_envelope", (fixture,))
+            .expect("audio transcription worker envelope should project to kwargs");
+
+        assert_eq!(
+            kwargs
+                .get_item("model_path")
+                .expect("model path key should exist")
+                .extract::<String>()
+                .expect("model path should be a string"),
+            "asr/example/tiny-whisper"
+        );
+        assert_eq!(
+            kwargs
+                .get_item("audio_base64")
+                .expect("audio key should exist")
+                .extract::<String>()
+                .expect("audio payload should be a string"),
+            "UklGRg=="
+        );
+        assert_eq!(
+            kwargs
+                .get_item("language")
+                .expect("language key should exist")
+                .extract::<String>()
+                .expect("language should be a string"),
+            "en"
+        );
+        assert_eq!(
+            kwargs
+                .get_item("chunk_length_s")
+                .expect("chunk length key should exist")
+                .extract::<f32>()
+                .expect("chunk length should be numeric"),
+            30.0
+        );
+    });
+}
+
+#[test]
+fn test_python_worker_contract_tolerates_additive_audio_transcription_fields() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let envelope = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-additive-audio",
+            "operation": "transcribe_audio",
+            "producer_trace": {"span_id": "trace-audio"},
+            "payload": {
+                "model_path": "/models/asr",
+                "audio_base64": " UklGRg== ",
+                "device": "auto",
+                "language": "en",
+                "future_payload_field": "ignored"
+            }
+        });
+
+        let kwargs = module
+            .call_method1(
+                "transcribe_audio_kwargs_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect("additive audio transcription fields should be ignored");
+
+        assert_eq!(
+            kwargs
+                .get_item("audio_base64")
+                .expect("audio key should exist")
+                .extract::<String>()
+                .expect("audio payload should be a string"),
+            "UklGRg=="
+        );
+    });
+}
+
+#[test]
 fn test_pytorch_worker_generate_text_response_decodes_fixture() {
     let fixture =
         include_str!("../../tests/fixtures/pytorch_worker_contract/generate_text_response.json");
@@ -1076,6 +1212,118 @@ fn test_pytorch_worker_generate_text_envelope_rejects_wrong_contract_version() {
         }
         other => panic!("expected wrong-version config error, got {other:?}"),
     }
+}
+
+#[test]
+fn test_pytorch_worker_audio_transcription_envelope_rejects_wrong_operation() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+    );
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest> =
+        serde_json::from_str(fixture).expect("decode worker audio transcription fixture");
+    envelope.operation = PyTorchWorkerOperation::GenerateText;
+
+    match PyTorchBackend::validate_audio_transcription_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("GenerateText"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_audio_transcription_envelope_rejects_wrong_contract_version() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+    );
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest> =
+        serde_json::from_str(fixture).expect("decode worker audio transcription fixture");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match PyTorchBackend::validate_audio_transcription_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("audio_transcription envelope contract version"));
+        }
+        other => panic!("expected wrong-version config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_audio_transcription_envelope_rejects_blank_inputs() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+    );
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest> =
+        serde_json::from_str(fixture).expect("decode worker audio transcription fixture");
+    envelope.payload.model_path = "  ".to_string();
+
+    match PyTorchBackend::validate_audio_transcription_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("requires a model_path"));
+        }
+        other => panic!("expected blank-model config error, got {other:?}"),
+    }
+
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest> =
+        serde_json::from_str(fixture).expect("decode worker audio transcription fixture");
+    envelope.payload.audio_base64 = "  ".to_string();
+
+    match PyTorchBackend::validate_audio_transcription_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("requires audio_base64"));
+        }
+        other => panic!("expected blank-audio config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_audio_transcription_envelope_rejects_extra_options() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+    );
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest> =
+        serde_json::from_str(fixture).expect("decode worker audio transcription fixture");
+    envelope.payload.extra_options = serde_json::json!({"return_timestamps": true});
+
+    match PyTorchBackend::validate_audio_transcription_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("does not support extra_options yet"));
+        }
+        other => panic!("expected extra-options config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_audio_transcription_envelope_from_request_trims_audio_and_filters_empty_fields() {
+    let request = AudioTranscriptionRequest {
+        model: "openai/whisper-tiny".to_string(),
+        audio: Some(EncodedAudio {
+            data_base64: " UklGRg== ".to_string(),
+            mime_type: "audio/wav".to_string(),
+            sample_rate_hz: Some(16_000),
+        }),
+        audio_ref: None,
+        language: Some("   ".to_string()),
+        prompt: Some("Meeting notes".to_string()),
+        task: Some("transcribe".to_string()),
+        chunk_length_s: Some(30.0),
+        extra_options: serde_json::Value::Null,
+    };
+
+    let envelope =
+        PyTorchBackend::audio_transcription_envelope_from_request("req-audio-build", request)
+            .expect("audio transcription envelope should build");
+
+    assert_eq!(envelope.request_id, "req-audio-build");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::TranscribeAudio);
+    assert_eq!(envelope.payload.model_path, "openai/whisper-tiny");
+    assert_eq!(envelope.payload.audio_base64, "UklGRg==");
+    assert_eq!(envelope.payload.device, "auto");
+    assert!(envelope.payload.language.is_none());
+    assert_eq!(envelope.payload.prompt.as_deref(), Some("Meeting notes"));
+    assert_eq!(envelope.payload.task.as_deref(), Some("transcribe"));
+    assert_eq!(envelope.payload.chunk_length_s, Some(30.0));
 }
 
 #[test]

@@ -1881,6 +1881,11 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   rejects missing or malformed `text`, `language`, and `duration_seconds`
   fields through canonical `pytorch_worker_audio_transcription_failed` errors
   instead of silently returning empty/default transcript data.
+  PyTorch audio transcription requests now cross the Rust/Python worker
+  boundary through the same versioned envelope contract as load and generation,
+  with Rust and torch-free Python projection tests covering operation/version
+  validation, required model/audio inputs, additive-field tolerance, and
+  fail-closed handling for unsupported non-null `extra_options`.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -3800,6 +3805,10 @@ Update during implementation:
   when required transcript text is missing or optional language/duration fields
   are present with malformed types, preventing silent empty/default transcript
   values from malformed Python worker output.
+- 2026-05-06: PyTorch audio transcription request inputs now use a versioned
+  Rust/Python worker envelope with typed Rust DTOs, torch-free Python projection,
+  fixture coverage, required model/audio validation, additive-field tolerance,
+  and explicit rejection of unsupported non-null audio `extra_options`.
 - 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
   threaded terminal text/chat cache-handle ids through typed gateway results,
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`

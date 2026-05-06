@@ -164,6 +164,10 @@ fn create_backend() {
 - PyTorch Rust/Python envelope DTOs stay in `pytorch_worker_contract.rs`.
   They are backend-local implementation contracts, not public Pantograph graph
   node shapes or scheduler/runtime-registry policy.
+- PyTorch audio transcription request inputs cross the embedded Python boundary
+  through the same versioned worker-envelope pattern as Transformers load and
+  text generation. Unsupported non-null audio `extra_options` fail closed until
+  they are deliberately mapped to backend-local kwargs.
 - PyTorch transport exceptions from the embedded Python boundary must be
   normalized before becoming `BackendError` messages: keep request ids,
   canonical worker codes, and bounded exception summaries, but strip Python
