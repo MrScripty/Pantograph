@@ -338,6 +338,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   Pumas package facts. Lifecycle facts may also carry explicit non-`auto`
   selected device ids from backend start config, bounded usage counts, and
   backend-local cache-handle ids when typed execution results provide them.
+  Compatibility issue summaries drop local path-shaped issue paths before
+  lifecycle emission when a stable model id is present, while retaining bounded
+  relative component paths such as `tokenizer.json`.
   Text generation may receive bounded stream usage and backend-local cache
   handle ids from backend `ChatChunk` metadata, and embedding execution
   aggregates backend embedding item token counts into bounded prompt/total usage

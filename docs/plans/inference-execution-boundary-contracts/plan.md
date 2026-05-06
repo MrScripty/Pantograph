@@ -2775,7 +2775,9 @@ drift back into inference.
   `llm-inference` routing may use resolved Pumas backend hints to enter the
   PyTorch/Transformers dependency preflight path when no explicit runtime hint
   or backend key is wired, without moving scheduling or admission policy into
-  node-engine/inference.
+  node-engine/inference. Inference source README now documents compatibility
+  issue path redaction before lifecycle emission when a stable model id is
+  present.
   Inference crate README contract sections now document that consumers must use
   typed `InferenceGateway` methods and capability facts rather than a raw
   backend-handle accessor.
