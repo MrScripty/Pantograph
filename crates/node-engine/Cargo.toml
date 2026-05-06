@@ -33,7 +33,7 @@ thiserror.workspace = true
 # Logging
 log.workspace = true
 
-# HTTP client (for ollama-inference and other HTTP-based nodes)
+# HTTP client for HTTP-based inference nodes
 reqwest = { workspace = true }
 
 # Link-time collection of TaskMetadata descriptors

@@ -25,7 +25,7 @@ async fn pytorch_model_needs_load(model_path: &str) -> Result<bool> {
     }
 }
 
-pub(crate) fn pytorch_typed_generation_top_k(
+pub(crate) fn pytorch_typed_generation_settings(
     extra_settings: &HashMap<String, serde_json::Value>,
 ) -> Result<Option<u32>> {
     let mut top_k = None;
@@ -163,7 +163,7 @@ pub(crate) async fn execute_pytorch_inference(
         .or_else(|| extra_settings.get("top_p").and_then(|v| v.as_f64()))
         .unwrap_or(0.95);
 
-    let top_k = pytorch_typed_generation_top_k(&extra_settings)?;
+    let top_k = pytorch_typed_generation_settings(&extra_settings)?;
 
     // Phase 2: Generate through the inference-owned PyTorch worker envelope.
     let response_text = if let Some(sink) = event_sink {
