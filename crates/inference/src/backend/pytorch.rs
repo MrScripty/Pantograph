@@ -144,6 +144,38 @@ fn kv_worker_failure_from_message(
     .into_backend_error()
 }
 
+fn kv_loaded_info_unavailable_error(request_id: &str) -> BackendError {
+    kv_worker_failure_from_message(
+        request_id,
+        "pytorch_worker_kv_loaded_info_failed",
+        "PyTorch KV operations require an active loaded model".to_string(),
+    )
+}
+
+fn loaded_model_info_from_kv_worker_result(
+    request_id: &str,
+    result: &Bound<'_, PyAny>,
+) -> Result<LoadedModelInfo, BackendError> {
+    pytorch_worker::extract_loaded_model_info(result).map_err(|error| {
+        kv_worker_failure_from_message(
+            request_id,
+            "pytorch_worker_kv_loaded_info_failed",
+            format!("PyTorch KV loaded model info result was malformed: {error}"),
+        )
+    })
+}
+
+fn live_kv_info_from_worker_result(
+    request_id: &str,
+    canonical_code: &'static str,
+    context: &'static str,
+    result: &Bound<'_, PyAny>,
+) -> Result<PyTorchLiveKvInfo, BackendError> {
+    pytorch_worker::extract_live_kv_info(result).map_err(|error| {
+        kv_worker_failure_from_message(request_id, canonical_code, format!("{context}: {error}"))
+    })
+}
+
 fn task_join_error_message(error: impl std::fmt::Display) -> String {
     normalize_worker_error_message(
         &format!("Task join error: {error}"),
@@ -170,11 +202,9 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
                 )
             })?;
             if result.is_none() {
-                return Err(BackendError::Inference(
-                    "PyTorch KV operations require an active loaded model".to_string(),
-                ));
+                return Err(kv_loaded_info_unavailable_error(&request_id));
             }
-            pytorch_worker::extract_loaded_model_info(&result)
+            loaded_model_info_from_kv_worker_result(&request_id, &result)
         })
     })
     .await
@@ -202,7 +232,12 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
                         format!("PyTorch KV save failed: {}", e),
                     )
                 })?;
-            pytorch_worker::extract_live_kv_info(&result)
+            live_kv_info_from_worker_result(
+                &request_id,
+                "pytorch_worker_kv_save_failed",
+                "PyTorch KV save result was malformed",
+                &result,
+            )
         })
     })
     .await
@@ -233,7 +268,12 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
                         format!("PyTorch KV restore failed: {}", e),
                     )
                 })?;
-            pytorch_worker::extract_live_kv_info(&result)
+            live_kv_info_from_worker_result(
+                &request_id,
+                "pytorch_worker_kv_restore_failed",
+                "PyTorch KV restore result was malformed",
+                &result,
+            )
         })
     })
     .await

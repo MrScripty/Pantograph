@@ -180,6 +180,10 @@ fn create_backend() {
   worker errors become canonical
   `pytorch_worker_audio_transcription_failed` errors instead of silent default
   transcript values.
+- PyTorch KV-cache worker result extraction must normalize unavailable or
+  malformed loaded-model/live-KV metadata through the canonical
+  `pytorch_worker_kv_*_failed` paths so request ids and bounded diagnostics are
+  preserved even when Python returns an unexpected shape.
 - Backend-native generation fields and kwargs must stay inside backend-local
   mapping helpers. PyTorch maps canonical generation options to
   Transformers-style kwargs, while llama.cpp maps them to bounded

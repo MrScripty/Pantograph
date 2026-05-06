@@ -2233,6 +2233,65 @@ fn test_pytorch_worker_live_kv_transport_error_normalizes_to_backend_error() {
 }
 
 #[test]
+fn test_pytorch_kv_loaded_info_unavailable_uses_canonical_error() {
+    match kv_loaded_info_unavailable_error("req-kv-loaded-info") {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_kv_loaded_info_failed"));
+            assert!(message.contains("req-kv-loaded-info"));
+            assert!(message.contains("active loaded model"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_kv_loaded_model_info_malformed_result_normalizes_to_backend_error() {
+    Python::with_gil(|py| {
+        let result = pyo3::types::PyDict::new(py);
+        result.set_item("model_path", "/models/tiny").unwrap();
+
+        let error =
+            loaded_model_info_from_kv_worker_result("req-kv-loaded-malformed", result.as_any())
+                .expect_err("missing loaded model fields should fail closed");
+
+        assert_worker_backend_error(
+            error,
+            ExpectedBackendErrorVariant::Inference,
+            "req-kv-loaded-malformed",
+            "pytorch_worker_kv_loaded_info_failed",
+            "loaded model info result was malformed",
+        );
+    });
+}
+
+#[test]
+fn test_pytorch_kv_live_info_malformed_result_normalizes_to_backend_error() {
+    Python::with_gil(|py| {
+        let result = pyo3::types::PyDict::new(py);
+        result.set_item("token_count", "many").unwrap();
+        result.set_item("model_path", "/models/tiny").unwrap();
+        result.set_item("model_type", "dllm").unwrap();
+        result.set_item("device", "cpu").unwrap();
+
+        let error = live_kv_info_from_worker_result(
+            "req-kv-save-malformed",
+            "pytorch_worker_kv_save_failed",
+            "PyTorch KV save result was malformed",
+            result.as_any(),
+        )
+        .expect_err("invalid live KV token_count should fail closed");
+
+        assert_worker_backend_error(
+            error,
+            ExpectedBackendErrorVariant::Inference,
+            "req-kv-save-malformed",
+            "pytorch_worker_kv_save_failed",
+            "KV save result was malformed",
+        );
+    });
+}
+
+#[test]
 fn test_pytorch_worker_kv_truncate_transport_error_normalizes_to_backend_error() {
     match kv_worker_failure_from_message(
         "req-kv-truncate",

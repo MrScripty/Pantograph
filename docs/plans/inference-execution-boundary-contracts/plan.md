@@ -1850,6 +1850,9 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   PyTorch live-KV helper worker lookup and save/restore/clear failures now
   retain generated request ids and canonical `pytorch_worker_kv_*_failed`
   codes without exposing cache bytes or file paths in the canonical code.
+  PyTorch live-KV loaded-model and live-KV metadata extraction failures now
+  use the same canonical KV worker failure shape when Python returns no active
+  model or malformed KV metadata.
   PyTorch backend trait KV slot save/restore/clear/truncate worker failures
   now use the same canonical KV worker failure shape.
   Non-streaming PyTorch generate-text worker transport failures now also retain
@@ -3819,6 +3822,10 @@ Update during implementation:
   and audio transcription through the operation-specific canonical worker
   failure path, so stale or cross-wired worker responses cannot be trusted as
   the active request.
+- 2026-05-06: PyTorch KV-cache loaded-model and live-KV metadata extraction now
+  routes unavailable active-model state and malformed Python result shapes
+  through canonical `pytorch_worker_kv_*_failed` backend errors with generated
+  request ids instead of ad hoc inference errors.
 - 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
   threaded terminal text/chat cache-handle ids through typed gateway results,
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`
