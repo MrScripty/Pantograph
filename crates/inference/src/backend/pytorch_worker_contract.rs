@@ -48,6 +48,7 @@ pub(super) enum PyTorchWorkerOperation {
     ShutdownWorker,
     GetLoadedInfo,
     LoadTransformersModel,
+    UnloadModel,
     GenerateText,
     GenerateTextStream,
     TranscribeAudio,
@@ -170,6 +171,16 @@ pub(super) struct PyTorchGenerateTextRequest {
 #[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchGenerateTextResult {
     pub text: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchUnloadModelRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchUnloadModelResult {
+    pub unloaded: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

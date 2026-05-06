@@ -1,0 +1,9 @@
+{
+  "contract_version": 1,
+  "request_id": "req-unload-001",
+  "operation": "unload_model",
+  "cancellation": {
+    "drop_stream_cancels": false
+  },
+  "payload": {}
+}

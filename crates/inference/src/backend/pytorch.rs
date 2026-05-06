@@ -23,9 +23,9 @@ use self::pytorch_worker_contract::{
     normalize_worker_error_message, PyTorchAudioTranscriptionRequest,
     PyTorchAudioTranscriptionResult, PyTorchGenerateTextRequest, PyTorchGenerateTextResult,
     PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
-    PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope, PyTorchWorkerError,
-    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
-    PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest, PyTorchUnloadModelResult,
+    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
+    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -674,6 +674,51 @@ impl PyTorchBackend {
         }
     }
 
+    fn unload_model_result_from_worker_response(
+        request_id: &str,
+        response_json: &str,
+    ) -> Result<(), BackendError> {
+        let response: PyTorchWorkerResponse<PyTorchUnloadModelResult> =
+            serde_json::from_str(response_json).map_err(|error| {
+                Self::unload_worker_failure_from_message(
+                    request_id,
+                    format!("Failed to decode PyTorch worker unload response: {error}"),
+                )
+            })?;
+        match response {
+            PyTorchWorkerResponse::Ok(success) => {
+                if success.request_id != request_id {
+                    return Err(Self::unload_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker unload response request_id mismatch: expected {request_id}, got {}",
+                            success.request_id
+                        ),
+                    ));
+                }
+                if !success.result.unloaded {
+                    return Err(Self::unload_worker_failure_from_message(
+                        request_id,
+                        "PyTorch worker unload response did not confirm unload".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+            PyTorchWorkerResponse::Error(failure) => {
+                if failure.request_id != request_id {
+                    return Err(Self::unload_worker_failure_from_message(
+                        request_id,
+                        format!(
+                            "PyTorch worker unload response request_id mismatch: expected {request_id}, got {}",
+                            failure.request_id
+                        ),
+                    ));
+                }
+                Err(failure.into_backend_error())
+            }
+        }
+    }
+
     fn load_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
         PyTorchWorkerFailure {
             request_id: request_id.to_string(),
@@ -927,6 +972,34 @@ impl PyTorchBackend {
         {
             return Err(BackendError::Config(format!(
                 "PyTorch worker generate_text envelope contains unsupported transformers_kwargs key '{unsupported_key}'"
+            )));
+        }
+        Ok(())
+    }
+
+    fn unload_model_envelope(
+        request_id: impl Into<String>,
+    ) -> PyTorchWorkerEnvelope<PyTorchUnloadModelRequest> {
+        PyTorchWorkerEnvelope::new(
+            request_id,
+            PyTorchWorkerOperation::UnloadModel,
+            PyTorchUnloadModelRequest::default(),
+        )
+    }
+
+    fn validate_unload_model_envelope(
+        envelope: &PyTorchWorkerEnvelope<PyTorchUnloadModelRequest>,
+    ) -> Result<(), BackendError> {
+        if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+            return Err(BackendError::Config(format!(
+                "Unsupported PyTorch worker unload envelope contract version {}",
+                envelope.contract_version
+            )));
+        }
+        if envelope.operation != PyTorchWorkerOperation::UnloadModel {
+            return Err(BackendError::Config(format!(
+                "Unexpected PyTorch worker operation {:?} for unload",
+                envelope.operation
             )));
         }
         Ok(())
@@ -1385,6 +1458,13 @@ impl PyTorchBackend {
     /// Unload the current model and free GPU memory.
     pub async fn unload_model(&mut self) -> Result<(), BackendError> {
         let request_id = format!("pytorch-unload-{}", Uuid::new_v4().simple());
+        let envelope = Self::unload_model_envelope(request_id.clone());
+        Self::validate_unload_model_envelope(&envelope)?;
+        let envelope_json = serde_json::to_string(&envelope).map_err(|error| {
+            BackendError::Config(format!(
+                "Failed to encode PyTorch worker unload envelope: {error}"
+            ))
+        })?;
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<(), BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
@@ -1393,13 +1473,22 @@ impl PyTorchBackend {
                         format!("Failed to get worker module: {}", e),
                     )
                 })?;
-                worker.call_method0("unload_model").map_err(|e| {
-                    Self::unload_worker_failure_from_message(
-                        &request_id,
-                        format!("Unload failed: {}", e),
-                    )
-                })?;
-                Ok(())
+                let response_json = worker
+                    .call_method1("unload_model_from_envelope", (envelope_json,))
+                    .map_err(|e| {
+                        Self::unload_worker_failure_from_message(
+                            &request_id,
+                            format!("PyTorch worker unload envelope failed: {}", e),
+                        )
+                    })?
+                    .extract::<String>()
+                    .map_err(|e| {
+                        Self::unload_worker_failure_from_message(
+                            &request_id,
+                            format!("PyTorch worker unload response was not JSON text: {e}"),
+                        )
+                    })?;
+                Self::unload_model_result_from_worker_response(&request_id, &response_json)
             })
         })
         .await

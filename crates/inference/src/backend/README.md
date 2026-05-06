@@ -170,6 +170,9 @@ fn create_backend() {
   through the same versioned worker-envelope pattern as Transformers load and
   text generation. Unsupported non-null audio `extra_options` fail closed until
   they are deliberately mapped to backend-local kwargs.
+- PyTorch model unload crosses the embedded Python boundary through a versioned
+  worker envelope and typed response decoder. The adapter clears Rust-side
+  loaded-model state only after a correlated structured unload success.
 - PyTorch transport exceptions from the embedded Python boundary must be
   normalized before becoming `BackendError` messages: keep request ids,
   canonical worker codes, and bounded exception summaries, but strip Python

@@ -60,6 +60,7 @@ from worker_contract import (
     generate_text_kwargs_from_envelope,
     load_transformers_model_kwargs_from_envelope,
     transcribe_audio_kwargs_from_envelope,
+    unload_model_kwargs_from_envelope,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -361,6 +362,52 @@ def generate_text_from_envelope(envelope):
                 "kind": "internal",
                 "message": str(exc),
                 "canonical_code": "pytorch_worker_generate_text_internal",
+            },
+        })
+
+
+def unload_model_from_envelope(envelope):
+    """Unload the active model from the Rust worker envelope contract."""
+    request_id = "unknown"
+    try:
+        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+        if isinstance(decoded, dict):
+            request_id = str(decoded.get("request_id") or request_id)
+        unload_model_kwargs_from_envelope(decoded)
+        unload_model()
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": {"unloaded": True},
+        })
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "invalid_request",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_invalid_unload_request",
+            },
+        })
+    except RuntimeError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "generation_failed",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_unload_failed",
+            },
+        })
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "internal",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_unload_internal",
             },
         })
 

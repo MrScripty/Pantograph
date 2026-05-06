@@ -4,6 +4,7 @@ import json
 
 WORKER_CONTRACT_VERSION = 1
 LOAD_TRANSFORMERS_MODEL_OPERATION = "load_transformers_model"
+UNLOAD_MODEL_OPERATION = "unload_model"
 GENERATE_TEXT_OPERATION = "generate_text"
 GENERATE_TEXT_STREAM_OPERATION = "generate_text_stream"
 TRANSCRIBE_AUDIO_OPERATION = "transcribe_audio"
@@ -110,6 +111,25 @@ def generate_text_kwargs_from_envelope(envelope, expected_operation=GENERATE_TEX
         if value is not None:
             kwargs[key] = value
     return kwargs
+
+
+def unload_model_kwargs_from_envelope(envelope):
+    """Validate a Rust worker envelope and project it to unload kwargs."""
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    if not isinstance(envelope, dict):
+        raise ValueError("PyTorch worker unload envelope must be an object")
+    contract_version = envelope.get("contract_version")
+    if contract_version != WORKER_CONTRACT_VERSION:
+        raise ValueError(f"Unsupported PyTorch worker contract_version: {contract_version}")
+    operation = envelope.get("operation")
+    if operation != UNLOAD_MODEL_OPERATION:
+        raise ValueError(f"Unexpected PyTorch worker operation for unload: {operation}")
+
+    payload = envelope.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("PyTorch worker unload envelope payload must be an object")
+    return {}
 
 
 def transcribe_audio_kwargs_from_envelope(envelope):

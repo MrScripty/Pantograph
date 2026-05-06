@@ -4,9 +4,9 @@ use std::ffi::CString;
 use super::pytorch_worker_contract::{
     PyTorchAudioTranscriptionRequest, PyTorchAudioTranscriptionResult, PyTorchGenerateTextRequest,
     PyTorchGenerateTextResult, PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader,
-    PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope, PyTorchWorkerError,
-    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
-    PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchTransformersTrustPolicy, PyTorchUnloadModelRequest, PyTorchWorkerEnvelope,
+    PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
+    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -660,6 +660,79 @@ fn test_pytorch_worker_generate_text_stream_envelope_decodes_fixture() {
 }
 
 #[test]
+fn test_pytorch_worker_unload_envelope_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/unload_model_request.json");
+    let envelope: PyTorchWorkerEnvelope<PyTorchUnloadModelRequest> =
+        serde_json::from_str(fixture).expect("decode worker unload fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-unload-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::UnloadModel);
+
+    PyTorchBackend::validate_unload_model_envelope(&envelope)
+        .expect("unload fixture should validate");
+}
+
+#[test]
+fn test_python_worker_contract_projects_unload_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture =
+            include_str!("../../tests/fixtures/pytorch_worker_contract/unload_model_request.json");
+
+        let kwargs = module
+            .call_method1("unload_model_kwargs_from_envelope", (fixture,))
+            .expect("unload worker envelope should project to kwargs");
+        let len = kwargs.len().expect("kwargs length should be readable");
+
+        assert_eq!(len, 0);
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_invalid_unload_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let wrong_operation = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-unload-operation",
+            "operation": "generate_text",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "unload_model_kwargs_from_envelope",
+                (wrong_operation.to_string(),),
+            )
+            .expect_err("wrong unload operation should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unexpected PyTorch worker operation for unload"));
+
+        let wrong_version = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION + 1,
+            "request_id": "req-invalid-unload-version",
+            "operation": "unload_model",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "unload_model_kwargs_from_envelope",
+                (wrong_version.to_string(),),
+            )
+            .expect_err("wrong unload contract version should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unsupported PyTorch worker contract_version"));
+    });
+}
+
+#[test]
 fn test_pytorch_worker_audio_transcription_envelope_decodes_fixture() {
     let fixture = include_str!(
         "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
@@ -1235,6 +1308,39 @@ fn test_pytorch_worker_generate_text_envelope_rejects_wrong_contract_version() {
     match PyTorchBackend::validate_generate_text_envelope(&envelope) {
         Err(BackendError::Config(message)) => {
             assert!(message.contains("generate_text envelope contract version"));
+        }
+        other => panic!("expected wrong-version config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_unload_envelope_rejects_wrong_operation() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/unload_model_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchUnloadModelRequest> =
+        serde_json::from_str(fixture).expect("decode worker unload fixture");
+    envelope.operation = PyTorchWorkerOperation::GenerateText;
+
+    match PyTorchBackend::validate_unload_model_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("GenerateText"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_unload_envelope_rejects_wrong_contract_version() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/unload_model_request.json");
+    let mut envelope: PyTorchWorkerEnvelope<PyTorchUnloadModelRequest> =
+        serde_json::from_str(fixture).expect("decode worker unload fixture");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match PyTorchBackend::validate_unload_model_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("unload envelope contract version"));
         }
         other => panic!("expected wrong-version config error, got {other:?}"),
     }
@@ -2183,6 +2289,93 @@ fn test_pytorch_audio_transcription_worker_response_error_maps_to_backend_error(
         "req-audio-invalid",
         "pytorch_worker_invalid_audio_transcription_request",
         "payload.model_path must be a non-empty string",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_unload_response_decodes() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-unload-ok",
+        "result": {
+            "unloaded": true
+        }
+    });
+
+    PyTorchBackend::unload_model_result_from_worker_response(
+        "req-unload-ok",
+        &response.to_string(),
+    )
+    .expect("unload response should decode");
+}
+
+#[test]
+fn test_pytorch_worker_unload_response_rejects_request_id_mismatch() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-unload-other",
+        "result": {
+            "unloaded": true
+        }
+    });
+
+    let error = PyTorchBackend::unload_model_result_from_worker_response(
+        "req-unload-expected",
+        &response.to_string(),
+    )
+    .expect_err("mismatched unload response id should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-unload-expected",
+        "pytorch_worker_unload_failed",
+        "request_id mismatch",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_unload_malformed_response_normalizes_to_inference_error() {
+    let malformed = r#"{"status":"ok","secret":"SECRET_RESPONSE""#;
+
+    match PyTorchBackend::unload_model_result_from_worker_response(
+        "req-unload-malformed",
+        malformed,
+    ) {
+        Err(BackendError::Inference(message)) => {
+            assert!(message.contains("pytorch_worker_unload_failed"));
+            assert!(message.contains("req-unload-malformed"));
+            assert!(message.contains("Failed to decode PyTorch worker unload response"));
+            assert!(!message.contains("SECRET_RESPONSE"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_unload_invalid_request_response_maps_to_config() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-unload-invalid",
+        "error": {
+            "kind": "invalid_request",
+            "message": "Unexpected PyTorch worker operation for unload: generate_text",
+            "canonical_code": "pytorch_worker_invalid_unload_request"
+        }
+    });
+
+    let error = PyTorchBackend::unload_model_result_from_worker_response(
+        "req-unload-invalid",
+        &response.to_string(),
+    )
+    .expect_err("structured unload error should map to BackendError");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Config,
+        "req-unload-invalid",
+        "pytorch_worker_invalid_unload_request",
+        "Unexpected PyTorch worker operation",
     );
 }
 

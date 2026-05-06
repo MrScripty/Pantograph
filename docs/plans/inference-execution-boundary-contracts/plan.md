@@ -1893,6 +1893,10 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   with Rust and torch-free Python projection tests covering operation/version
   validation, required model/audio inputs, additive-field tolerance, and
   fail-closed handling for unsupported non-null `extra_options`.
+  PyTorch model unload now also crosses the Rust/Python worker boundary through
+  a versioned envelope and typed response decoder, with request-id correlation,
+  malformed-response rejection, structured invalid-request mapping, and
+  Rust-side loaded-model state cleared only after a correlated unload success.
 
 **Verification:**
 - PyTorch backend tests for model-source mapping and error normalization.
@@ -3826,6 +3830,10 @@ Update during implementation:
   routes unavailable active-model state and malformed Python result shapes
   through canonical `pytorch_worker_kv_*_failed` backend errors with generated
   request ids instead of ad hoc inference errors.
+- 2026-05-06: PyTorch model unload now uses a versioned Rust/Python worker
+  envelope and typed response decoder with request-id correlation,
+  malformed-response rejection, and canonical sanitized unload errors before
+  clearing Rust-side loaded-model state.
 - 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
   threaded terminal text/chat cache-handle ids through typed gateway results,
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`
