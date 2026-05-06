@@ -2447,6 +2447,10 @@ canonicalization coverage for legacy llama.cpp and PyTorch nodes:
 `legacy_inference_migration_inventory_maps_model_sources_and_task_options`
 all pass and cover the old-to-canonical model source and task option mapping
 requirements.
+Workflow-node processing descriptors no longer preserve retired
+`ollama-inference` or `pytorch-inference` task structs as public graph-contract
+surface. Saved workflow upgrades remain owned by workflow-service
+canonicalization fixtures instead of local retired descriptors.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -3942,6 +3946,10 @@ Update during implementation:
   preflight for host Python execution is scoped to diffusion, audio generation,
   and ONNX nodes, and tests prove canonical LLM work falls through to the core
   node-engine/inference boundary.
+- 2026-05-06: Workflow-node processing contracts no longer export retired
+  `ollama-inference` or `pytorch-inference` descriptor structs. Saved graph
+  upgrade knowledge remains in workflow-service canonicalization fixtures,
+  while the workflow-node crate exposes only current graph-visible contracts.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

@@ -11,13 +11,11 @@ adapters such as the Python runtime.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `diffusion_inference.rs` | Declares the graph contract for process-backed diffusion generation, including optional dependency-environment handoff. |
-| `pytorch_inference.rs` | Defines the general PyTorch inference contract used for text-generation style models. |
 | `audio_generation.rs` | Declares the Stable Audio generation node contract. |
 | `reranker.rs` | Declares the GGUF reranker node contract used to rank candidate documents via llama.cpp. |
 | `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |
 | `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
-| `ollama_inference.rs` | Preserves the retired Ollama inference descriptor for migration reference only; it is not registered as a graph-visible node. |
 | `vision_analysis.rs` | Declares image-to-text style vision analysis contracts. |
 
 ## Problem
@@ -66,9 +64,6 @@ instead of hiding behind generic JSON ports.
   source schema.
 - Reranker outputs must preserve stable ranked-result fields so saved workflows
   and templates can consume them without endpoint-specific parsing logic.
-- The retired Ollama descriptor must not be submitted to the workflow-node
-  inventory. Saved workflows migrate to the canonical inference shape instead
-  of keeping Ollama as a supported graph node.
 - JSON-filter configuration defaults remain the derived empty-path/empty-default
   contract so descriptor consumers and task construction share one default
   shape.
@@ -91,10 +86,6 @@ host executors that consume these descriptors.
 
 ## Related ADRs
 - None identified as of 2026-04-21.
-- Reason: Ollama retirement preserves a migration reference while preventing
-  new graph-visible Ollama usage.
-- Revisit trigger: saved workflow migration no longer needs the old descriptor
-  shape as a local reference.
 
 ## Usage Examples
 ```rust
