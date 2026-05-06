@@ -355,58 +355,68 @@ pub(crate) async fn execute_pytorch_inference(
 
         full_response
     } else {
-        // Non-streaming: single blocking call
+        // Non-streaming: use the inference-owned worker envelope when no
+        // legacy custom kwargs need to be preserved.
         let p = prompt.clone();
         let sp = system_prompt.clone();
         let mpj = masked_prompt_json.clone();
         let extra = extra_settings;
 
-        tokio::task::spawn_blocking(move || {
-            pyo3::Python::with_gil(|py| -> std::result::Result<String, String> {
-                use pyo3::types::{PyAnyMethods, PyDictMethods};
+        if extra.is_empty() {
+            inference::backend::pytorch::PyTorchBackend::new()
+                .generate(p, sp, max_tokens, temperature, top_p, mpj)
+                .await
+                .map_err(|error| {
+                    NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", error))
+                })?
+        } else {
+            tokio::task::spawn_blocking(move || {
+                pyo3::Python::with_gil(|py| -> std::result::Result<String, String> {
+                    use pyo3::types::{PyAnyMethods, PyDictMethods};
 
-                ensure_torch_worker_initialised(py)?;
-                let worker = py
-                    .import("pantograph_torch_worker")
-                    .map_err(|e| format!("Failed to get worker: {}", e))?;
+                    ensure_torch_worker_initialised(py)?;
+                    let worker = py
+                        .import("pantograph_torch_worker")
+                        .map_err(|e| format!("Failed to get worker: {}", e))?;
 
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("prompt", &p).unwrap();
-                if let Some(ref sys) = sp {
-                    kwargs.set_item("system_prompt", sys).unwrap();
-                }
-                kwargs.set_item("max_tokens", max_tokens).unwrap();
-                kwargs.set_item("temperature", temperature).unwrap();
-                kwargs.set_item("top_p", top_p).unwrap();
-                if let Some(ref mpj_val) = mpj {
-                    kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
-                }
-
-                // Forward model-specific inference settings as kwargs
-                for (key, value) in &extra {
-                    if let Some(n) = value.as_i64() {
-                        kwargs.set_item(key.as_str(), n).unwrap();
-                    } else if let Some(n) = value.as_f64() {
-                        kwargs.set_item(key.as_str(), n).unwrap();
-                    } else if let Some(s) = value.as_str() {
-                        kwargs.set_item(key.as_str(), s).unwrap();
-                    } else if let Some(b) = value.as_bool() {
-                        kwargs.set_item(key.as_str(), b).unwrap();
+                    let kwargs = pyo3::types::PyDict::new(py);
+                    kwargs.set_item("prompt", &p).unwrap();
+                    if let Some(ref sys) = sp {
+                        kwargs.set_item("system_prompt", sys).unwrap();
                     }
-                }
+                    kwargs.set_item("max_tokens", max_tokens).unwrap();
+                    kwargs.set_item("temperature", temperature).unwrap();
+                    kwargs.set_item("top_p", top_p).unwrap();
+                    if let Some(ref mpj_val) = mpj {
+                        kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
+                    }
 
-                let result = worker
-                    .call_method("generate", (), Some(&kwargs))
-                    .map_err(|e| format!("Generation failed: {}", e))?;
+                    // Forward model-specific inference settings as kwargs
+                    for (key, value) in &extra {
+                        if let Some(n) = value.as_i64() {
+                            kwargs.set_item(key.as_str(), n).unwrap();
+                        } else if let Some(n) = value.as_f64() {
+                            kwargs.set_item(key.as_str(), n).unwrap();
+                        } else if let Some(s) = value.as_str() {
+                            kwargs.set_item(key.as_str(), s).unwrap();
+                        } else if let Some(b) = value.as_bool() {
+                            kwargs.set_item(key.as_str(), b).unwrap();
+                        }
+                    }
 
-                result
-                    .extract::<String>()
-                    .map_err(|e| format!("Failed to extract result: {}", e))
+                    let result = worker
+                        .call_method("generate", (), Some(&kwargs))
+                        .map_err(|e| format!("Generation failed: {}", e))?;
+
+                    result
+                        .extract::<String>()
+                        .map_err(|e| format!("Failed to extract result: {}", e))
+                })
             })
-        })
-        .await
-        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
-        .map_err(NodeEngineError::ExecutionFailed)?
+            .await
+            .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
+            .map_err(NodeEngineError::ExecutionFailed)?
+        }
     };
 
     let mut outputs = HashMap::new();

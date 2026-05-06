@@ -117,6 +117,10 @@ stable public facade and dispatch owner.
 - PyTorch loaded-model lookups in legacy node execution must use the inference
   crate's typed `get_loaded_info` boundary; direct worker imports remain only
   for the still-migrating load/generation calls in `pytorch_nodes.rs`.
+- PyTorch non-streaming text generation without legacy custom
+  `inference_settings` must use `PyTorchBackend::generate`; the direct worker
+  generation path is retained only for custom-kwargs compatibility until those
+  settings are represented by typed generation options.
 - Python-worker handlers should pass worker parameters directly into their
   blocking closures and avoid redundant rebinding so the feature-gated path
   stays clippy-clean without changing runtime behavior.

@@ -3905,6 +3905,11 @@ Update during implementation:
   preserving the old "no model loaded means load" behavior by treating
   `BackendError::NotRunning` as a load signal while other typed lookup failures
   fail closed.
+- 2026-05-06: Node-engine non-streaming PyTorch text generation without legacy
+  custom `inference_settings` now uses `PyTorchBackend::generate`, moving the
+  common generation path onto the inference-owned `generate_text` worker
+  envelope while retaining the direct worker path for custom kwargs until they
+  are modeled as typed generation options.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference
