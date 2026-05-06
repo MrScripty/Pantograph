@@ -1287,6 +1287,71 @@ test_model_library_update_feed_api_surface -- --nocapture`,
 `npm run -w electron validate`, `npm run -w frontend check:types`,
 `npm run -w electron test`, and `git diff --check`.
 
+### Milestone 12: Fast Selector Snapshot And Explicit Client Roles
+
+**Goal:** Make Pumas fast enough and explicit enough for Pantograph Library and
+graph model selectors to show rows without hydrating every model or relying on
+hidden local-client fallback behavior.
+
+**Affected contracts/artifacts:**
+- `ModelLibrarySelectorSnapshotRequest`, `ModelLibrarySelectorSnapshot`, and
+  `ModelLibrarySelectorSnapshotRow`.
+- `PumasReadOnlyLibrary` for indexed local snapshots with no lifecycle
+  ownership.
+- `PumasLocalClient` for explicit same-device client calls and update streams.
+- Owner-only `PumasApi`/`FfiPumasApi` construction behavior.
+- Batch selected-model hydration APIs for package summaries, execution
+  descriptors, and inference settings.
+
+**Ownership/lifecycle:**
+- Pumas owns selector row projection, cursor production, explicit owner/client
+  role enforcement, and batch hydration API behavior.
+- Pantograph owns access-role selection, local cache policy, graph/list row
+  projection, selected-row hydration timing, runtime compatibility checks, and
+  technical-fit derivation.
+- `PumasReadOnlyLibrary` must be opened with the model-library root containing
+  `models.db`. Consumers must not pass the Pumas launcher root or source
+  repository root.
+- Selector rows are indexed Pumas facts. Consumers must treat `indexed_path` as
+  display/debug data only and treat `entry_path` as executable only when both
+  `entry_path_state` and `artifact_state` are ready.
+
+**Tasks:**
+- [x] Add selector snapshot DTOs and contract tests.
+- [x] Expose direct owner, read-only, and explicit local-client selector
+  surfaces.
+- [x] Remove hidden `PumasApi` client fallback behavior and make owner/client
+  roles explicit.
+- [x] Add cursor handoff from selector snapshots to model-library update
+  recovery/live streams.
+- [x] Add batch selected-model hydration for package-facts summaries, cheap
+  execution descriptors, and inference settings.
+- [x] Record performance results for direct/read-only selector snapshots and
+  local-client selector snapshots.
+- [x] Document deviations: selector rows are live SQLite projections rather
+  than materialized rows, local-client transport is loopback TCP for this slice,
+  foreign-language local-client/read-only bindings are deferred, batch
+  hydration avoids transport/public per-row calls but still loops internal
+  resolvers for selected sets, and selector projection uses SQLite
+  `json_extract` instead of filesystem metadata JSON reads.
+
+**Verification:**
+- Focused Pumas selector tests pass and report direct/read-only warm 100-row
+  timings under the `<= 5ms` target.
+- Focused batch hydration tests pass.
+- Focused update-stream cursor tests pass.
+- Plan traceability points to the Pumas implementation package:
+  `/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/docs/plans/pumas-fast-model-snapshot-and-client-api/`.
+
+**Status:** Complete. Pumas commits through `6c564404` implement and reconcile
+the fast selector/client plan. Review verification run from Pantograph passed:
+`cargo test --manifest-path rust/Cargo.toml -p pumas-library selector_snapshot
+-- --nocapture` with warm 100-row direct `1.660ms`, read-only `2.497ms`, and
+local-client selector `0.313ms`; `cargo test --manifest-path rust/Cargo.toml
+-p pumas-library batch -- --nocapture`; and `cargo test --manifest-path
+rust/Cargo.toml -p pumas-library subscribe_model_library_update_stream_since
+-- --nocapture`.
+
 ## Definition of Done
 
 - Pumas exposes stable package facts sufficient for host inference
@@ -1345,6 +1410,14 @@ test_model_library_update_feed_api_surface -- --nocapture`,
   regenerated, and detail-derived summaries.
 - Pumas exposes a callable model-library update feed or equivalent cursor API
   that lets host applications refresh local model-fact caches after startup.
+- Pumas exposes a fast selector snapshot path for Library and graph model
+  selectors that returns indexed rows without filesystem scans, full package
+  fact resolution, or per-row IPC calls.
+- Pumas exposes explicit owner, local-client, and read-only roles so consumers
+  do not rely on hidden local-client fallback behavior.
+- Pumas exposes selected-model batch hydration APIs so host consumers can
+  hydrate package summaries, cheap execution descriptors, and inference
+  settings after selection instead of during list population.
 - Pumas and Pantograph share a canonical producer/consumer fixture path so
   Pantograph does not maintain a divergent package-facts DTO shape.
 - Required package-fact fixtures from `Required Fixture Set` exist and can be
@@ -1821,11 +1894,13 @@ test_model_library_update_feed_api_surface -- --nocapture`,
   `resolve_model_package_facts` but `pumas-rpc` did not dispatch that method;
   commit `a3677d2` fixed the missing RPC handler while adding the update-feed
   API surface.
-- Implementation should start with Milestone 1 contract/fixture design before
-  production extraction logic. This keeps producer semantics reviewable before
-  code depends on them.
-- Each implementation slice should update task status in this plan or link to a
-  follow-up implementation plan if the work is split across multiple PRs.
+- 2026-05-06: Pumas fast selector/client implementation settled through commit
+  `6c564404`. Pantograph review verified selector snapshot, batch hydration,
+  and update-stream tests, and this mirror plan now treats Pumas producer work
+  as complete for Pantograph's current implementation needs.
+- Future Pumas producer changes should update this mirror only when they change
+  Pantograph-visible DTOs, fixture semantics, selector rows, batch hydration,
+  access-role behavior, or update cursor behavior.
 
 ## Commit Cadence Notes
 
@@ -1859,33 +1934,69 @@ test_model_library_update_feed_api_surface -- --nocapture`,
 
 ## Completion Summary
 
-To be completed during implementation.
-
 ### Completed
 
-- List completed milestones and the final affected contracts, schemas, fixtures,
-  GUI surfaces, and host-consumer integration points.
+- Milestones 1-8 implemented the package-facts producer contract, lazy
+  package-facts cache, metadata projection cleanup, GUI execution-facts
+  surfaces, and required producer fixtures.
+- Milestones 9-11 implemented canonical cross-repo DTO/fixture alignment,
+  callable model-library update feeds, and package-fact summary snapshot/detail
+  APIs.
+- Milestone 12 implemented the settled fast selector path Pantograph should
+  consume next: `ModelLibrarySelectorSnapshot`, explicit owner/local-client/
+  read-only roles, cursor handoff, and selected-model batch hydration APIs.
+- Pumas remains host-agnostic. It supplies model/package facts, selector rows,
+  summaries, descriptors, settings, and update cursors; Pantograph owns graph
+  projection, cache policy, backend compatibility checks, technical-fit
+  derivation, runtime selection, and diagnostics-ledger mapping.
 
 ### Deviations
 
-- List deviations from this plan, why they were accepted, and which re-plan
-  trigger or implementation finding caused them.
+- Fast selector rows are live SQLite projections rather than materialized rows
+  because measured direct/read-only timings met the target.
+- The first explicit local-client transport uses loopback TCP with per-instance
+  tokens; Unix sockets/named pipes remain a Pumas transport-hardening follow-up.
+- Foreign-language local-client/read-only bindings were deferred; UniFFI was
+  made owner-explicit instead of preserving hidden IPC fallback behavior.
+- Selected-model batch hydration avoids public per-row calls and transport
+  round trips, but currently loops canonical internal resolvers for selected
+  sets. That is acceptable for Pantograph selected-row hydration unless
+  measured selected-set workloads require further optimization.
+- Selector projection uses SQLite `json_extract` over indexed metadata fields;
+  the accepted constraint is no filesystem metadata JSON reads, package-fact
+  regeneration, or deep model resolution on the selector path.
 
 ### Follow-Ups
 
-- List remaining unsupported package families, backend hints, cleanup
-  exclusions, or host-consumer work.
+- Pantograph should implement the fast selector integration slice in the parent
+  plan: explicit access-role adapter, correct model-library root resolution,
+  Library/graph selector population from selector rows, selected-row batch
+  hydration, and cursor handoff.
+- Pumas transport hardening can add Unix sockets/named pipes later without
+  changing Pantograph's explicit local-client contract.
+- Pumas can optimize selected-model batch hydration internals later if
+  Pantograph measures selected-set latency that justifies shared fact loading.
 
 ### Verification Summary
 
-- List verification commands, fixture paths, dry-run/write-mode migration
-  evidence, cache recovery checks, frontend checks, and any intentionally
-  skipped checks with reasons.
+- Pumas package-facts and summary/update verification is recorded in the
+  milestone status entries above.
+- Fast selector review from Pantograph reran:
+  `cargo test --manifest-path rust/Cargo.toml -p pumas-library selector_snapshot -- --nocapture`,
+  `cargo test --manifest-path rust/Cargo.toml -p pumas-library batch -- --nocapture`,
+  and
+  `cargo test --manifest-path rust/Cargo.toml -p pumas-library subscribe_model_library_update_stream_since -- --nocapture`.
+- Selector timings from that review were direct `1.660ms`, read-only `2.497ms`,
+  and local-client `0.313ms`, satisfying Pantograph's fast list/selector need.
 
 ### Traceability Links
 
-- Link affected Pumas READMEs, ADRs, PR notes, fixture locations, and
-  host-consumer fixture or integration changes.
+- Pumas fast selector plan:
+  `/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/docs/plans/pumas-fast-model-snapshot-and-client-api/plan.md`
+- Pumas selector contract:
+  `/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/docs/plans/pumas-fast-model-snapshot-and-client-api/selector-snapshot-contract.md`
+- Pumas package-facts fixtures:
+  `/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/rust/crates/pumas-core/tests/fixtures/package_facts/`
 
 ## Traceability
 

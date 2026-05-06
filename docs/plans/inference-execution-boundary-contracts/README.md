@@ -11,8 +11,8 @@ integration.
 
 | File | Description |
 | ---- | ----------- |
-| `plan.md` | Main Pantograph inference boundary plan covering inference contracts, backend mapping, workflow migration, managed dependencies, diagnostics-ledger integration, and consumer guardrails. |
-| `pumas-library-plan.md` | Split Pumas Library plan covering model identity, artifact/package facts, task evidence, generation defaults, backend hints, custom-code/security facts, and legacy reference resolution. |
+| `plan.md` | Main Pantograph inference boundary plan covering inference contracts, backend mapping, workflow migration, managed dependencies, diagnostics-ledger integration, consumer guardrails, and implementation blast-radius controls. |
+| `pumas-library-plan.md` | Pantograph-side mirror of the Pumas Library producer plan covering model identity, artifact/package facts, task evidence, generation defaults, backend hints, custom-code/security facts, legacy reference resolution, fast selector snapshots, and explicit owner/client/read-only access roles. |
 
 ## Problem
 
@@ -23,8 +23,12 @@ library implementation concerns that should be owned by the Pumas repository.
 ## Constraints
 
 - `plan.md` remains the Pantograph inference source of truth.
-- `pumas-library-plan.md` owns Pumas-side model-library requirements.
+- `pumas-library-plan.md` records the Pumas-side producer requirements and the
+  settled implementation baseline Pantograph consumes; active Pumas
+  implementation details live in the Pumas repository.
 - Cross-repo DTOs and fixtures must stay synchronized before implementation.
+- Implementation slices must declare blast radius, write sets, serial ownership
+  points, and verification gates before code changes.
 - Pumas must not inherit inference execution, scheduler, or diagnostics-ledger
   write policy.
 
@@ -32,17 +36,22 @@ library implementation concerns that should be owned by the Pumas repository.
 
 Keep the main inference plan and the Pumas Library plan in the same plan family,
 but split their implementation responsibilities into separate Markdown files.
-The main plan links to the Pumas plan where package-fact details are required.
+The main plan links to the Pumas plan where package-fact or selector details
+are required. The settled Pumas fast selector implementation lives at:
+
+```text
+/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/docs/plans/pumas-fast-model-snapshot-and-client-api/
+```
 
 ## Alternatives Rejected
 
 - Keep Pumas details inside `plan.md`.
   Rejected because it blurs ownership between Pantograph inference and Pumas
   model-library work.
-- Move the Pumas plan into the Pumas repository immediately.
-  Rejected for now because the current planning thread is still coordinating
-  Pantograph inference boundaries; implementation can mirror or move the plan
-  into Pumas when work begins there.
+- Move every Pumas detail out of this plan family.
+  Rejected because Pantograph still needs a local consumer-facing mirror of the
+  Pumas producer baseline, but the authoritative implementation details now
+  live in the Pumas repository.
 
 ## Invariants
 
@@ -55,8 +64,7 @@ The main plan links to the Pumas plan where package-fact details are required.
 
 ## Revisit Triggers
 
-- Pumas implementation starts and the plan needs to live in the Pumas
-  repository.
+- Pumas producer contracts change after the fast selector baseline.
 - Cross-repo fixtures drift between Pantograph and Pumas.
 - A new shared contract crate or schema location becomes necessary.
 
@@ -67,6 +75,8 @@ future implementation fixtures.
 
 **External:** `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`
 and `/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library`.
+The active Pumas fast selector implementation baseline is under
+`docs/plans/pumas-fast-model-snapshot-and-client-api/` in the Pumas repository.
 
 ## Related ADRs
 

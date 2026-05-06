@@ -66,6 +66,13 @@ to the ledger or store prompt/result payload bodies in diagnostics.
 - Define how Pumas `ModelExecutionDescriptor` and package-fact descriptors feed
   the canonical inference request without making inference depend on Pumas as
   its only possible caller.
+- Consume Pumas' fast `ModelLibrarySelectorSnapshot` contract as the first
+  model-list and graph-selector read path, then batch-hydrate only selected
+  models for package summaries, execution descriptors, and inference settings.
+- Choose an explicit Pumas access role per Pantograph process: owning
+  `PumasApi` when Pantograph owns the instance, explicit `PumasLocalClient`
+  when attaching to a running local instance, or `PumasReadOnlyLibrary` for
+  indexed local snapshots that must not start lifecycle work.
 - Keep detailed Pumas-library changes in
   [pumas-library-plan.md](pumas-library-plan.md), with this plan owning only the
   Pantograph inference consumer boundary and cross-repo fixture expectations.
@@ -218,21 +225,26 @@ reliability while keeping scheduling and workflow policy outside inference.
 ### Standards Reviewed
 
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/PLAN-STANDARDS.md`
+- `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/COMMIT-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/DOCUMENTATION-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/CODING-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/ARCHITECTURE-PATTERNS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/CONCURRENCY-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/DEPENDENCY-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/SECURITY-STANDARDS.md`
+- `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/FRONTEND-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/INTEROP-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/LANGUAGE-BINDINGS-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/TOOLING-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/CROSS-PLATFORM-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/languages/rust/RUST-API-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/languages/rust/RUST-ASYNC-STANDARDS.md`
+- `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/languages/rust/RUST-CROSS-PLATFORM-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/languages/rust/RUST-DEPENDENCY-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/languages/rust/RUST-INTEROP-STANDARDS.md`
+- `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/languages/rust/RUST-LANGUAGE-BINDINGS-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/languages/rust/RUST-SECURITY-STANDARDS.md`
+- `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/languages/rust/RUST-TOOLING-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/TESTING-STANDARDS.md`
 
 ### Standards Compliance Findings
@@ -252,6 +264,14 @@ reliability while keeping scheduling and workflow policy outside inference.
 | Cross-platform gates | MLX is macOS-only and vLLM/PyTorch sidecars may be platform-sensitive. | Keep platform-specific dependencies feature-gated and document cfg/build behavior before implementation. |
 | Public API docs | New Rust public contracts will include fallible parsing, validation, and lifecycle behavior. | Require crate-level/docs README updates plus `# Errors`, `# Panics`, and feature docs where Rust public APIs are touched. |
 | Testing strategy | Isolated type checks are not enough for the workflow-to-inference migration. | Start with contract tests and at least one vertical slice from saved workflow/Pumas model ref through inference compatibility reporting. |
+| Blast radius | The plan touches model-library selectors, workflow graph contracts, node execution, runtime registry facts, diagnostics, frontend stores, native bindings, and managed dependencies. | Add an explicit blast-radius and serial-ownership section. Each implementation slice must name its primary write set, adjacent write set, forbidden shared files, affected contracts, and verification gate before code changes. |
+| Pumas selector access roles | The settled Pumas API removed hidden local-client fallback and added owner/local-client/read-only roles. | Pantograph must implement an explicit access-role adapter and test owner, local-client, and read-only behavior. Read-only access must receive the model-library root containing `models.db`. |
+| Frontend synchronization | Library and graph selectors must not replace slow backend composition with frontend polling or optimistic model-list state. | Treat Pumas/Pantograph backend projections as source of truth, refresh through cursor/update events, and add cleanup/stale-response tests for any frontend subscription hook. |
+| Binding blast radius | UniFFI, Rustler, Tauri commands, TypeScript mirrors, and frontend service DTOs can drift from Rust contracts. | Assign binding/generated DTO updates to serial slices. Verify native-side conversion tests and host-side type/smoke tests when any boundary shape changes. |
+| Async lifecycle | Selector updates, local-client streams, backend sidecars, Python workers, and diagnostics sinks all involve cancellable async work. | New long-lived tasks must have owners, cancellation, shutdown, panic handling, and no discarded `JoinHandle`s. Core validation/projection remains sync unless I/O requires async. |
+| Path and payload safety | Pumas roots, artifact paths, runtime commands, media paths, and diagnostics payloads cross trust boundaries. | Parse once into validated domain values, use centralized path validation, sanitize local paths in diagnostics, and reject prompt/result/tensor/cache bytes from ledger-bound payloads. |
+| File-size/decomposition risk | Existing touched modules are already large in several areas, and implementation could worsen reviewability. | Any touched file over 500 lines or module crossing the standards thresholds must include a decomposition decision in the slice notes: split now, add focused helper module, or document why the local change remains safe. |
+| Tooling and feature matrix | Backend features, generated bindings, and frontend mirrors make partial checks insufficient. | Each slice must list default/no-default/all-feature Rust checks and focused frontend/binding checks needed by its write set; skipped checks need an explicit reason. |
 
 ### Overlapping Constraint Resolution
 
@@ -368,6 +388,15 @@ reliability while keeping scheduling and workflow policy outside inference.
   selection. It owns stable model ids, artifact storage, entry-path resolution,
   dependency bindings, validation state, and imported/downloaded model
   provenance.
+- Pumas fast selector implementation is settled as of commit `6c564404` in the
+  Pumas repository. Pantograph should treat
+  `model_library_selector_snapshot` as the normal list/selector entry point and
+  use package-summary, execution-descriptor, and inference-settings batch APIs
+  only for selected or expanded models.
+- `PumasReadOnlyLibrary::open` takes the Pumas model-library root containing
+  `models.db`; Pantograph must not pass the Pumas launcher root, source repo
+  root, or generic application data root unless that path is resolved to the
+  model-library directory first.
 - Runtime registry and workflow service can consume richer facts without
   requiring inference to know their selection policy.
 - Existing `RuntimeLifecycleSnapshot` can be evolved or wrapped rather than
@@ -475,6 +504,9 @@ reliability while keeping scheduling and workflow policy outside inference.
   old backend-specific inference node descriptors as the long-term surface.
 - `src-tauri/` and frontend runtime/status views: consumers of projected
   backend facts.
+- Pumas settled fast selector plan and contract:
+  - `/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/docs/plans/pumas-fast-model-snapshot-and-client-api/plan.md`
+  - `/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/docs/plans/pumas-fast-model-snapshot-and-client-api/selector-snapshot-contract.md`
 - Reference libraries inspected for patterns:
   - `/media/jeremy/OrangeCream/Linux Software/repos/reference/frameworks-libraries/transformers`
   - `/media/jeremy/OrangeCream/Linux Software/repos/reference/frameworks-libraries/candle`
@@ -493,6 +525,14 @@ reliability while keeping scheduling and workflow policy outside inference.
 - Pumas model reference and model package fact contracts for stable `model_id`,
   resolved artifact kind, executable entry path, storage kind, validation state,
   dependency bindings, provenance, and companion artifacts.
+- Pumas `ModelLibrarySelectorSnapshot`, `ModelLibrarySelectorSnapshotRow`,
+  `ModelEntryPathState`, `ModelArtifactState`, and
+  `ModelLibrarySelectorDetailState` contracts for fast Library page and graph
+  model-selector population.
+- Pumas explicit instance/client/read-only access contracts:
+  `PumasApi`/`FfiPumasApi` are owner-only, `PumasLocalClient` is the same-device
+  client transport, and `PumasReadOnlyLibrary` is a local indexed snapshot
+  reader opened against the model-library root that contains `models.db`.
 - New inference-side model-source/model-package contracts that consume
   Pumas-resolved facts for HF-compatible directories, Hugging Face provenance,
   GGUF files, diffusers bundles, safetensors, ONNX, and future model artifact
@@ -580,6 +620,60 @@ reliability while keeping scheduling and workflow policy outside inference.
 - Re-plan before changing persisted KV cache format, managed runtime state, or
   saved workflow request artifacts.
 
+### Blast Radius And Standards Guardrails
+
+The implementation blast radius is intentionally broad because the plan changes
+how Pumas model facts enter Pantograph, how graph-visible inference nodes are
+represented, and how backend execution facts are diagnosed. Each slice must
+declare its affected row in this table before code changes begin and must not
+touch another row's primary write set without updating this plan.
+
+| Area | Likely Primary Write Set | Blast Radius | Guardrail |
+| ---- | ------------------------ | ------------ | --------- |
+| Pumas selector integration | `crates/workflow-nodes/`, `src-tauri/src/llm/commands/`, frontend Library/model-selector services | Library page, graph `puma-lib` selector, startup cache, update cursor handling | Use `ModelLibrarySelectorSnapshot` first; no per-row hydration; explicit owner/local-client/read-only access role; no Pumas SQLite or `metadata_json` reads. |
+| Pumas selected-detail hydration | `crates/workflow-nodes/`, `crates/pantograph-embedded-runtime/`, `src-tauri/` Pumas commands | Selected model details, inference settings display, execution preflight | Use Pumas batch APIs where available; hydrate only selected/expanded models; preserve update cursor invalidation. |
+| Canonical inference contracts | `crates/inference/src/model_contracts*`, `crates/inference/src/types*`, inference fixtures/tests | Backend adapters, node-engine request builders, workflow-service capability facts, bindings | Contract fixtures first; append-only DTO changes; typed enums/newtypes; serde default/unknown-field tests. |
+| Graph/node migration | `crates/pantograph-workflow-service/src/graph/`, `crates/workflow-nodes/src/processing/`, `crates/node-engine/` | Saved workflows, templates, frontend node registry, output bindings | Preserve topology, node ids, edge ids, port intent, positions, labels, and migration diagnostics. |
+| Runtime registry and technical fit | `crates/pantograph-embedded-runtime/`, `crates/pantograph-runtime-registry/`, `crates/pantograph-workflow-service/` | Backend/runtimes shown as available, candidate explanations, workflow preflight | Pantograph derives candidates; Pumas and inference do not own scheduler/admission/selection policy. |
+| Diagnostics ledger projection | `crates/pantograph-workflow-service/`, `crates/pantograph-embedded-runtime/`, `src/services/diagnostics/` | Run/node diagnostics, selected backend visibility, canonical errors | Workflow/node execution owns ledger writes; inference returns bounded facts/errors only; no prompt/result/tensor/cache bytes. |
+| Backend adapters and workers | `crates/inference/src/backend/`, `crates/inference/torch/`, future vLLM/MLX/Candle modules | Model loading, execution, streaming, KV cache, subprocess lifecycle | Keep Python/CLI/framework objects adapter-local; validate request contracts before execution; own spawned task/process lifecycle. |
+| Managed dependency extraction | `crates/pantograph-managed-dependencies/`, `crates/inference/src/managed_runtime/`, `crates/pantograph-media-conversion/` | Runtime sidecars, media tools, UniFFI/frontend runtime settings | One source of truth for install/status/lease/command facts; media conversion does not depend on inference for ffmpeg/OIIO/OCIO ownership. |
+| Frontend projections | `src/services/`, `src/components/`, `packages/svelte-graph/` | Library page, graph editor, diagnostics/workbench views | Backend-confirmed state only; no optimistic backend-owned updates; event/cursor-driven refresh preferred over polling; accessible selector tests. |
+| Language bindings | `crates/pantograph-uniffi/`, `crates/pantograph-rustler/`, generated host mirrors | C#/Beam/native consumers, smoke harnesses, release artifacts | Binding layer stays thin; core compiles without bindings; native and host-side tests for changed DTOs. |
+
+Serial ownership points:
+
+- Shared public contracts, schema/fixture files, generated bindings, lockfiles,
+  feature flags, root manifests, saved-workflow migration fixtures, and
+  diagnostics-ledger event/projection DTOs must be owned by exactly one slice.
+- Implementation slices may read broadly, but edits outside the declared
+  primary or allowed adjacent write set require a plan update before editing.
+- Source files over 500 lines, UI components over 250 lines, or modules with
+  mixed responsibilities require a decomposition decision in the slice notes.
+  The decision may be "split now", "extract a focused helper", or "defer with
+  reason", but it must be explicit before adding more responsibility.
+- Generated or host-language mirrors must not be hand-edited without the
+  owning generation or projection contract in the same slice.
+
+Standards gate per implementation slice:
+
+- Start from a clean implementation worktree except for accepted plan/docs
+  changes.
+- Write or update the failing contract/acceptance fixture before implementation
+  when the slice crosses layers.
+- Validate boundary inputs once into typed domain values and keep raw strings,
+  raw paths, Python kwargs, backend command flags, and scheduler terms out of
+  internal APIs.
+- Keep pure parsing/projection synchronous unless the slice owns real I/O.
+  Async tasks, streams, subprocesses, local-client connections, and polling
+  hooks must have one lifecycle owner, cancellation, cleanup, and observed
+  errors.
+- Run verification selected from the blast-radius row: Rust unit/integration
+  tests, feature-matrix checks, frontend type/tests, binding smoke tests, and
+  `git diff --check`. Skipped checks require a recorded reason.
+- Commit each verified logical slice atomically before starting the next
+  implementation slice.
+
 ### Concurrency and Lifecycle Review
 
 - Inference owns backend start, stop, health check, request execution, and
@@ -605,6 +699,20 @@ reliability while keeping scheduling and workflow policy outside inference.
 - Diagnostics ledger appends remain workflow-service/node-execution concerns.
   Inference adapters return facts and typed errors; they do not depend on ledger
   repositories or mutate durable diagnostic state directly.
+- Pumas local-client update streams and Pantograph cache refresh loops must have
+  one owner that can stop polling/subscription work on app shutdown, Library
+  page teardown, or graph-selector disposal. Do not add global frontend polling
+  loops for model-list state.
+- If frontend selectors subscribe to backend-projected updates, stale async
+  responses must be discarded by request id or cursor, timers must be cleaned
+  up on unmount, and tests must prove cleanup under completion and teardown.
+- Read-only selector snapshots must be treated as local indexed reads with no
+  lifecycle ownership. They must not start Pumas reconciliation, downloads,
+  watchers, package-fact regeneration, or hidden IPC fallback.
+- Local-client connections must validate loopback/same-device endpoint facts
+  through Pumas' public discovery output and must surface token/connection
+  failures as typed integration diagnostics, not silent downgrade to another
+  access role.
 
 ### Implementation Strategy
 
@@ -621,14 +729,20 @@ until the slice is implemented, and it should assert producer input, validation
 behavior, compatibility diagnostics, and consumer-visible output rather than
 private intermediate implementation details.
 
-The first slice should be the thinnest useful end-to-end path that proves the
-new shape. Broaden shared layers only when a neighboring slice requires it. Do
+The first slice after the settled Pumas fast-snapshot implementation should be
+the thinnest useful end-to-end model-selection path that proves Pantograph can
+populate Library and graph model selectors without deep per-model Pumas
+hydration. Broaden shared layers only when a neighboring slice requires it. Do
 not complete broad Pumas, inference, workflow, frontend, or backend rewrites in
 isolation before at least one vertical slice proves that the contracts work
 together.
 
 Planned slice order:
 
+0. Pumas fast selector integration:
+   Pumas explicit access role -> `model_library_selector_snapshot` page/filter
+   request -> Pantograph Library and `puma-lib` graph selector row projection ->
+   cursor handoff -> selected-row batch hydration only.
 1. GGUF text generation:
    Pumas model ref -> resolved GGUF artifact -> canonical inference node ->
    llama.cpp compatibility report -> execution or explicit unsupported
@@ -652,6 +766,13 @@ Each slice must include:
 - A named owner for shared contracts, schemas, feature flags, generated
   bindings, lockfiles, fixtures, and saved-workflow migrations touched by the
   slice.
+- For the Pumas fast selector slice, an explicit access-role decision and a
+  test proving Pantograph passes the Pumas model-library root to read-only
+  access rather than the launcher/source repository root.
+- For the Pumas fast selector slice, a no per-row hydration acceptance test:
+  list population consumes selector rows first and uses batch summary,
+  descriptor, or settings hydration only for selected or explicitly expanded
+  models.
 - A diagnostics-ledger mapping decision for selected backend/runtime, selected
   model/task, compatibility summary, lifecycle summary, option-support summary,
   usage/cache/artifact references, and canonical error links.
@@ -677,6 +798,27 @@ Each slice must include:
 - Slice-specific verification plus any cross-layer acceptance test required by
   `TESTING-STANDARDS.md`.
 
+Minimum verification matrix by slice type:
+
+- Contract-only Rust DTO slice: targeted crate tests, serde/default/unknown
+  field tests, default/no-default/all-feature checks for affected public
+  feature contracts, and README/fixture updates.
+- Pumas selector/list slice: Rust adapter tests, model-list or graph-selector
+  acceptance test, no per-row hydration assertion, no Pumas storage-internal
+  access assertion, cursor stale/update recovery tests, and frontend type/test
+  coverage when UI stores or components change.
+- Graph migration slice: saved-workflow fixture migration tests, topology/edge/
+  output-binding preservation assertions, stale-node failure diagnostics, and
+  frontend node-definition parity tests.
+- Backend adapter slice: compatibility preflight tests, typed request/result
+  tests, lifecycle/cancellation/error tests, no prompt/result diagnostics
+  leakage tests, and backend feature-matrix checks.
+- Binding slice: native conversion/error tests plus host-language smoke or
+  generated-binding tests for every touched supported binding.
+- Managed-dependency/media slice: state migration/import tests, lease/command
+  resolution tests, cross-platform path handling tests where paths are touched,
+  and consumer tests proving inference is not the owner of media tool lifecycle.
+
 ### Public Facade Preservation Note
 
 Use facade-first preservation. Keep `InferenceGateway` and existing public DTOs
@@ -696,6 +838,9 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 | Pantograph expects Pumas to derive technical-fit candidates | High | Keep Pumas as the package/dependency fact producer and derive candidate/exclusion semantics inside Pantograph from Pumas facts plus runtime registry and workflow context. |
 | Pantograph model-list views serve stale Pumas package facts | Medium | Cache details locally for responsiveness, but refresh by Pumas model-library update events or cursors for added, removed, modified, invalidated, or dependency-changed models. |
 | Pantograph depends on Pumas SQLite or `models.metadata_json` internals | High | Consume only versioned Pumas DTO/API outputs and fixture contracts; add model-list/preflight tests that do not inspect Pumas storage internals. |
+| Pantograph keeps using slow Pumas list/summary/detail composition for model selectors | High | Make `model_library_selector_snapshot` the first read for Library and graph model selectors; use batch hydration only for selected or expanded rows. |
+| Pantograph opens read-only Pumas snapshots with the wrong root | Medium | Resolve and test the Pumas model-library root that contains `models.db`; do not pass launcher/source roots to `PumasReadOnlyLibrary::open`. |
+| Pantograph silently falls back to hidden Pumas RPC/client behavior | Medium | Use explicit owner, local-client, or read-only access roles and surface role-selection failures as typed integration diagnostics. |
 | Pantograph treats remote HF MLX/vLLM tags as installed-model compatibility | Medium | Treat remote search tags as discovery hints; installed compatibility requires resolved local Pumas package facts plus Pantograph inference/backend checks. |
 | Executable contract fixtures fall behind DTO changes | High | Own fixtures in the same slice as DTO changes and require decode/normalize tests before implementation is considered complete. |
 | Cross-language casing, tagging, or default semantics drift | High | Add serde/wire-shape tests and host-side binding checks for Rust/Python/Tauri/TypeScript boundaries touched by a slice. |
@@ -850,6 +995,14 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - Pantograph model/library pages cache Pumas model rows, package summaries, and
   selected detail facts during startup or page population, then refresh
   affected entries from Pumas model-library update events or cursors.
+- Pantograph Library page and graph model selectors populate first from Pumas
+  `ModelLibrarySelectorSnapshot` rows and do not hydrate every listed model.
+- Pantograph selected-model detail panes and execution preflight use Pumas batch
+  hydration APIs for package-fact summaries, cheap execution descriptors, and
+  inference settings where those APIs cover the selected set.
+- Pantograph has an explicit Pumas access-role adapter for owner, local-client,
+  and read-only selector paths, including a guard that read-only access receives
+  the model-library root containing `models.db`.
 - Pantograph derives technical-fit candidates and exclusion diagnostics from
   Pumas facts plus Pantograph backend/runtime/workflow context. Pumas does not
   provide final runtime candidates.
@@ -886,8 +1039,16 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - Embeddings are represented as normal inference execution semantics; any
   dedicated embedding runtime is documented as backend-local residency strategy.
 - Implementation proceeds through validated neighboring vertical slices, starting
-  with GGUF text generation and expanding through GGUF embeddings,
+  with Pumas fast selector integration after the settled Pumas producer
+  baseline, then expanding through GGUF text generation, GGUF embeddings,
   HF/Transformers text generation, rerank, and multimodal paths.
+- Each implementation slice records its blast radius, primary write set,
+  adjacent write set, forbidden shared files, shared contract owner,
+  decomposition decision for oversized touched files, and verification gate
+  before code changes begin.
+- Shared contracts, generated bindings, feature flags, lockfiles, saved-workflow
+  fixtures, and diagnostics projection DTOs are changed only by their assigned
+  serial owner for the slice.
 - KV cache remains a backend-owned artifact/compatibility contract with strict
   runtime/model fingerprints and graph-visible handles.
 - Scheduler/runtime-registry/workflow layers can consume those facts without
@@ -915,6 +1076,40 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   affected.
 
 ## Milestones
+
+### Milestone 0: Standards And Blast-Radius Gate
+
+**Goal:** Prevent the implementation from turning the broad inference plan into
+unbounded cross-repo churn.
+
+**Tasks:**
+- [x] Review the plan family against the Coding Standards set, including plan,
+  architecture, documentation, testing, security, dependency, interop,
+  concurrency, frontend, tooling, language-binding, cross-platform, and Rust API
+  standards.
+- [x] Add the blast-radius table that identifies primary write sets, likely
+  consumer impact, and standards guardrails for each implementation area.
+- [x] Add serial ownership rules for shared contracts, fixtures, generated
+  bindings, feature flags, lockfiles, saved-workflow migrations, and diagnostics
+  projection DTOs.
+- [x] Add per-slice verification matrix guidance so implementation cannot rely
+  on typecheck-only validation for cross-layer changes.
+- [x] Add Pumas fast selector access-role and read-only-root guardrails after
+  the settled Pumas implementation review.
+- [ ] Before the next code slice, record the exact Milestone 2 fast selector
+  primary write set, adjacent write set, forbidden shared files, and acceptance
+  test names.
+
+**Verification:**
+- Standards review produces no further required plan edits for the current
+  known Pumas fast selector implementation baseline.
+- `git diff --check` passes for plan artifacts.
+- No implementation code starts until source/test/config/generated/lockfile
+  dirtiness is either absent or explicitly accepted.
+
+**Status:** Updated during the 2026-05-06 standards pass. The remaining task is
+slice-specific and should be completed immediately before implementing the
+Pumas fast selector integration.
 
 ### Milestone 1: Freeze Boundary Vocabulary
 
@@ -1051,18 +1246,32 @@ Detailed Pumas-side work is split into
   generation, multimodal processor, custom-code-required, unsupported Ollama
   hint, stale package facts, invalid generation config, missing tokenizer, and
   remote MLX/vLLM hint fixtures.
-- [ ] Record any cross-repo DTO or fixture drift in both plans before
+- [x] Record any cross-repo DTO or fixture drift in both plans before
   implementation proceeds. Cross-repo review found no active
-  `ResolvedModelPackageFacts`, summary, update-feed, or package-facts fixture
-  wire-shape drift between Pantograph and Pumas. One plan-level drift remains:
-  Pumas-Library still has a proposal-level
-  `docs/plans/feasible-execution-candidates-plan.md` that introduces
-  Pumas-owned feasible-candidate DTOs and possible execution-descriptor
-  candidate summaries, which conflicts with Pantograph's current ownership
-  boundary that derives technical-fit candidates inside Pantograph from Pumas
-  package/dependency facts plus runtime/workflow context. Treat that Pumas
-  plan as superseded or blocked for this inference boundary until the Pumas
-  plan records the same ownership split.
+  `ResolvedModelPackageFacts`, summary, update-feed, selector snapshot, batch
+  hydration, or package-facts fixture wire-shape drift between Pantograph and
+  the settled Pumas implementation. Pumas still retains older proposal-level
+  planning artifacts that mention feasible execution candidates, but the
+  active fast-snapshot and package-facts plans keep candidate/exclusion
+  derivation in Pantograph.
+- [ ] Add a Pantograph Pumas access-role adapter that selects owner API,
+  explicit local client, or read-only selector access without relying on hidden
+  Pumas client fallback behavior.
+- [ ] Resolve the Pumas model-library root used by read-only selector access and
+  test that the adapter opens the directory containing `models.db`, not the
+  launcher/source repository root.
+- [ ] Replace Library page and graph `puma-lib` model-list population with
+  `model_library_selector_snapshot` as the first read path.
+- [ ] Project selector rows into Pantograph model-list and graph selector DTOs
+  using `row.model_ref` as canonical identity, treating `indexed_path` as
+  display/debug data only and `entry_path` as executable only when both row
+  readiness states are `ready`.
+- [ ] Hydrate selected or expanded models with Pumas batch APIs for package
+  summaries, cheap execution descriptors, and inference settings instead of
+  resolving full details for every listed row.
+- [ ] Connect selector cursors to Pantograph cache invalidation through the
+  existing model-library update feed or explicit local-client update stream so
+  startup/page snapshots cannot miss updates before polling/subscription begins.
 
 **Verification:**
 - Review [pumas-library-plan.md](pumas-library-plan.md) against the Pumas
@@ -1072,6 +1281,11 @@ Detailed Pumas-side work is split into
   custom-code-required cases.
 - Model-list cache tests proving startup/page population loads Pumas facts and
   update events/cursors invalidate only affected cached rows.
+- Selector integration tests proving Library and graph selectors populate from
+  `ModelLibrarySelectorSnapshot` without per-row detail hydration.
+- Access-role tests proving owner, local-client, and read-only paths are
+  explicit, and read-only access receives the model-library root that contains
+  `models.db`.
 - Tests proving Pantograph model-list and workflow preflight code do not inspect
   Pumas `metadata_json`, SQLite layout, or search-cache internals.
 - `git diff --check`.
@@ -1098,34 +1312,32 @@ the public fixture set, resolves to the canonical embedding task, projects into
 a backend-loadable source, and passes static Candle backend compatibility
 without invoking real model loading.
 Inference now exposes Pumas-aligned update feed and package-fact summary
-snapshot DTOs. Model-list cache and update-event consumption remain pending.
-The `puma-lib` model-list option cache now has a bounded
-`ModelLibraryUpdateFeed` invalidation helper: fresh cursors invalidate
-summary/detail-scoped model ids and always invalidate removed models, while
-stale cursors or snapshot-required feeds clear the cache so the next population
-uses a new Pumas snapshot. The `puma-lib` option cache polls Pumas after the
-startup/page snapshot and before bounded summary regeneration, so updates
-observed during population are applied without inspecting Pumas storage
-internals. Snapshot/update/regeneration coverage now freezes the cache sequence
-that invalidates modified summary rows after the snapshot cursor and repopulates
-them through summary resolution instead of serving stale rows. A longer-lived
-application startup cache loop is still pending before the event-consumption
-task is complete. `puma-lib` now also polls the update cursor after bounded
-summary regeneration, so updates that arrive during sparse-row regeneration
-invalidate only affected rows instead of letting a page serve newly stale
-summary details, then refills those affected rows against the newest cursor.
+snapshot DTOs. Those DTOs remain useful for selected-model detail refresh, but
+the settled Pumas implementation adds a faster list-first contract:
+`ModelLibrarySelectorSnapshot` rows should replace the current summary-first
+model-list composition for Library and graph selectors. The `puma-lib`
+model-list option cache now has a bounded `ModelLibraryUpdateFeed` invalidation
+helper: fresh cursors invalidate summary/detail-scoped model ids and always
+invalidate removed models, while stale cursors or snapshot-required feeds clear
+the cache so the next population uses a new Pumas snapshot. The next Pantograph
+slice should preserve that invalidation behavior but move initial list/page
+population to selector snapshots, using batch summary/descriptor/settings
+hydration only for selected or expanded rows. This also closes the user-visible
+loading problem where Pumas model selectors can wait on full detail or sparse
+summary regeneration before showing any rows.
 Backend-checked Pumas package-fact
 candidate projection now preserves bounded compatibility report and issue
 summaries on `RuntimeTechnicalFitCandidate` so rejected/degraded candidates can
 be explained without asking Pumas to own candidate derivation or scheduler
 selection. Continued model-list review found one remaining consumer-boundary
-gap: `workflow-nodes` still uses Pumas record metadata as a last-resort
-fallback only when versioned summary/execution/settings DTOs are unavailable.
+gap now superseded by the fast-snapshot slice: remaining model-list fallbacks
+should be audited while replacing the initial list path with selector rows.
 Runtime-facing backend hints, dependency binding display facts,
 `requires_custom_code`, bounded review reasons from summary diagnostic codes,
 bounded custom-code source omission, and API-unavailable inference-settings
-fallbacks now prefer Pumas DTOs or bounded defaults over raw record metadata
-when those DTOs are available.
+fallbacks already prefer Pumas DTOs or bounded defaults over raw record metadata
+when those DTOs are available. The selector-snapshot slice should remove any
+remaining need to inspect Pumas storage internals for list rendering.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
@@ -3346,10 +3558,12 @@ Update during implementation:
   contract update requirements, worktree hygiene, and explicit unrelated-issue
   tracking.
 - 2026-05-02: Added vertical-slice implementation strategy. After contract
-  freeze, implementation should start with GGUF text generation and expand
-  through neighboring slices for GGUF embeddings, HF/Transformers text
-  generation, rerank, and multimodal support rather than building broad layers
-  in isolation.
+  freeze, implementation should start with the thinnest useful slice and expand
+  through neighboring slices rather than building broad layers in isolation.
+  This originally meant GGUF text generation; after the settled 2026-05-06
+  Pumas fast selector implementation, the next slice is now Pumas fast selector
+  integration, followed by GGUF text generation, GGUF embeddings,
+  HF/Transformers text generation, rerank, and multimodal support.
 - 2026-05-02: Expanded the plan with a deeper generation configuration
   contract, strong task registry, explicit preprocess/execute/postprocess
   lifecycle diagnostics, richer Pumas package-facts requirements, and
@@ -4089,6 +4303,19 @@ Update during implementation:
   `is_ollama_running` wrapper and smoke binding entry, so host-language
   Pantograph APIs no longer expose an Ollama-specific probe even if Pumas keeps
   provider-neutral discovery helpers internally.
+- 2026-05-06: Reviewed the settled Pumas fast selector implementation through
+  commit `6c564404`. The next Pantograph implementation slice should consume
+  `ModelLibrarySelectorSnapshot` as the list/selector entry point, select an
+  explicit owner/local-client/read-only Pumas access role, pass the model-library
+  root to `PumasReadOnlyLibrary`, and reserve package-summary, execution-
+  descriptor, and inference-settings batch hydration for selected or expanded
+  models.
+- 2026-05-06: Standards pass added a blast-radius and implementation guardrail
+  section covering selector integration, selected-detail hydration, canonical
+  contracts, graph migration, runtime technical fit, diagnostics ledger
+  projection, backend adapters, managed dependencies, frontend projections, and
+  language bindings. Future code slices must declare write sets, serial owners,
+  decomposition decisions, and verification gates before implementation.
 - 2026-05-06: Shared runtime identity dropped Ollama from known runtime/backend
   alias normalization and display-name lookup. Workflow-service canonicalization
   remains the only owner of old Ollama saved-workflow migration semantics.
@@ -4223,11 +4450,13 @@ Update during implementation:
 - Markdown plan files may remain dirty during plan setup. Before source code,
   test, config, generated-file, lockfile, or build-manifest implementation
   begins, inspect `git status` and resolve unrelated dirty implementation files.
-- Current plan setup has known documentation-only dirtiness:
-  `docs/plans/README.md` and
-  `docs/plans/inference-execution-boundary-contracts/`. Do not treat that as
-  permission to start implementation if source, test, config, lockfile,
-  generated, or build-manifest files are also dirty.
+- Current plan setup has known documentation-only dirtiness under
+  `docs/plans/inference-execution-boundary-contracts/`. The existing untracked
+  root `PROPOSAL-pumas-library-fast-model-snapshot.md` is not part of this
+  standards pass and should be resolved separately before implementation
+  commits. Do not treat documentation dirtiness as permission to start
+  implementation if source, test, config, lockfile, generated, or
+  build-manifest files are also dirty.
 
 ## Optional Subagent Assignment
 
@@ -4244,6 +4473,13 @@ Update during implementation:
 
 ## Re-Plan Triggers
 
+- An implementation slice cannot identify a bounded primary write set,
+  adjacent write set, forbidden shared files, and verification gate.
+- A slice needs to edit shared public contracts, generated bindings, lockfiles,
+  root manifests, saved-workflow fixtures, diagnostics projection DTOs, or
+  feature flags already owned by another active slice.
+- A touched file crosses the decomposition thresholds and the slice cannot
+  safely split, extract, or explicitly defer decomposition.
 - A new contract field would encode scheduling, priority, reservation,
   admission, eviction, or workflow policy.
 - Runtime registry requires a fact that inference cannot observe directly.
@@ -4266,6 +4502,12 @@ Update during implementation:
 - Pumas host-agnostic model-library update events or cursors cannot satisfy
   Pantograph model-list cache invalidation without Pantograph inspecting Pumas
   storage internals.
+- Pumas fast selector snapshots cannot populate Library or graph selectors
+  without per-row package-fact/detail hydration.
+- Pantograph cannot resolve the Pumas model-library root for read-only selector
+  access without relying on launcher/source repository paths.
+- Pantograph requires hidden Pumas client fallback behavior instead of explicit
+  owner/local-client/read-only access roles.
 - Pantograph model-list or preflight code would need to inspect Pumas SQLite
   layout, `models.metadata_json`, or HF search-cache internals instead of
   versioned DTO/API output.
@@ -4399,14 +4641,17 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Resolve the `managed_redistributables` install-root path expectation mismatch
-  as a separate managed-dependency slice.
-- Continue Milestone 1 by identifying raw fact fields versus policy-risk fields
-  and deciding whether runtime facts extend `RuntimeLifecycleSnapshot` directly
-  or use a new wrapper DTO.
-- Continue Milestone 2 with Pumas update-feed polling/subscription consumption
-  and a no-missed-updates startup snapshot acceptance test around summary
-  snapshots and update cursors.
+- Implement the Pumas fast selector integration slice before broadening more
+  inference backend work: explicit owner/local-client/read-only access role,
+  correct model-library root resolution for read-only snapshots, Library and
+  graph selector population from `model_library_selector_snapshot`, selected-row
+  batch hydration, and cursor handoff to the existing cache invalidation path.
+- Add acceptance tests proving selector population does not perform per-row
+  package-fact/detail hydration and does not inspect Pumas SQLite,
+  `models.metadata_json`, or search-cache internals.
+- Keep the existing package-summary/update-feed integration as selected-detail
+  hydration and invalidation infrastructure rather than the primary list-row
+  population path.
 
 ### Verification Summary
 
