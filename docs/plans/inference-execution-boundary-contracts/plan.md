@@ -2472,6 +2472,10 @@ canonicalization instead of global runtime identity.
 Runtime-registry and embedded-runtime registry tests no longer use `ollama` as
 generic live runtime sample data; supported PyTorch samples cover replacement
 observation and explicit override behavior instead.
+The inference gateway no longer contains a dedicated Ollama startup-config
+rejection branch. Ollama remains unregistered in the backend registry, while
+manually constructed unsupported backend names use the normal backend config
+paths instead of a preserved Ollama-specific policy error.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -3995,6 +3999,10 @@ Update during implementation:
   generic live `ollama` runtime fixtures with supported PyTorch fixtures, so
   registry observation and technical-fit override coverage no longer presents
   Ollama as a selectable runtime candidate.
+- 2026-05-06: Inference gateway startup-config builders removed their dedicated
+  Ollama rejection branch and helper. Backend registry tests still prove Ollama
+  is not available, and manual unsupported gateway names now follow normal
+  backend config errors rather than a retained Ollama policy path.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

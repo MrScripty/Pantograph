@@ -301,7 +301,6 @@ impl InferenceGateway {
         }
 
         match backend_name.as_str() {
-            "Ollama" => Err(unsupported_ollama_gateway_error()),
             "PyTorch" => {
                 let model_path = request.file_model_path.ok_or_else(|| {
                     GatewayError::Backend(BackendError::Config(
@@ -350,7 +349,6 @@ impl InferenceGateway {
     ) -> Result<BackendConfig, GatewayError> {
         let backend_name = self.current_backend_name().await;
         match backend_name.as_str() {
-            "Ollama" => Err(unsupported_ollama_gateway_error()),
             "Candle" => {
                 let model_path = request.candle_model_path.ok_or_else(|| {
                     GatewayError::Backend(BackendError::Config(
@@ -2958,12 +2956,6 @@ fn unix_timestamp_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
         .unwrap_or(0)
-}
-
-fn unsupported_ollama_gateway_error() -> GatewayError {
-    GatewayError::Backend(BackendError::Config(
-        "Ollama is no longer supported as a first-party Pantograph inference backend. Use a Pumas model reference with a supported runtime such as llama.cpp, PyTorch/Transformers, or Candle.".to_string(),
-    ))
 }
 
 #[cfg(feature = "backend-llamacpp")]

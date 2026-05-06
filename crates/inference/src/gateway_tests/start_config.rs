@@ -7,26 +7,6 @@ use super::super::{EmbeddingStartRequest, GatewayError, InferenceGateway, Infere
 use super::{MockHttpBackend, MockImageBackend, MockProcessSpawner, MockReusedBackend};
 
 #[tokio::test]
-async fn test_build_inference_start_config_rejects_retired_ollama_backend() {
-    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Ollama");
-
-    let error = gateway
-        .build_inference_start_config(InferenceStartRequest {
-            external_url: None,
-            ..InferenceStartRequest::default()
-        })
-        .await
-        .expect_err("ollama should be retired");
-
-    assert!(matches!(
-        error,
-        GatewayError::Backend(BackendError::Config(message))
-        if message.contains("Ollama is no longer supported")
-            && message.contains("Pumas model reference")
-    ));
-}
-
-#[tokio::test]
 async fn test_build_inference_start_config_for_external_llamacpp_uses_external_url() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "llama.cpp");
 
