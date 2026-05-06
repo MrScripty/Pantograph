@@ -280,7 +280,6 @@ fn runtime_capability_matches_required_backend(
 fn runtime_backend_keys(binary_id: inference::ManagedBinaryId) -> Vec<String> {
     match binary_id {
         inference::ManagedBinaryId::LlamaCpp => backend_key_aliases("llama.cpp", "llama_cpp"),
-        inference::ManagedBinaryId::Ollama => Vec::new(),
     }
 }
 
@@ -296,7 +295,6 @@ fn managed_binary_runtime_id(status: &inference::ManagedBinaryStatus) -> String 
 fn managed_binary_runtime_backend_keys(runtime_id: &str) -> Vec<String> {
     match runtime_id {
         "llama_cpp" => backend_key_aliases("llama.cpp", "llama_cpp"),
-        "ollama" => Vec::new(),
         _ => runtime_backend_key_aliases(runtime_id, runtime_id),
     }
 }
@@ -1338,12 +1336,6 @@ mod tests {
             capability.install_state,
             WorkflowRuntimeInstallState::Installed
         );
-    }
-
-    #[test]
-    fn retired_ollama_runtime_does_not_project_backend_keys() {
-        assert!(runtime_backend_keys(inference::ManagedBinaryId::Ollama).is_empty());
-        assert!(managed_binary_runtime_backend_keys("ollama").is_empty());
     }
 
     #[test]

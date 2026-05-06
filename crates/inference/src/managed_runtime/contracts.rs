@@ -6,7 +6,6 @@ use std::path::PathBuf;
 #[serde(rename_all = "snake_case")]
 pub enum ManagedBinaryId {
     LlamaCpp,
-    Ollama,
 }
 
 impl ManagedBinaryId {
@@ -18,33 +17,21 @@ impl ManagedBinaryId {
         matches!(self, Self::LlamaCpp)
     }
 
-    pub fn retired_message(self) -> Option<&'static str> {
-        match self {
-            Self::LlamaCpp => None,
-            Self::Ollama => {
-                Some("Ollama is no longer supported as a first-party Pantograph managed runtime")
-            }
-        }
-    }
-
     pub fn key(self) -> &'static str {
         match self {
             Self::LlamaCpp => "llama_cpp",
-            Self::Ollama => "ollama",
         }
     }
 
     pub fn display_name(self) -> &'static str {
         match self {
             Self::LlamaCpp => "llama.cpp",
-            Self::Ollama => "Ollama",
         }
     }
 
     pub(crate) fn install_dir_name(self) -> &'static str {
         match self {
             Self::LlamaCpp => "llama-cpp",
-            Self::Ollama => "ollama",
         }
     }
 }

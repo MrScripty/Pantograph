@@ -55,9 +55,6 @@ rebuild runtime state independently.
 - `llama.cpp` managed installs depend on vendor release artifacts matching the
   current platform key; unsupported targets should surface an unsupported
   runtime state instead of attempting a partial install flow.
-- `Ollama` is retired as a first-party managed runtime. Supported runtime
-  lists, command resolution, and capability projections must not advertise or
-  launch it.
 - Runtime-family-specific packaging differences still belong in backend
   definition/platform modules; if a future runtime needs materially different
   packaging or validation, document that as a new bounded limit rather than
@@ -173,7 +170,7 @@ fn inspect_runtime(app_data_dir: &Path) {
   policy and its recorded install root instead of rebuilding the launch target
   from Tauri-local assumptions.
 - System-provided runtimes take precedence when a definition explicitly supports
-  them, as `Ollama` currently does.
+  them.
 
 ## Adding Another Managed Runtime
 

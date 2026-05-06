@@ -248,7 +248,6 @@ fn managed_runtime_dependency_key(id: ManagedBinaryId) -> Option<ManagedDependen
         ManagedBinaryId::LlamaCpp => Some(ManagedDependencyKey::RuntimeSidecar(
             RuntimeSidecarDependencyId::LlamaCpp,
         )),
-        ManagedBinaryId::Ollama => None,
     }
 }
 
@@ -431,9 +430,6 @@ mod tests {
         assert!(statuses.iter().any(|status| status.key
             == ManagedBinaryKey::runtime(ManagedBinaryId::LlamaCpp)
             && status.category == ManagedBinaryCategory::RuntimeSidecar));
-        assert!(!statuses
-            .iter()
-            .any(|status| status.key == ManagedBinaryKey::runtime(ManagedBinaryId::Ollama)));
         assert!(statuses.iter().any(|status| status.key
             == ManagedBinaryKey::redistributable(ManagedRedistributableId::Ffmpeg)
             && status.category == ManagedBinaryCategory::MediaTool));

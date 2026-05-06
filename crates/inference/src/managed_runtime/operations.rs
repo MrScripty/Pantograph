@@ -61,10 +61,10 @@ fn transition_lock(id: ManagedBinaryId) -> Arc<tokio::sync::Mutex<()>> {
 }
 
 fn ensure_first_party_runtime(id: ManagedBinaryId) -> Result<(), String> {
-    if let Some(message) = id.retired_message() {
+    if !id.is_first_party_supported() {
         Err(format!(
-            "{}. Use a Pumas model reference with a supported runtime such as llama.cpp.",
-            message
+            "{} is not supported as a first-party Pantograph managed runtime.",
+            id.display_name()
         ))
     } else {
         Ok(())
@@ -126,19 +126,6 @@ pub fn binary_capability(
     app_data_dir: &Path,
     id: ManagedBinaryId,
 ) -> Result<ManagedBinaryCapability, String> {
-    if let Some(message) = id.retired_message() {
-        return Ok(ManagedBinaryCapability {
-            id,
-            display_name: id.display_name().to_string(),
-            install_state: ManagedBinaryInstallState::Unsupported,
-            available: false,
-            can_install: false,
-            can_remove: false,
-            missing_files: Vec::new(),
-            unavailable_reason: Some(message.to_string()),
-        });
-    }
-
     let definition = definition(id);
     let install_dir = runtime_install_dir_for_projection(app_data_dir, id)?;
     let has_managed_install = install_dir.exists();

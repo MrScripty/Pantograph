@@ -105,7 +105,6 @@ fn managed_dependency_key(id: ManagedBinaryId) -> Option<ManagedDependencyKey> {
         ManagedBinaryId::LlamaCpp => Some(ManagedDependencyKey::RuntimeSidecar(
             RuntimeSidecarDependencyId::LlamaCpp,
         )),
-        ManagedBinaryId::Ollama => None,
     }
 }
 
@@ -213,16 +212,6 @@ mod tests {
         assert_eq!(command.args, vec!["--port".to_string(), "8080".to_string()]);
         assert_eq!(command.pid_file.as_deref(), Some("server.pid"));
         assert!(!command.env_overrides.is_empty());
-    }
-
-    #[test]
-    fn retired_ollama_is_not_projected_as_neutral_runtime_sidecar() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-
-        let error = managed_runtime_dependency_status(temp_dir.path(), ManagedBinaryId::Ollama)
-            .expect_err("ollama should not project as neutral sidecar");
-
-        assert!(error.contains("not a neutral managed runtime sidecar"));
     }
 
     fn install_fake_runtime_files(dir: &Path, id: ManagedBinaryId) {

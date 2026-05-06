@@ -25,7 +25,6 @@ pub(crate) trait ManagedBinaryDefinition: Sync {
 }
 
 struct LlamaCppBinary;
-struct OllamaBinary;
 
 impl ManagedBinaryDefinition for LlamaCppBinary {
     fn display_name(&self) -> &'static str {
@@ -76,65 +75,10 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
     }
 }
 
-impl ManagedBinaryDefinition for OllamaBinary {
-    fn display_name(&self) -> &'static str {
-        ManagedBinaryId::Ollama.display_name()
-    }
-
-    fn github_release_repo(&self) -> (&'static str, &'static str) {
-        ("ollama", "ollama")
-    }
-
-    fn default_release_version(&self) -> &'static str {
-        "retired"
-    }
-
-    fn release_asset(&self, version: &str) -> Result<ReleaseAsset, String> {
-        Err(format!(
-            "Ollama managed runtime support is retired; release {} is not installable by Pantograph",
-            version
-        ))
-    }
-
-    fn download_url(&self, _version: &str, _release_asset: &ReleaseAsset) -> String {
-        String::new()
-    }
-
-    fn platform_key(&self) -> &'static str {
-        "retired"
-    }
-
-    fn executable_name(&self) -> &'static str {
-        "ollama"
-    }
-
-    fn validate_installation(&self, install_dir: &Path) -> Vec<String> {
-        vec![install_dir.join("retired").display().to_string()]
-    }
-
-    fn install_distribution(
-        &self,
-        _extracted_dir: &Path,
-        _install_dir: &Path,
-    ) -> Result<(), String> {
-        Err("Ollama managed runtime support is retired".to_string())
-    }
-
-    fn resolve_command(
-        &self,
-        _install_dir: &Path,
-        _args: &[&str],
-    ) -> Result<ResolvedCommand, String> {
-        Err("Ollama managed runtime support is retired".to_string())
-    }
-}
-
 static LLAMA_CPP_BINARY: LlamaCppBinary = LlamaCppBinary;
-static OLLAMA_BINARY: OllamaBinary = OllamaBinary;
 
 pub(crate) fn definition(id: ManagedBinaryId) -> &'static dyn ManagedBinaryDefinition {
     match id {
         ManagedBinaryId::LlamaCpp => &LLAMA_CPP_BINARY,
-        ManagedBinaryId::Ollama => &OLLAMA_BINARY,
     }
 }

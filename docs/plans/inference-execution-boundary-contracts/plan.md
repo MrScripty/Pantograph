@@ -2455,6 +2455,10 @@ Node-engine no longer keeps explicit executor branches for stale
 `ollama-inference` or `pytorch-inference` task ids; if an uncanonicalized graph
 reaches execution, it follows the normal unknown/host-specific executor error
 path rather than a preserved compatibility handler.
+The inference managed-runtime contract no longer carries an `Ollama`
+`ManagedBinaryId` variant or retired Ollama binary definition. Managed runtime
+state, capabilities, command resolution, and neutral dependency projection now
+type-check only the supported llama.cpp managed runtime family.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -3958,6 +3962,11 @@ Update during implementation:
   `ollama-inference` and `pytorch-inference`, including the retired Ollama guard
   module. Canonicalization remains the saved-workflow upgrade path, and direct
   stale task execution now follows the standard unsupported node branch.
+- 2026-05-06: Inference managed-runtime contracts dropped the retired Ollama
+  binary id and definition entirely. Runtime capability projection, neutral
+  dependency projection, and managed-runtime operation tests now cover only
+  supported managed runtime families instead of preserving Ollama compatibility
+  states.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference
