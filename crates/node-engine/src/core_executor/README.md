@@ -115,8 +115,10 @@ stable public facade and dispatch owner.
   typed worker-envelope helpers instead of importing the embedded Python worker
   directly.
 - PyTorch loaded-model lookups in legacy node execution must use the inference
-  crate's typed `get_loaded_info` boundary; direct worker imports remain only
-  for the still-migrating load/generation calls in `pytorch_nodes.rs`.
+  crate's typed `get_loaded_info` boundary, and model loading must use
+  `PyTorchBackend::load_model`; direct worker imports remain only for the
+  still-migrating streaming and custom-kwargs generation calls in
+  `pytorch_nodes.rs`.
 - PyTorch non-streaming text generation without legacy custom
   `inference_settings` must use `PyTorchBackend::generate`; the direct worker
   generation path is retained only for custom-kwargs compatibility until those

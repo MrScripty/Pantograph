@@ -3905,6 +3905,10 @@ Update during implementation:
   preserving the old "no model loaded means load" behavior by treating
   `BackendError::NotRunning` as a load signal while other typed lookup failures
   fail closed.
+- 2026-05-06: Node-engine PyTorch text model loading now calls
+  `PyTorchBackend::load_model`, so direct-path loads cross the same
+  Transformers-backed `load_transformers_model` worker envelope as the
+  inference backend instead of calling the raw Python `load_model` function.
 - 2026-05-06: Node-engine non-streaming PyTorch text generation without legacy
   custom `inference_settings` now uses `PyTorchBackend::generate`, moving the
   common generation path onto the inference-owned `generate_text` worker

@@ -174,38 +174,14 @@ pub(crate) async fn execute_pytorch_inference(
 
     // Phase 1: Check if model is already loaded, load if needed
     if pytorch_model_needs_load(&model_path).await? {
-        let mp = model_path.clone();
-        let dev = device.clone();
-        let mt = model_type.clone();
-
-        tokio::task::spawn_blocking(move || {
-            pyo3::Python::with_gil(|py| -> std::result::Result<(), String> {
-                use pyo3::types::{PyAnyMethods, PyDictMethods};
-
-                // Ensure worker + sibling modules are initialised
-                ensure_torch_worker_initialised(py)?;
-                let worker = py
-                    .import("pantograph_torch_worker")
-                    .map_err(|e| format!("Failed to import worker: {}", e))?;
-
-                log::info!("PyTorchInference: loading model from '{}'", mp);
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("model_path", &mp).unwrap();
-                kwargs.set_item("device", &dev).unwrap();
-                if let Some(ref mt_val) = mt {
-                    kwargs.set_item("model_type", mt_val).unwrap();
-                }
-                worker
-                    .call_method("load_model", (), Some(&kwargs))
-                    .map_err(|e| format!("Model load failed: {}", e))?;
-                log::info!("PyTorchInference: model loaded successfully");
-
-                Ok(())
-            })
-        })
-        .await
-        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
-        .map_err(NodeEngineError::ExecutionFailed)?;
+        log::info!("PyTorchInference: loading model from '{}'", model_path);
+        inference::backend::pytorch::PyTorchBackend::new()
+            .load_model(&model_path, &device, model_type.as_deref())
+            .await
+            .map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!("PyTorch model load failed: {}", error))
+            })?;
+        log::info!("PyTorchInference: model loaded successfully");
     }
 
     let _restored_kv_cache = kv_cache::restore_pytorch_input_handle(
