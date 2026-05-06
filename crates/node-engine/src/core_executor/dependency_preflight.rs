@@ -11,8 +11,8 @@ use pantograph_runtime_identity::canonical_engine_backend_key;
 use inference::{
     resolve_task_registry_entry, BackendHintLabel, InferenceExecutionInputKind,
     InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, InferenceTaskId, ResolvedModelPackageFacts,
-    TaskRegistryEntry,
+    InferenceRequestLifecycleEventSink, InferenceTaskId, ModelArtifactKind,
+    ResolvedModelPackageFacts, TaskRegistryEntry,
 };
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -37,6 +37,7 @@ pub(crate) struct DependencyPreflightLifecycleContext {
     pub(crate) task_label: String,
     pub(crate) backend_key: Option<String>,
     pub(crate) model_id: Option<String>,
+    pub(crate) resolved_artifact_kind: Option<String>,
 }
 
 #[cfg(all(feature = "audio-nodes", not(feature = "inference-nodes")))]
@@ -403,6 +404,34 @@ fn read_resolved_model_package_facts_for_preflight(
     _inputs: &HashMap<String, serde_json::Value>,
 ) -> Option<()> {
     None
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) fn read_resolved_artifact_kind_from_inputs(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    read_resolved_model_package_facts_for_preflight(inputs)
+        .map(|facts| model_artifact_kind_label(&facts.artifact.artifact_kind).to_string())
+        .or_else(|| {
+            read_resolved_model_source_from_inputs(inputs)
+                .ok()
+                .flatten()
+                .map(|source| model_artifact_kind_label(&source.artifact_kind).to_string())
+        })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn model_artifact_kind_label(kind: &ModelArtifactKind) -> &'static str {
+    match kind {
+        ModelArtifactKind::Gguf => "gguf",
+        ModelArtifactKind::HfCompatibleDirectory => "hf_compatible_directory",
+        ModelArtifactKind::Safetensors => "safetensors",
+        ModelArtifactKind::DiffusersBundle => "diffusers_bundle",
+        ModelArtifactKind::Onnx => "onnx",
+        ModelArtifactKind::Adapter => "adapter",
+        ModelArtifactKind::Shard => "shard",
+        ModelArtifactKind::Unknown => "unknown",
+    }
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -884,7 +913,7 @@ fn record_dependency_preflight_lifecycle(
             selected_device_id: None,
             selected_network_node_id: None,
             model_id: context.model_id.clone(),
-            resolved_artifact_kind: None,
+            resolved_artifact_kind: context.resolved_artifact_kind.clone(),
             usage: None,
             cache_handle_id: None,
             artifact_refs: Vec::new(),

@@ -88,8 +88,9 @@ stable public facade and dispatch owner.
 - Dependency preflight lifecycle events are bounded model-package-resolution
   observations. Successful canonical PyTorch preflight emits
   started/completed/cleanup facts with request, task, backend/runtime, and
-  model identity, but no usage, cache, artifact, compatibility, option, tensor,
-  prompt, or local-path payloads.
+  model identity plus the resolved artifact-kind label when known, but no
+  usage, cache, artifact refs, compatibility, option, tensor, prompt, or
+  local-path payloads.
 - Retired Ollama-node handling stays in `ollama.rs` only to produce a clear
   migration error for stale saved workflows; it must not call an Ollama daemon
   or become a new inference path.

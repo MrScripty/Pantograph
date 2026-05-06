@@ -669,6 +669,7 @@ fn dependency_preflight_lifecycle_context(
         task_label,
         backend_key: backend_key.map(ToOwned::to_owned),
         model_id: inference_model_id_from_inputs(inputs),
+        resolved_artifact_kind: read_resolved_artifact_kind_from_inputs(inputs),
     }
 }
 

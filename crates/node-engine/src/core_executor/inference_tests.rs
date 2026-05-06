@@ -2385,6 +2385,7 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
         task_label: "text_generation".to_string(),
         backend_key: Some("pytorch".to_string()),
         model_id: Some("pumas://models/tiny-hf".to_string()),
+        resolved_artifact_kind: Some("hf_compatible_directory".to_string()),
     };
 
     let err = enforce_dependency_preflight_with_lifecycle(
@@ -2410,6 +2411,7 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
             && event.backend_key.as_deref() == Some("pytorch")
             && event.runtime_id.as_deref() == Some("pytorch")
             && event.model_id.as_deref() == Some("pumas://models/tiny-hf")
+            && event.resolved_artifact_kind.as_deref() == Some("hf_compatible_directory")
     }));
     assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
     assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
@@ -2462,6 +2464,7 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
         task_label: "text_generation".to_string(),
         backend_key: Some("pytorch".to_string()),
         model_id: Some("pumas://models/tiny-hf".to_string()),
+        resolved_artifact_kind: Some("hf_compatible_directory".to_string()),
     };
 
     let resolved = enforce_dependency_preflight_with_lifecycle(
@@ -2485,6 +2488,7 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
             && event.backend_key.as_deref() == Some("pytorch")
             && event.runtime_id.as_deref() == Some("pytorch")
             && event.model_id.as_deref() == Some("pumas://models/tiny-hf")
+            && event.resolved_artifact_kind.as_deref() == Some("hf_compatible_directory")
             && event.usage.is_none()
             && event.cache_handle_id.is_none()
             && event.artifact_refs.is_empty()
@@ -2504,6 +2508,65 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
         InferenceRequestLifecycleEventKind::CleanupCompleted
     );
     assert_eq!(events[2].detail, None);
+}
+
+#[cfg(feature = "pytorch-nodes")]
+#[test]
+fn test_dependency_preflight_lifecycle_context_reads_resolved_artifact_kind() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "runtime_hint".to_string(),
+        serde_json::json!("transformers_pytorch"),
+    );
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_with_artifact_kind(
+            "pumas://models/tiny-hf",
+            "/models/tiny-hf",
+            "hf_compatible_directory",
+        ),
+    );
+
+    let context = dependency_preflight_lifecycle_context(
+        &inputs,
+        "llm-inference-1",
+        "exec-a",
+        Some("pytorch"),
+    );
+
+    assert_eq!(context.model_id.as_deref(), Some("pumas://models/tiny-hf"));
+    assert_eq!(
+        context.resolved_artifact_kind.as_deref(),
+        Some("hf_compatible_directory")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_resolved_artifact_kind_prefers_package_facts_before_model_source() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let package_facts: inference::ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("text package facts fixture");
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_with_artifact_kind(
+            "pumas://models/tiny-hf",
+            "/models/tiny-hf",
+            "hf_compatible_directory",
+        ),
+    );
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    assert_eq!(
+        read_resolved_artifact_kind_from_inputs(&inputs).as_deref(),
+        Some("gguf")
+    );
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

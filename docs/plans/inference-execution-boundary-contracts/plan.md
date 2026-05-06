@@ -2834,8 +2834,9 @@ inference write ledger events directly.
   and legacy raw chat streaming remains unchanged. Node-engine dependency
   preflight now also emits model-package-resolution started/completed/cleanup
   lifecycle facts for successful canonical PyTorch preflight with bounded
-  request/task/backend/runtime/model identity and without usage, cache,
-  artifact, compatibility, option, tensor, prompt, or local-path payloads.
+  request/task/backend/runtime/model identity plus the resolved artifact-kind
+  label when known and without usage, cache, artifact refs, compatibility,
+  option, tensor, prompt, or local-path payloads.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
@@ -3756,6 +3757,11 @@ Update during implementation:
   preflight, mirroring the existing failure lifecycle shape while keeping
   scheduler/runtime selection and backend-local payloads out of the producer
   contract.
+- 2026-05-05: Node-engine dependency preflight lifecycle context now carries
+  the bounded resolved artifact-kind label from package facts or
+  `resolved_model_source`, so package-resolution diagnostics can distinguish
+  HF-compatible directories from GGUF and other artifact families without
+  adding artifact refs, local paths, compatibility summaries, or ledger writes.
 - 2026-05-05: Added append-only `ChatChunk.cache_handle_id` stream metadata and
   threaded terminal text/chat cache-handle ids through typed gateway results,
   backend-execution lifecycle completion events, and `llm-inference.kv_cache_out`
