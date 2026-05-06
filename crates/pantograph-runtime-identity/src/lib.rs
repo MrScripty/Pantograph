@@ -12,7 +12,6 @@ pub const DEFAULT_FRONTEND_RUNTIME_NAME: &str = "openai-compatible";
 pub fn canonical_runtime_backend_key(name: &str) -> String {
     match ascii_alnum_token(name).as_str() {
         "llamacpp" => "llama_cpp".to_string(),
-        "ollama" => "ollama".to_string(),
         "candle" => "candle".to_string(),
         "torch" | "pytorch" | "transformerspytorch" | "pytorchtransformers" => {
             "pytorch".to_string()
@@ -38,7 +37,6 @@ pub fn canonical_runtime_id(value: &str) -> String {
         "onnxruntime" => "onnx-runtime".to_string(),
         "torch" | "pytorch" => "pytorch".to_string(),
         "stableaudio" => "stable_audio".to_string(),
-        "ollama" => "ollama".to_string(),
         "candle" => "candle".to_string(),
         "diffusers" => "diffusers".to_string(),
         "vllm" => "vllm".to_string(),
@@ -113,7 +111,6 @@ pub fn runtime_display_name(runtime_id: &str) -> Option<&'static str> {
     match canonical_runtime_id(runtime_id).as_str() {
         "llama_cpp" => Some("llama.cpp"),
         "llama.cpp.embedding" => Some("Dedicated embedding runtime"),
-        "ollama" => Some("Ollama"),
         "candle" => Some("Candle"),
         "pytorch" => Some("PyTorch (Python sidecar)"),
         "diffusers" => Some("Diffusers (Python sidecar)"),

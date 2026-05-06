@@ -116,7 +116,7 @@ assert!(aliases.contains(&"torch".to_string()));
 ## Structured Producer Contract
 - The canonical runtime-id producer contract currently covers known values such
   as `llama_cpp`, `llama.cpp.embedding`, `pytorch`, `onnx-runtime`,
-  `stable_audio`, `diffusers`, `ollama`, `candle`, `vllm`, and `mlx`.
+  `stable_audio`, `diffusers`, `candle`, `vllm`, and `mlx`.
 - `vllm` and `mlx` are identity/display contracts for roadmap runtime families.
   They do not imply a registered runtime, installed binary, scheduler policy,
   or executable backend implementation.

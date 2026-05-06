@@ -2466,6 +2466,9 @@ target error path.
 Pantograph UniFFI and Rustler bindings no longer re-export Pumas'
 `is_ollama_running` helper. Pumas may keep provider-agnostic facts internally,
 but Pantograph host bindings no longer expose Ollama-specific runtime probes.
+Shared runtime identity no longer treats `ollama` as a known runtime or backend
+alias. Old Ollama workflow migration strings remain local to workflow-service
+canonicalization instead of global runtime identity.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -3982,6 +3985,9 @@ Update during implementation:
   `is_ollama_running` wrapper and smoke binding entry, so host-language
   Pantograph APIs no longer expose an Ollama-specific probe even if Pumas keeps
   provider-neutral discovery helpers internally.
+- 2026-05-06: Shared runtime identity dropped Ollama from known runtime/backend
+  alias normalization and display-name lookup. Workflow-service canonicalization
+  remains the only owner of old Ollama saved-workflow migration semantics.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference
