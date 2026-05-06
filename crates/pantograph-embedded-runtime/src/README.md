@@ -183,7 +183,9 @@ delegating methods; scheduler authority and diagnostics events stay in
   producers preserve the original inference/preflight/execution outcome.
   Resolved artifact-kind metadata must be label-shaped before persistence;
   path-shaped or otherwise unsafe values are dropped at the ledger adapter
-  boundary just like unsafe artifact refs.
+  boundary just like unsafe artifact refs. Lifecycle `cache_handle_id` values
+  are also filtered as bounded refs before persistence so local temp paths do
+  not become durable cache metadata.
   Prompt/result bodies, embeddings, tensors, token arrays, backend kwargs, raw
   backend output, cache bytes, cache fingerprints, and temp paths remain
   outside durable diagnostic payloads.

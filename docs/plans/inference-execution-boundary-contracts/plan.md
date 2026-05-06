@@ -3111,7 +3111,9 @@ inference write ledger events directly.
   accept and document the backend-authored
   `inference_execution_diagnostic_observed` timeline event kind without making
   frontend consumers parse option, usage, cache, artifact, compatibility, or
-  lifecycle payload JSON.
+  lifecycle payload JSON. Embedded-runtime source README now documents
+  path-shaped lifecycle `cache_handle_id` filtering before durable diagnostic
+  persistence.
 
 **Verification:**
 - `cargo test -p pantograph-diagnostics-ledger` for new event/projection fields,
