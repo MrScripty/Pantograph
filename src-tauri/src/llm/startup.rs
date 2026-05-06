@@ -129,7 +129,6 @@ mod tests {
                 vlm_mmproj_path: Some("/models/qwen.mmproj".to_string()),
                 embedding_model_path: None,
                 candle_embedding_model_path: None,
-                ollama_vlm_model: Some("qwen2.5vl".to_string()),
             },
             device: DeviceConfig {
                 device: "Vulkan0".to_string(),

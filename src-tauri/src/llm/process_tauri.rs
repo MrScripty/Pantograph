@@ -131,7 +131,6 @@ fn write_managed_runtime_pid_record(
 
 fn managed_runtime_mode(sidecar_name: &str, args: &[&str]) -> &'static str {
     match sidecar_name {
-        "ollama" => "ollama",
         "llama-server-wrapper" if args.contains(&"--embedding") => "llama.cpp.embedding",
         "llama-server-wrapper" if args.contains(&"--reranking") => "llama.cpp.reranking",
         "llama-server-wrapper" => "llama.cpp.inference",
@@ -169,12 +168,6 @@ impl ProcessSpawner for TauriProcessSpawner {
             "llama-server-wrapper" => {
                 resolve_managed_binary_command(&app_data_dir, ManagedBinaryId::LlamaCpp, args)
                     .map_err(|error| managed_binary_spawn_error(error.to_string()))?
-            }
-            "ollama" => {
-                return Err(managed_binary_spawn_error(
-                    "Ollama is no longer supported as a first-party Pantograph runtime. Use a Pumas model reference with a supported runtime such as llama.cpp."
-                        .to_string(),
-                ));
             }
             other => {
                 return Err(format!(

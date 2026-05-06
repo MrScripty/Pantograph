@@ -20,20 +20,11 @@ pub struct ModelConfig {
     /// Path to the Candle embedding model directory (SafeTensors format, e.g., bge-small-en-v1.5/)
     /// This is separate from embedding_model_path because Candle uses a different model format.
     pub candle_embedding_model_path: Option<String>,
-    /// Retired persisted compatibility field.
-    ///
-    /// Pantograph no longer supports Ollama as a first-party runtime. Existing
-    /// config files may still contain this value, so it remains deserializable
-    /// and is scrubbed when configs are loaded or saved.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ollama_vlm_model: Option<String>,
 }
 
 impl ModelConfig {
     /// Remove fields that belonged to retired backend surfaces.
-    pub fn scrub_retired_fields(&mut self) {
-        self.ollama_vlm_model = None;
-    }
+    pub fn scrub_retired_fields(&mut self) {}
 }
 
 /// Device configuration for inference
@@ -236,36 +227,22 @@ impl AppConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, ModelConfig};
+    use super::ModelConfig;
 
     #[test]
-    fn model_config_accepts_missing_retired_ollama_field() {
+    fn model_config_ignores_unknown_retired_fields() {
         let config = serde_json::from_str::<ModelConfig>(
             r#"{
                 "vlm_model_path": "/models/qwen.gguf",
                 "vlm_mmproj_path": null,
                 "embedding_model_path": null,
-                "candle_embedding_model_path": null
+                "candle_embedding_model_path": null,
+                "ollama_vlm_model": "llava:13b"
             }"#,
         )
-        .expect("missing retired field should deserialize");
+        .expect("unknown retired field should deserialize");
 
-        assert!(config.ollama_vlm_model.is_none());
-    }
-
-    #[test]
-    fn app_config_scrubs_retired_ollama_model_setting() {
-        let mut config = AppConfig {
-            models: ModelConfig {
-                ollama_vlm_model: Some("llava:13b".to_string()),
-                ..ModelConfig::default()
-            },
-            ..AppConfig::default()
-        };
-
-        config.scrub_retired_fields();
-
-        assert!(config.models.ollama_vlm_model.is_none());
+        assert_eq!(config.vlm_model_path.as_deref(), Some("/models/qwen.gguf"));
     }
 }
 
