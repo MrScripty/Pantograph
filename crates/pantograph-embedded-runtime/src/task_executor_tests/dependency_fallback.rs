@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn python_nodes_fail_fast_when_environment_ref_is_not_ready() {
+async fn diffusion_nodes_fail_fast_when_environment_ref_is_not_ready() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: requests.clone(),
@@ -19,10 +19,7 @@ async fn python_nodes_fail_fast_when_environment_ref_is_not_ready() {
         "model_path".to_string(),
         serde_json::json!("/tmp/model-ready"),
     );
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
     inputs.insert(
         "environment_ref".to_string(),
@@ -33,7 +30,12 @@ async fn python_nodes_fail_fast_when_environment_ref_is_not_ready() {
     );
 
     let err = executor
-        .execute_task("llm-inference-1", inputs, &Context::new(), &extensions)
+        .execute_task(
+            "diffusion-inference-1",
+            inputs,
+            &Context::new(),
+            &extensions,
+        )
         .await
         .expect_err("preflight should block when environment_ref state is not ready");
 

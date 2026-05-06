@@ -33,7 +33,6 @@ use crate::runtime_health::failed_runtime_health_assessment;
 ///
 /// Currently handles:
 /// - `rag-search`: requires an injected `RagBackend`
-/// - `llm-inference`: python sidecar execution when runtime hints resolve to PyTorch/Transformers
 /// - `diffusion-inference`: python sidecar execution
 /// - `audio-generation`: python sidecar execution
 /// - `onnx-inference`: python sidecar execution
@@ -44,7 +43,7 @@ use crate::runtime_health::failed_runtime_health_assessment;
 pub struct TauriTaskExecutor {
     /// Optional host-provided RAG backend for document search.
     rag_backend: Option<Arc<dyn RagBackend>>,
-    /// Host adapter for python-backed nodes (pytorch/diffusion/audio/onnx).
+    /// Host adapter for python-backed media/runtime nodes.
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
 }
 
@@ -112,10 +111,6 @@ impl TaskExecutor for TauriTaskExecutor {
                     .await
             }
             "diffusion-inference" | "audio-generation" | "onnx-inference" => {
-                self.execute_python_node(task_id, &node_type, &inputs, extensions)
-                    .await
-            }
-            "llm-inference" if Self::python_runtime_handles_node(&node_type, &inputs) => {
                 self.execute_python_node(task_id, &node_type, &inputs, extensions)
                     .await
             }

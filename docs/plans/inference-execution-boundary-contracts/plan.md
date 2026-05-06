@@ -2655,6 +2655,11 @@ drift back into inference.
   package-facts model-id fallback for direct typed callers, so backend chat
   transport projection no longer depends on every caller pre-populating
   `model_ref`.
+  Embedded-runtime host execution no longer treats canonical PyTorch
+  `llm-inference` as a Python-sidecar node: canonical LLM execution falls
+  through to node-engine/inference, while the host Python adapter remains scoped
+  to diffusion, audio generation, and ONNX nodes that still require
+  host-managed Python resources.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
@@ -3931,6 +3936,12 @@ Update during implementation:
   now rejects unsupported `inference_settings`, removes its embedded
   `pantograph_torch_worker` loader and direct PyO3 generation calls, and relies
   on the inference crate as the only PyTorch worker owner.
+- 2026-05-06: Embedded-runtime canonical `llm-inference` no longer routes
+  PyTorch/Transformers hints through the host Python runtime bridge. The bridge
+  now rejects legacy `pytorch-inference`/`llm-inference` dispatch, dependency
+  preflight for host Python execution is scoped to diffusion, audio generation,
+  and ONNX nodes, and tests prove canonical LLM work falls through to the core
+  node-engine/inference boundary.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference

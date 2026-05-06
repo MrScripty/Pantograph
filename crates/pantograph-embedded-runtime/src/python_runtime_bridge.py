@@ -16,15 +16,6 @@ import pathlib
 import traceback
 from typing import Any, Callable, Dict
 
-ASR_TASK_LABELS = {
-    "audio-to-text",
-    "audio_transcription",
-    "audio-transcription",
-    "automatic-speech-recognition",
-    "automatic_speech_recognition",
-}
-
-
 def _load_module(module_name: str, module_path: str):
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     if spec is None or spec.loader is None:
@@ -158,115 +149,6 @@ def _fallback_model_ref(engine: str, model_path: str, task_type_primary: str) ->
         "modelPath": model_path,
         "taskTypePrimary": task_type_primary,
     }
-
-
-def _is_audio_transcription_task(task_type_primary: str) -> bool:
-    normalized = task_type_primary.strip().lower()
-    return normalized in ASR_TASK_LABELS
-
-
-def _run_pytorch(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, Any]:
-    worker = _load_module("pantograph_torch_worker_process", torch_worker_path)
-
-    task_type_primary = _input_or_data(inputs, "task_type_primary")
-    if not isinstance(task_type_primary, str) or not task_type_primary.strip():
-        task_type_primary = "text-generation"
-    task_type_primary = task_type_primary.strip()
-
-    if _is_audio_transcription_task(task_type_primary):
-        model_path = inputs.get("model_path")
-        if not isinstance(model_path, str) or not model_path.strip():
-            raise RuntimeError("Missing model_path input. Connect a Puma-Lib node.")
-        model_path = model_path.strip()
-
-        audio = inputs.get("audio")
-        if not isinstance(audio, str) or not audio.strip():
-            raise RuntimeError("Missing audio input. Connect an audio-input node.")
-
-        kwargs: Dict[str, Any] = {"audio_base64": audio.strip()}
-        language = inputs.get("language")
-        if isinstance(language, str) and language.strip():
-            kwargs["language"] = language.strip()
-        prompt = inputs.get("prompt")
-        if isinstance(prompt, str) and prompt.strip():
-            kwargs["prompt"] = prompt.strip()
-
-        extra = _build_extra_settings(inputs)
-        if "language" in extra and "language" not in kwargs:
-            kwargs["language"] = extra["language"]
-        if "task" in extra:
-            kwargs["task"] = extra["task"]
-        if "chunk_length_s" in extra:
-            kwargs["chunk_length_s"] = extra["chunk_length_s"]
-
-        result = worker.transcribe_audio(
-            model_path=model_path,
-            device=str(inputs.get("device", "auto") or "auto"),
-            **kwargs,
-        )
-        if not isinstance(result, dict):
-            raise RuntimeError("PyTorch ASR worker returned unexpected payload shape")
-
-        outputs: Dict[str, Any] = {
-            "response": result.get("text", ""),
-            "language": result.get("language"),
-            "duration_seconds": result.get("duration_seconds"),
-        }
-        outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(
-            "pytorch", model_path, task_type_primary
-        )
-        return outputs
-
-    prompt_value = inputs.get("prompt")
-    masked_prompt_json = None
-    prompt = _extract_prompt(inputs)
-    if isinstance(prompt_value, dict) and prompt_value.get("type") == "masked_prompt":
-        masked_prompt_json = json.dumps(prompt_value)
-
-    model_path = inputs.get("model_path")
-    if not isinstance(model_path, str) or not model_path.strip():
-        raise RuntimeError("Missing model_path input. Connect a Puma-Lib node.")
-    model_path = model_path.strip()
-
-    model_info = worker.get_loaded_info()
-    loaded_path = ""
-    if isinstance(model_info, dict):
-        loaded_path = str(model_info.get("model_path", ""))
-    if loaded_path != model_path:
-        load_kwargs: Dict[str, Any] = {
-            "model_path": model_path,
-            "device": str(inputs.get("device", "auto") or "auto"),
-        }
-        model_type = inputs.get("model_type")
-        if isinstance(model_type, str) and model_type.strip():
-            load_kwargs["model_type"] = model_type.strip()
-        worker.load_model(**load_kwargs)
-
-    max_tokens = _as_int(inputs.get("max_tokens", 512), 512)
-    temperature = _as_float(inputs.get("temperature", 0.7), 0.7)
-    top_p = _as_float(inputs.get("top_p", 0.95), 0.95)
-
-    kwargs: Dict[str, Any] = {
-        "prompt": prompt,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "top_p": top_p,
-    }
-    system_prompt = inputs.get("system_prompt")
-    if isinstance(system_prompt, str) and system_prompt.strip():
-        kwargs["system_prompt"] = system_prompt
-    if masked_prompt_json is not None:
-        kwargs["masked_prompt_json"] = masked_prompt_json
-    kwargs.update(_build_extra_settings(inputs))
-
-    response = worker.generate(**kwargs)
-    response_text = response if isinstance(response, str) else str(response)
-
-    outputs: Dict[str, Any] = {"response": response_text}
-    outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(
-        "pytorch", model_path, task_type_primary
-    )
-    return outputs
 
 
 def _run_diffusion(
@@ -503,9 +385,7 @@ def _main() -> int:
         audio_worker = _ensure_worker_path(worker_paths.get("audio_worker"), "audio")
         onnx_worker = _ensure_worker_path(worker_paths.get("onnx_worker"), "onnx")
 
-        if node_type in ("llm-inference", "pytorch-inference"):
-            outputs = _run_pytorch(inputs, torch_worker)
-        elif node_type == "diffusion-inference":
+        if node_type == "diffusion-inference":
             outputs = _run_diffusion(
                 inputs,
                 torch_worker,

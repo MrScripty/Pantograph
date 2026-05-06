@@ -227,13 +227,13 @@ async fn python_runtime_recorder_progresses_failed_execution_health_state() {
         serde_json::json!("/tmp/model.safetensors"),
     );
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("pytorch"));
+    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
     for _ in 0..3 {
         let error = executor
             .execute_task(
-                "llm-inference-1",
+                "diffusion-inference-1",
                 inputs.clone(),
                 &Context::new(),
                 &extensions,

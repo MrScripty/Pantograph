@@ -200,15 +200,9 @@ impl TauriTaskExecutor {
         }
     }
 
-    pub(super) fn python_runtime_handles_node(
-        node_type: &str,
-        inputs: &HashMap<String, serde_json::Value>,
-    ) -> bool {
+    pub(super) fn python_runtime_handles_node(node_type: &str) -> bool {
         match node_type {
             "diffusion-inference" | "audio-generation" | "onnx-inference" => true,
-            "llm-inference" => {
-                Self::preferred_backend_key(node_type, inputs, None).as_deref() == Some("pytorch")
-            }
             _ => false,
         }
     }
@@ -540,7 +534,7 @@ impl TauriTaskExecutor {
         inputs: &HashMap<String, serde_json::Value>,
         extensions: &ExecutorExtensions,
     ) -> Result<Option<node_engine::ModelRefV2>> {
-        if !Self::python_runtime_handles_node(node_type, inputs) {
+        if !Self::python_runtime_handles_node(node_type) {
             return Ok(None);
         }
 

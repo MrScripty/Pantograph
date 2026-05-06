@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn python_nodes_block_when_dependency_preflight_is_not_ready() {
+async fn diffusion_nodes_block_when_dependency_preflight_is_not_ready() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: requests.clone(),
@@ -19,14 +19,16 @@ async fn python_nodes_block_when_dependency_preflight_is_not_ready() {
         "model_path".to_string(),
         serde_json::json!("/tmp/model-not-ready"),
     );
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
     let err = executor
-        .execute_task("llm-inference-1", inputs, &Context::new(), &extensions)
+        .execute_task(
+            "diffusion-inference-1",
+            inputs,
+            &Context::new(),
+            &extensions,
+        )
         .await
         .expect_err("preflight should block non-ready dependency state");
 
@@ -41,7 +43,7 @@ async fn python_nodes_block_when_dependency_preflight_is_not_ready() {
 }
 
 #[tokio::test]
-async fn python_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
+async fn diffusion_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
     let mut adapter_response = HashMap::new();
     adapter_response.insert("response".to_string(), serde_json::json!("ok"));
@@ -55,7 +57,7 @@ async fn python_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
         engine: "pytorch".to_string(),
         model_id: "model-a".to_string(),
         model_path: "/tmp/model-ready".to_string(),
-        task_type_primary: "text-generation".to_string(),
+        task_type_primary: "text-to-image".to_string(),
         dependency_bindings: vec![ModelDependencyBinding {
             binding_id: "binding-a".to_string(),
             profile_id: "profile-a".to_string(),
@@ -85,14 +87,16 @@ async fn python_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
         "model_path".to_string(),
         serde_json::json!("/tmp/model-ready"),
     );
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
     let outputs = executor
-        .execute_task("llm-inference-1", inputs, &Context::new(), &extensions)
+        .execute_task(
+            "diffusion-inference-1",
+            inputs,
+            &Context::new(),
+            &extensions,
+        )
         .await
         .expect("ready preflight should allow adapter execution");
     assert_eq!(outputs.get("response"), Some(&serde_json::json!("ok")));
@@ -100,7 +104,7 @@ async fn python_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
     let recorded = requests.lock().expect("recording lock");
     assert_eq!(recorded.len(), 1);
     let request = &recorded[0];
-    assert_eq!(request.node_type, "llm-inference");
+    assert_eq!(request.node_type, "diffusion-inference");
     assert_eq!(request.env_ids, vec!["venv:test".to_string()]);
     assert!(request.inputs.contains_key("model_ref"));
 }
