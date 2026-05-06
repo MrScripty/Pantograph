@@ -3028,7 +3028,11 @@ inference write ledger events directly.
   task-validation and backend-execution lifecycle events and durable inference
   diagnostics while keeping encoded audio bytes, prompt text, generated
   content, local paths, `file://` URLs, and scheduler/runtime selection state
-  out of the payload.
+  out of the payload. Contract-only image understanding, depth estimation,
+  video understanding, and multimodal generation typed requests now use the
+  same bounded artifact-ref collector for stable `image_ref`, `video_ref`, and
+  multimodal artifact parts during task validation, without promoting those
+  roadmap tasks to executable backend paths.
   Non-typed `embeddings_with_lifecycle` now also projects bounded token usage
   from backend `EmbeddingResult.token_count` values onto the backend-execution
   lifecycle completion event without serializing input text or embedding

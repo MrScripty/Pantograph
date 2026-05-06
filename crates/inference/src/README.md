@@ -174,6 +174,10 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   diagnostics. They must not carry encoded audio bytes, prompt text, generated
   content, local filesystem paths,
   `file://` URLs, or scheduler/runtime selection state.
+- Contract-only image understanding, depth estimation, video understanding, and
+  multimodal generation requests use the same bounded artifact-ref projection
+  for stable `image_ref`, `video_ref`, and multimodal artifact parts during
+  task validation, without implying backend execution support.
 - Typed text/chat streaming lifecycle events expose preprocessing,
   backend-execution, postprocessing, and result-projection phases around the
   typed request boundary. Legacy raw chat streaming remains a backend-execution

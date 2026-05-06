@@ -1275,7 +1275,7 @@ impl InferenceGateway {
         let validation_result = request.validate().map_err(GatewayError::Validation);
         if let Err(error) = validation_result {
             let result = Err(error);
-            record_non_streaming_lifecycle_phase_result(
+            record_non_streaming_lifecycle_phase_result_with_references(
                 lifecycle_sink.as_ref(),
                 InferenceLifecyclePhase::TaskValidation,
                 request_id,
@@ -1286,6 +1286,13 @@ impl InferenceGateway {
                 selected_device_id,
                 model_id,
                 &result,
+                Vec::new(),
+                None,
+                Vec::new(),
+                None,
+                None,
+                artifact_refs,
+                None,
             );
             return result;
         }
@@ -2849,7 +2856,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
             artifact_refs,
             resolved_artifact_kind.clone(),
         ),
-        Err(error) => record_inference_lifecycle_phase_event(
+        Err(error) => record_inference_lifecycle_phase_event_with_references(
             sink,
             phase.clone(),
             request_id.clone(),
@@ -2861,6 +2868,13 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Failed,
             Some(error.to_string()),
+            option_diagnostics,
+            compatibility_report,
+            compatibility_issues,
+            usage,
+            cache_handle_id,
+            artifact_refs,
+            resolved_artifact_kind.clone(),
         ),
     }
 
@@ -2962,6 +2976,33 @@ fn artifact_refs_from_typed_request(request: &InferenceExecutionRequest) -> Vec<
             .as_deref()
             .and_then(bounded_inference_artifact_ref)
             .into_iter()
+            .collect(),
+        InferenceExecutionInput::ImageUnderstanding { request } => request
+            .image_refs
+            .iter()
+            .filter_map(|image_ref| bounded_inference_artifact_ref(image_ref))
+            .collect(),
+        InferenceExecutionInput::DepthEstimation { request } => request
+            .image_ref
+            .as_deref()
+            .and_then(bounded_inference_artifact_ref)
+            .into_iter()
+            .collect(),
+        InferenceExecutionInput::VideoUnderstanding { request } => request
+            .video_ref
+            .as_deref()
+            .and_then(bounded_inference_artifact_ref)
+            .into_iter()
+            .collect(),
+        InferenceExecutionInput::MultimodalGeneration { request } => request
+            .parts
+            .iter()
+            .filter_map(|part| match part {
+                crate::types::MultimodalInputPart::Artifact { artifact_ref, .. } => {
+                    bounded_inference_artifact_ref(artifact_ref)
+                }
+                _ => None,
+            })
             .collect(),
         _ => Vec::new(),
     }

@@ -14,11 +14,12 @@ use crate::model_contracts::{
     SamplingGenerationOptions, StoppingGenerationOptions,
 };
 use crate::types::{
-    AudioTranscriptionRequest, AudioTranscriptionResult, EncodedAudio, ImageGenerationRequest,
-    InferenceExecutionInput, InferenceExecutionRequest, InferenceExecutionResult,
-    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
-    InferenceRequestLifecycleEventSink, InferenceRequestLifecycleEventSinkError, InferenceUsage,
-    RuntimeFactReadiness,
+    AudioTranscriptionRequest, AudioTranscriptionResult, DepthEstimationRequest, EncodedAudio,
+    ImageGenerationRequest, ImageUnderstandingRequest, InferenceExecutionInput,
+    InferenceExecutionRequest, InferenceExecutionResult, InferenceRequestLifecycleEvent,
+    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink,
+    InferenceRequestLifecycleEventSinkError, InferenceUsage, MultimodalGenerationRequest,
+    MultimodalInputPart, RuntimeFactReadiness, VideoUnderstandingRequest,
 };
 
 #[path = "gateway_tests/start_config.rs"]
@@ -2183,6 +2184,108 @@ async fn test_execute_typed_audio_lifecycle_omits_local_path_artifact_refs() {
     assert!(backend_completed.artifact_refs.is_empty());
     let serialized_events = serde_json::to_string(&events).expect("events serialize");
     assert!(!serialized_events.contains("SECRET_AUDIO_PATH"));
+}
+
+#[tokio::test]
+async fn test_contract_only_typed_lifecycle_collects_bounded_artifact_refs() {
+    let cases = vec![
+        (
+            InferenceTaskId::ImageUnderstanding,
+            InferenceExecutionInput::ImageUnderstanding {
+                request: ImageUnderstandingRequest {
+                    prompt: "describe".to_string(),
+                    images: Vec::new(),
+                    image_refs: vec![
+                        "artifact://image-a.png".to_string(),
+                        "/tmp/private-image.png".to_string(),
+                    ],
+                    extra_options: serde_json::Value::Null,
+                },
+            },
+            vec!["artifact://image-a.png".to_string()],
+            "/tmp/private-image.png",
+        ),
+        (
+            InferenceTaskId::DepthEstimation,
+            InferenceExecutionInput::DepthEstimation {
+                request: DepthEstimationRequest {
+                    image: None,
+                    image_ref: Some("artifact://depth-input.png".to_string()),
+                    extra_options: serde_json::Value::Null,
+                },
+            },
+            vec!["artifact://depth-input.png".to_string()],
+            "/tmp/private-depth.png",
+        ),
+        (
+            InferenceTaskId::VideoUnderstanding,
+            InferenceExecutionInput::VideoUnderstanding {
+                request: VideoUnderstandingRequest {
+                    prompt: "summarize".to_string(),
+                    video: None,
+                    video_ref: Some("artifact://clip.mp4".to_string()),
+                    extra_options: serde_json::Value::Null,
+                },
+            },
+            vec!["artifact://clip.mp4".to_string()],
+            "/tmp/private-video.mp4",
+        ),
+        (
+            InferenceTaskId::MultimodalGeneration,
+            InferenceExecutionInput::MultimodalGeneration {
+                request: MultimodalGenerationRequest {
+                    parts: vec![
+                        MultimodalInputPart::Artifact {
+                            modality: crate::model_contracts::InferenceModality::Image,
+                            artifact_ref: "artifact://multi-image.png".to_string(),
+                            mime_type: Some("image/png".to_string()),
+                        },
+                        MultimodalInputPart::Artifact {
+                            modality: crate::model_contracts::InferenceModality::Audio,
+                            artifact_ref: "/tmp/private-audio.wav".to_string(),
+                            mime_type: Some("audio/wav".to_string()),
+                        },
+                    ],
+                    extra_options: serde_json::Value::Null,
+                },
+            },
+            vec!["artifact://multi-image.png".to_string()],
+            "/tmp/private-audio.wav",
+        ),
+    ];
+
+    for (task_id, input, expected_refs, forbidden_ref) in cases {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+        let sink = Arc::new(RecordingLifecycleSink::default());
+        let request = InferenceExecutionRequest {
+            request_id: Some(format!("contract-only-{}", task_id.canonical_label())),
+            task_id,
+            model_ref: None,
+            model_name: Some("mock-contract".to_string()),
+            runtime_hint: Some("mock".to_string()),
+            resolved_model_package_facts: None,
+            input,
+            generation_options: None,
+            extra_options: serde_json::Value::Null,
+        };
+
+        gateway
+            .execute_typed_with_lifecycle(request, sink.clone())
+            .await
+            .expect_err("contract-only task should not execute");
+
+        let events = sink.events();
+        let validation_failed = events
+            .iter()
+            .find(|event| {
+                event.phase == InferenceLifecyclePhase::TaskValidation
+                    && event.kind == InferenceRequestLifecycleEventKind::Failed
+            })
+            .expect("task validation failure should be recorded");
+        assert_eq!(validation_failed.artifact_refs, expected_refs);
+        let serialized_events = serde_json::to_string(&events).expect("events serialize");
+        assert!(!serialized_events.contains(forbidden_ref));
+    }
 }
 
 #[test]
