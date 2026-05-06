@@ -1911,6 +1911,113 @@ mod tests {
     }
 
     #[test]
+    fn typed_depth_estimation_wire_shape_defaults_and_ignores_unknown_fields() {
+        let raw_request = serde_json::json!({
+            "request_id": "req-depth-estimation",
+            "task_id": "depth_estimation",
+            "model_name": "depth-roadmap",
+            "input": {
+                "input_type": "depth_estimation",
+                "request": {
+                    "image_ref": "artifact://image-a.png",
+                    "future_transformers_depth_field": {
+                        "ignored": true
+                    }
+                },
+                "future_input_field": true
+            },
+            "future_request_field": true
+        });
+
+        let request: InferenceExecutionRequest =
+            serde_json::from_value(raw_request).expect("depth estimation request decodes");
+        assert_eq!(request.task_id, InferenceTaskId::DepthEstimation);
+        assert_eq!(
+            request.input.input_kind(),
+            crate::model_contracts::InferenceExecutionInputKind::DepthEstimation
+        );
+        let InferenceExecutionInput::DepthEstimation { request: depth } = &request.input else {
+            panic!("expected depth estimation input");
+        };
+        assert!(depth.image.is_none());
+        assert_eq!(depth.image_ref.as_deref(), Some("artifact://image-a.png"));
+        assert_eq!(depth.extra_options, Value::Null);
+        match request.validate() {
+            Err(InferenceExecutionRequestValidationError::UnsupportedTask { task_id }) => {
+                assert_eq!(task_id, InferenceTaskId::DepthEstimation);
+            }
+            other => panic!("expected unsupported roadmap task, got {other:?}"),
+        }
+
+        let encoded_request = serde_json::to_value(&request).expect("depth request encodes");
+        assert_eq!(
+            encoded_request["input"]["input_type"],
+            serde_json::json!("depth_estimation")
+        );
+        assert_eq!(
+            encoded_request["input"]["request"]["image_ref"],
+            serde_json::json!("artifact://image-a.png")
+        );
+        assert!(encoded_request["input"]["request"].get("image").is_none());
+        assert!(encoded_request["input"]["request"]
+            .get("extra_options")
+            .is_none());
+        assert!(encoded_request["input"]["request"]
+            .get("future_transformers_depth_field")
+            .is_none());
+        assert!(encoded_request["input"].get("future_input_field").is_none());
+        assert!(encoded_request.get("future_request_field").is_none());
+
+        let raw_result = serde_json::json!({
+            "result_type": "depth_estimation",
+            "result": {
+                "depth_map_ref": "artifact://depth-map.png",
+                "future_result_field": true
+            },
+            "future_envelope_field": true
+        });
+        let result: InferenceExecutionResult =
+            serde_json::from_value(raw_result).expect("depth estimation result decodes");
+        assert_eq!(
+            result.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::DepthEstimation
+        );
+        let InferenceExecutionResult::DepthEstimation {
+            result: depth_result,
+            option_diagnostics,
+        } = &result
+        else {
+            panic!("expected depth estimation result");
+        };
+        assert_eq!(
+            depth_result.depth_map_ref.as_deref(),
+            Some("artifact://depth-map.png")
+        );
+        assert!(depth_result.depth_map.is_none());
+        assert!(depth_result.point_cloud_ref.is_none());
+        assert_eq!(depth_result.metadata, Value::Null);
+        assert!(option_diagnostics.is_empty());
+
+        let encoded_result = serde_json::to_value(&result).expect("depth result encodes");
+        assert_eq!(
+            encoded_result["result_type"],
+            serde_json::json!("depth_estimation")
+        );
+        assert_eq!(
+            encoded_result["result"]["depth_map_ref"],
+            serde_json::json!("artifact://depth-map.png")
+        );
+        assert!(encoded_result["result"].get("depth_map").is_none());
+        assert!(encoded_result["result"].get("point_cloud_ref").is_none());
+        assert!(encoded_result["result"].get("metadata").is_none());
+        assert!(encoded_result["result"]
+            .get("future_result_field")
+            .is_none());
+        assert!(encoded_result.get("option_diagnostics").is_none());
+        assert!(encoded_result.get("future_envelope_field").is_none());
+    }
+
+    #[test]
     fn typed_execution_request_maps_openai_chat_at_edge_and_validates() {
         let request = ChatRequest {
             model: "tiny-chat".to_string(),

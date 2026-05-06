@@ -1159,7 +1159,9 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   `DepthEstimationResult` typed DTOs for that registry contract while keeping
   the task `execution_supported=false`, and node-engine task-validation
   lifecycle coverage now rejects canonical `depth_estimation` before backend
-  execution with bounded option diagnostics.
+  execution with bounded option diagnostics. Depth-estimation input and result
+  serde coverage now freezes the roadmap task's artifact-ref-oriented request
+  and result shape without promoting it to an executable backend path.
 - [x] Define the strong task registry shape, including canonical task id,
   aliases, task family, input modalities, output modalities, result schema,
   processor/component requirements, streaming support, generative/scoring
@@ -1207,7 +1209,10 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   payloads. The same append-only stream contract now covers
   `ChatChunk.cache_handle_id`, with absent handles omitted and present handles
   serialized as stable backend-local ids rather than KV bytes, prompt/result
-  text, or runtime reuse policy.
+  text, or runtime reuse policy. Depth-estimation request/result coverage now
+  also freezes snake_case task/input/result labels, null/absent optional
+  defaults, and additive unknown-field tolerance for future Transformers-style
+  depth metadata.
 - [x] Add validation rules so internal code consumes parsed model/task types
   rather than raw strings or ad hoc JSON.
 - [x] Document that Python Transformers is one implementation of these
