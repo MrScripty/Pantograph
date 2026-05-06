@@ -57,6 +57,12 @@ pub(crate) fn ensure_torch_worker_initialised(
             c"worker_transformers.py",
             c"worker_transformers",
         ),
+        (
+            "worker_contract",
+            include_str!("../../../inference/torch/worker_contract.py"),
+            c"worker_contract.py",
+            c"worker_contract",
+        ),
     ] {
         let module_code = std::ffi::CString::new(source)
             .map_err(|e| format!("Invalid {} source: {}", name, e))?;

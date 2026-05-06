@@ -3896,6 +3896,10 @@ Update during implementation:
   exported embedded-worker unload helper, so shared canonical unload handling
   no longer imports `pantograph_torch_worker` or calls raw Python lifecycle
   methods directly.
+- 2026-05-06: Validation exposed that node-engine's remaining legacy PyTorch
+  worker initializer did not embed `worker_contract.py` even though the shared
+  worker imports it. The initializer now mirrors the inference backend loader
+  for that sibling module while the remaining generation path is migrated.
 - 2026-05-06: PyTorch KV-cache truncation temp-file read/write failures now
   route through canonical `pytorch_worker_kv_truncate_failed` errors with a
   generated request id and shared path sanitizer instead of ad hoc inference
