@@ -45,7 +45,7 @@ async fn require_pumas_api(
 }
 
 pub async fn hydrate_puma_lib_node(
-    registry: State<'_, SharedNodeRegistry>,
+    _registry: State<'_, SharedNodeRegistry>,
     extensions: State<'_, SharedExtensions>,
     resolver: State<'_, SharedModelDependencyResolver>,
     model_path: Option<String>,
@@ -59,9 +59,9 @@ pub async fn hydrate_puma_lib_node(
         return Err("model_path or model_id is required".to_string());
     }
 
+    let api = require_pumas_api(&extensions).await?;
     let option = find_matching_model_option(
-        &registry,
-        &extensions,
+        &api,
         requested_model_path.as_deref(),
         requested_model_id.as_deref(),
     )
@@ -247,37 +247,147 @@ fn record_hf_model_search_audit(workflow_service: &SharedWorkflowService) -> Opt
 }
 
 async fn find_matching_model_option(
-    registry: &SharedNodeRegistry,
-    extensions: &SharedExtensions,
+    api: &Arc<pumas_library::PumasApi>,
     requested_model_path: Option<&str>,
     requested_model_id: Option<&str>,
 ) -> Result<node_engine::PortOption, String> {
-    let ext = extensions.read().await;
-    let result = registry
-        .query_port_options(
-            "puma-lib",
-            "model_path",
-            &node_engine::PortOptionsQuery::default(),
-            &ext,
-        )
+    let lookup = requested_model_id
+        .or(requested_model_path)
+        .ok_or_else(|| "model_path or model_id is required".to_string())?;
+    let model_ref = api
+        .resolve_pumas_model_ref(lookup)
         .await
         .map_err(|error| error.to_string())?;
+    let model_id = model_ref.model_id.clone();
 
-    result
-        .options
+    let record = api
+        .get_model(&model_id)
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("Unable to resolve Puma-Lib model for model_id '{model_id}'"))?;
+    let descriptor = api
+        .resolve_model_execution_descriptors_batch(vec![model_id.clone()])
+        .await
+        .map_err(|error| error.to_string())?
         .into_iter()
-        .find(|option| {
-            requested_model_path
-                .is_some_and(|path| option_value_string(option).is_some_and(|value| value == path))
-                || requested_model_id.is_some_and(|model_id| {
-                    option_metadata_string(option, &["id"]).is_some_and(|value| value == model_id)
-                })
+        .find(|item| item.model_id == model_id)
+        .and_then(|item| item.descriptor);
+    let summary_result = api
+        .resolve_model_package_facts_summaries(vec![model_id.clone()])
+        .await
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|item| item.model_id == model_id)
+        .and_then(|item| item.result);
+    let inference_settings = api
+        .get_inference_settings_batch(vec![model_id.clone()])
+        .await
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|item| item.model_id == model_id)
+        .map(|item| {
+            serde_json::to_value(item.settings).unwrap_or_else(|_| Value::Array(Vec::new()))
         })
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let entry_path = descriptor
+        .as_ref()
+        .map(|descriptor| descriptor.entry_path.trim())
+        .filter(|path| !path.is_empty())
+        .map(ToOwned::to_owned)
         .ok_or_else(|| {
-            let id = requested_model_id.unwrap_or("<none>");
-            let path = requested_model_path.unwrap_or("<none>");
-            format!("Unable to resolve Puma-Lib model for model_id '{id}' and model_path '{path}'")
+            format!("Puma-Lib model '{model_id}' does not have a ready executable entry path")
+        })?;
+    let package_facts_summary = summary_result.as_ref().and_then(|result| {
+        result
+            .summary
+            .as_ref()
+            .and_then(|summary| serde_json::to_value(summary).ok())
+    });
+    let package_facts_summary_status = summary_result.as_ref().and_then(|result| {
+        serde_json::to_value(result.status)
+            .ok()
+            .and_then(|value| value.as_str().map(ToOwned::to_owned))
+    });
+    let dependency_bindings = descriptor
+        .as_ref()
+        .and_then(|descriptor| {
+            descriptor
+                .dependency_resolution
+                .as_ref()
+                .and_then(|resolution| resolution.get("bindings").cloned())
         })
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let runtime_engine_hints = descriptor
+        .as_ref()
+        .map(|descriptor| {
+            serde_json::to_value(&descriptor.runtime_engine_hints)
+                .unwrap_or_else(|_| Value::Array(Vec::new()))
+        })
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let model_ref_value = serde_json::to_value(&model_ref).map_err(|error| error.to_string())?;
+
+    Ok(node_engine::PortOption {
+        value: json!(entry_path),
+        label: record.official_name,
+        description: Some(format!(
+            "{} | {}",
+            record.model_type,
+            record.tags.join(", ")
+        )),
+        metadata: Some(json!({
+            "id": model_id,
+            "model_ref": model_ref_value,
+            "pumas_model_ref": model_ref_value,
+            "model_type": record.model_type,
+            "cleaned_name": record.cleaned_name,
+            "pipeline_tag": summary_result.as_ref().and_then(|result| {
+                result.summary.as_ref().and_then(|summary| summary.task.pipeline_tag.clone())
+            }),
+            "task_type_primary": descriptor
+                .as_ref()
+                .map(|descriptor| descriptor.task_type_primary.clone())
+                .or_else(|| {
+                    summary_result.as_ref().and_then(|result| {
+                        result.summary.as_ref().and_then(|summary| {
+                            summary.task.task_type_primary.clone()
+                        })
+                    })
+                }),
+            "recommended_backend": descriptor
+                .as_ref()
+                .and_then(|descriptor| descriptor.recommended_backend.clone()),
+            "runtime_engine_hints": runtime_engine_hints,
+            "entry_path": entry_path,
+            "execution_contract_version": descriptor
+                .as_ref()
+                .map(|descriptor| descriptor.execution_contract_version),
+            "storage_kind": descriptor.as_ref().map(|descriptor| descriptor.storage_kind),
+            "validation_state": descriptor
+                .as_ref()
+                .map(|descriptor| descriptor.validation_state),
+            "dependency_resolution": descriptor
+                .as_ref()
+                .and_then(|descriptor| descriptor.dependency_resolution.clone()),
+            "requires_custom_code": summary_result
+                .as_ref()
+                .and_then(|result| result.summary.as_ref())
+                .map(|summary| summary.requires_custom_code)
+                .unwrap_or(false),
+            "custom_code_sources": Value::Array(Vec::new()),
+            "dependency_bindings": dependency_bindings,
+            "review_reasons": summary_result
+                .as_ref()
+                .and_then(|result| result.summary.as_ref())
+                .map(|summary| {
+                    serde_json::to_value(&summary.diagnostic_codes)
+                        .unwrap_or_else(|_| Value::Array(Vec::new()))
+                })
+                .unwrap_or_else(|| Value::Array(Vec::new())),
+            "inference_settings": inference_settings,
+            "package_facts_summary_status": package_facts_summary_status,
+            "package_facts_summary": package_facts_summary,
+        })),
+    })
 }
 
 fn build_hydrated_node_data(
@@ -316,6 +426,7 @@ fn build_hydrated_node_data(
         "modelPath": model_path,
         "modelName": option.label,
         "model_id": metadata_string(metadata, &["id"]),
+        "pumas_model_ref": metadata.get("pumas_model_ref").or_else(|| metadata.get("model_ref")).cloned().unwrap_or(Value::Null),
         "model_type": metadata_string(metadata, &["model_type", "modelType"]),
         "task_type_primary": task_type_primary,
         "backend_key": backend_key,
@@ -547,14 +658,6 @@ fn option_value_string(option: &node_engine::PortOption) -> Option<&str> {
     option.value.as_str()
 }
 
-fn option_metadata_string(option: &node_engine::PortOption, keys: &[&str]) -> Option<String> {
-    option
-        .metadata
-        .as_ref()
-        .and_then(Value::as_object)
-        .and_then(|metadata| metadata_string(metadata, keys))
-}
-
 fn metadata_string(metadata: &Map<String, Value>, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
         metadata
@@ -649,6 +752,48 @@ fn sanitize_selected_binding_ids(selected_binding_ids: Vec<String>) -> Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+
+    fn create_test_env() -> TempDir {
+        let temp_dir = TempDir::new().expect("temporary Pumas root should be created");
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data/metadata")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data/cache")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data/logs")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("shared-resources/models")).unwrap();
+        temp_dir
+    }
+
+    fn write_library_owned_file_model(
+        model_dir: &std::path::Path,
+        model_id: &str,
+    ) -> std::path::PathBuf {
+        std::fs::create_dir_all(model_dir).unwrap();
+        let model_file = model_dir.join("model.gguf");
+        std::fs::write(&model_file, vec![0_u8; 256]).unwrap();
+        std::fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::json!({
+                "schema_version": 2,
+                "model_id": model_id,
+                "family": "imported",
+                "model_type": "llm",
+                "official_name": "test-gguf",
+                "cleaned_name": "test-gguf",
+                "source_path": model_dir.display().to_string(),
+                "entry_path": model_file.display().to_string(),
+                "storage_kind": "library_owned",
+                "import_state": "ready",
+                "validation_state": "valid",
+                "task_type_primary": "text-generation",
+                "recommended_backend": "llamacpp",
+                "runtime_engine_hints": ["llamacpp"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        model_file
+    }
 
     fn sample_option() -> node_engine::PortOption {
         node_engine::PortOption {
@@ -691,6 +836,45 @@ mod tests {
         assert_eq!(node_data["selected_binding_ids"], json!(["binding-a"]));
         assert_eq!(node_data["inference_settings"], json!([{ "key": "steps" }]));
         assert!(node_data["dependency_requirements"].is_null());
+    }
+
+    #[tokio::test]
+    async fn find_matching_model_option_hydrates_only_selected_model_detail() {
+        let temp_dir = create_test_env();
+        let model_id = "llm/imported/test-gguf";
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models")
+            .join(model_id);
+        let model_file = write_library_owned_file_model(&model_dir, model_id);
+        let api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .build()
+                .await
+                .unwrap(),
+        );
+        api.rebuild_model_index().await.unwrap();
+
+        let option = find_matching_model_option(&api, None, Some(model_id))
+            .await
+            .expect("selected model option should hydrate");
+        assert_eq!(option.value, json!(model_file.display().to_string()));
+        let metadata = option
+            .metadata
+            .as_ref()
+            .and_then(Value::as_object)
+            .expect("selected option metadata should be an object");
+        assert_eq!(metadata["id"], json!(model_id));
+        assert_eq!(
+            metadata["entry_path"],
+            json!(model_file.display().to_string())
+        );
+        assert_eq!(
+            metadata["pumas_model_ref"]["model_id"],
+            serde_json::json!(model_id)
+        );
+        assert!(metadata["execution_contract_version"].is_number());
+        assert!(metadata["inference_settings"].is_array());
     }
 
     #[test]

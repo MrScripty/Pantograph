@@ -950,6 +950,21 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   factory row with `InferenceGateway::current_backend_info`, so host-injected
   current backends are represented as available even when the compile-time
   registry factory reports missing system prerequisites.
+- 2026-05-06: The Pumas fast selector Pantograph slice hit an active Pumas
+  producer checkout parse error while rerunning `cargo fmt --all` and
+  `cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands`.
+  `Pumas-Library/rust/crates/pumas-core/src/api/system.rs` currently fails to
+  parse at the dirty `get_disk_space`/`get_system_resources` area before
+  Pantograph code is compiled.
+- Reason: Pumas is actively implementing
+  `docs/plans/backend-owned-status-resource-telemetry/plan.md`, and the dirty
+  files match that producer-side telemetry slice. The Pantograph selector
+  changes are outside that Pumas write set and can be revalidated after the
+  Pumas telemetry slice restores a parsing path-dependency checkout.
+- Resolution: after Pumas completed the telemetry bug-fix slice and restored a
+  clean parsing checkout, the Pantograph selector slice revalidated with
+  `cargo test -p workflow-nodes --features model-library --lib puma_lib` and
+  `cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands`.
 
 ## Definition of Done
 
@@ -1096,7 +1111,7 @@ unbounded cross-repo churn.
   on typecheck-only validation for cross-layer changes.
 - [x] Add Pumas fast selector access-role and read-only-root guardrails after
   the settled Pumas implementation review.
-- [ ] Before the next code slice, record the exact Milestone 2 fast selector
+- [x] Before the next code slice, record the exact Milestone 2 fast selector
   primary write set, adjacent write set, forbidden shared files, and acceptance
   test names.
 
@@ -1107,9 +1122,50 @@ unbounded cross-repo churn.
 - No implementation code starts until source/test/config/generated/lockfile
   dirtiness is either absent or explicitly accepted.
 
-**Status:** Updated during the 2026-05-06 standards pass. The remaining task is
-slice-specific and should be completed immediately before implementing the
-Pumas fast selector integration.
+**Status:** Updated during the 2026-05-06 standards pass. The slice-specific
+write set for the Pumas fast selector integration is now recorded below.
+
+**Milestone 2 Fast Selector Slice Boundary:**
+
+- Primary write set:
+  `crates/workflow-nodes/src/input/puma_lib.rs`,
+  `src-tauri/src/workflow/puma_lib_commands.rs`,
+  `src/components/nodes/workflow/PumaLibNode.svelte`, and
+  `src/components/workbench/LibraryPage.svelte` if UI behavior needs to expose
+  selector-row or selected-detail state.
+- Adjacent write set:
+  `src-tauri/src/workflow/workflow_port_query_commands.rs`,
+  `src-tauri/src/workflow/commands.rs`,
+  `src-tauri/src/app_setup.rs`,
+  `crates/workflow-nodes/src/setup.rs`, and
+  `src/services/workflow/types.ts` only if the slice adds a new typed command,
+  explicit access-role adapter, or frontend DTO mirror.
+- Forbidden shared files unless the plan is updated first:
+  external `../Pumas-Library/**`, `crates/node-engine/src/port_options.rs`,
+  `crates/pantograph-embedded-runtime/**`, `packages/svelte-graph/**`,
+  `shared-resources/models/models.db`, `Cargo.lock`, generated bindings, and
+  diagnostics-ledger event/projection DTOs.
+- Contract owner:
+  Pantograph owns projection from Pumas selector rows into `PortOption`
+  metadata and selected-node data; Pumas owns the producer DTO/API contract.
+- Decomposition decision:
+  `crates/workflow-nodes/src/input/puma_lib.rs` and
+  `src-tauri/src/workflow/puma_lib_commands.rs` are oversized existing modules.
+  This slice may add focused helpers inside those modules to keep the validated
+  vertical change narrow; broader file splitting is deferred because moving
+  module boundaries would enlarge the blast radius beyond selector behavior.
+- Acceptance tests:
+  `cargo test -p workflow-nodes --features model-library --lib puma_lib`,
+  `cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands`, and a
+  focused `git diff --check`.
+- Acceptance criteria:
+  model-list and graph selector population call
+  `model_library_selector_snapshot` first, do not call per-row descriptor or
+  inference-settings hydration, use `row.model_ref.model_id` as canonical
+  identity, treat `indexed_path` as display/debug data only, expose `entry_path`
+  as executable only when entry and artifact states are both `ready`, and
+  hydrate package summaries, execution descriptors, and inference settings only
+  for the selected model or explicit expanded-row detail path.
 
 ### Milestone 1: Freeze Boundary Vocabulary
 
@@ -1260,18 +1316,23 @@ Detailed Pumas-side work is split into
 - [ ] Resolve the Pumas model-library root used by read-only selector access and
   test that the adapter opens the directory containing `models.db`, not the
   launcher/source repository root.
-- [ ] Replace Library page and graph `puma-lib` model-list population with
+- [x] Replace Library page and graph `puma-lib` model-list population with
   `model_library_selector_snapshot` as the first read path.
-- [ ] Project selector rows into Pantograph model-list and graph selector DTOs
+- [x] Project selector rows into Pantograph model-list and graph selector DTOs
   using `row.model_ref` as canonical identity, treating `indexed_path` as
   display/debug data only and `entry_path` as executable only when both row
   readiness states are `ready`.
-- [ ] Hydrate selected or expanded models with Pumas batch APIs for package
+- [x] Hydrate selected or expanded models with Pumas batch APIs for package
   summaries, cheap execution descriptors, and inference settings instead of
   resolving full details for every listed row.
 - [ ] Connect selector cursors to Pantograph cache invalidation through the
   existing model-library update feed or explicit local-client update stream so
   startup/page snapshots cannot miss updates before polling/subscription begins.
+- [ ] Pin Pantograph to the published Pumas Library `v0.6.0` release once it is
+  available, replacing the moving sibling path dependency for normal
+  integration builds so future Pumas development cannot break Pantograph
+  unexpectedly. CI-only Pumas fixes after the release are assumed internal
+  unless they change public API/DTO contracts.
 
 **Verification:**
 - Review [pumas-library-plan.md](pumas-library-plan.md) against the Pumas
@@ -1338,6 +1399,31 @@ bounded custom-code source omission, and API-unavailable inference-settings
 fallbacks already prefer Pumas DTOs or bounded defaults over raw record metadata
 when those DTOs are available. The selector-snapshot slice should remove any
 remaining need to inspect Pumas storage internals for list rendering.
+
+The first Pantograph fast selector implementation slice now populates
+`puma-lib` options from Pumas `model_library_selector_snapshot` rows before any
+detail hydration. `PortOption` metadata uses `row.model_ref.model_id` as the
+canonical identity, keeps `indexed_path` as display/debug metadata, exposes an
+executable `entry_path` only when the row reports both entry and artifact states
+as ready, and leaves per-model inference settings empty in list rows. The
+existing Library page and graph selector both consume this shared
+`query_port_options` path. `hydrate_puma_lib_node` now resolves the selected
+Pumas model ref directly and hydrates only that selected model through Pumas
+package-summary, execution-descriptor, and inference-settings batch/detail APIs
+instead of re-running and scanning the full model option list. The slice does
+not yet add explicit local-client/read-only access-role selection or cursor
+subscription handoff; those remain open Milestone 2 items.
+
+Validation for the selector slice passed with
+`cargo test -p workflow-nodes --features model-library --lib puma_lib`,
+`cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands`,
+`cargo fmt --all`, and `git diff --check` after Pumas completed its
+backend-owned status/resource telemetry performance slice. Validation refreshed
+`Cargo.lock` because the current Pumas path dependency removed
+`notify-debouncer-mini`; that lockfile refresh is dependency graph drift from
+the Pumas producer update and should be committed separately from the selector
+code slice. A follow-up dependency slice should pin Pantograph to Pumas Library
+`v0.6.0` when the release is published.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 

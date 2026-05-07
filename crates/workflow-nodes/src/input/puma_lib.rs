@@ -122,17 +122,24 @@ mod options_provider {
         extension_keys, ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider,
         PortOptionsQuery, PortOptionsResult,
     };
+    #[cfg(test)]
     use pumas_library::models::{
         ModelExecutionDescriptor, ModelLibraryChangeKind, ModelLibraryRefreshScope,
         ModelLibraryUpdateFeed, ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
     };
-    use std::{collections::HashMap, sync::Arc};
+    use pumas_library::models::{
+        ModelLibrarySelectorSnapshotRequest, ModelLibrarySelectorSnapshotRow,
+    };
+    #[cfg(test)]
+    use std::collections::HashMap;
+    use std::sync::Arc;
 
     /// Provides available models from pumas-library for the `model_path` port.
     pub struct PumaLibOptionsProvider;
 
     /// Compute conservative inference settings when the API-backed settings
     /// lookup is unavailable.
+    #[cfg(test)]
     pub(crate) fn resolve_inference_settings_fallback(
         record: &pumas_library::ModelRecord,
     ) -> serde_json::Value {
@@ -141,6 +148,7 @@ mod options_provider {
             .unwrap_or(serde_json::Value::Null)
     }
 
+    #[cfg(test)]
     pub(crate) fn runtime_engine_hints_from_summary(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
     ) -> Option<serde_json::Value> {
@@ -157,6 +165,7 @@ mod options_provider {
         None
     }
 
+    #[cfg(test)]
     pub(crate) fn requires_custom_code_from_summary(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
     ) -> Option<serde_json::Value> {
@@ -169,6 +178,7 @@ mod options_provider {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn custom_code_sources_for_option_metadata(
         _summary_result: Option<&ModelPackageFactsSummaryResult>,
         _record: &pumas_library::ModelRecord,
@@ -176,6 +186,7 @@ mod options_provider {
         serde_json::Value::Array(Vec::new())
     }
 
+    #[cfg(test)]
     pub(crate) fn review_reasons_for_option_metadata(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
         _record: &pumas_library::ModelRecord,
@@ -190,6 +201,7 @@ mod options_provider {
         serde_json::Value::Array(Vec::new())
     }
 
+    #[cfg(test)]
     pub(crate) fn dependency_bindings_for_option_metadata(
         execution_descriptor: Option<&ModelExecutionDescriptor>,
         _record: &pumas_library::ModelRecord,
@@ -204,6 +216,7 @@ mod options_provider {
         serde_json::Value::Array(Vec::new())
     }
 
+    #[cfg(test)]
     fn pipeline_tag_from_summary(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
     ) -> Option<String> {
@@ -215,6 +228,7 @@ mod options_provider {
             .map(ToOwned::to_owned)
     }
 
+    #[cfg(test)]
     fn task_type_primary_from_summary(
         summary_result: Option<&ModelPackageFactsSummaryResult>,
     ) -> Option<String> {
@@ -231,6 +245,7 @@ mod options_provider {
             })
     }
 
+    #[cfg(test)]
     fn default_task_type_primary_from_record(record: &pumas_library::ModelRecord) -> String {
         if record.model_type.eq_ignore_ascii_case("audio") {
             "text-to-audio".to_string()
@@ -241,6 +256,7 @@ mod options_provider {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn task_type_primary_from_descriptor_or_record(
         execution_descriptor: Option<&ModelExecutionDescriptor>,
         summary_result: Option<&ModelPackageFactsSummaryResult>,
@@ -254,6 +270,7 @@ mod options_provider {
             .unwrap_or_else(|| default_task_type_primary_from_record(record))
     }
 
+    #[cfg(test)]
     pub(crate) async fn resolve_execution_descriptor(
         api: &Arc<pumas_library::PumasApi>,
         record: &pumas_library::ModelRecord,
@@ -267,11 +284,13 @@ mod options_provider {
             .ok()
     }
 
+    #[cfg(test)]
     pub(crate) struct PackageFactsSummaryCache {
         pub cursor: Option<String>,
         pub summaries: HashMap<String, ModelPackageFactsSummaryResult>,
     }
 
+    #[cfg(test)]
     impl PackageFactsSummaryCache {
         pub(crate) fn apply_update_feed(&mut self, feed: &ModelLibraryUpdateFeed) {
             self.cursor = Some(feed.cursor.clone());
@@ -310,6 +329,7 @@ mod options_provider {
         }
     }
 
+    #[cfg(test)]
     async fn poll_package_facts_summary_updates(
         api: &Arc<pumas_library::PumasApi>,
         cache: &mut PackageFactsSummaryCache,
@@ -325,6 +345,7 @@ mod options_provider {
         }
     }
 
+    #[cfg(test)]
     async fn resolve_missing_package_facts_summaries(
         api: &Arc<pumas_library::PumasApi>,
         records: &[pumas_library::ModelRecord],
@@ -339,6 +360,7 @@ mod options_provider {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn load_package_facts_summary_cache(
         api: &Arc<pumas_library::PumasApi>,
         records: &[pumas_library::ModelRecord],
@@ -375,6 +397,7 @@ mod options_provider {
         cache
     }
 
+    #[cfg(test)]
     fn pipeline_tag_to_task(pipeline_tag: &str) -> String {
         match pipeline_tag.to_lowercase().as_str() {
             "text-to-audio" | "text-to-speech" => "text-to-audio".to_string(),
@@ -385,6 +408,106 @@ mod options_provider {
             }
             "feature-extraction" | "sentence-similarity" => "feature-extraction".to_string(),
             _ => "text-generation".to_string(),
+        }
+    }
+
+    fn selector_snapshot_request(query: &PortOptionsQuery) -> ModelLibrarySelectorSnapshotRequest {
+        ModelLibrarySelectorSnapshotRequest {
+            offset: query
+                .offset
+                .map(|offset| offset.min(u32::MAX as usize) as u32),
+            limit: query.limit.map(|limit| limit.min(u32::MAX as usize) as u32),
+            search: query
+                .search
+                .as_deref()
+                .map(str::trim)
+                .filter(|search| !search.is_empty())
+                .map(ToOwned::to_owned),
+            model_type: None,
+            task_type_primary: None,
+        }
+    }
+
+    fn selector_row_description(row: &ModelLibrarySelectorSnapshotRow) -> String {
+        let model_type = row.model_type.as_deref().unwrap_or("unknown");
+        if row.tags.is_empty() {
+            model_type.to_string()
+        } else {
+            format!("{} | {}", model_type, row.tags.join(", "))
+        }
+    }
+
+    fn selector_row_value(row: &ModelLibrarySelectorSnapshotRow) -> serde_json::Value {
+        row.executable_entry_path()
+            .map(|path| serde_json::json!(path))
+            .unwrap_or_else(|| serde_json::json!(row.model_ref.model_id))
+    }
+
+    fn selector_row_option_metadata(
+        row: &ModelLibrarySelectorSnapshotRow,
+        cursor: &str,
+    ) -> serde_json::Value {
+        let package_facts_summary = row
+            .package_facts_summary
+            .as_ref()
+            .and_then(|summary| serde_json::to_value(summary).ok());
+        let runtime_engine_hints = serde_json::to_value(&row.runtime_engine_hints)
+            .unwrap_or(serde_json::Value::Array(Vec::new()));
+        let model_ref = serde_json::to_value(&row.model_ref).unwrap_or(serde_json::Value::Null);
+
+        serde_json::json!({
+            "id": row.model_ref.model_id,
+            "model_ref": model_ref,
+            "pumas_model_ref": model_ref,
+            "repo_id": row.repo_id,
+            "model_type": row.model_type,
+            "cleaned_name": row.display_name,
+            "pipeline_tag": row.pipeline_tag,
+            "task_type_primary": row.task_type_primary,
+            "recommended_backend": row.recommended_backend,
+            "runtime_engine_hints": runtime_engine_hints,
+            "entry_path": row.executable_entry_path(),
+            "indexed_path": row.indexed_path,
+            "selected_artifact_id": row.selected_artifact_id,
+            "selected_artifact_path": row.selected_artifact_path,
+            "entry_path_state": row.entry_path_state,
+            "artifact_state": row.artifact_state,
+            "selector_detail_state": row.detail_state,
+            "storage_kind": row.storage_kind,
+            "validation_state": row.validation_state,
+            "requires_custom_code": row
+                .package_facts_summary
+                .as_ref()
+                .map(|summary| serde_json::Value::Bool(summary.requires_custom_code))
+                .unwrap_or(serde_json::Value::Bool(false)),
+            "custom_code_sources": serde_json::Value::Array(Vec::new()),
+            "dependency_bindings": serde_json::Value::Array(Vec::new()),
+            "review_reasons": row
+                .package_facts_summary
+                .as_ref()
+                .map(|summary| {
+                    serde_json::to_value(&summary.diagnostic_codes)
+                        .unwrap_or(serde_json::Value::Array(Vec::new()))
+                })
+                .unwrap_or(serde_json::Value::Array(Vec::new())),
+            "inference_settings": serde_json::Value::Array(Vec::new()),
+            "package_facts_summary_cursor": cursor,
+            "package_facts_summary_status": row.package_facts_summary_status,
+            "package_facts_summary": package_facts_summary,
+            "selector_snapshot_contract_version": 1,
+            "selector_row_executable": row.is_executable_reference_ready(),
+        })
+    }
+
+    pub(crate) fn port_option_from_selector_row(
+        row: &ModelLibrarySelectorSnapshotRow,
+        cursor: &str,
+    ) -> PortOption {
+        PortOption {
+            value: selector_row_value(row),
+            label: row.display_name.clone(),
+            description: Some(selector_row_description(row)),
+            metadata: Some(selector_row_option_metadata(row, cursor)),
         }
     }
 
@@ -401,108 +524,21 @@ mod options_provider {
                     NodeEngineError::ExecutionFailed("Model library not available".to_string())
                 })?;
 
-            let records = if let Some(ref search) = query.search {
-                let result = api
-                    .search_models(search, query.limit.unwrap_or(50), query.offset.unwrap_or(0))
-                    .await
-                    .map_err(|e| NodeEngineError::ExecutionFailed(e.to_string()))?;
-                result.models
-            } else {
-                api.list_models()
-                    .await
-                    .map_err(|e| NodeEngineError::ExecutionFailed(e.to_string()))?
-            };
+            let snapshot = api
+                .model_library_selector_snapshot(selector_snapshot_request(query))
+                .await
+                .map_err(|e| NodeEngineError::ExecutionFailed(e.to_string()))?;
+            let cursor = snapshot.cursor.clone();
+            let total = snapshot
+                .total_count
+                .and_then(|count| usize::try_from(count).ok())
+                .unwrap_or(snapshot.rows.len());
+            let options = snapshot
+                .rows
+                .iter()
+                .map(|row| port_option_from_selector_row(row, &cursor))
+                .collect();
 
-            let summary_cache = load_package_facts_summary_cache(
-                api,
-                &records,
-                query.limit.unwrap_or(records.len()).max(records.len()),
-                query.offset.unwrap_or(0),
-            )
-            .await;
-
-            let mut options = Vec::with_capacity(records.len());
-            for m in &records {
-                let summary_result = summary_cache.summaries.get(&m.id);
-                let package_facts_summary = summary_result.and_then(|result| {
-                    result
-                        .summary
-                        .as_ref()
-                        .and_then(|summary| serde_json::to_value(summary).ok())
-                });
-                let package_facts_summary_status = summary_result.and_then(|result| {
-                    serde_json::to_value(result.status)
-                        .ok()
-                        .and_then(|value| value.as_str().map(ToOwned::to_owned))
-                });
-                // Prefer the Pumas execution descriptor whenever the record can
-                // resolve one so runtime-facing paths come from the executable
-                // contract rather than generic record metadata.
-                let execution_descriptor = resolve_execution_descriptor(api, m).await;
-                let inference_settings = api
-                    .get_inference_settings(&m.id)
-                    .await
-                    .map(|settings| serde_json::to_value(settings).unwrap_or_default())
-                    .unwrap_or_else(|_| resolve_inference_settings_fallback(m));
-                let pipeline_tag = pipeline_tag_from_summary(summary_result);
-                let task_type_primary = task_type_primary_from_descriptor_or_record(
-                    execution_descriptor.as_ref(),
-                    summary_result,
-                    m,
-                );
-                let dependency_bindings =
-                    dependency_bindings_for_option_metadata(execution_descriptor.as_ref(), m);
-                let recommended_backend = execution_descriptor
-                    .as_ref()
-                    .and_then(|descriptor| descriptor.recommended_backend.clone());
-                let runtime_engine_hints = execution_descriptor
-                    .as_ref()
-                    .map(|descriptor| {
-                        serde_json::to_value(&descriptor.runtime_engine_hints)
-                            .unwrap_or(serde_json::Value::Array(Vec::new()))
-                    })
-                    .or_else(|| runtime_engine_hints_from_summary(summary_result))
-                    .unwrap_or(serde_json::Value::Array(Vec::new()));
-                let requires_custom_code = requires_custom_code_from_summary(summary_result)
-                    .unwrap_or(serde_json::Value::Bool(false));
-                let custom_code_sources =
-                    custom_code_sources_for_option_metadata(summary_result, m);
-                let review_reasons = review_reasons_for_option_metadata(summary_result, m);
-                let execution_path = execution_descriptor
-                    .as_ref()
-                    .map(|descriptor| descriptor.entry_path.clone())
-                    .unwrap_or_else(|| m.path.clone());
-
-                options.push(PortOption {
-                    value: serde_json::json!(execution_path),
-                    label: m.official_name.clone(),
-                    description: Some(format!("{} | {}", m.model_type, m.tags.join(", "))),
-                    metadata: Some(serde_json::json!({
-                        "id": m.id,
-                        "model_type": m.model_type,
-                        "cleaned_name": m.cleaned_name,
-                        "pipeline_tag": pipeline_tag,
-                        "task_type_primary": task_type_primary,
-                        "recommended_backend": recommended_backend,
-                        "runtime_engine_hints": runtime_engine_hints,
-                        "entry_path": execution_descriptor.as_ref().map(|descriptor| descriptor.entry_path.clone()),
-                        "execution_contract_version": execution_descriptor.as_ref().map(|descriptor| descriptor.execution_contract_version),
-                        "storage_kind": execution_descriptor.as_ref().map(|descriptor| descriptor.storage_kind),
-                        "validation_state": execution_descriptor.as_ref().map(|descriptor| descriptor.validation_state),
-                        "dependency_resolution": execution_descriptor.as_ref().and_then(|descriptor| descriptor.dependency_resolution.clone()),
-                        "requires_custom_code": requires_custom_code,
-                        "custom_code_sources": custom_code_sources,
-                        "dependency_bindings": dependency_bindings,
-                        "review_reasons": review_reasons,
-                        "inference_settings": inference_settings,
-                        "package_facts_summary_cursor": summary_cache.cursor.clone(),
-                        "package_facts_summary_status": package_facts_summary_status,
-                        "package_facts_summary": package_facts_summary,
-                    })),
-                });
-            }
-
-            let total = options.len();
             Ok(PortOptionsResult {
                 options,
                 total_count: total,
@@ -610,15 +646,18 @@ mod tests {
 mod model_library_tests {
     use super::options_provider::{
         custom_code_sources_for_option_metadata, dependency_bindings_for_option_metadata,
-        load_package_facts_summary_cache, requires_custom_code_from_summary,
-        resolve_execution_descriptor, resolve_inference_settings_fallback,
-        review_reasons_for_option_metadata, runtime_engine_hints_from_summary,
-        task_type_primary_from_descriptor_or_record, PackageFactsSummaryCache,
+        load_package_facts_summary_cache, port_option_from_selector_row,
+        requires_custom_code_from_summary, resolve_execution_descriptor,
+        resolve_inference_settings_fallback, review_reasons_for_option_metadata,
+        runtime_engine_hints_from_summary, task_type_primary_from_descriptor_or_record,
+        PackageFactsSummaryCache, PumaLibOptionsProvider,
     };
+    use node_engine::{extension_keys, ExecutorExtensions, PortOptionsProvider, PortOptionsQuery};
     use pumas_library::models::{
-        ModelExecutionDescriptor, ModelFactFamily, ModelLibraryChangeKind,
-        ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
-        ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
+        ModelArtifactState, ModelEntryPathState, ModelExecutionDescriptor, ModelFactFamily,
+        ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibrarySelectorSnapshotRow,
+        ModelLibraryUpdateEvent, ModelLibraryUpdateFeed, ModelPackageFactsSummaryResult,
+        ModelPackageFactsSummaryStatus,
     };
     use pumas_library::{ModelRecord, PumasApi};
     use std::collections::HashMap;
@@ -742,6 +781,38 @@ mod model_library_tests {
         .expect("execution descriptor fixture should decode")
     }
 
+    fn selector_snapshot_row(
+        model_id: &str,
+        entry_path_state: ModelEntryPathState,
+        artifact_state: ModelArtifactState,
+    ) -> ModelLibrarySelectorSnapshotRow {
+        serde_json::from_value(serde_json::json!({
+            "model_id": model_id,
+            "model_ref": {
+                "model_ref_contract_version": 1,
+                "model_id": model_id,
+                "selected_artifact_id": "model.gguf",
+                "selected_artifact_path": format!("{model_id}/model.gguf")
+            },
+            "selected_artifact_id": "model.gguf",
+            "selected_artifact_path": format!("{model_id}/model.gguf"),
+            "entry_path": format!("/models/{model_id}/model.gguf"),
+            "entry_path_state": entry_path_state,
+            "artifact_state": artifact_state,
+            "display_name": "Selector Model",
+            "model_type": "llm",
+            "tags": ["gguf"],
+            "indexed_path": format!("indexed/{model_id}"),
+            "task_type_primary": "text-generation",
+            "pipeline_tag": "text-generation",
+            "recommended_backend": "llama.cpp",
+            "runtime_engine_hints": ["llama.cpp"],
+            "package_facts_summary_status": "missing",
+            "detail_state": "needs_package_facts"
+        }))
+        .expect("selector row fixture should decode")
+    }
+
     fn write_test_diffusers_bundle(root: &std::path::Path) {
         std::fs::create_dir_all(root.join("scheduler")).unwrap();
         std::fs::create_dir_all(root.join("text_encoder")).unwrap();
@@ -818,6 +889,7 @@ mod model_library_tests {
                 "official_name": "test-gguf",
                 "cleaned_name": "test-gguf",
                 "source_path": model_dir.display().to_string(),
+                "entry_path": model_file.display().to_string(),
                 "storage_kind": "library_owned",
                 "import_state": "ready",
                 "validation_state": "valid",
@@ -1028,6 +1100,100 @@ mod model_library_tests {
                 "requirements": []
             }])
         );
+    }
+
+    #[test]
+    fn test_selector_row_option_uses_entry_path_only_when_ready() {
+        let ready = selector_snapshot_row(
+            "llm/imported/ready",
+            ModelEntryPathState::Ready,
+            ModelArtifactState::Ready,
+        );
+        let ready_option = port_option_from_selector_row(&ready, "model-library-updates:1");
+        assert_eq!(
+            ready_option.value,
+            serde_json::json!("/models/llm/imported/ready/model.gguf")
+        );
+        let ready_metadata = ready_option
+            .metadata
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .expect("selector option metadata should be an object");
+        assert_eq!(
+            ready_metadata["id"],
+            serde_json::json!("llm/imported/ready")
+        );
+        assert_eq!(
+            ready_metadata["indexed_path"],
+            serde_json::json!("indexed/llm/imported/ready")
+        );
+        assert_eq!(
+            ready_metadata["selector_row_executable"],
+            serde_json::json!(true)
+        );
+
+        let partial = selector_snapshot_row(
+            "llm/imported/partial",
+            ModelEntryPathState::Partial,
+            ModelArtifactState::Ready,
+        );
+        let partial_option = port_option_from_selector_row(&partial, "model-library-updates:1");
+        assert_eq!(
+            partial_option.value,
+            serde_json::json!("llm/imported/partial")
+        );
+        let partial_metadata = partial_option
+            .metadata
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .expect("selector option metadata should be an object");
+        assert!(partial_metadata["entry_path"].is_null());
+        assert_eq!(
+            partial_metadata["selector_row_executable"],
+            serde_json::json!(false)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_model_options_use_selector_snapshot_without_detail_hydration() {
+        let temp_dir = create_test_env();
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models/llm/imported/test-gguf");
+        let model_file = write_library_owned_file_model(&model_dir, "model.gguf", 256);
+
+        let api = Arc::new(PumasApi::builder(temp_dir.path()).build().await.unwrap());
+        api.rebuild_model_index().await.unwrap();
+
+        let mut extensions = ExecutorExtensions::new();
+        extensions.set(extension_keys::PUMAS_API, api);
+        let provider = PumaLibOptionsProvider;
+        let result = provider
+            .query_options(
+                &PortOptionsQuery {
+                    limit: Some(25),
+                    ..PortOptionsQuery::default()
+                },
+                &extensions,
+            )
+            .await
+            .expect("selector options should load");
+
+        assert_eq!(result.options.len(), 1);
+        let option = &result.options[0];
+        assert_eq!(
+            option.value,
+            serde_json::json!(model_file.display().to_string())
+        );
+        let metadata = option
+            .metadata
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .expect("selector option metadata should be an object");
+        assert_eq!(metadata["id"], serde_json::json!("llm/imported/test-gguf"));
+        assert_eq!(metadata["selector_row_executable"], serde_json::json!(true));
+        assert_eq!(metadata["inference_settings"], serde_json::json!([]));
+        assert!(metadata.get("execution_contract_version").is_none());
     }
 
     #[test]
