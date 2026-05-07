@@ -2074,6 +2074,10 @@ implementation logic; it maps legacy inference DTOs onto
 `pantograph-media-conversion` plan, activation, holder-validation, release, and
 executable-resolution functions so old callers retain their current wire shape
 while implementation ownership lives in the media-conversion crate.
+Embedded workflow runtime capability projection now reads runtime sidecar
+snapshots directly instead of the aggregate legacy managed-binary facade, so
+workflow capabilities no longer stitch media/native dependency status through a
+runtime-only surface while preserving runtime install/remove readiness facts.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`

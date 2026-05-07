@@ -93,10 +93,10 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         } else {
             available_backends.push(current_backend);
         }
-        let managed_binaries = inference::list_managed_binary_statuses(&self.app_data_dir)
+        let managed_runtimes = inference::list_managed_runtime_snapshots(&self.app_data_dir)
             .map_err(|error| WorkflowServiceError::RuntimeNotReady(error.to_string()))?;
-        let mut runtimes = runtime_capabilities::managed_binary_runtime_capabilities(
-            &managed_binaries,
+        let mut runtimes = runtime_capabilities::managed_runtime_capabilities(
+            &managed_runtimes,
             &available_backends,
             &selected_backend_key,
         );
