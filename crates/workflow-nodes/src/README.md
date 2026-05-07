@@ -123,8 +123,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   and execution already consume those fields as canonical node data.
 - Pumas model selectors use an explicit selector-access extension role:
   owner `PumasApi`, local `PumasLocalClient`, or read-only
-  `PumasReadOnlyLibrary`. Read-only access must be opened against the
-  model-library root that contains `models.db`, not a launcher/source root.
+  `PumasReadOnlyLibrary`; selector queries must not reconstruct that role from
+  raw `PUMAS_API` extension injection.
+  Read-only access must be opened against the model-library root that contains
+  `models.db`, not a launcher/source root.
   The same selector-access adapter owns model-library update feed handoff:
   owner access lists updates directly, local-client access converts the Pumas
   subscription recovery handshake into an update feed, and read-only access

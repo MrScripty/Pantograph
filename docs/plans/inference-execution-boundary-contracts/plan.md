@@ -1530,9 +1530,9 @@ Explicit configured roots are resolved before discovery fallback, and read-only
 setup resolves direct model roots, launcher roots, and Pumas build-output paths
 to the model-library directory containing `models.db` without creating a
 missing index. `puma-lib` model options now use the selector access extension
-and retain the full `PUMAS_API` compatibility fallback only for existing test
-or host injection paths. Selected-model detail hydration remains on the full
-API path until the local-client/detail hydration slice is planned.
+as the only selector snapshot source instead of reconstructing selector access
+from raw `PUMAS_API` injection. Selected-model detail hydration remains on the
+full API path until the local-client/detail hydration slice is planned.
 
 Validation for the selector slice passed with
 `cargo test -p workflow-nodes --features model-library --lib puma_lib`,
@@ -1550,6 +1550,17 @@ Validation for the selector access-role slice passed with
 `cargo test -p workflow-nodes --features model-library test_model_options_use_selector_snapshot_without_detail_hydration`,
 `cargo test -p workflow-nodes --features model-library --lib puma_lib`,
 `cargo check -p workflow-nodes --features model-library`, and
+`cargo fmt --all`, and `git diff --check`.
+
+The selector access hardening slice removed the remaining `puma-lib` model
+option fallback that wrapped raw `PUMAS_API` as owner selector access at query
+time. Hosts must register the explicit selector access role during setup, so
+owner, local-client, and read-only selector paths remain visible at the
+Pantograph/Pumas boundary. Validation passed with
+`cargo test -p workflow-nodes --features model-library test_model_options_use_selector_snapshot_without_detail_hydration`,
+`cargo test -p workflow-nodes --features model-library test_model_options_require_selector_access_instead_of_raw_pumas_api`,
+`cargo test -p workflow-nodes --features model-library test_model_options_use_read_only_selector_snapshot_without_pumas_api`,
+`cargo test -p workflow-nodes --features model-library --lib puma_lib`,
 `cargo fmt --all`, and `git diff --check`.
 
 The selector cursor handoff slice now centralizes frontend Pumas model-option

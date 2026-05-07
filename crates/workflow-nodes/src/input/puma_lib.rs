@@ -120,8 +120,8 @@ mod options_provider {
     use crate::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
     use async_trait::async_trait;
     use node_engine::{
-        extension_keys, ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider,
-        PortOptionsQuery, PortOptionsResult,
+        ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider, PortOptionsQuery,
+        PortOptionsResult,
     };
     #[cfg(test)]
     use pumas_library::models::{
@@ -522,12 +522,6 @@ mod options_provider {
             let selector_access = extensions
                 .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
                 .cloned()
-                .or_else(|| {
-                    extensions
-                        .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
-                        .cloned()
-                        .map(|api| Arc::new(PumasSelectorAccess::Owner(api)))
-                })
                 .ok_or_else(|| {
                     NodeEngineError::ExecutionFailed(
                         "Pumas model selector access not available".to_string(),
@@ -1177,7 +1171,10 @@ mod model_library_tests {
         api.rebuild_model_index().await.unwrap();
 
         let mut extensions = ExecutorExtensions::new();
-        extensions.set(extension_keys::PUMAS_API, api);
+        extensions.set(
+            PUMAS_SELECTOR_ACCESS,
+            Arc::new(PumasSelectorAccess::Owner(api)),
+        );
         let provider = PumaLibOptionsProvider;
         let result = provider
             .query_options(
@@ -1205,6 +1202,27 @@ mod model_library_tests {
         assert_eq!(metadata["selector_row_executable"], serde_json::json!(true));
         assert_eq!(metadata["inference_settings"], serde_json::json!([]));
         assert!(metadata.get("execution_contract_version").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_model_options_require_selector_access_instead_of_raw_pumas_api() {
+        let temp_dir = create_test_env();
+        let api = Arc::new(PumasApi::builder(temp_dir.path()).build().await.unwrap());
+        let mut extensions = ExecutorExtensions::new();
+        extensions.set(extension_keys::PUMAS_API, api);
+
+        let provider = PumaLibOptionsProvider;
+        let error = provider
+            .query_options(&PortOptionsQuery::default(), &extensions)
+            .await
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("Pumas model selector access not available"),
+            "unexpected error: {error}"
+        );
     }
 
     #[tokio::test]
