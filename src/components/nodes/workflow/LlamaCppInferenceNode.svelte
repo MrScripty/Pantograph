@@ -25,7 +25,7 @@
     $edges.some((edge) => edge.target === id && edge.targetHandle === 'model_path')
   );
 
-  // Processing node color (purple for llama.cpp to distinguish from Ollama's green)
+  // Processing node color for llama.cpp.
   const nodeColor = '#9333ea';
 
   let statusText = $derived(

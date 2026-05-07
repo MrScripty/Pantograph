@@ -3251,6 +3251,9 @@ drift back into inference.
   Node-engine no longer treats `ollama-inference` as a stale backend-specific
   task id in dependency preflight or executor-branch guard tests; direct stale
   Ollama node execution now follows the generic unsupported-node path.
+  The orphan frontend `OllamaInferenceNode.svelte` renderer has been removed,
+  and neighboring frontend comments no longer describe llama.cpp styling in
+  relation to Ollama.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
