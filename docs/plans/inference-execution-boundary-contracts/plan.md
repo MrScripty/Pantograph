@@ -5027,6 +5027,10 @@ Update during implementation:
   project to none.
 - 2026-05-07: Decision-traceability tooling no longer names the removed Ollama
   managed-runtime platform directory as an active structured producer.
+- 2026-05-07: Embedded-runtime dependency preflight no longer scans the full
+  Pumas library and hydrates each execution descriptor to guess from path-only
+  workflow data. Path-only requests now use Pumas model-ref resolution as the
+  bounded migration aid, and unresolved paths remain explicit unresolved input.
 
 ### Deviations
 
@@ -5046,6 +5050,9 @@ Update during implementation:
 - Continue treating Pumas package-summary/update-feed integration as
   invalidation and selected-detail infrastructure, not as the primary list-row
   population path.
+- If path-only model dependency requests need to resolve external Pumas
+  `entry_path` values without saved `model_id`, add a bounded Pumas resolver
+  API instead of reintroducing Pantograph-side full-library descriptor scans.
 
 ### Verification Summary
 

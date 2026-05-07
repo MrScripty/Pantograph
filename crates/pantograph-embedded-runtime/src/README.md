@@ -100,6 +100,9 @@ Pumas-specific dependency resolution.
   through Pumas only when a canonical `model_id`/model ref is present. Display
   names such as `modelName` are not a lookup contract and must not trigger
   full-library scans.
+- Dependency preflight may ask Pumas to resolve a path into a canonical model
+  ref, but it must not scan the full library and hydrate every execution
+  descriptor to guess a model from path-only workflow data.
 - Keep dependency preflight deterministic because it can block workflow
   execution before node runtime starts.
 - App-global runtime residency, admission, retention, and eviction policy must
@@ -122,7 +125,10 @@ mapping workflow dependency requests onto Pumas contracts, and it should prefer
 preserves the existing workflow-facing `model_path`, `model_type`, and
 `task_type_primary` facades, but the values behind those fields may come from
 the descriptor `entry_path` and descriptor task/type data rather than projected
-record metadata. Python package checks, binding installation, install stream
+record metadata. Path-only dependency requests use Pumas' canonical model-ref
+resolver as a bounded migration aid; if Pumas cannot map the path to a model id,
+Pantograph preserves the requested path instead of doing a descriptor scan.
+Python package checks, binding installation, install stream
 capture, and per-environment install locks stay in `model_dependency_python.rs`
 so the resolver facade remains focused on API orchestration, cache lookup, and
 Pumas contract projection. The runtime registry may consume this crate's

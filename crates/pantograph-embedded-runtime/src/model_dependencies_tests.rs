@@ -331,7 +331,7 @@ async fn resolve_descriptor_uses_entry_path_for_external_diffusers_bundle() {
 }
 
 #[tokio::test]
-async fn resolve_descriptor_matches_descriptor_entry_path_without_record_metadata() {
+async fn resolve_descriptor_does_not_scan_descriptors_for_path_only_external_entry_path() {
     let temp_dir = create_test_env();
     let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");
     write_test_diffusers_bundle(&bundle_root);
@@ -360,12 +360,12 @@ async fn resolve_descriptor_matches_descriptor_entry_path_without_record_metadat
     let descriptor = resolver
         .resolve_descriptor(&request, Some(&api))
         .await
-        .expect("descriptor should resolve by public execution descriptor entry path");
+        .expect("descriptor should preserve unresolved path-only input");
 
-    assert_eq!(descriptor.model_id, "diffusion/imported/test-bundle");
+    assert_eq!(descriptor.model_id, bundle_root.display().to_string());
     assert_eq!(descriptor.model_path, bundle_root.display().to_string());
     assert_eq!(descriptor.task_type_primary, "text-to-image");
-    assert!(descriptor.model_id_resolved);
+    assert!(!descriptor.model_id_resolved);
 }
 
 #[tokio::test]
@@ -401,6 +401,40 @@ async fn resolve_descriptor_uses_primary_file_for_library_owned_file_model() {
     assert_eq!(descriptor.model_path, model_file.display().to_string());
     assert_eq!(descriptor.task_type_primary, "text-generation");
     assert_eq!(descriptor.model_type.as_deref(), Some("llm"));
+    assert!(descriptor.model_id_resolved);
+}
+
+#[tokio::test]
+async fn resolve_descriptor_uses_pumas_model_ref_for_path_only_library_model() {
+    let temp_dir = create_test_env();
+    let model_dir = temp_dir
+        .path()
+        .join("shared-resources/models/llm/imported/test-gguf");
+    let model_file = write_library_owned_file_model(&model_dir, "model.gguf", 256);
+
+    let (resolver, api) = test_resolver_with_pumas(&temp_dir).await;
+    let request = ModelDependencyRequest {
+        node_type: "llm-inference".to_string(),
+        model_path: model_dir.display().to_string(),
+        model_id: None,
+        model_type: Some("llm".to_string()),
+        task_type_primary: Some("text-generation".to_string()),
+        backend_key: Some("llamacpp".to_string()),
+        platform_context: Some(serde_json::json!({
+            "os": "linux",
+            "arch": "x86_64"
+        })),
+        selected_binding_ids: Vec::new(),
+        dependency_override_patches: Vec::new(),
+    };
+
+    let descriptor = resolver
+        .resolve_descriptor(&request, Some(&api))
+        .await
+        .expect("descriptor should resolve through Pumas model-ref lookup");
+
+    assert_eq!(descriptor.model_id, "llm/imported/test-gguf");
+    assert_eq!(descriptor.model_path, model_file.display().to_string());
     assert!(descriptor.model_id_resolved);
 }
 

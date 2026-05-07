@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::path::Path;
 use std::sync::Arc;
 
 use node_engine::ModelDependencyRequest;
@@ -79,15 +78,6 @@ fn stable_json(value: &serde_json::Value) -> String {
             out
         }
         _ => value.to_string(),
-    }
-}
-
-fn normalize_path(path: &str) -> String {
-    let p = Path::new(path);
-    if let Ok(canon) = p.canonicalize() {
-        canon.to_string_lossy().to_string()
-    } else {
-        path.to_string()
     }
 }
 
@@ -272,42 +262,30 @@ async fn resolve_model_with_api(
         }
     }
 
-    let all = api
-        .list_models()
-        .await
-        .map_err(|e| format!("Failed to list models: {e}"))?;
-    let target = normalize_path(&request.model_path);
-    for record in all {
-        let rp = normalize_path(&record.path);
-        if rp == target || target == record.path || record.path == request.model_path {
-            let execution_descriptor = resolve_execution_descriptor_with_api(api, &record).await?;
-            return Ok(Some(ResolvedPumasModel {
-                record,
-                execution_descriptor,
-            }));
-        }
-
-        let Ok(execution_descriptor) = resolve_execution_descriptor_with_api(api, &record).await
-        else {
-            continue;
-        };
-        let Some(descriptor) = execution_descriptor.as_ref() else {
-            continue;
-        };
-        let entry_path = descriptor.entry_path.trim();
-        if entry_path.is_empty() {
-            continue;
-        }
-        let ep = normalize_path(entry_path);
-        if ep == target || target == entry_path || entry_path == request.model_path {
-            return Ok(Some(ResolvedPumasModel {
-                record,
-                execution_descriptor,
-            }));
-        }
+    if request.model_path.trim().is_empty() {
+        return Ok(None);
     }
 
-    Ok(None)
+    let model_ref = api
+        .resolve_pumas_model_ref(&request.model_path)
+        .await
+        .map_err(|e| format!("Failed to resolve model ref '{}': {e}", request.model_path))?;
+    if model_ref.model_id.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let Some(record) = api
+        .get_model(&model_ref.model_id)
+        .await
+        .map_err(|e| format!("Failed to query model '{}': {e}", model_ref.model_id))?
+    else {
+        return Ok(None);
+    };
+    let execution_descriptor = resolve_execution_descriptor_with_api(api, &record).await?;
+    Ok(Some(ResolvedPumasModel {
+        record,
+        execution_descriptor,
+    }))
 }
 
 pub(super) async fn resolve_descriptor(
