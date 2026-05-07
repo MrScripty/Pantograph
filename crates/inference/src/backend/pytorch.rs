@@ -1458,6 +1458,33 @@ impl PyTorchBackend {
                 envelope.operation
             )));
         }
+        if envelope.payload.entry_path.trim().is_empty() {
+            return Err(BackendError::Config(
+                "PyTorch worker load envelope requires a non-empty entry_path".to_string(),
+            ));
+        }
+        if let Some(device) = envelope.payload.device.as_deref() {
+            if device.trim().is_empty() {
+                return Err(BackendError::Config(
+                    "PyTorch worker load envelope device must be non-empty when present"
+                        .to_string(),
+                ));
+            }
+        }
+        if let Some(task_profile) = &envelope.payload.task_profile {
+            if task_profile.task_id != envelope.payload.task_id {
+                return Err(BackendError::Config(format!(
+                    "PyTorch worker load envelope task_profile task_id {:?} does not match payload task_id {:?}",
+                    task_profile.task_id, envelope.payload.task_id
+                )));
+            }
+            if task_profile.canonical_task_label.trim().is_empty() {
+                return Err(BackendError::Config(
+                    "PyTorch worker load envelope task_profile canonical_task_label must be non-empty"
+                        .to_string(),
+                ));
+            }
+        }
         if let Some(model_source) = &envelope.payload.model_source {
             if let Err(diagnostics) = model_source.validate_for_backend_load() {
                 let codes = diagnostics
@@ -1468,6 +1495,24 @@ impl PyTorchBackend {
                 return Err(BackendError::Config(format!(
                     "Invalid PyTorch worker resolved model source: {codes}"
                 )));
+            }
+            if model_source.entry_path != envelope.payload.entry_path {
+                return Err(BackendError::Config(
+                    "PyTorch worker load envelope model_source entry_path must match payload entry_path"
+                        .to_string(),
+                ));
+            }
+            if model_source.artifact_kind != envelope.payload.artifact_kind {
+                return Err(BackendError::Config(
+                    "PyTorch worker load envelope model_source artifact_kind must match payload artifact_kind"
+                        .to_string(),
+                ));
+            }
+            if model_source.model_ref.as_ref() != envelope.payload.model_ref.as_ref() {
+                return Err(BackendError::Config(
+                    "PyTorch worker load envelope model_source model_ref must match payload model_ref"
+                        .to_string(),
+                ));
             }
         }
         Ok(())

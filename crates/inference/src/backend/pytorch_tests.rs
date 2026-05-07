@@ -585,6 +585,43 @@ fn test_python_worker_contract_rejects_unsupported_task_profile_loader() {
 }
 
 #[test]
+fn test_python_worker_contract_rejects_missing_load_entry_path() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let envelope = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-load-missing-entry",
+            "operation": "load_transformers_model",
+            "payload": {
+                "artifact_kind": "hf_compatible_directory",
+                "entry_path": " ",
+                "task_id": "text_generation",
+                "task_profile": {
+                    "task_id": "text_generation",
+                    "canonical_task_label": "text_generation",
+                    "loader": "causal_lm"
+                },
+                "trust_policy": {
+                    "allow_remote_code": false,
+                    "local_files_only": true
+                }
+            }
+        });
+
+        let error = module
+            .call_method1(
+                "load_transformers_model_kwargs_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect_err("empty load entry_path should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("payload.entry_path must be a non-empty string"));
+    });
+}
+
+#[test]
 fn test_python_worker_load_value_error_after_projection_maps_to_model_load_failed() {
     Python::with_gil(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
@@ -812,7 +849,9 @@ fn test_pytorch_worker_generate_text_dllm_envelope_decodes_backend_local_control
     assert_eq!(envelope.operation, PyTorchWorkerOperation::GenerateText);
     assert_eq!(
         envelope.payload.masked_prompt_json.as_deref(),
-        Some("{\"segments\":[{\"kind\":\"known\",\"text\":\"Plan:\"},{\"kind\":\"mask\",\"token_count\":8}]}")
+        Some(
+            "{\"segments\":[{\"kind\":\"known\",\"text\":\"Plan:\"},{\"kind\":\"mask\",\"token_count\":8}]}"
+        )
     );
     assert_eq!(envelope.payload.denoising_steps, Some(8));
     assert_eq!(envelope.payload.block_length, Some(64));
@@ -4557,6 +4596,74 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_invalid_model_sour
             assert!(message.contains("pumas_resolved_source_missing_model_ref"));
         }
         other => panic!("expected invalid model source config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_transformers_load_envelope_validation_rejects_empty_entry_path() {
+    let mut envelope = PyTorchBackend::transformers_load_envelope_from_direct_path(
+        "req-empty-entry",
+        " ",
+        Some("cpu"),
+        None,
+        PyTorchTransformersTrustPolicy::default(),
+    );
+    envelope.payload.model_source = None;
+
+    match PyTorchBackend::validate_transformers_load_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("requires a non-empty entry_path"));
+        }
+        other => panic!("expected empty entry_path config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_transformers_load_envelope_validation_rejects_mismatched_model_source() {
+    let mut envelope = PyTorchBackend::transformers_load_envelope_from_direct_path(
+        "req-mismatch-source",
+        "/models/direct-hf",
+        Some("cpu"),
+        None,
+        PyTorchTransformersTrustPolicy::default(),
+    );
+    envelope
+        .payload
+        .model_source
+        .as_mut()
+        .expect("direct model source")
+        .entry_path = "/models/other".to_string();
+
+    match PyTorchBackend::validate_transformers_load_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("model_source entry_path must match"));
+        }
+        other => panic!("expected mismatched model_source config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_transformers_load_envelope_validation_rejects_mismatched_task_profile() {
+    let mut envelope = PyTorchBackend::transformers_load_envelope_from_direct_path(
+        "req-mismatch-task",
+        "/models/direct-hf",
+        Some("cpu"),
+        None,
+        PyTorchTransformersTrustPolicy::default(),
+    );
+    envelope
+        .payload
+        .task_profile
+        .as_mut()
+        .expect("task profile")
+        .task_id = InferenceTaskId::AudioTranscription;
+
+    match PyTorchBackend::validate_transformers_load_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("task_profile task_id"));
+            assert!(message.contains("does not match payload task_id"));
+        }
+        other => panic!("expected mismatched task profile config error, got {other:?}"),
     }
 }
 

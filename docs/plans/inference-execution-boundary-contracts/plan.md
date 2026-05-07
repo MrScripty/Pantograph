@@ -2549,6 +2549,12 @@ The canonical PyTorch/Transformers load-request fixture now includes the
 backend-local task profile, freezing the Rust-to-worker loader family and
 required processor-component projection alongside the package-facts mapper
 tests.
+PyTorch/Transformers load-envelope validation now rejects empty load
+`entry_path` values, empty explicit device strings, mismatched task-profile
+ids, and mismatched resolved-model-source identity before crossing into the
+Python worker. The torch-free Python worker-contract projection also rejects
+empty load `entry_path` values, so Rust and Python validate the same required
+model-load identity field.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

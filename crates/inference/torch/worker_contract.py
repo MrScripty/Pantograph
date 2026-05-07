@@ -73,9 +73,12 @@ def load_transformers_model_kwargs_from_envelope(envelope):
     loader = task_profile.get("loader") or CAUSAL_LM_LOADER
     if loader not in SUPPORTED_TRANSFORMERS_LOADERS:
         raise ValueError(f"Unsupported PyTorch worker Transformers loader: {loader}")
+    entry_path = payload.get("entry_path")
+    if not isinstance(entry_path, str) or not entry_path.strip():
+        raise ValueError("PyTorch worker load payload.entry_path must be a non-empty string")
 
     return {
-        "model_path": payload.get("entry_path"),
+        "model_path": entry_path,
         "device": payload.get("device") or "auto",
         "model_type": payload.get("model_type_hint"),
         "loader": loader,
