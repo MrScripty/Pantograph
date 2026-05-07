@@ -1,0 +1,9 @@
+{
+  "contract_version": 1,
+  "request_id": "req-shutdown-001",
+  "operation": "shutdown_worker",
+  "cancellation": {
+    "drop_stream_cancels": false
+  },
+  "payload": {}
+}

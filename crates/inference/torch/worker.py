@@ -64,6 +64,7 @@ from worker_contract import (
     load_transformers_model_kwargs_from_envelope,
     restore_kv_cache_kwargs_from_envelope,
     save_kv_cache_kwargs_from_envelope,
+    shutdown_worker_kwargs_from_envelope,
     transcribe_audio_kwargs_from_envelope,
     truncate_kv_cache_kwargs_from_envelope,
     unload_model_kwargs_from_envelope,
@@ -124,6 +125,42 @@ def init_worker_from_envelope(envelope):
                 "kind": "internal",
                 "message": str(exc),
                 "canonical_code": "pytorch_worker_init_internal",
+            },
+        })
+
+
+def shutdown_worker_from_envelope(envelope):
+    """Clear all worker-owned model state from the Rust worker envelope."""
+    request_id = "unknown"
+    try:
+        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+        if isinstance(decoded, dict):
+            request_id = str(decoded.get("request_id") or request_id)
+        shutdown_worker_kwargs_from_envelope(decoded)
+        shutdown_worker()
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": {"shutdown": True},
+        })
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "invalid_request",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_invalid_shutdown_request",
+            },
+        })
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "internal",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_shutdown_internal",
             },
         })
 
@@ -941,6 +978,13 @@ def unload_model():
             pass
 
         logger.info("Model unloaded: %s", name)
+
+
+def shutdown_worker():
+    """Clear every model family owned by this in-process worker module."""
+    unload_model()
+    unload_diffusion_model()
+    unload_asr_model()
 
 
 def clear_live_kv_cache():

@@ -2555,6 +2555,12 @@ ids, and mismatched resolved-model-source identity before crossing into the
 Python worker. The torch-free Python worker-contract projection also rejects
 empty load `entry_path` values, so Rust and Python validate the same required
 model-load identity field.
+PyTorch now has an explicit versioned `shutdown_worker` envelope, torch-free
+Python projection, structured response decoder, and worker entrypoint that
+clears text-generation, diffusion, and ASR module state without terminating the
+embedded interpreter. Backend `stop()` uses this shutdown envelope for
+best-effort cleanup instead of treating model unload as the worker lifecycle
+boundary.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

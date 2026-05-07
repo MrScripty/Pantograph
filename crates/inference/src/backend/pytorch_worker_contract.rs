@@ -195,6 +195,16 @@ pub(super) struct PyTorchInitWorkerResult {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchShutdownWorkerRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchShutdownWorkerResult {
+    pub shutdown: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub(super) struct PyTorchGetLoadedInfoRequest {}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

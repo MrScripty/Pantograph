@@ -5,10 +5,10 @@ use super::pytorch_worker_contract::{
     PyTorchAudioTranscriptionRequest, PyTorchAudioTranscriptionResult, PyTorchClearKvCacheRequest,
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
     PyTorchInitWorkerRequest, PyTorchRestoreKvCacheRequest, PyTorchSaveKvCacheRequest,
-    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy,
-    PyTorchTruncateKvCacheRequest, PyTorchUnloadModelRequest, PyTorchWorkerEnvelope,
-    PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
-    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchShutdownWorkerRequest, PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader,
+    PyTorchTransformersTrustPolicy, PyTorchTruncateKvCacheRequest, PyTorchUnloadModelRequest,
+    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
+    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
@@ -104,6 +104,7 @@ for attr in [
     "init_worker_kwargs_from_envelope",
     "restore_kv_cache_kwargs_from_envelope",
     "save_kv_cache_kwargs_from_envelope",
+    "shutdown_worker_kwargs_from_envelope",
     "transcribe_audio_kwargs_from_envelope",
     "truncate_kv_cache_kwargs_from_envelope",
     "unload_model_kwargs_from_envelope",
@@ -1030,6 +1031,34 @@ fn test_pytorch_worker_init_envelope_json_uses_init_operation() {
 }
 
 #[test]
+fn test_pytorch_worker_shutdown_envelope_decodes_fixture() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/shutdown_worker_request.json");
+    let envelope: PyTorchWorkerEnvelope<PyTorchShutdownWorkerRequest> =
+        serde_json::from_str(fixture).expect("decode worker shutdown fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-shutdown-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::ShutdownWorker);
+
+    validate_shutdown_worker_envelope(&envelope).expect("shutdown fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_shutdown_envelope_json_uses_shutdown_operation() {
+    let envelope_json = shutdown_worker_envelope_json("req-stop-shutdown-001")
+        .expect("shutdown envelope should encode");
+    let envelope: PyTorchWorkerEnvelope<PyTorchShutdownWorkerRequest> =
+        serde_json::from_str(&envelope_json).expect("decode encoded shutdown envelope");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-stop-shutdown-001");
+    assert_eq!(envelope.operation, PyTorchWorkerOperation::ShutdownWorker);
+    validate_shutdown_worker_envelope(&envelope)
+        .expect("encoded shutdown envelope should validate");
+}
+
+#[test]
 fn test_pytorch_worker_init_envelope_rejects_wrong_operation() {
     let fixture =
         include_str!("../../tests/fixtures/pytorch_worker_contract/init_worker_request.json");
@@ -1372,6 +1401,47 @@ fn test_python_worker_contract_projects_init_envelope() {
 }
 
 #[test]
+fn test_python_worker_contract_projects_shutdown_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let fixture = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/shutdown_worker_request.json"
+        );
+
+        let kwargs = module
+            .call_method1("shutdown_worker_kwargs_from_envelope", (fixture,))
+            .expect("shutdown worker envelope should project to kwargs");
+        let len = kwargs.len().expect("kwargs length should be readable");
+
+        assert_eq!(len, 0);
+    });
+}
+
+#[test]
+fn test_python_worker_shutdown_from_envelope_returns_structured_success() {
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_stubbed_dependencies(py);
+        let fixture = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/shutdown_worker_request.json"
+        );
+
+        let response_json = module
+            .call_method1("shutdown_worker_from_envelope", (fixture,))
+            .and_then(|value| value.extract::<String>())
+            .expect("shutdown worker envelope should return JSON response");
+        let response: serde_json::Value =
+            serde_json::from_str(&response_json).expect("shutdown response should be JSON");
+
+        assert_eq!(response["status"], serde_json::json!("ok"));
+        assert_eq!(
+            response["request_id"],
+            serde_json::json!("req-shutdown-001")
+        );
+        assert_eq!(response["result"]["shutdown"], serde_json::json!(true));
+    });
+}
+
+#[test]
 fn test_python_worker_contract_rejects_invalid_init_envelope() {
     Python::with_gil(|py| {
         let module = load_worker_contract_module(py);
@@ -1406,6 +1476,48 @@ fn test_python_worker_contract_rejects_invalid_init_envelope() {
                 (wrong_version.to_string(),),
             )
             .expect_err("wrong init_worker contract version should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unsupported PyTorch worker contract_version"));
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_invalid_shutdown_envelope() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let wrong_operation = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
+            "request_id": "req-invalid-shutdown-operation",
+            "operation": "init_worker",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "shutdown_worker_kwargs_from_envelope",
+                (wrong_operation.to_string(),),
+            )
+            .expect_err("wrong shutdown_worker operation should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("Unexpected PyTorch worker operation for shutdown_worker"));
+
+        let wrong_version = serde_json::json!({
+            "contract_version": PYTORCH_WORKER_CONTRACT_VERSION + 1,
+            "request_id": "req-invalid-shutdown-version",
+            "operation": "shutdown_worker",
+            "payload": {}
+        });
+
+        let error = module
+            .call_method1(
+                "shutdown_worker_kwargs_from_envelope",
+                (wrong_version.to_string(),),
+            )
+            .expect_err("wrong shutdown_worker contract version should fail validation");
 
         assert!(error
             .to_string()
@@ -3514,6 +3626,22 @@ fn test_pytorch_worker_init_error_normalizes_to_startup_failed() {
 }
 
 #[test]
+fn test_pytorch_worker_shutdown_error_normalizes_to_inference_error() {
+    match PyTorchBackend::shutdown_worker_failure_from_message(
+        "req-shutdown",
+        "Failed to shutdown Python worker: /tmp/private/model.bin".to_string(),
+    ) {
+        BackendError::Inference(message) => {
+            assert!(message.contains("pytorch_worker_shutdown_failed"));
+            assert!(message.contains("req-shutdown"));
+            assert!(message.contains("[local-path]"));
+            assert!(!message.contains("/tmp/private/model.bin"));
+        }
+        other => panic!("expected Inference error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_worker_init_response_decodes() {
     let response = serde_json::json!({
         "status": "ok",
@@ -3525,6 +3653,68 @@ fn test_pytorch_worker_init_response_decodes() {
 
     init_worker_result_from_worker_response("req-init-ok", &response.to_string())
         .expect("init_worker response should decode");
+}
+
+#[test]
+fn test_pytorch_worker_shutdown_response_decodes() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-shutdown-ok",
+        "result": {
+            "shutdown": true
+        }
+    });
+
+    shutdown_worker_result_from_worker_response("req-shutdown-ok", &response.to_string())
+        .expect("shutdown_worker response should decode");
+}
+
+#[test]
+fn test_pytorch_worker_shutdown_response_rejects_false_shutdown() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-shutdown-false",
+        "result": {
+            "shutdown": false
+        }
+    });
+
+    let error =
+        shutdown_worker_result_from_worker_response("req-shutdown-false", &response.to_string())
+            .expect_err("unconfirmed shutdown should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Inference,
+        "req-shutdown-false",
+        "pytorch_worker_shutdown_failed",
+        "did not confirm shutdown",
+    );
+}
+
+#[test]
+fn test_pytorch_worker_shutdown_invalid_request_maps_to_config_error() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-shutdown-invalid",
+        "error": {
+            "kind": "invalid_request",
+            "message": "Unexpected PyTorch worker operation for shutdown_worker: init_worker",
+            "canonical_code": "pytorch_worker_invalid_shutdown_request"
+        }
+    });
+
+    let error =
+        shutdown_worker_result_from_worker_response("req-shutdown-invalid", &response.to_string())
+            .expect_err("invalid shutdown_worker request should fail closed");
+
+    assert_worker_backend_error(
+        error,
+        ExpectedBackendErrorVariant::Config,
+        "req-shutdown-invalid",
+        "pytorch_worker_invalid_shutdown_request",
+        "Unexpected PyTorch worker operation for shutdown_worker",
+    );
 }
 
 #[test]

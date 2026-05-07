@@ -24,11 +24,12 @@ use self::pytorch_worker_contract::{
     PyTorchAudioTranscriptionResult, PyTorchClearKvCacheRequest, PyTorchClearKvCacheResult,
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
     PyTorchInitWorkerRequest, PyTorchInitWorkerResult, PyTorchRestoreKvCacheRequest,
-    PyTorchSaveKvCacheRequest, PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader,
-    PyTorchTransformersTaskProfile, PyTorchTransformersTrustPolicy, PyTorchTruncateKvCacheRequest,
-    PyTorchTruncateKvCacheResult, PyTorchUnloadModelRequest, PyTorchUnloadModelResult,
-    PyTorchWorkerEnvelope, PyTorchWorkerError, PyTorchWorkerErrorKind, PyTorchWorkerFailure,
-    PyTorchWorkerOperation, PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchSaveKvCacheRequest, PyTorchShutdownWorkerRequest, PyTorchShutdownWorkerResult,
+    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
+    PyTorchTransformersTrustPolicy, PyTorchTruncateKvCacheRequest, PyTorchTruncateKvCacheResult,
+    PyTorchUnloadModelRequest, PyTorchUnloadModelResult, PyTorchWorkerEnvelope, PyTorchWorkerError,
+    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -268,6 +269,125 @@ fn init_worker_from_envelope_blocking(
                 )
             })?;
         init_worker_result_from_worker_response(request_id, &response_json)
+    })
+}
+
+fn shutdown_worker_envelope(
+    request_id: impl Into<String>,
+) -> PyTorchWorkerEnvelope<PyTorchShutdownWorkerRequest> {
+    PyTorchWorkerEnvelope::new(
+        request_id,
+        PyTorchWorkerOperation::ShutdownWorker,
+        PyTorchShutdownWorkerRequest::default(),
+    )
+}
+
+fn validate_shutdown_worker_envelope(
+    envelope: &PyTorchWorkerEnvelope<PyTorchShutdownWorkerRequest>,
+) -> Result<(), BackendError> {
+    if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+        return Err(BackendError::Config(format!(
+            "Unsupported PyTorch worker shutdown_worker envelope contract version {}",
+            envelope.contract_version
+        )));
+    }
+    if envelope.operation != PyTorchWorkerOperation::ShutdownWorker {
+        return Err(BackendError::Config(format!(
+            "Unexpected PyTorch worker operation {:?} for shutdown_worker",
+            envelope.operation
+        )));
+    }
+    Ok(())
+}
+
+fn shutdown_worker_envelope_json(request_id: &str) -> Result<String, BackendError> {
+    let envelope = shutdown_worker_envelope(request_id.to_string());
+    validate_shutdown_worker_envelope(&envelope)?;
+    serde_json::to_string(&envelope).map_err(|error| {
+        BackendError::Config(format!(
+            "Failed to encode PyTorch worker shutdown_worker envelope: {error}"
+        ))
+    })
+}
+
+fn shutdown_worker_result_from_worker_response(
+    request_id: &str,
+    response_json: &str,
+) -> Result<(), BackendError> {
+    let response: PyTorchWorkerResponse<PyTorchShutdownWorkerResult> =
+        serde_json::from_str(response_json).map_err(|error| {
+            PyTorchBackend::shutdown_worker_failure_from_message(
+                request_id,
+                format!("Failed to decode PyTorch worker shutdown_worker response: {error}"),
+            )
+        })?;
+    match response {
+        PyTorchWorkerResponse::Ok(success) => {
+            if success.request_id != request_id {
+                return Err(PyTorchBackend::shutdown_worker_failure_from_message(
+                    request_id,
+                    format!(
+                        "PyTorch worker shutdown_worker response request_id mismatch: expected {request_id}, got {}",
+                        success.request_id
+                    ),
+                ));
+            }
+            if !success.result.shutdown {
+                return Err(PyTorchBackend::shutdown_worker_failure_from_message(
+                    request_id,
+                    "PyTorch worker shutdown_worker response did not confirm shutdown".to_string(),
+                ));
+            }
+            Ok(())
+        }
+        PyTorchWorkerResponse::Error(failure) => {
+            if failure.request_id != request_id {
+                return Err(PyTorchBackend::shutdown_worker_failure_from_message(
+                    request_id,
+                    format!(
+                        "PyTorch worker shutdown_worker response request_id mismatch: expected {request_id}, got {}",
+                        failure.request_id
+                    ),
+                ));
+            }
+            Err(failure.into_backend_error())
+        }
+    }
+}
+
+fn shutdown_worker_from_envelope_blocking(
+    request_id: &str,
+    envelope_json: String,
+) -> Result<(), BackendError> {
+    Python::with_gil(|py| {
+        pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
+            PyTorchBackend::shutdown_worker_failure_from_message(
+                request_id,
+                format!("Failed to initialise Python worker: {}", e),
+            )
+        })?;
+        let worker = pytorch_worker::worker_module(py).map_err(|e| {
+            PyTorchBackend::shutdown_worker_failure_from_message(
+                request_id,
+                format!("Failed to get worker module: {}", e),
+            )
+        })?;
+        let response_json = worker
+            .call_method1("shutdown_worker_from_envelope", (envelope_json,))
+            .map_err(|e| {
+                PyTorchBackend::shutdown_worker_failure_from_message(
+                    request_id,
+                    format!("PyTorch worker shutdown_worker envelope failed: {}", e),
+                )
+            })?
+            .extract::<String>()
+            .map_err(|e| {
+                PyTorchBackend::shutdown_worker_failure_from_message(
+                    request_id,
+                    format!("PyTorch worker shutdown_worker response was not JSON text: {e}"),
+                )
+            })?;
+        shutdown_worker_result_from_worker_response(request_id, &response_json)
     })
 }
 
@@ -1404,6 +1524,18 @@ impl PyTorchBackend {
         .into_backend_error()
     }
 
+    fn shutdown_worker_failure_from_message(request_id: &str, message: String) -> BackendError {
+        PyTorchWorkerFailure {
+            request_id: request_id.to_string(),
+            error: PyTorchWorkerError {
+                kind: PyTorchWorkerErrorKind::Internal,
+                message: normalize_worker_error_message(&message, "Python worker transport failed"),
+                canonical_code: Some("pytorch_worker_shutdown_failed".to_string()),
+            },
+        }
+        .into_backend_error()
+    }
+
     fn generate_text_from_worker_response(
         request_id: &str,
         response_json: &str,
@@ -2457,19 +2589,19 @@ impl InferenceBackend for PyTorchBackend {
         self.ready = false;
 
         if had_model {
-            let request_id = format!("pytorch-stop-unload-{}", Uuid::new_v4().simple());
-            match Self::unload_model_envelope_json(&request_id) {
+            let request_id = format!("pytorch-stop-shutdown-{}", Uuid::new_v4().simple());
+            match shutdown_worker_envelope_json(&request_id) {
                 Ok(envelope_json) => {
                     std::thread::spawn(move || {
                         if let Err(error) =
-                            Self::unload_model_from_envelope_blocking(&request_id, envelope_json)
+                            shutdown_worker_from_envelope_blocking(&request_id, envelope_json)
                         {
-                            log::debug!("PyTorch stop best-effort unload failed: {error}");
+                            log::debug!("PyTorch stop best-effort shutdown failed: {error}");
                         }
                     });
                 }
                 Err(error) => {
-                    log::debug!("PyTorch stop best-effort unload envelope build failed: {error}");
+                    log::debug!("PyTorch stop best-effort shutdown envelope build failed: {error}");
                 }
             }
         }
