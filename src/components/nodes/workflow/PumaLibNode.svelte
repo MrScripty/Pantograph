@@ -70,7 +70,6 @@
       definition?: NodeDefinition;
       label?: string;
       modelPath?: string;
-      modelName?: string;
       model_id?: string;
       model_type?: string;
       task_type_primary?: string;

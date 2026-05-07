@@ -1621,6 +1621,11 @@ returning cached rows, reloads when the update feed reports changes after the
 initial handoff, and gives manual Library/Puma-Lib refresh actions a
 force-refresh path that bypasses the cache.
 
+The legacy `modelName` rehydration follow-up removed execution/preload lookups
+that scanned the full Pumas library by display name. `puma-lib` execution now
+uses Pumas detail hydration only when a canonical `model_id`/model ref is
+available; otherwise it preserves saved path data without list scanning.
+
 Validation for the selector cursor handoff slice passed with
 `node --experimental-strip-types --test src/services/workflow/pumaModelOptionsCache.test.ts`,
 `npm run test:frontend`, `npm run typecheck`, and `git diff --check`.

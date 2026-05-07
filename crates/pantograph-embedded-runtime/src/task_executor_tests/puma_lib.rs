@@ -94,7 +94,7 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
 }
 
 #[tokio::test]
-async fn puma_lib_execution_resolves_saved_model_name_without_path_or_id() {
+async fn puma_lib_execution_does_not_resolve_saved_model_name_without_model_id() {
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
@@ -138,39 +138,17 @@ async fn puma_lib_execution_resolves_saved_model_name_without_path_or_id() {
     let outputs = executor
         .execute_task("puma-lib-1", inputs, &Context::new(), &extensions)
         .await
-        .expect("puma-lib should resolve model name");
+        .expect("puma-lib should execute with saved data only");
 
-    assert_eq!(
-        outputs.get("model_path"),
-        Some(&serde_json::json!(bundle_root.display().to_string()))
-    );
-    assert_eq!(outputs.get("model_id"), Some(&serde_json::json!(model_id)));
-    assert_eq!(
-        outputs.get("model_type"),
-        Some(&serde_json::json!("diffusion"))
-    );
-    assert_eq!(
-        outputs.get("task_type_primary"),
-        Some(&serde_json::json!("text-to-image"))
-    );
-    assert_eq!(
-        outputs
-            .get("resolved_model_package_facts")
-            .and_then(|value| value.get("model_ref"))
-            .and_then(|value| value.get("model_id")),
-        Some(&serde_json::json!(model_id))
-    );
-    assert_eq!(
-        outputs
-            .get("resolved_model_package_facts")
-            .and_then(|value| value.get("artifact"))
-            .and_then(|value| value.get("entry_path")),
-        Some(&serde_json::json!(bundle_root.display().to_string()))
-    );
+    assert_eq!(outputs.get("model_path"), Some(&serde_json::json!("")));
+    assert!(outputs.get("model_id").is_none());
+    assert!(outputs.get("model_type").is_none());
+    assert!(outputs.get("task_type_primary").is_none());
+    assert!(outputs.get("resolved_model_package_facts").is_none());
     assert_eq!(
         outputs
             .get("pumas_model_ref")
             .and_then(|value| value.get("status")),
-        Some(&serde_json::json!("resolved"))
+        Some(&serde_json::json!("path_only"))
     );
 }

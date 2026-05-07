@@ -255,7 +255,6 @@ impl EmbeddedWorkflowHost {
     ) -> Result<Option<String>, WorkflowServiceError> {
         let mut model_path = model_path_from_node_data(data);
         let model_id = read_optional_string_aliases(data, &["model_id", "modelId"]);
-        let model_name = read_optional_string_aliases(data, &["model_name", "modelName"]);
         let Some(api) = self.pumas_api().await else {
             return Ok(model_path);
         };
@@ -267,8 +266,6 @@ impl EmbeddedWorkflowHost {
                 ))
                 .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
             })?
-        } else if let Some(model_name) = model_name.as_deref() {
-            find_puma_lib_model_by_name(&api, model_name).await?
         } else {
             None
         };
@@ -728,40 +725,6 @@ fn model_path_from_node_data(data: &serde_json::Value) -> Option<String> {
             )
         })
     })
-}
-
-async fn find_puma_lib_model_by_name(
-    api: &pumas_library::PumasApi,
-    model_name: &str,
-) -> Result<Option<pumas_library::ModelRecord>, WorkflowServiceError> {
-    let requested = normalized_puma_lib_model_name(model_name);
-    if requested.is_empty() {
-        return Ok(None);
-    }
-
-    let models = api.list_models().await.map_err(|error| {
-        WorkflowServiceError::RuntimeNotReady(format!(
-            "failed to list Puma-Lib models while resolving '{model_name}': {error}"
-        ))
-        .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
-    })?;
-    Ok(models.into_iter().find(|record| {
-        [
-            record.id.as_str(),
-            record.official_name.as_str(),
-            record.cleaned_name.as_str(),
-        ]
-        .into_iter()
-        .any(|candidate| normalized_puma_lib_model_name(candidate) == requested)
-    }))
-}
-
-fn normalized_puma_lib_model_name(value: &str) -> String {
-    value
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .flat_map(char::to_lowercase)
-        .collect()
 }
 
 fn resolve_gguf_path(path: &str) -> Result<PathBuf, WorkflowServiceError> {

@@ -96,6 +96,10 @@ Pumas-specific dependency resolution.
 - `puma-lib` selector/list queries must use the explicit workflow-nodes Pumas
   selector-access role. Raw `PUMAS_API` access is reserved for full-detail
   dependency resolution and selected-model hydration, not list population.
+- `puma-lib` execution and preload paths may rehydrate selected model details
+  through Pumas only when a canonical `model_id`/model ref is present. Display
+  names such as `modelName` are not a lookup contract and must not trigger
+  full-library scans.
 - Keep dependency preflight deterministic because it can block workflow
   execution before node runtime starts.
 - App-global runtime residency, admission, retention, and eviction policy must

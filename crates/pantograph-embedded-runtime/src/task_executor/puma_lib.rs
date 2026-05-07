@@ -11,56 +11,15 @@ impl TauriTaskExecutor {
         }
     }
 
-    fn normalized_puma_lib_model_name(value: &str) -> String {
-        value
-            .chars()
-            .filter(|ch| ch.is_ascii_alphanumeric())
-            .flat_map(char::to_lowercase)
-            .collect()
-    }
-
-    fn puma_lib_record_matches_name(record: &pumas_library::ModelRecord, requested: &str) -> bool {
-        let requested = Self::normalized_puma_lib_model_name(requested);
-        if requested.is_empty() {
-            return false;
-        }
-
-        [
-            record.id.as_str(),
-            record.official_name.as_str(),
-            record.cleaned_name.as_str(),
-        ]
-        .into_iter()
-        .any(|candidate| Self::normalized_puma_lib_model_name(candidate) == requested)
-    }
-
-    async fn find_puma_lib_model_by_name(
-        api: &Arc<pumas_library::PumasApi>,
-        model_name: &str,
-    ) -> std::result::Result<Option<pumas_library::ModelRecord>, String> {
-        let models = api
-            .list_models()
-            .await
-            .map_err(|error| format!("Failed to list Puma-Lib models: {error}"))?;
-        Ok(models
-            .into_iter()
-            .find(|record| Self::puma_lib_record_matches_name(record, model_name)))
-    }
-
     async fn resolve_puma_lib_model_record(
         api: &Arc<pumas_library::PumasApi>,
         model_id: Option<&str>,
-        model_name: Option<&str>,
     ) -> std::result::Result<Option<pumas_library::ModelRecord>, String> {
         if let Some(model_id) = model_id {
             return api
                 .get_model(model_id)
                 .await
                 .map_err(|error| format!("Failed to query Puma-Lib model '{model_id}': {error}"));
-        }
-
-        if let Some(model_name) = model_name {
-            return Self::find_puma_lib_model_by_name(api, model_name).await;
         }
 
         Ok(None)
@@ -76,8 +35,6 @@ impl TauriTaskExecutor {
                 .unwrap_or_default();
         let mut model_id =
             Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"]);
-        let model_name =
-            Self::read_optional_input_string_aliases(inputs, &["model_name", "modelName"]);
         let mut model_type =
             Self::read_optional_input_string_aliases(inputs, &["model_type", "modelType"]);
         let mut task_type_primary = Self::read_optional_input_string_aliases(
@@ -96,13 +53,7 @@ impl TauriTaskExecutor {
         if let Some(api) = extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
         {
             let requested_model_id = model_id.clone();
-            match Self::resolve_puma_lib_model_record(
-                &api,
-                requested_model_id.as_deref(),
-                model_name.as_deref(),
-            )
-            .await
-            {
+            match Self::resolve_puma_lib_model_record(&api, requested_model_id.as_deref()).await {
                 Ok(Some(model)) => {
                     resolved_from_pumas = true;
                     model_id = Some(model.id.clone());
@@ -173,11 +124,6 @@ impl TauriTaskExecutor {
                         log::warn!(
                             "Puma-Lib model '{}' was not found during workflow execution; using saved node data",
                             model_id
-                        );
-                    } else if let Some(model_name) = model_name.as_deref() {
-                        log::warn!(
-                            "Puma-Lib model named '{}' was not found during workflow execution; using saved node data",
-                            model_name
                         );
                     }
                 }
