@@ -1180,6 +1180,12 @@ handoff between the Library page and graph `puma-lib` node.
   `test_model_options_use_selector_snapshot_without_detail_hydration`,
   `test_selector_row_option_uses_entry_path_only_when_ready`, and
   read-only selector coverage.
+- 2026-05-07 follow-up: the selector cursor is now also projected into
+  result-level `PortOptionsResult.metadata.package_facts_summary_cursor`, so an
+  empty selector page can still hand off to
+  `list_model_library_updates_since(cursor)`. Frontend cache code reads the
+  result-level cursor before the older per-option fallback, and Rust/TypeScript
+  tests cover the empty-snapshot path.
 
 **Milestone 2 Selector Access-Role Slice Boundary:**
 
@@ -4662,6 +4668,11 @@ Update during implementation:
   owner/local-client/read-only selector-access role; frontend model-option
   consumers share the cursor handoff cache; and validation confirms selector
   population does not perform per-row detail hydration.
+- 2026-05-07: Closed a Pumas selector cursor edge case discovered during the
+  cache handoff review. `PortOptionsResult` now has optional structured
+  metadata, `puma-lib` writes the selector cursor at result scope, and the
+  frontend cache can poll the Pumas update feed even when the startup snapshot
+  contains zero options.
 - 2026-05-06: Standards pass added a blast-radius and implementation guardrail
   section covering selector integration, selected-detail hydration, canonical
   contracts, graph migration, runtime technical fit, diagnostics ledger

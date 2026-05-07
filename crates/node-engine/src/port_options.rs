@@ -66,6 +66,9 @@ pub struct PortOptionsResult {
     pub total_count: usize,
     /// Whether this provider supports server-side search filtering.
     pub searchable: bool,
+    /// Optional structured result metadata, such as snapshot cursors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Trait for providing dynamic options for a port.
@@ -146,11 +149,13 @@ mod tests {
             }],
             total_count: 1,
             searchable: true,
+            metadata: Some(serde_json::json!({"cursor": "model-library-updates:1"})),
         };
 
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["totalCount"], 1);
         assert_eq!(json["searchable"], true);
+        assert_eq!(json["metadata"]["cursor"], "model-library-updates:1");
         assert_eq!(json["options"].as_array().unwrap().len(), 1);
     }
 }

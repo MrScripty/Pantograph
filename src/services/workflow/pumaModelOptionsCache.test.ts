@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   extractPumasSelectorCursor,
+  extractPumasSelectorCursorFromResult,
   invalidatePumasModelOptionsCache,
   loadPumasModelOptions,
   selectorUpdateFeedRequiresRefresh,
@@ -21,11 +22,15 @@ function option(modelId: string, cursor: string): PortOption {
   };
 }
 
-function portOptions(options: PortOption[]): PortOptionsResult {
+function portOptions(
+  options: PortOption[],
+  metadata?: Record<string, unknown>,
+): PortOptionsResult {
   return {
     options,
     totalCount: options.length,
     searchable: true,
+    metadata,
   };
 }
 
@@ -41,6 +46,24 @@ function updateFeed(overrides: Partial<ModelLibraryUpdateFeed> = {}): ModelLibra
 
 test.afterEach(() => {
   invalidatePumasModelOptionsCache();
+});
+
+test('extractPumasSelectorCursorFromResult reads result metadata before row metadata', () => {
+  assert.equal(
+    extractPumasSelectorCursorFromResult(
+      portOptions(
+        [option('llm/imported/ready', 'model-library-updates:1')],
+        { package_facts_summary_cursor: 'model-library-updates:2' },
+      ),
+    ),
+    'model-library-updates:2',
+  );
+  assert.equal(
+    extractPumasSelectorCursorFromResult(
+      portOptions([], { package_facts_summary_cursor: 'model-library-updates:3' }),
+    ),
+    'model-library-updates:3',
+  );
 });
 
 test('extractPumasSelectorCursor reads the first selector cursor from option metadata', () => {
@@ -153,6 +176,28 @@ test('loadPumasModelOptions keeps read-only snapshots when update feed is unavai
   const options = await loadPumasModelOptions(invoker);
 
   assert.deepEqual(options.map((item) => item.value), ['llm/imported/read-only']);
+  assert.deepEqual(
+    calls,
+    ['query_port_options', 'list_model_library_updates_since'],
+  );
+});
+
+test('loadPumasModelOptions performs update handoff for empty selector snapshots', async () => {
+  const calls: string[] = [];
+  const invoker: WorkflowInvoker = async (command) => {
+    calls.push(command);
+    if (command === 'query_port_options') {
+      return portOptions([], { package_facts_summary_cursor: 'model-library-updates:1' }) as never;
+    }
+    if (command === 'list_model_library_updates_since') {
+      return updateFeed({ cursor: 'model-library-updates:1' }) as never;
+    }
+    throw new Error(`unexpected command ${command}`);
+  };
+
+  const options = await loadPumasModelOptions(invoker);
+
+  assert.deepEqual(options, []);
   assert.deepEqual(
     calls,
     ['query_port_options', 'list_model_library_updates_since'],

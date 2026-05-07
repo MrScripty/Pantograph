@@ -547,6 +547,10 @@ mod options_provider {
                 options,
                 total_count: total,
                 searchable: true,
+                metadata: Some(serde_json::json!({
+                    "package_facts_summary_cursor": cursor,
+                    "selector_snapshot_contract_version": 1,
+                })),
             })
         }
     }
@@ -1202,6 +1206,18 @@ mod model_library_tests {
         assert_eq!(metadata["selector_row_executable"], serde_json::json!(true));
         assert_eq!(metadata["inference_settings"], serde_json::json!([]));
         assert!(metadata.get("execution_contract_version").is_none());
+        let result_metadata = result
+            .metadata
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .expect("selector result metadata should be an object");
+        assert!(result_metadata["package_facts_summary_cursor"]
+            .as_str()
+            .is_some_and(|cursor| cursor.starts_with("model-library-updates:")));
+        assert_eq!(
+            result_metadata["selector_snapshot_contract_version"],
+            serde_json::json!(1)
+        );
     }
 
     #[tokio::test]
@@ -1284,6 +1300,59 @@ mod model_library_tests {
         assert_eq!(metadata["id"], serde_json::json!("llm/imported/read-only"));
         assert_eq!(metadata["selector_row_executable"], serde_json::json!(true));
         assert_eq!(metadata["inference_settings"], serde_json::json!([]));
+        let result_metadata = result
+            .metadata
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .expect("read-only selector result metadata should be an object");
+        assert!(result_metadata["package_facts_summary_cursor"]
+            .as_str()
+            .is_some_and(|cursor| cursor.starts_with("model-library-updates:")));
+        assert_eq!(
+            result_metadata["selector_snapshot_contract_version"],
+            serde_json::json!(1)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_empty_model_options_preserve_selector_cursor_in_result_metadata() {
+        let temp_dir = TempDir::new().unwrap();
+        let model_root = temp_dir.path();
+        drop(ModelIndex::new(model_root.join("models.db")).unwrap());
+
+        let read_only = PumasReadOnlyLibrary::open(model_root).unwrap();
+        let mut extensions = ExecutorExtensions::new();
+        extensions.set(
+            PUMAS_SELECTOR_ACCESS,
+            Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
+        );
+
+        let provider = PumaLibOptionsProvider;
+        let result = provider
+            .query_options(
+                &PortOptionsQuery {
+                    limit: Some(25),
+                    ..PortOptionsQuery::default()
+                },
+                &extensions,
+            )
+            .await
+            .expect("empty read-only selector options should load");
+
+        assert!(result.options.is_empty());
+        assert_eq!(result.total_count, 0);
+        let metadata = result
+            .metadata
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .expect("empty selector result metadata should carry cursor");
+        assert!(metadata["package_facts_summary_cursor"]
+            .as_str()
+            .is_some_and(|cursor| cursor.starts_with("model-library-updates:")));
+        assert_eq!(
+            metadata["selector_snapshot_contract_version"],
+            serde_json::json!(1)
+        );
     }
 
     #[test]

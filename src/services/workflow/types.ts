@@ -1378,4 +1378,5 @@ export interface PortOptionsResult {
   options: PortOption[];
   totalCount: number;
   searchable: boolean;
+  metadata?: Record<string, unknown>;
 }

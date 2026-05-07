@@ -35,6 +35,7 @@ export interface PortOptionsResult {
   options: PortOption[];
   total_count: number;
   searchable: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 /** Query parameters for port options */

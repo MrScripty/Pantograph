@@ -38,6 +38,14 @@ export function extractPumasSelectorCursor(options: PortOption[]): string | null
   return null;
 }
 
+export function extractPumasSelectorCursorFromResult(response: PortOptionsResult): string | null {
+  const resultCursor = response.metadata?.package_facts_summary_cursor;
+  if (typeof resultCursor === 'string' && resultCursor.trim().length > 0) {
+    return resultCursor;
+  }
+  return extractPumasSelectorCursor(response.options);
+}
+
 export function selectorUpdateFeedRequiresRefresh(feed: ModelLibraryUpdateFeed): boolean {
   return feed.stale_cursor || feed.snapshot_required || feed.events.length > 0;
 }
@@ -82,7 +90,7 @@ async function fetchPumasModelOptionsSnapshot(
   });
   return {
     options: response.options,
-    cursor: extractPumasSelectorCursor(response.options),
+    cursor: extractPumasSelectorCursorFromResult(response),
   };
 }
 
