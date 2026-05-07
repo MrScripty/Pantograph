@@ -121,6 +121,11 @@ from the same package version.
   by the bridge.
 - Compatibility: changing exported NIF names or resource shapes is breaking for
   BEAM consumers.
+- Pumas API resources injected into workflow executors register both raw
+  selected-detail API access and the explicit Pumas selector-access role.
+  Registry port-option queries should still initialize their own
+  `ExtensionsResource` through `extensions_setup`, which is the BEAM-facing
+  selector/list setup path.
 - Regeneration/migration: NIF surface changes must update host docs, native
   tests, BEAM smoke paths, and release notes together.
 

@@ -49,9 +49,12 @@ pub(crate) fn executor_set_pumas_api(
 
     rt.block_on(async {
         let mut exec = executor_resource.executor.write().await;
+        let api = pumas_resource.api.clone();
+        exec.extensions_mut()
+            .set(node_engine::extension_keys::PUMAS_API, api.clone());
         exec.extensions_mut().set(
-            node_engine::extension_keys::PUMAS_API,
-            pumas_resource.api.clone(),
+            workflow_nodes::setup::PUMAS_SELECTOR_ACCESS,
+            Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(api)),
         );
     });
 

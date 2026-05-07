@@ -1599,6 +1599,12 @@ selected-detail API access and owner selector access, and UniFFI runtime tests
 prove `workflow_graph_query_port_options` can populate `puma-lib` options plus
 the selector cursor through that role.
 
+Rustler executor Pumas injection now mirrors the same extension pairing for
+BEAM workflow execution resources. Rustler registry port-option queries still
+initialize selector/list access through `extensions_setup`, keeping that
+resource boundary explicit instead of treating raw `PUMAS_API` as a selector
+fallback.
+
 The selector cursor handoff slice now centralizes frontend Pumas model-option
 caching in `src/services/workflow/pumaModelOptionsCache.ts`. The service loads
 selector rows through `query_port_options`, extracts the selector cursor from

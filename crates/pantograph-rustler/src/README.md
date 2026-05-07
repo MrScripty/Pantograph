@@ -127,6 +127,10 @@ Pantograph.Native.workflow_validate(graph_json)
   envelopes.
 - Versioning: exported NIF names, atoms, resource shapes, and JSON payload
   semantics are public binding contracts for BEAM consumers.
+- Pumas API executor injection sets both raw selected-detail access and the
+  explicit selector-access role. Port-option registry resources must still use
+  `extensions_setup` so selector/list population does not rely on raw
+  `PUMAS_API`.
 
 ## Structured Producer Contract
 - Stable fields: exported NIF names, atoms, JSON payload shapes, callback event
