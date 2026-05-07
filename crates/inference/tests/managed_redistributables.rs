@@ -1,8 +1,9 @@
-use inference::{
+use inference::{list_managed_dependency_statuses, managed_dependency_status};
+use pantograph_managed_dependencies::{
     acquire_managed_redistributable_lease, activate_managed_redistributable_version,
-    install_managed_redistributable_from_staging, list_managed_dependency_statuses,
-    list_managed_redistributable_statuses, load_managed_redistributable_state,
-    managed_dependency_status, managed_redistributable_catalog, managed_redistributable_status,
+    install_managed_redistributable_from_staging, list_managed_redistributable_statuses,
+    load_managed_redistributable_state, managed_redistributable_catalog,
+    managed_redistributable_catalog_entry, managed_redistributable_status,
     managed_redistributables_dir, release_managed_redistributable_lease,
     remove_managed_redistributable_version, select_managed_redistributable_version,
     set_default_managed_redistributable_version, ManagedDependencyCategory,
@@ -245,8 +246,7 @@ fn state_round_trips_after_selection_and_activation_restart() {
 #[test]
 fn select_and_activate_fail_until_expected_files_are_ready() {
     let temp = tempfile::tempdir().unwrap();
-    let catalog =
-        inference::managed_redistributable_catalog_entry(ManagedRedistributableId::Ffmpeg);
+    let catalog = managed_redistributable_catalog_entry(ManagedRedistributableId::Ffmpeg);
 
     let select_error = select_managed_redistributable_version(
         temp.path(),
@@ -291,8 +291,7 @@ fn select_and_activate_fail_until_expected_files_are_ready() {
 fn install_from_staging_validates_expected_files_before_finalizing() {
     let temp = tempfile::tempdir().unwrap();
     let staging = tempfile::tempdir().unwrap();
-    let catalog =
-        inference::managed_redistributable_catalog_entry(ManagedRedistributableId::Ocioconvert);
+    let catalog = managed_redistributable_catalog_entry(ManagedRedistributableId::Ocioconvert);
 
     let error = install_managed_redistributable_from_staging(
         temp.path(),
@@ -380,7 +379,7 @@ fn unsupported_or_uncataloged_versions_fail_closed() {
 }
 
 fn install_ready_dependency(app_data_dir: &Path, id: ManagedRedistributableId) -> String {
-    let catalog = inference::managed_redistributable_catalog_entry(id);
+    let catalog = managed_redistributable_catalog_entry(id);
     create_expected_files(
         &version_dir(app_data_dir, id, &catalog.version),
         &catalog.expected_files,

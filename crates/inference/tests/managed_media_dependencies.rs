@@ -7,13 +7,16 @@ use inference::managed_media_dependencies::{
     validate_media_conversion_dependency_lease_holder,
 };
 use inference::{
-    acquire_media_conversion_dependency_plan, activate_managed_redistributable_version,
-    load_managed_redistributable_state, managed_redistributable_catalog_entry,
-    open_color_io_activation_validation_state, release_media_conversion_dependency_plan,
-    remove_managed_redistributable_version, resolve_media_conversion_dependency_executable_path,
-    validate_open_color_io_activation, ManagedRedistributableId, MediaConversionDependencyId,
-    MediaConversionDependencyLease, MediaConversionDependencyPlanRequest, MediaConversionJobKind,
+    acquire_media_conversion_dependency_plan, open_color_io_activation_validation_state,
+    release_media_conversion_dependency_plan, resolve_media_conversion_dependency_executable_path,
+    validate_open_color_io_activation, MediaConversionDependencyId, MediaConversionDependencyLease,
+    MediaConversionDependencyPlanRequest, MediaConversionJobKind,
     OpenColorIoActivationValidationState,
+};
+use pantograph_managed_dependencies::{
+    activate_managed_redistributable_version, load_managed_redistributable_state,
+    managed_redistributable_catalog_entry, remove_managed_redistributable_version,
+    ManagedRedistributableId,
 };
 
 #[test]

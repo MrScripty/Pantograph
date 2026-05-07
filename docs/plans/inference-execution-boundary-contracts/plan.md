@@ -2089,6 +2089,9 @@ inference re-exports.
 UniFFI managed-media dependency action/status methods also use
 `pantograph-managed-dependencies` directly, leaving inference re-exports only
 for compatibility tests and callers that have not yet migrated.
+Inference no longer publicly re-exports redistributable install/status/lease
+DTOs or operations; it only exposes the neutral media/native dependency status
+projection helpers used by inference-owned aggregate dependency status.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`

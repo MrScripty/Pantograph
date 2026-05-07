@@ -33,7 +33,7 @@ pub mod kv_cache;
 pub mod managed_binaries;
 pub mod managed_dependencies;
 pub mod managed_media_dependencies;
-pub mod managed_redistributables;
+mod managed_redistributables;
 pub mod managed_runtime;
 pub mod model_contracts;
 pub mod process;
@@ -84,23 +84,7 @@ pub use managed_media_dependencies::{
     MediaConversionDependencyPlanRequest, MediaConversionJobKind, OpenColorIoActivation,
     OpenColorIoActivationValidation, OpenColorIoActivationValidationState,
 };
-pub use managed_redistributables::{
-    acquire_managed_redistributable_lease, activate_managed_redistributable_version,
-    install_managed_redistributable_from_staging, list_managed_dependency_statuses,
-    list_managed_redistributable_statuses, load_managed_redistributable_state,
-    managed_dependency_status, managed_redistributable_catalog,
-    managed_redistributable_catalog_entry, managed_redistributable_status,
-    managed_redistributables_dir, release_managed_redistributable_lease,
-    remove_managed_redistributable_version, save_managed_redistributable_state,
-    select_managed_redistributable_version, set_default_managed_redistributable_version,
-    ManagedRedistributableArchiveKind, ManagedRedistributableCatalogEntry,
-    ManagedRedistributableCategory, ManagedRedistributableId, ManagedRedistributableInstallState,
-    ManagedRedistributableLease, ManagedRedistributableLeaseToken,
-    ManagedRedistributablePackageKind, ManagedRedistributablePersistedDependency,
-    ManagedRedistributablePersistedState, ManagedRedistributableReadiness,
-    ManagedRedistributableSelection, ManagedRedistributableSource, ManagedRedistributableStatus,
-    ManagedRedistributableVersionStatus,
-};
+pub use managed_redistributables::{list_managed_dependency_statuses, managed_dependency_status};
 pub use managed_runtime::{
     binary_capability, cancel_binary_download, check_binary_status, download_binary,
     list_binary_capabilities, list_managed_runtime_dependency_statuses,
