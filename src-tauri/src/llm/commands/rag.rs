@@ -229,8 +229,8 @@ pub async fn index_docs_with_switch(
     log::info!("Restore VLM after indexing: {}", restore_vlm);
     log::info!("Current backend for embedding: {}", prepared.backend_name);
 
-    // Update RAG manager with embedding URL from the gateway
-    // All backends now expose an HTTP API (llama.cpp sidecar, Ollama daemon, Candle's Axum server)
+    // Update RAG manager with the embedding URL when the selected backend exposes
+    // one. Candle currently has no GUI-compatible embedding HTTP endpoint here.
     let embedding_url = match embedding_url {
         Some(url) => url,
         None => {

@@ -3254,6 +3254,8 @@ drift back into inference.
   The orphan frontend `OllamaInferenceNode.svelte` renderer has been removed,
   and neighboring frontend comments no longer describe llama.cpp styling in
   relation to Ollama.
+  Tauri RAG indexing comments no longer describe Ollama as part of the active
+  local embedding backend set.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
