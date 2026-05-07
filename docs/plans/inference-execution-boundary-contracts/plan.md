@@ -1625,7 +1625,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
 - [x] Define component facts and overrides for tokenizer, processor,
   image_processor, video_processor, feature_extractor/audio_processor, chat
   template, and generation config.
-- [ ] Define task request contracts aligned with Transformers task semantics
+- [x] Define task request contracts aligned with Transformers task semantics
   for text generation/chat, embeddings, rerank, image/depth/audio/video-ready
   extensions, and multimodal payloads. Public inference integration coverage
   now freezes the task request contract matrix for text generation, chat,
@@ -1675,7 +1675,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   backend command flags are hidden adapter details.
 - [x] Define which fields are stable Pantograph contracts versus backend-local
   extras.
-- [ ] Define serde/wire casing, enum tagging, optional field defaults, and
+- [x] Define serde/wire casing, enum tagging, optional field defaults, and
   unknown-field behavior for every contract that crosses Rust/Python,
   Rust/Tauri/TypeScript, Pumas/inference, saved workflow, or external HTTP
   runtime boundaries. Public inference integration coverage now freezes the
@@ -1722,7 +1722,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   documented semantics.
 - `git diff --check`.
 
-**Status:** In progress. The first task-registry slice added seeded
+**Status:** Implemented. The first task-registry slice added seeded
 Transformers-aligned registry entries for the current vertical slices and
 nearby roadmap diagnostics: text generation, chat completion, embeddings,
 rerank, image understanding, audio transcription, video understanding, and
@@ -1786,9 +1786,8 @@ audio, video, image-understanding, and multimodal roadmap tasks. Typed request
 validation now consumes this contract instead of carrying an independent
 task/input table, and `crates/inference/src/README.md` documents the consumer
 rule that payload compatibility comes from the registry contract rather than
-backend names or raw task strings. Neighboring consumer-migration slices should
-continue moving graph/runtime consumers to the exported contract before marking
-the broader task request/registry tasks complete.
+backend names or raw task strings. Neighboring graph/runtime consumer migration
+remains tracked under Milestone 14.
 Typed request serde coverage now freezes the stable wire shape for current
 executable text, embedding, rerank, image-generation, and audio-transcription
 inputs, including tagged `input_type` payloads and append-only `extra_options`
@@ -1796,8 +1795,9 @@ where backend-local options are still needed.
 Contract-only typed request/result wire shapes now also cover image
 understanding, video understanding, and multimodal generation payloads with
 artifact-reference-friendly media fields while preserving unsupported-task
-validation until executable backends exist. Depth-specific task contracts remain
-unseeded.
+validation until executable backends exist. Depth estimation is now seeded as a
+contract-only roadmap task with typed request/result DTOs and validation
+coverage while remaining non-executable.
 Request wire-shape coverage now also freezes the top-level stable
 `InferenceExecutionRequest` fields and keeps backend-local escape hatches under
 `generation_options.backend_extensions` or `extra_options`, preventing raw
@@ -1883,6 +1883,19 @@ Node-engine dependency preflight can now receive stable task/execution context
 from canonical node dispatch and emit bounded model-package-resolution lifecycle
 failure facts through the existing host-owned inference lifecycle sink without
 inventing node-engine ledger writes.
+The 2026-05-06 Milestone 3 checklist reconciliation closed the remaining
+task-request and wire-shape checklist items against existing executable
+coverage: `task_request_contracts_publish_transformers_aligned_execution_matrix`
+freezes the Transformers-aligned matrix for text/chat, embeddings, rerank,
+image generation, image understanding, depth estimation, audio transcription,
+video understanding, and multimodal generation;
+`task_request_contract_wire_shape_preserves_snake_case_defaults_and_unknown_fields`
+freezes snake_case task contract labels, omitted collection defaults, and
+additive unknown-field tolerance; and
+`inference_execution_request_wire_contract_preserves_tags_defaults_and_unknown_fields`
+freezes canonical request tagging, optional defaults, and additive top-level
+and input-payload fields. Validation passed with those three focused
+`cargo test -p inference ...` filters and `git diff --check`.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
