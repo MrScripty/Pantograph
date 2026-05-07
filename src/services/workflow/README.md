@@ -208,9 +208,11 @@ handoff reports stale or changed rows.
   from Pumas, but it must not synthesize download audit facts locally.
 - Pumas model-option caches must come from backend `query_port_options` selector
   snapshots and must perform one update-feed handoff against the snapshot cursor
-  before publishing reusable cache state. If the update feed is unavailable,
-  such as a read-only selector path without owner API, components may reuse the
-  snapshot but must not start frontend polling.
+  before publishing reusable cache state. Later cache reads must check that
+  cursor before returning cached rows unless the caller explicitly forces a new
+  selector snapshot. If the update feed is unavailable, such as a read-only
+  selector path without owner API, components may reuse the snapshot but must
+  not start frontend polling.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.

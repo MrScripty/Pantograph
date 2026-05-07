@@ -1616,6 +1616,11 @@ explicitly invalidates it. If the update-feed command is unavailable, such as
 read-only selector access without owner API, the frontend preserves the loaded
 snapshot and does not start a polling loop.
 
+The cache freshness follow-up now checks the cached selector cursor before
+returning cached rows, reloads when the update feed reports changes after the
+initial handoff, and gives manual Library/Puma-Lib refresh actions a
+force-refresh path that bypasses the cache.
+
 Validation for the selector cursor handoff slice passed with
 `node --experimental-strip-types --test src/services/workflow/pumaModelOptionsCache.test.ts`,
 `npm run test:frontend`, `npm run typecheck`, and `git diff --check`.

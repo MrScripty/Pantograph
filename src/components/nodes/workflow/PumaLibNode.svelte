@@ -143,10 +143,10 @@
     }
   });
 
-  async function loadModels() {
+  async function loadModels(forceRefresh = false) {
     isLoading = true;
     try {
-      availableModels = await loadPumasModelOptions();
+      availableModels = await loadPumasModelOptions({ forceRefresh });
       loadError = null;
     } catch (error) {
       loadError = error instanceof Error ? error.message : 'Failed to load models from pumas library';
@@ -366,7 +366,7 @@
           <button
             type="button"
             class="text-neutral-500 hover:text-neutral-400"
-            onclick={loadModels}
+            onclick={() => loadModels(true)}
             disabled={isLoading}
           >
             {isLoading ? '...' : 'Refresh'}

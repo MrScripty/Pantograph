@@ -100,7 +100,7 @@ test('selectorUpdateFeedRequiresRefresh treats events and stale cursors as cache
   );
 });
 
-test('loadPumasModelOptions caches a snapshot after empty update handoff', async () => {
+test('loadPumasModelOptions checks the cached cursor before returning cached rows', async () => {
   const calls: string[] = [];
   const invoker: WorkflowInvoker = async (command) => {
     calls.push(command);
@@ -119,7 +119,59 @@ test('loadPumasModelOptions caches a snapshot after empty update handoff', async
   assert.equal(first, second);
   assert.deepEqual(
     calls,
-    ['query_port_options', 'list_model_library_updates_since'],
+    [
+      'query_port_options',
+      'list_model_library_updates_since',
+      'list_model_library_updates_since',
+    ],
+  );
+});
+
+test('loadPumasModelOptions reloads cached rows when cached cursor reports updates', async () => {
+  const snapshots = [
+    portOptions([option('llm/imported/initial', 'model-library-updates:1')]),
+    portOptions([option('llm/imported/fresh', 'model-library-updates:2')]),
+  ];
+  let feedCalls = 0;
+  const calls: string[] = [];
+  const invoker: WorkflowInvoker = async (command) => {
+    calls.push(command);
+    if (command === 'query_port_options') {
+      const snapshot = snapshots.shift();
+      assert.ok(snapshot);
+      return snapshot as never;
+    }
+    if (command === 'list_model_library_updates_since') {
+      feedCalls += 1;
+      return updateFeed(feedCalls === 2
+        ? {
+            cursor: 'model-library-updates:2',
+            events: [{
+              cursor: 'model-library-updates:2',
+              model_id: 'llm/imported/initial',
+              change_kind: 'model_modified',
+              fact_family: 'model_record',
+              refresh_scope: 'summary',
+            }],
+          }
+        : { cursor: `model-library-updates:${feedCalls}` }) as never;
+    }
+    throw new Error(`unexpected command ${command}`);
+  };
+
+  await loadPumasModelOptions(invoker);
+  const refreshed = await loadPumasModelOptions(invoker);
+
+  assert.deepEqual(refreshed.map((item) => item.value), ['llm/imported/fresh']);
+  assert.deepEqual(
+    calls,
+    [
+      'query_port_options',
+      'list_model_library_updates_since',
+      'list_model_library_updates_since',
+      'query_port_options',
+      'list_model_library_updates_since',
+    ],
   );
 });
 
@@ -201,5 +253,39 @@ test('loadPumasModelOptions performs update handoff for empty selector snapshots
   assert.deepEqual(
     calls,
     ['query_port_options', 'list_model_library_updates_since'],
+  );
+});
+
+test('loadPumasModelOptions forceRefresh bypasses cached rows', async () => {
+  const snapshots = [
+    portOptions([option('llm/imported/cached', 'model-library-updates:1')]),
+    portOptions([option('llm/imported/reloaded', 'model-library-updates:2')]),
+  ];
+  const calls: string[] = [];
+  const invoker: WorkflowInvoker = async (command) => {
+    calls.push(command);
+    if (command === 'query_port_options') {
+      const snapshot = snapshots.shift();
+      assert.ok(snapshot);
+      return snapshot as never;
+    }
+    if (command === 'list_model_library_updates_since') {
+      return updateFeed({ cursor: 'model-library-updates:1' }) as never;
+    }
+    throw new Error(`unexpected command ${command}`);
+  };
+
+  await loadPumasModelOptions(invoker);
+  const options = await loadPumasModelOptions(invoker, { forceRefresh: true });
+
+  assert.deepEqual(options.map((item) => item.value), ['llm/imported/reloaded']);
+  assert.deepEqual(
+    calls,
+    [
+      'query_port_options',
+      'list_model_library_updates_since',
+      'query_port_options',
+      'list_model_library_updates_since',
+    ],
   );
 });

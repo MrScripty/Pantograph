@@ -76,11 +76,11 @@
     }
   }
 
-  async function refreshPumasModels(): Promise<void> {
+  async function refreshPumasModels(forceRefresh = false): Promise<void> {
     pumasLoading = pumasModels.length === 0;
     pumasError = null;
     try {
-      pumasModels = await loadPumasModelOptions();
+      pumasModels = await loadPumasModelOptions({ forceRefresh });
     } catch (modelError) {
       pumasError = formatWorkflowCommandError(modelError);
     } finally {
@@ -92,7 +92,7 @@
     if (forcePumasReload) {
       invalidatePumasModelOptionsCache();
     }
-    await Promise.all([refreshLibraryUsage(), refreshPumasModels()]);
+    await Promise.all([refreshLibraryUsage(), refreshPumasModels(forcePumasReload)]);
   }
 
   async function searchHfModels(): Promise<void> {

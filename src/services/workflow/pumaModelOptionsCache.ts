@@ -20,6 +20,10 @@ export interface ModelLibraryUpdateFeed {
 
 export type WorkflowInvoker = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
+export interface LoadPumasModelOptionsOptions {
+  forceRefresh?: boolean;
+}
+
 interface PumasModelOptionsSnapshot {
   options: PortOption[];
   cursor: string | null;
@@ -55,9 +59,22 @@ export function invalidatePumasModelOptionsCache(): void {
   inflightSnapshot = null;
 }
 
-export async function loadPumasModelOptions(invoker: WorkflowInvoker = invoke): Promise<PortOption[]> {
+export async function loadPumasModelOptions(
+  invokerOrOptions: WorkflowInvoker | LoadPumasModelOptionsOptions = invoke,
+  maybeOptions: LoadPumasModelOptionsOptions = {},
+): Promise<PortOption[]> {
+  const { invoker, options } = normalizeLoadPumasModelOptionsArgs(invokerOrOptions, maybeOptions);
+
+  if (options.forceRefresh) {
+    cachedSnapshot = null;
+    inflightSnapshot = null;
+  }
+
   if (cachedSnapshot) {
-    return cachedSnapshot.options;
+    if (!cachedSnapshot.cursor || !(await snapshotNeedsRefresh(invoker, cachedSnapshot.cursor))) {
+      return cachedSnapshot.options;
+    }
+    cachedSnapshot = null;
   }
 
   if (inflightSnapshot) {
@@ -68,6 +85,16 @@ export async function loadPumasModelOptions(invoker: WorkflowInvoker = invoke): 
     inflightSnapshot = null;
   });
   return inflightSnapshot;
+}
+
+function normalizeLoadPumasModelOptionsArgs(
+  invokerOrOptions: WorkflowInvoker | LoadPumasModelOptionsOptions,
+  maybeOptions: LoadPumasModelOptionsOptions,
+): { invoker: WorkflowInvoker; options: LoadPumasModelOptionsOptions } {
+  if (typeof invokerOrOptions === 'function') {
+    return { invoker: invokerOrOptions, options: maybeOptions };
+  }
+  return { invoker: invoke, options: invokerOrOptions };
 }
 
 async function loadFreshPumasModelOptions(invoker: WorkflowInvoker): Promise<PortOption[]> {
