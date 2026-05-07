@@ -114,9 +114,9 @@ const llama = await managedRuntimeService.inspectRuntime('llama_cpp');
   `ManagedRuntimeVersionStatus`, `ManagedRuntimeJobStatus`,
   `ManagedRuntimeJobArtifactStatus`, and `ManagedRuntimeInstallHistoryEntry` in
   `types.ts`.
-- Unified managed-binary fields mirror `ManagedBinaryStatus` and related
-  facade DTOs in `crates/inference`; callers must not synthesize readiness,
-  selection, or install state locally.
+- Managed dependency fields mirror `ManagedDependencyStatus` and related
+  neutral DTOs in `pantograph-managed-dependencies`; callers must not
+  synthesize readiness, selection, or install state locally.
 - Omitted nullable fields such as `selected_version`, `default_version`,
   `active_job`, and `job_artifact` retain their backend null semantics.
 - Enum strings such as `install_state`, `readiness_state`, `state`, and

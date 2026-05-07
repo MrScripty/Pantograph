@@ -64,8 +64,8 @@ server-shell components.
 ## Invariants
 - Runtime cards render backend-owned `ManagedRuntimeManagerRuntimeView`
   snapshots without redefining install/readiness policy locally.
-- The unified overview renders backend-owned `ManagedBinaryStatus` snapshots
-  from `managedRuntimeService.listManagedBinaries()` and never synthesizes
+- The dependency overview renders neutral `ManagedDependencyStatus` snapshots
+  from `managedRuntimeService.listManagedDependencies()` and never synthesizes
   readiness or selection state locally.
 - Version selection and default policy updates always route through
   `managedRuntimeService`.

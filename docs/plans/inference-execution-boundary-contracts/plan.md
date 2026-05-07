@@ -2078,6 +2078,10 @@ Embedded workflow runtime capability projection now reads runtime sidecar
 snapshots directly instead of the aggregate legacy managed-binary facade, so
 workflow capabilities no longer stitch media/native dependency status through a
 runtime-only surface while preserving runtime install/remove readiness facts.
+The legacy aggregate managed-binary status DTOs and `list_managed_binary_statuses`
+export have been retired. The remaining managed-binary facade is limited to
+runtime launch command compatibility for Tauri process startup and resolves
+through the neutral runtime sidecar command path.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`
