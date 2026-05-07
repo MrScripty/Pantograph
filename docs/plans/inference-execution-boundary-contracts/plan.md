@@ -1587,6 +1587,13 @@ Validation for the local-client update-feed slice passed with
 `cargo check -p workflow-nodes --features model-library`,
 `cargo fmt --all`, and `git diff --check`.
 
+The Pumas release-pin slice remains blocked as of 2026-05-06: Pantograph still
+depends on the sibling Pumas path, the local Pumas workspace package version is
+`0.5.0`, no local `v0.6.0` tag is available, and the sibling Pumas worktree has
+uncommitted producer changes. Pantograph should keep using the local path for
+active integration until the published `v0.6.0` artifact or tag exists, then
+replace the path dependency in a dedicated dependency-pin commit.
+
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
 **Goal:** Create the Rust-side resolved model-source and task shape that can
