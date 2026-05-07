@@ -1,13 +1,7 @@
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use pantograph_media_conversion as media_conversion;
 use serde::{Deserialize, Serialize};
-
-use crate::managed_redistributables::{
-    acquire_managed_redistributable_lease, managed_redistributable_status,
-    release_managed_redistributable_lease, ManagedRedistributableId,
-    ManagedRedistributableLeaseToken, ManagedRedistributableReadiness,
-};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -98,388 +92,238 @@ pub fn format_media_conversion_dependency_lease_holder(
     port_id: &str,
     conversion_id: &str,
 ) -> Result<String, String> {
-    validate_holder_component("workflow_run_id", workflow_run_id)?;
-    validate_holder_component("node_id", node_id)?;
-    validate_holder_component("port_id", port_id)?;
-    validate_holder_component("conversion_id", conversion_id)?;
-
-    Ok(format!(
-        "workflow_run:{workflow_run_id}/node:{node_id}/port:{port_id}/conversion:{conversion_id}"
-    ))
+    media_conversion::format_managed_media_dependency_lease_holder(
+        workflow_run_id,
+        node_id,
+        port_id,
+        conversion_id,
+    )
 }
 
 pub fn validate_media_conversion_dependency_lease_holder(holder: &str) -> Result<(), String> {
-    let mut parts = holder.split('/');
-    validate_holder_segment(parts.next(), "workflow_run", "workflow_run_id")?;
-    validate_holder_segment(parts.next(), "node", "node_id")?;
-    validate_holder_segment(parts.next(), "port", "port_id")?;
-    validate_holder_segment(parts.next(), "conversion", "conversion_id")?;
-
-    if parts.next().is_some() {
-        return Err(format!(
-            "Media conversion dependency lease holder must use exactly 4 attribution segments: {}",
-            media_conversion_dependency_lease_holder_convention()
-        ));
-    }
-
-    Ok(())
+    media_conversion::validate_managed_media_dependency_lease_holder(holder)
 }
 
 pub fn media_conversion_dependency_lease_holder_convention() -> &'static str {
-    "workflow_run:{workflow_run_id}/node:{node_id}/port:{port_id}/conversion:{conversion_id}"
+    media_conversion::managed_media_dependency_lease_holder_convention()
 }
 
 pub fn validate_open_color_io_activation(
     app_data_dir: &Path,
 ) -> Result<OpenColorIoActivation, String> {
-    let dependency = resolve_active_dependency(
-        app_data_dir,
-        ManagedRedistributableId::OpenColorIo,
-        MediaConversionDependencyId::OpenColorIo,
-    )?;
-
-    Ok(OpenColorIoActivation {
-        dependency,
-        abi_validation: OpenColorIoActivationValidation {
-            state: OpenColorIoActivationValidationState::NotValidated,
-            reason: "OpenColorIO managed artifact expected files are present and active, but ABI validation is not performed in this scaffold because this slice does not dynamically load native libraries".to_string(),
-        },
-    })
+    media_conversion::validate_open_color_io_activation(app_data_dir).map(legacy_activation)
 }
 
 pub fn open_color_io_activation_validation_state(
     app_data_dir: &Path,
 ) -> OpenColorIoActivationValidation {
-    match validate_open_color_io_activation(app_data_dir) {
-        Ok(activation) => activation.abi_validation,
-        Err(reason) => OpenColorIoActivationValidation {
-            state: OpenColorIoActivationValidationState::Unavailable,
-            reason,
-        },
-    }
+    legacy_activation_validation(media_conversion::open_color_io_activation_validation_state(
+        app_data_dir,
+    ))
 }
 
 pub fn acquire_media_conversion_dependency_plan(
     app_data_dir: &Path,
     request: MediaConversionDependencyPlanRequest,
 ) -> Result<MediaConversionDependencyPlan, String> {
-    validate_media_conversion_dependency_lease_holder(&request.holder)?;
-
-    let dependencies = dependency_ids_for_request(&request);
-    let mut acquired = Vec::new();
-
-    for (redistributable_id, dependency_id) in dependencies {
-        match acquire_dependency_lease(
-            app_data_dir,
-            redistributable_id,
-            dependency_id,
-            &request.holder,
-        ) {
-            Ok(lease) => acquired.push(lease),
-            Err(error) => {
-                release_acquired_leases(app_data_dir, &acquired);
-                return Err(error);
-            }
-        }
-    }
-
-    let open_color_io_activation = if request.color_managed {
-        match validate_open_color_io_activation(app_data_dir) {
-            Ok(activation) => Some(activation),
-            Err(error) => {
-                release_acquired_leases(app_data_dir, &acquired);
-                return Err(error);
-            }
-        }
-    } else {
-        None
-    };
-
-    Ok(MediaConversionDependencyPlan {
-        job_kind: request.job_kind,
+    let media_request = media_conversion::ManagedMediaDependencyPlanRequest {
+        kind: media_kind_from_job_kind(request.job_kind),
         color_managed: request.color_managed,
-        leases: acquired,
-        open_color_io_activation,
-    })
+        holder: request.holder,
+    };
+    media_conversion::acquire_managed_media_dependency_plan(app_data_dir, media_request)
+        .map(|plan| legacy_plan(request.job_kind, plan))
 }
 
 pub fn release_media_conversion_dependency_plan(
     app_data_dir: &Path,
     plan: &MediaConversionDependencyPlan,
 ) -> Result<(), String> {
-    let mut errors = Vec::new();
-    for lease in plan.leases.iter().rev() {
-        let managed_token = managed_lease_token_from_media_token(&lease.token);
-        if let Err(error) = release_managed_redistributable_lease(app_data_dir, &managed_token) {
-            errors.push(error);
-        }
-    }
-
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(format!(
-            "Failed to release media conversion dependency lease(s): {}",
-            errors.join("; ")
-        ))
-    }
+    media_conversion::release_managed_media_dependency_plan(app_data_dir, &media_plan(plan))
 }
 
 pub fn resolve_media_conversion_dependency_executable_path(
     dependency: &MediaConversionDependency,
 ) -> Result<PathBuf, String> {
-    match dependency.id {
-        MediaConversionDependencyId::Ffmpeg
-        | MediaConversionDependencyId::Ocioconvert
-        | MediaConversionDependencyId::Oiiotool => {}
-        MediaConversionDependencyId::OpenColorIo => {
-            return Err(
-                "OpenColorIO is a managed native library artifact, not an executable tool"
-                    .to_string(),
-            );
-        }
-    }
-
-    if dependency.expected_files.len() != 1 {
-        return Err(format!(
-            "{} {} must expose exactly one executable expected file, found {}",
-            dependency.display_name,
-            dependency.version,
-            dependency.expected_files.len()
-        ));
-    }
-
-    let executable_path = Path::new(&dependency.install_root).join(&dependency.expected_files[0]);
-    if !executable_path.is_file() {
-        return Err(format!(
-            "{} {} executable {:?} is missing",
-            dependency.display_name, dependency.version, executable_path
-        ));
-    }
-
-    Ok(executable_path)
+    media_conversion::resolve_managed_media_dependency_executable_path(&media_dependency(
+        dependency,
+    ))
 }
 
-fn dependency_ids_for_request(
-    request: &MediaConversionDependencyPlanRequest,
-) -> Vec<(ManagedRedistributableId, MediaConversionDependencyId)> {
-    let mut seen = HashSet::new();
-    let mut dependencies = Vec::new();
-
-    match request.job_kind {
-        MediaConversionJobKind::Image | MediaConversionJobKind::ThreeD => push_dependency(
-            &mut seen,
-            &mut dependencies,
-            ManagedRedistributableId::Oiiotool,
-            MediaConversionDependencyId::Oiiotool,
-        ),
-        MediaConversionJobKind::Audio | MediaConversionJobKind::Video => push_dependency(
-            &mut seen,
-            &mut dependencies,
-            ManagedRedistributableId::Ffmpeg,
-            MediaConversionDependencyId::Ffmpeg,
-        ),
-    }
-
-    if request.color_managed {
-        push_dependency(
-            &mut seen,
-            &mut dependencies,
-            ManagedRedistributableId::Ocioconvert,
-            MediaConversionDependencyId::Ocioconvert,
-        );
-        push_dependency(
-            &mut seen,
-            &mut dependencies,
-            ManagedRedistributableId::OpenColorIo,
-            MediaConversionDependencyId::OpenColorIo,
-        );
-    }
-
-    dependencies
-}
-
-fn push_dependency(
-    seen: &mut HashSet<ManagedRedistributableId>,
-    dependencies: &mut Vec<(ManagedRedistributableId, MediaConversionDependencyId)>,
-    redistributable_id: ManagedRedistributableId,
-    dependency_id: MediaConversionDependencyId,
-) {
-    if seen.insert(redistributable_id) {
-        dependencies.push((redistributable_id, dependency_id));
+fn legacy_plan(
+    job_kind: MediaConversionJobKind,
+    plan: media_conversion::ManagedMediaDependencyPlan,
+) -> MediaConversionDependencyPlan {
+    MediaConversionDependencyPlan {
+        job_kind,
+        color_managed: plan.color_managed,
+        leases: plan.leases.into_iter().map(legacy_lease).collect(),
+        open_color_io_activation: plan.open_color_io_activation.map(legacy_activation),
     }
 }
 
-fn acquire_dependency_lease(
-    app_data_dir: &Path,
-    redistributable_id: ManagedRedistributableId,
-    dependency_id: MediaConversionDependencyId,
-    holder: &str,
-) -> Result<MediaConversionDependencyLease, String> {
-    ensure_active_dependency_available(app_data_dir, redistributable_id)?;
-    let lease = acquire_managed_redistributable_lease(app_data_dir, redistributable_id, holder)?;
-    let dependency =
-        match resolve_active_dependency(app_data_dir, redistributable_id, dependency_id) {
-            Ok(dependency) => dependency,
-            Err(error) => {
-                let _ = release_managed_redistributable_lease(app_data_dir, &lease);
-                return Err(error);
-            }
-        };
-    let token = MediaConversionDependencyLeaseToken {
-        id: dependency_id,
-        version: lease.version,
-        lease_id: lease.lease_id,
-        holder: holder.to_string(),
-    };
-
-    Ok(MediaConversionDependencyLease { dependency, token })
-}
-
-fn ensure_active_dependency_available(
-    app_data_dir: &Path,
-    id: ManagedRedistributableId,
-) -> Result<(), String> {
-    let status = managed_redistributable_status(app_data_dir, id);
-    let Some(active_version) = status.selection.active_version.as_deref() else {
-        return Err(format!(
-            "{} does not have an active managed dependency version",
-            status.display_name
-        ));
-    };
-
-    let Some(version) = status
-        .versions
-        .iter()
-        .find(|version| version.version == active_version && version.active)
-    else {
-        return Err(format!(
-            "{} active managed dependency version {} is not available in the current catalog",
-            status.display_name, active_version
-        ));
-    };
-
-    if version.readiness != ManagedRedistributableReadiness::Ready {
-        return Err(format!(
-            "{} active managed dependency version {} is not ready; missing expected file(s): {}",
-            status.display_name,
-            active_version,
-            version.missing_files.join(", ")
-        ));
-    }
-
-    Ok(())
-}
-
-fn resolve_active_dependency(
-    app_data_dir: &Path,
-    redistributable_id: ManagedRedistributableId,
-    dependency_id: MediaConversionDependencyId,
-) -> Result<MediaConversionDependency, String> {
-    ensure_active_dependency_available(app_data_dir, redistributable_id)?;
-    let status = managed_redistributable_status(app_data_dir, redistributable_id);
-    let active_version = status.selection.active_version.as_deref().ok_or_else(|| {
-        format!(
-            "{} does not have an active managed dependency version",
-            status.display_name
-        )
-    })?;
-    let version = status
-        .versions
-        .iter()
-        .find(|version| version.version == active_version && version.active)
-        .ok_or_else(|| {
-            format!(
-                "{} active managed dependency version {} is not available in the current catalog",
-                status.display_name, active_version
-            )
-        })?;
-
-    Ok(MediaConversionDependency {
-        id: dependency_id,
-        display_name: status.display_name,
-        version: version.version.clone(),
-        install_root: version.install_root.clone(),
-        expected_files: version.expected_files.clone(),
-    })
-}
-
-fn release_acquired_leases(app_data_dir: &Path, leases: &[MediaConversionDependencyLease]) {
-    for lease in leases.iter().rev() {
-        let managed_token = managed_lease_token_from_media_token(&lease.token);
-        let _ = release_managed_redistributable_lease(app_data_dir, &managed_token);
+fn media_plan(
+    plan: &MediaConversionDependencyPlan,
+) -> media_conversion::ManagedMediaDependencyPlan {
+    media_conversion::ManagedMediaDependencyPlan {
+        kind: media_kind_from_job_kind(plan.job_kind),
+        color_managed: plan.color_managed,
+        leases: plan.leases.iter().map(media_lease).collect(),
+        open_color_io_activation: plan.open_color_io_activation.as_ref().map(media_activation),
     }
 }
 
-fn managed_lease_token_from_media_token(
+fn legacy_lease(
+    lease: media_conversion::ManagedMediaDependencyLease,
+) -> MediaConversionDependencyLease {
+    MediaConversionDependencyLease {
+        dependency: legacy_dependency(lease.dependency),
+        token: legacy_lease_token(lease.token),
+    }
+}
+
+fn media_lease(
+    lease: &MediaConversionDependencyLease,
+) -> media_conversion::ManagedMediaDependencyLease {
+    media_conversion::ManagedMediaDependencyLease {
+        dependency: media_dependency(&lease.dependency),
+        token: media_lease_token(&lease.token),
+    }
+}
+
+fn legacy_lease_token(
+    token: media_conversion::ManagedMediaDependencyLeaseToken,
+) -> MediaConversionDependencyLeaseToken {
+    MediaConversionDependencyLeaseToken {
+        id: dependency_id_from_media_id(token.id),
+        version: token.version,
+        lease_id: token.lease_id,
+        holder: token.holder,
+    }
+}
+
+fn media_lease_token(
     token: &MediaConversionDependencyLeaseToken,
-) -> ManagedRedistributableLeaseToken {
-    ManagedRedistributableLeaseToken {
-        id: redistributable_id_for_dependency_id(token.id),
+) -> media_conversion::ManagedMediaDependencyLeaseToken {
+    media_conversion::ManagedMediaDependencyLeaseToken {
+        id: media_id_from_dependency_id(token.id),
         version: token.version.clone(),
         lease_id: token.lease_id.clone(),
+        holder: token.holder.clone(),
     }
 }
 
-fn redistributable_id_for_dependency_id(
+fn legacy_activation(activation: media_conversion::OpenColorIoActivation) -> OpenColorIoActivation {
+    OpenColorIoActivation {
+        dependency: legacy_dependency(activation.dependency),
+        abi_validation: legacy_activation_validation(activation.abi_validation),
+    }
+}
+
+fn media_activation(activation: &OpenColorIoActivation) -> media_conversion::OpenColorIoActivation {
+    media_conversion::OpenColorIoActivation {
+        dependency: media_dependency(&activation.dependency),
+        abi_validation: media_activation_validation(activation.abi_validation.clone()),
+    }
+}
+
+fn legacy_activation_validation(
+    validation: media_conversion::OpenColorIoActivationValidation,
+) -> OpenColorIoActivationValidation {
+    OpenColorIoActivationValidation {
+        state: match validation.state {
+            media_conversion::OpenColorIoActivationValidationState::NotValidated => {
+                OpenColorIoActivationValidationState::NotValidated
+            }
+            media_conversion::OpenColorIoActivationValidationState::Unavailable => {
+                OpenColorIoActivationValidationState::Unavailable
+            }
+        },
+        reason: validation.reason,
+    }
+}
+
+fn media_activation_validation(
+    validation: OpenColorIoActivationValidation,
+) -> media_conversion::OpenColorIoActivationValidation {
+    media_conversion::OpenColorIoActivationValidation {
+        state: match validation.state {
+            OpenColorIoActivationValidationState::NotValidated => {
+                media_conversion::OpenColorIoActivationValidationState::NotValidated
+            }
+            OpenColorIoActivationValidationState::Unavailable => {
+                media_conversion::OpenColorIoActivationValidationState::Unavailable
+            }
+        },
+        reason: validation.reason,
+    }
+}
+
+fn legacy_dependency(
+    dependency: media_conversion::ManagedMediaDependency,
+) -> MediaConversionDependency {
+    MediaConversionDependency {
+        id: dependency_id_from_media_id(dependency.id),
+        display_name: dependency.display_name,
+        version: dependency.version,
+        install_root: dependency.install_root,
+        expected_files: dependency.expected_files,
+    }
+}
+
+fn media_dependency(
+    dependency: &MediaConversionDependency,
+) -> media_conversion::ManagedMediaDependency {
+    media_conversion::ManagedMediaDependency {
+        id: media_id_from_dependency_id(dependency.id),
+        display_name: dependency.display_name.clone(),
+        version: dependency.version.clone(),
+        install_root: dependency.install_root.clone(),
+        expected_files: dependency.expected_files.clone(),
+    }
+}
+
+fn media_kind_from_job_kind(
+    job_kind: MediaConversionJobKind,
+) -> media_conversion::ConversionMediaKind {
+    match job_kind {
+        MediaConversionJobKind::Image => media_conversion::ConversionMediaKind::Image,
+        MediaConversionJobKind::Audio => media_conversion::ConversionMediaKind::Audio,
+        MediaConversionJobKind::Video => media_conversion::ConversionMediaKind::Video,
+        MediaConversionJobKind::ThreeD => media_conversion::ConversionMediaKind::ThreeD,
+    }
+}
+
+fn media_id_from_dependency_id(
     id: MediaConversionDependencyId,
-) -> ManagedRedistributableId {
+) -> media_conversion::ManagedMediaDependencyId {
     match id {
-        MediaConversionDependencyId::Ffmpeg => ManagedRedistributableId::Ffmpeg,
-        MediaConversionDependencyId::Ocioconvert => ManagedRedistributableId::Ocioconvert,
-        MediaConversionDependencyId::Oiiotool => ManagedRedistributableId::Oiiotool,
-        MediaConversionDependencyId::OpenColorIo => ManagedRedistributableId::OpenColorIo,
+        MediaConversionDependencyId::Ffmpeg => media_conversion::ManagedMediaDependencyId::Ffmpeg,
+        MediaConversionDependencyId::Ocioconvert => {
+            media_conversion::ManagedMediaDependencyId::Ocioconvert
+        }
+        MediaConversionDependencyId::Oiiotool => {
+            media_conversion::ManagedMediaDependencyId::Oiiotool
+        }
+        MediaConversionDependencyId::OpenColorIo => {
+            media_conversion::ManagedMediaDependencyId::OpenColorIo
+        }
     }
 }
 
-fn validate_holder_segment(
-    segment: Option<&str>,
-    expected_prefix: &str,
-    component_name: &str,
-) -> Result<(), String> {
-    let Some(segment) = segment else {
-        return Err(format!(
-            "Media conversion dependency lease holder is missing {component_name}; expected {}",
-            media_conversion_dependency_lease_holder_convention()
-        ));
-    };
-    let Some(value) = segment.strip_prefix(expected_prefix) else {
-        return Err(format!(
-            "Media conversion dependency lease holder segment '{segment}' must start with '{expected_prefix}:'; expected {}",
-            media_conversion_dependency_lease_holder_convention()
-        ));
-    };
-    let Some(value) = value.strip_prefix(':') else {
-        return Err(format!(
-            "Media conversion dependency lease holder segment '{segment}' must start with '{expected_prefix}:'; expected {}",
-            media_conversion_dependency_lease_holder_convention()
-        ));
-    };
-
-    validate_holder_component(component_name, value)
-}
-
-fn validate_holder_component(component_name: &str, value: &str) -> Result<(), String> {
-    if value.is_empty() {
-        return Err(format!(
-            "Media conversion dependency lease holder {component_name} must not be empty"
-        ));
+fn dependency_id_from_media_id(
+    id: media_conversion::ManagedMediaDependencyId,
+) -> MediaConversionDependencyId {
+    match id {
+        media_conversion::ManagedMediaDependencyId::Ffmpeg => MediaConversionDependencyId::Ffmpeg,
+        media_conversion::ManagedMediaDependencyId::Ocioconvert => {
+            MediaConversionDependencyId::Ocioconvert
+        }
+        media_conversion::ManagedMediaDependencyId::Oiiotool => {
+            MediaConversionDependencyId::Oiiotool
+        }
+        media_conversion::ManagedMediaDependencyId::OpenColorIo => {
+            MediaConversionDependencyId::OpenColorIo
+        }
     }
-
-    if value.len() > 128 {
-        return Err(format!(
-            "Media conversion dependency lease holder {component_name} must be 128 characters or fewer"
-        ));
-    }
-
-    if !value
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
-    {
-        return Err(format!(
-            "Media conversion dependency lease holder {component_name} must contain only ASCII letters, digits, ':', '.', '_', or '-'"
-        ));
-    }
-
-    Ok(())
 }

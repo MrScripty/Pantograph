@@ -4937,6 +4937,7 @@ dependencies = [
  "log",
  "once_cell",
  "pantograph-managed-dependencies",
+ "pantograph-media-conversion",
  "pantograph-runtime-identity",
  "parking_lot",
  "pyo3",

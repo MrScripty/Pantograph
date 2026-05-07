@@ -2069,6 +2069,11 @@ redistributable operations instead of importing inference-owned media planning
 types. The inference media planning module remains as a compatibility surface
 until remaining tests and legacy callers are moved to the media-conversion
 owner.
+The inference media planning module no longer owns duplicate lease/path
+implementation logic; it maps legacy inference DTOs onto
+`pantograph-media-conversion` plan, activation, holder-validation, release, and
+executable-resolution functions so old callers retain their current wire shape
+while implementation ownership lives in the media-conversion crate.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`
