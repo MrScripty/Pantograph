@@ -1274,6 +1274,61 @@ fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
 }
 
 #[test]
+fn kv_cache_progress_detail_drops_path_shaped_metadata_before_ledger() {
+    let workflow_id = WorkflowId::try_from("workflow-a".to_string()).expect("workflow id");
+    let workflow_run_id = WorkflowRunId::try_from("run-a".to_string()).expect("run id");
+    let contexts_by_node_id = BTreeMap::from([(
+        "node-a".to_string(),
+        NodeExecutionWorkflowLedgerNodeContext {
+            node_id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+        },
+    )]);
+
+    let request = build_kv_cache_diagnostic_event_ledger_append_request(
+        &workflow_id,
+        &workflow_run_id,
+        "run-a",
+        &contexts_by_node_id,
+        &node_engine::WorkflowEvent::TaskProgress {
+            task_id: "node-a".to_string(),
+            execution_id: "run-a".to_string(),
+            progress: 0.4,
+            message: Some("cache restore attempted".to_string()),
+            detail: Some(node_engine::TaskProgressDetail::KvCache(
+                node_engine::KvCacheExecutionDiagnostics {
+                    action: node_engine::KvCacheEventAction::RestoreInput,
+                    outcome: node_engine::KvCacheEventOutcome::Miss,
+                    cache_id: Some("/tmp/private/kv-cache.bin".to_string()),
+                    backend_key: Some("llamacpp".to_string()),
+                    reuse_source: Some("file:///tmp/private/reuse-source".to_string()),
+                    token_count: Some(64),
+                    reason: Some("fallback used /tmp/private/history.bin".to_string()),
+                    option_diagnostics: Vec::new(),
+                },
+            )),
+            occurred_at_ms: Some(175),
+        },
+    )
+    .expect("kv cache progress should map even when unsafe metadata is dropped");
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("/tmp/private"));
+    assert!(!payload_json.contains("file:///tmp/private"));
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            let kv_cache = payload.kv_cache.expect("kv cache summary");
+            assert!(kv_cache.cache_id.is_none());
+            assert!(kv_cache.reuse_source.is_none());
+            assert!(kv_cache.reason.is_none());
+            assert_eq!(kv_cache.backend_key.as_deref(), Some("llamacpp"));
+            assert_eq!(kv_cache.token_count, Some(64));
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn kv_cache_workflow_sink_returns_diagnostics_unavailable_and_forwards_event_on_append_failure() {
     let service =
         std::sync::Arc::new(WorkflowService::with_ephemeral_diagnostics_ledger().expect("service"));

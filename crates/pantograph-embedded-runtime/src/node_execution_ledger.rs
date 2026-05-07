@@ -866,14 +866,41 @@ fn kv_cache_diagnostic_summary(
     InferenceKvCacheDiagnosticSummary {
         action: kv_cache_action_label(&detail.action).to_string(),
         outcome: kv_cache_outcome_label(&detail.outcome).to_string(),
-        cache_id: detail.cache_id.clone(),
+        cache_id: detail
+            .cache_id
+            .as_deref()
+            .and_then(bounded_kv_cache_metadata),
         backend_key: detail.backend_key.clone(),
-        reuse_source: detail.reuse_source.clone(),
+        reuse_source: detail
+            .reuse_source
+            .as_deref()
+            .and_then(bounded_kv_cache_metadata),
         token_count: detail
             .token_count
             .and_then(|token_count| u64::try_from(token_count).ok()),
-        reason: detail.reason.clone(),
+        reason: detail.reason.as_deref().and_then(bounded_kv_cache_metadata),
     }
+}
+
+fn bounded_kv_cache_metadata(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || contains_local_artifact_ref_token(value) {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn contains_local_artifact_ref_token(value: &str) -> bool {
+    value.split_whitespace().any(|token| {
+        let token = token.trim_matches(|ch: char| {
+            matches!(
+                ch,
+                '"' | '\'' | '`' | ',' | ':' | ';' | ')' | '(' | '[' | ']' | '{' | '}'
+            )
+        });
+        inference::looks_like_local_artifact_ref(token)
+    })
 }
 
 fn kv_cache_action_label(action: &node_engine::KvCacheEventAction) -> &'static str {

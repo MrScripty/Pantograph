@@ -3764,6 +3764,11 @@ one-off conversions.
   same Transformers-aligned public lifecycle boundaries as non-streaming typed
   text execution; failed and cancelled streams do not emit postprocessing or
   result-projection, and legacy raw chat streaming is unchanged.
+- 2026-05-06: KV-cache diagnostic hygiene follow-up now filters local
+  path-shaped cache ids, reuse sources, and reason strings before durable
+  inference diagnostic persistence. Stable KV labels remain queryable, but
+  temp paths and `file://` refs cannot persist through KV-cache progress
+  metadata.
 - 2026-05-03: Generation option diagnostics ledger slice added append-only
   `inference.execution_diagnostic_observed` ledger events with bounded
   option-support counts and per-option summaries. `InferenceRequestLifecycleEvent`
