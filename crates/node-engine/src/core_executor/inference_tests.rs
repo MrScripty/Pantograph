@@ -2506,6 +2506,11 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
 async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("text package facts fixture");
     let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
     let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
         Arc::new(MockInferenceLifecycleSink {
@@ -2535,13 +2540,17 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
             "hf_compatible_directory",
         ),
     );
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
 
     let context = DependencyPreflightLifecycleContext {
         task_id: "llm-inference-1".to_string(),
         execution_id: "exec-a".to_string(),
         task_label: "text_generation".to_string(),
         backend_key: Some("pytorch".to_string()),
-        model_id: Some("pumas://models/tiny-hf".to_string()),
+        model_id: Some("llm/example/tiny-transformers".to_string()),
         resolved_artifact_kind: Some("hf_compatible_directory".to_string()),
     };
 
@@ -2556,7 +2565,7 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
     .expect("resolver should return a model_ref");
 
     assert_eq!(resolved.engine, "pytorch");
-    assert_eq!(resolved.model_id, "pumas://models/tiny-hf");
+    assert_eq!(resolved.model_id, "llm/example/tiny-transformers");
 
     let events = lifecycle_events.lock().expect("lifecycle events lock");
     assert_eq!(events.len(), 3);
@@ -2565,27 +2574,37 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
             && event.request_id.as_deref() == Some("exec-a:llm-inference-1:text_generation")
             && event.backend_key.as_deref() == Some("pytorch")
             && event.runtime_id.as_deref() == Some("pytorch")
-            && event.model_id.as_deref() == Some("pumas://models/tiny-hf")
+            && event.model_id.as_deref() == Some("llm/example/tiny-transformers")
             && event.resolved_artifact_kind.as_deref() == Some("hf_compatible_directory")
             && event.usage.is_none()
             && event.cache_handle_id.is_none()
             && event.artifact_refs.is_empty()
-            && event.compatibility_report.is_none()
-            && event.compatibility_issues.is_empty()
             && event.option_diagnostics.is_empty()
     }));
     assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
     assert_eq!(events[0].detail, None);
+    assert!(events[0].compatibility_report.is_none());
+    assert!(events[0].compatibility_issues.is_empty());
     assert_eq!(
         events[1].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
     assert_eq!(events[1].detail, None);
+    let report = events[1]
+        .compatibility_report
+        .as_ref()
+        .expect("completed preflight should carry compatibility report");
+    assert!(report.compatible);
+    assert_eq!(report.status, "accepted");
+    assert_eq!(report.model_source, "supported");
+    assert!(events[1].compatibility_issues.is_empty());
     assert_eq!(
         events[2].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
     );
     assert_eq!(events[2].detail, None);
+    assert!(events[2].compatibility_report.is_none());
+    assert!(events[2].compatibility_issues.is_empty());
 }
 
 #[cfg(feature = "inference-nodes")]

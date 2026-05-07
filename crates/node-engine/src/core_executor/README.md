@@ -87,9 +87,10 @@ stable public facade and dispatch owner.
 - Dependency preflight lifecycle events are bounded model-package-resolution
   observations. Successful canonical PyTorch preflight emits
   started/completed/cleanup facts with request, task, backend/runtime, and
-  model identity plus the resolved artifact-kind label when known, but no
-  usage, cache, artifact refs, compatibility, option, tensor, prompt, or
-  local-path payloads.
+  model identity plus the resolved artifact-kind label when known. The terminal
+  completed event may also carry bounded backend compatibility summaries when
+  resolved package facts are present; started and cleanup events stay free of
+  usage, cache, artifact refs, option, tensor, prompt, and local-path payloads.
 - Gateway-backed inference handlers stay in `inference_nodes.rs`; PyTorch and
   audio Python-worker handlers remain separate feature families.
 - Canonical `llm-inference` request builders in `inference_nodes.rs` should

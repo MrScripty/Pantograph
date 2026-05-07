@@ -11,11 +11,14 @@ use pantograph_runtime_identity::canonical_engine_backend_key;
 use inference::ModelArtifactKind;
 #[cfg(feature = "inference-nodes")]
 use inference::{
-    resolve_task_registry_entry, BackendHintLabel, InferenceExecutionInputKind,
-    InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    resolve_task_registry_entry, BackendHintLabel, InferenceCompatibilityIssueSummary,
+    InferenceCompatibilityReportSummary, InferenceExecutionInputKind, InferenceLifecyclePhase,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, InferenceTaskId, ResolvedModelPackageFacts,
     TaskRegistryEntry,
 };
+#[cfg(feature = "pytorch-nodes")]
+use inference::{BackendCompatibilityOptions, BackendCompatibilityRequest, PyTorchBackend};
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::error::{NodeEngineError, Result};
@@ -31,6 +34,9 @@ use super::{read_optional_input_string, read_optional_input_value};
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use super::{read_optional_input_string_aliases, read_optional_input_value_aliases};
 
+#[cfg(feature = "pytorch-nodes")]
+const MAX_DEPENDENCY_PREFLIGHT_COMPATIBILITY_ISSUES: usize = 32;
+
 #[cfg(feature = "inference-nodes")]
 #[derive(Debug, Clone)]
 pub(crate) struct DependencyPreflightLifecycleContext {
@@ -40,6 +46,13 @@ pub(crate) struct DependencyPreflightLifecycleContext {
     pub(crate) backend_key: Option<String>,
     pub(crate) model_id: Option<String>,
     pub(crate) resolved_artifact_kind: Option<String>,
+}
+
+#[cfg(feature = "inference-nodes")]
+#[derive(Debug, Default)]
+struct DependencyPreflightCompatibilityDiagnostics {
+    compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
 }
 
 #[cfg(all(feature = "audio-nodes", not(feature = "inference-nodes")))]
@@ -836,7 +849,16 @@ async fn enforce_dependency_preflight_inner(
         }
     }
 
-    record_dependency_preflight_success_lifecycle(extensions, lifecycle_context);
+    #[cfg(feature = "inference-nodes")]
+    let compatibility_diagnostics =
+        dependency_preflight_compatibility_diagnostics(inputs, lifecycle_context);
+    #[cfg(not(feature = "inference-nodes"))]
+    let compatibility_diagnostics = ();
+    record_dependency_preflight_success_lifecycle(
+        extensions,
+        lifecycle_context,
+        &compatibility_diagnostics,
+    );
     Ok(resolved)
 }
 
@@ -851,6 +873,7 @@ fn record_dependency_preflight_failure_lifecycle(
         lifecycle_context,
         InferenceRequestLifecycleEventKind::Failed,
         Some(sanitize_dependency_preflight_lifecycle_detail(detail)),
+        &DependencyPreflightCompatibilityDiagnostics::default(),
     );
 }
 
@@ -886,12 +909,14 @@ fn record_dependency_preflight_failure_lifecycle(
 fn record_dependency_preflight_success_lifecycle(
     extensions: &ExecutorExtensions,
     lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+    compatibility_diagnostics: &DependencyPreflightCompatibilityDiagnostics,
 ) {
     record_dependency_preflight_lifecycle(
         extensions,
         lifecycle_context,
         InferenceRequestLifecycleEventKind::Completed,
         None,
+        compatibility_diagnostics,
     );
 }
 
@@ -899,6 +924,7 @@ fn record_dependency_preflight_success_lifecycle(
 fn record_dependency_preflight_success_lifecycle(
     _extensions: &ExecutorExtensions,
     _lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+    _compatibility_diagnostics: &(),
 ) {
 }
 
@@ -908,6 +934,7 @@ fn record_dependency_preflight_lifecycle(
     lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
     terminal_kind: InferenceRequestLifecycleEventKind,
     terminal_detail: Option<String>,
+    compatibility_diagnostics: &DependencyPreflightCompatibilityDiagnostics,
 ) {
     let Some(context) = lifecycle_context else {
         return;
@@ -931,6 +958,7 @@ fn record_dependency_preflight_lifecycle(
         (terminal_kind, terminal_detail),
         (InferenceRequestLifecycleEventKind::CleanupCompleted, None),
     ] {
+        let emit_compatibility = kind == InferenceRequestLifecycleEventKind::Completed;
         if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
             request_id: request_id.clone(),
             phase: InferenceLifecyclePhase::ModelPackageResolution,
@@ -949,13 +977,61 @@ fn record_dependency_preflight_lifecycle(
             artifact_refs: Vec::new(),
             detail,
             canonical_error_event_id: None,
-            compatibility_report: None,
-            compatibility_issues: Vec::new(),
+            compatibility_report: emit_compatibility
+                .then(|| compatibility_diagnostics.compatibility_report.clone())
+                .flatten(),
+            compatibility_issues: if emit_compatibility {
+                compatibility_diagnostics.compatibility_issues.clone()
+            } else {
+                Vec::new()
+            },
             option_diagnostics: Vec::new(),
         }) {
             log::warn!("failed to record inference dependency preflight lifecycle event: {error}");
         }
     }
+}
+
+#[cfg(feature = "pytorch-nodes")]
+fn dependency_preflight_compatibility_diagnostics(
+    inputs: &HashMap<String, serde_json::Value>,
+    lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+) -> DependencyPreflightCompatibilityDiagnostics {
+    let Some(context) = lifecycle_context else {
+        return DependencyPreflightCompatibilityDiagnostics::default();
+    };
+    if context.backend_key.as_deref() != Some("pytorch") {
+        return DependencyPreflightCompatibilityDiagnostics::default();
+    }
+    let Some(package_facts) = read_resolved_model_package_facts_for_preflight(inputs) else {
+        return DependencyPreflightCompatibilityDiagnostics::default();
+    };
+    let Some(task) = resolve_task_registry_entry(&context.task_label)
+        .or_else(|| canonical_inference_task_entry(inputs))
+    else {
+        return DependencyPreflightCompatibilityDiagnostics::default();
+    };
+
+    let report = PyTorchBackend::static_capabilities().check_model_compatibility(
+        context.backend_key.as_deref(),
+        BackendCompatibilityRequest::new(&task, &package_facts)
+            .with_options(BackendCompatibilityOptions::default()),
+    );
+
+    DependencyPreflightCompatibilityDiagnostics {
+        compatibility_report: Some(report.to_inference_compatibility_report_summary()),
+        compatibility_issues: report.to_inference_compatibility_issue_summaries(
+            MAX_DEPENDENCY_PREFLIGHT_COMPATIBILITY_ISSUES,
+        ),
+    }
+}
+
+#[cfg(all(feature = "inference-nodes", not(feature = "pytorch-nodes")))]
+fn dependency_preflight_compatibility_diagnostics(
+    _inputs: &HashMap<String, serde_json::Value>,
+    _lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+) -> DependencyPreflightCompatibilityDiagnostics {
+    DependencyPreflightCompatibilityDiagnostics::default()
 }
 
 #[cfg(feature = "inference-nodes")]

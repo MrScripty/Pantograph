@@ -3379,7 +3379,16 @@ inference write ledger events directly.
   `llm-inference` coverage proving image-generation
   request construction forwards package facts while task-validation and
   backend-execution lifecycle events carry bounded compatibility summaries with
-  the stable Pumas model id.
+  the stable Pumas model id. Canonical PyTorch dependency preflight now also
+  computes a bounded backend compatibility summary from resolved package facts
+  and selected PyTorch backend facts, attaching it only to the completed
+  model-package-resolution lifecycle event while keeping started and cleanup
+  events free of option, usage, cache, prompt, tensor, and local-path payloads.
+  Validation passed with
+  `cargo test -p node-engine --features inference-nodes,pytorch-nodes dependency_preflight`,
+  `cargo test -p node-engine --features inference-nodes,pytorch-nodes test_dependency_preflight_records_lifecycle_success_with_resolver`,
+  `cargo test -p pantograph-embedded-runtime compatibility`,
+  `cargo fmt --all`, and `git diff --check`.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support. Canonical
