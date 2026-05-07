@@ -1126,8 +1126,13 @@ unbounded cross-repo churn.
 - No implementation code starts until source/test/config/generated/lockfile
   dirtiness is either absent or explicitly accepted.
 
-**Status:** Updated during the 2026-05-06 standards pass. The slice-specific
-write set for the Pumas fast selector integration is now recorded below.
+**Status:** Completed. The 2026-05-06 standards pass recorded the
+slice-specific write set for Pumas fast selector integration, and the
+implementation now satisfies it: `puma-lib` model options query the explicit
+Pumas selector-access role, selector rows are populated from
+`model_library_selector_snapshot`, read-only setup opens the model-library root
+containing `models.db`, and the frontend shares the selector snapshot/cache
+handoff between the Library page and graph `puma-lib` node.
 
 **Milestone 2 Fast Selector Slice Boundary:**
 
@@ -1170,6 +1175,11 @@ write set for the Pumas fast selector integration is now recorded below.
   as executable only when entry and artifact states are both `ready`, and
   hydrate package summaries, execution descriptors, and inference settings only
   for the selected model or explicit expanded-row detail path.
+- 2026-05-07 validation: `cargo test -p workflow-nodes --features
+  model-library --lib puma_lib` passes and includes
+  `test_model_options_use_selector_snapshot_without_detail_hydration`,
+  `test_selector_row_option_uses_entry_path_only_when_ready`, and
+  read-only selector coverage.
 
 **Milestone 2 Selector Access-Role Slice Boundary:**
 
@@ -1248,6 +1258,10 @@ write set for the Pumas fast selector integration is now recorded below.
   unavailable errors preserve the loaded selector rows without spinning or
   polling; and both LibraryPage and graph PumaLibNode share the same cache
   helper.
+- 2026-05-07 validation: `node --experimental-strip-types --test
+  src/services/workflow/pumaModelOptionsCache.test.ts` passes and covers the
+  cursor extraction, update-feed refresh, read-only unavailable-feed fallback,
+  and shared cache behavior used by LibraryPage and PumaLibNode.
 
 **Milestone 2 Local-Client Update Feed Slice Boundary:**
 
@@ -3893,8 +3907,8 @@ Update during implementation:
   freeze, implementation should start with the thinnest useful slice and expand
   through neighboring slices rather than building broad layers in isolation.
   This originally meant GGUF text generation; after the settled 2026-05-06
-  Pumas fast selector implementation, the next slice is now Pumas fast selector
-  integration, followed by GGUF text generation, GGUF embeddings,
+  Pumas fast selector implementation, Pantograph first completed the Pumas fast
+  selector integration, followed by GGUF text generation, GGUF embeddings,
   HF/Transformers text generation, rerank, and multimodal support.
 - 2026-05-02: Expanded the plan with a deeper generation configuration
   contract, strong task registry, explicit preprocess/execute/postprocess
@@ -4642,6 +4656,12 @@ Update during implementation:
   root to `PumasReadOnlyLibrary`, and reserve package-summary, execution-
   descriptor, and inference-settings batch hydration for selected or expanded
   models.
+- 2026-05-07: Reconciled the Pantograph implementation against that settled
+  Pumas selector contract. `workflow-nodes` now consumes
+  `ModelLibrarySelectorSnapshot` for puma-lib options through the explicit
+  owner/local-client/read-only selector-access role; frontend model-option
+  consumers share the cursor handoff cache; and validation confirms selector
+  population does not perform per-row detail hydration.
 - 2026-05-06: Standards pass added a blast-radius and implementation guardrail
   section covering selector integration, selected-detail hydration, canonical
   contracts, graph migration, runtime technical fit, diagnostics ledger
@@ -4976,16 +4996,11 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Implement the Pumas fast selector integration slice before broadening more
-  inference backend work: explicit owner/local-client/read-only access role,
-  correct model-library root resolution for read-only snapshots, Library and
-  graph selector population from `model_library_selector_snapshot`, selected-row
-  batch hydration, and cursor handoff to the existing cache invalidation path.
-- Add acceptance tests proving selector population does not perform per-row
-  package-fact/detail hydration and does not inspect Pumas SQLite,
-  `models.metadata_json`, or search-cache internals.
-- Keep the existing package-summary/update-feed integration as selected-detail
-  hydration and invalidation infrastructure rather than the primary list-row
+- Keep selected-detail hydration separate from selector-row population if
+  future UI work adds expanded-row package facts, execution descriptors, or
+  inference-settings panels.
+- Continue treating Pumas package-summary/update-feed integration as
+  invalidation and selected-detail infrastructure, not as the primary list-row
   population path.
 
 ### Verification Summary
@@ -5026,6 +5041,15 @@ Update during implementation:
 - `cargo check --manifest-path src-tauri/Cargo.toml` passed after exposing
   Pumas summary/update Tauri commands, with existing dead-code warnings in the
   Tauri workflow modules.
+- `cargo test -p workflow-nodes --features model-library --lib puma_lib`
+  passed after reconciling the Pumas fast selector integration.
+- `cargo test -p workflow-nodes --features model-library read_only` passed
+  after reconciling the selector access-role/read-only root behavior.
+- `cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands` passed
+  after reconciling the selector access-role command routing.
+- `node --experimental-strip-types --test
+  src/services/workflow/pumaModelOptionsCache.test.ts` passed after reconciling
+  the frontend selector cursor handoff cache.
 - `cargo test -p inference` failed in
   `managed_redistributables::install_from_staging_validates_expected_files_before_finalizing`
   due to the unrelated managed-dependency path mismatch recorded above.
