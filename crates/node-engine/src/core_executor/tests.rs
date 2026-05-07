@@ -25,22 +25,20 @@ fn test_resolve_node_type_no_suffix() {
 #[tokio::test]
 async fn stale_backend_specific_inference_nodes_do_not_have_executor_branches() {
     let executor = CoreTaskExecutor::new();
-    for task_id in ["ollama-inference-1", "pytorch-inference-1"] {
-        let error = executor
-            .execute_task(
-                task_id,
-                HashMap::new(),
-                &crate::Context::new(),
-                &ExecutorExtensions::new(),
-            )
-            .await
-            .expect_err("stale backend-specific node should not execute");
-        match error {
-            NodeEngineError::ExecutionFailed(message) => {
-                assert!(message.contains("requires host-specific executor"));
-            }
-            other => panic!("unexpected error variant: {other:?}"),
+    let error = executor
+        .execute_task(
+            "pytorch-inference-1",
+            HashMap::new(),
+            &crate::Context::new(),
+            &ExecutorExtensions::new(),
+        )
+        .await
+        .expect_err("stale backend-specific node should not execute");
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("requires host-specific executor"));
         }
+        other => panic!("unexpected error variant: {other:?}"),
     }
 }
 

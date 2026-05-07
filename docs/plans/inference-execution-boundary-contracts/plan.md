@@ -3248,6 +3248,9 @@ drift back into inference.
   `retired_ollama` placeholder. Ollama is treated as removed compatibility
   surface rather than an upgrade target; workflows must already use the
   canonical Pumas-backed inference shape.
+  Node-engine no longer treats `ollama-inference` as a stale backend-specific
+  task id in dependency preflight or executor-branch guard tests; direct stale
+  Ollama node execution now follows the generic unsupported-node path.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
@@ -4959,6 +4962,13 @@ Update during implementation:
   redistributable path expectation mismatch recorded above.
 - Earlier embedded-runtime no-default feature checking was unblocked after
   Pumas restored package-fact helper support.
+- `cargo test -p node-engine --features inference-nodes dependency_preflight`
+  currently fails
+  `test_dependency_preflight_records_lifecycle_success_with_resolver` because
+  that feature set does not emit the expected completed compatibility report.
+  The same focused test passes with `--features pytorch-nodes`, so this is a
+  feature-matrix diagnostics coverage issue rather than an Ollama-removal
+  regression.
 
 ### Follow-Ups
 

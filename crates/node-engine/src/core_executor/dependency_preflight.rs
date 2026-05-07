@@ -294,8 +294,7 @@ pub(crate) fn infer_backend_key(
             }
         }
         "onnx-inference" => Some("onnx-runtime".to_string()),
-        "embedding" | "reranker" | "llamacpp-inference" | "ollama-inference"
-        | "pytorch-inference" => None,
+        "embedding" | "reranker" | "llamacpp-inference" | "pytorch-inference" => None,
         _ => Some("pytorch".to_string()),
     }
 }
