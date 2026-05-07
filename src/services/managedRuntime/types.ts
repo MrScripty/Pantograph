@@ -1,9 +1,18 @@
 export type ManagedRuntimeId = 'llama_cpp';
 
-export type ManagedBinaryCategory =
+export type ManagedDependencyCategory =
   | 'runtime_sidecar'
   | 'media_tool'
   | 'native_artifact';
+
+export type ManagedMediaToolDependencyId = 'ffmpeg' | 'ocioconvert' | 'oiiotool';
+
+export type ManagedNativeArtifactDependencyId = 'open_color_io';
+
+export type ManagedDependencyKey =
+  | { runtime_sidecar: ManagedRuntimeId }
+  | { media_tool: ManagedMediaToolDependencyId }
+  | { native_artifact: ManagedNativeArtifactDependencyId };
 
 export type ManagedBinaryInstallState =
   | 'installed'
@@ -20,11 +29,6 @@ export type ManagedRuntimeReadinessState =
   | 'ready'
   | 'failed'
   | 'unsupported';
-
-export type ManagedBinaryActionSupport =
-  | 'resolved_command'
-  | 'activation'
-  | 'status_only';
 
 export type ManagedRuntimeJobState =
   | 'queued'
@@ -67,14 +71,8 @@ export interface ManagedRuntimeVersionStatus {
   active: boolean;
 }
 
-export interface ManagedBinarySource {
-  owner: string | null;
-  project: string | null;
-}
-
-export interface ManagedBinaryVersionStatus {
+export interface ManagedDependencyVersionStatus {
   version: string | null;
-  display_label: string;
   platform_key: string;
   install_root: string | null;
   expected_files: string[];
@@ -83,8 +81,6 @@ export interface ManagedBinaryVersionStatus {
   readiness_state: ManagedRuntimeReadinessState;
   selected: boolean;
   active: boolean;
-  source: ManagedBinarySource | null;
-  checksum_sha256: string | null;
 }
 
 export interface ManagedRuntimeJobStatus {
@@ -129,23 +125,23 @@ export interface ManagedRuntimeManagerRuntimeView {
   install_history: ManagedRuntimeInstallHistoryEntry[];
 }
 
-export interface ManagedBinaryStatus {
-  key: string;
-  display_name: string;
-  category: ManagedBinaryCategory;
-  install_state: ManagedBinaryInstallState;
-  readiness_state: ManagedRuntimeReadinessState;
-  available: boolean;
-  can_install: boolean;
-  can_remove: boolean;
-  missing_files: string[];
-  unavailable_reason: string | null;
-  active_job: ManagedRuntimeJobStatus | null;
+export interface ManagedDependencySelectionState {
   selected_version: string | null;
   active_version: string | null;
   default_version: string | null;
-  action_support: ManagedBinaryActionSupport;
-  versions: ManagedBinaryVersionStatus[];
+}
+
+export interface ManagedDependencyStatus {
+  key: ManagedDependencyKey;
+  display_name: string;
+  category: ManagedDependencyCategory;
+  install_state: ManagedBinaryInstallState;
+  readiness_state: ManagedRuntimeReadinessState;
+  available: boolean;
+  missing_files: string[];
+  unavailable_reason: string | null;
+  selection: ManagedDependencySelectionState;
+  versions: ManagedDependencyVersionStatus[];
 }
 
 export interface ManagedRuntimeProgress {

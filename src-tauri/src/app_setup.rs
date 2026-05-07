@@ -385,7 +385,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::llm::get_runtime_debug_snapshot,
             crate::llm::reclaim_runtime_registry_runtime,
             // Managed runtime commands
-            crate::llm::list_managed_binaries,
+            crate::llm::list_managed_dependencies,
             crate::llm::list_managed_runtimes,
             crate::llm::inspect_managed_runtime,
             crate::llm::refresh_managed_runtime_catalogs,

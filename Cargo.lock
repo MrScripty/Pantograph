@@ -7207,6 +7207,7 @@ dependencies = [
  "node-engine",
  "once_cell",
  "pantograph-embedded-runtime",
+ "pantograph-managed-dependencies",
  "pantograph-media-conversion",
  "pantograph-runtime-identity",
  "pantograph-runtime-registry",

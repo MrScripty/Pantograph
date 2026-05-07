@@ -8,9 +8,10 @@ use pantograph_embedded_runtime::{
     select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
     ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
 };
+use pantograph_managed_dependencies::ManagedDependencyStatus;
 use tauri::{command, ipc::Channel, AppHandle, Manager};
 
-use inference::{list_managed_binary_statuses, ManagedBinaryId, ManagedBinaryStatus};
+use inference::ManagedBinaryId;
 
 fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
@@ -27,12 +28,14 @@ pub async fn list_managed_runtimes(
     list_managed_runtime_manager_runtimes(&app_data_dir)
 }
 
-/// List backend-owned managed binary state for runtime sidecars, media tools,
-/// and native redistributable artifacts.
+/// List neutral managed dependency state for runtime sidecars, media tools,
+/// and native artifacts.
 #[command]
-pub async fn list_managed_binaries(app: AppHandle) -> Result<Vec<ManagedBinaryStatus>, String> {
+pub async fn list_managed_dependencies(
+    app: AppHandle,
+) -> Result<Vec<ManagedDependencyStatus>, String> {
     let app_data_dir = app_data_dir(&app)?;
-    list_managed_binary_statuses(&app_data_dir).map_err(|error| error.to_string())
+    inference::list_all_managed_dependency_statuses(&app_data_dir)
 }
 
 /// Inspect one managed runtime, including version, readiness, and history state.

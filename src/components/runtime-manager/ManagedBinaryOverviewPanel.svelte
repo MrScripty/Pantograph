@@ -3,15 +3,16 @@
   import { RefreshCw } from 'lucide-svelte';
   import {
     managedRuntimeService,
-    type ManagedBinaryCategory,
-    type ManagedBinaryStatus,
+    type ManagedDependencyCategory,
+    type ManagedDependencyKey,
+    type ManagedDependencyStatus,
   } from '../../services/managedRuntime';
 
-  let binaries: ManagedBinaryStatus[] = $state([]);
+  let dependencies: ManagedDependencyStatus[] = $state([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
 
-  const CATEGORY_LABELS: Record<ManagedBinaryCategory, string> = {
+  const CATEGORY_LABELS: Record<ManagedDependencyCategory, string> = {
     runtime_sidecar: 'Runtime Sidecars',
     media_tool: 'Media Tools',
     native_artifact: 'Native Artifacts',
@@ -25,7 +26,7 @@
     loading = true;
     error = null;
     try {
-      binaries = await managedRuntimeService.listManagedBinaries();
+      dependencies = await managedRuntimeService.listManagedDependencies();
     } catch (loadError) {
       error = String(loadError);
     } finally {
@@ -33,24 +34,32 @@
     }
   }
 
-  function binariesForCategory(category: ManagedBinaryCategory): ManagedBinaryStatus[] {
-    return binaries.filter((binary) => binary.category === category);
+  function dependenciesForCategory(
+    category: ManagedDependencyCategory
+  ): ManagedDependencyStatus[] {
+    return dependencies.filter((dependency) => dependency.category === category);
   }
 
-  function statusLabel(binary: ManagedBinaryStatus): string {
-    if (binary.readiness_state === 'ready') return 'Ready';
-    if (binary.install_state === 'system_provided') return 'System';
-    return binary.readiness_state.replace(/_/g, ' ');
+  function statusLabel(dependency: ManagedDependencyStatus): string {
+    if (dependency.readiness_state === 'ready') return 'Ready';
+    if (dependency.install_state === 'system_provided') return 'System';
+    return dependency.readiness_state.replace(/_/g, ' ');
   }
 
-  function versionLabel(binary: ManagedBinaryStatus): string {
+  function versionLabel(dependency: ManagedDependencyStatus): string {
     return (
-      binary.selected_version ??
-      binary.active_version ??
-      binary.default_version ??
-      binary.versions[0]?.version ??
+      dependency.selection.selected_version ??
+      dependency.selection.active_version ??
+      dependency.selection.default_version ??
+      dependency.versions[0]?.version ??
       'Unselected'
     );
+  }
+
+  function dependencyStableKey(key: ManagedDependencyKey): string {
+    if ('runtime_sidecar' in key) return `runtime_sidecar:${key.runtime_sidecar}`;
+    if ('media_tool' in key) return `media_tool:${key.media_tool}`;
+    return `native_artifact:${key.native_artifact}`;
   }
 </script>
 
@@ -58,7 +67,7 @@
   <div class="mb-3 flex items-center justify-between gap-3">
     <div>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-neutral-400">
-        Unified Managed Binary State
+        Managed Dependency State
       </h3>
     </div>
     <button
@@ -79,23 +88,23 @@
   {:else}
     <div class="overflow-hidden rounded border border-neutral-800">
       {#each Object.keys(CATEGORY_LABELS) as categoryKey (categoryKey)}
-        {@const category = categoryKey as ManagedBinaryCategory}
-        {@const categoryBinaries = binariesForCategory(category)}
+        {@const category = categoryKey as ManagedDependencyCategory}
+        {@const categoryDependencies = dependenciesForCategory(category)}
         <div class="border-b border-neutral-900 last:border-b-0">
           <div class="bg-neutral-950 px-3 py-2 text-xs font-medium text-neutral-300">
             {CATEGORY_LABELS[category]}
           </div>
-          {#if categoryBinaries.length === 0}
+          {#if categoryDependencies.length === 0}
             <div class="px-3 py-2 text-sm text-neutral-500">No backend entries reported.</div>
           {:else}
             <div class="divide-y divide-neutral-900">
-              {#each categoryBinaries as binary (binary.key)}
+              {#each categoryDependencies as dependency (dependencyStableKey(dependency.key))}
                 <div class="grid gap-2 px-3 py-2 text-sm text-neutral-300 md:grid-cols-[minmax(9rem,1fr)_7rem_minmax(8rem,1fr)_minmax(10rem,2fr)] md:items-center">
-                  <div class="font-medium text-neutral-100">{binary.display_name}</div>
-                  <div class="capitalize text-neutral-400">{statusLabel(binary)}</div>
-                  <div class="text-neutral-400">{versionLabel(binary)}</div>
-                  <div class="truncate text-neutral-500" title={binary.unavailable_reason ?? binary.missing_files.join(', ')}>
-                    {binary.unavailable_reason ?? binary.missing_files.join(', ') ?? ''}
+                  <div class="font-medium text-neutral-100">{dependency.display_name}</div>
+                  <div class="capitalize text-neutral-400">{statusLabel(dependency)}</div>
+                  <div class="text-neutral-400">{versionLabel(dependency)}</div>
+                  <div class="truncate text-neutral-500" title={dependency.unavailable_reason ?? dependency.missing_files.join(', ')}>
+                    {dependency.unavailable_reason ?? dependency.missing_files.join(', ') ?? ''}
                   </div>
                 </div>
               {/each}

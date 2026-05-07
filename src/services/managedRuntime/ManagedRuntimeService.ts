@@ -1,7 +1,7 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { Logger } from '../Logger';
 import type {
-  ManagedBinaryStatus,
+  ManagedDependencyStatus,
   ManagedRuntimeId,
   ManagedRuntimeManagerRuntimeView,
   ManagedRuntimeProgress,
@@ -72,17 +72,19 @@ class ManagedRuntimeServiceClass {
     this.setRuntimes(nextRuntimes);
   }
 
-  public async listManagedBinaries(): Promise<ManagedBinaryStatus[]> {
-    const binaries = await invoke<ManagedBinaryStatus[]>('list_managed_binaries');
-    return binaries.map((binary) => ({
-      ...binary,
-      missing_files: [...binary.missing_files],
-      active_job: binary.active_job ? { ...binary.active_job } : null,
-      versions: binary.versions.map((version) => ({
+  public async listManagedDependencies(): Promise<ManagedDependencyStatus[]> {
+    const dependencies = await invoke<ManagedDependencyStatus[]>(
+      'list_managed_dependencies'
+    );
+    return dependencies.map((dependency) => ({
+      ...dependency,
+      key: { ...dependency.key },
+      missing_files: [...dependency.missing_files],
+      selection: { ...dependency.selection },
+      versions: dependency.versions.map((version) => ({
         ...version,
         expected_files: [...version.expected_files],
         missing_files: [...version.missing_files],
-        source: version.source ? { ...version.source } : null,
       })),
     }));
   }

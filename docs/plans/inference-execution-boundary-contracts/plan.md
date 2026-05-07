@@ -2058,6 +2058,11 @@ managed-dependency/media-conversion owner.
 The media redistributable implementation has moved from inference into
 `pantograph-managed-dependencies::redistributables`; inference now re-exports
 that API for compatibility and keeps only neutral projection helpers locally.
+The desktop settings dependency overview now calls a neutral
+`list_managed_dependencies` Tauri command returning `ManagedDependencyStatus`
+values, so the frontend no longer depends on the legacy aggregate
+`ManagedBinaryStatus` compatibility facade for runtime/media/native status
+display.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`
