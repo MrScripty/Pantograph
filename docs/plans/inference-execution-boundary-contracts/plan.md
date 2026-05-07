@@ -5031,6 +5031,10 @@ Update during implementation:
   Pumas library and hydrates each execution descriptor to guess from path-only
   workflow data. Path-only requests now use Pumas model-ref resolution as the
   bounded migration aid, and unresolved paths remain explicit unresolved input.
+- 2026-05-07: The reusable `@pantograph/svelte-graph` Puma-Lib node no longer
+  persists selector option labels as `modelName`. Selection now writes
+  canonical Pumas model/task/backend metadata from option metadata and leaves
+  labels as UI-only display data.
 
 ### Deviations
 

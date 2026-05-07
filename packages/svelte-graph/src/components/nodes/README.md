@@ -45,6 +45,9 @@ dim unrelated nodes.
 - Intent highlighting must not change handle ids or node ids.
 - Output-handle emphasis applies only to the active source anchor during an
   intent.
+- Puma-Lib model selection persists canonical Pumas metadata such as `model_id`,
+  task/model type, and backend hints; option display labels are UI-only and
+  must not be saved as lookup contracts.
 
 ## Revisit Triggers
 - Different node families need incompatible layout strategies for handles.

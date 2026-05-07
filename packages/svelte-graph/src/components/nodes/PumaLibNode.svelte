@@ -13,7 +13,12 @@
       definition?: NodeDefinition;
       label?: string;
       modelPath?: string;
-      modelName?: string;
+      model_id?: string;
+      model_type?: string;
+      task_type_primary?: string;
+      backend_key?: string;
+      recommended_backend?: string;
+      runtime_engine_hints?: string[];
     } & Record<string, unknown>;
     selected?: boolean;
   }
@@ -54,14 +59,36 @@
     }
   }
 
+  function metadataString(metadata: Record<string, unknown> | undefined, key: string) {
+    const value = metadata?.[key];
+    return typeof value === 'string' && value.trim() ? value : undefined;
+  }
+
+  function metadataStringArray(metadata: Record<string, unknown> | undefined, key: string) {
+    const value = metadata?.[key];
+    if (!Array.isArray(value)) return undefined;
+    const strings = value.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
+    return strings.length > 0 ? strings : undefined;
+  }
+
   function handleModelSelect(e: Event) {
     const target = e.target as HTMLSelectElement;
     const match = availableModels.find((m) => String(m.value) === target.value);
     if (match) {
       const nextModelPath = String(match.value);
+      const metadata = match.metadata;
+      const recommendedBackend =
+        metadataString(metadata, 'recommended_backend') ?? metadataString(metadata, 'backend_key');
       stores.workflow.updateNodeData(id, {
         modelPath: nextModelPath,
-        modelName: match.label,
+        model_id: metadataString(metadata, 'id') ?? metadataString(metadata, 'model_id'),
+        model_type: metadataString(metadata, 'model_type'),
+        task_type_primary: metadataString(metadata, 'task_type_primary'),
+        backend_key: metadataString(metadata, 'backend_key') ?? recommendedBackend,
+        recommended_backend: recommendedBackend,
+        runtime_engine_hints: metadataStringArray(metadata, 'runtime_engine_hints'),
       });
     }
   }
