@@ -1206,6 +1206,45 @@ write set for the Pumas fast selector integration is now recorded below.
   requiring full `PUMAS_API`; and selected-model detail hydration remains on
   the full API path until a later local-client/detail slice is planned.
 
+**Milestone 2 Selector Cursor Handoff Slice Boundary:**
+
+- Primary write set:
+  `src/services/workflow/pumaModelOptionsCache.ts`,
+  `src/services/workflow/pumaModelOptionsCache.test.ts`,
+  `src/components/nodes/workflow/PumaLibNode.svelte`,
+  `src/components/nodes/workflow/README.md`,
+  `src/components/workbench/LibraryPage.svelte`,
+  `src/components/workbench/README.md`, `package.json`, and this plan.
+- Adjacent write set:
+  `src/services/workflow/types.ts` only if the update-feed wire shape needs a
+  shared TypeScript mirror. Backend Tauri commands are adjacent only if the
+  current `list_model_library_updates_since` command cannot support the
+  frontend handoff.
+- Forbidden shared files unless the plan is updated first:
+  Rust Pumas access-role setup, `src-tauri/**`, external `../Pumas-Library/**`,
+  generated bindings, `Cargo.lock`, diagnostics-ledger DTOs, and saved-workflow
+  migration fixtures.
+- Contract owner:
+  Frontend workflow services own the in-memory selector-row cache and the
+  snapshot-to-update-feed handoff. Pumas remains the update cursor/event
+  producer and backend commands remain the source of truth.
+- Decomposition decision:
+  `PumaLibNode.svelte` already has module-level cache state. Move cache
+  ownership into a small workflow service helper instead of adding more
+  module-script state to the component. Keep LibraryPage and PumaLibNode as
+  consumers only.
+- Acceptance tests:
+  `node --experimental-strip-types --test src/services/workflow/pumaModelOptionsCache.test.ts`,
+  `npm run test:frontend`, `npm run typecheck`, and `git diff --check`.
+- Acceptance criteria:
+  the first selector snapshot cursor is extracted from option metadata; the
+  frontend asks the backend for updates since that cursor before publishing a
+  reusable cache; stale cursors, snapshot-required feeds, or non-empty update
+  feeds invalidate and reload the options once; read-only/update-feed
+  unavailable errors preserve the loaded selector rows without spinning or
+  polling; and both LibraryPage and graph PumaLibNode share the same cache
+  helper.
+
 ### Milestone 1: Freeze Boundary Vocabulary
 
 **Goal:** Define the exact fact-producing boundary before changing behavior.
@@ -1364,7 +1403,7 @@ Detailed Pumas-side work is split into
 - [x] Hydrate selected or expanded models with Pumas batch APIs for package
   summaries, cheap execution descriptors, and inference settings instead of
   resolving full details for every listed row.
-- [ ] Connect selector cursors to Pantograph cache invalidation through the
+- [x] Connect selector cursors to Pantograph cache invalidation through the
   existing model-library update feed or explicit local-client update stream so
   startup/page snapshots cannot miss updates before polling/subscription begins.
 - [ ] Pin Pantograph to the published Pumas Library `v0.6.0` release once it is
@@ -1480,6 +1519,21 @@ Validation for the selector access-role slice passed with
 `cargo test -p workflow-nodes --features model-library --lib puma_lib`,
 `cargo check -p workflow-nodes --features model-library`, and
 `cargo fmt --all`, and `git diff --check`.
+
+The selector cursor handoff slice now centralizes frontend Pumas model-option
+caching in `src/services/workflow/pumaModelOptionsCache.ts`. The service loads
+selector rows through `query_port_options`, extracts the selector cursor from
+row metadata, asks `list_model_library_updates_since` for changes since that
+cursor before publishing reusable cache state, and reloads once when the feed
+reports a stale cursor, required snapshot, or changed rows. LibraryPage and
+PumaLibNode both consume the shared cache, and LibraryPage's manual refresh
+explicitly invalidates it. If the update-feed command is unavailable, such as
+read-only selector access without owner API, the frontend preserves the loaded
+snapshot and does not start a polling loop.
+
+Validation for the selector cursor handoff slice passed with
+`node --experimental-strip-types --test src/services/workflow/pumaModelOptionsCache.test.ts`,
+`npm run test:frontend`, `npm run typecheck`, and `git diff --check`.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 

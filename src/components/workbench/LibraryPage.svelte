@@ -1,13 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
   import { Download, RefreshCw, Search, Trash2 } from 'lucide-svelte';
   import type {
     LibraryUsageProjectionRecord,
     PumasHfModelSearchResult,
     ProjectionStateRecord,
   } from '../../services/diagnostics/types';
-  import type { PortOption, PortOptionsResult } from '../../services/workflow/types';
+  import type { PortOption } from '../../services/workflow/types';
+  import {
+    invalidatePumasModelOptionsCache,
+    loadPumasModelOptions,
+  } from '../../services/workflow/pumaModelOptionsCache';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
@@ -77,11 +80,7 @@
     pumasLoading = pumasModels.length === 0;
     pumasError = null;
     try {
-      const response = await invoke<PortOptionsResult>('query_port_options', {
-        nodeType: 'puma-lib',
-        portId: 'model_path',
-      });
-      pumasModels = response.options;
+      pumasModels = await loadPumasModelOptions();
     } catch (modelError) {
       pumasError = formatWorkflowCommandError(modelError);
     } finally {
@@ -89,7 +88,10 @@
     }
   }
 
-  async function refreshLibraryPage(): Promise<void> {
+  async function refreshLibraryPage(forcePumasReload = false): Promise<void> {
+    if (forcePumasReload) {
+      invalidatePumasModelOptionsCache();
+    }
     await Promise.all([refreshLibraryUsage(), refreshPumasModels()]);
   }
 
@@ -172,7 +174,7 @@
     <button
       type="button"
       class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-      onclick={() => refreshLibraryPage()}
+      onclick={() => refreshLibraryPage(true)}
       disabled={loading || pumasLoading}
     >
       <RefreshCw size={14} aria-hidden="true" class={loading || pumasLoading ? 'animate-spin' : ''} />

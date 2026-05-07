@@ -17,6 +17,8 @@ on raw invoke payloads.
 | `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
 | `workflowServiceErrors.test.ts` | Unit coverage for backend error-envelope parsing and transport-error fallback behavior. |
 | `workflowConnectionActions.ts` | Focused Tauri invoke helpers for connection-intent candidate, commit, and edge-insert commands. |
+| `pumaModelOptionsCache.ts` | Shared Pumas selector-row cache for graph nodes and Library views, including selector cursor handoff against backend update feeds. |
+| `pumaModelOptionsCache.test.ts` | Unit coverage for selector cursor extraction, update-feed invalidation, reload, cache reuse, and read-only update-feed-unavailable behavior. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
 | `mocks.ts` | Mock workflow data and behaviors used when the app runs in mock mode. |
 | `templateService.ts` | Workflow template discovery/loading helpers, including the built-in tiny-sd-turbo and GGUF reranker starter workflows. |
@@ -108,6 +110,11 @@ responses without synthesizing Library usage facts.
 Pumas HuggingFace download startup is exposed as a backend-owned audited
 command; frontend services forward the structured Pumas download request and
 preserve the backend download/audit response.
+Pumas model-option loading is centralized in `pumaModelOptionsCache.ts` so the
+Library page and graph `puma-lib` node share the same backend selector snapshot
+and cursor handoff. The service publishes reusable options only after asking
+the backend for updates since the snapshot cursor, and it reloads once when the
+handoff reports stale or changed rows.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -199,6 +206,11 @@ preserve the backend download/audit response.
 - Pumas HuggingFace download-start commands must return backend-authored
   download ids and audit event ids exactly. Frontend code may display progress
   from Pumas, but it must not synthesize download audit facts locally.
+- Pumas model-option caches must come from backend `query_port_options` selector
+  snapshots and must perform one update-feed handoff against the snapshot cursor
+  before publishing reusable cache state. If the update feed is unavailable,
+  such as a read-only selector path without owner API, components may reuse the
+  snapshot but must not start frontend polling.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.

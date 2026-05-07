@@ -275,7 +275,10 @@ transient UI state without becoming backend scheduler policy.
 - `LibraryPage.svelte` reads usage and audit summaries through
   `workflowService.queryLibraryUsage`. Audited HuggingFace search results use
   the typed diagnostics service result shape and render model ids without
-  treating provider rows as arbitrary `unknown` values.
+  treating provider rows as arbitrary `unknown` values. Pumas selector rows come
+  from `src/services/workflow/pumaModelOptionsCache.ts`, which owns the
+  selector snapshot cursor handoff before publishing reusable frontend cache
+  state.
 
 ## Structured Producer Contract
 - Workbench navigation order comes from `WORKBENCH_PAGES` in
@@ -296,6 +299,9 @@ transient UI state without becoming backend scheduler policy.
   availability, but do not dereference payload bodies.
 - Library usage rows render `LibraryUsageProjectionRecord` summaries and may
   highlight only rows whose `last_workflow_run_id` equals the active run.
+- Library Pumas model rows render shared `PortOption` selector projections from
+  the workflow service cache. Components must not poll Pumas directly or infer
+  model-library freshness without the backend update cursor handoff.
 - Run graph snapshot rows render `WorkflowRunGraphProjection` topology,
   presentation revision, graph settings, and execution fingerprint fields.
   Node I/O overlays render summarized `IoArtifactProjectionRecord` metadata and

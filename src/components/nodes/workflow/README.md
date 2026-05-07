@@ -157,9 +157,9 @@ and finality metadata in runtime data while the component reads bytes lazily wit
 - `LLMInferenceNode.svelte` must keep task and diagnostics display derived from
   `inference_payloads` role metadata only; it must not inspect backend runtime
   internals or infer scheduler/runtime selection.
-- `PumaLibNode.svelte` must keep its shared model-option cache in a Svelte 5
-  `module` script so the component avoids deprecated module-script syntax while
-  preserving one cache per bundled module instance.
+- `PumaLibNode.svelte` must consume the shared Pumas model-option cache from
+  `src/services/workflow/pumaModelOptionsCache.ts`; selector cursor handoff and
+  invalidation logic belong in that service, not in component module state.
 - `ExpandSettingsNode.svelte` must not hardcode durable override handles; it
   renders whatever additive inputs/outputs arrive in the backend-owned node
   definition.

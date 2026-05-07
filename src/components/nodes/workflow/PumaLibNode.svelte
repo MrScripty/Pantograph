@@ -1,20 +1,14 @@
-<script module lang="ts">
-  import type { PortOption } from '../../../services/workflow/types';
-
-  let cachedModelOptions: PortOption[] | null = null;
-  let inflightModelOptions: Promise<PortOption[]> | null = null;
-</script>
-
 <script lang="ts">
   import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
-  import type { NodeDefinition, PortOption, PortOptionsResult } from '../../../services/workflow/types';
+  import type { NodeDefinition, PortOption } from '../../../services/workflow/types';
   import {
     updateNodeData,
     syncInferencePorts,
     syncExpandPorts,
   } from '../../../stores/workflowStore';
   import { invoke } from '@tauri-apps/api/core';
+  import { loadPumasModelOptions } from '../../../services/workflow/pumaModelOptionsCache';
 
   interface InferenceParamSchema {
     key: string;
@@ -150,39 +144,13 @@
   });
 
   async function loadModels() {
-    if (cachedModelOptions) {
-      availableModels = cachedModelOptions;
-      loadError = null;
-      return;
-    }
-
-    if (inflightModelOptions) {
-      isLoading = true;
-      try {
-        availableModels = await inflightModelOptions;
-        loadError = null;
-      } catch (error) {
-        loadError = error instanceof Error ? error.message : 'Failed to load models from pumas library';
-      } finally {
-        isLoading = false;
-      }
-      return;
-    }
-
     isLoading = true;
     try {
-      inflightModelOptions = invoke<PortOptionsResult>('query_port_options', {
-        nodeType: 'puma-lib',
-        portId: 'model_path',
-      }).then((result) => result.options);
-
-      availableModels = await inflightModelOptions;
-      cachedModelOptions = availableModels;
+      availableModels = await loadPumasModelOptions();
       loadError = null;
     } catch (error) {
       loadError = error instanceof Error ? error.message : 'Failed to load models from pumas library';
     } finally {
-      inflightModelOptions = null;
       isLoading = false;
     }
   }
