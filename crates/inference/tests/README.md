@@ -3,15 +3,15 @@
 ## Purpose
 
 This directory contains integration tests for the `inference` crate's managed
-runtime boundary, transitional managed media dependency boundary, and adapters
+runtime boundary, transitional managed media planning adapter, and adapters
 into neutral managed dependency DTOs.
 
 ## Contents
 
 | File | Description |
 | ---- | ----------- |
-| `managed_media_dependencies.rs` | Transitional conversion dependency lease and media-tool/native-library planning tests. |
-| `managed_redistributables.rs` | Transitional managed redistributable catalog, status, activation, selection, removal, and neutral status projection tests. |
+| `managed_media_dependencies.rs` | Transitional conversion dependency lease and media-tool/native-library planning adapter tests over the media-conversion owner. |
+| `managed_redistributables.rs` | Managed redistributable owner contract and inference neutral status projection tests. |
 | `model_contracts.rs` | Public contract fixture tests for Pumas model refs, package facts, task evidence, generation defaults, option diagnostics, lifecycle phases, package-facts summary snapshots, and model-library update feeds. |
 | `fixtures/inference_package_facts/` | Named JSON fixtures matching the inference execution boundary plan. |
 
@@ -38,8 +38,9 @@ storage internals.
 
 ## Decision
 
-Keep managed redistributable and conversion dependency tests as integration
-tests under this directory while inference still owns the implementation state.
+Keep managed redistributable owner coverage and conversion dependency adapter
+coverage as integration tests under this directory while inference still
+publishes neutral dependency projection helpers and legacy media-planning DTOs.
 They exercise the public crate contracts with temporary storage so status,
 activation, lease behavior, and neutral DTO projections remain auditable.
 Keep model package fixtures here as public contract tests because later
@@ -69,15 +70,16 @@ workflow, backend, and diagnostics slices will consume the same shapes.
 
 - Managed media dependencies gain real download/checksum operations.
 - OpenColorIO ABI validation starts loading native libraries in tests.
-- Conversion dependency leasing moves behind the neutral managed-dependency
-  crate or another process boundary.
+- The inference media-planning compatibility adapter is removed.
+- Inference no longer aggregates managed dependency status for runtime,
+  media-tool, and native-artifact dependencies.
 - The holder convention changes or becomes a typed cross-crate contract.
 - Pumas package-fact fixtures move to a shared contract crate or schema package.
 
 ## Dependencies
 
-**Internal:** `inference::managed_redistributables`,
-`inference::managed_media_dependencies`, and
+**Internal:** inference neutral dependency projection helpers,
+`inference::managed_media_dependencies`, `pantograph-media-conversion`, and
 `pantograph-managed-dependencies` DTOs.
 
 **External:** temporary filesystem support from the Rust test environment.
@@ -102,10 +104,10 @@ cargo test -p inference --test model_contracts
 
 ## API Consumer Contract
 
-- Inputs: public managed redistributable ids, staging directories, activation
-  requests, and conversion dependency plans.
-- Outputs: status projections, state transitions, and explicit errors for
-  invalid or unsafe operations.
+- Inputs: public managed redistributable ids, managed-dependency staging and
+  activation requests, and legacy inference conversion dependency plans.
+- Outputs: managed-dependency owner state transitions, inference neutral status
+  projections, and explicit errors for invalid or unsafe operations.
 - Lifecycle: each test creates temporary roots, writes only its own placeholder
   artifacts, and lets test cleanup remove them.
 - Lease attribution: conversion dependency tests assert holder, dependency id,

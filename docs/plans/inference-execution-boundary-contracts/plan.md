@@ -454,16 +454,17 @@ reliability while keeping scheduling and workflow policy outside inference.
 - `crates/inference/src/managed_runtime/ollama_platform/`: removed retired
   managed-runtime platform adapters; serialized `ollama` ids project through
   unsupported compatibility records.
-- `crates/inference/src/managed_runtime/`: current runtime sidecar manager that
-  should move under or adapt to the neutral managed-dependency boundary.
-- `crates/inference/src/managed_redistributables/`: current media dependency
-  manager that should move out of inference.
-- `crates/inference/src/managed_binaries.rs`: current aggregate facade that
-  should become unnecessary once the neutral boundary owns all managed
-  dependency status.
-- `crates/inference/src/managed_media_dependencies.rs`: current media
-  dependency lease planning that should move to the media conversion or neutral
-  managed-dependency boundary.
+- `crates/inference/src/managed_runtime/`: runtime sidecar manager for
+  llama.cpp launch compatibility, adapted to neutral managed-dependency status
+  and command facts.
+- `crates/inference/src/managed_redistributables/`: private projection adapter
+  from managed redistributable status into neutral managed-dependency status.
+- `crates/inference/src/managed_binaries.rs`: runtime-launch compatibility
+  facade that resolves through neutral runtime sidecar command facts; it no
+  longer owns aggregate runtime/media/native status DTOs.
+- `crates/inference/src/managed_media_dependencies.rs`: compatibility adapter
+  that maps legacy inference media-planning DTOs onto
+  `pantograph-media-conversion` ownership.
 - `crates/pantograph-managed-dependencies/`: neutral managed dependency
   contract crate for runtime sidecars, media tools, native artifacts, status,
   leases, activation facts, command facts, and operation scopes.
@@ -2004,94 +2005,53 @@ runtime launch behavior and media conversion readiness facts.
   by touched files.
 - `git diff --check`.
 
-**Status:** In progress. Inventory is complete and inference now depends on the
-neutral `pantograph-managed-dependencies` contract crate. The first media
-adapter slice projects existing ffmpeg, ocioconvert, oiiotool, and OpenColorIO
-redistributable statuses into `ManagedDependencyStatus` values without moving
-persisted state or lease ownership yet. The first runtime adapter slice projects
-llama.cpp managed runtime snapshots into `ManagedDependencyStatus` values and
-projects resolved llama.cpp command facts, including sanitized args,
-environment overrides, working directory, executable path, and pid-file path,
-into `ResolvedManagedDependencyCommand`. The current implementation still keeps
-the authoritative runtime and redistributable managers in `crates/inference`:
-`managed_runtime/` owns llama.cpp sidecar catalog, install state, job state,
-and command resolution; `managed_redistributables/` owns media dependency
-catalog, install state, activation, selection, lease, removal, and status
-records; `managed_media_dependencies.rs` owns ffmpeg/OIIO/OCIO media
-conversion lease projections and OpenColorIO activation validation; and
-`managed_binaries.rs` is an aggregate facade over runtime and redistributable
-status/command facts. `pantograph-media-conversion` already owns conversion
-planning and media dependency identifiers, while `pantograph-uniffi`,
-`pantograph-embedded-runtime`, `pantograph-workflow-service`, and inference
-tests still consume inference-owned managed dependency APIs. UniFFI now exposes
-a new neutral `managed_dependency_statuses` JSON method for runtime and media
-dependency status migration, backed by the inference-level
-`list_all_managed_dependency_statuses` aggregation API so host adapters do not
-need to stitch runtime and media projections together. The existing
-managed-media methods remain compatibility surfaces returning the legacy
-redistributable shape. Runtime sidecar command resolution is also exposed
-through `resolve_managed_dependency_command(ManagedDependencyKey::RuntimeSidecar(..))`;
+**Status:** Implemented for the current boundary. Inventory is complete and
+inference now depends on the neutral `pantograph-managed-dependencies` contract
+crate. Media redistributable catalog, install state, activation, selection,
+lease, removal, and status records moved to
+`pantograph-managed-dependencies::redistributables`; inference keeps only
+private projection helpers that adapt those facts into
+`ManagedDependencyStatus` for aggregate status callers. Runtime sidecar
+catalog, install state, job state, and command resolution still live in
+`crates/inference/src/managed_runtime/` because llama.cpp launch is an
+inference-owned runtime concern, but runtime status and command resolution now
+project through neutral managed-dependency facts,
+`ManagedDependencyKey::RuntimeSidecar(..)`, and
+`ResolvedManagedDependencyCommand`. Media planning moved to
+`pantograph-media-conversion`; the inference media-planning module is now a
+legacy wire-shape adapter over media-conversion-owned plan, activation,
+holder-validation, release, and executable-resolution functions. The remaining
+managed-binary facade is limited to runtime launch command compatibility for
+Tauri process startup and resolves through the neutral runtime sidecar command
+path; the legacy aggregate managed-binary status DTOs and
+`list_managed_binary_statuses` export have been retired. UniFFI and Tauri
+managed-media action/status commands now import redistributable operations
+directly from `pantograph-managed-dependencies`, and desktop Settings now calls
+the neutral `list_managed_dependencies` Tauri command returning
+`ManagedDependencyStatus`.
+
+Runtime sidecar command resolution is exposed through
+`resolve_managed_dependency_command(ManagedDependencyKey::RuntimeSidecar(..))`;
 media tool command resolution and native artifact activation explicitly reject
 there so conversion execution remains owned by media conversion.
 Artifact-format dependency-version synchronization now derives from neutral
 `ManagedDependencyStatus` values through
 `ArtifactFormatDependencyVersions::from_managed_dependency_statuses`, filtering
 runtime sidecars out and using stable dependency keys such as `opencolorio` for
-media/native dependencies. Legacy UniFFI managed-media action methods still
-return redistributable-shaped compatibility JSON until install, activation, and
-lease ownership move.
+media/native dependencies.
 `pantograph-media-conversion` now has an explicit key bridge between
 `ManagedMediaDependencyId` and neutral `ManagedDependencyKey`, and it rejects
-runtime sidecar keys as non-media-conversion dependencies. This freezes the
-stable media/native key mapping without moving lease ownership or command
-execution into inference.
-The legacy managed-binary facade now resolves llama.cpp launch commands through
-the neutral `resolve_managed_dependency_command` path and converts the result
-back to its existing `ResolvedCommand` compatibility shape.
-Temporary compatibility shims are limited to the legacy UniFFI
-managed-media action/status methods that still return redistributable-shaped
-JSON and the legacy managed-binary facade that still returns `ResolvedCommand`.
-Removal trigger: delete those shims after UniFFI/frontend callers consume
-neutral `ManagedDependencyStatus`/`ResolvedManagedDependencyCommand` DTOs and
-media install, activation, and lease operations move behind the neutral
-managed-dependency/media-conversion owner.
-The media redistributable implementation has moved from inference into
-`pantograph-managed-dependencies::redistributables`; inference now re-exports
-that API for compatibility and keeps only neutral projection helpers locally.
-The desktop settings dependency overview now calls a neutral
-`list_managed_dependencies` Tauri command returning `ManagedDependencyStatus`
-values, so the frontend no longer depends on the legacy aggregate
-`ManagedBinaryStatus` compatibility facade for runtime/media/native status
-display.
-The Tauri managed media conversion executor now acquires and releases media
-dependency plans through `pantograph-media-conversion` using neutral
-redistributable operations instead of importing inference-owned media planning
-types. The inference media planning module remains as a compatibility surface
-until remaining tests and legacy callers are moved to the media-conversion
-owner.
-The inference media planning module no longer owns duplicate lease/path
-implementation logic; it maps legacy inference DTOs onto
-`pantograph-media-conversion` plan, activation, holder-validation, release, and
-executable-resolution functions so old callers retain their current wire shape
-while implementation ownership lives in the media-conversion crate.
-Embedded workflow runtime capability projection now reads runtime sidecar
-snapshots directly instead of the aggregate legacy managed-binary facade, so
-workflow capabilities no longer stitch media/native dependency status through a
-runtime-only surface while preserving runtime install/remove readiness facts.
-The legacy aggregate managed-binary status DTOs and `list_managed_binary_statuses`
-export have been retired. The remaining managed-binary facade is limited to
-runtime launch command compatibility for Tauri process startup and resolves
-through the neutral runtime sidecar command path.
-Tauri workflow managed-media dependency commands now import
-`ManagedRedistributableStatus`, identifiers, and install/selection/activation
-operations directly from `pantograph-managed-dependencies` instead of through
-inference re-exports.
-UniFFI managed-media dependency action/status methods also use
-`pantograph-managed-dependencies` directly, leaving inference re-exports only
-for compatibility tests and callers that have not yet migrated.
-Inference no longer publicly re-exports redistributable install/status/lease
-DTOs or operations; it only exposes the neutral media/native dependency status
-projection helpers used by inference-owned aggregate dependency status.
+runtime sidecar keys as non-media-conversion dependencies. Embedded workflow
+runtime capability projection reads runtime sidecar snapshots directly instead
+of an aggregate managed-binary facade, so workflow capabilities no longer
+stitch media/native dependency status through a runtime-only surface while
+preserving runtime install/remove readiness facts.
+
+Temporary compatibility shims are limited to the legacy inference
+media-planning DTO adapter and the legacy managed-binary facade that still
+returns `ResolvedCommand`. Removal trigger: delete those shims after Tauri
+process startup consumes `ResolvedManagedDependencyCommand` directly and no
+callers rely on the inference-shaped media conversion plan DTOs.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`

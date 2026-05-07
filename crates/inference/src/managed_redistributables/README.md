@@ -4,8 +4,8 @@
 
 This directory is now an inference compatibility adapter for
 Pantograph-managed media redistributables. The implementation owner moved to
-`pantograph-managed-dependencies`; inference keeps only neutral projection
-helpers and re-exports for callers that have not migrated yet.
+`pantograph-managed-dependencies`; inference keeps only private neutral
+projection helpers for aggregate managed-dependency status.
 
 ## Contents
 
@@ -81,28 +81,28 @@ neutral managed dependency DTOs.
 ## Usage Examples
 
 ```rust
-use inference::managed_redistributables::{
-    managed_redistributable_status, ManagedRedistributableId,
-};
+use inference::managed_dependency_status;
+use pantograph_managed_dependencies::ManagedRedistributableId;
 
-let status = managed_redistributable_status(root, ManagedRedistributableId::Ffmpeg)?;
+let status = managed_dependency_status(root, ManagedRedistributableId::Ffmpeg);
 ```
 
 ## API Consumer Contract
 
-- Inputs: managed redistributable ids, local staging directories, selected
-  versions, and activation/default commands.
-- Outputs: catalog metadata, install/readiness state, missing expected files,
-  active/default version facts, and conversion dependency leases.
-- Lifecycle: callers stage files, install them into app-owned storage, select
-  or activate versions, and remove inactive versions through backend commands.
+- Inputs: managed redistributable ids passed to inference-owned projection
+  helpers.
+- Outputs: neutral managed-dependency status facts for media tools and native
+  artifacts.
+- Lifecycle: install, selection, activation, removal, and lease operations are
+  consumed from `pantograph-managed-dependencies`, not this inference adapter.
 - Errors: unsupported platform, missing expected files, invalid ids, and active
-  lease conflicts must be reported explicitly.
+  lease conflicts must be reported by the managed-dependency owner before
+  projection.
 
 ## Structured Producer Contract
 
-- Catalog and status DTOs are re-exported from `pantograph-managed-dependencies`
-  for compatibility.
+- Catalog and status DTOs are imported from `pantograph-managed-dependencies`
+  internally and projected into neutral managed-dependency DTOs.
 - State files are durable selected/default/active-version records owned by the
   managed-dependency crate.
 - Lease records protect active conversion dependency versions from removal
