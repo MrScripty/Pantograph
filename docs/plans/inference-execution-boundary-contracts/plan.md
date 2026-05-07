@@ -2063,6 +2063,12 @@ The desktop settings dependency overview now calls a neutral
 values, so the frontend no longer depends on the legacy aggregate
 `ManagedBinaryStatus` compatibility facade for runtime/media/native status
 display.
+The Tauri managed media conversion executor now acquires and releases media
+dependency plans through `pantograph-media-conversion` using neutral
+redistributable operations instead of importing inference-owned media planning
+types. The inference media planning module remains as a compatibility surface
+until remaining tests and legacy callers are moved to the media-conversion
+owner.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`

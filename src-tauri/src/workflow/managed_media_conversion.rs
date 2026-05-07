@@ -2,15 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use inference::{
-    acquire_media_conversion_dependency_plan, format_media_conversion_dependency_lease_holder,
-    release_media_conversion_dependency_plan, resolve_media_conversion_dependency_executable_path,
-    MediaConversionDependency, MediaConversionDependencyId, MediaConversionDependencyLease,
-    MediaConversionDependencyPlan, MediaConversionDependencyPlanRequest, MediaConversionJobKind,
-};
 use pantograph_media_conversion::{
-    ConversionMediaKind, ManagedExecutablePath, ManagedMediaDependencyId,
-    ManagedMediaDependencyLeaseId, ManagedMediaDependencyVersion, MediaCommandPlan,
+    acquire_managed_media_dependency_plan, format_managed_media_dependency_lease_holder,
+    release_managed_media_dependency_plan, resolve_managed_media_dependency_executable_path,
+    ConversionMediaKind, ManagedExecutablePath, ManagedMediaDependency, ManagedMediaDependencyId,
+    ManagedMediaDependencyLease, ManagedMediaDependencyLeaseId, ManagedMediaDependencyPlan,
+    ManagedMediaDependencyPlanRequest, ManagedMediaDependencyVersion, MediaCommandPlan,
     MediaConversionDependencyAttribution, MediaConversionError, MediaConversionExecutor,
     MediaConversionRequest, MediaConversionResult, MediaConversionStatus, ProcessRunRequest,
     ProcessRunner, StdProcessRunner,
@@ -43,7 +40,7 @@ where
         &self,
         request: MediaConversionRequest,
         command_plan: MediaCommandPlan,
-        dependency_plan: &MediaConversionDependencyPlan,
+        dependency_plan: &ManagedMediaDependencyPlan,
     ) -> Result<MediaConversionResult, MediaConversionError> {
         let mut stdin = request.source.body.clone();
         let mut stderr_summaries = Vec::new();
@@ -95,13 +92,13 @@ where
         request: MediaConversionRequest,
     ) -> Result<MediaConversionResult, MediaConversionError> {
         let command_plan = MediaCommandPlan::try_for_target(request.kind, request.target.clone())?;
-        let plan_request = MediaConversionDependencyPlanRequest {
-            job_kind: job_kind_for_media_kind(command_plan.kind),
+        let plan_request = ManagedMediaDependencyPlanRequest {
+            kind: command_plan.kind,
             color_managed: command_plan.target.color_managed,
             holder: lease_holder_for_request(&request)?,
         };
         let dependency_plan =
-            acquire_media_conversion_dependency_plan(self.app_data_dir.as_path(), plan_request)
+            acquire_managed_media_dependency_plan(self.app_data_dir.as_path(), plan_request)
                 .map_err(|reason| MediaConversionError::DependencyUnavailable {
                     dependency_id: primary_dependency_id(&command_plan),
                     reason,
@@ -118,18 +115,18 @@ where
 
 struct MediaConversionDependencyPlanGuard {
     app_data_dir: PathBuf,
-    dependency_plan: Option<MediaConversionDependencyPlan>,
+    dependency_plan: Option<ManagedMediaDependencyPlan>,
 }
 
 impl MediaConversionDependencyPlanGuard {
-    fn new(app_data_dir: PathBuf, dependency_plan: MediaConversionDependencyPlan) -> Self {
+    fn new(app_data_dir: PathBuf, dependency_plan: ManagedMediaDependencyPlan) -> Self {
         Self {
             app_data_dir,
             dependency_plan: Some(dependency_plan),
         }
     }
 
-    fn plan(&self) -> &MediaConversionDependencyPlan {
+    fn plan(&self) -> &ManagedMediaDependencyPlan {
         self.dependency_plan
             .as_ref()
             .expect("dependency plan guard should hold a plan until release")
@@ -143,7 +140,7 @@ impl MediaConversionDependencyPlanGuard {
         let Some(dependency_plan) = self.dependency_plan.take() else {
             return Ok(());
         };
-        release_media_conversion_dependency_plan(self.app_data_dir.as_path(), &dependency_plan)
+        release_managed_media_dependency_plan(self.app_data_dir.as_path(), &dependency_plan)
     }
 }
 
@@ -173,12 +170,12 @@ fn release_after_conversion(
 }
 
 fn managed_executable_path(
-    dependency: &MediaConversionDependency,
+    dependency: &ManagedMediaDependency,
 ) -> Result<ManagedExecutablePath, MediaConversionError> {
     let executable_path =
-        resolve_media_conversion_dependency_executable_path(dependency).map_err(|reason| {
+        resolve_managed_media_dependency_executable_path(dependency).map_err(|reason| {
             MediaConversionError::DependencyUnavailable {
-                dependency_id: managed_dependency_id(dependency.id),
+                dependency_id: dependency.id,
                 reason,
             }
         })?;
@@ -186,13 +183,12 @@ fn managed_executable_path(
 }
 
 fn dependency_for_step(
-    plan: &MediaConversionDependencyPlan,
+    plan: &ManagedMediaDependencyPlan,
     dependency_id: ManagedMediaDependencyId,
-) -> Result<&MediaConversionDependencyLease, MediaConversionError> {
-    let inference_dependency_id = inference_dependency_id(dependency_id);
+) -> Result<&ManagedMediaDependencyLease, MediaConversionError> {
     plan.leases
         .iter()
-        .find(|lease| lease.token.id == inference_dependency_id)
+        .find(|lease| lease.token.id == dependency_id)
         .ok_or_else(|| MediaConversionError::DependencyUnavailable {
             dependency_id,
             reason: "managed dependency lease was not included in the acquired plan".to_string(),
@@ -200,13 +196,13 @@ fn dependency_for_step(
 }
 
 fn dependency_attributions(
-    plan: &MediaConversionDependencyPlan,
+    plan: &ManagedMediaDependencyPlan,
 ) -> Result<Vec<MediaConversionDependencyAttribution>, MediaConversionError> {
     plan.leases
         .iter()
         .map(|lease| {
             Ok(MediaConversionDependencyAttribution {
-                dependency_id: managed_dependency_id(lease.token.id),
+                dependency_id: lease.token.id,
                 version: ManagedMediaDependencyVersion::try_from(lease.token.version.clone())?,
                 lease_id: ManagedMediaDependencyLeaseId::try_from(lease.token.lease_id.clone())?,
                 lease_holder: lease.token.holder.clone(),
@@ -230,7 +226,7 @@ fn lease_holder_for_request(
         .as_ref()
         .map(|port_id| port_id.as_str())
         .unwrap_or("output");
-    format_media_conversion_dependency_lease_holder(
+    format_managed_media_dependency_lease_holder(
         request.attribution.workflow_run_id.as_str(),
         node_id,
         port_id,
@@ -265,39 +261,12 @@ fn primary_dependency_id(command_plan: &MediaCommandPlan) -> ManagedMediaDepende
         .unwrap_or(ManagedMediaDependencyId::Ffmpeg)
 }
 
-fn job_kind_for_media_kind(kind: ConversionMediaKind) -> MediaConversionJobKind {
-    match kind {
-        ConversionMediaKind::Image => MediaConversionJobKind::Image,
-        ConversionMediaKind::Audio => MediaConversionJobKind::Audio,
-        ConversionMediaKind::Video => MediaConversionJobKind::Video,
-        ConversionMediaKind::ThreeD => MediaConversionJobKind::ThreeD,
-    }
-}
-
 fn media_kind_key(kind: ConversionMediaKind) -> &'static str {
     match kind {
         ConversionMediaKind::Image => "image",
         ConversionMediaKind::Audio => "audio",
         ConversionMediaKind::Video => "video",
         ConversionMediaKind::ThreeD => "3d",
-    }
-}
-
-fn inference_dependency_id(id: ManagedMediaDependencyId) -> MediaConversionDependencyId {
-    match id {
-        ManagedMediaDependencyId::Ffmpeg => MediaConversionDependencyId::Ffmpeg,
-        ManagedMediaDependencyId::Ocioconvert => MediaConversionDependencyId::Ocioconvert,
-        ManagedMediaDependencyId::Oiiotool => MediaConversionDependencyId::Oiiotool,
-        ManagedMediaDependencyId::OpenColorIo => MediaConversionDependencyId::OpenColorIo,
-    }
-}
-
-fn managed_dependency_id(id: MediaConversionDependencyId) -> ManagedMediaDependencyId {
-    match id {
-        MediaConversionDependencyId::Ffmpeg => ManagedMediaDependencyId::Ffmpeg,
-        MediaConversionDependencyId::Ocioconvert => ManagedMediaDependencyId::Ocioconvert,
-        MediaConversionDependencyId::Oiiotool => ManagedMediaDependencyId::Oiiotool,
-        MediaConversionDependencyId::OpenColorIo => ManagedMediaDependencyId::OpenColorIo,
     }
 }
 
@@ -308,7 +277,7 @@ mod tests {
     use std::path::Path;
     use std::sync::Mutex;
 
-    use inference::{
+    use pantograph_managed_dependencies::{
         activate_managed_redistributable_version, install_managed_redistributable_from_staging,
         load_managed_redistributable_state, managed_redistributable_catalog_entry,
         remove_managed_redistributable_version, ManagedRedistributableId,
