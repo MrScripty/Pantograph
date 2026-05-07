@@ -1593,6 +1593,12 @@ queried `puma-lib` options with raw `PUMAS_API` only. The fixture now registers
 only for selected-model dependency resolution, matching the production
 selector/list versus detail/hydration boundary.
 
+The host-binding follow-up applies the same boundary to UniFFI embedded
+runtime construction: an optional Pumas handle now registers both raw
+selected-detail API access and owner selector access, and UniFFI runtime tests
+prove `workflow_graph_query_port_options` can populate `puma-lib` options plus
+the selector cursor through that role.
+
 The selector cursor handoff slice now centralizes frontend Pumas model-option
 caching in `src/services/workflow/pumaModelOptionsCache.ts`. The service loads
 selector rows through `query_port_options`, extracts the selector cursor from

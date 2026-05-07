@@ -23,6 +23,7 @@ pantograph-workflow-service = { path = "../pantograph-workflow-service" }
 pantograph-embedded-runtime = { path = "../pantograph-embedded-runtime", default-features = false, optional = true }
 pantograph-frontend-http-adapter = { path = "../pantograph-frontend-http-adapter", optional = true }
 inference = { path = "../inference", default-features = false, optional = true }
+workflow-nodes = { path = "../workflow-nodes", default-features = false, features = ["model-library"] }
 
 # UniFFI runtime (tokio feature for async method export)
 uniffi = { version = "0.28", features = ["tokio"] }

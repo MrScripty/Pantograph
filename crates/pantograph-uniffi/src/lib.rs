@@ -762,9 +762,14 @@ impl FfiPumasApi {
 impl FfiWorkflowEngine {
     /// Set a PumasApi on this engine for model resolution in workflow nodes.
     pub async fn set_pumas_api(&self, api: Arc<FfiPumasApi>) {
+        let api = api.api_arc();
         let mut exec = self.executor.write().await;
         exec.extensions_mut()
-            .set(node_engine::extension_keys::PUMAS_API, api.api_arc());
+            .set(node_engine::extension_keys::PUMAS_API, api.clone());
+        exec.extensions_mut().set(
+            workflow_nodes::setup::PUMAS_SELECTOR_ACCESS,
+            Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(api)),
+        );
     }
 }
 

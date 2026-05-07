@@ -103,6 +103,10 @@ uniffi-bindgen-cs target/debug/libpantograph_headless.so \
   envelopes.
 - Versioning: generated bindings and native library artifacts must come from
   the same release input.
+- Passing an optional Pumas handle to `FfiPantographRuntime` registers both
+  selected-model Pumas API access and the explicit selector-access role used by
+  `workflow_graph_query_port_options`; host code must not expect raw Pumas API
+  injection alone to populate `puma-lib` model selectors.
 
 ## Binding Support Tiers
 | Tier | Surface | Contract |

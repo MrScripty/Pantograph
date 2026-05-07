@@ -26,6 +26,7 @@ use pantograph_workflow_service::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::sync::RwLock;
+use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
 use crate::{FfiError, FfiPumasApi};
 
@@ -135,10 +136,13 @@ impl FfiPantographRuntime {
 
         let extensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
         if let Some(api) = pumas_api {
-            extensions
-                .write()
-                .await
-                .set(node_engine::extension_keys::PUMAS_API, api.api_arc());
+            let api = api.api_arc();
+            let mut extensions = extensions.write().await;
+            extensions.set(node_engine::extension_keys::PUMAS_API, api.clone());
+            extensions.set(
+                PUMAS_SELECTOR_ACCESS,
+                Arc::new(PumasSelectorAccess::Owner(api)),
+            );
         }
 
         let artifact_store = ArtifactStore::open(

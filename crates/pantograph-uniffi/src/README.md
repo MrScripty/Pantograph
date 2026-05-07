@@ -120,6 +120,10 @@ let runtime = FfiPantographRuntime::new(config, optional_pumas_api).await?;
 - Versioning: generated bindings and native library artifacts must come from
   the same release input; exported method changes require host-language smoke
   updates.
+- Optional Pumas handles on `FfiPantographRuntime` initialize both selected
+  model API access and the explicit Pumas selector-access role. Generated
+  hosts should query `puma-lib` options through `workflow_graph_query_port_options`
+  only after that selector role is available.
 
 ## Structured Producer Contract
 - Stable fields: generated binding metadata, native library name, exported

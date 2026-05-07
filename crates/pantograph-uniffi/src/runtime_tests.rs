@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use inference::{managed_redistributable_catalog_entry, ManagedRedistributableId};
+use pantograph_managed_dependencies::{
+    managed_redistributable_catalog_entry, ManagedRedistributableId,
+};
 use pantograph_workflow_service::{WorkflowErrorCode, WorkflowErrorEnvelope};
 
 use super::{FfiEmbeddedRuntimeConfig, FfiPantographRuntime};
@@ -127,6 +130,35 @@ fn write_test_workflow(root: &Path, workflow_id: &str) {
         serde_json::to_vec(&workflow_json).expect("serialize workflow"),
     )
     .expect("write workflow");
+}
+
+fn write_selector_ready_gguf_model(root: &Path) -> PathBuf {
+    let model_dir = root.join("shared-resources/models/llm/imported/uniffi-test-gguf");
+    std::fs::create_dir_all(&model_dir).expect("create pumas model dir");
+    let model_file = model_dir.join("model.gguf");
+    std::fs::write(&model_file, vec![0_u8; 256]).expect("write pumas model file");
+    std::fs::write(
+        model_dir.join("metadata.json"),
+        serde_json::json!({
+            "schema_version": 2,
+            "model_id": "llm/imported/uniffi-test-gguf",
+            "family": "imported",
+            "model_type": "llm",
+            "official_name": "uniffi-test-gguf",
+            "cleaned_name": "uniffi-test-gguf",
+            "source_path": model_dir.display().to_string(),
+            "entry_path": model_file.display().to_string(),
+            "storage_kind": "library_owned",
+            "import_state": "ready",
+            "validation_state": "valid",
+            "task_type_primary": "text-generation",
+            "recommended_backend": "llamacpp",
+            "runtime_engine_hints": ["llamacpp"]
+        })
+        .to_string(),
+    )
+    .expect("write pumas model metadata");
+    model_file
 }
 
 fn write_human_input_workflow(root: &Path, workflow_id: &str) {
@@ -659,6 +691,65 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
     assert!(envelope
         .message
         .contains("No options provider for text-input:text"));
+
+    runtime.shutdown().await;
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+async fn direct_runtime_puma_lib_options_use_selector_access_from_pumas_api() {
+    let workflow_id = "uniffi-runtime-puma-options";
+    let root = create_temp_root(workflow_id);
+    let model_file = write_selector_ready_gguf_model(&root);
+    let api = Arc::new(
+        pumas_library::PumasApi::builder(&root)
+            .auto_create_dirs(true)
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("pumas api should build"),
+    );
+    api.rebuild_model_index()
+        .await
+        .expect("pumas index should rebuild");
+
+    let runtime = FfiPantographRuntime::new(
+        FfiEmbeddedRuntimeConfig {
+            app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
+            project_root: root.to_string_lossy().into_owned(),
+            workflow_roots: Vec::new(),
+            max_loaded_sessions: None,
+        },
+        Some(Arc::new(crate::FfiPumasApi { api })),
+    )
+    .await
+    .expect("runtime should initialize");
+
+    let options_json = runtime
+        .workflow_graph_query_port_options(
+            "puma-lib".to_string(),
+            "model_path".to_string(),
+            serde_json::json!({"limit": 10}).to_string(),
+        )
+        .await
+        .expect("puma-lib options should use selector access");
+    let result: serde_json::Value =
+        serde_json::from_str(&options_json).expect("parse puma-lib options");
+    let option = result["options"]
+        .as_array()
+        .expect("options should be an array")
+        .iter()
+        .find(|option| option["metadata"]["id"] == "llm/imported/uniffi-test-gguf")
+        .expect("selector option should be present");
+
+    assert_eq!(
+        option["value"],
+        serde_json::json!(model_file.display().to_string())
+    );
+    assert!(result["metadata"]["package_facts_summary_cursor"]
+        .as_str()
+        .is_some_and(|cursor| cursor.starts_with("model-library-updates:")));
 
     runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);
