@@ -25,12 +25,50 @@ async fn pytorch_model_needs_load(model_path: &str) -> Result<bool> {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub(crate) struct PyTorchTypedGenerationSettings {
+    pub(crate) max_tokens: Option<i64>,
+    pub(crate) temperature: Option<f64>,
+    pub(crate) top_p: Option<f64>,
+    pub(crate) top_k: Option<u32>,
+}
+
 pub(crate) fn pytorch_typed_generation_settings(
     extra_settings: &HashMap<String, serde_json::Value>,
-) -> Result<Option<u32>> {
-    let mut top_k = None;
+) -> Result<PyTorchTypedGenerationSettings> {
+    let mut settings = PyTorchTypedGenerationSettings::default();
     for (key, value) in extra_settings {
         match key.as_str() {
+            "max_new_tokens" | "max_tokens" => {
+                let value = value.as_u64().and_then(|value| i64::try_from(value).ok());
+                let Some(value) = value else {
+                    return Err(NodeEngineError::ExecutionFailed(
+                        "PyTorch max_new_tokens must be a non-negative integer within i64 range"
+                            .to_string(),
+                    ));
+                };
+                if let Some(existing) = settings.max_tokens {
+                    if existing != value {
+                        return Err(NodeEngineError::ExecutionFailed(
+                            "PyTorch max_new_tokens and max_tokens settings conflict".to_string(),
+                        ));
+                    }
+                }
+                settings.max_tokens = Some(value);
+            }
+            "temperature" => {
+                let Some(value) = value.as_f64() else {
+                    return Err(NodeEngineError::ExecutionFailed(
+                        "PyTorch temperature must be numeric".to_string(),
+                    ));
+                };
+                if value < 0.0 {
+                    return Err(NodeEngineError::ExecutionFailed(
+                        "PyTorch temperature must be non-negative".to_string(),
+                    ));
+                }
+                settings.temperature = Some(value);
+            }
             "top_k" => {
                 let value = value.as_u64().and_then(|value| u32::try_from(value).ok());
                 let Some(value) = value else {
@@ -38,16 +76,15 @@ pub(crate) fn pytorch_typed_generation_settings(
                         "PyTorch top_k must be a non-negative integer within u32 range".to_string(),
                     ));
                 };
-                top_k = Some(value);
+                settings.top_k = Some(value);
             }
-            // top_p is already read from typed inputs above and remains allowed
-            // here so existing canonical schemas do not become backend kwargs.
             "top_p" => {
-                if value.as_f64().is_none() {
+                let Some(value) = value.as_f64() else {
                     return Err(NodeEngineError::ExecutionFailed(
                         "PyTorch top_p must be numeric".to_string(),
                     ));
-                }
+                };
+                settings.top_p = Some(value);
             }
             unsupported => {
                 return Err(NodeEngineError::ExecutionFailed(format!(
@@ -57,7 +94,7 @@ pub(crate) fn pytorch_typed_generation_settings(
             }
         }
     }
-    Ok(top_k)
+    Ok(settings)
 }
 
 pub(crate) async fn execute_pytorch_inference(
@@ -109,13 +146,17 @@ pub(crate) async fn execute_pytorch_inference(
         .get("system_prompt")
         .and_then(|s| s.as_str())
         .map(|s| s.to_string());
+    let extra_settings = build_extra_settings(inputs);
+    let generation_settings = pytorch_typed_generation_settings(&extra_settings)?;
     let temperature = inputs
         .get("temperature")
         .and_then(|t| t.as_f64())
+        .or(generation_settings.temperature)
         .unwrap_or(0.7);
     let max_tokens = inputs
         .get("max_tokens")
         .and_then(|m| m.as_i64())
+        .or(generation_settings.max_tokens)
         .unwrap_or(512);
     let device = inputs
         .get("device")
@@ -154,16 +195,12 @@ pub(crate) async fn execute_pytorch_inference(
     )
     .await?;
 
-    // Read model-specific inference settings to forward as Python kwargs
-    let extra_settings = build_extra_settings(inputs);
-    // Keep top_p explicit even when inference_settings schema is missing.
     let top_p = inputs
         .get("top_p")
         .and_then(|v| v.as_f64())
-        .or_else(|| extra_settings.get("top_p").and_then(|v| v.as_f64()))
+        .or(generation_settings.top_p)
         .unwrap_or(0.95);
-
-    let top_k = pytorch_typed_generation_settings(&extra_settings)?;
+    let top_k = generation_settings.top_k;
 
     // Phase 2: Generate through the inference-owned PyTorch worker envelope.
     let response_text = if let Some(sink) = event_sink {

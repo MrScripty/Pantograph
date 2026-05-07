@@ -2703,7 +2703,7 @@ fn test_pytorch_typed_generation_settings_accepts_empty_settings() {
     let settings = HashMap::new();
     assert_eq!(
         pytorch_typed_generation_settings(&settings).expect("empty settings should be accepted"),
-        None
+        PyTorchTypedGenerationSettings::default()
     );
 }
 
@@ -2713,19 +2713,43 @@ fn test_pytorch_typed_generation_settings_accepts_single_top_k() {
     let mut settings = HashMap::new();
     settings.insert("top_k".to_string(), serde_json::json!(40));
     assert_eq!(
-        pytorch_typed_generation_settings(&settings).expect("top_k should be accepted"),
+        pytorch_typed_generation_settings(&settings)
+            .expect("top_k should be accepted")
+            .top_k,
         Some(40)
     );
 }
 
 #[cfg(feature = "pytorch-nodes")]
 #[test]
-fn test_pytorch_typed_generation_settings_accepts_typed_top_p() {
+fn test_pytorch_typed_generation_settings_accepts_sampling_controls() {
     let mut settings = HashMap::new();
     settings.insert("top_p".to_string(), serde_json::json!(0.9));
+    settings.insert("temperature".to_string(), serde_json::json!(0.25));
+    let parsed =
+        pytorch_typed_generation_settings(&settings).expect("sampling controls should be accepted");
     assert_eq!(
-        pytorch_typed_generation_settings(&settings).expect("typed top_p should be accepted"),
-        None
+        parsed,
+        PyTorchTypedGenerationSettings {
+            max_tokens: None,
+            temperature: Some(0.25),
+            top_p: Some(0.9),
+            top_k: None,
+        }
+    );
+}
+
+#[cfg(feature = "pytorch-nodes")]
+#[test]
+fn test_pytorch_typed_generation_settings_accepts_length_aliases() {
+    let mut settings = HashMap::new();
+    settings.insert("max_new_tokens".to_string(), serde_json::json!(128));
+    settings.insert("max_tokens".to_string(), serde_json::json!(128));
+    assert_eq!(
+        pytorch_typed_generation_settings(&settings)
+            .expect("matching length aliases should be accepted")
+            .max_tokens,
+        Some(128)
     );
 }
 
@@ -2739,6 +2763,22 @@ fn test_pytorch_typed_generation_settings_rejects_invalid_top_p() {
     match error {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("PyTorch top_p must be numeric"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "pytorch-nodes")]
+#[test]
+fn test_pytorch_typed_generation_settings_rejects_conflicting_length_aliases() {
+    let mut settings = HashMap::new();
+    settings.insert("max_new_tokens".to_string(), serde_json::json!(128));
+    settings.insert("max_tokens".to_string(), serde_json::json!(64));
+    let error = pytorch_typed_generation_settings(&settings)
+        .expect_err("conflicting length aliases should be rejected");
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("max_new_tokens and max_tokens settings conflict"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }

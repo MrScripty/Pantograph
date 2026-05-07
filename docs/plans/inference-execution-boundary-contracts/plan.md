@@ -2561,6 +2561,11 @@ clears text-generation, diffusion, and ASR module state without terminating the
 embedded interpreter. Backend `stop()` uses this shutdown envelope for
 best-effort cleanup instead of treating model unload as the worker lifecycle
 boundary.
+Node-engine PyTorch text execution now treats model/Pumas-provided
+`inference_settings` as typed generation settings for `max_new_tokens` /
+`max_tokens`, `temperature`, `top_p`, and `top_k`, with direct node ports taking
+precedence. Unsupported settings still fail at the node-engine boundary rather
+than becoming arbitrary Transformers/Python kwargs.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 
