@@ -2181,6 +2181,9 @@ tests/fixtures, or historical documentation. A follow-up cleanup removed
 Ollama from the Tauri Pumas dependency-runtime probe backend-binding candidate
 matrix so Pumas Ollama compatibility facts are ignored instead of queried as
 Pantograph-executable backend options.
+A later tooling cleanup removed the deleted Ollama managed-runtime platform
+directory from the decision-traceability structured-producer defaults, keeping
+the guardrail focused on active producer paths instead of retired backend code.
 
 ### Milestone 7: Strengthen Capability Facts
 
@@ -5022,6 +5025,8 @@ Update during implementation:
   Pantograph-local package-fact candidates project to advisory
   runtime-registry candidates, while remote discovery hints
   project to none.
+- 2026-05-07: Decision-traceability tooling no longer names the removed Ollama
+  managed-runtime platform directory as an active structured producer.
 
 ### Deviations
 

@@ -52,7 +52,8 @@ can be debugged without the full app UI in the loop.
 - Decision traceability defaults cover `src`, `src-tauri/src`, `crates`,
   `packages/svelte-graph/src`, `scripts`, and `.pantograph`; use environment
   overrides for temporary focused audits. The default host-facing and
-  structured-producer lists include UniFFI binding generator helpers.
+  structured-producer lists include UniFFI binding generator helpers and active
+  inference managed-runtime producers only.
 - Decision traceability must preserve equivalent README/ADR checks when `rg` is
   unavailable by falling back to standard shell tooling instead of failing on
   clean CI runners.
