@@ -29,6 +29,12 @@ routing without hardcoding runtime choices into the UI or executor.
   when a model can resolve one.
 - Model-list/package-fact summary details must come from Pumas summary snapshot
   and summary resolution APIs, not Pumas storage internals.
+- Model selector rows must come from Pumas `ModelLibrarySelectorSnapshot`
+  first. Selected or expanded model details may use batch/package APIs after a
+  row has been chosen.
+- Pumas selector access must be explicit: owner API, local client, or read-only
+  library. Read-only selector access is a local indexed read and must not start
+  reconciliation, downloads, watchers, or hidden lifecycle work.
 - Model metadata fallbacks must stay additive so older Pumas records continue to
   resolve when descriptor lookup is unavailable.
 
@@ -41,9 +47,10 @@ flows. For `puma-lib`, Pantograph preserves the graph-facing `model_path`,
 from Pumas `ModelExecutionDescriptor` whenever a `model_id` is available and
 descriptor resolution succeeds. Record metadata remains a display/fallback
 contract only, not the runtime source of truth. The model option provider also
-captures Pumas package-fact summary status, summary payload, and the producer
-cursor for the populated page so UI/model-list consumers can refresh from
-Pumas update feeds without inspecting Pumas storage.
+populates rows from Pumas `ModelLibrarySelectorSnapshot`, captures package-fact
+summary status, summary payload, and the producer cursor for the populated page
+so UI/model-list consumers can refresh from Pumas update feeds without
+inspecting Pumas storage.
 
 ## Alternatives Rejected
 - Keep an unregistered `model-provider` `NodeExecutor` in this crate.
@@ -63,6 +70,8 @@ Pumas update feeds without inspecting Pumas storage.
   into Pantograph routing.
 - `puma-lib` option metadata may cache bounded Pumas package summaries for the
   listed page, but Pumas remains the source of truth and update cursor producer.
+- `puma-lib` model options query the explicit selector-access role and must not
+  require full owner `PumasApi` when a read-only selector snapshot is available.
 - `puma-lib` summary-cache population applies the Pumas snapshot cursor before
   resolving sparse rows, consumes the update feed for that cursor, regenerates
   bounded missing summaries, then polls the update feed again so updates that
@@ -107,6 +116,9 @@ assert_eq!(metadata.node_type, "model-provider");
 - Consumers must not assume Pantograph inferred runtime-executable paths from
   `metadata.json`; the host may rebind the same facade from the upstream
   execution descriptor contract.
+- Consumers must treat selector `indexed_path` as display/debug data. A
+  selector `entry_path` is executable only when the selector row reports ready
+  entry and artifact states.
 
 ## Structured Producer Contract
 - `puma-lib` emits `model_path`, `model_id`, `model_type`,

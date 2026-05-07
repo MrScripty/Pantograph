@@ -13,7 +13,7 @@ workflow node family.
 | ----------- | ----------- |
 | `lib.rs` | Crate export surface and built-in descriptor registration wiring. |
 | `contracts.rs` | Canonical primitive contract projection plus composed authoring registrations for built-in workflow nodes. |
-| `setup.rs` | Node registration helpers used by hosts and tests. |
+| `setup.rs` | Node registration helpers and optional host extension setup, including explicit Pumas selector access roles. |
 | `input/` | User/model input node task definitions and metadata. |
 | `processing/` | Inference, transformation, dependency, and model-processing nodes. |
 | `output/` | Terminal output node definitions for text, image, audio, vector, component, and point-cloud values. |
@@ -121,6 +121,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
 - Canonical `llm-inference` declares `task_kind` and `runtime_hint` as
   optional graph-visible inputs because saved-workflow migration, preflight,
   and execution already consume those fields as canonical node data.
+- Pumas model selectors use an explicit selector-access extension role:
+  owner `PumasApi`, local `PumasLocalClient`, or read-only
+  `PumasReadOnlyLibrary`. Read-only access must be opened against the
+  model-library root that contains `models.db`, not a launcher/source root.
 
 ## Testing
 ```bash

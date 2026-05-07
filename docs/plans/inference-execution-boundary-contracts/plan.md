@@ -1167,6 +1167,45 @@ write set for the Pumas fast selector integration is now recorded below.
   hydrate package summaries, execution descriptors, and inference settings only
   for the selected model or explicit expanded-row detail path.
 
+**Milestone 2 Selector Access-Role Slice Boundary:**
+
+- Primary write set:
+  `crates/workflow-nodes/src/setup.rs`,
+  `crates/workflow-nodes/src/input/puma_lib.rs`,
+  `crates/workflow-nodes/src/README.md`,
+  `crates/workflow-nodes/src/input/README.md`, and this plan.
+- Adjacent write set:
+  `crates/node-engine/src/extensions.rs` only if the explicit role keys need to
+  move into the shared extension-key contract, and
+  `crates/pantograph-embedded-runtime/src/runtime_extensions.rs` only if
+  executor-scoped extension snapshots must preserve the read-only selector
+  object.
+- Forbidden shared files unless the plan is updated first:
+  external `../Pumas-Library/**`, `src-tauri/**`, frontend components/stores,
+  generated bindings, `Cargo.lock`, diagnostics-ledger DTOs, and saved-workflow
+  migration fixtures.
+- Contract owner:
+  `workflow-nodes` owns host extension setup for selector access. Pumas owns
+  the owner/local-client/read-only API behavior and the read-only requirement
+  that callers pass the model-library root containing `models.db`.
+- Decomposition decision:
+  `crates/workflow-nodes/src/input/puma_lib.rs` is already oversized, but the
+  selector access change is a focused extension lookup replacement plus one
+  acceptance test. Broader model-list decomposition is deferred to avoid
+  mixing structural refactors with access-role behavior.
+- Acceptance tests:
+  `cargo test -p workflow-nodes --features model-library read_only`,
+  `cargo test -p workflow-nodes --features model-library test_model_options_use_read_only_selector_snapshot_without_pumas_api`,
+  `cargo test -p workflow-nodes --features model-library test_model_options_use_selector_snapshot_without_detail_hydration`,
+  `cargo fmt --all`, and `git diff --check`.
+- Acceptance criteria:
+  `setup_extensions_with_path` records an explicit selector access role when
+  owner API, local-client, or read-only access is available; read-only access
+  resolves launcher roots and build-output roots to `shared-resources/models`
+  before opening; `puma-lib` options query through the selector role without
+  requiring full `PUMAS_API`; and selected-model detail hydration remains on
+  the full API path until a later local-client/detail slice is planned.
+
 ### Milestone 1: Freeze Boundary Vocabulary
 
 **Goal:** Define the exact fact-producing boundary before changing behavior.
@@ -1310,10 +1349,10 @@ Detailed Pumas-side work is split into
   planning artifacts that mention feasible execution candidates, but the
   active fast-snapshot and package-facts plans keep candidate/exclusion
   derivation in Pantograph.
-- [ ] Add a Pantograph Pumas access-role adapter that selects owner API,
+- [x] Add a Pantograph Pumas access-role adapter that selects owner API,
   explicit local client, or read-only selector access without relying on hidden
   Pumas client fallback behavior.
-- [ ] Resolve the Pumas model-library root used by read-only selector access and
+- [x] Resolve the Pumas model-library root used by read-only selector access and
   test that the adapter opens the directory containing `models.db`, not the
   launcher/source repository root.
 - [x] Replace Library page and graph `puma-lib` model-list population with
@@ -1411,8 +1450,18 @@ existing Library page and graph selector both consume this shared
 Pumas model ref directly and hydrates only that selected model through Pumas
 package-summary, execution-descriptor, and inference-settings batch/detail APIs
 instead of re-running and scanning the full model option list. The slice does
-not yet add explicit local-client/read-only access-role selection or cursor
-subscription handoff; those remain open Milestone 2 items.
+not yet add cursor subscription handoff; that remains an open Milestone 2 item.
+
+The selector access-role slice now registers a workflow-nodes selector access
+extension that can route selector snapshot reads through owner `PumasApi`,
+same-device `PumasLocalClient`, or local read-only `PumasReadOnlyLibrary`.
+Explicit configured roots are resolved before discovery fallback, and read-only
+setup resolves direct model roots, launcher roots, and Pumas build-output paths
+to the model-library directory containing `models.db` without creating a
+missing index. `puma-lib` model options now use the selector access extension
+and retain the full `PUMAS_API` compatibility fallback only for existing test
+or host injection paths. Selected-model detail hydration remains on the full
+API path until the local-client/detail hydration slice is planned.
 
 Validation for the selector slice passed with
 `cargo test -p workflow-nodes --features model-library --lib puma_lib`,
@@ -1424,6 +1473,13 @@ backend-owned status/resource telemetry performance slice. Validation refreshed
 the Pumas producer update and should be committed separately from the selector
 code slice. A follow-up dependency slice should pin Pantograph to Pumas Library
 `v0.6.0` when the release is published.
+
+Validation for the selector access-role slice passed with
+`cargo test -p workflow-nodes --features model-library read_only`,
+`cargo test -p workflow-nodes --features model-library test_model_options_use_selector_snapshot_without_detail_hydration`,
+`cargo test -p workflow-nodes --features model-library --lib puma_lib`,
+`cargo check -p workflow-nodes --features model-library`, and
+`cargo fmt --all`, and `git diff --check`.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 

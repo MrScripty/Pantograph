@@ -117,6 +117,7 @@ inventory::submit!(node_engine::DescriptorFn(PumaLibTask::descriptor));
 
 #[cfg(feature = "model-library")]
 mod options_provider {
+    use crate::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
     use async_trait::async_trait;
     use node_engine::{
         extension_keys, ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider,
@@ -518,13 +519,22 @@ mod options_provider {
             query: &PortOptionsQuery,
             extensions: &ExecutorExtensions,
         ) -> node_engine::Result<PortOptionsResult> {
-            let api = extensions
-                .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+            let selector_access = extensions
+                .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+                .cloned()
+                .or_else(|| {
+                    extensions
+                        .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+                        .cloned()
+                        .map(|api| Arc::new(PumasSelectorAccess::Owner(api)))
+                })
                 .ok_or_else(|| {
-                    NodeEngineError::ExecutionFailed("Model library not available".to_string())
+                    NodeEngineError::ExecutionFailed(
+                        "Pumas model selector access not available".to_string(),
+                    )
                 })?;
 
-            let snapshot = api
+            let snapshot = selector_access
                 .model_library_selector_snapshot(selector_snapshot_request(query))
                 .await
                 .map_err(|e| NodeEngineError::ExecutionFailed(e.to_string()))?;
@@ -652,6 +662,7 @@ mod model_library_tests {
         runtime_engine_hints_from_summary, task_type_primary_from_descriptor_or_record,
         PackageFactsSummaryCache, PumaLibOptionsProvider,
     };
+    use crate::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
     use node_engine::{extension_keys, ExecutorExtensions, PortOptionsProvider, PortOptionsQuery};
     use pumas_library::models::{
         ModelArtifactState, ModelEntryPathState, ModelExecutionDescriptor, ModelFactFamily,
@@ -659,7 +670,7 @@ mod model_library_tests {
         ModelLibraryUpdateEvent, ModelLibraryUpdateFeed, ModelPackageFactsSummaryResult,
         ModelPackageFactsSummaryStatus,
     };
-    use pumas_library::{ModelRecord, PumasApi};
+    use pumas_library::{ModelIndex, ModelRecord, PumasApi, PumasReadOnlyLibrary};
     use std::collections::HashMap;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -1194,6 +1205,67 @@ mod model_library_tests {
         assert_eq!(metadata["selector_row_executable"], serde_json::json!(true));
         assert_eq!(metadata["inference_settings"], serde_json::json!([]));
         assert!(metadata.get("execution_contract_version").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_model_options_use_read_only_selector_snapshot_without_pumas_api() {
+        let temp_dir = TempDir::new().unwrap();
+        let model_root = temp_dir.path();
+        let writer = ModelIndex::new(model_root.join("models.db")).unwrap();
+        writer
+            .upsert(&ModelRecord {
+                id: "llm/imported/read-only".to_string(),
+                path: "llm/imported/read-only".to_string(),
+                cleaned_name: "read-only".to_string(),
+                official_name: "read-only".to_string(),
+                model_type: "llm".to_string(),
+                tags: vec!["gguf".to_string()],
+                hashes: HashMap::new(),
+                metadata: serde_json::json!({
+                    "entry_path": "/models/read-only/model.gguf",
+                    "validation_state": "valid",
+                    "task_type_primary": "text-generation",
+                    "recommended_backend": "llama.cpp",
+                    "runtime_engine_hints": ["llama.cpp"]
+                }),
+                updated_at: "2026-05-06T00:00:00Z".to_string(),
+            })
+            .unwrap();
+        drop(writer);
+
+        let read_only = PumasReadOnlyLibrary::open(model_root).unwrap();
+        let mut extensions = ExecutorExtensions::new();
+        extensions.set(
+            PUMAS_SELECTOR_ACCESS,
+            Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
+        );
+
+        let provider = PumaLibOptionsProvider;
+        let result = provider
+            .query_options(
+                &PortOptionsQuery {
+                    limit: Some(25),
+                    ..PortOptionsQuery::default()
+                },
+                &extensions,
+            )
+            .await
+            .expect("read-only selector options should load");
+
+        assert_eq!(result.options.len(), 1);
+        let option = &result.options[0];
+        assert_eq!(
+            option.value,
+            serde_json::json!("/models/read-only/model.gguf")
+        );
+        let metadata = option
+            .metadata
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .expect("selector option metadata should be an object");
+        assert_eq!(metadata["id"], serde_json::json!("llm/imported/read-only"));
+        assert_eq!(metadata["selector_row_executable"], serde_json::json!(true));
+        assert_eq!(metadata["inference_settings"], serde_json::json!([]));
     }
 
     #[test]
