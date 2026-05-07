@@ -125,6 +125,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   owner `PumasApi`, local `PumasLocalClient`, or read-only
   `PumasReadOnlyLibrary`. Read-only access must be opened against the
   model-library root that contains `models.db`, not a launcher/source root.
+  The same selector-access adapter owns model-library update feed handoff:
+  owner access lists updates directly, local-client access converts the Pumas
+  subscription recovery handshake into an update feed, and read-only access
+  reports update-feed unavailability without starting lifecycle work.
 
 ## Testing
 ```bash

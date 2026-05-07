@@ -43,6 +43,36 @@ impl PumasSelectorAccess {
             Self::ReadOnly(library) => library.model_library_selector_snapshot(request),
         }
     }
+
+    pub async fn list_model_library_updates_since(
+        &self,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> pumas_library::Result<pumas_library::models::ModelLibraryUpdateFeed> {
+        match self {
+            Self::Owner(api) => api.list_model_library_updates_since(cursor, limit).await,
+            Self::LocalClient(client) => {
+                let cursor = cursor.ok_or_else(|| pumas_library::PumasError::InvalidParams {
+                    message: "local-client model-library update handoff requires a selector cursor"
+                        .to_string(),
+                })?;
+                let stream = client
+                    .subscribe_model_library_update_stream_since(cursor)
+                    .await?;
+                let handshake = stream.handshake();
+                Ok(pumas_library::models::ModelLibraryUpdateFeed {
+                    cursor: handshake.cursor_after_recovery.clone(),
+                    events: handshake.recovered_events.clone(),
+                    stale_cursor: handshake.stale_cursor,
+                    snapshot_required: handshake.snapshot_required,
+                })
+            }
+            Self::ReadOnly(_) => Err(pumas_library::PumasError::InvalidParams {
+                message: "read-only Pumas selector access does not provide update feeds"
+                    .to_string(),
+            }),
+        }
+    }
 }
 
 /// Initialize optional runtime dependencies in `ExecutorExtensions`.
@@ -290,9 +320,43 @@ pub fn resolve_pumas_model_library_root(path: &Path) -> Option<PathBuf> {
 #[cfg(all(test, feature = "model-library"))]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use node_engine::extension_keys;
+    use pumas_library::ipc::{IpcDispatch, IpcServer};
+    use pumas_library::model_library::ModelLibrary;
+    use pumas_library::registry::{InstanceEntry, InstanceStatus, LocalInstanceTransportKind};
     use pumas_library::ModelIndex;
     use tempfile::TempDir;
+
+    struct UpdateStreamDispatch {
+        library: ModelLibrary,
+    }
+
+    #[async_trait]
+    impl IpcDispatch for UpdateStreamDispatch {
+        async fn dispatch(
+            &self,
+            method: &str,
+            _params: serde_json::Value,
+        ) -> pumas_library::Result<serde_json::Value> {
+            Err(pumas_library::PumasError::Other(format!(
+                "unexpected IPC method: {method}"
+            )))
+        }
+
+        async fn subscribe_model_library_update_stream_since(
+            &self,
+            cursor: &str,
+            _connection_token: Option<&str>,
+        ) -> pumas_library::Result<Option<pumas_library::model_library::ModelLibraryUpdateSubscriber>>
+        {
+            Ok(Some(
+                self.library
+                    .subscribe_model_library_update_stream_since(cursor)
+                    .await?,
+            ))
+        }
+    }
 
     fn create_models_db(model_root: &Path) {
         std::fs::create_dir_all(model_root).unwrap();
@@ -309,6 +373,20 @@ mod tests {
         std::fs::create_dir_all(temp.path().join("launcher-data")).unwrap();
         std::fs::create_dir_all(temp.path().join("shared-resources/models")).unwrap();
         temp
+    }
+
+    fn ready_instance(port: u16) -> InstanceEntry {
+        InstanceEntry {
+            library_path: PathBuf::from("/tmp/pantograph-pumas-test-library"),
+            pid: std::process::id(),
+            port,
+            transport_kind: LocalInstanceTransportKind::LoopbackTcp,
+            endpoint: format!("127.0.0.1:{port}"),
+            connection_token: Some("token".to_string()),
+            started_at: "2026-05-06T00:00:00Z".to_string(),
+            version: None,
+            status: InstanceStatus::Ready,
+        }
     }
 
     #[test]
@@ -385,6 +463,65 @@ mod tests {
                 .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
                 .is_none(),
             "read-only selector setup must not claim owner API access"
+        );
+    }
+
+    #[tokio::test]
+    async fn local_client_update_feed_recovers_events_from_selector_cursor() {
+        let temp = TempDir::new().unwrap();
+        let library_root = temp.path().join("models");
+        std::fs::create_dir_all(&library_root).unwrap();
+        let library = ModelLibrary::new(&library_root).await.unwrap();
+        let cursor = library
+            .list_model_library_updates_since(None, 100)
+            .await
+            .unwrap()
+            .cursor;
+        library
+            .notify_model_library_refresh("local-client-handoff-test")
+            .unwrap();
+        let Some(server) = IpcServer::start(Arc::new(UpdateStreamDispatch {
+            library: library.clone(),
+        }))
+        .await
+        .ok() else {
+            eprintln!("Skipping local_client_update_feed_recovers_events_from_selector_cursor");
+            return;
+        };
+        let client = pumas_library::PumasLocalClient::connect(ready_instance(server.port))
+            .await
+            .unwrap();
+        let access = PumasSelectorAccess::LocalClient(Arc::new(client));
+
+        let feed = access
+            .list_model_library_updates_since(Some(&cursor), 100)
+            .await
+            .expect("local client update feed should recover durable updates");
+
+        assert!(!feed.stale_cursor);
+        assert!(!feed.snapshot_required);
+        assert!(feed.cursor.starts_with("model-library-updates:"));
+        assert_eq!(feed.events.len(), 1);
+        assert_eq!(feed.events[0].model_id, "__library__/model-library-refresh");
+    }
+
+    #[tokio::test]
+    async fn read_only_update_feed_reports_unavailable_without_lifecycle() {
+        let temp = TempDir::new().unwrap();
+        create_model_index(temp.path());
+        let library = pumas_library::PumasReadOnlyLibrary::open(temp.path()).unwrap();
+        let access = PumasSelectorAccess::ReadOnly(Arc::new(library));
+
+        let error = access
+            .list_model_library_updates_since(Some("model-library-updates:1"), 100)
+            .await
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("read-only Pumas selector access does not provide update feeds"),
+            "unexpected error: {error}"
         );
     }
 }

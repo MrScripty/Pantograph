@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use tauri::State;
+use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
 use super::commands::{SharedExtensions, SharedNodeRegistry, SharedWorkflowService};
 use super::model_dependencies::SharedModelDependencyResolver;
@@ -177,13 +178,44 @@ pub async fn list_model_library_updates_since(
     limit: Option<usize>,
 ) -> Result<pumas_library::models::ModelLibraryUpdateFeed, String> {
     let cursor = validate_optional_pumas_update_cursor(cursor)?;
-    let api = require_pumas_api(&extensions).await?;
-    api.list_model_library_updates_since(
-        cursor.as_deref(),
-        validate_pumas_model_library_page_limit(limit.unwrap_or(100))?,
-    )
-    .await
-    .map_err(|error| error.to_string())
+    let limit = validate_pumas_model_library_page_limit(limit.unwrap_or(100))?;
+    let selector_access = {
+        let ext = extensions.read().await;
+        pumas_update_feed_access_from_extensions(&ext)
+    };
+    list_model_library_updates_since_from_access(selector_access, cursor.as_deref(), limit).await
+}
+
+async fn list_model_library_updates_since_from_extensions(
+    extensions: &node_engine::ExecutorExtensions,
+    cursor: Option<&str>,
+    limit: usize,
+) -> Result<pumas_library::models::ModelLibraryUpdateFeed, String> {
+    let selector_access = pumas_update_feed_access_from_extensions(extensions);
+    list_model_library_updates_since_from_access(selector_access, cursor, limit).await
+}
+
+fn pumas_update_feed_access_from_extensions(
+    extensions: &node_engine::ExecutorExtensions,
+) -> Option<Arc<PumasSelectorAccess>> {
+    extensions
+        .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+        .cloned()
+}
+
+async fn list_model_library_updates_since_from_access(
+    selector_access: Option<Arc<PumasSelectorAccess>>,
+    cursor: Option<&str>,
+    limit: usize,
+) -> Result<pumas_library::models::ModelLibraryUpdateFeed, String> {
+    if let Some(selector_access) = selector_access {
+        return selector_access
+            .list_model_library_updates_since(cursor, limit)
+            .await
+            .map_err(|error| error.to_string());
+    }
+
+    Err("Pumas selector access not available in executor extensions".to_string())
 }
 
 fn record_pumas_model_delete_audit(
@@ -875,6 +907,61 @@ mod tests {
         );
         assert!(metadata["execution_contract_version"].is_number());
         assert!(metadata["inference_settings"].is_array());
+    }
+
+    #[tokio::test]
+    async fn list_model_library_updates_since_uses_owner_selector_access() {
+        let temp_dir = create_test_env();
+        let api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .build()
+                .await
+                .unwrap(),
+        );
+        let mut extensions = node_engine::ExecutorExtensions::new();
+        extensions.set(
+            PUMAS_SELECTOR_ACCESS,
+            Arc::new(PumasSelectorAccess::Owner(api)),
+        );
+
+        let feed = list_model_library_updates_since_from_extensions(&extensions, None, 100)
+            .await
+            .expect("owner selector access update feed should load");
+
+        assert!(feed.cursor.starts_with("model-library-updates:"));
+        assert!(!feed.stale_cursor);
+        assert!(!feed.snapshot_required);
+    }
+
+    #[tokio::test]
+    async fn list_model_library_updates_since_prefers_selector_access_role() {
+        let temp_dir = TempDir::new().unwrap();
+        let _index = pumas_library::ModelIndex::new(temp_dir.path().join("models.db")).unwrap();
+        let read_only = pumas_library::PumasReadOnlyLibrary::open(temp_dir.path()).unwrap();
+        let mut extensions = node_engine::ExecutorExtensions::new();
+        extensions.set(
+            PUMAS_SELECTOR_ACCESS,
+            Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
+        );
+
+        let error = list_model_library_updates_since_from_extensions(
+            &extensions,
+            Some("model-library-updates:1"),
+            100,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            error.contains("read-only Pumas selector access does not provide update feeds"),
+            "unexpected error: {error}"
+        );
+        assert!(
+            extensions
+                .get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
+                .is_none(),
+            "read-only selector access must not require raw PUMAS_API"
+        );
     }
 
     #[test]

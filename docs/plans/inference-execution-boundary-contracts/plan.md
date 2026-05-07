@@ -1245,6 +1245,38 @@ write set for the Pumas fast selector integration is now recorded below.
   polling; and both LibraryPage and graph PumaLibNode share the same cache
   helper.
 
+**Milestone 2 Local-Client Update Feed Slice Boundary:**
+
+- Primary write set:
+  `crates/workflow-nodes/src/setup.rs`,
+  `src-tauri/src/workflow/puma_lib_commands.rs`, this plan, and source READMEs
+  for directories whose API consumer contract changes.
+- Adjacent write set:
+  `src/services/workflow/pumaModelOptionsCache.ts` only if the frontend command
+  response shape changes. Pumas producer code remains read-only.
+- Forbidden shared files unless the plan is updated first:
+  external `../Pumas-Library/**`, frontend components, generated bindings,
+  `Cargo.lock`, diagnostics-ledger DTOs, and saved-workflow migration fixtures.
+- Contract owner:
+  `workflow-nodes` owns the selector-access adapter. `src-tauri` owns command
+  routing from app calls to the active selector access role. Pumas owns the
+  local-client subscription handshake and update DTO shapes.
+- Decomposition decision:
+  Keep the local-client feed conversion inside the selector-access adapter so
+  Tauri commands do not learn owner/local-client internals. `puma_lib_commands`
+  may gain only a focused helper that clones the extension role before awaiting.
+- Acceptance tests:
+  `cargo test -p workflow-nodes --features model-library local_client_update_feed`,
+  `cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands`,
+  `cargo fmt --all`, and `git diff --check`.
+- Acceptance criteria:
+  owner access still uses `PumasApi::list_model_library_updates_since`;
+  local-client access converts `subscribe_model_library_update_stream_since`
+  handshake recovery into `ModelLibraryUpdateFeed`; read-only access reports
+  update-feed unavailability without starting lifecycle work; Tauri
+  `list_model_library_updates_since` requires the explicit selector-access
+  role so update-feed routing has one source of truth.
+
 ### Milestone 1: Freeze Boundary Vocabulary
 
 **Goal:** Define the exact fact-producing boundary before changing behavior.
@@ -1534,6 +1566,26 @@ snapshot and does not start a polling loop.
 Validation for the selector cursor handoff slice passed with
 `node --experimental-strip-types --test src/services/workflow/pumaModelOptionsCache.test.ts`,
 `npm run test:frontend`, `npm run typecheck`, and `git diff --check`.
+
+The local-client update-feed slice now routes Tauri
+`list_model_library_updates_since` through the explicit selector-access role
+instead of requiring raw owner `PUMAS_API`. Owner access still uses
+Pumas' list API; local-client access converts Pumas'
+`subscribe_model_library_update_stream_since` recovery handshake into the same
+`ModelLibraryUpdateFeed` DTO used by the frontend cache handoff; and read-only
+selector access reports update-feed unavailability without starting lifecycle
+work. The command clones extension handles before awaiting Pumas APIs or IPC so
+the Tauri shared-extension lock is not held across async work. Raw `PUMAS_API`
+injection is intentionally not a fallback for update-feed routing because the
+selector-access role is the Pantograph boundary source of truth.
+
+Validation for the local-client update-feed slice passed with
+`cargo test -p workflow-nodes --features model-library local_client_update_feed`,
+`cargo test -p workflow-nodes --features model-library read_only_update_feed`,
+`cargo test -p workflow-nodes --features model-library --lib setup`,
+`cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands`,
+`cargo check -p workflow-nodes --features model-library`,
+`cargo fmt --all`, and `git diff --check`.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 

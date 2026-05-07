@@ -65,6 +65,11 @@ while still handling desktop runtime execution concerns.
   after Pumas returns bounded results, and download-start commands may record
   download events after Pumas returns a download id, but handlers must not
   append raw diagnostic ledger events.
+- Pumas model-library update commands must route through the explicit selector
+  access role. Owner access may list updates directly, local-client access may
+  project the subscription recovery handshake as an update feed, and read-only
+  selector access must report feed unavailability without starting Pumas
+  lifecycle work.
 - Tauri execution-handle lifecycle and undo/redo projection must stay thin
   wrappers around backend-owned `node-engine` behavior rather than becoming a
   second owner of workflow-session policy.
@@ -222,6 +227,9 @@ dependency removal refusal while a conversion lease is active.
 - Workflow-event serialization and ownership projection stay in
   `event_serialization.rs`; `events.rs` remains the DTO and constructor
   boundary.
+- Pumas update-feed command handlers must clone extension handles before
+  awaiting Pumas APIs or local-client IPC so Tauri shared-extension locks are
+  not held across async calls.
 - Session-scoped candidate and insert commands must log enough request/rejection
   context to diagnose release-only interaction failures without relying on
   browser-console access.
