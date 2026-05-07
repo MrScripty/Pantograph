@@ -1587,6 +1587,12 @@ Pantograph/Pumas boundary. Validation passed with
 `cargo test -p workflow-nodes --features model-library --lib puma_lib`,
 `cargo fmt --all`, and `git diff --check`.
 
+A follow-up embedded-runtime fixture audit found a stale test path that still
+queried `puma-lib` options with raw `PUMAS_API` only. The fixture now registers
+`PUMAS_SELECTOR_ACCESS` for the option query while keeping raw Pumas API access
+only for selected-model dependency resolution, matching the production
+selector/list versus detail/hydration boundary.
+
 The selector cursor handoff slice now centralizes frontend Pumas model-option
 caching in `src/services/workflow/pumaModelOptionsCache.ts`. The service loads
 selector rows through `query_port_options`, extracts the selector cursor from

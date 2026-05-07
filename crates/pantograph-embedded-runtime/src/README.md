@@ -93,6 +93,9 @@ Pumas-specific dependency resolution.
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option
   metadata.
+- `puma-lib` selector/list queries must use the explicit workflow-nodes Pumas
+  selector-access role. Raw `PUMAS_API` access is reserved for full-detail
+  dependency resolution and selected-model hydration, not list population.
 - Keep dependency preflight deterministic because it can block workflow
   execution before node runtime starts.
 - App-global runtime residency, admission, retention, and eviction policy must

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::sync::RwLock;
+use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
 fn test_resolver() -> TauriModelDependencyResolver {
     TauriModelDependencyResolver::new(
@@ -96,6 +97,7 @@ fn write_library_owned_file_model(
             "official_name": "test-gguf",
             "cleaned_name": "test-gguf",
             "source_path": model_dir.display().to_string(),
+            "entry_path": model_file.display().to_string(),
             "storage_kind": "library_owned",
             "import_state": "ready",
             "validation_state": "valid",
@@ -414,7 +416,10 @@ async fn puma_lib_option_and_dependency_resolver_agree_on_primary_file_path() {
 
     let registry = node_engine::NodeRegistry::with_builtins();
     let mut extensions = node_engine::ExecutorExtensions::default();
-    extensions.set(extension_keys::PUMAS_API, api.clone());
+    extensions.set(
+        PUMAS_SELECTOR_ACCESS,
+        Arc::new(PumasSelectorAccess::Owner(api.clone())),
+    );
     let query = node_engine::PortOptionsQuery {
         search: Some("test-gguf".to_string()),
         limit: Some(10),
