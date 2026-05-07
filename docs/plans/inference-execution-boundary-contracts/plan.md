@@ -3256,6 +3256,9 @@ drift back into inference.
   relation to Ollama.
   Tauri RAG indexing comments no longer describe Ollama as part of the active
   local embedding backend set.
+  Node-engine dependency-preflight compatibility-report tests are now
+  cfg-gated to `pytorch-nodes`, matching the PyTorch producer that emits those
+  reports.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
@@ -4967,13 +4970,9 @@ Update during implementation:
   redistributable path expectation mismatch recorded above.
 - Earlier embedded-runtime no-default feature checking was unblocked after
   Pumas restored package-fact helper support.
-- `cargo test -p node-engine --features inference-nodes dependency_preflight`
-  currently fails
-  `test_dependency_preflight_records_lifecycle_success_with_resolver` because
-  that feature set does not emit the expected completed compatibility report.
-  The same focused test passes with `--features pytorch-nodes`, so this is a
-  feature-matrix diagnostics coverage issue rather than an Ollama-removal
-  regression.
+- Earlier node-engine dependency-preflight feature checking was unblocked after
+  PyTorch compatibility-report assertions were cfg-gated to `pytorch-nodes`,
+  matching the producer that emits those reports.
 
 ### Follow-Ups
 

@@ -2503,7 +2503,7 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
     );
 }
 
-#[cfg(feature = "inference-nodes")]
+#[cfg(feature = "pytorch-nodes")]
 #[tokio::test]
 async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
     let fixture = include_str!(
