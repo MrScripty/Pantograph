@@ -71,150 +71,34 @@ fn canonicalize_workflow_graph_migrates_legacy_system_prompt_nodes() {
 }
 
 #[test]
-fn canonicalize_workflow_graph_migrates_legacy_ollama_nodes() {
+fn canonicalize_workflow_graph_does_not_migrate_retired_ollama_nodes() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {
-        nodes: vec![
-            GraphNode {
-                id: "model".to_string(),
-                node_type: "model-provider".to_string(),
-                position: super::super::types::Position { x: 0.0, y: 0.0 },
-                data: json!({ "model_name": "llama3:8b" }),
-            },
-            GraphNode {
-                id: "ollama".to_string(),
-                node_type: "ollama-inference".to_string(),
-                position: super::super::types::Position { x: 100.0, y: 0.0 },
-                data: json!({
-                    "model": "llama3:8b",
-                    "temperature": 0.2,
-                    "max_tokens": 128,
-                }),
-            },
-            GraphNode {
-                id: "output".to_string(),
-                node_type: "text-output".to_string(),
-                position: super::super::types::Position { x: 200.0, y: 0.0 },
-                data: json!({}),
-            },
-            GraphNode {
-                id: "model-ref-output".to_string(),
-                node_type: "text-output".to_string(),
-                position: super::super::types::Position { x: 200.0, y: 100.0 },
-                data: json!({}),
-            },
-        ],
-        edges: vec![
-            GraphEdge {
-                id: "model-name-ollama-model".to_string(),
-                source: "model".to_string(),
-                source_handle: "model_name".to_string(),
-                target: "ollama".to_string(),
-                target_handle: "model".to_string(),
-            },
-            GraphEdge {
-                id: "ollama-response-output-text".to_string(),
-                source: "ollama".to_string(),
-                source_handle: "response".to_string(),
-                target: "output".to_string(),
-                target_handle: "text".to_string(),
-            },
-            GraphEdge {
-                id: "ollama-model-ref-output-text".to_string(),
-                source: "ollama".to_string(),
-                source_handle: "model_ref".to_string(),
-                target: "model-ref-output".to_string(),
-                target_handle: "text".to_string(),
-            },
-        ],
+        nodes: vec![GraphNode {
+            id: "ollama".to_string(),
+            node_type: "ollama-inference".to_string(),
+            position: super::super::types::Position { x: 100.0, y: 0.0 },
+            data: json!({
+                "model": "llama3:8b",
+                "temperature": 0.2,
+                "max_tokens": 128,
+            }),
+        }],
+        edges: Vec::new(),
         derived_graph: None,
     };
 
     let result = canonicalize_workflow_graph_with_migrations(graph, &registry);
-    let canonical = result.graph;
-    let migrated = canonical
+    let node = result
+        .graph
         .nodes
         .iter()
         .find(|node| node.id == "ollama")
-        .expect("migrated ollama node");
+        .expect("ollama node should remain present");
 
-    assert_eq!(migrated.node_type, "llm-inference");
-    assert_eq!(migrated.data["task_kind"], json!("text_generation"));
-    assert_eq!(migrated.data["runtime_hint"], json!("retired_ollama"));
-    assert_eq!(
-        migrated.data["pumas_model_ref"]["status"],
-        json!("unresolved")
-    );
-    assert_eq!(
-        migrated.data["pumas_model_ref"]["legacy_model"],
-        json!("llama3:8b")
-    );
-    assert_eq!(
-        migrated.data["migration_diagnostics"][0]["code"],
-        json!("legacy_ollama_backend_retired")
-    );
-    assert!(canonical.edges.iter().any(|edge| {
-        edge.id == "ollama-response-output-text"
-            && edge.source_handle == "response"
-            && edge.target_handle == "text"
-    }));
-    assert!(!canonical
-        .edges
-        .iter()
-        .any(|edge| edge.target == "ollama" && edge.target_handle == "model"));
-    assert!(!canonical
-        .edges
-        .iter()
-        .any(|edge| edge.source == "ollama" && edge.source_handle == "model_ref"));
-
-    assert_eq!(result.migration_records.len(), 1);
-    let record = &result.migration_records[0];
-    assert_eq!(record.node_type.as_str(), "ollama-inference");
-    assert_eq!(record.outcome, ContractUpgradeOutcome::Upgraded);
-    assert_eq!(
-        record.diagnostics_lineage,
-        DiagnosticsLineagePolicy::RejectToAvoidSilentChange
-    );
-    assert!(record.changes.iter().any(|change| matches!(
-        change,
-        ContractUpgradeChange::NodeTypeChanged { from, to, .. }
-            if from.as_str() == "ollama-inference" && to.as_str() == "llm-inference"
-    )));
-    assert!(record.changes.iter().any(|change| matches!(
-        change,
-        ContractUpgradeChange::PortRemoved { port_id, kind, .. }
-            if port_id.as_str() == "model" && *kind == PortKind::Input
-    )));
-    assert!(record.changes.iter().any(|change| matches!(
-        change,
-        ContractUpgradeChange::PortRemoved { port_id, kind, .. }
-            if port_id.as_str() == "model_ref" && *kind == PortKind::Output
-    )));
-    assert!(record
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.message.contains("Ollama execution is retired")));
-
-    let ollama_spec = legacy_inference_node_migration_specs()
-        .iter()
-        .find(|spec| spec.legacy_node_type == "ollama-inference")
-        .expect("ollama migration spec");
-    assert_eq!(
-        ollama_spec.task_kind.as_str(),
-        migrated.data["task_kind"].as_str().expect("task kind")
-    );
-    assert_eq!(
-        ollama_spec.runtime_hint.as_str(),
-        migrated.data["runtime_hint"]
-            .as_str()
-            .expect("runtime hint")
-    );
-    assert_eq!(
-        ollama_spec.diagnostic_code,
-        migrated.data["migration_diagnostics"][0]["code"]
-            .as_str()
-            .expect("diagnostic code")
-    );
+    assert_eq!(node.node_type, "ollama-inference");
+    assert_eq!(node.data["model"], json!("llama3:8b"));
+    assert!(result.migration_records.is_empty());
 }
 
 #[test]
@@ -226,7 +110,6 @@ fn legacy_inference_migration_inventory_covers_planned_node_types() {
         .collect::<HashSet<_>>();
 
     for expected in [
-        "ollama-inference",
         "llamacpp-inference",
         "pytorch-inference",
         "embedding",
@@ -259,6 +142,11 @@ fn legacy_inference_migration_inventory_defines_canonical_data_fields() {
             "{} must define migration diagnostics",
             spec.legacy_node_type
         );
+        assert!(
+            !spec.runtime_hint.as_str().is_empty(),
+            "{} must define a canonical runtime hint",
+            spec.legacy_node_type
+        );
     }
 }
 
@@ -266,7 +154,6 @@ fn legacy_inference_migration_inventory_defines_canonical_data_fields() {
 fn legacy_inference_migration_inventory_maps_model_sources_and_task_options() {
     let specs = legacy_inference_node_migration_specs();
     let model_source_nodes = [
-        "ollama-inference",
         "llamacpp-inference",
         "pytorch-inference",
         "embedding",
@@ -331,7 +218,6 @@ fn legacy_inference_port_mappings_are_deterministic_per_node() {
 fn canonicalize_workflow_graph_removes_retired_inference_node_types() {
     let registry = NodeRegistry::new();
     let retired_node_types = [
-        "ollama-inference",
         "llamacpp-inference",
         "pytorch-inference",
         "embedding",
@@ -339,12 +225,6 @@ fn canonicalize_workflow_graph_removes_retired_inference_node_types() {
     ];
     let graph = WorkflowGraph {
         nodes: vec![
-            GraphNode {
-                id: "ollama".to_string(),
-                node_type: "ollama-inference".to_string(),
-                position: super::super::types::Position { x: 0.0, y: 0.0 },
-                data: json!({ "model": "llama3", "prompt": "hello" }),
-            },
             GraphNode {
                 id: "llamacpp".to_string(),
                 node_type: "llamacpp-inference".to_string(),

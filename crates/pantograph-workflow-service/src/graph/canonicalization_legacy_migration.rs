@@ -12,7 +12,6 @@ use super::super::types::WorkflowGraph;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum LegacyNodeMigrationKind {
     SystemPrompt,
-    OllamaInference,
     LlamaCppInference,
     PyTorchInference,
     Embedding,
@@ -42,7 +41,6 @@ impl CanonicalInferenceTaskKind {
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum CanonicalInferenceRuntimeHint {
-    RetiredOllama,
     LlamaCpp,
     TransformersPyTorch,
     OpenAiCompatible,
@@ -52,7 +50,6 @@ pub(super) enum CanonicalInferenceRuntimeHint {
 impl CanonicalInferenceRuntimeHint {
     pub(super) fn as_str(self) -> &'static str {
         match self {
-            Self::RetiredOllama => "retired_ollama",
             Self::LlamaCpp => "llamacpp",
             Self::TransformersPyTorch => "transformers_pytorch",
             Self::OpenAiCompatible => "openai_compatible",
@@ -72,7 +69,6 @@ pub(super) enum LegacyInferencePortDirection {
 pub(super) enum LegacyInferencePortAction {
     Preserve,
     PromoteToNodeData { field_path: &'static str },
-    Remove,
 }
 
 #[cfg(test)]
@@ -107,20 +103,6 @@ const CANONICAL_INFERENCE_NODE_DATA_FIELDS: &[&str] = &[
     "generation_options",
     "task_options",
     "migration_diagnostics",
-];
-
-#[cfg(test)]
-const OLLAMA_PORTS: &[LegacyInferencePortMigration] = &[
-    legacy_input_preserve("prompt"),
-    legacy_input_preserve("system_prompt"),
-    legacy_input_data("model", "pumas_model_ref"),
-    legacy_input_data("temperature", "generation_options.sampling.temperature"),
-    legacy_input_data("max_tokens", "generation_options.length.max_new_tokens"),
-    legacy_input_data("inference_settings", "generation_options"),
-    legacy_output_preserve("response"),
-    legacy_output_remove("model_used"),
-    legacy_output_data("model_ref", "pumas_model_ref"),
-    legacy_output_preserve("stream"),
 ];
 
 #[cfg(test)]
@@ -204,15 +186,6 @@ const GENERIC_INFERENCE_PORTS: &[LegacyInferencePortMigration] = &[
 
 #[cfg(test)]
 const LEGACY_INFERENCE_NODE_MIGRATION_SPECS: &[LegacyInferenceNodeMigrationSpec] = &[
-    LegacyInferenceNodeMigrationSpec {
-        legacy_node_type: "ollama-inference",
-        canonical_node_type: CANONICAL_INFERENCE_NODE_TYPE,
-        task_kind: CanonicalInferenceTaskKind::TextGeneration,
-        runtime_hint: CanonicalInferenceRuntimeHint::RetiredOllama,
-        node_data_fields: CANONICAL_INFERENCE_NODE_DATA_FIELDS,
-        ports: OLLAMA_PORTS,
-        diagnostic_code: "legacy_ollama_backend_retired",
-    },
     LegacyInferenceNodeMigrationSpec {
         legacy_node_type: "llamacpp-inference",
         canonical_node_type: CANONICAL_INFERENCE_NODE_TYPE,
@@ -308,15 +281,6 @@ const fn legacy_output_data(
     }
 }
 
-#[cfg(test)]
-const fn legacy_output_remove(legacy_port_id: &'static str) -> LegacyInferencePortMigration {
-    LegacyInferencePortMigration {
-        direction: LegacyInferencePortDirection::Output,
-        legacy_port_id,
-        action: LegacyInferencePortAction::Remove,
-    }
-}
-
 pub(super) fn canonicalize_legacy_node_types(
     graph: WorkflowGraph,
 ) -> (WorkflowGraph, HashMap<String, LegacyNodeMigrationKind>) {
@@ -334,12 +298,6 @@ pub(super) fn canonicalize_legacy_node_types(
                             data.entry("text".to_string()).or_insert(prompt);
                         }
                     }
-                }
-                "ollama-inference" => {
-                    migrated_nodes
-                        .insert(node.id.clone(), LegacyNodeMigrationKind::OllamaInference);
-                    node.node_type = "llm-inference".to_string();
-                    migrate_ollama_node_data(&mut node.data);
                 }
                 "llamacpp-inference" => {
                     migrated_nodes
@@ -378,19 +336,6 @@ pub(super) fn canonicalize_legacy_node_types(
         .edges
         .into_iter()
         .filter_map(|edge| {
-            if migrated_nodes.get(&edge.source) == Some(&LegacyNodeMigrationKind::OllamaInference)
-                && matches!(edge.source_handle.as_str(), "model_used" | "model_ref")
-            {
-                return None;
-            }
-            if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::OllamaInference)
-                && matches!(
-                    edge.target_handle.as_str(),
-                    "model" | "temperature" | "max_tokens"
-                )
-            {
-                return None;
-            }
             if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::LlamaCppInference)
                 && matches!(
                     edge.target_handle.as_str(),
@@ -478,7 +423,6 @@ pub(super) fn legacy_node_type_migration_records(
         .iter()
         .filter_map(|(node_id, migration)| match migration {
             LegacyNodeMigrationKind::SystemPrompt => legacy_system_prompt_migration_record(node_id),
-            LegacyNodeMigrationKind::OllamaInference => legacy_ollama_migration_record(node_id),
             LegacyNodeMigrationKind::LlamaCppInference => legacy_llamacpp_migration_record(node_id),
             LegacyNodeMigrationKind::PyTorchInference => legacy_pytorch_migration_record(node_id),
             LegacyNodeMigrationKind::Embedding => legacy_embedding_migration_record(node_id),
@@ -494,48 +438,6 @@ pub(super) fn legacy_node_type_migration_records(
         left_node.cmp(&right_node)
     });
     records
-}
-
-fn migrate_ollama_node_data(data: &mut serde_json::Value) {
-    if !data.is_object() {
-        *data = json!({});
-    }
-
-    let Some(object) = data.as_object_mut() else {
-        return;
-    };
-    let legacy_model = object.get("model").cloned();
-    let legacy_temperature = object.get("temperature").cloned();
-    let legacy_max_tokens = object.get("max_tokens").cloned();
-
-    object
-        .entry("task_kind".to_string())
-        .or_insert_with(|| json!(CanonicalInferenceTaskKind::TextGeneration.as_str()));
-    object
-        .entry("runtime_hint".to_string())
-        .or_insert_with(|| json!("retired_ollama"));
-    object
-        .entry("pumas_model_ref".to_string())
-        .or_insert_with(|| {
-            json!({
-                "status": "unresolved",
-                "source": "legacy_ollama",
-                "legacy_model": legacy_model,
-                "message": "Ollama is retired as a first-party Pantograph backend; select a Pumas model reference before running this node."
-            })
-        });
-    object
-        .entry("migration_diagnostics".to_string())
-        .or_insert_with(|| {
-            json!([{
-                "code": "legacy_ollama_backend_retired",
-                "severity": "error",
-                "message": "Migrated from ollama-inference to llm-inference without preserving Ollama execution support. Select a Pumas model reference and supported runtime before execution.",
-                "legacy_model": legacy_model,
-                "legacy_temperature": legacy_temperature,
-                "legacy_max_tokens": legacy_max_tokens
-            }])
-        });
 }
 
 fn migrate_llamacpp_node_data(data: &mut serde_json::Value) {
@@ -867,60 +769,6 @@ fn legacy_system_prompt_migration_record(node_id: &str) -> Option<ContractUpgrad
             },
         ],
         diagnostics: Vec::new(),
-    };
-    record.validate().ok()?;
-    Some(record)
-}
-
-fn legacy_ollama_migration_record(node_id: &str) -> Option<ContractUpgradeRecord> {
-    let node_id = NodeInstanceId::try_from(node_id.to_string()).ok()?;
-    let record = ContractUpgradeRecord {
-        node_type: NodeTypeId::try_from("ollama-inference".to_string()).ok()?,
-        outcome: ContractUpgradeOutcome::Upgraded,
-        source_contract_version: Some("0.0.0".to_string()),
-        source_contract_digest: None,
-        target_contract_version: Some("1.0.0".to_string()),
-        target_contract_digest: None,
-        diagnostics_lineage: DiagnosticsLineagePolicy::RejectToAvoidSilentChange,
-        changes: vec![
-            ContractUpgradeChange::NodeTypeChanged {
-                node_id: node_id.clone(),
-                from: NodeTypeId::try_from("ollama-inference".to_string()).ok()?,
-                to: NodeTypeId::try_from("llm-inference".to_string()).ok()?,
-            },
-            ContractUpgradeChange::PortRemoved {
-                node_id: node_id.clone(),
-                kind: PortKind::Input,
-                port_id: PortId::try_from("model".to_string()).ok()?,
-            },
-            ContractUpgradeChange::PortRemoved {
-                node_id: node_id.clone(),
-                kind: PortKind::Input,
-                port_id: PortId::try_from("temperature".to_string()).ok()?,
-            },
-            ContractUpgradeChange::PortRemoved {
-                node_id: node_id.clone(),
-                kind: PortKind::Input,
-                port_id: PortId::try_from("max_tokens".to_string()).ok()?,
-            },
-            ContractUpgradeChange::PortRemoved {
-                node_id: node_id.clone(),
-                kind: PortKind::Output,
-                port_id: PortId::try_from("model_used".to_string()).ok()?,
-            },
-            ContractUpgradeChange::PortRemoved {
-                node_id: node_id.clone(),
-                kind: PortKind::Output,
-                port_id: PortId::try_from("model_ref".to_string()).ok()?,
-            },
-        ],
-        diagnostics: vec![ContractUpgradeDiagnostic {
-            reason: ContractUpgradeRejectionReason::UnsupportedLegacyContract,
-            message: "Ollama execution is retired; this node was migrated to llm-inference with an unresolved Pumas model reference diagnostic.".to_string(),
-            node_id: Some(node_id),
-            node_type: Some(NodeTypeId::try_from("ollama-inference".to_string()).ok()?),
-            port_id: None,
-        }],
     };
     record.validate().ok()?;
     Some(record)

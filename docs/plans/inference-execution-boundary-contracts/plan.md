@@ -433,9 +433,10 @@ reliability while keeping scheduling and workflow policy outside inference.
 - Saved workflow and template migration can run through a deterministic graph
   migration layer before node execution, so old workflows can be made editable
   without preserving old runtime paths.
-- Old `ollama-inference` nodes can be structurally migrated to a canonical
-  chat/generation task with an unresolved Pumas model reference or a
-  user-selected replacement Pumas model reference.
+- Old `ollama-inference` nodes are not a supported compatibility target.
+  Workflows should be updated to canonical `llm-inference` with a Pumas model
+  reference before execution rather than relying on a synthesized Ollama
+  placeholder.
 - Old `embedding` nodes can be structurally migrated to canonical inference
   nodes with `task_kind = embedding` and no public embedding-mode semantics.
 - A neutral managed-dependency crate can serve both runtime sidecars and media
@@ -597,15 +598,17 @@ reliability while keeping scheduling and workflow policy outside inference.
 - Managed runtime and managed redistributable persisted states may need a
   schema migration, adapter shim, or graceful import path into the neutral
   managed-dependency owner.
-- Saved settings or workflows that refer to the Ollama backend may need a
-  compatibility/migration path.
+- Saved settings or workflows that refer to the Ollama backend should surface
+  explicit unsupported-contract feedback; Pantograph should not synthesize a
+  replacement Ollama runtime or placeholder model reference.
 - Saved workflows and templates that persist raw model paths should migrate to
   Pumas model references where Pumas can resolve the model. Unresolved paths
   should become explicit migration diagnostics rather than remaining canonical
   model identity.
-- Saved workflows and templates containing old `ollama-inference`,
-  `llamacpp-inference`, `pytorch-inference`, `embedding`, or `reranker` nodes
-  require deterministic migration into the canonical inference node shape.
+- Saved workflows and templates containing old `llamacpp-inference`,
+  `pytorch-inference`, `embedding`, or `reranker` nodes require deterministic
+  migration into the canonical inference node shape. `ollama-inference` remains
+  removed rather than migrated.
 - Saved workflow versions should not continue to persist old backend-specific
   inference node types after migration succeeds.
 - KV cache metadata may be affected only if live execution cache contracts add
@@ -1040,9 +1043,9 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - Saved workflows and templates with old inference node types migrate to the
   canonical inference node shape instead of keeping legacy backend-specific node
   contracts.
-- Old `ollama-inference` nodes are structurally migrated and do not retain
-  Ollama execution support. Missing replacement model information is represented
-  as an unresolved Pumas model reference with validation diagnostics.
+- Old `ollama-inference` nodes are not structurally migrated and do not retain
+  Ollama execution support. Replacement workflows must use canonical
+  `llm-inference` with a Pumas model reference.
 - Old llama.cpp nodes preserve GGUF and optional multimodal projection inputs
   through Pumas-resolved artifact facts and explicit backend mapping.
 - Old PyTorch nodes migrate to canonical inference with a
@@ -2115,6 +2118,9 @@ added saved-workflow canonicalization for legacy `ollama-inference` nodes by
 migrating them to `llm-inference`, removing unsupported Ollama-only ports,
 recording append-only upgrade diagnostics, preserving compatible response/stream
 edges, and retaining unresolved Pumas model-reference metadata for user repair.
+That fourth-slice compatibility path was later removed: workflow-service now
+leaves `ollama-inference` unsupported instead of rewriting it to a canonical
+placeholder.
 The fifth slice made the persisted `ollama_vlm_model` setting a scrubbed
 compatibility field, stopped configured startup requests from forwarding it, and
 removed the frontend model-setting/runtime-manager type surfaces that could
@@ -2718,17 +2724,16 @@ canonical inference shape instead of preserving backend-specific node contracts.
   shapes, including expected diagnostics and default semantics when fields are
   omitted.
 - [x] Inventory old graph-visible inference node types and related ports,
-  including `ollama-inference`, `llamacpp-inference`, `pytorch-inference`,
+  including removed `ollama-inference`, `llamacpp-inference`, `pytorch-inference`,
   generic `inference`, `embedding`, `reranker`, model provider, unload model,
   KV ports, and embedding-mode fields.
 - [x] Define old-to-new port mappings for prompt/messages, system prompt,
   model source, Pumas model reference, image/audio/video inputs, generation
   options, embedding options, rerank inputs, model refs, stream outputs, and KV
   cache handles.
-- [x] Migrate old `ollama-inference` nodes structurally to canonical
-  chat/generation tasks without keeping Ollama execution support. If no
-  replacement Pumas model reference is known, emit an unresolved model-reference
-  diagnostic instead of retaining an Ollama node.
+- [x] Remove old `ollama-inference` from the saved-graph migration target set;
+  do not synthesize `retired_ollama` runtime hints or unresolved Ollama model
+  placeholders.
 - [x] Migrate old llama.cpp nodes to canonical inference with
   a Pumas model reference where the GGUF can resolve through Pumas. Preserve GGUF
   path, optional mmproj path, task options, and KV cache ports through
@@ -2750,10 +2755,10 @@ canonical inference shape instead of preserving backend-specific node contracts.
   persist after migration succeeds.
 
 **Verification:**
-- Fixture tests for saved workflow migration covering Ollama, llama.cpp,
-  PyTorch, embedding, reranker, multimodal, stream, and KV-cache cases.
-- Tests proving unresolved Ollama/Pumas model references produce migration
-  diagnostics and validation errors without preserving Ollama execution.
+- Fixture tests for saved workflow migration covering llama.cpp, PyTorch,
+  embedding, reranker, multimodal, stream, and KV-cache cases.
+- Tests proving `ollama-inference` is not migrated to a canonical placeholder
+  and stale `retired_ollama` hints are not silently ignored.
 - Tests proving raw path model fields migrate to Pumas model refs where
   resolvable and remain explicit unresolved diagnostics where not resolvable.
 - Tests proving graph topology and output bindings are preserved across
@@ -2768,11 +2773,13 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - Relevant frontend typecheck/tests if node registry or renderer DTOs change.
 - `git diff --check`.
 
-**Status:** In progress. Ollama inference nodes have structural migration
-coverage from an earlier slice. The workflow-service canonicalization boundary
+**Status:** In progress. Ollama inference nodes had structural migration
+coverage from an earlier slice, but that compatibility target has now been cut
+so saved `ollama-inference` nodes are no longer rewritten to canonical
+`llm-inference` placeholders. The workflow-service canonicalization boundary
 now has an executable legacy inference-node migration inventory covering
-`ollama-inference`, `llamacpp-inference`, `pytorch-inference`, `embedding`,
-`reranker`, and the existing generic `llm-inference` shape, including
+`llamacpp-inference`, `pytorch-inference`, `embedding`, `reranker`, and the
+existing generic `llm-inference` shape, including
 canonical node-data fields, task-kind/runtime-hint semantics, migration
 diagnostic codes, and old-to-new port actions for model sources, generation
 options, task options, KV-cache handles, streams, embedding outputs, and rerank
@@ -2817,7 +2824,8 @@ reranker template now uses canonical `llm-inference` with
 Workflow-service capability extraction no longer infers llama.cpp or PyTorch
 requirements from retired node type names; it derives backend requirements from
 canonical `runtime_hint`, `backend_key`, or Pumas `recommended_backend` data and
-ignores `retired_ollama` hints.
+surfaces stale `retired_ollama` hints as invalid required backend data instead
+of hiding them.
 The legacy migration inventory/spec helpers are now scoped to test builds, and
 runtime migration task-kind literals use the canonical task-kind enum so focused
 embedded-runtime validation no longer surfaces the workflow-service dead-code
@@ -2850,9 +2858,10 @@ Workflow-service capability fixtures now model inference and KV-cache extension
 requirements with canonical `llm-inference` node data instead of retired
 backend-specific inference node names.
 Workflow-service canonicalization now has an aggregate regression test proving
-that retired `ollama-inference`, `llamacpp-inference`, `pytorch-inference`,
-`embedding`, and `reranker` node types are all rewritten to canonical
-`llm-inference` nodes and still produce migration records.
+that supported retired `llamacpp-inference`, `pytorch-inference`, `embedding`,
+and `reranker` node types are rewritten to canonical `llm-inference` nodes and
+still produce migration records. A separate regression test proves removed
+`ollama-inference` nodes are not rewritten into canonical placeholders.
 Embedded-runtime Python dependency preflight and host dispatch now route
 canonical `llm-inference` through the Python adapter only when canonical backend
 data resolves to PyTorch/Transformers, and the Python bridge accepts
@@ -3234,6 +3243,11 @@ drift back into inference.
   package-facts backend precedence as dependency request construction, so
   Transformers/PyTorch package facts enter preflight even when no raw
   `runtime_hint` input is present.
+  Workflow-service graph canonicalization no longer migrates saved
+  `ollama-inference` nodes into canonical `llm-inference` with a
+  `retired_ollama` placeholder. Ollama is treated as removed compatibility
+  surface rather than an upgrade target; workflows must already use the
+  canonical Pumas-backed inference shape.
 - [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
@@ -3283,10 +3297,13 @@ drift back into inference.
   dependency-input edges. Embedded-runtime task-executor README now documents
   dependency preflight request precedence: explicit workflow inputs first,
   Pumas resolved package facts second, then dependency-requirement or node-type
-  legacy heuristics. Node-engine source README now mirrors that canonical
-  `llm-inference` routing may use resolved Pumas backend hints to enter the
-  PyTorch/Transformers dependency preflight path when no explicit runtime hint
-  or backend key is wired, without moving scheduling or admission policy into
+  legacy heuristics. Workflow-service graph README now documents that
+  `ollama-inference` is not a supported saved-graph compatibility target and
+  graph canonicalization does not synthesize `retired_ollama` placeholders.
+  Node-engine source README now mirrors that canonical `llm-inference` routing
+  may use resolved Pumas backend hints to enter the PyTorch/Transformers
+  dependency preflight path when no explicit runtime hint or backend key is
+  wired, without moving scheduling or admission policy into
   node-engine/inference. Inference source README now documents compatibility
   issue path redaction before lifecycle emission when a stable model id is
   present.

@@ -434,9 +434,7 @@ fn promoted_inference_setting_port_ids(node_type: &str) -> HashSet<&'static str>
         "diffusion-inference" => ["steps", "cfg_scale", "seed", "width", "height"]
             .into_iter()
             .collect(),
-        "llamacpp-inference" | "ollama-inference" => {
-            ["temperature", "max_tokens"].into_iter().collect()
-        }
+        "llamacpp-inference" => ["temperature", "max_tokens"].into_iter().collect(),
         "pytorch-inference" => ["temperature", "max_tokens", "device", "model_type"]
             .into_iter()
             .collect(),

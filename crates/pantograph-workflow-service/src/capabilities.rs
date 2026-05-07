@@ -513,7 +513,7 @@ fn extract_backend_keys_from_value(value: &serde_json::Value, out: &mut HashSet<
 
 fn backend_key_for_runtime_hint(raw: &str) -> Option<String> {
     let normalized = raw.trim().to_ascii_lowercase();
-    if normalized.is_empty() || normalized == "retired_ollama" {
+    if normalized.is_empty() {
         return None;
     }
 
@@ -695,17 +695,26 @@ mod tests {
                 data: serde_json::json!({"runtime_hint": "llamacpp"}),
                 position: StoredPosition::default(),
             },
-            StoredGraphNode {
-                id: "ollama".to_string(),
-                node_type: "llm-inference".to_string(),
-                data: serde_json::json!({"runtime_hint": "retired_ollama"}),
-                position: StoredPosition::default(),
-            },
         ];
 
         assert_eq!(
             extract_required_backends(&nodes),
             vec!["llama_cpp".to_string(), "pytorch".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_required_backends_does_not_ignore_retired_ollama_hints() {
+        let nodes = vec![StoredGraphNode {
+            id: "ollama".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({"runtime_hint": "retired_ollama"}),
+            position: StoredPosition::default(),
+        }];
+
+        assert_eq!(
+            extract_required_backends(&nodes),
+            vec!["retiredollama".to_string()]
         );
     }
 
