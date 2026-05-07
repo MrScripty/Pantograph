@@ -18,6 +18,7 @@ name = "pantograph_headless"
 [dependencies]
 # Core workflow engine
 node-engine = { path = "../node-engine" }
+pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }
 pantograph-workflow-service = { path = "../pantograph-workflow-service" }
 pantograph-embedded-runtime = { path = "../pantograph-embedded-runtime", default-features = false, optional = true }
 pantograph-frontend-http-adapter = { path = "../pantograph-frontend-http-adapter", optional = true }

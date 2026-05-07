@@ -7374,6 +7374,7 @@ dependencies = [
  "node-engine",
  "pantograph-embedded-runtime",
  "pantograph-frontend-http-adapter",
+ "pantograph-managed-dependencies",
  "pantograph-workflow-service",
  "pumas-library",
  "serde",

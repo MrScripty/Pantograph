@@ -2086,6 +2086,9 @@ Tauri workflow managed-media dependency commands now import
 `ManagedRedistributableStatus`, identifiers, and install/selection/activation
 operations directly from `pantograph-managed-dependencies` instead of through
 inference re-exports.
+UniFFI managed-media dependency action/status methods also use
+`pantograph-managed-dependencies` directly, leaving inference re-exports only
+for compatibility tests and callers that have not yet migrated.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`

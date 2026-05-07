@@ -60,13 +60,13 @@ pub struct FfiPantographRuntime {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 struct ManagedMediaDependencyStatusRequest {
-    dependency_id: inference::ManagedRedistributableId,
+    dependency_id: pantograph_managed_dependencies::ManagedRedistributableId,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 struct ManagedMediaDependencyInstallFromStagingRequest {
-    dependency_id: inference::ManagedRedistributableId,
+    dependency_id: pantograph_managed_dependencies::ManagedRedistributableId,
     version: String,
     staging_dir: String,
 }
@@ -74,14 +74,14 @@ struct ManagedMediaDependencyInstallFromStagingRequest {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 struct ManagedMediaDependencySelectionRequest {
-    dependency_id: inference::ManagedRedistributableId,
+    dependency_id: pantograph_managed_dependencies::ManagedRedistributableId,
     version: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 struct ManagedMediaDependencyVersionRequest {
-    dependency_id: inference::ManagedRedistributableId,
+    dependency_id: pantograph_managed_dependencies::ManagedRedistributableId,
     version: String,
 }
 
@@ -89,7 +89,7 @@ struct ManagedMediaDependencyVersionRequest {
 #[serde(rename_all = "snake_case")]
 struct ManagedMediaDependencyInstallFromStagingResponse {
     install_root: String,
-    status: inference::ManagedRedistributableStatus,
+    status: pantograph_managed_dependencies::ManagedRedistributableStatus,
 }
 
 #[derive(Serialize)]
@@ -335,7 +335,9 @@ impl FfiPantographRuntime {
 
     /// Return ManagedRedistributableStatus JSON for all managed media dependencies.
     pub fn managed_media_dependency_statuses(&self) -> Result<String, FfiError> {
-        let response = inference::list_managed_redistributable_statuses(&self.app_data_dir);
+        let response = pantograph_managed_dependencies::list_managed_redistributable_statuses(
+            &self.app_data_dir,
+        );
         serialize_response(&response)
     }
 
@@ -352,8 +354,10 @@ impl FfiPantographRuntime {
         request_json: String,
     ) -> Result<String, FfiError> {
         let request: ManagedMediaDependencyStatusRequest = parse_request(request_json)?;
-        let response =
-            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        let response = pantograph_managed_dependencies::managed_redistributable_status(
+            &self.app_data_dir,
+            request.dependency_id,
+        );
         serialize_response(&response)
     }
 
@@ -364,15 +368,18 @@ impl FfiPantographRuntime {
     ) -> Result<String, FfiError> {
         let request: ManagedMediaDependencyInstallFromStagingRequest = parse_request(request_json)?;
         let staging_dir = non_empty_path(request.staging_dir, "staging_dir")?;
-        let install_root = inference::install_managed_redistributable_from_staging(
+        let install_root =
+            pantograph_managed_dependencies::install_managed_redistributable_from_staging(
+                &self.app_data_dir,
+                request.dependency_id,
+                &request.version,
+                &staging_dir,
+            )
+            .map_err(map_managed_media_dependency_error)?;
+        let status = pantograph_managed_dependencies::managed_redistributable_status(
             &self.app_data_dir,
             request.dependency_id,
-            &request.version,
-            &staging_dir,
-        )
-        .map_err(map_managed_media_dependency_error)?;
-        let status =
-            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        );
         sync_artifact_format_dependency_versions(
             &self.app_data_dir,
             self.runtime.workflow_service().as_ref(),
@@ -390,14 +397,16 @@ impl FfiPantographRuntime {
         request_json: String,
     ) -> Result<String, FfiError> {
         let request: ManagedMediaDependencySelectionRequest = parse_request(request_json)?;
-        inference::select_managed_redistributable_version(
+        pantograph_managed_dependencies::select_managed_redistributable_version(
             &self.app_data_dir,
             request.dependency_id,
             request.version.as_deref(),
         )
         .map_err(map_managed_media_dependency_error)?;
-        let response =
-            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        let response = pantograph_managed_dependencies::managed_redistributable_status(
+            &self.app_data_dir,
+            request.dependency_id,
+        );
         sync_artifact_format_dependency_versions(
             &self.app_data_dir,
             self.runtime.workflow_service().as_ref(),
@@ -412,14 +421,16 @@ impl FfiPantographRuntime {
         request_json: String,
     ) -> Result<String, FfiError> {
         let request: ManagedMediaDependencySelectionRequest = parse_request(request_json)?;
-        inference::set_default_managed_redistributable_version(
+        pantograph_managed_dependencies::set_default_managed_redistributable_version(
             &self.app_data_dir,
             request.dependency_id,
             request.version.as_deref(),
         )
         .map_err(map_managed_media_dependency_error)?;
-        let response =
-            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        let response = pantograph_managed_dependencies::managed_redistributable_status(
+            &self.app_data_dir,
+            request.dependency_id,
+        );
         sync_artifact_format_dependency_versions(
             &self.app_data_dir,
             self.runtime.workflow_service().as_ref(),
@@ -434,14 +445,16 @@ impl FfiPantographRuntime {
         request_json: String,
     ) -> Result<String, FfiError> {
         let request: ManagedMediaDependencyVersionRequest = parse_request(request_json)?;
-        inference::activate_managed_redistributable_version(
+        pantograph_managed_dependencies::activate_managed_redistributable_version(
             &self.app_data_dir,
             request.dependency_id,
             &request.version,
         )
         .map_err(map_managed_media_dependency_error)?;
-        let response =
-            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        let response = pantograph_managed_dependencies::managed_redistributable_status(
+            &self.app_data_dir,
+            request.dependency_id,
+        );
         sync_artifact_format_dependency_versions(
             &self.app_data_dir,
             self.runtime.workflow_service().as_ref(),
@@ -456,14 +469,16 @@ impl FfiPantographRuntime {
         request_json: String,
     ) -> Result<String, FfiError> {
         let request: ManagedMediaDependencyVersionRequest = parse_request(request_json)?;
-        inference::remove_managed_redistributable_version(
+        pantograph_managed_dependencies::remove_managed_redistributable_version(
             &self.app_data_dir,
             request.dependency_id,
             &request.version,
         )
         .map_err(map_managed_media_dependency_error)?;
-        let response =
-            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        let response = pantograph_managed_dependencies::managed_redistributable_status(
+            &self.app_data_dir,
+            request.dependency_id,
+        );
         sync_artifact_format_dependency_versions(
             &self.app_data_dir,
             self.runtime.workflow_service().as_ref(),
