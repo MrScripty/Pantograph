@@ -1,6 +1,6 @@
 use std::fs;
 
-use inference::{
+use pantograph_managed_dependencies::{
     ManagedRedistributableId, ManagedRedistributableInstallState, ManagedRedistributableReadiness,
 };
 

@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use inference::{
+use pantograph_managed_dependencies::{
     activate_managed_redistributable_version, install_managed_redistributable_from_staging,
     list_managed_redistributable_statuses, managed_redistributable_status,
     remove_managed_redistributable_version, select_managed_redistributable_version,

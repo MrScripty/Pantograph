@@ -407,7 +407,7 @@ pub async fn workflow_artifact_format_capabilities(
 pub fn workflow_list_managed_media_dependencies(
     app: AppHandle,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<Vec<inference::ManagedRedistributableStatus>, String> {
+) -> Result<Vec<pantograph_managed_dependencies::ManagedRedistributableStatus>, String> {
     let app_data_dir = app_data_dir(&app)?;
     let statuses =
         super::headless_workflow_commands::workflow_list_managed_media_dependencies(&app_data_dir)?;
@@ -422,8 +422,8 @@ pub fn workflow_list_managed_media_dependencies(
 pub fn workflow_managed_media_dependency_status(
     app: AppHandle,
     workflow_service: State<'_, SharedWorkflowService>,
-    id: inference::ManagedRedistributableId,
-) -> Result<inference::ManagedRedistributableStatus, String> {
+    id: pantograph_managed_dependencies::ManagedRedistributableId,
+) -> Result<pantograph_managed_dependencies::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
     let status = super::headless_workflow_commands::workflow_managed_media_dependency_status(
         &app_data_dir,
@@ -440,10 +440,10 @@ pub fn workflow_managed_media_dependency_status(
 pub fn workflow_install_managed_media_dependency_from_staging(
     app: AppHandle,
     workflow_service: State<'_, SharedWorkflowService>,
-    id: inference::ManagedRedistributableId,
+    id: pantograph_managed_dependencies::ManagedRedistributableId,
     version: String,
     staging_dir: String,
-) -> Result<inference::ManagedRedistributableStatus, String> {
+) -> Result<pantograph_managed_dependencies::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
     let status =
         super::headless_workflow_commands::workflow_install_managed_media_dependency_from_staging(
@@ -463,9 +463,9 @@ pub fn workflow_install_managed_media_dependency_from_staging(
 pub fn workflow_select_managed_media_dependency_version(
     app: AppHandle,
     workflow_service: State<'_, SharedWorkflowService>,
-    id: inference::ManagedRedistributableId,
+    id: pantograph_managed_dependencies::ManagedRedistributableId,
     version: Option<String>,
-) -> Result<inference::ManagedRedistributableStatus, String> {
+) -> Result<pantograph_managed_dependencies::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
     let status =
         super::headless_workflow_commands::workflow_select_managed_media_dependency_version(
@@ -484,9 +484,9 @@ pub fn workflow_select_managed_media_dependency_version(
 pub fn workflow_set_default_managed_media_dependency_version(
     app: AppHandle,
     workflow_service: State<'_, SharedWorkflowService>,
-    id: inference::ManagedRedistributableId,
+    id: pantograph_managed_dependencies::ManagedRedistributableId,
     version: Option<String>,
-) -> Result<inference::ManagedRedistributableStatus, String> {
+) -> Result<pantograph_managed_dependencies::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
     let status =
         super::headless_workflow_commands::workflow_set_default_managed_media_dependency_version(
@@ -505,9 +505,9 @@ pub fn workflow_set_default_managed_media_dependency_version(
 pub fn workflow_activate_managed_media_dependency_version(
     app: AppHandle,
     workflow_service: State<'_, SharedWorkflowService>,
-    id: inference::ManagedRedistributableId,
+    id: pantograph_managed_dependencies::ManagedRedistributableId,
     version: String,
-) -> Result<inference::ManagedRedistributableStatus, String> {
+) -> Result<pantograph_managed_dependencies::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
     let status =
         super::headless_workflow_commands::workflow_activate_managed_media_dependency_version(
@@ -526,9 +526,9 @@ pub fn workflow_activate_managed_media_dependency_version(
 pub fn workflow_remove_managed_media_dependency_version(
     app: AppHandle,
     workflow_service: State<'_, SharedWorkflowService>,
-    id: inference::ManagedRedistributableId,
+    id: pantograph_managed_dependencies::ManagedRedistributableId,
     version: String,
-) -> Result<inference::ManagedRedistributableStatus, String> {
+) -> Result<pantograph_managed_dependencies::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
     let status =
         super::headless_workflow_commands::workflow_remove_managed_media_dependency_version(

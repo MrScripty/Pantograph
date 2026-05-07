@@ -2082,6 +2082,10 @@ The legacy aggregate managed-binary status DTOs and `list_managed_binary_statuse
 export have been retired. The remaining managed-binary facade is limited to
 runtime launch command compatibility for Tauri process startup and resolves
 through the neutral runtime sidecar command path.
+Tauri workflow managed-media dependency commands now import
+`ManagedRedistributableStatus`, identifiers, and install/selection/activation
+operations directly from `pantograph-managed-dependencies` instead of through
+inference re-exports.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`
