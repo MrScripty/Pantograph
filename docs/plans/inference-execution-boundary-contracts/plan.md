@@ -2580,16 +2580,15 @@ using Python Transformers behind the boundary for broad HF-compatible support.
 - Existing PyTorch request tests continue to pass.
 - `cargo test -p inference`.
 
-**Status:** In progress. The first contract-only slice added backend-local
-PyTorch worker envelope DTOs, Transformers load request fields, request
-correlation, init/shutdown operations, cancellation metadata, trust policy
-defaults, response/error DTOs, and JSON fixtures for load and error envelopes.
-The PyTorch worker now defaults `trust_remote_code` closed and rejects
-Transformers packages that declare custom code unless Rust passes an explicit
-trust-policy opt-in. Direct and Pumas-resolved model loading now use the typed
-worker envelope for compatible load paths. Remaining work is to preserve
-dLLM/Sherry local behavior as documented backend-local support and normalize
-remaining Python/Transformers errors into typed backend/runtime facts.
+**Status:** Implemented. The PyTorch backend now binds through backend-local
+Transformers worker envelopes for load, generation, streaming, audio
+transcription, unload, loaded-model inspection, and live-KV operations. The
+worker contract carries request correlation, init/shutdown operations,
+cancellation metadata, trust-policy defaults, response/error DTOs, and JSON
+fixtures. PyTorch defaults `trust_remote_code` closed, rejects custom-code
+packages unless the Rust contract explicitly opts in, preserves dLLM/Sherry
+controls as backend-local worker fields, and normalizes Python/Transformers
+failures into typed Pantograph backend/runtime facts with bounded diagnostics.
 
 Update during implementation:
 - 2026-05-04: PyTorch direct local model loading now builds the same
@@ -2897,7 +2896,7 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - Relevant frontend typecheck/tests if node registry or renderer DTOs change.
 - `git diff --check`.
 
-**Status:** In progress. Ollama inference nodes had structural migration
+**Status:** Implemented. Ollama inference nodes had structural migration
 coverage from an earlier slice, but that compatibility target has now been cut
 so saved `ollama-inference` nodes are no longer rewritten to canonical
 `llm-inference` placeholders. The workflow-service canonicalization boundary
@@ -3096,7 +3095,9 @@ canonicalization, persistence, workflow-node, frontend mock, and template
 coverage. Descriptor/schema definition, canonical task/options storage,
 executable migration fixtures, topology preservation, and registry/template
 updates are now marked complete. Pumas-backed package resolution, validation
-display behavior, and persisted schema-version records remain open.
+display behavior, and persisted schema/version upgrade records are covered by
+the later canonical `llm-inference` hydration, presenter, and workflow
+persistence slices recorded below.
 Node-engine generic streaming text/chat execution now also routes through the
 gateway streaming facade instead of posting directly over HTTP from node-engine,
 preserving graph `TaskStream` event shape while making backend/lifecycle facts
@@ -3193,7 +3194,7 @@ without broad scheduler or Transformers duplication.
   unless explicitly marked as ignored/integration.
 - README feature contract review.
 
-**Status:** In progress.
+**Status:** Implemented as a staged Candle preparation slice.
 
 The first Candle staging slice keeps embeddings as the only advertised task
 family for HF-compatible local package directories containing safetensors
@@ -3204,10 +3205,10 @@ Candle unavailable because executable safetensors/tokenizer model loading is
 not implemented yet; this prevents runtime selection from treating a staged
 backend as executable. A backend-local load plan now resolves Pumas package
 facts into concrete local config, tokenizer, safetensors, dtype, model-type, and
-device-hint facts. The next resource-probe slice consumes that plan through
-real Candle/tokenizers APIs and loads tokenizer plus safetensors tensor
-resources, but it still stops before constructing Candle model modules,
-runtime residency, or executable inference paths.
+device-hint facts. The staged resource probe consumes that plan through real
+Candle/tokenizers APIs and loads tokenizer plus safetensors tensor resources,
+but intentionally stops before constructing Candle model modules, runtime
+residency, or executable inference paths.
 
 Update during implementation:
 - 2026-05-03: Candle backend availability now fails closed behind
