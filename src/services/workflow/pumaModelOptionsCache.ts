@@ -54,6 +54,19 @@ export function selectorUpdateFeedRequiresRefresh(feed: ModelLibraryUpdateFeed):
   return feed.stale_cursor || feed.snapshot_required || feed.events.length > 0;
 }
 
+export function isPumasUpdateFeedUnavailable(error: unknown): boolean {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('read-only pumas selector access') &&
+    normalized.includes('update feed')
+  ) || normalized.includes('does not provide update feeds');
+}
+
 export function invalidatePumasModelOptionsCache(): void {
   cachedSnapshot = null;
   inflightSnapshot = null;
@@ -128,7 +141,10 @@ async function snapshotNeedsRefresh(invoker: WorkflowInvoker, cursor: string): P
       limit: 100,
     });
     return selectorUpdateFeedRequiresRefresh(feed);
-  } catch {
-    return false;
+  } catch (error) {
+    if (isPumasUpdateFeedUnavailable(error)) {
+      return false;
+    }
+    throw error;
   }
 }

@@ -1673,7 +1673,10 @@ snapshot and does not start a polling loop.
 The cache freshness follow-up now checks the cached selector cursor before
 returning cached rows, reloads when the update feed reports changes after the
 initial handoff, and gives manual Library/Puma-Lib refresh actions a
-force-refresh path that bypasses the cache.
+force-refresh path that bypasses the cache. A later 2026-05-08 hardening slice
+narrows frontend cache preservation to the explicit read-only/no-update-feed
+boundary; other update-feed failures now propagate instead of silently serving
+cached selector rows.
 
 The legacy `modelName` rehydration follow-up removed execution/preload lookups
 that scanned the full Pumas library by display name. `puma-lib` execution now

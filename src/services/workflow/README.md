@@ -212,7 +212,8 @@ handoff reports stale or changed rows.
   cursor before returning cached rows unless the caller explicitly forces a new
   selector snapshot. If the update feed is unavailable, such as a read-only
   selector path without owner API, components may reuse the snapshot but must
-  not start frontend polling.
+  not start frontend polling. Other update-feed failures must propagate instead
+  of silently serving cached selector rows.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.
