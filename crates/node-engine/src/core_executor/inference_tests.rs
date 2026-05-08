@@ -259,6 +259,25 @@ fn test_build_text_generation_execution_request_defaults_missing_task_kind_to_te
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_text_generation_execution_request_ignores_node_id_task_aliases() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("task_id".to_string(), serde_json::json!("llm-inference-1"));
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({
+            "taskId": "embedding"
+        }),
+    );
+
+    let request = build_text_generation_execution_request(&inputs)
+        .expect("node id shaped task aliases should not be parsed as task kind");
+
+    assert_eq!(request.task_id, InferenceTaskId::TextGeneration);
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_text_generation_execution_request_rejects_malformed_generation_options() {
     let mut inputs = HashMap::new();
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));

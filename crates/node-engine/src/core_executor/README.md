@@ -103,6 +103,9 @@ stable public facade and dispatch owner.
 - Canonical `llm-inference` task/request compatibility checks should consume
   inference task registry request contracts instead of hard-coded backend names
   or raw task labels.
+- Canonical text-generation request builders read public task semantics from
+  `task_kind`/`taskKind` only. `task_id`/`taskId` remain workflow/node identity
+  fields and must not be interpreted as task-kind aliases.
 - Contract-only canonical tasks such as `depth_estimation` and
   `video_understanding` fail during task validation before backend execution.
   Their lifecycle diagnostics may include bounded task option-support facts and

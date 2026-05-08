@@ -914,10 +914,10 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   strict task-registry validation slice now rejects unknown supplied values, so
   any saved/direct workflow input that used those fields as arbitrary node ids
   may fail earlier than before.
-- Reason: the current slice preserves the existing alias list while preventing
-  unvalidated backend execution. A later workflow-shape migration slice should
-  decide whether `task_id` belongs in the public inference-node input contract
-  or should be removed from task-kind alias parsing.
+- 2026-05-08 resolution: canonical text-generation request building now reads
+  task semantics from `task_kind`/`taskKind` only. `task_id` and `taskId` are no
+  longer public task-kind aliases, so node-id-shaped values default to ordinary
+  text generation instead of failing task-registry validation.
 - 2026-05-03: Focused `pantograph-embedded-runtime puma_lib` validation for the
   canonical template slice compiled `pantograph-workflow-service` and surfaced
   dead-code warnings for the legacy inference migration inventory/spec helper
@@ -1897,12 +1897,13 @@ The PyTorch/Transformers and llama.cpp generation-option mappers now consume
 that shared scope diagnostic before backend-local extension mapping, so raw
 kwargs are rejected consistently while correctly scoped foreign extensions
 remain backend-specific unsupported diagnostics.
-Node-engine text/chat request construction now validates supplied `task_kind`,
-`taskKind`, `task_id`, and `taskId` labels through the inference task registry.
-Missing task labels still default to text generation for existing text nodes,
-but non-string labels, unknown labels, or labels that resolve to non-text tasks
-now fail before gateway/backend execution instead of silently collapsing to text
-generation.
+Node-engine text/chat request construction now validates supplied `task_kind`
+and `taskKind` labels through the inference task registry. Missing task labels
+still default to text generation for existing text nodes, while `task_id` and
+`taskId` stay workflow/node identity fields instead of task-kind aliases. For
+public task-kind inputs, non-string labels, unknown labels, or labels that
+resolve to non-text tasks now fail before gateway/backend execution instead of
+silently collapsing to text generation.
 The task registry now publishes canonical typed request/result payload contracts
 through `TaskRequestContract`, including executable mappings for text/chat,
 embedding, rerank, and image generation plus visible contract-only mappings for

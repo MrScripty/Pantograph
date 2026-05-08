@@ -354,8 +354,7 @@ fn insert_nested_generation_option(
 fn text_generation_task_id(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<inference::InferenceTaskId> {
-    let Some(task_label) =
-        read_text_generation_task_label(inputs, &["task_kind", "taskKind", "task_id", "taskId"])?
+    let Some(task_label) = read_text_generation_task_label(inputs, &["task_kind", "taskKind"])?
     else {
         return Ok(inference::InferenceTaskId::TextGeneration);
     };
