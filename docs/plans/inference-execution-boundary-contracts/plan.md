@@ -3989,6 +3989,12 @@ one-off conversions.
   now proves the host-owned workflow sink records failed node-status lifecycle
   facts through `WorkflowService` with selected backend context and terminal
   duration.
+- 2026-05-08: Duration-only lifecycle coverage now table-checks completed
+  model-package-resolution, preprocessing, postprocessing, and
+  result-projection summaries through the embedded-runtime ledger adapter. The
+  coverage freezes that these phases can persist bounded duration metadata
+  without option, compatibility, usage, cache, artifact, prompt, or result
+  payloads.
 - 2026-05-04: Capacity-rebalance unload diagnostics follow-up preserved the
   original runtime unload error when recording the scheduler model lifecycle or
   runtime-load admission diagnostics is unavailable, matching the post-run
