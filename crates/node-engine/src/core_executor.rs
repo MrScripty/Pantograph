@@ -436,6 +436,7 @@ fn reject_contract_only_inference_task(
     );
     let option_diagnostics =
         contract_only_task_option_diagnostics(inputs, entry.task_id.clone(), backend_key);
+    let artifact_refs = contract_only_task_artifact_refs(inputs);
     record_task_validation_failure_lifecycle(
         extensions,
         task_id,
@@ -445,6 +446,7 @@ fn reject_contract_only_inference_task(
         inference_model_id_from_inputs(inputs),
         message.clone(),
         option_diagnostics,
+        artifact_refs,
     );
 
     Err(NodeEngineError::ExecutionFailed(message))
@@ -582,6 +584,7 @@ fn record_task_validation_failure_lifecycle(
     model_id: Option<String>,
     detail: String,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    artifact_refs: Vec<String>,
 ) {
     let Some(sink) = extensions
         .get::<Arc<dyn InferenceRequestLifecycleEventSink>>(
@@ -606,6 +609,11 @@ fn record_task_validation_failure_lifecycle(
         } else {
             Vec::new()
         };
+        let event_artifact_refs = if matches!(kind, InferenceRequestLifecycleEventKind::Failed) {
+            artifact_refs.clone()
+        } else {
+            Vec::new()
+        };
         if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
             request_id: request_id.clone(),
             phase: InferenceLifecyclePhase::TaskValidation,
@@ -621,7 +629,7 @@ fn record_task_validation_failure_lifecycle(
             resolved_artifact_kind: None,
             usage: None,
             cache_handle_id: None,
-            artifact_refs: Vec::new(),
+            artifact_refs: event_artifact_refs,
             detail,
             canonical_error_event_id: None,
             compatibility_report: None,
@@ -631,6 +639,77 @@ fn record_task_validation_failure_lifecycle(
             log::warn!("failed to record inference task validation lifecycle event: {error}");
         }
     }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn contract_only_task_artifact_refs(inputs: &HashMap<String, serde_json::Value>) -> Vec<String> {
+    let mut refs = Vec::new();
+    for value in inputs.values() {
+        collect_bounded_artifact_refs_from_value(value, &mut refs);
+    }
+    refs
+}
+
+#[cfg(feature = "inference-nodes")]
+fn collect_bounded_artifact_refs_from_value(value: &serde_json::Value, refs: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(object) => {
+            for (key, value) in object {
+                if is_artifact_ref_key(key) {
+                    collect_bounded_artifact_ref_leaf(value, refs);
+                } else {
+                    collect_bounded_artifact_refs_from_value(value, refs);
+                }
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_bounded_artifact_refs_from_value(value, refs);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn collect_bounded_artifact_ref_leaf(value: &serde_json::Value, refs: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(value) => push_bounded_artifact_ref(value, refs),
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_bounded_artifact_ref_leaf(value, refs);
+            }
+        }
+        serde_json::Value::Object(object) => {
+            for value in object.values() {
+                collect_bounded_artifact_ref_leaf(value, refs);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn push_bounded_artifact_ref(value: &str, refs: &mut Vec<String>) {
+    let Some(value) = inference::bounded_inference_artifact_ref(value) else {
+        return;
+    };
+    if !refs.iter().any(|existing| existing == &value) {
+        refs.push(value);
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn is_artifact_ref_key(key: &str) -> bool {
+    let normalized: String = key
+        .chars()
+        .filter(|character| *character != '_' && *character != '-')
+        .flat_map(char::to_lowercase)
+        .collect();
+    matches!(
+        normalized.as_str(),
+        "imageref" | "imagerefs" | "videoref" | "videorefs" | "artifactref" | "artifactrefs"
+    )
 }
 
 #[cfg(feature = "inference-nodes")]

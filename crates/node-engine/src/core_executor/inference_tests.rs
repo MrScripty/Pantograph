@@ -2859,6 +2859,8 @@ async fn test_canonical_llm_depth_estimation_rejects_contract_only_with_lifecycl
     inputs.insert(
         "task_options".to_string(),
         serde_json::json!({
+            "image_ref": "artifact://depth/input.png",
+            "artifact_refs": ["/tmp/private-depth-input.png"],
             "output_format": "depth_map",
             "include_point_cloud": true
         }),
@@ -2900,6 +2902,10 @@ async fn test_canonical_llm_depth_estimation_rejects_contract_only_with_lifecycl
         .as_deref()
         .is_some_and(|detail| detail.contains("execution_supported=false")));
     assert_eq!(events[1].option_diagnostics.len(), 2);
+    assert_eq!(
+        events[1].artifact_refs,
+        vec!["artifact://depth/input.png".to_string()]
+    );
     assert!(events[1].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "depth_estimation.output_format"
             && diagnostic.state == inference::OptionSupportState::BackendUnavailable
@@ -2916,6 +2922,8 @@ async fn test_canonical_llm_depth_estimation_rejects_contract_only_with_lifecycl
     );
     assert!(events[0].option_diagnostics.is_empty());
     assert!(events[2].option_diagnostics.is_empty());
+    assert!(events[0].artifact_refs.is_empty());
+    assert!(events[2].artifact_refs.is_empty());
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -3516,6 +3524,8 @@ async fn test_canonical_llm_video_understanding_rejects_contract_only_with_lifec
     inputs.insert(
         "task_options".to_string(),
         serde_json::json!({
+            "video_ref": "artifact://video/input.mp4",
+            "artifact_refs": ["file:///tmp/private-video.mp4"],
             "max_frames": 16,
             "frame_sample_rate": 2
         }),
@@ -3557,6 +3567,10 @@ async fn test_canonical_llm_video_understanding_rejects_contract_only_with_lifec
         .as_deref()
         .is_some_and(|detail| detail.contains("execution_supported=false")));
     assert_eq!(events[1].option_diagnostics.len(), 2);
+    assert_eq!(
+        events[1].artifact_refs,
+        vec!["artifact://video/input.mp4".to_string()]
+    );
     assert!(events[1].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "video_understanding.max_frames"
             && diagnostic.state == inference::OptionSupportState::BackendUnavailable
@@ -3573,6 +3587,8 @@ async fn test_canonical_llm_video_understanding_rejects_contract_only_with_lifec
     );
     assert!(events[0].option_diagnostics.is_empty());
     assert!(events[2].option_diagnostics.is_empty());
+    assert!(events[0].artifact_refs.is_empty());
+    assert!(events[2].artifact_refs.is_empty());
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

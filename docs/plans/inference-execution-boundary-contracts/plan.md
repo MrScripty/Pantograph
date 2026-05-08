@@ -3707,6 +3707,10 @@ inference write ledger events directly.
   from backend `EmbeddingResult.token_count` values onto the backend-execution
   lifecycle completion event without serializing input text or embedding
   vectors.
+  Node-engine graph-level contract-only task validation now also propagates
+  bounded stable artifact refs from roadmap task inputs onto the failed
+  task-validation lifecycle event while filtering local path and `file://`
+  values and leaving started/cleanup events artifact-free.
 - [x] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output

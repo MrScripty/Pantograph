@@ -202,6 +202,10 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Dependency-preflight lifecycle failure details redact local path-shaped tokens
   before they reach the lifecycle sink. The returned execution error may still
   contain the full operational detail for the caller.
+- Contract-only canonical inference validation may forward bounded stable
+  artifact refs to lifecycle diagnostics for task-validation failures. It must
+  filter local path-shaped refs and keep started/cleanup lifecycle events free
+  of artifact refs.
 - Canonical `llm-inference` text/chat `usage` output is bounded token-count
   metadata from typed gateway results or terminal stream chunks. It must not
   contain prompt text, generated text, token arrays, logits, tensors, backend
