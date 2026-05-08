@@ -30,12 +30,13 @@ pub(super) fn resolve_dependency_inputs(
             continue;
         };
 
-        if let Some(value) = dep_outputs.get(&edge.source_handle) {
-            inputs.insert(edge.target_handle.clone(), value.clone());
+        let (source_handle, target_handle) = canonical_dependency_edge_handles(graph, edge);
+        if let Some(value) = dep_outputs.get(source_handle) {
+            inputs.insert(target_handle.to_string(), value.clone());
         }
 
         if matches!(
-            edge.target_handle.as_str(),
+            target_handle,
             "model_path"
                 | "pumas_model_ref"
                 | "resolved_model_package_facts"
@@ -46,6 +47,28 @@ pub(super) fn resolve_dependency_inputs(
     }
 
     inputs
+}
+
+fn canonical_dependency_edge_handles<'a>(
+    graph: &'a WorkflowGraph,
+    edge: &'a crate::types::GraphEdge,
+) -> (&'a str, &'a str) {
+    let source_is_llm = graph
+        .find_node(&edge.source)
+        .is_some_and(|node| node.node_type == "llm-inference");
+    let target_is_text_output = graph
+        .find_node(&edge.target)
+        .is_some_and(|node| node.node_type == "text-output");
+
+    if source_is_llm
+        && target_is_text_output
+        && edge.source_handle == "stream"
+        && edge.target_handle == "stream"
+    {
+        return ("response", "text");
+    }
+
+    (&edge.source_handle, &edge.target_handle)
 }
 
 fn merge_model_context(
@@ -299,6 +322,49 @@ mod tests {
             inputs.get("backend_key"),
             Some(&serde_json::json!("llamacpp"))
         );
+    }
+
+    #[test]
+    fn resolve_dependency_inputs_repairs_llm_stream_edge_to_text_output() {
+        let graph = WorkflowGraph {
+            id: "workflow".to_string(),
+            name: "Workflow".to_string(),
+            nodes: vec![
+                GraphNode {
+                    id: "llm".to_string(),
+                    node_type: "llm-inference".to_string(),
+                    data: serde_json::json!({}),
+                    position: (0.0, 0.0),
+                },
+                GraphNode {
+                    id: "output".to_string(),
+                    node_type: "text-output".to_string(),
+                    data: serde_json::json!({}),
+                    position: (100.0, 0.0),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "edge".to_string(),
+                source: "llm".to_string(),
+                source_handle: "stream".to_string(),
+                target: "output".to_string(),
+                target_handle: "stream".to_string(),
+            }],
+            groups: Vec::new(),
+        };
+
+        let dependency_outputs = HashMap::from([(
+            "llm".to_string(),
+            HashMap::from([("response".to_string(), serde_json::json!("generated text"))]),
+        )]);
+
+        let inputs = resolve_dependency_inputs(&graph, &"output".to_string(), &dependency_outputs);
+
+        assert_eq!(
+            inputs.get("text"),
+            Some(&serde_json::json!("generated text"))
+        );
+        assert!(inputs.get("stream").is_none());
     }
 
     #[test]
