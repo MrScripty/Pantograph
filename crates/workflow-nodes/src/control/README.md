@@ -12,7 +12,7 @@ branching, merging, and tool-call orchestration inside workflow graphs.
 | `mod.rs` | Control-node module exports and registration wiring. |
 | `conditional.rs` | Conditional branch node behavior and metadata. |
 | `merge.rs` | Merge node behavior and metadata. |
-| `tool_loop.rs` | Tool-loop node descriptor and current single-attempt LLM behavior; fails explicitly when tool calls require disabled backend tool execution. |
+| `tool_loop.rs` | Tool-loop authoring descriptor; runtime execution is owned by the composed primitive contract. |
 | `tool_executor.rs` | Disabled tool-executor node descriptor that preserves saved-workflow compatibility without fabricating tool results. |
 
 ## Problem
@@ -41,10 +41,8 @@ emitting synthetic success.
 
 ## Invariants
 - Conditional and merge nodes must preserve declared input/output semantics.
-- Tool-loop/tool-executor must fail when real tool execution would be required.
-- Tool-loop may perform only the initial LLM request while backend-owned tool
-  execution is disabled; multi-turn continuation must land with the tool
-  runtime contract rather than as a hidden local loop.
+- Tool-loop/tool-executor must fail when direct descriptor-local execution is
+  requested; tool-loop runtime behavior belongs to its composed primitive graph.
 - Disabled tool behavior must not emit successful placeholder results.
 
 ## Revisit Triggers
@@ -67,8 +65,8 @@ let task = ToolExecutorTask::new("tool-executor-1");
 
 ## API Consumer Contract
 - Inputs: context values for declared control-node input ports.
-- Outputs: branch/merge context values and non-tool-loop LLM responses; tool
-  execution requests fail until a backend tool runtime exists.
+- Outputs: branch/merge context values. Tool-loop runtime output is produced by
+  its composed primitive execution, not by descriptor-local HTTP calls.
 - Lifecycle: tasks are instantiated by graph execution and run once per
   scheduling decision.
 - Errors: missing required inputs return `GraphError::TaskExecutionFailed`.
@@ -78,8 +76,8 @@ let task = ToolExecutorTask::new("tool-executor-1");
 ## Structured Producer Contract
 - Stable fields: node type ids, port ids, port data types, execution modes, and
   serialized tool-call/result shapes are machine-consumed.
-- Defaults: `ToolLoopConfig::default()` values are observable while the node
-  remains registered.
+- Defaults: tool-loop must not carry descriptor-local LLM endpoint defaults;
+  model/task options flow through the composed `llm-inference` primitive.
 - Enums and labels: control node type ids and task labels carry behavior.
 - Ordering: tool result arrays preserve input tool-call ordering.
 - Compatibility: saved workflows may already reference these node ids, so

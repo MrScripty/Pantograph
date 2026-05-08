@@ -12563,7 +12563,6 @@ dependencies = [
  "node-engine",
  "pantograph-node-contracts",
  "pumas-library",
- "reqwest",
  "serde",
  "serde_json",
  "tempfile",

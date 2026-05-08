@@ -68,7 +68,7 @@ non-Pumas consumers can still inspect and execute dependency-light nodes.
 **Internal:** `node-engine` and optional `pumas-library`.
 
 **External:** `graph-flow`, `tokio`, `async-trait`, `serde`, `serde_json`,
-`reqwest`, `thiserror`, `log`, `uuid`, and `inventory`.
+`thiserror`, `log`, `uuid`, and `inventory`.
 
 ## Related ADRs
 - `None identified as of 2026-04-21.`

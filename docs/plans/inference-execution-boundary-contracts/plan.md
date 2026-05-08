@@ -2961,6 +2961,11 @@ Image understanding remains represented by the canonical `llm-inference`
 `image_understanding` task contract until a typed executable backend slice
 promotes it; stale `vision-analysis` execution attempts now receive the same
 canonical migration error as other retired inference node shapes.
+Workflow-node `tool-loop` now also fails closed from its descriptor-local
+`Task::run` implementation and no longer carries `ToolLoopConfig` LLM endpoint
+defaults. Runtime behavior must use its composed contract over canonical
+`llm-inference`, `tool-executor`, and turn-state primitives, so workflow-nodes
+no longer depends on `reqwest` for direct model HTTP calls.
 Workflow-service capability extraction no longer infers llama.cpp or PyTorch
 requirements from retired node type names; it derives backend requirements from
 canonical `runtime_hint`, `backend_key`, or Pumas `recommended_backend` data and
