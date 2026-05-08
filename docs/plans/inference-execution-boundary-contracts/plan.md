@@ -3779,10 +3779,13 @@ inference write ledger events directly.
   producer refs are dropped and stable refs remain bounded. Embedded-runtime
   ledger projection now also applies that bounded-ref filter to lifecycle
   `cache_handle_id` values before persistence, so local temp-path-shaped cache
-  handles are not treated as durable metadata. Inference typed execution and
-  lifecycle producers now apply the same bounded-ref filter to text-generation
-  cache handles before returning non-streaming typed results or emitting
-  lifecycle cache facts. Node-engine streaming text collection now also drops
+  handles are not treated as durable metadata. The diagnostics ledger now also
+  rejects local-path-shaped inference `artifact_refs` and `cache_handle_id`
+  values at append time, so direct durable writes cannot bypass the producer
+  filters. Inference typed execution and lifecycle producers now apply the same
+  bounded-ref filter to text-generation cache handles before returning
+  non-streaming typed results or emitting lifecycle cache facts. Node-engine
+  streaming text collection now also drops
   path-shaped terminal cache handles before exposing `kv_cache_out` to graph
   outputs. Embedded-runtime ledger projection now drops path-shaped runtime
   instance ids, runtime ids, backend keys, model ids, device ids, network-node

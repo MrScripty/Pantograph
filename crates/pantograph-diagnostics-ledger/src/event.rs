@@ -1398,6 +1398,9 @@ impl InferenceExecutionDiagnosticObservedPayload {
             self.cache_handle_id.as_deref(),
             MAX_ID_LEN,
         )?;
+        if let Some(cache_handle_id) = self.cache_handle_id.as_deref() {
+            validate_no_local_path_shaped_ref("cache_handle_id", cache_handle_id)?;
+        }
         if self.artifact_refs.len() > MAX_INFERENCE_ARTIFACT_REFS {
             return Err(DiagnosticsLedgerError::FieldTooLong {
                 field: "artifact_refs",
@@ -1406,6 +1409,7 @@ impl InferenceExecutionDiagnosticObservedPayload {
         }
         for artifact_ref in &self.artifact_refs {
             validate_required_text("artifact_refs", artifact_ref, MAX_ID_LEN)?;
+            validate_no_local_path_shaped_ref("artifact_refs", artifact_ref)?;
         }
         if self.option_diagnostics.len() > MAX_INFERENCE_OPTION_DIAGNOSTICS {
             return Err(DiagnosticsLedgerError::FieldTooLong {
@@ -2592,6 +2596,30 @@ fn validate_payload_ref(value: Option<&str>) -> Result<(), DiagnosticsLedgerErro
         });
     }
     Ok(())
+}
+
+fn validate_no_local_path_shaped_ref(
+    field: &'static str,
+    value: &str,
+) -> Result<(), DiagnosticsLedgerError> {
+    let value = value.trim();
+    let lowercase = value.to_ascii_lowercase();
+    if value.starts_with('/')
+        || lowercase.starts_with("file://")
+        || value.starts_with(r"\\")
+        || is_windows_drive_path(value)
+    {
+        return Err(DiagnosticsLedgerError::InvalidField { field });
+    }
+    Ok(())
+}
+
+fn is_windows_drive_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'/' || bytes[2] == b'\\')
 }
 
 fn validate_library_resource_id(

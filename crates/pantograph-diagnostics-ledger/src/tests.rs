@@ -1250,6 +1250,70 @@ fn diagnostic_event_ledger_validates_inference_execution_diagnostic_scope_and_bo
 }
 
 #[test]
+fn diagnostic_event_ledger_rejects_inference_local_path_diagnostic_refs() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    for artifact_ref in [
+        "/tmp/artifact.bin",
+        "file:///tmp/artifact.bin",
+        r"C:\Users\runner\AppData\Local\artifact.bin",
+        "C:/Users/runner/AppData/Local/artifact.bin",
+        r"\\server\share\artifact.bin",
+        " /tmp/artifact.bin ",
+    ] {
+        let mut request = sample_inference_execution_diagnostic_event();
+        if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) =
+            &mut request.payload
+        {
+            payload.artifact_refs = vec![artifact_ref.to_string()];
+        }
+
+        let result = ledger.append_diagnostic_event(request);
+        assert!(
+            matches!(
+                result,
+                Err(DiagnosticsLedgerError::InvalidField {
+                    field: "artifact_refs"
+                })
+            ),
+            "expected artifact_ref {artifact_ref:?} to be rejected"
+        );
+    }
+
+    for cache_handle_id in [
+        "/tmp/kv-cache.bin",
+        "file:///tmp/kv-cache.bin",
+        r"C:\Users\runner\AppData\Local\kv-cache.bin",
+        "C:/Users/runner/AppData/Local/kv-cache.bin",
+        r"\\server\share\kv-cache.bin",
+        " file:///tmp/kv-cache.bin ",
+    ] {
+        let mut request = sample_inference_execution_diagnostic_event();
+        if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) =
+            &mut request.payload
+        {
+            payload.cache_handle_id = Some(cache_handle_id.to_string());
+        }
+
+        let result = ledger.append_diagnostic_event(request);
+        assert!(
+            matches!(
+                result,
+                Err(DiagnosticsLedgerError::InvalidField {
+                    field: "cache_handle_id"
+                })
+            ),
+            "expected cache_handle_id {cache_handle_id:?} to be rejected"
+        );
+    }
+
+    let safe_request = sample_inference_execution_diagnostic_event();
+    ledger
+        .append_diagnostic_event(safe_request)
+        .expect("safe inference diagnostic refs append");
+}
+
+#[test]
 fn diagnostic_event_ledger_validates_error_scope_source_and_text() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
 
