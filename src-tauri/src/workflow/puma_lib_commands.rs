@@ -60,23 +60,21 @@ pub async fn hydrate_puma_lib_node(
         return Err("model_path or model_id is required".to_string());
     }
 
-    let selector_access = {
+    let (selector_access, owner_api) = {
         let ext = extensions.read().await;
-        pumas_update_feed_access_from_extensions(&ext)
-    };
-    let option = if let (Some(model_id), Some(selector_access)) =
-        (requested_model_id.as_deref(), selector_access.as_ref())
-    {
-        find_matching_model_option_from_selector_access(selector_access, model_id).await?
-    } else {
-        let api = require_pumas_api(&extensions).await?;
-        find_matching_model_option(
-            &api,
-            requested_model_path.as_deref(),
-            requested_model_id.as_deref(),
+        (
+            pumas_update_feed_access_from_extensions(&ext),
+            ext.get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
+                .cloned(),
         )
-        .await?
     };
+    let option = find_puma_lib_hydration_option(
+        selector_access,
+        owner_api,
+        requested_model_path.as_deref(),
+        requested_model_id.as_deref(),
+    )
+    .await?;
 
     let mut node_data =
         build_hydrated_node_data(&option, selected_binding_ids.unwrap_or_default())?;
@@ -155,6 +153,25 @@ pub async fn start_hf_download_with_audit(
         download_id,
         audit_event_seq,
     })
+}
+
+async fn find_puma_lib_hydration_option(
+    selector_access: Option<Arc<PumasSelectorAccess>>,
+    owner_api: Option<Arc<pumas_library::PumasApi>>,
+    requested_model_path: Option<&str>,
+    requested_model_id: Option<&str>,
+) -> Result<node_engine::PortOption, String> {
+    if let Some(model_id) = requested_model_id {
+        let selector_access = selector_access.ok_or_else(|| {
+            "Pumas selector access not available in executor extensions for model_id hydration"
+                .to_string()
+        })?;
+        return find_matching_model_option_from_selector_access(&selector_access, model_id).await;
+    }
+
+    let api =
+        owner_api.ok_or_else(|| "Pumas API not available in executor extensions".to_string())?;
+    find_matching_model_option(&api, requested_model_path, None).await
 }
 
 pub async fn model_package_facts_summary_snapshot(
@@ -1171,6 +1188,27 @@ mod tests {
             .as_array()
             .unwrap()
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn model_id_hydration_requires_explicit_selector_access() {
+        let temp_dir = create_test_env();
+        let api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .build()
+                .await
+                .unwrap(),
+        );
+
+        let error =
+            find_puma_lib_hydration_option(None, Some(api), None, Some("llm/imported/test-gguf"))
+                .await
+                .expect_err("model_id hydration must not fall back to raw PUMAS_API");
+
+        assert!(
+            error.contains("Pumas selector access not available"),
+            "unexpected error: {error}"
+        );
     }
 
     #[tokio::test]

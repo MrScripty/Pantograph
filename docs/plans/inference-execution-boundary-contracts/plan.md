@@ -1575,6 +1575,12 @@ and `git diff --check`. A follow-up validation hardening slice added a
 Pantograph-side local-client selected-detail IPC fixture proving the same
 adapter method calls Pumas batch descriptor, package-summary, and
 inference-settings methods for same-device clients.
+
+The Tauri hydration hardening slice removed raw owner `PUMAS_API` fallback for
+selected `model_id` hydration. App commands now require the explicit selector
+access role whenever a canonical model id is provided, and reserve raw owner
+API access for path-only Pumas model-ref migration.
+
 Embedded-runtime `puma-lib` execution now applies the same boundary:
 selected `model_id` refresh prefers the explicit selector-access role, read-only
 selector rows may rebind executable path/backend/task metadata without being
@@ -4570,6 +4576,10 @@ Update during implementation:
   selector access replace stale saved node settings when non-empty, while
   read-only selector access preserves saved settings because selector rows do
   not own rich settings facts.
+- 2026-05-08: Removed the remaining Tauri `puma-lib` `model_id` hydration
+  fallback to raw owner `PUMAS_API`; selected model ids now require explicit
+  selector access, with raw owner API retained only for path-only model-ref
+  migration.
 - 2026-05-04: Added append-only terminal `ChatChunk` usage counts and threaded
   typed text-generation usage into result and backend-execution lifecycle
   summaries, with regression coverage proving prompt/result text stays out of

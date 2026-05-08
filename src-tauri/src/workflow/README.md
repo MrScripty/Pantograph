@@ -329,10 +329,11 @@ let snapshot = workflow_service
   capabilities are introduced.
 - Workflow dependency resolution and execution treat Pumas as the source of
   truth for executable model asset paths when bundle metadata requires it.
-- Puma-Lib selected `model_id` hydration uses the explicit Pumas selector-access
-  role before raw owner API fallback. Owner/local-client access may return batch
-  detail facts; read-only access may return selector-row facts without
-  inference settings.
+- Puma-Lib selected `model_id` hydration requires the explicit Pumas
+  selector-access role. Owner/local-client access may return batch detail
+  facts; read-only access may return selector-row facts without inference
+  settings. Raw owner API fallback is reserved for path-only model-ref
+  migration.
 - Puma-Lib option queries record successful model collection access/search
   through the workflow-service Library asset audit API and do not emit audit
   events for failed provider calls.
