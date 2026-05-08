@@ -509,10 +509,13 @@ fn build_inference_lifecycle_event_ledger_append_request(
             | NodeExecutionProjectionStatus::Failed
             | NodeExecutionProjectionStatus::Cancelled
     );
+    let runtime_id =
+        bounded_diagnostic_metadata(event.runtime_id.as_deref().or(event.backend_key.as_deref()));
+    let backend_key = bounded_diagnostic_metadata(event.backend_key.as_deref());
 
     Some(DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::NodeExecution,
-        source_instance_id: event.runtime_instance_id.clone(),
+        source_instance_id: bounded_diagnostic_metadata(event.runtime_instance_id.as_deref()),
         occurred_at_ms,
         workflow_run_id: Some(context.workflow_run_id.clone()),
         workflow_id: Some(context.workflow_id.clone()),
@@ -521,12 +524,9 @@ fn build_inference_lifecycle_event_ledger_append_request(
         node_id: Some(context.node_id.to_string()),
         node_type: Some(context.node_type.to_string()),
         node_version: context.node_version.cloned(),
-        runtime_id: event
-            .runtime_id
-            .clone()
-            .or_else(|| event.backend_key.clone()),
+        runtime_id,
         runtime_version: None,
-        model_id: event.model_id.clone(),
+        model_id: bounded_diagnostic_metadata(event.model_id.as_deref()),
         model_version: None,
         client_id: context.client_id.cloned(),
         client_session_id: context.client_session_id.cloned(),
@@ -551,7 +551,7 @@ fn build_inference_lifecycle_event_ledger_append_request(
                 .map(sanitize_inference_lifecycle_error_detail),
             canonical_error_event_id: event.canonical_error_event_id.clone(),
             task_id: event.task_id.clone(),
-            selected_backend_key: event.backend_key.clone(),
+            selected_backend_key: backend_key,
         }),
     })
 }
@@ -595,6 +595,8 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
         .unwrap_or_else(|| {
             i64::try_from(crate::workflow_runtime::unix_timestamp_ms()).unwrap_or(i64::MAX)
         });
+    let backend_key = bounded_diagnostic_metadata(detail.backend_key.as_deref());
+    let selected_backend_family = selected_backend_family(backend_key.as_deref(), None);
 
     Some(DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::NodeExecution,
@@ -607,7 +609,7 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
         node_id: Some(context.node_id.clone()),
         node_type: Some(context.node_type.clone()),
         node_version: None,
-        runtime_id: detail.backend_key.clone(),
+        runtime_id: backend_key.clone(),
         runtime_version: None,
         model_id: None,
         model_version: None,
@@ -626,11 +628,8 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
                 lifecycle_phase: Some("kv_cache".to_string()),
                 lifecycle_event_kind: Some("progress".to_string()),
                 duration_ms: None,
-                selected_backend_key: detail.backend_key.clone(),
-                selected_backend_family: selected_backend_family(
-                    detail.backend_key.as_deref(),
-                    None,
-                ),
+                selected_backend_key: backend_key,
+                selected_backend_family,
                 selected_device_id: None,
                 selected_network_node_id: None,
                 resolved_artifact_kind: None,
@@ -680,10 +679,18 @@ fn build_inference_diagnostic_event_ledger_append_request(
         return None;
     }
     let occurred_at_ms = i64::try_from(event.occurred_at_ms).unwrap_or(i64::MAX);
+    let runtime_id =
+        bounded_diagnostic_metadata(event.runtime_id.as_deref().or(event.backend_key.as_deref()));
+    let backend_key = bounded_diagnostic_metadata(event.backend_key.as_deref());
+    let selected_backend_family =
+        selected_backend_family(backend_key.as_deref(), runtime_id.as_deref());
+    let selected_device_id = bounded_diagnostic_metadata(event.selected_device_id.as_deref());
+    let selected_network_node_id =
+        bounded_diagnostic_metadata(event.selected_network_node_id.as_deref());
 
     Some(DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::NodeExecution,
-        source_instance_id: event.runtime_instance_id.clone(),
+        source_instance_id: bounded_diagnostic_metadata(event.runtime_instance_id.as_deref()),
         occurred_at_ms,
         workflow_run_id: Some(context.workflow_run_id.clone()),
         workflow_id: Some(context.workflow_id.clone()),
@@ -692,12 +699,9 @@ fn build_inference_diagnostic_event_ledger_append_request(
         node_id: Some(context.node_id.to_string()),
         node_type: Some(context.node_type.to_string()),
         node_version: context.node_version.cloned(),
-        runtime_id: event
-            .runtime_id
-            .clone()
-            .or_else(|| event.backend_key.clone()),
+        runtime_id,
         runtime_version: None,
-        model_id: event.model_id.clone(),
+        model_id: bounded_diagnostic_metadata(event.model_id.as_deref()),
         model_version: None,
         client_id: context.client_id.cloned(),
         client_session_id: context.client_session_id.cloned(),
@@ -722,13 +726,10 @@ fn build_inference_diagnostic_event_ledger_append_request(
                     inference_lifecycle_event_kind_key(&event.kind).to_string(),
                 ),
                 duration_ms,
-                selected_backend_key: event.backend_key.clone(),
-                selected_backend_family: selected_backend_family(
-                    event.backend_key.as_deref(),
-                    event.runtime_id.as_deref(),
-                ),
-                selected_device_id: event.selected_device_id.clone(),
-                selected_network_node_id: event.selected_network_node_id.clone(),
+                selected_backend_key: backend_key,
+                selected_backend_family,
+                selected_device_id,
+                selected_network_node_id,
                 resolved_artifact_kind,
                 usage: event.usage.as_ref().map(inference_usage_summary),
                 cache_handle_id,
@@ -870,7 +871,10 @@ fn kv_cache_diagnostic_summary(
             .cache_id
             .as_deref()
             .and_then(bounded_kv_cache_metadata),
-        backend_key: detail.backend_key.clone(),
+        backend_key: detail
+            .backend_key
+            .as_deref()
+            .and_then(bounded_kv_cache_metadata),
         reuse_source: detail
             .reuse_source
             .as_deref()
@@ -884,6 +888,15 @@ fn kv_cache_diagnostic_summary(
 
 fn bounded_kv_cache_metadata(value: &str) -> Option<String> {
     let value = value.trim();
+    if value.is_empty() || contains_local_artifact_ref_token(value) {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn bounded_diagnostic_metadata(value: Option<&str>) -> Option<String> {
+    let value = value?.trim();
     if value.is_empty() || contains_local_artifact_ref_token(value) {
         None
     } else {
@@ -943,7 +956,7 @@ fn compatibility_issue_summary(
         kind: issue.kind.clone(),
         phase: inference_lifecycle_phase_key(&issue.phase).to_string(),
         message: issue.message.clone(),
-        model_id: issue.model_id.clone(),
+        model_id: bounded_diagnostic_metadata(issue.model_id.as_deref()),
         path: bounded_compatibility_issue_path(issue, event_model_id),
     }
 }
@@ -956,9 +969,11 @@ fn bounded_compatibility_issue_path(
         .model_id
         .as_deref()
         .or(event_model_id)
-        .is_some_and(|model_id| !model_id.trim().is_empty());
+        .is_some_and(|model_id| bounded_diagnostic_metadata(Some(model_id)).is_some());
     issue.path.as_ref().and_then(|path| {
-        if has_stable_model_id && Path::new(path).is_absolute() {
+        if (has_stable_model_id && Path::new(path).is_absolute())
+            || inference::looks_like_local_artifact_ref(path)
+        {
             None
         } else {
             Some(path.clone())
@@ -1013,7 +1028,7 @@ fn kv_cache_option_diagnostic_summary(
     InferenceOptionDiagnosticSummary {
         option_path: diagnostic.option_path.clone(),
         state: kv_cache_option_support_state_label(diagnostic.state).to_string(),
-        backend_key: diagnostic.backend_key.clone(),
+        backend_key: bounded_diagnostic_metadata(diagnostic.backend_key.as_deref()),
         message: None,
     }
 }
@@ -1035,7 +1050,7 @@ fn option_diagnostic_summary(
     InferenceOptionDiagnosticSummary {
         option_path: diagnostic.option_path.clone(),
         state: option_support_state_label(diagnostic.state).to_string(),
-        backend_key: diagnostic.backend_key.clone(),
+        backend_key: bounded_diagnostic_metadata(diagnostic.backend_key.as_deref()),
         message: None,
     }
 }

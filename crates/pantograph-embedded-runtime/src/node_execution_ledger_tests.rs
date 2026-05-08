@@ -178,6 +178,31 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
 }
 
 #[test]
+fn inference_lifecycle_event_adapter_drops_path_shaped_runtime_metadata() {
+    let context = context();
+    let mut event =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Failed, 124);
+    event.runtime_instance_id = Some("/tmp/private/runtime.sock".to_string());
+    event.runtime_id = Some("file:///tmp/private/pytorch-runtime".to_string());
+    event.backend_key = Some("/tmp/private/backend".to_string());
+    event.model_id = Some("/tmp/private/model.gguf".to_string());
+
+    let request = inference_lifecycle_event_ledger_append_request(&context, &event)
+        .expect("failed lifecycle event should map after unsafe metadata is dropped");
+
+    assert!(request.source_instance_id.is_none());
+    assert!(request.runtime_id.is_none());
+    assert!(request.model_id.is_none());
+    match request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            assert!(payload.selected_backend_key.is_none());
+            assert_eq!(payload.status, NodeExecutionProjectionStatus::Failed);
+        }
+        other => panic!("expected node execution status payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure() {
     let context = context();
     let event = inference::InferenceRequestLifecycleEvent {
@@ -756,6 +781,62 @@ fn inference_diagnostic_event_adapter_persists_usage_and_cache_summary() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_drops_path_shaped_runtime_metadata() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        178,
+    );
+    event.usage = Some(inference::InferenceUsage {
+        prompt_tokens: Some(1),
+        completion_tokens: Some(2),
+        total_tokens: Some(3),
+    });
+    event.runtime_instance_id = Some("/tmp/private/runtime.sock".to_string());
+    event.runtime_id = Some("file:///tmp/private/pytorch-runtime".to_string());
+    event.backend_key = Some("/tmp/private/backend".to_string());
+    event.model_id = Some("/tmp/private/model.gguf".to_string());
+    event.selected_device_id = Some("/tmp/private/gpu0".to_string());
+    event.selected_network_node_id = Some("~/private-node".to_string());
+    event.compatibility_issues = vec![inference::InferenceCompatibilityIssueSummary {
+        kind: "unsupported_model_artifact".to_string(),
+        phase: inference::InferenceLifecyclePhase::ModelPackageResolution,
+        message: "backend does not declare support for this artifact".to_string(),
+        model_id: Some("/tmp/private/model.gguf".to_string()),
+        path: Some("/tmp/private/model.gguf".to_string()),
+    }];
+    event.option_diagnostics = vec![inference::OptionCompatibilityDiagnostic {
+        option_path: "sampling.temperature".to_string(),
+        state: inference::OptionSupportState::Mapped,
+        backend_key: Some("/tmp/private/backend".to_string()),
+        message: None,
+    }];
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("completed backend lifecycle with usage should map");
+    let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
+    assert!(!payload_json.contains("/tmp/private"));
+    assert!(!payload_json.contains("file:///tmp/private"));
+    assert!(!payload_json.contains("~/private-node"));
+
+    assert!(request.source_instance_id.is_none());
+    assert!(request.runtime_id.is_none());
+    assert!(request.model_id.is_none());
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert!(payload.selected_backend_key.is_none());
+            assert!(payload.selected_backend_family.is_none());
+            assert!(payload.selected_device_id.is_none());
+            assert!(payload.selected_network_node_id.is_none());
+            assert!(payload.compatibility_issues[0].model_id.is_none());
+            assert!(payload.compatibility_issues[0].path.is_none());
+            assert!(payload.option_diagnostics[0].backend_key.is_none());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_diagnostic_event_adapter_drops_local_path_cache_handle_id() {
     let context = context();
     let mut event = inference_lifecycle_event(
@@ -1300,11 +1381,16 @@ fn kv_cache_progress_detail_drops_path_shaped_metadata_before_ledger() {
                     action: node_engine::KvCacheEventAction::RestoreInput,
                     outcome: node_engine::KvCacheEventOutcome::Miss,
                     cache_id: Some("/tmp/private/kv-cache.bin".to_string()),
-                    backend_key: Some("llamacpp".to_string()),
+                    backend_key: Some("/tmp/private/llamacpp".to_string()),
                     reuse_source: Some("file:///tmp/private/reuse-source".to_string()),
                     token_count: Some(64),
                     reason: Some("fallback used /tmp/private/history.bin".to_string()),
-                    option_diagnostics: Vec::new(),
+                    option_diagnostics: vec![node_engine::KvCacheOptionDiagnostic {
+                        option_path: "kv_cache.reuse".to_string(),
+                        state: node_engine::KvCacheOptionSupportState::Ignored,
+                        backend_key: Some("/tmp/private/llamacpp".to_string()),
+                        message: None,
+                    }],
                 },
             )),
             occurred_at_ms: Some(175),
@@ -1314,15 +1400,19 @@ fn kv_cache_progress_detail_drops_path_shaped_metadata_before_ledger() {
     let payload_json = serde_json::to_string(&request.payload).expect("payload serializes");
     assert!(!payload_json.contains("/tmp/private"));
     assert!(!payload_json.contains("file:///tmp/private"));
+    assert!(request.runtime_id.is_none());
 
     match request.payload {
         DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert!(payload.selected_backend_key.is_none());
+            assert!(payload.selected_backend_family.is_none());
             let kv_cache = payload.kv_cache.expect("kv cache summary");
             assert!(kv_cache.cache_id.is_none());
             assert!(kv_cache.reuse_source.is_none());
             assert!(kv_cache.reason.is_none());
-            assert_eq!(kv_cache.backend_key.as_deref(), Some("llamacpp"));
+            assert!(kv_cache.backend_key.is_none());
             assert_eq!(kv_cache.token_count, Some(64));
+            assert!(payload.option_diagnostics[0].backend_key.is_none());
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }

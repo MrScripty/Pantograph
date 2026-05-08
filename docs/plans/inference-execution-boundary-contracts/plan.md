@@ -3700,7 +3700,11 @@ inference write ledger events directly.
   cache handles before returning non-streaming typed results or emitting
   lifecycle cache facts. Node-engine streaming text collection now also drops
   path-shaped terminal cache handles before exposing `kv_cache_out` to graph
-  outputs. While validating the streaming graph slice, a stale node-engine
+  outputs. Embedded-runtime ledger projection now drops path-shaped runtime
+  instance ids, runtime ids, backend keys, model ids, device ids, network-node
+  ids, KV-cache backend keys, option diagnostic backend keys, and compatibility
+  issue model/path fields before durable inference lifecycle or diagnostic
+  persistence. While validating the streaming graph slice, a stale node-engine
   lifecycle regression assertion was updated to match the full typed lifecycle
   event sequence emitted by the current gateway boundary. The shared
   artifact-ref filter now lives in the inference contract surface so gateway
