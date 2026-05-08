@@ -12,7 +12,7 @@ hold execution families that need host resources.
 | File | Description |
 | ---- | ----------- |
 | `dependency_environment.rs` | Dependency requirement fallback parsing, dependency environment emission, dependency preflight, and model-ref resolution. |
-| `puma_lib.rs` | Puma-Lib model lookup, execution descriptor projection, metadata normalization, and model-path output preparation. |
+| `puma_lib.rs` | Puma-Lib selected-model lookup through explicit selector-access roles, optional owner full-package-facts enrichment, execution descriptor projection, metadata normalization, and model-path output preparation. |
 | `python_execution.rs` | Python runtime input normalization, runtime instance metadata, adapter invocation, failure health recording, and stream replay. |
 | `rag_search.rs` | RAG search execution against the host-provided RAG backend. |
 
@@ -64,6 +64,9 @@ same behavior without exposing helper paths outside this module boundary.
   but dependency gating must remain in dependency preflight helpers.
 - Puma-Lib helpers prepare model metadata outputs and must not own dependency
   installation decisions.
+- Puma-Lib selected `model_id` refresh must prefer `PUMAS_SELECTOR_ACCESS`.
+  Read-only selector rows may rebind executable path/backend/task metadata, but
+  only owner `PumasApi` access may enrich outputs with full package facts.
 - Stream artifact helpers may emit pass-through ArtifactStore metadata, but
   they must leave managed conversion status and dependency lease attribution
   empty unless a host-owned conversion executor supplies those typed facts.

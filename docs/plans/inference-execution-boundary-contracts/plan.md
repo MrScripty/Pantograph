@@ -1575,6 +1575,15 @@ and `git diff --check`. A follow-up validation hardening slice added a
 Pantograph-side local-client selected-detail IPC fixture proving the same
 adapter method calls Pumas batch descriptor, package-summary, and
 inference-settings methods for same-device clients.
+Embedded-runtime `puma-lib` execution now applies the same boundary:
+selected `model_id` refresh prefers the explicit selector-access role, read-only
+selector rows may rebind executable path/backend/task metadata without being
+promoted to full package facts, and raw owner `PUMAS_API` is retained only for
+path-only fallback and optional full package-facts enrichment. Validation
+passed with `cargo test -p pantograph-embedded-runtime puma_lib`,
+`cargo check -p pantograph-embedded-runtime`,
+`cargo test -p workflow-nodes --features model-library --lib setup`,
+`cargo fmt --all`, and `git diff --check`.
 
 Validation for the selector slice passed with
 `cargo test -p workflow-nodes --features model-library --lib puma_lib`,

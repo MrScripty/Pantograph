@@ -1,4 +1,5 @@
 use super::*;
+use workflow_nodes::setup::{PumasSelectedModelDetail, PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
 impl TauriTaskExecutor {
     pub(super) fn insert_puma_lib_output_string(
@@ -23,6 +24,121 @@ impl TauriTaskExecutor {
         }
 
         Ok(None)
+    }
+
+    async fn resolve_puma_lib_selected_detail(
+        selector_access: &Arc<PumasSelectorAccess>,
+        model_id: &str,
+    ) -> std::result::Result<Option<PumasSelectedModelDetail>, String> {
+        let detail = selector_access
+            .selected_model_detail(model_id)
+            .await
+            .map_err(|error| {
+                format!("Failed to query Puma-Lib selected detail for '{model_id}': {error}")
+            })?;
+        if detail.selector_row.is_none() && detail.descriptor.is_none() {
+            Ok(None)
+        } else {
+            Ok(Some(detail))
+        }
+    }
+
+    fn apply_puma_lib_selected_detail(
+        detail: PumasSelectedModelDetail,
+        requested_model_id: &str,
+        model_path: &mut String,
+        model_id: &mut Option<String>,
+        model_type: &mut Option<String>,
+        task_type_primary: &mut Option<String>,
+        recommended_backend: &mut Option<String>,
+    ) {
+        let row = detail.selector_row.as_ref();
+        let descriptor = detail.descriptor.as_ref();
+
+        *model_id = Some(
+            descriptor
+                .map(|descriptor| descriptor.model_id.clone())
+                .or_else(|| row.map(|row| row.model_ref.model_id.clone()))
+                .unwrap_or_else(|| requested_model_id.to_string()),
+        );
+        if let Some(entry_path) = descriptor
+            .map(|descriptor| descriptor.entry_path.trim())
+            .filter(|path| !path.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                row.and_then(|row| row.executable_entry_path())
+                    .map(ToOwned::to_owned)
+            })
+        {
+            *model_path = entry_path;
+        }
+        if let Some(value) = descriptor
+            .map(|descriptor| descriptor.model_type.trim())
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                row.and_then(|row| row.model_type.as_deref())
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned)
+            })
+        {
+            *model_type = Some(value);
+        }
+        if let Some(task) = descriptor
+            .map(|descriptor| descriptor.task_type_primary.trim())
+            .filter(|task| !task.is_empty() && *task != "unknown")
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                row.and_then(|row| row.task_type_primary.as_deref())
+                    .map(str::trim)
+                    .filter(|task| !task.is_empty() && *task != "unknown")
+                    .map(ToOwned::to_owned)
+            })
+        {
+            *task_type_primary = Some(task);
+        }
+        if let Some(backend) = descriptor
+            .and_then(|descriptor| descriptor.recommended_backend.as_deref())
+            .map(str::trim)
+            .filter(|backend| !backend.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                row.and_then(|row| row.recommended_backend.as_deref())
+                    .map(str::trim)
+                    .filter(|backend| !backend.is_empty())
+                    .map(ToOwned::to_owned)
+            })
+        {
+            *recommended_backend = Some(backend);
+        }
+    }
+
+    async fn resolve_puma_lib_full_package_facts(
+        api: &Arc<pumas_library::PumasApi>,
+        model_id: &str,
+    ) -> Option<serde_json::Value> {
+        match api.resolve_model_package_facts(model_id).await {
+            Ok(package_facts) => match serde_json::to_value(&package_facts) {
+                Ok(value) => Some(value),
+                Err(error) => {
+                    log::warn!(
+                        "Puma-Lib package-facts serialization failed for '{}': {}",
+                        model_id,
+                        error
+                    );
+                    None
+                }
+            },
+            Err(error) => {
+                log::warn!(
+                    "Puma-Lib package-facts lookup failed for '{}': {}",
+                    model_id,
+                    error
+                );
+                None
+            }
+        }
     }
 
     pub(super) async fn execute_puma_lib(
@@ -50,9 +166,53 @@ impl TauriTaskExecutor {
         let mut resolved_from_pumas = false;
         let mut resolved_model_package_facts = None;
 
-        if let Some(api) = extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+        let requested_model_id = model_id.clone();
+        if let Some(requested_model_id) = requested_model_id.as_deref() {
+            if let Some(selector_access) =
+                extensions.get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+            {
+                match Self::resolve_puma_lib_selected_detail(&selector_access, requested_model_id)
+                    .await
+                {
+                    Ok(Some(detail)) => {
+                        resolved_from_pumas = true;
+                        Self::apply_puma_lib_selected_detail(
+                            detail,
+                            requested_model_id,
+                            &mut model_path,
+                            &mut model_id,
+                            &mut model_type,
+                            &mut task_type_primary,
+                            &mut recommended_backend,
+                        );
+                    }
+                    Ok(None) => {
+                        log::warn!(
+                            "Puma-Lib selected detail for '{}' was not found during workflow execution; using saved node data",
+                            requested_model_id
+                        );
+                    }
+                    Err(error) => {
+                        log::warn!(
+                            "Puma-Lib selected-detail lookup failed during workflow execution: {}; using saved node data",
+                            error
+                        );
+                    }
+                }
+            }
+        }
+
+        if resolved_from_pumas {
+            if let (Some(api), Some(model_id)) = (
+                extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API),
+                model_id.as_deref(),
+            ) {
+                resolved_model_package_facts =
+                    Self::resolve_puma_lib_full_package_facts(&api, model_id).await;
+            }
+        } else if let Some(api) =
+            extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
         {
-            let requested_model_id = model_id.clone();
             match Self::resolve_puma_lib_model_record(&api, requested_model_id.as_deref()).await {
                 Ok(Some(model)) => {
                     resolved_from_pumas = true;
@@ -97,27 +257,8 @@ impl TauriTaskExecutor {
                         }
                     }
 
-                    match api.resolve_model_package_facts(&model.id).await {
-                        Ok(package_facts) => match serde_json::to_value(&package_facts) {
-                            Ok(value) => {
-                                resolved_model_package_facts = Some(value);
-                            }
-                            Err(error) => {
-                                log::warn!(
-                                    "Puma-Lib package-facts serialization failed for '{}': {}",
-                                    model.id,
-                                    error
-                                );
-                            }
-                        },
-                        Err(error) => {
-                            log::warn!(
-                                "Puma-Lib package-facts lookup failed for '{}': {}",
-                                model.id,
-                                error
-                            );
-                        }
-                    }
+                    resolved_model_package_facts =
+                        Self::resolve_puma_lib_full_package_facts(&api, &model.id).await;
                 }
                 Ok(None) => {
                     if let Some(model_id) = requested_model_id.as_deref() {
