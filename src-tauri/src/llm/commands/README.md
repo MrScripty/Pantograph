@@ -82,6 +82,9 @@ command transport can stay focused on invoke state and payload mapping.
   `image_understanding` is promoted beyond a contract-only task, these commands
   return explicit typed-inference contract errors instead of acting as an
   alternate inference backend.
+- Agent command prompt builders should keep only active request-formatting
+  paths; retired reference-only helpers belong in tests or docs, not command
+  code.
 - Generated-component history commands use `.pantograph/generated-components.git/`
   with `src/generated/` as the work tree.
 - Command helper cleanup for strict clippy must not alter public invoke

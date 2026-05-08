@@ -556,48 +556,6 @@ fn format_fix_mode_prompt(request: &AgentRequest) -> String {
     prompt
 }
 
-/// Format the agent prompt with all context (legacy, kept for reference)
-#[allow(dead_code)]
-fn format_agent_prompt(request: &AgentRequest) -> String {
-    let mut prompt = String::new();
-
-    // Add drawing bounds context
-    if let Some(bounds) = &request.drawing_bounds {
-        prompt.push_str(&format!(
-            "## Drawing Location\nThe user drew at position: x={:.0}, y={:.0}, width={:.0}, height={:.0}\n\n",
-            bounds.min_x, bounds.min_y, bounds.width, bounds.height
-        ));
-    }
-
-    // Add target element context
-    if let Some(target_id) = &request.target_element_id {
-        prompt.push_str(&format!(
-            "## Target Element\nThe user is drawing on/near existing component: {}\n\n",
-            target_id
-        ));
-    }
-
-    // Add component tree context
-    if !request.component_tree.is_empty() {
-        prompt.push_str("## Existing Components\n");
-        for comp in &request.component_tree {
-            prompt.push_str(&format!(
-                "- {} ({}) at ({:.0}, {:.0})\n",
-                comp.name, comp.path, comp.bounds.x, comp.bounds.y
-            ));
-        }
-        prompt.push('\n');
-    }
-
-    // Add image reference
-    prompt.push_str(&format!(
-        "## User's Drawing\n[The image shows the user's sketch]\n\n## User's Request\n{}",
-        request.prompt
-    ));
-
-    prompt
-}
-
 /// Create component updates based on file changes and request context
 fn create_component_updates(
     request: &AgentRequest,
