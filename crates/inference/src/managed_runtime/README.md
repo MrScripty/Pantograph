@@ -71,6 +71,9 @@ backend-facing transition and availability flow. Helper modules under
 persisted state transitions below the large-file threshold without changing the
 public managed-runtime facade. This keeps Tauri as an adapter that calls
 backend services instead of becoming the owner of install or launch policy.
+Persisted state loading tolerates retired runtime ids by filtering unsupported
+runtime entries before typed deserialization, so old local state such as
+removed Ollama records cannot block the supported managed-runtime catalog.
 
 ## Alternatives Rejected
 

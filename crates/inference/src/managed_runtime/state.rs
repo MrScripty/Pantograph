@@ -4,6 +4,7 @@ use super::contracts::{
 };
 use super::paths::managed_runtime_dir;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -99,7 +100,9 @@ pub fn load_managed_runtime_state(
 
     let contents = fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read managed runtime state {:?}: {}", path, e))?;
-    let mut state: ManagedRuntimePersistedState = serde_json::from_str(&contents)
+    let filtered_contents = drop_unsupported_runtime_entries(&contents)
+        .map_err(|e| format!("Failed to parse managed runtime state {:?}: {}", path, e))?;
+    let mut state: ManagedRuntimePersistedState = serde_json::from_value(filtered_contents)
         .map_err(|e| format!("Failed to parse managed runtime state {:?}: {}", path, e))?;
 
     if state.schema_version == 0 {
@@ -107,6 +110,20 @@ pub fn load_managed_runtime_state(
     }
 
     Ok(state)
+}
+
+fn drop_unsupported_runtime_entries(contents: &str) -> Result<Value, serde_json::Error> {
+    let mut value = serde_json::from_str::<Value>(contents)?;
+    if let Some(runtimes) = value.get_mut("runtimes").and_then(Value::as_array_mut) {
+        runtimes.retain(|runtime| {
+            runtime
+                .get("id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| ManagedBinaryId::all().iter().any(|known| known.key() == id))
+        });
+    }
+
+    Ok(value)
 }
 
 pub fn reconcile_interrupted_managed_runtime_jobs(app_data_dir: &Path) -> Result<(), String> {
@@ -257,11 +274,12 @@ fn current_unix_timestamp_ms() -> u64 {
 mod tests {
     use super::{
         load_managed_runtime_state, reconcile_interrupted_managed_runtime_jobs,
-        runtime_state_entry, save_managed_runtime_state, ManagedBinaryId,
+        runtime_state_entry, save_managed_runtime_state, state_path, ManagedBinaryId,
         ManagedRuntimeHistoryEventKind, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
         ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedRuntime,
         ManagedRuntimePersistedState, ManagedRuntimeSelectionState,
     };
+    use std::fs;
 
     #[test]
     fn load_returns_default_when_state_file_is_missing() {
@@ -295,6 +313,48 @@ mod tests {
         save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
         let loaded = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
 
+        let runtime =
+            runtime_state_entry(&loaded, ManagedBinaryId::LlamaCpp).expect("llama runtime entry");
+        assert_eq!(runtime.selection.selected_version.as_deref(), Some("b8248"));
+    }
+
+    #[test]
+    fn load_drops_retired_runtime_entries_from_persisted_state() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let path = state_path(temp_dir.path());
+        fs::create_dir_all(path.parent().expect("state parent")).expect("create state dir");
+        fs::write(
+            &path,
+            serde_json::json!({
+                "schema_version": 1,
+                "runtimes": [
+                    {
+                        "id": "ollama",
+                        "catalog_refreshed_at_ms": null,
+                        "versions": [],
+                        "selection": {},
+                        "active_job": null,
+                        "active_job_artifact": null
+                    },
+                    {
+                        "id": "llama_cpp",
+                        "catalog_refreshed_at_ms": null,
+                        "versions": [],
+                        "selection": {
+                            "selected_version": "b8248"
+                        },
+                        "active_job": null,
+                        "active_job_artifact": null
+                    }
+                ]
+            })
+            .to_string(),
+        )
+        .expect("write old state");
+
+        let loaded = load_managed_runtime_state(temp_dir.path()).expect("load filtered state");
+
+        assert_eq!(loaded.runtimes.len(), 1);
         let runtime =
             runtime_state_entry(&loaded, ManagedBinaryId::LlamaCpp).expect("llama runtime entry");
         assert_eq!(runtime.selection.selected_version.as_deref(), Some("b8248"));
