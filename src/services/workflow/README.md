@@ -114,7 +114,9 @@ Pumas model-option loading is centralized in `pumaModelOptionsCache.ts` so the
 Library page and graph `puma-lib` node share the same backend selector snapshot
 and cursor handoff. The service publishes reusable options only after asking
 the backend for updates since the snapshot cursor, and it reloads once when the
-handoff reports stale or changed rows.
+handoff reports stale or changed rows. Pumas update feeds may omit the
+`events` field when there are no changes, so the frontend cache treats a
+missing `events` array as empty rather than a transport failure.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`

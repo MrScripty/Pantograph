@@ -51,7 +51,8 @@ export function extractPumasSelectorCursorFromResult(response: PortOptionsResult
 }
 
 export function selectorUpdateFeedRequiresRefresh(feed: ModelLibraryUpdateFeed): boolean {
-  return feed.stale_cursor || feed.snapshot_required || feed.events.length > 0;
+  const events = Array.isArray(feed.events) ? feed.events : [];
+  return feed.stale_cursor || feed.snapshot_required || events.length > 0;
 }
 
 export function isPumasUpdateFeedUnavailable(error: unknown): boolean {

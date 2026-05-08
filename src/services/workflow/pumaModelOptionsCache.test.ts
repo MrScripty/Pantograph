@@ -80,6 +80,14 @@ test('extractPumasSelectorCursor reads the first selector cursor from option met
 test('selectorUpdateFeedRequiresRefresh treats events and stale cursors as cache invalidation', () => {
   assert.equal(selectorUpdateFeedRequiresRefresh(updateFeed()), false);
   assert.equal(
+    selectorUpdateFeedRequiresRefresh({
+      cursor: 'model-library-updates:1',
+      stale_cursor: false,
+      snapshot_required: false,
+    } as ModelLibraryUpdateFeed),
+    false,
+  );
+  assert.equal(
     selectorUpdateFeedRequiresRefresh(updateFeed({ stale_cursor: true })),
     true,
   );
