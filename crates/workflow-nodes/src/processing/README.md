@@ -11,7 +11,6 @@ adapters such as the Python runtime.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `audio_generation.rs` | Declares the Stable Audio generation node contract. |
-| `reranker.rs` | Declares the GGUF reranker node contract used to rank candidate documents via llama.cpp. |
 | `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |
 | `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
@@ -34,14 +33,13 @@ hidden behavior that the graph cannot express safely.
 ## Decision
 Keep descriptors in this directory as the graph-visible contract layer and let
 host executors implement the runtime behavior. Retired direct inference
-descriptors, including the old diffusion shape, must not re-enter this
-directory; canonical `llm-inference` task metadata owns image-generation graph
-contracts. The reranker node follows the same pattern: the graph sees explicit
-query, candidate-document, and ranked-result contracts while the host owns the
-runtime-specific llama.cpp execution details. `expand_settings.rs` follows the
-same contract-first rule: model-specific settings stay graph-visible as
-matching optional input/output ports while the schema itself still passes
-through unchanged for downstream inference merging. Compatible text-generation
+descriptors, including old diffusion, llama.cpp, embedding, and reranker
+shapes, must not re-enter this directory; canonical `llm-inference` task
+metadata owns text/chat, embedding, rerank, audio-transcription, and
+image-generation graph contracts. `expand_settings.rs` follows the same
+contract-first rule: model-specific settings stay graph-visible as matching
+optional input/output ports while the schema itself still passes through
+unchanged for downstream inference merging. Compatible text-generation
 descriptors now also reserve explicit `kv_cache_in` and `kv_cache_out` ports
 using the first-class `kv_cache` graph type so KV reuse remains graph-visible
 instead of hiding behind generic JSON ports.
@@ -62,8 +60,9 @@ instead of hiding behind generic JSON ports.
 - Expand-settings contracts must preserve the static `inference_settings`
   passthrough while keeping per-setting override ports additive and keyed by the
   source schema.
-- Reranker outputs must preserve stable ranked-result fields so saved workflows
-  and templates can consume them without endpoint-specific parsing logic.
+- Rerank outputs must be exposed through canonical `llm-inference` ranked-result
+  fields so saved workflows and templates can consume them without
+  endpoint-specific parsing logic.
 - Canonical `llm-inference` image-generation descriptors must expose the first
   generated image on the `image` output while keeping the full typed result
   envelope on `results`.

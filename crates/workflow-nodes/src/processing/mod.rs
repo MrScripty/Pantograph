@@ -5,13 +5,10 @@
 mod audio_generation;
 mod dependency_environment;
 mod depth_estimation;
-mod embedding;
 mod expand_settings;
 mod inference;
 mod json_filter;
-mod llamacpp_inference;
 mod onnx_inference;
-mod reranker;
 mod unload_model;
 mod validator;
 mod vision_analysis;
@@ -19,16 +16,13 @@ mod vision_analysis;
 pub use audio_generation::AudioGenerationTask;
 pub use dependency_environment::DependencyEnvironmentTask;
 pub use depth_estimation::DepthEstimationTask;
-pub use embedding::{EmbeddingConfig, EmbeddingTask};
 pub use expand_settings::ExpandSettingsTask;
 pub use inference::{
     InferenceConfig, InferenceTask, ToolCall as InferenceToolCall,
     ToolDefinition as InferenceToolDefinition,
 };
 pub use json_filter::{JsonFilterConfig, JsonFilterTask};
-pub use llamacpp_inference::LlamaCppInferenceTask;
 pub use onnx_inference::OnnxInferenceTask;
-pub use reranker::RerankerTask;
 pub use unload_model::UnloadModelTask;
 pub use validator::{ValidationResult, ValidatorConfig, ValidatorTask};
 pub use vision_analysis::{VisionAnalysisTask, VisionConfig};

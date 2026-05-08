@@ -2939,10 +2939,13 @@ frontend-only sessions exercise the same graph-facing contract as Rust-backed
 sessions. Rust workflow-node
 inventory no longer registers retired `llamacpp-inference`,
 `pytorch-inference`, `embedding`, or `reranker` node descriptors as
-graph-visible built-ins; the descriptor structs remain only as migration
-references and compatibility test surfaces. Frontend node maps and workflow
-mocks no longer expose retired backend-specific inference renderers, the GGUF
-reranker template now uses canonical `llm-inference` with
+graph-visible built-ins, and the remaining retired `llamacpp-inference`,
+dedicated `embedding`, and dedicated `reranker` processing modules have now
+been deleted from the public workflow-nodes surface. Workflow-service
+canonicalization fixtures own old-shape migration semantics instead of local
+retired descriptor structs or direct legacy execution helpers. Frontend node
+maps and workflow mocks no longer expose retired backend-specific inference
+renderers, the GGUF reranker template now uses canonical `llm-inference` with
 `task_kind = rerank`, and `puma-lib` exposes a canonical JSON
 `pumas_model_ref` output for Pumas-to-inference graph wiring.
 Workflow-service capability extraction no longer infers llama.cpp or PyTorch
