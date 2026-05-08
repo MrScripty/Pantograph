@@ -1581,6 +1581,15 @@ selected `model_id` hydration. App commands now require the explicit selector
 access role whenever a canonical model id is provided, and reserve raw owner
 API access for path-only Pumas model-ref migration.
 
+The technical-fit package-facts access slice now snapshots and reapplies the
+explicit Pumas selector-access role for workflow execution, and technical-fit
+full package-fact resolution consumes only owner selector access. Local-client
+and read-only selector roles degrade explicitly because Pumas v0.6.0 exposes
+package summaries, not full `ResolvedModelPackageFacts`, through those roles.
+If Pantograph needs local-client technical-fit candidates from full package
+facts, Pumas needs a full package-facts IPC contract; Pantograph must not
+promote selector summaries into full inference facts.
+
 Embedded-runtime `puma-lib` execution now applies the same boundary:
 selected `model_id` refresh prefers the explicit selector-access role, read-only
 selector rows may rebind executable path/backend/task metadata without being
@@ -4580,6 +4589,10 @@ Update during implementation:
   fallback to raw owner `PUMAS_API`; selected model ids now require explicit
   selector access, with raw owner API retained only for path-only model-ref
   migration.
+- 2026-05-08: Moved technical-fit full package-fact resolution to explicit
+  Pumas selector access. Owner selector access can produce full facts;
+  local-client/read-only roles remain summary-only in Pumas v0.6.0 and now
+  degrade rather than promoting summaries to full inference package facts.
 - 2026-05-04: Added append-only terminal `ChatChunk` usage counts and threaded
   typed text-generation usage into result and backend-execution lifecycle
   summaries, with regression coverage proving prompt/result text stays out of

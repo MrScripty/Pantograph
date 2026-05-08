@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use node_engine::{EventSink, ExecutorExtensions, WorkflowExecutor};
 use tokio::sync::RwLock;
+use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
 use crate::SharedWorkflowService;
 
@@ -10,6 +11,7 @@ pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 #[derive(Clone, Default)]
 pub struct RuntimeExtensionsSnapshot {
     pub pumas_api: Option<Arc<pumas_library::PumasApi>>,
+    pub pumas_selector_access: Option<Arc<PumasSelectorAccess>>,
     pub kv_cache_store: Option<Arc<inference::kv_cache::KvCacheStore>>,
     pub dependency_resolver: Option<Arc<dyn node_engine::ModelDependencyResolver>>,
     pub workflow_service: Option<SharedWorkflowService>,
@@ -34,6 +36,9 @@ impl RuntimeExtensionsSnapshot {
         Self {
             pumas_api: shared
                 .get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
+                .cloned(),
+            pumas_selector_access: shared
+                .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
                 .cloned(),
             kv_cache_store: shared
                 .get::<Arc<inference::kv_cache::KvCacheStore>>(
@@ -75,6 +80,11 @@ pub fn apply_runtime_extensions_for_execution(
         executor
             .extensions_mut()
             .set(node_engine::extension_keys::PUMAS_API, api.clone());
+    }
+    if let Some(selector_access) = &snapshot.pumas_selector_access {
+        executor
+            .extensions_mut()
+            .set(PUMAS_SELECTOR_ACCESS, selector_access.clone());
     }
     if let Some(store) = &snapshot.kv_cache_store {
         executor

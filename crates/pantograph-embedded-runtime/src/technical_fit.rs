@@ -16,6 +16,7 @@ use pantograph_workflow_service::{
     WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
     WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
 };
+use workflow_nodes::setup::PumasSelectorAccess;
 
 use crate::{workflow_runtime::unix_timestamp_ms, EmbeddedWorkflowHost};
 
@@ -433,8 +434,37 @@ async fn resolve_required_model_package_facts(
     host: &EmbeddedWorkflowHost,
     required_model_ids: &[String],
 ) -> Vec<inference::ResolvedModelPackageFacts> {
-    let api = host.pumas_api().await;
-    resolve_required_model_package_facts_from_api(api.as_deref(), required_model_ids).await
+    let selector_access = host.pumas_selector_access().await;
+    resolve_required_model_package_facts_from_selector_access(
+        selector_access.as_deref(),
+        required_model_ids,
+    )
+    .await
+}
+
+async fn resolve_required_model_package_facts_from_selector_access(
+    selector_access: Option<&PumasSelectorAccess>,
+    required_model_ids: &[String],
+) -> Vec<inference::ResolvedModelPackageFacts> {
+    match selector_access {
+        Some(PumasSelectorAccess::Owner(api)) => {
+            resolve_required_model_package_facts_from_api(Some(api.as_ref()), required_model_ids)
+                .await
+        }
+        Some(PumasSelectorAccess::LocalClient(_)) => {
+            log::warn!(
+                "Pumas local-client selector access does not expose full package facts for technical-fit"
+            );
+            Vec::new()
+        }
+        Some(PumasSelectorAccess::ReadOnly(_)) => {
+            log::warn!(
+                "Pumas read-only selector access exposes package summaries, not full package facts for technical-fit"
+            );
+            Vec::new()
+        }
+        None => Vec::new(),
+    }
 }
 
 async fn resolve_required_model_package_facts_from_api(
@@ -649,6 +679,7 @@ mod tests {
         build_workflow_technical_fit_request, WorkflowRuntimeReadinessState,
         WorkflowRuntimeRequirements,
     };
+    use std::sync::Arc;
 
     fn runtime_capability() -> WorkflowRuntimeCapability {
         WorkflowRuntimeCapability {
@@ -1004,7 +1035,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn required_model_package_facts_resolve_from_pumas_api() {
+    async fn required_model_package_facts_resolve_from_owner_selector_access() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let model_id = "llm/test/live-technical-fit-facts";
         let model_dir = temp_dir
@@ -1032,16 +1063,22 @@ mod tests {
             .expect("metadata json"),
         )
         .expect("metadata");
-        let api = pumas_library::PumasApi::builder(temp_dir.path())
-            .with_hf_client(false)
-            .with_process_manager(false)
-            .build()
-            .await
-            .expect("pumas api");
+        let api = Arc::new(
+            pumas_library::PumasApi::builder(temp_dir.path())
+                .with_hf_client(false)
+                .with_process_manager(false)
+                .build()
+                .await
+                .expect("pumas api"),
+        );
         let required_models = vec![model_id.to_string(), model_id.to_string(), " ".to_string()];
+        let selector_access = PumasSelectorAccess::Owner(api);
 
-        let facts =
-            resolve_required_model_package_facts_from_api(Some(&api), &required_models).await;
+        let facts = resolve_required_model_package_facts_from_selector_access(
+            Some(&selector_access),
+            &required_models,
+        )
+        .await;
 
         assert_eq!(facts.len(), 1);
         assert_eq!(facts[0].model_ref.model_id, model_id);
@@ -1052,6 +1089,38 @@ mod tests {
         assert_eq!(
             facts[0].backend_hints.accepted,
             vec![inference::BackendHintLabel::Transformers]
+        );
+    }
+
+    #[tokio::test]
+    async fn required_model_package_facts_do_not_promote_read_only_summaries() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(temp_dir.path().join("shared-resources/models"))
+            .expect("models dir");
+        let api = pumas_library::PumasApi::builder(temp_dir.path())
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+            .expect("pumas api");
+        api.rebuild_model_index()
+            .await
+            .expect("model index rebuild");
+        let read_only = pumas_library::PumasReadOnlyLibrary::open(
+            temp_dir.path().join("shared-resources/models"),
+        )
+        .expect("read-only Pumas library");
+        let selector_access = PumasSelectorAccess::ReadOnly(Arc::new(read_only));
+
+        let facts = resolve_required_model_package_facts_from_selector_access(
+            Some(&selector_access),
+            &["llm/test/live-technical-fit-facts".to_string()],
+        )
+        .await;
+
+        assert!(
+            facts.is_empty(),
+            "read-only package summaries must not be promoted to full technical-fit facts"
         );
     }
 

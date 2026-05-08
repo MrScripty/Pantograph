@@ -28,6 +28,7 @@ use std::pin::Pin;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::sync::{mpsc, RwLock};
+use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
 #[path = "lib_tests/data_graph_execution_tests.rs"]
 mod data_graph_execution_tests;
@@ -98,6 +99,40 @@ async fn runtime_extensions_apply_workflow_service_for_stream_artifacts() {
         .get::<Arc<WorkflowService>>(runtime_extension_keys::WORKFLOW_SERVICE)
         .expect("workflow service extension should be applied");
     assert!(Arc::ptr_eq(applied, &workflow_service));
+}
+
+#[tokio::test]
+async fn runtime_extensions_apply_pumas_selector_access() {
+    let temp_dir = TempDir::new().expect("temporary Pumas root should be created");
+    let pumas_api = Arc::new(
+        pumas_library::PumasApi::builder(temp_dir.path())
+            .build()
+            .await
+            .expect("pumas api should initialize"),
+    );
+    let selector_access = Arc::new(PumasSelectorAccess::Owner(pumas_api.clone()));
+    let shared = Arc::new(RwLock::new(ExecutorExtensions::new()));
+    shared
+        .write()
+        .await
+        .set(PUMAS_SELECTOR_ACCESS, selector_access.clone());
+    let snapshot = RuntimeExtensionsSnapshot::from_shared(&shared).await;
+    let mut executor = WorkflowExecutor::new(
+        "runtime-extension-test",
+        node_engine::WorkflowGraph::new("runtime-extension-test", "Runtime Extension Test"),
+        Arc::new(NullEventSink),
+    );
+
+    apply_runtime_extensions(&mut executor, &snapshot);
+
+    let applied = executor
+        .extensions()
+        .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
+        .expect("Pumas selector access should be applied");
+    match applied.as_ref() {
+        PumasSelectorAccess::Owner(applied_api) => assert!(Arc::ptr_eq(applied_api, &pumas_api)),
+        _ => panic!("unexpected selector access role"),
+    }
 }
 
 struct MockImagePythonRuntime {

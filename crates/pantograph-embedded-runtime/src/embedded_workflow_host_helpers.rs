@@ -13,6 +13,7 @@ use pantograph_workflow_service::{
     WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeDiagnosticPhaseHint,
     WorkflowRuntimeRequirements, WorkflowServiceError,
 };
+use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
 use crate::{
     runtime_registry, runtime_registry_errors, task_executor, EmbeddedWorkflowHost,
@@ -24,6 +25,13 @@ impl EmbeddedWorkflowHost {
         let guard = self.extensions.read().await;
         guard
             .get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
+            .cloned()
+    }
+
+    pub(crate) async fn pumas_selector_access(&self) -> Option<Arc<PumasSelectorAccess>> {
+        let guard = self.extensions.read().await;
+        guard
+            .get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
             .cloned()
     }
 

@@ -50,13 +50,13 @@ packages.
 | `task_executor/` | Behavior modules for RAG search, Puma-Lib metadata projection, dependency environment/preflight, and Python runtime execution used by the host executor facade. Puma-Lib execution refreshes selected `model_id` facts and non-empty selected-detail inference settings through the explicit Pumas selector-access role before falling back to raw owner API access, and only owner API access may enrich outputs with full package facts. |
 | `task_executor_tests.rs` | Shared Pantograph host task-executor test fixtures and behavior-module index. |
 | `task_executor_tests/` | Focused task-executor behavior tests for dependency preflight/fallback, input helpers, Puma-Lib metadata rebinding through owner and selector-access roles, and Python runtime recorder/stream behavior. |
-| `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, advisory Pumas package-fact candidate projection, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
+| `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, advisory Pumas package-fact candidate projection from explicit selector-access owner facts, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime snapshot-to-capability projection, host-runtime, dedicated-embedding, Python-sidecar capability builders, task request-contract projection, and capability-to-lifecycle projection. |
 | `runtime_config.rs` | Owns embedded-runtime configuration and initialization error contracts re-exported by the crate facade. |
-| `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas, KV cache, model dependencies, event sinks, execution ids, Python runtime execution records, and host-provided inference lifecycle sinks. |
+| `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas owner API, explicit Pumas selector access, KV cache, model dependencies, event sinks, execution ids, Python runtime execution records, and host-provided inference lifecycle sinks. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
@@ -93,9 +93,10 @@ Pumas-specific dependency resolution.
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option
   metadata.
-- `puma-lib` selector/list queries must use the explicit workflow-nodes Pumas
-  selector-access role. Raw `PUMAS_API` access is reserved for full-detail
-  dependency resolution and selected-model hydration, not list population.
+- `puma-lib` selector/list queries and selected `model_id` hydration must use
+  the explicit workflow-nodes Pumas selector-access role. Raw `PUMAS_API`
+  access is reserved for full-detail dependency resolution, optional owner-only
+  full package-facts enrichment, and path-only model-ref migration.
 - `puma-lib` execution and preload paths may rehydrate selected model details
   through Pumas only when a canonical `model_id`/model ref is present. Display
   names such as `modelName` are not a lookup contract and must not trigger
