@@ -1462,11 +1462,12 @@ Detailed Pumas-side work is split into
 - [x] Connect selector cursors to Pantograph cache invalidation through the
   existing model-library update feed or explicit local-client update stream so
   startup/page snapshots cannot miss updates before polling/subscription begins.
-- [ ] Pin Pantograph to the published Pumas Library `v0.6.0` release once it is
+- [x] Pin Pantograph to the published Pumas Library `v0.6.0` release once it is
   available, replacing the moving sibling path dependency for normal
   integration builds so future Pumas development cannot break Pantograph
   unexpectedly. CI-only Pumas fixes after the release are assumed internal
-  unless they change public API/DTO contracts.
+  unless they change public API/DTO contracts. Pantograph now pins the released
+  upstream tag at commit `6d038ff8fd955351fbd77daeea4a01a972c6e886`.
 
 **Verification:**
 - Review [pumas-library-plan.md](pumas-library-plan.md) against the Pumas
