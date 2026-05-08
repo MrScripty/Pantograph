@@ -53,6 +53,10 @@ same behavior without exposing helper paths outside this module boundary.
 
 - Parent dispatch remains the only place that maps node types onto host
   execution families.
+- Parent dispatch must not route retired direct inference shapes such as
+  `diffusion-inference` into Python sidecar execution. Canonical image
+  generation enters through inference task metadata, not this host Python
+  bridge.
 - Dependency environment helpers may emit environment references and model
   refs, but they must not invoke Python runtime execution directly.
 - Dependency preflight request construction must prefer explicit workflow

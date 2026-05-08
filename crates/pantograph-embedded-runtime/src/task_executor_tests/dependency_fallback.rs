@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn diffusion_nodes_fail_fast_when_environment_ref_is_not_ready() {
+async fn onnx_nodes_fail_fast_when_environment_ref_is_not_ready() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: requests.clone(),
@@ -19,7 +19,7 @@ async fn diffusion_nodes_fail_fast_when_environment_ref_is_not_ready() {
         "model_path".to_string(),
         serde_json::json!("/tmp/model-ready"),
     );
-    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
+    inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
     inputs.insert(
         "environment_ref".to_string(),
@@ -30,12 +30,7 @@ async fn diffusion_nodes_fail_fast_when_environment_ref_is_not_ready() {
     );
 
     let err = executor
-        .execute_task(
-            "diffusion-inference-1",
-            inputs,
-            &Context::new(),
-            &extensions,
-        )
+        .execute_task("onnx-inference-1", inputs, &Context::new(), &extensions)
         .await
         .expect_err("preflight should block when environment_ref state is not ready");
 
@@ -53,7 +48,7 @@ async fn diffusion_nodes_fail_fast_when_environment_ref_is_not_ready() {
 async fn python_nodes_allow_execution_when_no_dependency_bindings_are_available() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
     let mut adapter_response = HashMap::new();
-    adapter_response.insert("image".to_string(), serde_json::json!("base64-image"));
+    adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: requests.clone(),
         response: adapter_response,
@@ -61,12 +56,12 @@ async fn python_nodes_allow_execution_when_no_dependency_bindings_are_available(
 
     let resolved_model_ref = ModelRefV2 {
         contract_version: 2,
-        engine: "pytorch".to_string(),
-        model_id: "diffusion/imported/tiny-sd-turbo".to_string(),
-        model_path: "/tmp/external/tiny-sd-turbo".to_string(),
-        task_type_primary: "text-to-image".to_string(),
+        engine: "onnx-runtime".to_string(),
+        model_id: "audio/imported/tiny-tts".to_string(),
+        model_path: "/tmp/external/tiny-tts.onnx".to_string(),
+        task_type_primary: "text-to-audio".to_string(),
         dependency_bindings: Vec::new(),
-        dependency_requirements_id: Some("requirements-diffusion".to_string()),
+        dependency_requirements_id: Some("requirements-onnx".to_string()),
     };
 
     let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
@@ -79,32 +74,27 @@ async fn python_nodes_allow_execution_when_no_dependency_bindings_are_available(
     let mut inputs = HashMap::new();
     inputs.insert(
         "model_path".to_string(),
-        serde_json::json!("/tmp/external/tiny-sd-turbo"),
+        serde_json::json!("/tmp/external/tiny-tts.onnx"),
     );
-    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
+    inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert(
         "prompt".to_string(),
         serde_json::json!("paper lantern in the rain"),
     );
 
     let outputs = executor
-        .execute_task(
-            "diffusion-inference-2",
-            inputs,
-            &Context::new(),
-            &extensions,
-        )
+        .execute_task("onnx-inference-2", inputs, &Context::new(), &extensions)
         .await
         .expect("python nodes should execute without dependency bindings");
     assert_eq!(
-        outputs.get("image"),
-        Some(&serde_json::json!("base64-image"))
+        outputs.get("audio"),
+        Some(&serde_json::json!("base64-audio"))
     );
 
     let recorded = requests.lock().expect("recording lock");
     assert_eq!(recorded.len(), 1);
     let request = &recorded[0];
-    assert_eq!(request.node_type, "diffusion-inference");
+    assert_eq!(request.node_type, "onnx-inference");
     assert!(request.env_ids.is_empty());
     assert_eq!(
         request
@@ -112,7 +102,7 @@ async fn python_nodes_allow_execution_when_no_dependency_bindings_are_available(
             .get("model_ref")
             .and_then(|value| value.get("modelPath"))
             .and_then(|value| value.as_str()),
-        Some("/tmp/external/tiny-sd-turbo")
+        Some("/tmp/external/tiny-tts.onnx")
     );
 }
 
@@ -120,7 +110,7 @@ async fn python_nodes_allow_execution_when_no_dependency_bindings_are_available(
 async fn python_nodes_allow_execution_when_bindings_are_missing_only_runtime_packages() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
     let mut adapter_response = HashMap::new();
-    adapter_response.insert("image".to_string(), serde_json::json!("base64-image"));
+    adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: requests.clone(),
         response: adapter_response,
@@ -128,12 +118,12 @@ async fn python_nodes_allow_execution_when_bindings_are_missing_only_runtime_pac
 
     let resolved_model_ref = ModelRefV2 {
         contract_version: 2,
-        engine: "diffusers".to_string(),
-        model_id: "diffusion/cc-nms/tiny-sd-turbo".to_string(),
-        model_path: "/tmp/external/tiny-sd-turbo".to_string(),
-        task_type_primary: "text-to-image".to_string(),
+        engine: "onnx-runtime".to_string(),
+        model_id: "audio/imported/tiny-tts".to_string(),
+        model_path: "/tmp/external/tiny-tts.onnx".to_string(),
+        task_type_primary: "text-to-audio".to_string(),
         dependency_bindings: Vec::new(),
-        dependency_requirements_id: Some("requirements-diffusion".to_string()),
+        dependency_requirements_id: Some("requirements-onnx".to_string()),
     };
 
     let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
@@ -146,32 +136,27 @@ async fn python_nodes_allow_execution_when_bindings_are_missing_only_runtime_pac
     let mut inputs = HashMap::new();
     inputs.insert(
         "model_path".to_string(),
-        serde_json::json!("/tmp/external/tiny-sd-turbo"),
+        serde_json::json!("/tmp/external/tiny-tts.onnx"),
     );
-    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
+    inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert(
         "prompt".to_string(),
         serde_json::json!("paper lantern in the rain"),
     );
 
     let outputs = executor
-        .execute_task(
-            "diffusion-inference-3",
-            inputs,
-            &Context::new(),
-            &extensions,
-        )
+        .execute_task("onnx-inference-3", inputs, &Context::new(), &extensions)
         .await
         .expect("python nodes should execute when only runtime packages are missing");
     assert_eq!(
-        outputs.get("image"),
-        Some(&serde_json::json!("base64-image"))
+        outputs.get("audio"),
+        Some(&serde_json::json!("base64-audio"))
     );
 
     let recorded = requests.lock().expect("recording lock");
     assert_eq!(recorded.len(), 1);
     let request = &recorded[0];
-    assert_eq!(request.node_type, "diffusion-inference");
+    assert_eq!(request.node_type, "onnx-inference");
     assert!(request.env_ids.is_empty());
     assert_eq!(
         request
@@ -179,6 +164,6 @@ async fn python_nodes_allow_execution_when_bindings_are_missing_only_runtime_pac
             .get("model_ref")
             .and_then(|value| value.get("engine"))
             .and_then(|value| value.as_str()),
-        Some("diffusers")
+        Some("onnx-runtime")
     );
 }

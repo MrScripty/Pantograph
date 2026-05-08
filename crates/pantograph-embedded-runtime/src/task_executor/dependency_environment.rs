@@ -95,9 +95,6 @@ impl TauriTaskExecutor {
         if node_type == "audio-generation" || model_type == "audio" {
             return "text-to-audio".to_string();
         }
-        if node_type == "diffusion-inference" {
-            return "text-to-image".to_string();
-        }
 
         match model_type.as_str() {
             "diffusion" => "text-to-image".to_string(),
@@ -110,10 +107,6 @@ impl TauriTaskExecutor {
     pub(super) fn infer_backend_key(node_type: &str) -> Option<String> {
         match node_type {
             "audio-generation" => Some("stable_audio".to_string()),
-            // Leave diffusion unspecified when the graph does not provide a
-            // concrete backend so Pumas can apply the model's recommended
-            // execution profile.
-            "diffusion-inference" => None,
             "onnx-inference" => Some("onnx-runtime".to_string()),
             _ => Some("pytorch".to_string()),
         }
@@ -124,17 +117,6 @@ impl TauriTaskExecutor {
         inputs: &HashMap<String, serde_json::Value>,
         requirements: Option<&ModelDependencyRequirements>,
     ) -> Option<String> {
-        if node_type == "diffusion-inference" {
-            if let Some(backend) = Self::canonical_backend_key(
-                Self::read_optional_input_string_aliases(
-                    inputs,
-                    &["recommended_backend", "recommendedBackend"],
-                )
-                .as_deref(),
-            ) {
-                return Some(backend);
-            }
-        }
         if node_type == "llm-inference" {
             if let Some(backend) = Self::canonical_backend_key(
                 Self::read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"])
@@ -268,7 +250,7 @@ impl TauriTaskExecutor {
 
     pub(super) fn python_runtime_handles_node(node_type: &str) -> bool {
         match node_type {
-            "diffusion-inference" | "audio-generation" | "onnx-inference" => true,
+            "audio-generation" | "onnx-inference" => true,
             _ => false,
         }
     }

@@ -52,6 +52,44 @@ async fn canonical_llm_inference_falls_through_to_core_executor() {
     assert!(requests.lock().expect("recording lock").is_empty());
 }
 
+#[tokio::test]
+async fn retired_direct_diffusion_falls_through_without_python_execution() {
+    let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+    let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+        requests: requests.clone(),
+        response: HashMap::new(),
+    });
+    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+        requirements: make_requirements(DependencyValidationState::Resolved),
+        status: make_status(DependencyState::Ready, None),
+        model_ref: None,
+    });
+    let (executor, extensions) = test_executor(adapter, resolver);
+
+    let mut inputs = HashMap::new();
+    inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
+    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+
+    let error = executor
+        .execute_task(
+            "diffusion-inference-1",
+            inputs,
+            &Context::new(),
+            &extensions,
+        )
+        .await
+        .expect_err("retired direct diffusion should fall through to core executor");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("requires host-specific executor"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+    assert!(requests.lock().expect("recording lock").is_empty());
+}
+
 #[derive(Clone)]
 struct StubDependencyResolver {
     requirements: ModelDependencyRequirements,

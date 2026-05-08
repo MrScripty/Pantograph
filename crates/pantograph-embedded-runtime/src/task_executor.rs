@@ -33,7 +33,6 @@ use crate::runtime_health::failed_runtime_health_assessment;
 ///
 /// Currently handles:
 /// - `rag-search`: requires an injected `RagBackend`
-/// - `diffusion-inference`: python sidecar execution
 /// - `audio-generation`: python sidecar execution
 /// - `onnx-inference`: python sidecar execution
 ///
@@ -110,7 +109,7 @@ impl TaskExecutor for TauriTaskExecutor {
                 self.execute_dependency_environment(&inputs, extensions)
                     .await
             }
-            "diffusion-inference" | "audio-generation" | "onnx-inference" => {
+            "audio-generation" | "onnx-inference" => {
                 self.execute_python_node(task_id, &node_type, &inputs, extensions)
                     .await
             }

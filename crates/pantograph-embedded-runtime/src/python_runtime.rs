@@ -94,7 +94,6 @@ struct BridgePayload {
 
 #[derive(Debug, Serialize)]
 struct BridgeWorkerPaths {
-    torch_worker: String,
     audio_worker: String,
     onnx_worker: String,
 }
@@ -272,11 +271,6 @@ impl ProcessPythonRuntimeAdapter {
                 )
             })?;
 
-        let torch_worker = repo_root
-            .join("crates")
-            .join("inference")
-            .join("torch")
-            .join("worker.py");
         let audio_worker = repo_root
             .join("crates")
             .join("inference")
@@ -288,12 +282,6 @@ impl ProcessPythonRuntimeAdapter {
             .join("onnx")
             .join("worker.py");
 
-        if !torch_worker.exists() {
-            return Err(format!(
-                "Torch worker script not found at {}",
-                torch_worker.display()
-            ));
-        }
         if !audio_worker.exists() {
             return Err(format!(
                 "Audio worker script not found at {}",
@@ -308,7 +296,6 @@ impl ProcessPythonRuntimeAdapter {
         }
 
         Ok(BridgeWorkerPaths {
-            torch_worker: torch_worker.to_string_lossy().to_string(),
             audio_worker: audio_worker.to_string_lossy().to_string(),
             onnx_worker: onnx_worker.to_string_lossy().to_string(),
         })
@@ -663,7 +650,6 @@ mod tests {
     fn resolve_worker_paths_includes_onnx_worker() {
         let workers = ProcessPythonRuntimeAdapter::resolve_worker_paths()
             .expect("worker paths should resolve from repository layout");
-        assert!(PathBuf::from(workers.torch_worker).exists());
         assert!(PathBuf::from(workers.audio_worker).exists());
         assert!(PathBuf::from(workers.onnx_worker).exists());
     }

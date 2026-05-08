@@ -211,33 +211,3 @@ fn build_model_dependency_request_prefers_requirements_backend_when_input_missin
         TauriTaskExecutor::build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
 }
-
-#[test]
-fn build_model_dependency_request_prefers_recommended_backend_for_diffusion() {
-    let mut inputs = HashMap::new();
-    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
-    inputs.insert(
-        "recommended_backend".to_string(),
-        serde_json::json!("diffusers"),
-    );
-
-    let request = TauriTaskExecutor::build_model_dependency_request(
-        "diffusion-inference",
-        "/tmp/model",
-        &inputs,
-    );
-    assert_eq!(request.backend_key.as_deref(), Some("diffusers"));
-}
-
-#[test]
-fn build_model_dependency_request_leaves_diffusion_backend_unspecified_by_default() {
-    let mut inputs = HashMap::new();
-    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
-
-    let request = TauriTaskExecutor::build_model_dependency_request(
-        "diffusion-inference",
-        "/tmp/model",
-        &inputs,
-    );
-    assert_eq!(request.backend_key, None);
-}

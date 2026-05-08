@@ -4578,6 +4578,11 @@ Update during implementation:
   selection, task inference, or dependency resolver dispatch. Image-generation
   dependency checks now enter through canonical `llm-inference` task metadata
   and resolved package facts.
+- 2026-05-08 follow-up: embedded-runtime host dispatch no longer sends retired
+  direct `diffusion-inference` nodes to the Python sidecar, and the process
+  bridge no longer exposes the diffusion worker path. Host Python coverage now
+  exercises audio and ONNX sidecar behavior while canonical image generation
+  stays on the inference task boundary.
 - 2026-05-08: Puma-Lib hydration dependency preflight now infers canonical
   `llm-inference` for `text-to-image` and `image-to-image` package facts instead
   of routing the request through the retired direct `diffusion-inference` node

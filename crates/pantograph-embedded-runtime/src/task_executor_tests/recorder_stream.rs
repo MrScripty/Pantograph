@@ -210,7 +210,7 @@ fn artifact_policy() -> ArtifactPolicy {
 async fn python_runtime_recorder_progresses_failed_execution_health_state() {
     let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
         requirements: ModelDependencyRequirements {
-            backend_key: Some("pytorch".to_string()),
+            backend_key: Some("onnx-runtime".to_string()),
             ..make_requirements(DependencyValidationState::Resolved)
         },
         status: make_status(DependencyState::Ready, None),
@@ -224,16 +224,16 @@ async fn python_runtime_recorder_progresses_failed_execution_health_state() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "model_path".to_string(),
-        serde_json::json!("/tmp/model.safetensors"),
+        serde_json::json!("/tmp/model.onnx"),
     );
-    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
-    inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("onnx-runtime"));
+    inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
     for _ in 0..3 {
         let error = executor
             .execute_task(
-                "diffusion-inference-1",
+                "onnx-inference-1",
                 inputs.clone(),
                 &Context::new(),
                 &extensions,
