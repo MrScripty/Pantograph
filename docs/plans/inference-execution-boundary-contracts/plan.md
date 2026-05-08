@@ -3818,7 +3818,7 @@ inference write ledger events directly.
   inference diagnostic appends fail; gateway and node-engine producer edges log
   those secondary sink failures and preserve the original inference,
   preflight, or execution result.
-- [ ] Keep prompts, chat messages, raw media, generated content, embeddings,
+- [x] Keep prompts, chat messages, raw media, generated content, embeddings,
   token arrays, logits, tensors, Python kwargs, backend CLI flags, full local
   paths where stable ids exist, and unbounded stderr/stdout out of ledger
   payloads. Usage/cache diagnostic adapter coverage now asserts that raw-looking
@@ -3907,7 +3907,7 @@ inference write ledger events directly.
   persisted in ledger payloads.
 - `git diff --check`.
 
-**Status:** In progress. The first diagnostics-ledger integration slice added
+**Status:** Implemented. The first diagnostics-ledger integration slice added
 an append-only optional `model_id` to inference request lifecycle events and
 projects it into the existing ledger append request top-level `model_id` field
 alongside the already-recorded selected backend/runtime context, without adding
