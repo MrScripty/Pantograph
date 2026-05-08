@@ -3490,6 +3490,14 @@ drift back into inference.
     app-command HTTP requests to `/v1/chat/completions`. Promoting
     image-understanding later requires a typed executor slice rather than
     restoring command-local backend calls.
+  - 2026-05-08 finding: `src-tauri/src/agent/mod.rs` still builds a RIG
+    OpenAI-compatible completions client from the gateway base URL for the UI
+    generation agent used by `src-tauri/src/llm/commands/agent.rs`. That path
+    is broader than the retired vision helper because it owns tool-calling UI
+    generation behavior, but it remains an inference-adjacent app consumer.
+    It needs an explicit typed-inference or host-agent boundary slice before
+    the app can claim that all user-facing LLM execution flows through the
+    canonical inference gateway contracts.
 
 **Verification:**
 - `cargo test -p inference`.
