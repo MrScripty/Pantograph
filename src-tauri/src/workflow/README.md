@@ -272,6 +272,9 @@ dependency removal refusal while a conversion lease is active.
   execution descriptors rather than from raw library record paths.
 - Task-type-derived backend selection must preserve distinct execution modes
   such as llama.cpp reranking rather than collapsing them into text generation.
+- Puma-Lib dependency hydration must infer canonical `llm-inference` for
+  image-generation package facts; direct `diffusion-inference` is retained only
+  for existing executable node paths that still explicitly name that node type.
 
 ## Revisit Triggers
 - Core graph-edit contracts need a new transport projection that the current

@@ -981,10 +981,6 @@ fn infer_runtime_node_type(task_type_primary: Option<&str>, backend_key: Option<
     let task = task_type_primary
         .map(|value| value.trim().to_ascii_lowercase())
         .unwrap_or_default();
-    if matches!(task.as_str(), "text-to-image" | "image-to-image") {
-        return "diffusion-inference".to_string();
-    }
-
     if normalize_backend_key(backend_key).as_deref() == Some("onnx-runtime") {
         return "onnx-inference".to_string();
     }
@@ -1334,7 +1330,11 @@ mod tests {
     fn infer_runtime_node_type_matches_puma_lib_task_shape() {
         assert_eq!(
             infer_runtime_node_type(Some("text-to-image"), Some("pytorch")),
-            "diffusion-inference"
+            "llm-inference"
+        );
+        assert_eq!(
+            infer_runtime_node_type(Some("image-to-image"), Some("diffusers")),
+            "llm-inference"
         );
         assert_eq!(
             infer_runtime_node_type(Some("text-generation"), Some("onnxruntime")),

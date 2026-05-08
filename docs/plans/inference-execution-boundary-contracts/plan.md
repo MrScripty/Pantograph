@@ -4547,6 +4547,11 @@ Update during implementation:
   connects the canonical `image` output to `image-output`. A frontend template
   regression test now prevents built-in image-generation starters from drifting
   back to direct `diffusion-inference` or raw `model_path` handoff.
+- 2026-05-08: Puma-Lib hydration dependency preflight now infers canonical
+  `llm-inference` for `text-to-image` and `image-to-image` package facts instead
+  of routing the request through the retired direct `diffusion-inference` node
+  shape. Backend and task metadata remain in the dependency request so Pumas
+  facts and selected bindings still drive dependency resolution.
 - 2026-05-04: Node-engine canonical image-generation execution now has
   package-facts lifecycle coverage. Diffusers package facts flow from graph
   inputs through typed gateway execution, and task-validation plus
