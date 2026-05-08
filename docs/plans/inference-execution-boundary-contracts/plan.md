@@ -3713,7 +3713,7 @@ inference write ledger events directly.
   bounded lifecycle/task/backend/device/artifact/compatibility/option/usage/
   cache-reference summaries without promoting prompt/result bodies, tensors,
   raw media, Python kwargs, CLI flags, or local paths into timeline detail.
-- [ ] Record usage/cache/artifact references where available, including token or
+- [x] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
   durable inference diagnostic payloads now carry bounded usage counts and
@@ -3742,7 +3742,7 @@ inference write ledger events directly.
   PyTorch token usage metadata without storing prompt or generated text. Typed
   streaming lifecycle completion now also carries the last bounded stream-chunk
   usage summary onto the terminal backend-execution event without storing prompt
-  or generated text. Additional backend producers remain open. Canonical
+  or generated text. Canonical
   `llm-inference` embedding execution
   now projects typed embedding `usage` and bounded `option_diagnostics` onto
   graph output ports while keeping input text and embedding vectors out of
