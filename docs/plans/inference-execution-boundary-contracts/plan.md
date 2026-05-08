@@ -1223,8 +1223,9 @@ handoff between the Library page and graph `puma-lib` node.
   owner API, local-client, or read-only access is available; read-only access
   resolves launcher roots and build-output roots to `shared-resources/models`
   before opening; `puma-lib` options query through the selector role without
-  requiring full `PUMAS_API`; and selected-model detail hydration remains on
-  the full API path until a later local-client/detail slice is planned.
+  requiring full `PUMAS_API`; and `model_id` selected-model detail hydration
+  routes through the same selector-access role, using owner/local-client batch
+  detail APIs or read-only selector-row projection as available.
 
 **Milestone 2 Selector Cursor Handoff Slice Boundary:**
 
