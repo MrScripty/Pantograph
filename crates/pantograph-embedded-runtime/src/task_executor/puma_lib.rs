@@ -12,6 +12,42 @@ impl TauriTaskExecutor {
         }
     }
 
+    fn read_puma_lib_model_path(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
+        Self::read_optional_input_string_aliases(
+            inputs,
+            &[
+                "model_path",
+                "modelPath",
+                "selected_artifact_path",
+                "selectedArtifactPath",
+                "entry_path",
+                "entryPath",
+            ],
+        )
+        .or_else(|| {
+            Self::read_optional_input_value_aliases(inputs, &["pumas_model_ref", "pumasModelRef"])
+                .and_then(|model_ref| {
+                    [
+                        "model_path",
+                        "modelPath",
+                        "selected_artifact_path",
+                        "selectedArtifactPath",
+                        "entry_path",
+                        "entryPath",
+                    ]
+                    .iter()
+                    .find_map(|key| {
+                        model_ref
+                            .get(key)
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
+                            .map(ToOwned::to_owned)
+                    })
+                })
+        })
+    }
+
     async fn resolve_puma_lib_selected_detail(
         selector_access: &Arc<PumasSelectorAccess>,
         model_id: &str,
@@ -204,9 +240,7 @@ impl TauriTaskExecutor {
         inputs: &HashMap<String, serde_json::Value>,
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
-        let mut model_path =
-            Self::read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
-                .unwrap_or_default();
+        let mut model_path = Self::read_puma_lib_model_path(inputs).unwrap_or_default();
         let mut model_id =
             Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"]);
         let mut model_type =
@@ -319,7 +353,14 @@ impl TauriTaskExecutor {
                 "path_only"
             }),
         );
-        pumas_model_ref.insert("model_path".to_string(), serde_json::json!(model_path));
+        pumas_model_ref.insert(
+            "model_path".to_string(),
+            serde_json::json!(model_path.clone()),
+        );
+        pumas_model_ref.insert(
+            "selected_artifact_path".to_string(),
+            serde_json::json!(model_path.clone()),
+        );
         for (key, value) in [
             ("model_id", model_id.as_deref()),
             ("model_type", model_type.as_deref()),

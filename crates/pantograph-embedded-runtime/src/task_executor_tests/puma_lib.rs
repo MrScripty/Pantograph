@@ -101,6 +101,59 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
 }
 
 #[tokio::test]
+async fn puma_lib_execution_uses_nested_selected_artifact_path_when_saved_path_is_absent() {
+    let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+        requests: Arc::new(Mutex::new(Vec::new())),
+        response: HashMap::new(),
+    });
+    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+        requirements: make_requirements(DependencyValidationState::Resolved),
+        status: make_status(DependencyState::Ready, None),
+        model_ref: None,
+    });
+    let (executor, extensions) = test_executor(adapter, resolver);
+
+    let artifact_path = "/opt/Pumas-Library/shared-resources/models/vlm/qwen35/qwen3_6-27b-heretic-ara-gguf/Qwen3.6-27B-heretic-ara-Q4_K_M.gguf";
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({
+            "modelName": "Qwen3.6-27B-heretic-ara-GGUF",
+            "model_id": "vlm/qwen35/qwen3_6-27b-heretic-ara-gguf",
+            "pumas_model_ref": {
+                "model_ref_contract_version": 1,
+                "model_id": "vlm/qwen35/qwen3_6-27b-heretic-ara-gguf",
+                "selected_artifact_path": artifact_path
+            },
+            "recommended_backend": "llamacpp",
+            "inference_settings": []
+        }),
+    );
+
+    let outputs = executor
+        .execute_task("puma-lib-1", inputs, &Context::new(), &extensions)
+        .await
+        .expect("puma-lib should preserve nested selected artifact path");
+
+    assert_eq!(
+        outputs.get("model_path"),
+        Some(&serde_json::json!(artifact_path))
+    );
+    assert_eq!(
+        outputs
+            .get("pumas_model_ref")
+            .and_then(|value| value.get("selected_artifact_path")),
+        Some(&serde_json::json!(artifact_path))
+    );
+    assert_eq!(
+        outputs.get("model_id"),
+        Some(&serde_json::json!(
+            "vlm/qwen35/qwen3_6-27b-heretic-ara-gguf"
+        ))
+    );
+}
+
+#[tokio::test]
 async fn puma_lib_execution_does_not_rebind_model_id_from_raw_pumas_api() {
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: Arc::new(Mutex::new(Vec::new())),

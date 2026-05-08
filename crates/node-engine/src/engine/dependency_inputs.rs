@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use crate::types::{NodeId, WorkflowGraph};
 
-const MODEL_CONTEXT_KEYS: [&str; 11] = [
+const MODEL_CONTEXT_KEYS: [&str; 13] = [
+    "model_path",
+    "mmproj_path",
     "pumas_model_ref",
     "model_id",
     "model_type",
@@ -51,7 +53,15 @@ fn merge_model_context(
     dep_outputs: &HashMap<String, serde_json::Value>,
 ) {
     for context_key in MODEL_CONTEXT_KEYS {
-        if inputs.contains_key(context_key) {
+        if let Some(existing) = inputs.get(context_key) {
+            if context_key == "pumas_model_ref" && !existing.is_object() {
+                if let Some(value) = dep_outputs
+                    .get(context_key)
+                    .filter(|value| value.is_object())
+                {
+                    inputs.insert(context_key.to_string(), value.clone());
+                }
+            }
             continue;
         }
         if let Some(value) = dep_outputs.get(context_key) {
@@ -223,6 +233,71 @@ mod tests {
         assert_eq!(
             inputs.get("resolved_model_package_facts"),
             Some(&package_facts)
+        );
+    }
+
+    #[test]
+    fn resolve_dependency_inputs_merges_model_context_when_path_edge_targets_model_ref() {
+        let graph = WorkflowGraph {
+            id: "workflow".to_string(),
+            name: "Workflow".to_string(),
+            nodes: vec![
+                GraphNode {
+                    id: "puma-lib".to_string(),
+                    node_type: "puma-lib".to_string(),
+                    data: serde_json::json!({}),
+                    position: (0.0, 0.0),
+                },
+                GraphNode {
+                    id: "runtime".to_string(),
+                    node_type: "llm-inference".to_string(),
+                    data: serde_json::json!({}),
+                    position: (100.0, 0.0),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "edge".to_string(),
+                source: "puma-lib".to_string(),
+                source_handle: "model_path".to_string(),
+                target: "runtime".to_string(),
+                target_handle: "pumas_model_ref".to_string(),
+            }],
+            groups: Vec::new(),
+        };
+
+        let model_ref = serde_json::json!({
+            "source": "puma-lib",
+            "status": "resolved",
+            "model_id": "family/model",
+            "model_path": "/tmp/model.gguf"
+        });
+        let dependency_outputs = HashMap::from([(
+            "puma-lib".to_string(),
+            HashMap::from([
+                (
+                    "model_path".to_string(),
+                    serde_json::json!("/tmp/model.gguf"),
+                ),
+                ("pumas_model_ref".to_string(), model_ref.clone()),
+                ("model_id".to_string(), serde_json::json!("family/model")),
+                ("backend_key".to_string(), serde_json::json!("llamacpp")),
+            ]),
+        )]);
+
+        let inputs = resolve_dependency_inputs(&graph, &"runtime".to_string(), &dependency_outputs);
+
+        assert_eq!(
+            inputs.get("model_path"),
+            Some(&serde_json::json!("/tmp/model.gguf"))
+        );
+        assert_eq!(inputs.get("pumas_model_ref"), Some(&model_ref));
+        assert_eq!(
+            inputs.get("model_id"),
+            Some(&serde_json::json!("family/model"))
+        );
+        assert_eq!(
+            inputs.get("backend_key"),
+            Some(&serde_json::json!("llamacpp"))
         );
     }
 
