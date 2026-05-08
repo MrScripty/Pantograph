@@ -10,7 +10,7 @@ versioned with the app and reviewable as structured artifacts.
 | ----------- | ----------- |
 | `gguf-reranker-workflow.json` | Minimal local reranking starter that wires `puma-lib`, query/document text inputs, canonical `llm-inference` with `task_kind = rerank`, and text output for GGUF reranker models such as `Qwen3-Reranker-4B-GGUF`. |
 | `svelte-code-agent.json` | Multi-graph agent workflow template used to scaffold Svelte code-generation flows. |
-| `tiny-sd-turbo-text-to-image.json` | Minimal local text-to-image starter that wires `puma-lib`, direct diffusion inference, and image output for imported bundles such as tiny-sd-turbo. |
+| `tiny-sd-turbo-text-to-image.json` | Minimal local text-to-image starter that wires `puma-lib`, canonical `llm-inference` with `task_kind = image_generation`, and image output for imported bundles such as tiny-sd-turbo. |
 
 ## Problem
 Starter workflows must demonstrate real graph shapes that match current node
@@ -26,25 +26,25 @@ text-to-image generation or local GGUF reranking to be wired.
 
 ## Decision
 Store built-in workflow templates here as JSON and import them statically into
-the frontend template service. The tiny-sd-turbo template deliberately uses the
-same direct `puma-lib -> diffusion-inference` path that Pantograph can execute
-today for imported bundles without Pumas dependency bindings, rather than
-shipping a starter graph that stalls on an unresolved dependency-environment
-step.
+the frontend template service. Text-to-image starters use the same canonical
+`puma-lib -> llm-inference` model identity, package facts, and inference
+settings handoff as other inference tasks, with `task_kind = image_generation`
+and a graph-visible `image` output connected to `image-output`.
 
 ## Alternatives Rejected
 - Generate workflow templates dynamically in code.
   Rejected because structured JSON is easier to review, diff, and validate.
-- Ship a text-to-image template that inserts dependency-environment even when
-  imported bundles have no dependency bindings yet.
-  Rejected because it teaches a starter graph that cannot execute for the
-  currently supported imported tiny-sd-turbo path.
+- Keep text-to-image starters on the direct `diffusion-inference` node after
+  canonical image generation gained an `image` output.
+  Rejected because it would keep new starter workflows on a superseded graph
+  shape and bypass the Pumas package-facts boundary.
 
 ## Invariants
 - Template JSON must deserialize into the frontend `WorkflowTemplate` shape.
-- Built-in text-to-image templates must use declared node ports and may omit
-  optional `environment_ref` handoff when the recommended starter path relies on
-  Pantograph's local Python fallback.
+- Built-in text-to-image templates must use canonical `llm-inference` with
+  `task_kind = image_generation`, carry `pumas_model_ref`,
+  `resolved_model_package_facts`, and `inference_settings` from `puma-lib`, and
+  connect the canonical `image` output into `image-output`.
 - Example workflows should remain small enough to serve as operator references.
 - Reranker starter workflows may use additive compatibility inputs such as
   `documents_json` only when the canonical structured port is still awkward to
@@ -52,15 +52,22 @@ step.
 
 ## Revisit Triggers
 - Built-in templates need schema validation tooling beyond JSON parse checks.
-- Pumas dependency bindings become available for imported diffusion bundles and
-  the recommended starter path should reintroduce explicit dependency
-  environment staging.
+- The canonical inference contract replaces direct task-specific node types
+  with a more specific image-generation node contract.
 
 ## Dependencies
 **Internal:** `src/services/workflow/templateService.ts`, workflow DTOs, and
 the node descriptors served by the Rust backend.
 
-**External:** none.
+**External:** None.
+Reason: bundled templates are local assets consumed by Pantograph itself.
+Revisit trigger: templates are loaded from remote catalogs or plugin packages.
+
+## Related ADRs
+None.
+Reason: bundled templates are an internal starter-graph asset boundary rather
+than an architecture decision record surface.
+Revisit trigger: template loading becomes an external SDK or plugin surface.
 
 ## Usage Examples
 ```ts
@@ -80,4 +87,5 @@ Revisit trigger: template loading becomes an external SDK or plugin surface.
 - Template changes that rely on new node contracts must land with the matching
   descriptor/runtime changes in the same implementation slice.
 - Template examples must reflect the backend execution path Pantograph actually
-  supports today; they must not imply unsupported generic-inference reranking.
+  supports today; they must not imply unsupported generic-inference reranking or
+  bypass the canonical image-generation inference contract.

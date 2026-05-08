@@ -1,6 +1,6 @@
 {
   "name": "Tiny SD Turbo Text to Image",
-  "description": "Minimal text-to-image workflow that routes an imported tiny-sd-turbo model from Puma-Lib directly into diffusion inference using Pantograph's local Python runtime fallback.",
+  "description": "Minimal text-to-image workflow that routes an imported tiny-sd-turbo model from Puma-Lib into canonical image-generation inference.",
   "version": "1.0.0",
   "orchestration": {
     "id": "tiny-sd-turbo-text-to-image-orch",
@@ -128,10 +128,12 @@
         },
         {
           "id": "diffusion",
-          "node_type": "diffusion-inference",
+          "node_type": "llm-inference",
           "position": { "x": 700, "y": 220 },
           "data": {
-            "label": "Tiny SD Turbo Diffusion"
+            "label": "Tiny SD Turbo Image Generation",
+            "task_kind": "image_generation",
+            "runtime_hint": "diffusers"
           }
         },
         {
@@ -161,54 +163,61 @@
         {
           "id": "e3",
           "source": "model",
-          "source_handle": "model_path",
+          "source_handle": "pumas_model_ref",
           "target": "diffusion",
-          "target_handle": "model_path"
+          "target_handle": "pumas_model_ref"
         },
         {
           "id": "e4",
+          "source": "model",
+          "source_handle": "resolved_model_package_facts",
+          "target": "diffusion",
+          "target_handle": "resolved_model_package_facts"
+        },
+        {
+          "id": "e5",
           "source": "model",
           "source_handle": "inference_settings",
           "target": "diffusion",
           "target_handle": "inference_settings"
         },
         {
-          "id": "e5",
+          "id": "e6",
           "source": "steps",
           "source_handle": "value",
           "target": "diffusion",
           "target_handle": "steps"
         },
         {
-          "id": "e6",
+          "id": "e7",
           "source": "cfg-scale",
           "source_handle": "value",
           "target": "diffusion",
           "target_handle": "cfg_scale"
         },
         {
-          "id": "e7",
+          "id": "e8",
           "source": "seed",
           "source_handle": "value",
           "target": "diffusion",
           "target_handle": "seed"
         },
         {
-          "id": "e8",
+          "id": "e9",
           "source": "width",
           "source_handle": "value",
           "target": "diffusion",
           "target_handle": "width"
         },
         {
-          "id": "e9",
+          "id": "e10",
           "source": "height",
           "source_handle": "value",
           "target": "diffusion",
           "target_handle": "height"
         },
         {
-          "id": "e10",
+          "id": "e11",
           "source": "diffusion",
           "source_handle": "image",
           "target": "image-output",

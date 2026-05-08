@@ -223,6 +223,9 @@ handoff reports stale or changed rows.
   subsystem with its own lifecycle and persistence concerns.
 - Template count or complexity grows enough that per-template validation needs a
   dedicated service boundary.
+- Template contract tests must reject starter workflows that bypass canonical
+  inference-family model-reference and package-facts ports after the matching
+  backend node contracts exist.
 
 ## Dependencies
 **Internal:** `src-tauri` workflow commands, `src/backends`, app workflow

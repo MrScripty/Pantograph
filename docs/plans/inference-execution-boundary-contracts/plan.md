@@ -4523,6 +4523,13 @@ Update during implementation:
   additionally exposes the first generated image on the graph-visible `image`
   port so canonical image-generation templates can wire directly into
   `image-output` without parsing the typed `results` envelope.
+- 2026-05-08: The bundled tiny-sd-turbo text-to-image template now uses
+  canonical `llm-inference` with `task_kind = image_generation` and
+  `runtime_hint = diffusers`, carries `pumas_model_ref`,
+  `resolved_model_package_facts`, and `inference_settings` from `puma-lib`, and
+  connects the canonical `image` output to `image-output`. A frontend template
+  regression test now prevents built-in image-generation starters from drifting
+  back to direct `diffusion-inference` or raw `model_path` handoff.
 - 2026-05-04: Node-engine canonical image-generation execution now has
   package-facts lifecycle coverage. Diffusers package facts flow from graph
   inputs through typed gateway execution, and task-validation plus
