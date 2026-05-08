@@ -171,6 +171,9 @@ handoff reports stale or changed rows.
   preserve the backend cleanup result exactly.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
+- Built-in template tests must scan every registered starter template for
+  retired direct inference node types so new examples stay on canonical
+  `llm-inference` task shapes.
 - Workflow execution must use a backend-owned session. Raw graph execution is
   not exposed because scheduler diagnostics and runtime admission depend on
   session-scoped run lifecycle state.

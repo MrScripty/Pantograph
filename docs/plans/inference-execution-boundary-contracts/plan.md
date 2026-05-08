@@ -4550,7 +4550,10 @@ Update during implementation:
   `resolved_model_package_facts`, and `inference_settings` from `puma-lib`, and
   connects the canonical `image` output to `image-output`. A frontend template
   regression test now prevents built-in image-generation starters from drifting
-  back to direct `diffusion-inference` or raw `model_path` handoff.
+  back to direct `diffusion-inference` or raw `model_path` handoff. A follow-up
+  guardrail now scans every registered built-in workflow template for retired
+  direct inference node types so new starters stay on canonical `llm-inference`
+  task shapes.
 - 2026-05-08: Puma-Lib hydration dependency preflight now infers canonical
   `llm-inference` for `text-to-image` and `image-to-image` package facts instead
   of routing the request through the retired direct `diffusion-inference` node

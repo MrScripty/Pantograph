@@ -41,6 +41,9 @@ and a graph-visible `image` output connected to `image-output`.
 
 ## Invariants
 - Template JSON must deserialize into the frontend `WorkflowTemplate` shape.
+- Built-in templates must not use retired direct inference node types such as
+  `diffusion-inference`, `llamacpp-inference`, `pytorch-inference`,
+  `ollama-inference`, dedicated `embedding`, or dedicated `reranker`.
 - Built-in text-to-image templates must use canonical `llm-inference` with
   `task_kind = image_generation`, carry `pumas_model_ref`,
   `resolved_model_package_facts`, and `inference_settings` from `puma-lib`, and

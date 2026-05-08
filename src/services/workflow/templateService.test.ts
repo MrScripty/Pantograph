@@ -32,11 +32,38 @@ function loadTemplate(relativePath: string): WorkflowTemplate {
   return JSON.parse(readFileSync(templatePath, 'utf8')) as WorkflowTemplate;
 }
 
+const builtInTemplatePaths = [
+  '../../templates/workflows/gguf-reranker-workflow.json',
+  '../../templates/workflows/svelte-code-agent.json',
+  '../../templates/workflows/tiny-sd-turbo-text-to-image.json',
+];
+
+test('built-in templates do not use retired direct inference nodes', () => {
+  const retiredNodeTypes = new Set([
+    'diffusion-inference',
+    'embedding',
+    'llamacpp-inference',
+    'ollama-inference',
+    'pytorch-inference',
+    'reranker',
+  ]);
+
+  for (const templatePath of builtInTemplatePaths) {
+    const template = loadTemplate(templatePath);
+    for (const graph of Object.values(template.dataGraphs)) {
+      for (const node of graph.nodes) {
+        assert.equal(
+          retiredNodeTypes.has(node.node_type),
+          false,
+          `${templatePath} must not use retired inference node type ${node.node_type}`,
+        );
+      }
+    }
+  }
+});
+
 test('puma-lib to canonical inference template edges carry package facts', () => {
-  const templates = [
-    loadTemplate('../../templates/workflows/gguf-reranker-workflow.json'),
-    loadTemplate('../../templates/workflows/tiny-sd-turbo-text-to-image.json'),
-  ];
+  const templates = builtInTemplatePaths.map(loadTemplate);
 
   for (const template of templates) {
     for (const graph of Object.values(template.dataGraphs)) {
