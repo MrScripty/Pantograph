@@ -94,7 +94,7 @@ export function isWorkflowSemanticVersionConflictError(error: unknown): boolean 
       : '';
 
   return (
-    candidate.code === 'internal_error' &&
+    (candidate.code === 'invalid_request' || candidate.code === 'internal_error') &&
     message.toLowerCase().includes('workflow semantic version already points')
   );
 }

@@ -38,6 +38,7 @@
 
   const DEFAULT_WORKFLOW_SEMANTIC_VERSION = '0.1.0';
   const WORKFLOW_SEMANTIC_VERSION_STORAGE_KEY_PREFIX = 'pantograph.workflowSemanticVersion.';
+  const MAX_WORKFLOW_VERSION_CONFLICT_RETRIES = 25;
 
   let workflowError = $state<WorkflowServiceError | null>(null);
   let workflowErrorWorkflowId = $state<string | null>(null);
@@ -168,24 +169,30 @@
           priority: null,
         };
         let submittedVersion = workflowSemanticVersion;
-        let response;
-        try {
-          response = await workflowService.runWorkflowExecutionSession({
-            ...runRequestBase,
-            workflow_semantic_version: submittedVersion,
-          });
-        } catch (runError) {
-          const normalizedRunError = normalizeWorkflowServiceError(runError);
-          if (!isWorkflowSemanticVersionConflictError(normalizedRunError)) {
-            throw normalizedRunError;
+        let response = null;
+        let lastConflictError: WorkflowServiceError | null = null;
+        for (let attempt = 0; attempt <= MAX_WORKFLOW_VERSION_CONFLICT_RETRIES; attempt += 1) {
+          if (attempt > 0) {
+            submittedVersion = nextWorkflowPatchSemanticVersion(submittedVersion);
+            workflowSemanticVersion = submittedVersion;
           }
-
-          submittedVersion = nextWorkflowPatchSemanticVersion(submittedVersion);
-          workflowSemanticVersion = submittedVersion;
-          response = await workflowService.runWorkflowExecutionSession({
-            ...runRequestBase,
-            workflow_semantic_version: submittedVersion,
-          });
+          try {
+            response = await workflowService.runWorkflowExecutionSession({
+              ...runRequestBase,
+              workflow_semantic_version: submittedVersion,
+            });
+            lastConflictError = null;
+            break;
+          } catch (runError) {
+            const normalizedRunError = normalizeWorkflowServiceError(runError);
+            if (!isWorkflowSemanticVersionConflictError(normalizedRunError)) {
+              throw normalizedRunError;
+            }
+            lastConflictError = normalizedRunError;
+          }
+        }
+        if (!response) {
+          throw lastConflictError ?? new Error('Workflow submit failed');
         }
 
         persistWorkflowSemanticVersion(submittedWorkflowId, submittedVersion);

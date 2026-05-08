@@ -171,7 +171,7 @@ test('isWorkflowSemanticVersionConflictError detects attribution conflicts', () 
       code: 'invalid_request',
       message: 'workflow semantic version already points at a different execution fingerprint',
     }),
-    false,
+    true,
   );
   assert.equal(
     isWorkflowSemanticVersionConflictError({

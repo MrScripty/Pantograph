@@ -112,9 +112,9 @@ Submit disabled reasons are rendered visibly below the toolbar rather than
 being available only as button titles, because Puma-Lib selection and other
 node edits mark workflows dirty and require a save before scheduler submission.
 When the run snapshot boundary reports that the current semantic version
-already belongs to another execution fingerprint, the toolbar bumps the patch
-version and retries once instead of asking the backend to weaken workflow
-version immutability.
+already belongs to another execution fingerprint, the toolbar walks forward
+through a bounded patch-version retry sequence instead of asking the backend to
+weaken workflow version immutability.
 The app workflow graph delegates orchestration boundary overlay rendering to
 `WorkflowContainerBoundary.svelte` and boundary math to
 `workflowContainerBoundary.ts`, while the parent keeps viewport tracking,
