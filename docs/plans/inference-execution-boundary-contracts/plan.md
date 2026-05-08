@@ -1650,12 +1650,11 @@ Validation for the local-client update-feed slice passed with
 `cargo check -p workflow-nodes --features model-library`,
 `cargo fmt --all`, and `git diff --check`.
 
-The Pumas release-pin slice remains blocked as of 2026-05-06: Pantograph still
-depends on the sibling Pumas path, and the local Pumas `v0.6.0` tag points at a
-Rust workspace whose package version is still `0.5.0`. Pantograph should keep
-using the local path for active integration until the published `v0.6.0`
-artifact or tag carries matching Rust crate version metadata, then replace the
-path dependency in a dedicated dependency-pin commit.
+The Pumas release-pin slice is implemented as of 2026-05-08. The published
+`v0.6.0` tag now points at commit `6d038ff8fd955351fbd77daeea4a01a972c6e886`
+and the Rust workspace package metadata declares version `0.6.0`, so
+Pantograph now pins `pumas-library` to that released git tag instead of the
+sibling checkout path.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
@@ -5035,6 +5034,8 @@ Update during implementation:
   persists selector option labels as `modelName`. Selection now writes
   canonical Pumas model/task/backend metadata from option metadata and leaves
   labels as UI-only display data.
+- 2026-05-08: Pantograph pinned `pumas-library` to the released upstream
+  `v0.6.0` tag after verifying the release commit and Rust crate metadata.
 
 ### Deviations
 
@@ -5105,6 +5106,15 @@ Update during implementation:
 - `node --experimental-strip-types --test
   src/services/workflow/pumaModelOptionsCache.test.ts` passed after reconciling
   the frontend selector cursor handoff cache.
+- `cargo check -p workflow-nodes --features model-library` passed after pinning
+  `pumas-library` to the released upstream `v0.6.0` tag.
+- `cargo test -p workflow-nodes --features model-library --lib puma_lib`
+  passed against the released upstream `pumas-library v0.6.0` tag.
+- `cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands` passed
+  against the released upstream `pumas-library v0.6.0` tag, with existing
+  dead-code warnings in unregistered legacy Tauri execution-runtime modules.
+- `cargo check -p pantograph-uniffi` and `cargo check -p pantograph_rustler`
+  passed against the released upstream `pumas-library v0.6.0` tag.
 - `cargo test -p inference` failed in
   `managed_redistributables::install_from_staging_validates_expected_files_before_finalizing`
   due to the unrelated managed-dependency path mismatch recorded above.
