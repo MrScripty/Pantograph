@@ -57,6 +57,8 @@ module imports the shared parent test scope and covers one behavior family.
   installation policy.
 - Puma-Lib selector-access tests must prove read-only rows can rebind selected
   model metadata without promoting selector summaries to full package facts.
+- Puma-Lib raw owner API tests must prove saved `model_id` values are not
+  rehydrated unless explicit selector access is present.
 - Puma-Lib selected-detail tests may assert owner/local-client inference-setting
   refresh, but read-only selector rows must not be treated as rich
   inference-setting detail.

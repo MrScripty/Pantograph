@@ -64,7 +64,7 @@ same behavior without exposing helper paths outside this module boundary.
   but dependency gating must remain in dependency preflight helpers.
 - Puma-Lib helpers prepare model metadata outputs and must not own dependency
   installation decisions.
-- Puma-Lib selected `model_id` refresh must prefer `PUMAS_SELECTOR_ACCESS`.
+- Puma-Lib selected `model_id` refresh must use `PUMAS_SELECTOR_ACCESS`.
   Read-only selector rows may rebind executable path/backend/task metadata, but
   only owner `PumasApi` access may enrich outputs with full package facts.
 - Owner and local-client selected-detail hydration may replace saved

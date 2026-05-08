@@ -12,20 +12,6 @@ impl TauriTaskExecutor {
         }
     }
 
-    async fn resolve_puma_lib_model_record(
-        api: &Arc<pumas_library::PumasApi>,
-        model_id: Option<&str>,
-    ) -> std::result::Result<Option<pumas_library::ModelRecord>, String> {
-        if let Some(model_id) = model_id {
-            return api
-                .get_model(model_id)
-                .await
-                .map_err(|error| format!("Failed to query Puma-Lib model '{model_id}': {error}"));
-        }
-
-        Ok(None)
-    }
-
     async fn resolve_puma_lib_selected_detail(
         selector_access: &Arc<PumasSelectorAccess>,
         model_id: &str,
@@ -142,6 +128,15 @@ impl TauriTaskExecutor {
         }
     }
 
+    fn owner_api_from_selector_access(
+        selector_access: &Arc<PumasSelectorAccess>,
+    ) -> Option<Arc<pumas_library::PumasApi>> {
+        match selector_access.as_ref() {
+            PumasSelectorAccess::Owner(api) => Some(api.clone()),
+            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => None,
+        }
+    }
+
     async fn resolve_puma_lib_full_package_facts(
         api: &Arc<pumas_library::PumasApi>,
         model_id: &str,
@@ -194,12 +189,19 @@ impl TauriTaskExecutor {
         let mut hydrated_inference_settings = None;
         let mut resolved_from_pumas = false;
         let mut resolved_model_package_facts = None;
+        let mut owner_api_for_package_facts = extensions
+            .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+            .cloned();
 
         let requested_model_id = model_id.clone();
         if let Some(requested_model_id) = requested_model_id.as_deref() {
             if let Some(selector_access) =
                 extensions.get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
             {
+                if owner_api_for_package_facts.is_none() {
+                    owner_api_for_package_facts =
+                        Self::owner_api_from_selector_access(&selector_access);
+                }
                 match Self::resolve_puma_lib_selected_detail(&selector_access, requested_model_id)
                     .await
                 {
@@ -233,81 +235,20 @@ impl TauriTaskExecutor {
                         );
                     }
                 }
+            } else {
+                log::warn!(
+                    "Puma-Lib selector access is not available for '{}' during workflow execution; using saved node data",
+                    requested_model_id
+                );
             }
         }
 
         if resolved_from_pumas {
-            if let (Some(api), Some(model_id)) = (
-                extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API),
-                model_id.as_deref(),
-            ) {
+            if let (Some(api), Some(model_id)) =
+                (owner_api_for_package_facts.as_ref(), model_id.as_deref())
+            {
                 resolved_model_package_facts =
                     Self::resolve_puma_lib_full_package_facts(&api, model_id).await;
-            }
-        } else if let Some(api) =
-            extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
-        {
-            match Self::resolve_puma_lib_model_record(&api, requested_model_id.as_deref()).await {
-                Ok(Some(model)) => {
-                    resolved_from_pumas = true;
-                    model_id = Some(model.id.clone());
-                    if !model.path.trim().is_empty() {
-                        model_path = model.path.clone();
-                    }
-                    if model_type
-                        .as_deref()
-                        .is_none_or(|value| value.trim().is_empty())
-                    {
-                        model_type = Some(model.model_type.clone());
-                    }
-
-                    match api.resolve_model_execution_descriptor(&model.id).await {
-                        Ok(descriptor) => {
-                            if !descriptor.entry_path.trim().is_empty() {
-                                model_path = descriptor.entry_path;
-                            }
-                            if !descriptor.model_type.trim().is_empty() {
-                                model_type = Some(descriptor.model_type);
-                            }
-                            let task = descriptor.task_type_primary.trim();
-                            if !task.is_empty() && task != "unknown" {
-                                task_type_primary = Some(task.to_string());
-                            }
-                            if let Some(backend) = descriptor
-                                .recommended_backend
-                                .as_deref()
-                                .map(str::trim)
-                                .filter(|backend| !backend.is_empty())
-                            {
-                                recommended_backend = Some(backend.to_string());
-                            }
-                        }
-                        Err(error) => {
-                            log::warn!(
-                                "Puma-Lib execution descriptor lookup failed for '{}': {}",
-                                model.id,
-                                error
-                            );
-                        }
-                    }
-
-                    resolved_model_package_facts =
-                        Self::resolve_puma_lib_full_package_facts(&api, &model.id).await;
-                }
-                Ok(None) => {
-                    if let Some(model_id) = requested_model_id.as_deref() {
-                        log::warn!(
-                            "Puma-Lib model '{}' was not found during workflow execution; using saved node data",
-                            model_id
-                        );
-                    }
-                }
-                Err(error) => {
-                    log::warn!(
-                        "Puma-Lib lookup failed during workflow execution: {}; using saved node data",
-                        error,
-                    );
-                }
             }
         }
 

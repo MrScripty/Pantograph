@@ -1593,12 +1593,18 @@ promote selector summaries into full inference facts.
 Embedded-runtime `puma-lib` execution now applies the same boundary:
 selected `model_id` refresh prefers the explicit selector-access role, read-only
 selector rows may rebind executable path/backend/task metadata without being
-promoted to full package facts, and raw owner `PUMAS_API` is retained only for
-path-only fallback and optional full package-facts enrichment. Validation
+promoted to full package facts, and owner access is used only for optional full
+package-facts enrichment. Validation
 passed with `cargo test -p pantograph-embedded-runtime puma_lib`,
 `cargo check -p pantograph-embedded-runtime`,
 `cargo test -p workflow-nodes --features model-library --lib setup`,
 `cargo fmt --all`, and `git diff --check`.
+
+The embedded-runtime execution hardening slice removed the remaining raw
+`PUMAS_API` selected-model fallback from `puma-lib` execution. Saved `model_id`
+values now rehydrate only through explicit selector access; raw owner API alone
+preserves saved node data with an unverified identity instead of silently
+rebinding model path/backend facts.
 
 The selected-detail inference-settings execution slice now replaces stale saved
 `puma-lib` `inference_settings` with non-empty settings from Pumas selected
@@ -4593,6 +4599,10 @@ Update during implementation:
   Pumas selector access. Owner selector access can produce full facts;
   local-client/read-only roles remain summary-only in Pumas v0.6.0 and now
   degrade rather than promoting summaries to full inference package facts.
+- 2026-05-08: Removed embedded-runtime `puma-lib` execution fallback from saved
+  `model_id` to raw owner `PUMAS_API`; execution now requires selector access
+  for selected model rehydration and keeps raw owner access only for optional
+  full package-facts enrichment.
 - 2026-05-04: Added append-only terminal `ChatChunk` usage counts and threaded
   typed text-generation usage into result and backend-execution lifecycle
   summaries, with regression coverage proving prompt/result text stays out of
