@@ -315,6 +315,7 @@ impl WorkflowService {
             Some(decision) => workflow_runtime_preflight_from_decision(
                 decision,
                 &capabilities.runtime_requirements.required_backends,
+                &capabilities.runtime_requirements.required_models,
                 &capabilities.runtime_capabilities,
             ),
             None => {
@@ -406,9 +407,12 @@ impl WorkflowService {
 fn workflow_runtime_preflight_from_decision(
     decision: &WorkflowTechnicalFitDecision,
     required_backends: &[String],
+    required_models: &[String],
     runtime_capabilities: &[WorkflowRuntimeCapability],
 ) -> WorkflowRuntimePreflightAssessment {
     let decision = decision.normalized();
+    let enforce_runtime_readiness =
+        decision_enforces_runtime_readiness(&decision, required_backends, required_models);
     let required_backend_key = decision
         .selected_backend_key
         .clone()
@@ -438,6 +442,14 @@ fn workflow_runtime_preflight_from_decision(
 
     let mut runtime_warnings = Vec::new();
     let mut blocking_runtime_issues = Vec::new();
+
+    if !enforce_runtime_readiness {
+        return WorkflowRuntimePreflightAssessment {
+            technical_fit_decision: Some(decision),
+            runtime_warnings,
+            blocking_runtime_issues,
+        };
+    }
 
     if let Some(runtime) = runtime.as_ref() {
         if !(runtime.available && runtime.configured) {
@@ -486,6 +498,35 @@ fn workflow_runtime_preflight_from_decision(
         runtime_warnings,
         blocking_runtime_issues,
     }
+}
+
+fn decision_enforces_runtime_readiness(
+    decision: &WorkflowTechnicalFitDecision,
+    required_backends: &[String],
+    _required_models: &[String],
+) -> bool {
+    if required_backends
+        .iter()
+        .any(|backend| !backend.trim().is_empty())
+    {
+        return true;
+    }
+
+    if decision.selected_model_id.is_some() {
+        return true;
+    }
+
+    if decision.reasons.iter().any(|reason| {
+        matches!(
+            reason.code,
+            WorkflowTechnicalFitReasonCode::ExplicitBackendOverride
+                | WorkflowTechnicalFitReasonCode::ExplicitModelOverride
+        )
+    }) {
+        return true;
+    }
+
+    false
 }
 
 fn find_runtime_capability_for_decision(
@@ -655,6 +696,9 @@ fn normalize_trimmed_string(value: Option<&str>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::workflow::{
+        WorkflowRuntimeInstallState, WorkflowRuntimeReadinessState, WorkflowRuntimeSourceKind,
+    };
 
     fn runtime_requirements() -> WorkflowRuntimeRequirements {
         WorkflowRuntimeRequirements {
@@ -666,6 +710,30 @@ mod tests {
             required_models: vec!["model-a".to_string(), "model-a".to_string()],
             required_backends: vec!["llama.cpp".to_string(), "llama_cpp".to_string()],
             required_extensions: vec!["kv_cache".to_string(), " kv_cache ".to_string()],
+        }
+    }
+
+    fn unavailable_candle_runtime() -> WorkflowRuntimeCapability {
+        WorkflowRuntimeCapability {
+            runtime_id: "candle".to_string(),
+            display_name: "Candle".to_string(),
+            install_state: WorkflowRuntimeInstallState::SystemProvided,
+            available: true,
+            configured: false,
+            can_install: false,
+            can_remove: false,
+            source_kind: WorkflowRuntimeSourceKind::Host,
+            selected: true,
+            readiness_state: Some(WorkflowRuntimeReadinessState::Failed),
+            selected_version: None,
+            supports_external_connection: false,
+            backend_capability_facts: None,
+            backend_keys: vec!["candle".to_string()],
+            missing_files: Vec::new(),
+            unavailable_reason: Some(
+                "Candle backend has a staged embedding load planner but executable model loading is not implemented"
+                    .to_string(),
+            ),
         }
     }
 
@@ -777,5 +845,63 @@ mod tests {
             normalized.compatibility_issues[0].model_id.as_deref(),
             Some("model-a")
         );
+    }
+
+    #[test]
+    fn technical_fit_preflight_does_not_block_on_ungrounded_selected_backend() {
+        let decision = WorkflowTechnicalFitDecision {
+            selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+            selected_candidate_id: Some("candle".to_string()),
+            selected_runtime_id: Some("candle".to_string()),
+            selected_backend_key: Some("candle".to_string()),
+            selected_model_id: None,
+            reasons: vec![WorkflowTechnicalFitReason::new(
+                WorkflowTechnicalFitReasonCode::MissingCandidateData,
+                Some("candle"),
+            )],
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        };
+
+        let assessment = workflow_runtime_preflight_from_decision(
+            &decision,
+            &[],
+            &["llm/gen-verse/trado-8b-instruct".to_string()],
+            &[unavailable_candle_runtime()],
+        );
+
+        assert!(assessment.runtime_warnings.is_empty());
+        assert!(assessment.blocking_runtime_issues.is_empty());
+    }
+
+    #[test]
+    fn technical_fit_preflight_blocks_model_grounded_unready_backend() {
+        let decision = WorkflowTechnicalFitDecision {
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+            selected_candidate_id: Some("candle|llm/model".to_string()),
+            selected_runtime_id: Some("candle".to_string()),
+            selected_backend_key: Some("candle".to_string()),
+            selected_model_id: Some("llm/model".to_string()),
+            reasons: vec![WorkflowTechnicalFitReason::new(
+                WorkflowTechnicalFitReasonCode::RuntimeRequirements,
+                Some("candle|llm/model"),
+            )],
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        };
+
+        let assessment = workflow_runtime_preflight_from_decision(
+            &decision,
+            &[],
+            &["llm/model".to_string()],
+            &[unavailable_candle_runtime()],
+        );
+
+        assert_eq!(assessment.blocking_runtime_issues.len(), 1);
+        assert!(assessment.blocking_runtime_issues[0]
+            .message
+            .contains("workflow requires backend 'candle'"));
     }
 }

@@ -99,7 +99,7 @@ async fn test_runtime_unload_candidate_selection_uses_registry_eviction_order() 
 }
 
 #[tokio::test]
-async fn workflow_preflight_reports_candle_runtime_as_available() {
+async fn workflow_preflight_reports_selected_candle_without_requiring_it() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");
 
@@ -141,10 +141,10 @@ async fn workflow_preflight_reports_candle_runtime_as_available() {
         })
         .await
         .expect("workflow capabilities");
-    assert_eq!(
-        capabilities.runtime_requirements.required_backends,
-        vec!["candle".to_string()]
-    );
+    assert!(capabilities
+        .runtime_requirements
+        .required_backends
+        .is_empty());
     let candle = capabilities
         .runtime_capabilities
         .iter()

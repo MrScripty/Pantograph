@@ -462,6 +462,20 @@ fn extract_model_ids_from_value(value: &serde_json::Value, out: &mut HashSet<Str
                         }
                     }
                 }
+                if matches!(
+                    key.as_str(),
+                    "model_path"
+                        | "modelPath"
+                        | "entry_path"
+                        | "entryPath"
+                        | "selected_artifact_path"
+                        | "selectedArtifactPath"
+                ) {
+                    if let Some(model_id) = child.as_str().and_then(model_id_from_pumas_model_path)
+                    {
+                        out.insert(model_id);
+                    }
+                }
                 extract_model_ids_from_value(child, out);
             }
         }
@@ -471,6 +485,18 @@ fn extract_model_ids_from_value(value: &serde_json::Value, out: &mut HashSet<Str
             }
         }
         _ => {}
+    }
+}
+
+fn model_id_from_pumas_model_path(path: &str) -> Option<String> {
+    let normalized = path.trim().replace('\\', "/");
+    let marker = "shared-resources/models/";
+    let (_, suffix) = normalized.split_once(marker)?;
+    let model_id = suffix.trim_matches('/');
+    if model_id.is_empty() {
+        None
+    } else {
+        Some(model_id.to_string())
     }
 }
 
@@ -780,6 +806,23 @@ mod tests {
         assert_eq!(
             extract_required_backends(&nodes),
             vec!["llama_cpp".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_required_models_recovers_pumas_model_id_from_library_path() {
+        let nodes = vec![StoredGraphNode {
+            id: "puma".to_string(),
+            node_type: "puma-lib".to_string(),
+            data: serde_json::json!({
+                "modelPath": "/opt/Pumas-Library/shared-resources/models/llm/gen-verse/trado-8b-instruct",
+            }),
+            position: StoredPosition::default(),
+        }];
+
+        assert_eq!(
+            extract_required_models(&nodes),
+            vec!["llm/gen-verse/trado-8b-instruct".to_string()]
         );
     }
 
