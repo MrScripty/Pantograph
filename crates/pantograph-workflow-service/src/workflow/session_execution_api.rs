@@ -1995,15 +1995,22 @@ struct SchedulerEstimateContext {
     reasons: Vec<String>,
 }
 
+const SCHEDULER_ESTIMATE_REASON_MAX_LEN: usize = 128;
+const SCHEDULER_ESTIMATE_REASON_TRUNCATION_SUFFIX: &str = "...";
+
 fn scheduler_estimate_context_from_snapshot(
     queue_position: u32,
     snapshot: Option<&WorkflowRunSnapshotRecord>,
 ) -> Result<SchedulerEstimateContext, WorkflowServiceError> {
-    let mut reasons = vec![if queue_position == 0 {
-        "next admission candidate pending runtime readiness".to_string()
-    } else {
-        format!("{queue_position} run(s) ahead in session queue")
-    }];
+    let mut reasons = Vec::new();
+    push_scheduler_estimate_reason(
+        &mut reasons,
+        if queue_position == 0 {
+            "next admission candidate pending runtime readiness".to_string()
+        } else {
+            format!("{queue_position} run(s) ahead in session queue")
+        },
+    );
     let mut blocking_conditions = if queue_position == 0 {
         vec![SchedulerEstimateBlockingCondition::RuntimeAdmissionPending]
     } else {
@@ -2030,16 +2037,19 @@ fn scheduler_estimate_context_from_snapshot(
     let candidate_runtime_ids =
         scheduler_candidate_runtime_ids(&runtime_requirements, &runtime_capabilities);
     if !candidate_runtime_ids.is_empty() {
-        reasons.push(format!(
-            "candidate runtime(s): {}",
-            candidate_runtime_ids.join(", ")
-        ));
+        push_scheduler_estimate_reason(
+            &mut reasons,
+            format!("candidate runtime(s): {}", candidate_runtime_ids.join(", ")),
+        );
     } else if !runtime_requirements.required_backends.is_empty() {
         blocking_conditions.push(SchedulerEstimateBlockingCondition::RuntimeUnavailable);
-        reasons.push(format!(
-            "no compatible candidate runtime for backend(s): {}",
-            runtime_requirements.required_backends.join(", ")
-        ));
+        push_scheduler_estimate_reason(
+            &mut reasons,
+            format!(
+                "no compatible candidate runtime for backend(s): {}",
+                runtime_requirements.required_backends.join(", ")
+            ),
+        );
     }
     let confidence = match runtime_requirements.estimation_confidence.trim() {
         "" | "unknown" => "low".to_string(),
@@ -2119,22 +2129,31 @@ fn append_scheduler_estimate_runtime_reasons(
     runtime_requirements: &WorkflowRuntimeRequirements,
 ) {
     if !runtime_requirements.required_backends.is_empty() {
-        reasons.push(format!(
-            "requires backend(s): {}",
-            runtime_requirements.required_backends.join(", ")
-        ));
+        push_scheduler_estimate_reason(
+            reasons,
+            format!(
+                "requires backend(s): {}",
+                runtime_requirements.required_backends.join(", ")
+            ),
+        );
     }
     if !runtime_requirements.required_models.is_empty() {
-        reasons.push(format!(
-            "requires model(s): {}",
-            runtime_requirements.required_models.join(", ")
-        ));
+        push_scheduler_estimate_reason(
+            reasons,
+            format!(
+                "requires model(s): {}",
+                runtime_requirements.required_models.join(", ")
+            ),
+        );
     }
     if !runtime_requirements.required_extensions.is_empty() {
-        reasons.push(format!(
-            "requires extension(s): {}",
-            runtime_requirements.required_extensions.join(", ")
-        ));
+        push_scheduler_estimate_reason(
+            reasons,
+            format!(
+                "requires extension(s): {}",
+                runtime_requirements.required_extensions.join(", ")
+            ),
+        );
     }
     let mut memory_estimates = Vec::new();
     if let Some(peak_vram_mb) = runtime_requirements.estimated_peak_vram_mb {
@@ -2144,11 +2163,33 @@ fn append_scheduler_estimate_runtime_reasons(
         memory_estimates.push(format!("{peak_ram_mb} MB RAM"));
     }
     if !memory_estimates.is_empty() {
-        reasons.push(format!(
-            "estimated peak memory: {}",
-            memory_estimates.join(", ")
-        ));
+        push_scheduler_estimate_reason(
+            reasons,
+            format!("estimated peak memory: {}", memory_estimates.join(", ")),
+        );
     }
+}
+
+fn push_scheduler_estimate_reason(reasons: &mut Vec<String>, reason: String) {
+    reasons.push(truncate_scheduler_estimate_reason(reason));
+}
+
+fn truncate_scheduler_estimate_reason(reason: String) -> String {
+    if reason.len() <= SCHEDULER_ESTIMATE_REASON_MAX_LEN {
+        return reason;
+    }
+
+    let max_prefix_len =
+        SCHEDULER_ESTIMATE_REASON_MAX_LEN - SCHEDULER_ESTIMATE_REASON_TRUNCATION_SUFFIX.len();
+    let mut prefix = String::new();
+    for character in reason.chars() {
+        if prefix.len() + character.len_utf8() > max_prefix_len {
+            break;
+        }
+        prefix.push(character);
+    }
+    prefix.push_str(SCHEDULER_ESTIMATE_REASON_TRUNCATION_SUFFIX);
+    prefix
 }
 
 fn scheduler_candidate_runtime_ids(
@@ -2206,5 +2247,49 @@ fn workflow_execution_session_retention_policy(
         WORKFLOW_SESSION_RETENTION_KEEP_ALIVE
     } else {
         WORKFLOW_SESSION_RETENTION_EPHEMERAL
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_runtime_requirements() -> WorkflowRuntimeRequirements {
+        WorkflowRuntimeRequirements {
+            estimated_peak_vram_mb: None,
+            estimated_peak_ram_mb: None,
+            estimated_min_vram_mb: None,
+            estimated_min_ram_mb: None,
+            estimation_confidence: "unknown".to_string(),
+            required_models: Vec::new(),
+            required_backends: Vec::new(),
+            required_extensions: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn scheduler_estimate_reasons_are_bounded_for_diagnostics_ledger() {
+        let mut requirements = empty_runtime_requirements();
+        requirements.required_models = vec![format!(
+            "llm/vendor/{}",
+            "very-long-model-segment-".repeat(12)
+        )];
+
+        let mut reasons = Vec::new();
+        append_scheduler_estimate_runtime_reasons(&mut reasons, &requirements);
+
+        assert_eq!(reasons.len(), 1);
+        assert!(reasons[0].len() <= SCHEDULER_ESTIMATE_REASON_MAX_LEN);
+        assert!(reasons[0].ends_with(SCHEDULER_ESTIMATE_REASON_TRUNCATION_SUFFIX));
+    }
+
+    #[test]
+    fn scheduler_estimate_reason_truncation_preserves_utf8_boundaries() {
+        let reason = format!("requires model(s): {}", "模型".repeat(128));
+
+        let truncated = truncate_scheduler_estimate_reason(reason);
+
+        assert!(truncated.len() <= SCHEDULER_ESTIMATE_REASON_MAX_LEN);
+        assert!(truncated.ends_with(SCHEDULER_ESTIMATE_REASON_TRUNCATION_SUFFIX));
     }
 }
