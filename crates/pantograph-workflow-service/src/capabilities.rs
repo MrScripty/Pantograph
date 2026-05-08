@@ -492,11 +492,27 @@ fn model_id_from_pumas_model_path(path: &str) -> Option<String> {
     let normalized = path.trim().replace('\\', "/");
     let marker = "shared-resources/models/";
     let (_, suffix) = normalized.split_once(marker)?;
+    let model_id = model_id_from_pumas_model_suffix(suffix)?;
+    Some(model_id.to_string())
+}
+
+fn model_id_from_pumas_model_suffix(suffix: &str) -> Option<&str> {
     let model_id = suffix.trim_matches('/');
     if model_id.is_empty() {
-        None
+        return None;
+    }
+
+    if path_has_gguf_extension(model_id) {
+        model_id.rsplit_once('/').and_then(|(parent, _)| {
+            let parent = parent.trim_matches('/');
+            if parent.is_empty() {
+                None
+            } else {
+                Some(parent)
+            }
+        })
     } else {
-        Some(model_id.to_string())
+        Some(model_id)
     }
 }
 
@@ -823,6 +839,23 @@ mod tests {
         assert_eq!(
             extract_required_models(&nodes),
             vec!["llm/gen-verse/trado-8b-instruct".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_required_models_recovers_pumas_model_id_from_gguf_file_path() {
+        let nodes = vec![StoredGraphNode {
+            id: "puma".to_string(),
+            node_type: "puma-lib".to_string(),
+            data: serde_json::json!({
+                "selected_artifact_path": "/opt/Pumas-Library/shared-resources/models/vlm/qwen35/qwen3_6-27b-heretic-ara-gguf/Qwen3.6-27B-heretic-ara-Q4_K_M.gguf",
+            }),
+            position: StoredPosition::default(),
+        }];
+
+        assert_eq!(
+            extract_required_models(&nodes),
+            vec!["vlm/qwen35/qwen3_6-27b-heretic-ara-gguf".to_string()]
         );
     }
 

@@ -141,14 +141,34 @@ impl TauriTaskExecutor {
         let marker = "shared-resources/models/";
         let normalized = model_path.replace('\\', "/");
         let (_, model_id) = normalized.rsplit_once(marker)?;
-        let model_id = model_id
+        let model_id = Self::model_id_from_pumas_model_suffix(model_id)?;
+        Some(model_id.to_string())
+    }
+
+    fn model_id_from_pumas_model_suffix(suffix: &str) -> Option<&str> {
+        let model_id = suffix
             .trim_matches('/')
             .trim_end_matches("/metadata.json")
             .trim();
         if model_id.is_empty() {
-            None
+            return None;
+        }
+
+        if std::path::Path::new(model_id)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"))
+        {
+            model_id.rsplit_once('/').and_then(|(parent, _)| {
+                let parent = parent.trim_matches('/');
+                if parent.is_empty() {
+                    None
+                } else {
+                    Some(parent)
+                }
+            })
         } else {
-            Some(model_id.to_string())
+            Some(model_id)
         }
     }
 
@@ -392,6 +412,17 @@ mod tests {
             )
             .as_deref(),
             Some("llm/gen-verse/trado-8b-instruct")
+        );
+    }
+
+    #[test]
+    fn infer_model_id_from_pumas_model_path_drops_gguf_artifact_filename() {
+        assert_eq!(
+            TauriTaskExecutor::infer_model_id_from_pumas_model_path(
+                "/opt/Pumas-Library/shared-resources/models/vlm/qwen35/qwen3_6-27b-heretic-ara-gguf/Qwen3.6-27B-heretic-ara-Q4_K_M.gguf"
+            )
+            .as_deref(),
+            Some("vlm/qwen35/qwen3_6-27b-heretic-ara-gguf")
         );
     }
 
