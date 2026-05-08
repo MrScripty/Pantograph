@@ -26,6 +26,7 @@ impl Resource for NodeRegistryResource {}
 /// Wrapper for PumasApi shared via ResourceArc.
 pub struct PumasApiResource {
     pub api: Arc<pumas_library::PumasApi>,
+    pub selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>,
     pub runtime: Arc<tokio::runtime::Runtime>,
 }
 impl Resource for PumasApiResource {}

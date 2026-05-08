@@ -1702,6 +1702,20 @@ call Pumas summary APIs directly; local-client and read-only access project
 bounded selector-row summary status and cached summary facts without requiring
 raw owner `PUMAS_API` for list views.
 
+The host-binding selector parity slice now makes UniFFI and Rustler Pumas
+resources carry an explicit owner selector-access role and routes public
+package-facts summary snapshot, single-summary, and update-feed methods through
+that role. This keeps host-language bindings aligned with Tauri and
+workflow-node selector/list freshness boundaries while preserving raw owner API
+access only for owner operations that are not selector/list reads.
+Validation for this slice passed with `cargo check -p pantograph-uniffi`,
+`cargo check -p pantograph_rustler`, and
+`cargo test -p pantograph-uniffi pumas`. `cargo test -p pantograph_rustler pumas`
+still cannot link as a standalone Rust test binary in this workspace because
+Rustler's Erlang NIF symbols (`enif_*`) are unresolved outside the BEAM loader;
+this is a host-binding validation limitation, not a selector-access contract
+failure.
+
 Validation for the selector-access summary slice passed with
 `cargo test -p workflow-nodes --features model-library local_client_update_feed`,
 `cargo test -p workflow-nodes --features model-library read_only_update_feed`,

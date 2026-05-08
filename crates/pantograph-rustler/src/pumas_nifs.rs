@@ -14,8 +14,14 @@ pub(crate) fn api_discover() -> NifResult<ResourceArc<PumasApiResource>> {
         .block_on(async { pumas_library::PumasApi::discover().await })
         .map_err(|e| rustler::Error::Term(Box::new(format!("PumasApi discover error: {}", e))))?;
 
+    let api = Arc::new(api);
+    let selector_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(
+        api.clone(),
+    ));
+
     Ok(ResourceArc::new(PumasApiResource {
-        api: Arc::new(api),
+        api,
+        selector_access,
         runtime: Arc::new(runtime),
     }))
 }
@@ -35,8 +41,14 @@ pub(crate) fn api_new(launcher_root_path: String) -> NifResult<ResourceArc<Pumas
         })
         .map_err(|e| rustler::Error::Term(Box::new(format!("PumasApi init error: {}", e))))?;
 
+    let api = Arc::new(api);
+    let selector_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(
+        api.clone(),
+    ));
+
     Ok(ResourceArc::new(PumasApiResource {
-        api: Arc::new(api),
+        api,
+        selector_access,
         runtime: Arc::new(runtime),
     }))
 }
@@ -54,7 +66,7 @@ pub(crate) fn executor_set_pumas_api(
             .set(node_engine::extension_keys::PUMAS_API, api.clone());
         exec.extensions_mut().set(
             workflow_nodes::setup::PUMAS_SELECTOR_ACCESS,
-            Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(api)),
+            pumas_resource.selector_access.clone(),
         );
     });
 
@@ -133,7 +145,7 @@ pub(crate) fn model_package_facts_summary_snapshot(
         .runtime
         .block_on(async {
             resource
-                .api
+                .selector_access
                 .model_package_facts_summary_snapshot(limit, offset)
                 .await
         })
@@ -152,7 +164,7 @@ pub(crate) fn resolve_model_package_facts_summary(
         .runtime
         .block_on(async {
             resource
-                .api
+                .selector_access
                 .resolve_model_package_facts_summary(&model_id)
                 .await
         })
@@ -172,7 +184,7 @@ pub(crate) fn list_model_library_updates_since(
         .runtime
         .block_on(async {
             resource
-                .api
+                .selector_access
                 .list_model_library_updates_since(cursor.as_deref(), limit)
                 .await
         })

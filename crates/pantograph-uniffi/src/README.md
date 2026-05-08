@@ -124,6 +124,10 @@ let runtime = FfiPantographRuntime::new(config, optional_pumas_api).await?;
   model API access and the explicit Pumas selector-access role. Generated
   hosts should query `puma-lib` options through `workflow_graph_query_port_options`
   only after that selector role is available.
+- Public Pumas summary snapshot, single-summary, and update-feed binding
+  methods route through the handle's explicit Pumas selector-access role. Owner
+  handles still use Pumas owner APIs internally, but the binding surface must
+  not add separate raw-owner shortcuts for selector/list freshness reads.
 
 ## Structured Producer Contract
 - Stable fields: generated binding metadata, native library name, exported

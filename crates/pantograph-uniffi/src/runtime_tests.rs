@@ -721,7 +721,10 @@ async fn direct_runtime_puma_lib_options_use_selector_access_from_pumas_api() {
             workflow_roots: Vec::new(),
             max_loaded_sessions: None,
         },
-        Some(Arc::new(crate::FfiPumasApi { api })),
+        Some(Arc::new(crate::FfiPumasApi {
+            api: api.clone(),
+            selector_access: Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(api)),
+        })),
     )
     .await
     .expect("runtime should initialize");

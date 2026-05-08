@@ -508,6 +508,7 @@ impl FfiOrchestrationStore {
 #[derive(uniffi::Object)]
 pub struct FfiPumasApi {
     api: Arc<pumas_library::PumasApi>,
+    selector_access: Arc<workflow_nodes::setup::PumasSelectorAccess>,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -527,7 +528,15 @@ impl FfiPumasApi {
                 message: format!("PumasApi init error: {}", e),
             })?;
 
-        Ok(Arc::new(Self { api: Arc::new(api) }))
+        let api = Arc::new(api);
+        let selector_access = Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(
+            api.clone(),
+        ));
+
+        Ok(Arc::new(Self {
+            api,
+            selector_access,
+        }))
     }
 
     // --- Local library ---
@@ -588,7 +597,7 @@ impl FfiPumasApi {
         offset: u32,
     ) -> Result<String, FfiError> {
         let snapshot = self
-            .api
+            .selector_access
             .model_package_facts_summary_snapshot(limit as usize, offset as usize)
             .await
             .map_err(|e| FfiError::Other {
@@ -605,7 +614,7 @@ impl FfiPumasApi {
         model_id: String,
     ) -> Result<String, FfiError> {
         let summary = self
-            .api
+            .selector_access
             .resolve_model_package_facts_summary(&model_id)
             .await
             .map_err(|e| FfiError::Other {
@@ -623,7 +632,7 @@ impl FfiPumasApi {
         limit: u32,
     ) -> Result<String, FfiError> {
         let feed = self
-            .api
+            .selector_access
             .list_model_library_updates_since(cursor.as_deref(), limit as usize)
             .await
             .map_err(|e| FfiError::Other {
@@ -755,6 +764,10 @@ impl FfiPumasApi {
     fn api_arc(&self) -> Arc<pumas_library::PumasApi> {
         self.api.clone()
     }
+
+    fn selector_access_arc(&self) -> Arc<workflow_nodes::setup::PumasSelectorAccess> {
+        self.selector_access.clone()
+    }
 }
 
 /// Inject PumasApi into a workflow engine's extensions.
@@ -762,13 +775,14 @@ impl FfiPumasApi {
 impl FfiWorkflowEngine {
     /// Set a PumasApi on this engine for model resolution in workflow nodes.
     pub async fn set_pumas_api(&self, api: Arc<FfiPumasApi>) {
-        let api = api.api_arc();
+        let api_handle = api.api_arc();
+        let selector_access = api.selector_access_arc();
         let mut exec = self.executor.write().await;
         exec.extensions_mut()
-            .set(node_engine::extension_keys::PUMAS_API, api.clone());
+            .set(node_engine::extension_keys::PUMAS_API, api_handle);
         exec.extensions_mut().set(
             workflow_nodes::setup::PUMAS_SELECTOR_ACCESS,
-            Arc::new(workflow_nodes::setup::PumasSelectorAccess::Owner(api)),
+            selector_access,
         );
     }
 }

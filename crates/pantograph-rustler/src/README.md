@@ -131,6 +131,10 @@ Pantograph.Native.workflow_validate(graph_json)
   explicit selector-access role. Port-option registry resources must still use
   `extensions_setup` so selector/list population does not rely on raw
   `PUMAS_API`.
+- Pumas API resources carry an explicit selector-access role. Public summary
+  snapshot, single-summary, and update-feed NIFs route through that role so
+  BEAM consumers observe the same selector/list freshness boundary as workflow
+  execution and port-option queries.
 
 ## Structured Producer Contract
 - Stable fields: exported NIF names, atoms, JSON payload shapes, callback event
