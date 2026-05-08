@@ -3474,7 +3474,7 @@ drift back into inference.
   Inference crate README contract sections now document that consumers must use
   typed `InferenceGateway` methods and capability facts rather than a raw
   backend-handle accessor.
-- [ ] Record any deferred consumer migrations in this plan.
+- [x] Record any deferred consumer migrations in this plan.
   - 2026-05-08 finding: `src-tauri/src/llm/commands/vision.rs` and the
     drawing-analysis helper in `src-tauri/src/llm/commands/agent.rs` still issue
     app-command OpenAI-compatible vision/chat HTTP requests through the gateway
