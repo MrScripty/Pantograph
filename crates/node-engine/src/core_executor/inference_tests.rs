@@ -2288,6 +2288,31 @@ async fn test_retired_llamacpp_node_type_is_not_executable() {
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_retired_vision_analysis_node_type_is_not_executable() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "vision-analysis"}),
+    );
+
+    let executor = CoreTaskExecutor::new();
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("vision-analysis-1", inputs, &context, &extensions)
+        .await
+        .expect_err("retired vision analysis should not execute");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Retired inference node type 'vision-analysis'"));
+            assert!(message.contains("canonical llm-inference"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_canonical_llm_rejects_unresolved_migration_model_reference_before_gateway() {
     let mut inputs = HashMap::new();
     inputs.insert(

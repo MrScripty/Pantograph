@@ -11,7 +11,6 @@ mod json_filter;
 mod onnx_inference;
 mod unload_model;
 mod validator;
-mod vision_analysis;
 
 pub use audio_generation::AudioGenerationTask;
 pub use dependency_environment::DependencyEnvironmentTask;
@@ -24,4 +23,3 @@ pub use json_filter::{JsonFilterConfig, JsonFilterTask};
 pub use onnx_inference::OnnxInferenceTask;
 pub use unload_model::UnloadModelTask;
 pub use validator::{ValidationResult, ValidatorConfig, ValidatorTask};
-pub use vision_analysis::{VisionAnalysisTask, VisionConfig};

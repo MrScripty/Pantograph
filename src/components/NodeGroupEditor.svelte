@@ -54,7 +54,6 @@
     'agent-tools': AgentToolsNode,
     // Generic fallback
     'image-input': GenericNode,
-    'vision-analysis': GenericNode,
     'rag-search': GenericNode,
     'read-file': GenericNode,
     'write-file': GenericNode,

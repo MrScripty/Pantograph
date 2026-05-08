@@ -118,6 +118,11 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   executable image-generation payloads plus graph-visible generated-image,
   text/chat usage, and cache-handle outputs without changing frontend
   rendering, scheduler policy, or runtime backend selection.
+- Retired direct inference descriptors, including direct diffusion,
+  llama.cpp-specific inference, dedicated embedding/reranker, and direct
+  `vision-analysis`, are not registered built-ins. Saved graph upgrades and
+  stale-node diagnostics belong to workflow-service canonicalization and
+  node-engine guardrails, not workflow-node descriptor shims.
 - Canonical `llm-inference` declares `task_kind` and `runtime_hint` as
   optional graph-visible inputs because saved-workflow migration, preflight,
   and execution already consume those fields as canonical node data.

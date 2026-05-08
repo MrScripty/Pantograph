@@ -244,21 +244,6 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     execution_mode: 'stream',
   },
   {
-    node_type: 'vision-analysis',
-    category: 'processing',
-    label: 'Vision Analysis',
-    description: 'Analyze images with vision model',
-    io_binding_origin: 'integrated',
-    inputs: [
-      { id: 'image', label: 'Image', data_type: 'image', required: true, multiple: false },
-      { id: 'prompt', label: 'Prompt', data_type: 'string', required: false, multiple: false },
-    ],
-    outputs: [
-      { id: 'analysis', label: 'Analysis', data_type: 'string', required: true, multiple: false },
-    ],
-    execution_mode: 'manual',
-  },
-  {
     node_type: 'rag-search',
     category: 'processing',
     label: 'RAG Search',

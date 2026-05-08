@@ -124,6 +124,9 @@ Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
 mapping remains testable outside the graph component.
 The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
 `WorkflowGraph.svelte` remains focused on graph state and interaction handling.
+That registry mirrors backend-visible node contracts and must not keep retired
+direct inference nodes such as `vision-analysis` mapped after workflow-node
+inventory removes them.
 Cut gesture state, line sampling, and overlay rendering come from the package
 `CutTool`; the app graph only owns the backend edge-deletion callback.
 Palette edge-insert hover projection, commit eligibility, preview edge flagging,

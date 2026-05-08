@@ -245,6 +245,8 @@ impl TaskExecutor for CoreTaskExecutor {
             #[cfg(feature = "inference-nodes")]
             "reranker" => retired_inference_node_error("reranker"),
             #[cfg(feature = "inference-nodes")]
+            "vision-analysis" => retired_inference_node_error("vision-analysis"),
+            #[cfg(feature = "inference-nodes")]
             "llm-inference" => {
                 let canonical_inputs = inputs_with_model_path_from_ref(&inputs)?;
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
@@ -368,8 +370,6 @@ impl TaskExecutor for CoreTaskExecutor {
                     }
                 }
             }
-            #[cfg(feature = "inference-nodes")]
-            "vision-analysis" => execute_vision_analysis(self.gateway.as_ref(), &inputs).await,
             #[cfg(feature = "inference-nodes")]
             "unload-model" => execute_unload_model(self.gateway.as_ref(), &inputs).await,
 

@@ -79,6 +79,10 @@ registration, callback transport, and feature-gated adapter calls.
   keeps only the exported executor NIF wrappers.
 - BEAM DTO and `ResourceArc` wrapper declarations stay outside `lib.rs` so the
   facade remains focused on exported NIF behavior and load wiring.
+- Inference-backed executor NIF docs and wrappers must describe the canonical
+  `llm-inference`/KV-cache/unload-model surface. Retired direct inference node
+  names such as `vision-analysis` must not be documented as native executable
+  gateway paths.
 - Callback/event JSON serialization preserves backend event labels and order,
   and maps backend runtime-event identity to public `workflowRunId` instead of
   exposing ambiguous `executionId`.

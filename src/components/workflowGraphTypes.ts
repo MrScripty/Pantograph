@@ -60,7 +60,6 @@ export const workflowNodeTypes: NodeTypes = {
   'masked-text-input': MaskedTextInputNode,
   'expand-settings': ExpandSettingsNode,
   'image-input': GenericNode,
-  'vision-analysis': GenericNode,
   'rag-search': GenericNode,
   'read-file': GenericNode,
   'write-file': GenericNode,

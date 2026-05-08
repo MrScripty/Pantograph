@@ -2955,6 +2955,12 @@ and node-engine lifecycle/diagnostic boundary. The descriptor-local
 `InferenceConfig`/`base_url` public export was removed with that path; canonical
 task and generation options must flow through graph ports and typed inference
 requests instead of a hidden descriptor config.
+The old graph-visible `vision-analysis` node has also been retired from
+workflow-node inventory, frontend mock registries, and node-engine execution.
+Image understanding remains represented by the canonical `llm-inference`
+`image_understanding` task contract until a typed executable backend slice
+promotes it; stale `vision-analysis` execution attempts now receive the same
+canonical migration error as other retired inference node shapes.
 Workflow-service capability extraction no longer infers llama.cpp or PyTorch
 requirements from retired node type names; it derives backend requirements from
 canonical `runtime_hint`, `backend_key`, or Pumas `recommended_backend` data and

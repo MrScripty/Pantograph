@@ -15,7 +15,7 @@ into frontend, transport, or descriptor crates.
 | `audio_nodes.rs` | Feature-gated Stable Audio Python-worker initialization and text-to-audio execution. |
 | `dependency_preflight.rs` | Model dependency binding, backend-key normalization, task-type inference, model-reference construction, and dependency resolver preflight used before runtime-backed execution. |
 | `file_io.rs` | Async read-file/write-file handlers that resolve paths through the project-root validation boundary before touching the filesystem. |
-| `inference_nodes.rs` | Feature-gated shared inference helpers plus OpenAI-compatible chat, vision, and unload-model handlers. |
+| `inference_nodes.rs` | Feature-gated shared canonical inference request builders, graph result projection, and unload-model handling. |
 | `inference_tests.rs` | Focused tests for dependency preflight, backend-key normalization, embedding failure behavior, and reranker parsing. |
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `kv_cache_llamacpp.rs` | llama.cpp KV-cache slot restore/capture helpers and temporary slot-file handling. |
@@ -95,7 +95,9 @@ stable public facade and dispatch owner.
   resolved package facts are present; started and cleanup events stay free of
   usage, cache, artifact refs, option, tensor, prompt, and local-path payloads.
 - Gateway-backed inference handlers stay in `inference_nodes.rs`; PyTorch and
-  audio Python-worker handlers remain separate feature families.
+  audio Python-worker handlers remain separate feature families. The retired
+  direct `vision-analysis` HTTP path must not bypass canonical
+  `llm-inference` image-understanding task contracts.
 - Canonical `llm-inference` request builders in `inference_nodes.rs` should
   promote resolved Pumas package facts into typed request `model_ref` when an
   explicit graph `pumas_model_ref` or `model_ref` is not wired, so stable model
@@ -109,11 +111,11 @@ stable public facade and dispatch owner.
 - Canonical text-generation request builders read public task semantics from
   `task_kind`/`taskKind` only. `task_id`/`taskId` remain workflow/node identity
   fields and must not be interpreted as task-kind aliases.
-- Contract-only canonical tasks such as `depth_estimation` and
-  `video_understanding` fail during task validation before backend execution.
-  Their lifecycle diagnostics may include bounded task option-support facts and
-  stable artifact refs from graph inputs, but must not store local paths or
-  fabricate executable backend behavior.
+- Contract-only canonical tasks such as `image_understanding`,
+  `depth_estimation`, and `video_understanding` fail during task validation
+  before backend execution. Their lifecycle diagnostics may include bounded
+  task option-support facts and stable artifact refs from graph inputs, but
+  must not store local paths or fabricate executable backend behavior.
 - Canonical text/chat usage projection in `inference_nodes.rs` is bounded
   graph metadata copied from typed gateway results or terminal stream chunks.
   It must not be recomputed from prompt or generated text.

@@ -15,7 +15,6 @@ adapters such as the Python runtime.
 | `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
 | `inference.rs` | Declares the canonical `llm-inference` graph contract for text/chat, embedding, rerank, audio transcription, image generation, model refs, package facts, and graph-visible generated-image output. |
-| `vision_analysis.rs` | Declares image-to-text style vision analysis contracts. |
 
 ## Problem
 Workflow graphs need stable processing-node contracts across Rust, Python, and
@@ -34,10 +33,11 @@ hidden behavior that the graph cannot express safely.
 Keep descriptors in this directory as the graph-visible contract layer and let
 host executors implement the runtime behavior. Retired direct inference
 descriptors, including old diffusion, llama.cpp, embedding, and reranker
-shapes, must not re-enter this directory; canonical `llm-inference` task
-metadata owns text/chat, embedding, rerank, audio-transcription, and
-image-generation graph contracts. Its `Task::run` implementation fails closed
-so standalone graph execution cannot bypass the host typed inference gateway.
+shapes plus the old direct `vision-analysis` image-understanding node, must not
+re-enter this directory; canonical `llm-inference` task metadata owns text/chat,
+embedding, rerank, audio-transcription, image-understanding, and
+image-generation graph contracts. Its `Task::run` implementation fails closed so
+standalone graph execution cannot bypass the host typed inference gateway.
 The old descriptor-local `base_url`/model generation config has been removed;
 generation and task options must flow through canonical graph ports and typed
 inference requests.

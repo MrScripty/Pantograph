@@ -102,14 +102,16 @@ are resolved through `pantograph-node-contracts` projections.
   workflow-service canonicalization; new runtime-backed behavior must enter via
   canonical `llm-inference` task/runtime evidence.
 - Gateway-backed inference execution stays in `core_executor/inference_nodes.rs`
-  so OpenAI-compatible chat, vision, and unload-model handlers remain separate
-  from Python-worker adapters.
+  so canonical task request/projection handlers and unload-model behavior
+  remain separate from Python-worker adapters. The retired direct
+  `vision-analysis` HTTP path must not bypass canonical `llm-inference`
+  image-understanding task contracts.
 - Llama.cpp completion execution stays in `core_executor/llamacpp_nodes.rs` so
   completion streaming and KV-cache capture are isolated from the remaining
   gateway-backed inference adapters.
 - Retrieval inference execution stays in `core_executor/retrieval_nodes.rs` so
   reranking document parsing and embedding compatibility checks remain separate
-  from chat and vision adapters.
+  from text/chat adapters.
 - Python-worker execution stays in `core_executor/pytorch_nodes.rs` and
   `core_executor/audio_nodes.rs` so PyTorch inference and Stable Audio
   generation remain separate feature families.

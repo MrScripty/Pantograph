@@ -174,6 +174,9 @@ handoff reports stale or changed rows.
 - Built-in template tests must scan every registered starter template for
   retired direct inference node types so new examples stay on canonical
   `llm-inference` task shapes.
+- Mock node definitions must mirror backend-visible built-ins and must not keep
+  retired direct inference nodes such as `vision-analysis` available in
+  frontend-only sessions.
 - Workflow execution must use a backend-owned session. Raw graph execution is
   not exposed because scheduler diagnostics and runtime admission depend on
   session-scoped run lifecycle state.

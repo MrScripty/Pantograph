@@ -306,8 +306,8 @@ fn inference_gateway_new(
 /// Create a new WorkflowExecutor with inference gateway support.
 ///
 /// Same as `executor_new` but wires an `InferenceGateway` into the
-/// `CoreTaskExecutor`, enabling native handling of `llamacpp-inference`,
-/// `llm-inference`, `vision-analysis`, and `unload-model` nodes.
+/// `CoreTaskExecutor`, enabling native handling of canonical `llm-inference`,
+/// supported KV-cache helpers, and `unload-model` nodes.
 #[rustler::nif(schedule = "DirtyCpu")]
 fn executor_new_with_inference(
     env: Env,
@@ -642,7 +642,7 @@ fn execute_orchestration(
 ///
 /// Same as `execute_orchestration` but wires an `InferenceGateway` into
 /// the `CoreTaskExecutor`, enabling native inference node execution
-/// (llamacpp-inference, llm-inference, vision-analysis, unload-model)
+/// (canonical llm-inference, supported KV-cache helpers, unload-model)
 /// with streaming token events via `BeamEventSink`.
 #[rustler::nif(schedule = "DirtyCpu")]
 fn execute_orchestration_with_inference(

@@ -46,14 +46,14 @@ mod tests {
         #[cfg(feature = "desktop")]
         assert_eq!(
             all.len(),
-            39,
-            "Expected 39 built-in nodes with desktop feature"
+            38,
+            "Expected 38 built-in nodes with desktop feature"
         );
         #[cfg(not(feature = "desktop"))]
         assert_eq!(
             all.len(),
-            36,
-            "Expected 36 built-in nodes without desktop feature"
+            35,
+            "Expected 35 built-in nodes without desktop feature"
         );
 
         // Spot-check known types
@@ -91,6 +91,7 @@ mod tests {
             "diffusion-inference",
             "embedding",
             "reranker",
+            "vision-analysis",
         ] {
             assert!(
                 !registry.has_node_type(retired_node_type),
