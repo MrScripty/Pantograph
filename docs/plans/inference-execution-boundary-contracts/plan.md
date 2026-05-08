@@ -3504,6 +3504,11 @@ drift back into inference.
     tool-calling adapter rather than a workflow inference backend; replacing it
     with typed inference requires a future tool-calling-capable inference
     contract rather than reusing generic gateway-base-url helpers.
+  - 2026-05-08 implementation: desktop RAG embedding calls now use an explicit
+    `create_rag_embedding_client` host adapter with tested base-URL
+    normalization. This keeps documentation indexing/search separate from
+    workflow inference execution while still allowing the RAG manager to use the
+    embedding runtime URL synchronized from gateway-owned lifecycle facts.
 
 **Verification:**
 - `cargo test -p inference`.

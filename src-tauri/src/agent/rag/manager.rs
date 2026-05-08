@@ -26,7 +26,7 @@ use crate::agent::chunker::{chunk_document, ChunkConfig};
 use crate::agent::docs::DocsManager;
 use crate::agent::docs_index::IndexEntry;
 use crate::agent::embeddings::{
-    check_embedding_server, create_embedding_client, get_embedding_model_name,
+    check_embedding_server, create_rag_embedding_client, get_embedding_model_name,
 };
 use crate::agent::types::DocChunk;
 
@@ -188,7 +188,7 @@ impl RagManager {
         });
 
         // Create embedding client
-        let client = create_embedding_client(&embedding_url)?;
+        let client = create_rag_embedding_client(&embedding_url)?;
         let model_name = get_embedding_model_name(&embedding_url).await;
         log::info!("Created embedding client for model: {}", model_name);
         let embedding_model = client.embedding_model(&model_name);
@@ -339,7 +339,7 @@ impl RagManager {
         let table = db.open_table(CHUNKS_TABLE_NAME).execute().await?;
 
         // Create embedding for query
-        let client = create_embedding_client(embedding_url)?;
+        let client = create_rag_embedding_client(embedding_url)?;
         let model_name = get_embedding_model_name(embedding_url).await;
         let embedding_model = client.embedding_model(&model_name);
 

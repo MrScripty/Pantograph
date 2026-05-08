@@ -27,6 +27,9 @@ storage errors and ranking semantics can blur into generic agent logic.
 - RAG state must not become canonical product documentation.
 - Public exports should expose the shared manager handle and constructor, not
   concrete manager internals unless an active non-test consumer requires them.
+- Embedding clients used by the manager must go through the explicit host RAG
+  adapter in `src-tauri/src/agent/embeddings.rs`; this is documentation-search
+  infrastructure, not a workflow inference backend.
 
 ## Decision
 Keep RAG storage and retrieval orchestration here behind typed manager and DTO
@@ -45,6 +48,8 @@ storage directly.
 - Storage-specific errors are converted into RAG error categories.
 - Manager internals such as storage paths remain private implementation
   details unless surfaced through a command or typed DTO.
+- RAG embedding URL normalization belongs in the host RAG adapter, keeping
+  manager code focused on indexing and retrieval orchestration.
 
 ## Revisit Triggers
 - RAG moves to a shared backend crate.

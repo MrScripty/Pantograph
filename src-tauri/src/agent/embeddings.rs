@@ -1,40 +1,40 @@
 //! Embedding client helpers for RAG
 //!
-//! Provides utilities for creating OpenAI-compatible embedding clients
-//! that can connect to local llama.cpp servers running embedding models.
+//! Provides utilities for the host RAG embedding adapter used by desktop
+//! documentation indexing and retrieval.
 
 use rig::providers::openai;
 
-/// Create an OpenAI-compatible client for embeddings
+/// Create the host RAG embedding client used by desktop documentation search.
 ///
-/// This client can connect to a llama.cpp server running an embedding model
-/// (e.g., Qwen3-Embedding-0.6B) at a custom base URL.
-///
-/// # Arguments
-/// * `base_url` - Base URL of the embedding server (e.g., "http://127.0.0.1:8081")
-///
-/// # Returns
-/// An OpenAI client configured for the embedding server
-pub fn create_embedding_client(base_url: &str) -> Result<openai::Client, String> {
-    log::debug!("Creating embedding client for base_url: {}", base_url);
-    // RIG expects the base URL to include /v1 suffix for proper endpoint routing
-    let base_url_with_v1 = if base_url.ends_with("/v1") {
-        base_url.to_string()
-    } else {
-        format!("{}/v1", base_url.trim_end_matches('/'))
-    };
-
+/// This adapter is intentionally scoped to RAG indexing/query embedding calls.
+/// Workflow inference must use canonical typed inference contracts instead.
+pub(crate) fn create_rag_embedding_client(base_url: &str) -> Result<openai::Client, String> {
+    log::debug!("Creating RAG embedding client for base_url: {}", base_url);
+    let base_url_with_v1 = rag_embedding_base_url(base_url)?;
     let result = openai::Client::builder()
-        .api_key("local") // Local servers typically don't require auth
+        .api_key("local")
         .base_url(&base_url_with_v1)
         .build()
-        .map_err(|e| format!("Failed to create embedding client: {}", e));
+        .map_err(|e| format!("Failed to create RAG embedding client: {}", e));
 
     if result.is_ok() {
-        log::debug!("Embedding client created successfully");
+        log::debug!("RAG embedding client created successfully");
     }
 
     result
+}
+
+fn rag_embedding_base_url(base_url: &str) -> Result<String, String> {
+    let base_url = base_url.trim();
+    if base_url.is_empty() {
+        return Err("RAG embedding base URL cannot be empty".to_string());
+    }
+    if base_url.ends_with("/v1") {
+        Ok(base_url.to_string())
+    } else {
+        Ok(format!("{}/v1", base_url.trim_end_matches('/')))
+    }
 }
 
 /// Check if an embedding server is available at the given URL
@@ -120,14 +120,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_create_embedding_client_adds_v1() {
-        let result = create_embedding_client("http://localhost:8081");
-        assert!(result.is_ok());
+    fn rag_embedding_base_url_adds_v1() {
+        assert_eq!(
+            rag_embedding_base_url("http://localhost:8081").as_deref(),
+            Ok("http://localhost:8081/v1")
+        );
     }
 
     #[test]
-    fn test_create_embedding_client_preserves_v1() {
-        let result = create_embedding_client("http://localhost:8081/v1");
-        assert!(result.is_ok());
+    fn rag_embedding_base_url_preserves_v1() {
+        assert_eq!(
+            rag_embedding_base_url("http://localhost:8081/v1").as_deref(),
+            Ok("http://localhost:8081/v1")
+        );
+    }
+
+    #[test]
+    fn rag_embedding_base_url_rejects_blank_url() {
+        let error = rag_embedding_base_url(" ").expect_err("blank URL should fail");
+
+        assert!(error.contains("cannot be empty"));
     }
 }
