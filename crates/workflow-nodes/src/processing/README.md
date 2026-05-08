@@ -33,11 +33,11 @@ hidden behavior that the graph cannot express safely.
 
 ## Decision
 Keep descriptors in this directory as the graph-visible contract layer and let
-host executors implement the runtime behavior. Python-backed diffusion nodes now
-declare an optional `environment_ref` input so dependency-environment workflows
-can express the handoff explicitly instead of relying on hidden runtime fields.
-The reranker node follows the same pattern: the graph sees explicit query,
-candidate-document, and ranked-result contracts while the host owns the
+host executors implement the runtime behavior. Retired direct inference
+descriptors, including the old diffusion shape, must not re-enter this
+directory; canonical `llm-inference` task metadata owns image-generation graph
+contracts. The reranker node follows the same pattern: the graph sees explicit
+query, candidate-document, and ranked-result contracts while the host owns the
 runtime-specific llama.cpp execution details. `expand_settings.rs` follows the
 same contract-first rule: model-specific settings stay graph-visible as
 matching optional input/output ports while the schema itself still passes

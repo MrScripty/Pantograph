@@ -4565,14 +4565,12 @@ Update during implementation:
   task shapes.
 - 2026-05-08: The retired direct `diffusion-inference` descriptor is no longer
   submitted to the workflow-node inventory, so built-in node definitions and
-  frontend registry maps no longer expose it as an authorable graph node. Old
-  execution internals remain separate until deeper direct-diffusion removal can
-  be done without touching Python-sidecar audio/ONNX behavior.
+  frontend registry maps no longer expose it as an authorable graph node.
 - 2026-05-08 follow-up: removed the now-unreferenced direct-diffusion workflow
   descriptor module and frontend renderer component. Remaining
   `diffusion-inference` references are limited to historical plan text,
-  explicit retired-node test guardrails, or embedded-runtime Python-sidecar
-  execution internals awaiting a deeper removal slice.
+  explicit retired-node test guardrails, and documentation invariants that
+  prevent the retired shape from re-entering authoring or execution paths.
 - 2026-05-08 follow-up: node-engine dependency preflight no longer
   special-cases the retired direct `diffusion-inference` node shape for backend
   selection, task inference, or dependency resolver dispatch. Image-generation
