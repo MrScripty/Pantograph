@@ -8,10 +8,8 @@ use crate::agent::{
     AgentEvent, AgentEventType, AgentRequest, AgentResponse, ComponentUpdate, FileAction,
     FileChange, Position, Size, WriteTracker,
 };
-use crate::llm::types::*;
 use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway};
 use futures_util::StreamExt;
-use reqwest::Client;
 use rig::agent::MultiTurnStreamItem;
 use rig::streaming::{
     StreamedAssistantContent, StreamedUserContent, StreamingPrompt, ToolCallDeltaContent,
@@ -413,65 +411,19 @@ pub async fn run_agent(
     })
 }
 
-/// Analyze the drawing using vision API
+const DRAWING_VISION_CONTRACT_ONLY_ERROR: &str = "Drawing vision analysis is disabled until \
+image_understanding is implemented through canonical typed inference contracts.";
+
+/// Drawing analysis is contract-only until image-understanding has a typed executor.
 async fn analyze_drawing_with_vision(
-    base_url: &str,
-    request: &AgentRequest,
+    _base_url: &str,
+    _request: &AgentRequest,
 ) -> Result<String, String> {
-    let client = Client::new();
+    Err(drawing_vision_contract_only_error())
+}
 
-    let vision_prompt = format!(
-        "Analyze this UI sketch and describe what UI component the user wants to create. \
-        Be specific about the shape, layout, and any text visible. \
-        The user's request is: {}",
-        request.prompt
-    );
-
-    let chat_request = ChatRequest {
-        model: "default".to_string(),
-        messages: vec![ChatMessage {
-            role: "user".to_string(),
-            content: vec![
-                ContentPart::ImageUrl {
-                    image_url: ImageUrlData {
-                        url: format!("data:image/png;base64,{}", request.image_base64),
-                    },
-                },
-                ContentPart::Text {
-                    text: vision_prompt,
-                },
-            ],
-        }],
-        stream: false,
-        max_tokens: Some(1024),
-        temperature: Some(0.3),
-    };
-
-    let response = client
-        .post(format!("{}/v1/chat/completions", base_url))
-        .json(&chat_request)
-        .send()
-        .await
-        .map_err(|e| format!("Vision request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("Vision API error {}: {}", status, body));
-    }
-
-    // Parse the non-streaming response
-    let json_response: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse vision response: {}", e))?;
-
-    let content = json_response["choices"][0]["message"]["content"]
-        .as_str()
-        .unwrap_or("Unable to analyze drawing")
-        .to_string();
-
-    Ok(content)
+fn drawing_vision_contract_only_error() -> String {
+    DRAWING_VISION_CONTRACT_ONLY_ERROR.to_string()
 }
 
 /// Format the agent prompt with vision analysis
@@ -554,6 +506,19 @@ fn format_agent_prompt_with_analysis(
     ));
 
     prompt
+}
+
+#[cfg(test)]
+mod tests {
+    use super::drawing_vision_contract_only_error;
+
+    #[test]
+    fn drawing_vision_error_points_to_typed_inference_contracts() {
+        let error = drawing_vision_contract_only_error();
+
+        assert!(error.contains("image_understanding"));
+        assert!(error.contains("canonical typed inference contracts"));
+    }
 }
 
 /// Format the agent prompt for fix/repair mode.

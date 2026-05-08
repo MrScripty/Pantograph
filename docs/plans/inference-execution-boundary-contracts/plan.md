@@ -3484,6 +3484,12 @@ drift back into inference.
     explicit app-command adapter plan before image-understanding execution is
     promoted beyond contract-only status. They must not be used as a hidden
     replacement workflow inference backend.
+  - 2026-05-08 implementation: Tauri app-command vision execution now
+    fail-closes after payload size validation with an explicit
+    `image_understanding` typed-contract error, and no longer sends direct
+    app-command HTTP requests to `/v1/chat/completions`. Promoting
+    image-understanding later requires a typed executor slice rather than
+    restoring command-local backend calls.
 
 **Verification:**
 - `cargo test -p inference`.

@@ -25,7 +25,7 @@ and forward requests onto backend-owned Rust contracts.
 | `server.rs` | LLM server lifecycle commands that compose shared gateway and registry state. |
 | `shared.rs` | Shared Tauri-only helper functions and aliases used by multiple command modules. |
 | `version.rs` | Generated-component history/versioning transport using `src/generated/` as the work tree and `.pantograph/generated-components.git/` for Git metadata. |
-| `vision.rs` | Vision/image prompt transport. |
+| `vision.rs` | Vision/image prompt transport. It fail-closes until `image_understanding` has a typed inference executor. |
 
 ## Problem
 Tauri invoke commands expose runtime, model, agent, and generated-component
@@ -78,6 +78,10 @@ command transport can stay focused on invoke state and payload mapping.
 - Managed-runtime pause, resume, and destructive cancel semantics must remain
   backend-owned. Tauri forwards those requests onto the backend manager and
   must not reinterpret retained-artifact state locally.
+- App-command vision paths must not call gateway base URLs directly. Until
+  `image_understanding` is promoted beyond a contract-only task, these commands
+  return explicit typed-inference contract errors instead of acting as an
+  alternate inference backend.
 - Generated-component history commands use `.pantograph/generated-components.git/`
   with `src/generated/` as the work tree.
 - Command helper cleanup for strict clippy must not alter public invoke

@@ -17,6 +17,7 @@ runtime contracts exposed by `crates/inference`.
 | `recovery.rs` | Recovery orchestration that reacts to runtime failures and retries through the shared gateway. |
 | `startup.rs` | Shared startup request construction and model-path resolution for Tauri-side runtime launches. |
 | `process_tauri.rs` | Tauri-specific process spawning bridge used when the app must launch managed runtimes. |
+| `types.rs` | Small Tauri stream-event DTOs that remain after direct OpenAI-compatible chat wire payloads moved out of the app-command layer. |
 
 ## Problem
 Pantograph's desktop app still needs a native composition layer for runtime
@@ -110,6 +111,9 @@ than cloning Tauri state handles without need.
 - Runtime-registry injection passes through this layer, but runtime residency
   and admission policy must not be implemented in command handlers or other
   Tauri transport modules.
+- App-command DTOs in this layer must not recreate OpenAI-compatible chat or
+  vision request bodies for direct gateway HTTP calls; typed inference contracts
+  own executable task payloads.
 - Do not keep desktop server-discovery registries in this layer without active
   command consumers and an explicit relationship to the backend runtime
   registry.
