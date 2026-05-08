@@ -1510,31 +1510,27 @@ a backend-loadable source, and passes static Candle backend compatibility
 without invoking real model loading.
 Inference now exposes Pumas-aligned update feed and package-fact summary
 snapshot DTOs. Those DTOs remain useful for selected-model detail refresh, but
-the settled Pumas implementation adds a faster list-first contract:
-`ModelLibrarySelectorSnapshot` rows should replace the current summary-first
-model-list composition for Library and graph selectors. The `puma-lib`
-model-list option cache now has a bounded `ModelLibraryUpdateFeed` invalidation
-helper: fresh cursors invalidate summary/detail-scoped model ids and always
-invalidate removed models, while stale cursors or snapshot-required feeds clear
-the cache so the next population uses a new Pumas snapshot. The next Pantograph
-slice should preserve that invalidation behavior but move initial list/page
-population to selector snapshots, using batch summary/descriptor/settings
-hydration only for selected or expanded rows. This also closes the user-visible
-loading problem where Pumas model selectors can wait on full detail or sparse
-summary regeneration before showing any rows.
+the settled Pumas implementation added the faster list-first
+`ModelLibrarySelectorSnapshot` contract. Pantograph now uses selector rows for
+Library and graph-selector population, preserves the bounded
+`ModelLibraryUpdateFeed` invalidation behavior, and hydrates
+summary/descriptor/settings detail only for selected or expanded rows. This
+closed the user-visible loading problem where Pumas model selectors could wait
+on full detail or sparse summary regeneration before showing any rows.
 Backend-checked Pumas package-fact
 candidate projection now preserves bounded compatibility report and issue
 summaries on `RuntimeTechnicalFitCandidate` so rejected/degraded candidates can
 be explained without asking Pumas to own candidate derivation or scheduler
 selection. Continued model-list review found one remaining consumer-boundary
-gap now superseded by the fast-snapshot slice: remaining model-list fallbacks
-should be audited while replacing the initial list path with selector rows.
+gap that was superseded by the fast-snapshot slice: the remaining model-list
+fallbacks were audited while replacing the initial list path with selector
+rows.
 Runtime-facing backend hints, dependency binding display facts,
 `requires_custom_code`, bounded review reasons from summary diagnostic codes,
 bounded custom-code source omission, and API-unavailable inference-settings
 fallbacks already prefer Pumas DTOs or bounded defaults over raw record metadata
-when those DTOs are available. The selector-snapshot slice should remove any
-remaining need to inspect Pumas storage internals for list rendering.
+when those DTOs are available. The selector-snapshot slice removed the active
+list-rendering need to inspect Pumas storage internals.
 
 The first Pantograph fast selector implementation slice now populates
 `puma-lib` options from Pumas `model_library_selector_snapshot` rows before any
@@ -1546,8 +1542,8 @@ existing Library page and graph selector both consume this shared
 `query_port_options` path. `hydrate_puma_lib_node` now resolves the selected
 Pumas model ref directly and hydrates only that selected model through Pumas
 package-summary, execution-descriptor, and inference-settings batch/detail APIs
-instead of re-running and scanning the full model option list. The slice does
-not yet add cursor subscription handoff; that remains an open Milestone 2 item.
+instead of re-running and scanning the full model option list. Later cursor
+handoff slices connected selector cursors to frontend cache invalidation.
 
 The selector access-role slice now registers a workflow-nodes selector access
 extension that can route selector snapshot reads through owner `PumasApi`,
@@ -1557,8 +1553,8 @@ setup resolves direct model roots, launcher roots, and Pumas build-output paths
 to the model-library directory containing `models.db` without creating a
 missing index. `puma-lib` model options now use the selector access extension
 as the only selector snapshot source instead of reconstructing selector access
-from raw `PUMAS_API` injection. At this point selected-model detail hydration
-still remained on the full API path pending a later local-client/detail slice.
+from raw `PUMAS_API` injection. Later selected-detail slices routed
+`model_id` hydration through the same explicit selector-access role.
 
 The local-client/detail hydration slice now routes `model_id` hydration through
 the explicit Pumas selector-access adapter before falling back to raw owner API
