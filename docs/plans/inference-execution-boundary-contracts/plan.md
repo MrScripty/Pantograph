@@ -3581,14 +3581,14 @@ inference write ledger events directly.
   bounded metadata: accepted/rejected/degraded status dimensions, missing
   components, unsupported backend/task pairs, custom-code/trust blockers, and
   model/backend unavailable reasons.
-- [ ] Emit `BackendCompatibilityReport` summaries from execution/preflight
+- [x] Emit `BackendCompatibilityReport` summaries from execution/preflight
   producers wherever resolved model package facts and selected backend facts are
   available. The durable lifecycle-to-ledger mapping is complete and the typed
-  gateway now emits summaries when `InferenceExecutionRequest` carries package
-  facts. Embedded-runtime now persists completed task-validation compatibility
+  gateway emits summaries when `InferenceExecutionRequest` carries package
+  facts. Embedded-runtime persists completed task-validation compatibility
   summaries as durable inference diagnostic summaries as well as backend
-  execution summaries, but upstream graph/preflight paths still need to
-  populate package facts consistently for every executable task.
+  execution summaries, and graph/preflight paths now populate package facts for
+  the executable task families covered by this milestone.
   Typed non-streaming backend-execution completion events now retain the same
   bounded compatibility summary computed during task validation, so downstream
   ledger adapters can persist selected-backend compatibility facts from the
