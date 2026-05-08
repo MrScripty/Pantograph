@@ -13,7 +13,6 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including ArtifactStore stream-reference preview reads, rerun cleanup of execution-local playback state, and explicit artifact format overrides. |
 | `ImageOutputNode.svelte` | Renders image output previews and explicit artifact format overrides for image artifacts. |
 | `PointCloudOutputNode.svelte` | Renders point-cloud previews and explicit artifact format overrides for 3D artifacts. |
-| `DiffusionInferenceNode.svelte` | Retired direct diffusion renderer kept only until the old component file is deleted; new image-generation authoring uses canonical `LLMInferenceNode.svelte`. |
 | `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
 | `DependencyEnvironmentBindingsPanel.svelte` | Renders binding selection, manual override summary controls, and per-requirement override fields. |
 | `DependencyEnvironmentModeControls.svelte` | Renders the dependency environment automatic/manual mode selector. |

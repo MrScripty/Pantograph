@@ -4568,6 +4568,11 @@ Update during implementation:
   frontend registry maps no longer expose it as an authorable graph node. Old
   execution internals remain separate until deeper direct-diffusion removal can
   be done without touching Python-sidecar audio/ONNX behavior.
+- 2026-05-08 follow-up: removed the now-unreferenced direct-diffusion workflow
+  descriptor module and frontend renderer component. Remaining
+  `diffusion-inference` references are limited to historical plan text,
+  explicit retired-node test guardrails, or embedded-runtime Python-sidecar
+  execution internals awaiting a deeper removal slice.
 - 2026-05-08: Puma-Lib hydration dependency preflight now infers canonical
   `llm-inference` for `text-to-image` and `image-to-image` package facts instead
   of routing the request through the retired direct `diffusion-inference` node

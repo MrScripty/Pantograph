@@ -5,7 +5,6 @@
 mod audio_generation;
 mod dependency_environment;
 mod depth_estimation;
-mod diffusion_inference;
 mod embedding;
 mod expand_settings;
 mod inference;
@@ -20,7 +19,6 @@ mod vision_analysis;
 pub use audio_generation::AudioGenerationTask;
 pub use dependency_environment::DependencyEnvironmentTask;
 pub use depth_estimation::DepthEstimationTask;
-pub use diffusion_inference::DiffusionInferenceTask;
 pub use embedding::{EmbeddingConfig, EmbeddingTask};
 pub use expand_settings::ExpandSettingsTask;
 pub use inference::{
