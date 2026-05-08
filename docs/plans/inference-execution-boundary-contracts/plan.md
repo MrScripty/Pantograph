@@ -3681,10 +3681,13 @@ inference write ledger events directly.
   stream chunks into typed results and backend-execution lifecycle events
   without storing prompt text or generated content. The llama.cpp SSE parser
   now retains OpenAI-compatible bounded usage payloads from content or
-  usage-only stream events while dropping oversized counts. Typed streaming
-  lifecycle completion now also carries the last bounded stream-chunk usage
-  summary onto the terminal backend-execution event without storing prompt or
-  generated text. Additional backend producers remain open. Canonical
+  usage-only stream events while dropping oversized counts. PyTorch worker
+  streaming now applies the same usage-only and bounded-count behavior for
+  dictionary stream chunks, so typed streaming lifecycle completion can retain
+  PyTorch token usage metadata without storing prompt or generated text. Typed
+  streaming lifecycle completion now also carries the last bounded stream-chunk
+  usage summary onto the terminal backend-execution event without storing prompt
+  or generated text. Additional backend producers remain open. Canonical
   `llm-inference` embedding execution
   now projects typed embedding `usage` and bounded `option_diagnostics` onto
   graph output ports while keeping input text and embedding vectors out of

@@ -3178,18 +3178,79 @@ fn test_pytorch_worker_stream_token_accepts_replace_dict_chunk() {
         let token = pyo3::types::PyDict::new(py);
         token.set_item("mode", "replace").expect("set mode");
         token.set_item("text", "final text").expect("set text");
+        let usage = pyo3::types::PyDict::new(py);
+        usage.set_item("prompt_tokens", 3).expect("set prompt");
+        usage
+            .set_item("completion_tokens", 5)
+            .expect("set completion");
+        usage.set_item("total_tokens", 8).expect("set total");
+        token.set_item("usage", usage).expect("set usage");
 
         let chunk =
             PyTorchBackend::stream_chunk_from_python_token("req-stream-token", token.as_any())
                 .expect("dict stream token should decode");
 
         assert_eq!(chunk.content.as_deref(), Some("final text"));
+        let usage = chunk.usage.expect("usage should decode");
+        assert_eq!(usage.prompt_tokens, Some(3));
+        assert_eq!(usage.completion_tokens, Some(5));
+        assert_eq!(usage.total_tokens, Some(8));
         assert!(!chunk.done);
     });
 }
 
 #[test]
-fn test_pytorch_worker_stream_token_rejects_dict_without_text() {
+fn test_pytorch_worker_stream_token_accepts_usage_only_dict_chunk() {
+    Python::with_gil(|py| {
+        let token = pyo3::types::PyDict::new(py);
+        let usage = pyo3::types::PyDict::new(py);
+        usage.set_item("prompt_tokens", 7).expect("set prompt");
+        usage
+            .set_item("completion_tokens", 11)
+            .expect("set completion");
+        usage.set_item("total_tokens", 18).expect("set total");
+        token.set_item("usage", usage).expect("set usage");
+
+        let chunk =
+            PyTorchBackend::stream_chunk_from_python_token("req-stream-token", token.as_any())
+                .expect("usage-only dict stream token should decode");
+
+        assert_eq!(chunk.content, None);
+        let usage = chunk.usage.expect("usage should decode");
+        assert_eq!(usage.prompt_tokens, Some(7));
+        assert_eq!(usage.completion_tokens, Some(11));
+        assert_eq!(usage.total_tokens, Some(18));
+        assert!(!chunk.done);
+    });
+}
+
+#[test]
+fn test_pytorch_worker_stream_token_bounds_usage_counts() {
+    Python::with_gil(|py| {
+        let token = pyo3::types::PyDict::new(py);
+        let usage = pyo3::types::PyDict::new(py);
+        usage.set_item("prompt_tokens", 2).expect("set prompt");
+        usage
+            .set_item("completion_tokens", u64::from(u32::MAX) + 1)
+            .expect("set oversized completion");
+        usage
+            .set_item("total_tokens", "many")
+            .expect("set malformed total");
+        token.set_item("usage", usage).expect("set usage");
+
+        let chunk =
+            PyTorchBackend::stream_chunk_from_python_token("req-stream-token", token.as_any())
+                .expect("bounded usage dict stream token should decode");
+
+        let usage = chunk.usage.expect("usage should decode");
+        assert_eq!(usage.prompt_tokens, Some(2));
+        assert_eq!(usage.completion_tokens, None);
+        assert_eq!(usage.total_tokens, None);
+    });
+}
+
+#[test]
+fn test_pytorch_worker_stream_token_rejects_dict_without_text_or_usage() {
     Python::with_gil(|py| {
         let token = pyo3::types::PyDict::new(py);
         token.set_item("mode", "replace").expect("set mode");
@@ -3198,7 +3259,7 @@ fn test_pytorch_worker_stream_token_rejects_dict_without_text() {
             Err(BackendError::Inference(message)) => {
                 assert!(message.contains("pytorch_worker_generate_text_stream_failed"));
                 assert!(message.contains("req-stream-token"));
-                assert!(message.contains("missing text"));
+                assert!(message.contains("missing text or usage"));
             }
             other => panic!("expected Inference error, got {other:?}"),
         }

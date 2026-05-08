@@ -349,7 +349,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   lifecycle emission when a stable model id is present, while retaining bounded
   relative component paths such as `tokenizer.json`.
   Text generation may receive bounded stream usage and backend-local cache
-  handle ids from backend `ChatChunk` metadata, and embedding execution
+  handle ids from backend `ChatChunk` metadata. The llama.cpp SSE parser and
+  PyTorch worker stream parser both accept usage-only stream chunks and drop
+  oversized usage counts before typed lifecycle projection. Embedding execution
   aggregates backend embedding item token counts into bounded prompt/total usage
   summaries without exposing vectors or input text; prompt text, messages,
   generated content, embeddings, tensors, token arrays, Python kwargs, backend

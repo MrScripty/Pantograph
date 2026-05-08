@@ -46,7 +46,8 @@ use crate::model_contracts::{
 };
 use crate::process::ProcessSpawner;
 use crate::types::{
-    AudioTranscriptionRequest, AudioTranscriptionResult, RerankRequest, RerankResponse,
+    AudioTranscriptionRequest, AudioTranscriptionResult, InferenceUsage, RerankRequest,
+    RerankResponse,
 };
 use crate::{BackendHintLabel, ModelArtifactKind};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
@@ -1397,22 +1398,39 @@ impl PyTorchBackend {
                     format!("Token text lookup failed: {}", error),
                 )
             })?;
-            let Some(text_value) = text_value else {
-                return Err(Self::stream_worker_failure_from_message(
-                    request_id,
-                    "Token extraction failed: stream dictionary was missing text".to_string(),
-                ));
+            let content = if let Some(text_value) = text_value {
+                Some(text_value.extract::<String>().map_err(|error| {
+                    Self::stream_worker_failure_from_message(
+                        request_id,
+                        format!("Token text extraction failed: {}", error),
+                    )
+                })?)
+            } else {
+                None
             };
-            let text = text_value.extract::<String>().map_err(|error| {
+            let usage_value = dict.get_item("usage").map_err(|error| {
                 Self::stream_worker_failure_from_message(
                     request_id,
-                    format!("Token text extraction failed: {}", error),
+                    format!("Token usage lookup failed: {}", error),
                 )
             })?;
+            let usage = usage_value
+                .as_ref()
+                .map(|value| Self::stream_usage_from_python_value(request_id, value))
+                .transpose()?
+                .flatten();
+
+            if content.is_none() && usage.is_none() {
+                return Err(Self::stream_worker_failure_from_message(
+                    request_id,
+                    "Token extraction failed: stream dictionary was missing text or usage"
+                        .to_string(),
+                ));
+            }
             return Ok(ChatChunk {
-                content: Some(text),
+                content,
                 done: false,
-                usage: None,
+                usage,
                 cache_handle_id: None,
             });
         }
@@ -1421,6 +1439,58 @@ impl PyTorchBackend {
             request_id,
             "Token extraction failed: expected string or stream dictionary".to_string(),
         ))
+    }
+
+    fn stream_usage_from_python_value(
+        request_id: &str,
+        usage_obj: &Bound<'_, PyAny>,
+    ) -> Result<Option<InferenceUsage>, BackendError> {
+        let usage_dict = usage_obj
+            .downcast::<pyo3::types::PyDict>()
+            .map_err(|error| {
+                Self::stream_worker_failure_from_message(
+                    request_id,
+                    format!("Token usage extraction failed: {}", error),
+                )
+            })?;
+        let usage = InferenceUsage {
+            prompt_tokens: Self::stream_usage_u32_field(request_id, usage_dict, "prompt_tokens")?,
+            completion_tokens: Self::stream_usage_u32_field(
+                request_id,
+                usage_dict,
+                "completion_tokens",
+            )?,
+            total_tokens: Self::stream_usage_u32_field(request_id, usage_dict, "total_tokens")?,
+        };
+
+        if usage.prompt_tokens.is_none()
+            && usage.completion_tokens.is_none()
+            && usage.total_tokens.is_none()
+        {
+            Ok(None)
+        } else {
+            Ok(Some(usage))
+        }
+    }
+
+    fn stream_usage_u32_field(
+        request_id: &str,
+        usage_dict: &Bound<'_, pyo3::types::PyDict>,
+        field: &str,
+    ) -> Result<Option<u32>, BackendError> {
+        let Some(value) = usage_dict.get_item(field).map_err(|error| {
+            Self::stream_worker_failure_from_message(
+                request_id,
+                format!("Token usage field lookup failed: {}", error),
+            )
+        })?
+        else {
+            return Ok(None);
+        };
+        let Ok(count) = value.extract::<u64>() else {
+            return Ok(None);
+        };
+        Ok(u32::try_from(count).ok())
     }
 
     fn generate_text_worker_failure_from_message(
