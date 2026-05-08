@@ -85,6 +85,9 @@ command transport can stay focused on invoke state and payload mapping.
 - Agent command prompt builders should keep only active request-formatting
   paths; retired reference-only helpers belong in tests or docs, not command
   code.
+- Agent commands that need RIG tool-calling must call the explicit host-agent
+  completions adapter from `src-tauri/src/agent`, not generic gateway-base-url
+  helpers that could be mistaken for workflow inference execution.
 - Generated-component history commands use `.pantograph/generated-components.git/`
   with `src/generated/` as the work tree.
 - Command helper cleanup for strict clippy must not alter public invoke

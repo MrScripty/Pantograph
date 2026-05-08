@@ -37,6 +37,9 @@ sub-boundaries for RAG and tools. Reusable model/runtime execution remains in
 backend crates.
 Documentation and indexing helpers should stay idiomatic under strict clippy
 without adding local lint exceptions for simple expression or borrow cleanup.
+The desktop UI-generation agent uses an explicit host-agent completions adapter
+for RIG tool-calling. That adapter is not a workflow inference backend and must
+not be reused by graph execution or model-runtime selection code.
 
 ## Alternatives Rejected
 - Mix assistant tools into workflow-node execution: rejected because assistant
@@ -48,6 +51,8 @@ without adding local lint exceptions for simple expression or borrow cleanup.
 - Tool writes must pass validation before modifying files.
 - Retrieval inputs and generated context must remain traceable to sources.
 - Agent helpers should not bypass workflow/runtime service contracts.
+- Host-agent model clients are scoped to desktop assistant tool-calling only;
+  workflow execution must use the canonical inference/workflow contracts.
 - Indexing/chunking helpers should accept borrowed string/path forms at the
   narrowest useful boundary so assistant support code remains adapter-only.
 

@@ -3498,6 +3498,12 @@ drift back into inference.
     It needs an explicit typed-inference or host-agent boundary slice before
     the app can claim that all user-facing LLM execution flows through the
     canonical inference gateway contracts.
+  - 2026-05-08 implementation: the RIG UI-generation path now uses an explicit
+    `create_host_agent_completions_client` adapter with tested base-URL
+    normalization and README boundary notes. It remains a desktop host-agent
+    tool-calling adapter rather than a workflow inference backend; replacing it
+    with typed inference requires a future tool-calling-capable inference
+    contract rather than reusing generic gateway-base-url helpers.
 
 **Verification:**
 - `cargo test -p inference`.

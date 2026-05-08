@@ -97,7 +97,7 @@ pub async fn run_agent(
     // Step 2: Create the RIG client and agent for tool execution
     log::info!("[run_agent] Step 2: Creating RIG agent...");
 
-    let client = agent::create_client(&base_url)?;
+    let client = agent::create_host_agent_completions_client(&base_url)?;
 
     // Create write tracker to track files written during this session
     let write_tracker: WriteTracker = Arc::new(Mutex::new(Vec::new()));

@@ -26,25 +26,33 @@ use rig::providers::openai::completion::CompletionModel;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// Create an OpenAI-compatible client for the local LLM server
-/// Uses the Chat Completions API (/v1/chat/completions) for LM Studio compatibility
-pub fn create_client(base_url: &str) -> Result<openai::CompletionsClient, String> {
-    // RIG's OpenAI client supports custom base URLs via builder pattern
-    // Using "local" as API key since local servers typically don't require one
-    // Use completions_api() to get a client that uses /v1/chat/completions
-    // Note: RIG expects the base URL to include /v1 suffix for proper endpoint routing
-    let base_url_with_v1 = if base_url.ends_with("/v1") {
-        base_url.to_string()
-    } else {
-        format!("{}/v1", base_url.trim_end_matches('/'))
-    };
-
+/// Create the host-agent completions client used by the desktop UI generator.
+///
+/// This adapter is intentionally scoped to RIG tool-calling in the desktop
+/// assistant. It is not a workflow inference backend and must not be reused by
+/// graph execution paths.
+pub fn create_host_agent_completions_client(
+    base_url: &str,
+) -> Result<openai::CompletionsClient, String> {
+    let base_url_with_v1 = host_agent_completions_base_url(base_url)?;
     openai::Client::builder()
         .api_key("local")
         .base_url(&base_url_with_v1)
         .build()
         .map(|client| client.completions_api())
         .map_err(|e| format!("Failed to create client: {}", e))
+}
+
+fn host_agent_completions_base_url(base_url: &str) -> Result<String, String> {
+    let base_url = base_url.trim();
+    if base_url.is_empty() {
+        return Err("Host-agent completions base URL cannot be empty".to_string());
+    }
+    if base_url.ends_with("/v1") {
+        Ok(base_url.to_string())
+    } else {
+        Ok(format!("{}/v1", base_url.trim_end_matches('/')))
+    }
 }
 
 /// Create the UI generation agent with all tools
@@ -75,4 +83,32 @@ pub fn create_ui_agent(
         .tool(ListTemplatesTool::new(project_root.clone()))
         .tool(ReadTemplateTool::new(project_root))
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::host_agent_completions_base_url;
+
+    #[test]
+    fn host_agent_completions_base_url_adds_v1() {
+        assert_eq!(
+            host_agent_completions_base_url("http://localhost:8080").as_deref(),
+            Ok("http://localhost:8080/v1")
+        );
+    }
+
+    #[test]
+    fn host_agent_completions_base_url_preserves_v1() {
+        assert_eq!(
+            host_agent_completions_base_url("http://localhost:8080/v1").as_deref(),
+            Ok("http://localhost:8080/v1")
+        );
+    }
+
+    #[test]
+    fn host_agent_completions_base_url_rejects_blank_url() {
+        let error = host_agent_completions_base_url("  ").expect_err("blank URL should fail");
+
+        assert!(error.contains("cannot be empty"));
+    }
 }
