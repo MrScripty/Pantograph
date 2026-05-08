@@ -325,6 +325,10 @@ let snapshot = workflow_service
   capabilities are introduced.
 - Workflow dependency resolution and execution treat Pumas as the source of
   truth for executable model asset paths when bundle metadata requires it.
+- Puma-Lib selected `model_id` hydration uses the explicit Pumas selector-access
+  role before raw owner API fallback. Owner/local-client access may return batch
+  detail facts; read-only access may return selector-row facts without
+  inference settings.
 - Puma-Lib option queries record successful model collection access/search
   through the workflow-service Library asset audit API and do not emit audit
   events for failed provider calls.
@@ -358,6 +362,9 @@ let snapshot = workflow_service
 - Tauri diagnostics collection should pass grouped embedded-runtime diagnostics
   input objects into the backend projection helpers rather than rebuilding long
   positional argument lists locally.
+- Tauri Puma-Lib commands may project Pumas batch detail or selector-row facts
+  into node data, but must not infer scheduler/runtime selection policy or read
+  Pumas storage internals directly.
 - Workflow execution runtime helpers should pass grouped execution/session and
   runtime-state inputs internally; expanded argument lists are only acceptable
   at Tauri command registration boundaries with a scoped reason.

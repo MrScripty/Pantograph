@@ -119,6 +119,10 @@ assert_eq!(metadata.node_type, "model-provider");
 - Consumers must treat selector `indexed_path` as display/debug data. A
   selector `entry_path` is executable only when the selector row reports ready
   entry and artifact states.
+- Consumers must treat selected-model detail as role-dependent. Owner and
+  local-client Pumas access may provide batch execution descriptors, package
+  summaries, and inference settings; read-only access may provide only the
+  bounded selector row and empty inference settings.
 
 ## Structured Producer Contract
 - `puma-lib` emits `model_path`, `model_id`, `model_type`,
@@ -130,6 +134,10 @@ assert_eq!(metadata.node_type, "model-provider");
   executable `entry_path`, `model_type` should prefer the descriptor model
   type, and `task_type_primary` should prefer descriptor task data unless more
   explicit task metadata is present.
+- Selected `puma-lib` hydration should prefer the explicit selector-access role
+  and must not read Pumas storage internals or synthesize runtime policy. The
+  producer may project read-only selector-row facts when batch detail is not
+  available.
 - Metadata fields such as `bundle_format`, `storage_kind`, and `entry_path` are
   compatibility fallbacks only. They are not the authoritative runtime contract
   for executable model selection.

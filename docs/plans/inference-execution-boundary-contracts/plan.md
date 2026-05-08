@@ -3332,7 +3332,12 @@ drift back into inference.
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
   service README contract sections now document workflow backend capability
   `request_contract` DTOs as task/modality/execution metadata, not scheduler or
-  runtime selection policy.
+  runtime selection policy. Workflow-nodes input and Tauri workflow README
+  contract sections now document selected Puma-Lib detail hydration as
+  selector-access-role dependent: owner/local-client access may expose batch
+  detail facts, read-only access may expose selector-row facts only, and neither
+  boundary may infer runtime/scheduler policy or inspect Pumas storage
+  internals.
 - [ ] Update generated bindings, host-language types, or shared schemas in the
   same implementation slice as native DTO changes when those bindings are
   public contract surface. Frontend workflow service and shared svelte-graph
