@@ -3667,7 +3667,7 @@ inference write ledger events directly.
   now emits bounded backend-unavailable diagnostics for recognized video
   sampling/window task options and embedded-runtime persists those option
   support counts without storing raw video payloads.
-- [ ] Map lifecycle summaries into durable bounded metadata for package
+- [x] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup. Diagnostic-observed
   inference payloads now preserve lifecycle phase and event kind for events that
