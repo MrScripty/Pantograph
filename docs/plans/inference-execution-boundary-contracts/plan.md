@@ -3770,6 +3770,10 @@ inference write ledger events directly.
   bounded stable artifact refs from roadmap task inputs onto the failed
   task-validation lifecycle event while filtering local path and `file://`
   values and leaving started/cleanup events artifact-free.
+  OpenAI-compatible embedding backends now copy bounded response-scoped usage
+  into `EmbeddingResult.token_count` only for single-input responses where
+  attribution is unambiguous; multi-input batches keep `token_count = 0`
+  instead of distributing response-level counts heuristically.
 - [x] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output

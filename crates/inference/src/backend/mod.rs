@@ -753,6 +753,31 @@ pub struct EmbeddingResult {
     pub token_count: usize,
 }
 
+/// Extract per-item embedding token usage only when attribution is unambiguous.
+///
+/// OpenAI-compatible embedding responses report usage at response scope rather
+/// than per embedding item. For multi-input batches we keep `token_count = 0`
+/// instead of distributing counts heuristically.
+pub(crate) fn openai_embedding_token_count_for_single_result(
+    response_json: &serde_json::Value,
+    item_count: usize,
+) -> usize {
+    if item_count != 1 {
+        return 0;
+    }
+    response_json
+        .get("usage")
+        .and_then(|usage| {
+            usage
+                .get("prompt_tokens")
+                .or_else(|| usage.get("total_tokens"))
+        })
+        .and_then(|value| value.as_u64())
+        .and_then(|count| u32::try_from(count).ok())
+        .map(|count| count as usize)
+        .unwrap_or(0)
+}
+
 /// Re-export diffusion request/result types from the shared `types` module so
 /// backend consumers can reach them from the backend facade.
 pub type ImageRequest = ImageGenerationRequest;
@@ -948,6 +973,64 @@ mod tests {
         assert_eq!(
             encoded["cache_handle_id"],
             serde_json::json!("kv-checkpoint-1")
+        );
+    }
+
+    #[test]
+    fn openai_embedding_token_count_uses_single_item_prompt_usage() {
+        let response = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 9,
+                "total_tokens": 9
+            }
+        });
+
+        assert_eq!(
+            openai_embedding_token_count_for_single_result(&response, 1),
+            9
+        );
+    }
+
+    #[test]
+    fn openai_embedding_token_count_uses_total_tokens_fallback() {
+        let response = serde_json::json!({
+            "usage": {
+                "total_tokens": 7
+            }
+        });
+
+        assert_eq!(
+            openai_embedding_token_count_for_single_result(&response, 1),
+            7
+        );
+    }
+
+    #[test]
+    fn openai_embedding_token_count_avoids_multi_item_attribution() {
+        let response = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 9,
+                "total_tokens": 9
+            }
+        });
+
+        assert_eq!(
+            openai_embedding_token_count_for_single_result(&response, 2),
+            0
+        );
+    }
+
+    #[test]
+    fn openai_embedding_token_count_drops_oversized_counts() {
+        let response = serde_json::json!({
+            "usage": {
+                "prompt_tokens": u64::MAX
+            }
+        });
+
+        assert_eq!(
+            openai_embedding_token_count_for_single_result(&response, 1),
+            0
         );
     }
 }

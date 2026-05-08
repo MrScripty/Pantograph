@@ -11,10 +11,10 @@ use async_trait::async_trait;
 use futures_util::Stream;
 
 use super::{
-    BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
-    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
-    BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
-    EmbeddingResult, InferenceBackend,
+    openai_embedding_token_count_for_single_result, BackendCapabilities, BackendCapabilityFacts,
+    BackendComponentCapability, BackendConfig, BackendError, BackendFeatureCapabilityFacts,
+    BackendFeatureSupport, BackendModelSourceCapabilityFacts, BackendStartOutcome,
+    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
@@ -354,6 +354,7 @@ impl InferenceBackend for LlamaCppBackend {
         let data = json.get("data").and_then(|d| d.as_array()).ok_or_else(|| {
             BackendError::Inference("Invalid embedding response format".to_string())
         })?;
+        let token_count = openai_embedding_token_count_for_single_result(&json, data.len());
 
         let mut results = Vec::new();
         for item in data {
@@ -369,7 +370,7 @@ impl InferenceBackend for LlamaCppBackend {
 
             results.push(EmbeddingResult {
                 vector,
-                token_count: 0, // llama.cpp doesn't return token count
+                token_count,
             });
         }
 

@@ -132,6 +132,10 @@ fn create_backend() {
   llama.cpp SSE parsing and PyTorch worker dictionary stream parsing both keep
   usage-only chunks and drop oversized usage counts before exposing
   `ChatChunk.usage`.
+- OpenAI-compatible embedding response usage is response-scoped, not
+  per-item. Backends may copy bounded usage into `EmbeddingResult.token_count`
+  only for single-input responses where attribution is unambiguous; multi-input
+  batches must not distribute token counts heuristically.
 - `ChatChunk.cache_handle_id` is optional append-only stream metadata for
   backend-local KV checkpoint handles. Backends should emit stable handle ids
   only, never KV bytes, prompt text, generated text, tensors, temp paths, or
