@@ -758,6 +758,7 @@ pub struct EmbeddingResult {
 /// OpenAI-compatible embedding responses report usage at response scope rather
 /// than per embedding item. For multi-input batches we keep `token_count = 0`
 /// instead of distributing counts heuristically.
+#[cfg(any(feature = "backend-llamacpp", feature = "backend-candle", test))]
 pub(crate) fn openai_embedding_token_count_for_single_result(
     response_json: &serde_json::Value,
     item_count: usize,

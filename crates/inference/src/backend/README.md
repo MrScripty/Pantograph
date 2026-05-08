@@ -136,6 +136,9 @@ fn create_backend() {
   per-item. Backends may copy bounded usage into `EmbeddingResult.token_count`
   only for single-input responses where attribution is unambiguous; multi-input
   batches must not distribute token counts heuristically.
+- Shared helpers used only by optional backend adapters should be gated to the
+  same backend features so consumers that compile inference without those
+  adapters do not inherit dead code.
 - `ChatChunk.cache_handle_id` is optional append-only stream metadata for
   backend-local KV checkpoint handles. Backends should emit stable handle ids
   only, never KV bytes, prompt text, generated text, tensors, temp paths, or
