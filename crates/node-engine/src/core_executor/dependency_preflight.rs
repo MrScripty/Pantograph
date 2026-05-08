@@ -120,9 +120,6 @@ pub(crate) fn infer_task_type_primary(
     if node_type == "audio-generation" || model_type == "audio" {
         return "text-to-audio".to_string();
     }
-    if node_type == "diffusion-inference" {
-        return "text-to-image".to_string();
-    }
     if model_type == "reranker" {
         return "reranking".to_string();
     }
@@ -263,10 +260,6 @@ pub(crate) fn infer_backend_key(
 ) -> Option<String> {
     match node_type {
         "audio-generation" => Some("stable_audio".to_string()),
-        // Leave diffusion unspecified when the graph does not provide a
-        // concrete backend so Pumas can apply the model's recommended
-        // execution profile.
-        "diffusion-inference" => None,
         "llm-inference" => {
             #[cfg(feature = "inference-nodes")]
             if matches!(
@@ -301,28 +294,9 @@ pub(crate) fn infer_backend_key(
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 pub(crate) fn preferred_backend_key(
-    node_type: &str,
+    _node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Option<String> {
-    if node_type == "diffusion-inference" {
-        if let Some(backend) = read_optional_input_string_aliases(
-            inputs,
-            &["recommended_backend", "recommendedBackend"],
-        )
-        .or_else(|| {
-            inputs.get("pumas_model_ref").and_then(|model_ref| {
-                read_optional_string_aliases_from_value(
-                    model_ref,
-                    &["recommended_backend", "recommendedBackend"],
-                )
-            })
-        })
-        .and_then(|value| canonical_backend_key(Some(value.as_str())))
-        {
-            return Some(backend);
-        }
-    }
-
     if let Some(backend) = read_optional_input_string_aliases(
         inputs,
         &[
@@ -756,7 +730,7 @@ async fn enforce_dependency_preflight_inner(
     lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
 ) -> Result<Option<ModelRefV2>> {
     let llm_backend_key = preferred_or_package_facts_backend_key(node_type, inputs);
-    let should_preflight = matches!(node_type, "diffusion-inference" | "audio-generation")
+    let should_preflight = node_type == "audio-generation"
         || (node_type == "llm-inference" && llm_backend_key.as_deref() == Some("pytorch"));
     if !should_preflight {
         return Ok(None);

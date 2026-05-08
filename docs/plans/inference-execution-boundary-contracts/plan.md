@@ -4573,6 +4573,11 @@ Update during implementation:
   `diffusion-inference` references are limited to historical plan text,
   explicit retired-node test guardrails, or embedded-runtime Python-sidecar
   execution internals awaiting a deeper removal slice.
+- 2026-05-08 follow-up: node-engine dependency preflight no longer
+  special-cases the retired direct `diffusion-inference` node shape for backend
+  selection, task inference, or dependency resolver dispatch. Image-generation
+  dependency checks now enter through canonical `llm-inference` task metadata
+  and resolved package facts.
 - 2026-05-08: Puma-Lib hydration dependency preflight now infers canonical
   `llm-inference` for `text-to-image` and `image-to-image` package facts instead
   of routing the request through the retired direct `diffusion-inference` node

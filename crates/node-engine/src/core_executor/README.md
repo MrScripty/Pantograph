@@ -84,6 +84,9 @@ stable public facade and dispatch owner.
   workflow/backend hints win, then resolved package facts may provide factual
   backend/task/model inputs, and only sparse legacy graphs use backend-name
   heuristics.
+- Dependency preflight must not special-case retired direct inference node
+  shapes such as `diffusion-inference`. Image-generation preflight enters
+  through canonical `llm-inference` task metadata and resolved package facts.
 - Dependency preflight lifecycle events are bounded model-package-resolution
   observations. Successful canonical PyTorch preflight emits
   started/completed/cleanup facts with request, task, backend/runtime, and
