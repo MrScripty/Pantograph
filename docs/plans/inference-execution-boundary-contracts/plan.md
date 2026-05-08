@@ -4583,6 +4583,10 @@ Update during implementation:
   bridge no longer exposes the diffusion worker path. Host Python coverage now
   exercises audio and ONNX sidecar behavior while canonical image generation
   stays on the inference task boundary.
+- 2026-05-08 follow-up: embedded-runtime model dependency descriptors no
+  longer preserve a direct `diffusion-inference` backend default. Diffusers
+  descriptor tests now use canonical `llm-inference` dependency requests with
+  explicit task/backend facts from Pumas.
 - 2026-05-08: Puma-Lib hydration dependency preflight now infers canonical
   `llm-inference` for `text-to-image` and `image-to-image` package facts instead
   of routing the request through the retired direct `diffusion-inference` node

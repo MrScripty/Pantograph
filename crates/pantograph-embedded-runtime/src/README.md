@@ -595,6 +595,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   resolution so model ids, executable paths, backend aliases, selected binding
   ids, and task tags are normalized before dependency requirement and model-ref
   projection.
+- `model_dependency_descriptors.rs` must not preserve backend defaults for
+  retired direct inference node shapes. Diffusers and image-generation package
+  facts use canonical dependency requests with explicit backend/task facts.
 - `model_dependency_requirements.rs` owns Pumas dependency-contract mapping,
   binding selection, runtime-state aggregation, install-target normalization,
   and override patch validation so the resolver facade can focus on API,

@@ -185,12 +185,6 @@ fn normalized_backend_key_canonicalizes_aliases() {
 }
 
 #[test]
-fn infer_engine_defaults_diffusion_node_to_pytorch() {
-    let engine = descriptors::infer_engine(None, "diffusion-inference", Some("diffusion"));
-    assert_eq!(engine, "pytorch");
-}
-
-#[test]
 fn infer_engine_uses_llamacpp_for_canonical_reranker_task() {
     let engine = descriptors::infer_engine(None, "llm-inference", Some("reranker"));
     assert_eq!(engine, "llamacpp");
@@ -304,7 +298,7 @@ async fn resolve_descriptor_uses_entry_path_for_external_diffusers_bundle() {
 
     let (resolver, api) = test_resolver_with_pumas(&temp_dir).await;
     let request = ModelDependencyRequest {
-        node_type: "diffusion-inference".to_string(),
+        node_type: "llm-inference".to_string(),
         model_path: bundle_root.display().to_string(),
         model_id: Some("diffusion/imported/test-bundle".to_string()),
         model_type: Some("diffusion".to_string()),
@@ -343,7 +337,7 @@ async fn resolve_descriptor_does_not_scan_descriptors_for_path_only_external_ent
 
     let (resolver, api) = test_resolver_with_pumas(&temp_dir).await;
     let request = ModelDependencyRequest {
-        node_type: "diffusion-inference".to_string(),
+        node_type: "llm-inference".to_string(),
         model_path: bundle_root.display().to_string(),
         model_id: None,
         model_type: Some("diffusion".to_string()),
