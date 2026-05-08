@@ -4519,7 +4519,10 @@ Update during implementation:
   The slice parses direct and nested image-generation options, falls back to
   resolved Pumas package facts for model identity, projects generated images
   through existing graph outputs, and verifies diagnostics do not include
-  prompt text or encoded image bytes.
+  prompt text or encoded image bytes. The 2026-05-08 output contract slice
+  additionally exposes the first generated image on the graph-visible `image`
+  port so canonical image-generation templates can wire directly into
+  `image-output` without parsing the typed `results` envelope.
 - 2026-05-04: Node-engine canonical image-generation execution now has
   package-facts lifecycle coverage. Diffusers package facts flow from graph
   inputs through typed gateway execution, and task-validation plus

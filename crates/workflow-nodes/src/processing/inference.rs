@@ -136,6 +136,8 @@ impl InferenceTask {
     pub const PORT_TOP_SCORE: &'static str = "top_score";
     /// Port ID for embedding vector output
     pub const PORT_EMBEDDING: &'static str = "embedding";
+    /// Port ID for first generated image output
+    pub const PORT_IMAGE: &'static str = "image";
     /// Port ID for task metadata output
     pub const PORT_METADATA: &'static str = "metadata";
     /// Port ID for canonical model reference output
@@ -250,6 +252,7 @@ impl TaskDescriptor for InferenceTask {
                 ),
                 PortMetadata::optional(Self::PORT_TOP_SCORE, "Top Score", PortDataType::Number),
                 PortMetadata::optional(Self::PORT_EMBEDDING, "Embedding", PortDataType::Embedding),
+                PortMetadata::optional(Self::PORT_IMAGE, "Image", PortDataType::Image),
                 PortMetadata::optional(Self::PORT_METADATA, "Metadata", PortDataType::Json),
                 PortMetadata::optional(Self::PORT_MODEL_REF, "Model Ref", PortDataType::Json),
                 PortMetadata::optional(Self::PORT_TOOL_CALLS, "Tool Calls", PortDataType::Json),
@@ -597,6 +600,10 @@ mod tests {
         assert!(meta.outputs.iter().any(|p| {
             p.id == InferenceTask::PORT_EMBEDDING && p.data_type == PortDataType::Embedding
         }));
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_IMAGE && p.data_type == PortDataType::Image));
         assert!(meta.outputs.iter().any(|p| {
             p.id == InferenceTask::PORT_METADATA && p.data_type == PortDataType::Json
         }));

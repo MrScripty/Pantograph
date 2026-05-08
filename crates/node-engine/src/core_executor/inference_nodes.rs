@@ -811,6 +811,14 @@ pub(crate) async fn execute_image_generation_inference(
 
     let mut outputs = HashMap::new();
     outputs.insert(
+        "image".to_string(),
+        image_result
+            .images
+            .first()
+            .map(|image| serde_json::json!(image.data_base64))
+            .unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert(
         "results".to_string(),
         serde_json::to_value(&image_result).unwrap_or(serde_json::Value::Null),
     );

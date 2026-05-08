@@ -115,9 +115,9 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   for canonical request/result families. The current `llm-inference`
   projection derives task fields from `inference::model_contracts`, then
   annotates text/chat, embedding, rerank, executable audio transcription, and
-  executable image-generation payloads plus text/chat usage and cache-handle
-  outputs without changing frontend rendering, scheduler policy, or runtime
-  backend selection.
+  executable image-generation payloads plus graph-visible generated-image,
+  text/chat usage, and cache-handle outputs without changing frontend
+  rendering, scheduler policy, or runtime backend selection.
 - Canonical `llm-inference` declares `task_kind` and `runtime_hint` as
   optional graph-visible inputs because saved-workflow migration, preflight,
   and execution already consume those fields as canonical node data.

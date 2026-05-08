@@ -1435,6 +1435,7 @@ async fn test_canonical_llm_image_generation_uses_typed_gateway_boundary() {
 
     assert_eq!(outputs["results"]["images"][0]["mime_type"], "image/png");
     assert_eq!(outputs["results"]["images"][0]["width"], 512);
+    assert_eq!(outputs["image"], "aW1hZ2U=");
     assert_eq!(outputs["metadata"]["seed_used"], 42);
     assert_eq!(outputs["metadata"]["image_count"], 1);
     let bounded_outputs = serde_json::to_string(&serde_json::json!({

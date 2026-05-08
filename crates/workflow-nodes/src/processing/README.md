@@ -16,6 +16,7 @@ adapters such as the Python runtime.
 | `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |
 | `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
+| `inference.rs` | Declares the canonical `llm-inference` graph contract for text/chat, embedding, rerank, audio transcription, image generation, model refs, package facts, and graph-visible generated-image output. |
 | `vision_analysis.rs` | Declares image-to-text style vision analysis contracts. |
 
 ## Problem
@@ -64,6 +65,9 @@ instead of hiding behind generic JSON ports.
   source schema.
 - Reranker outputs must preserve stable ranked-result fields so saved workflows
   and templates can consume them without endpoint-specific parsing logic.
+- Canonical `llm-inference` image-generation descriptors must expose the first
+  generated image on the `image` output while keeping the full typed result
+  envelope on `results`.
 - JSON-filter configuration defaults remain the derived empty-path/empty-default
   contract so descriptor consumers and task construction share one default
   shape.
@@ -85,7 +89,11 @@ host executors that consume these descriptors.
   rather than declaring a host-consumed descriptor.
 
 ## Related ADRs
-- None identified as of 2026-04-21.
+None.
+Reason: this directory documents local descriptor contracts; no separate
+architecture decision has been needed beyond the implementation plan.
+Revisit trigger: processing descriptors move into a generated registry or a
+host-specific runtime crate.
 
 ## Usage Examples
 ```rust
