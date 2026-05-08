@@ -18,8 +18,7 @@ pub use dependency_environment::DependencyEnvironmentTask;
 pub use depth_estimation::DepthEstimationTask;
 pub use expand_settings::ExpandSettingsTask;
 pub use inference::{
-    InferenceConfig, InferenceTask, ToolCall as InferenceToolCall,
-    ToolDefinition as InferenceToolDefinition,
+    InferenceTask, ToolCall as InferenceToolCall, ToolDefinition as InferenceToolDefinition,
 };
 pub use json_filter::{JsonFilterConfig, JsonFilterTask};
 pub use onnx_inference::OnnxInferenceTask;

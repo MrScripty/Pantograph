@@ -36,10 +36,15 @@ host executors implement the runtime behavior. Retired direct inference
 descriptors, including old diffusion, llama.cpp, embedding, and reranker
 shapes, must not re-enter this directory; canonical `llm-inference` task
 metadata owns text/chat, embedding, rerank, audio-transcription, and
-image-generation graph contracts. `expand_settings.rs` follows the same
-contract-first rule: model-specific settings stay graph-visible as matching
-optional input/output ports while the schema itself still passes through
-unchanged for downstream inference merging. Compatible text-generation
+image-generation graph contracts. Its `Task::run` implementation fails closed
+so standalone graph execution cannot bypass the host typed inference gateway.
+The old descriptor-local `base_url`/model generation config has been removed;
+generation and task options must flow through canonical graph ports and typed
+inference requests.
+`expand_settings.rs` follows the same contract-first rule: model-specific
+settings stay graph-visible as matching optional input/output ports while the
+schema itself still passes through unchanged for downstream inference merging.
+Compatible text-generation
 descriptors now also reserve explicit `kv_cache_in` and `kv_cache_out` ports
 using the first-class `kv_cache` graph type so KV reuse remains graph-visible
 instead of hiding behind generic JSON ports.

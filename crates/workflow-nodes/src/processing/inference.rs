@@ -1,13 +1,12 @@
-//! LLM Inference Task
+//! Canonical LLM inference descriptor.
 //!
-//! This task sends a prompt to an LLM and returns the response.
-//! Supports tool calling when tools are provided.
+//! Execution is owned by the host typed inference gateway. This module only
+//! defines the graph-visible `llm-inference` contract.
 
 use async_trait::async_trait;
-use graph_flow::{Context, GraphError, NextAction, Task, TaskResult};
+use graph_flow::{Context, GraphError, Task, TaskResult};
 use node_engine::{
-    ContextKeys, ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor,
-    TaskMetadata,
+    ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor, TaskMetadata,
 };
 use serde::{Deserialize, Serialize};
 
@@ -33,38 +32,11 @@ pub struct ToolCall {
     pub arguments: serde_json::Value,
 }
 
-/// Configuration for the inference task
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InferenceConfig {
-    /// Base URL of the LLM server
-    pub base_url: String,
-    /// Model name (for OpenAI-compatible APIs)
-    pub model: String,
-    /// Maximum tokens to generate
-    pub max_tokens: Option<u32>,
-    /// Temperature for sampling
-    pub temperature: Option<f32>,
-    /// Whether to enable tool calling when tools are provided
-    pub enable_tools: bool,
-}
-
-impl Default for InferenceConfig {
-    fn default() -> Self {
-        Self {
-            base_url: "http://localhost:8080".to_string(),
-            model: "gpt-4".to_string(),
-            max_tokens: None,
-            temperature: None,
-            enable_tools: true,
-        }
-    }
-}
-
-/// LLM Inference Task
+/// Canonical LLM inference descriptor.
 ///
-/// Sends a prompt to an LLM and stores the response in context.
-/// When tools are provided, the LLM may return tool calls instead of
-/// or in addition to a text response.
+/// Hosts execute this node through the typed inference gateway. The descriptor
+/// keeps the graph-visible task/model/option/result ports stable across
+/// frontend, workflow-service, and node-engine consumers.
 ///
 /// # Inputs (from context)
 /// - `{task_id}.input.prompt` - The prompt to send
@@ -77,16 +49,10 @@ impl Default for InferenceConfig {
 /// - `{task_id}.output.tool_calls` - Array of ToolCall if the LLM requested tools
 /// - `{task_id}.output.has_tool_calls` - Boolean indicating if tool calls were made
 ///
-/// # Configuration
-/// - `config.base_url` - LLM server URL
-/// - `config.model` - Model name
-/// - `config.enable_tools` - Whether to include tools in requests (default: true)
 #[derive(Clone)]
 pub struct InferenceTask {
     /// Unique identifier for this task instance
     task_id: String,
-    /// Configuration (optional, can also be set via context)
-    config: Option<InferenceConfig>,
 }
 
 impl InferenceTask {
@@ -159,15 +125,6 @@ impl InferenceTask {
     pub fn new(task_id: impl Into<String>) -> Self {
         Self {
             task_id: task_id.into(),
-            config: None,
-        }
-    }
-
-    /// Create with configuration
-    pub fn with_config(task_id: impl Into<String>, config: InferenceConfig) -> Self {
-        Self {
-            task_id: task_id.into(),
-            config: Some(config),
         }
     }
 
@@ -283,176 +240,10 @@ impl Task for InferenceTask {
         &self.task_id
     }
 
-    async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
-        // Get required input: prompt
-        let prompt_key = ContextKeys::input(&self.task_id, Self::PORT_PROMPT);
-        let prompt: String = context.get(&prompt_key).await.ok_or_else(|| {
-            GraphError::TaskExecutionFailed(format!(
-                "Missing required input 'prompt' at key '{}'",
-                prompt_key
-            ))
-        })?;
-
-        // Get optional inputs
-        let system_prompt_key = ContextKeys::input(&self.task_id, Self::PORT_SYSTEM_PROMPT);
-        let system_prompt: Option<String> = context.get(&system_prompt_key).await;
-
-        let context_key = ContextKeys::input(&self.task_id, Self::PORT_CONTEXT);
-        let extra_context: Option<String> = context.get(&context_key).await;
-
-        // Get optional tools input
-        let tools_key = ContextKeys::input(&self.task_id, Self::PORT_TOOLS);
-        let tools: Vec<ToolDefinition> = context.get(&tools_key).await.unwrap_or_default();
-
-        // Get configuration from context or use instance config
-        let config = if let Some(ref cfg) = self.config {
-            cfg.clone()
-        } else {
-            let config_key = ContextKeys::meta(&self.task_id, "config");
-            context
-                .get::<InferenceConfig>(&config_key)
-                .await
-                .unwrap_or_default()
-        };
-
-        // Build the full prompt with context if provided
-        let full_prompt = if let Some(ctx) = extra_context {
-            format!("{}\n\nContext:\n{}", prompt, ctx)
-        } else {
-            prompt
-        };
-
-        // Build messages for OpenAI-compatible API
-        let mut messages = Vec::new();
-        if let Some(sys) = system_prompt {
-            messages.push(serde_json::json!({
-                "role": "system",
-                "content": sys
-            }));
-        }
-        messages.push(serde_json::json!({
-            "role": "user",
-            "content": full_prompt
-        }));
-
-        // Build request body
-        let mut request_body = serde_json::json!({
-            "model": config.model,
-            "messages": messages,
-            "stream": false
-        });
-
-        if let Some(max_tokens) = config.max_tokens {
-            request_body["max_tokens"] = serde_json::json!(max_tokens);
-        }
-        if let Some(temp) = config.temperature {
-            request_body["temperature"] = serde_json::json!(temp);
-        }
-
-        // Add tools if available and enabled
-        if config.enable_tools && !tools.is_empty() {
-            let tools_json: Vec<serde_json::Value> = tools
-                .iter()
-                .map(|t| {
-                    serde_json::json!({
-                        "type": "function",
-                        "function": {
-                            "name": t.name,
-                            "description": t.description,
-                            "parameters": t.parameters
-                        }
-                    })
-                })
-                .collect();
-            request_body["tools"] = serde_json::json!(tools_json);
-            log::debug!(
-                "InferenceTask {}: including {} tools in request",
-                self.task_id,
-                tools.len()
-            );
-        }
-
-        // Make the HTTP request
-        let client = reqwest::Client::new();
-        let url = format!("{}/v1/chat/completions", config.base_url);
-
-        log::debug!("InferenceTask {}: sending request to {}", self.task_id, url);
-
-        let http_response = client
-            .post(&url)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| GraphError::TaskExecutionFailed(format!("HTTP request failed: {}", e)))?;
-
-        if !http_response.status().is_success() {
-            let status = http_response.status();
-            let error_body = http_response.text().await.unwrap_or_default();
-            return Err(GraphError::TaskExecutionFailed(format!(
-                "LLM API error ({}): {}",
-                status, error_body
-            )));
-        }
-
-        let json: serde_json::Value = http_response.json().await.map_err(|e| {
-            GraphError::TaskExecutionFailed(format!("Failed to parse response: {}", e))
-        })?;
-
-        let message = &json["choices"][0]["message"];
-
-        // Extract text response
-        let response = message["content"].as_str().unwrap_or("").to_string();
-
-        // Extract tool calls if present
-        let tool_calls_json = message.get("tool_calls");
-        let has_tool_calls = tool_calls_json
-            .and_then(|t| t.as_array())
-            .map(|a| !a.is_empty())
-            .unwrap_or(false);
-
-        let tool_calls: Vec<ToolCall> = if has_tool_calls {
-            tool_calls_json
-                .and_then(|t| t.as_array())
-                .map(|calls| {
-                    calls
-                        .iter()
-                        .filter_map(|call| {
-                            let id = call["id"].as_str()?.to_string();
-                            let name = call["function"]["name"].as_str()?.to_string();
-                            let args_str = call["function"]["arguments"].as_str().unwrap_or("{}");
-                            let arguments: serde_json::Value =
-                                serde_json::from_str(args_str).unwrap_or(serde_json::json!({}));
-                            Some(ToolCall {
-                                id,
-                                name,
-                                arguments,
-                            })
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-
-        // Store outputs in context
-        let output_key = ContextKeys::output(&self.task_id, Self::PORT_RESPONSE);
-        context.set(&output_key, response.clone()).await;
-
-        let tool_calls_key = ContextKeys::output(&self.task_id, Self::PORT_TOOL_CALLS);
-        context.set(&tool_calls_key, tool_calls.clone()).await;
-
-        let has_tool_calls_key = ContextKeys::output(&self.task_id, Self::PORT_HAS_TOOL_CALLS);
-        context.set(&has_tool_calls_key, has_tool_calls).await;
-
-        log::debug!(
-            "InferenceTask {}: completed with {} chars response, {} tool calls",
-            self.task_id,
-            response.len(),
-            tool_calls.len()
-        );
-
-        Ok(TaskResult::new(Some(response), NextAction::Continue))
+    async fn run(&self, _context: Context) -> graph_flow::Result<TaskResult> {
+        Err(GraphError::TaskExecutionFailed(
+            "llm-inference requires host execution through the typed inference gateway".into(),
+        ))
     }
 }
 
@@ -464,31 +255,6 @@ mod tests {
     fn test_task_id() {
         let task = InferenceTask::new("my_inference");
         assert_eq!(task.id(), "my_inference");
-    }
-
-    #[test]
-    fn test_with_config() {
-        let config = InferenceConfig {
-            base_url: "http://localhost:1234".to_string(),
-            model: "llama".to_string(),
-            max_tokens: Some(100),
-            temperature: Some(0.7),
-            enable_tools: false,
-        };
-        let task = InferenceTask::with_config("task1", config);
-        assert_eq!(
-            task.config.as_ref().unwrap().base_url,
-            "http://localhost:1234"
-        );
-        assert!(!task.config.as_ref().unwrap().enable_tools);
-    }
-
-    #[test]
-    fn test_default_config() {
-        let config = InferenceConfig::default();
-        assert_eq!(config.base_url, "http://localhost:8080");
-        assert_eq!(config.model, "gpt-4");
-        assert!(config.enable_tools);
     }
 
     #[test]
@@ -615,6 +381,19 @@ mod tests {
             .outputs
             .iter()
             .any(|p| p.id == InferenceTask::PORT_USAGE && p.data_type == PortDataType::Json));
+    }
+
+    #[tokio::test]
+    async fn test_run_returns_host_gateway_error() {
+        let task = InferenceTask::new("test-llm");
+        let result = task.run(Context::new()).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("typed inference gateway"),
+            "error should point callers at the host typed gateway, got: {err}"
+        );
     }
 
     #[test]

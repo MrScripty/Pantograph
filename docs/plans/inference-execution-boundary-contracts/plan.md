@@ -2948,6 +2948,13 @@ maps and workflow mocks no longer expose retired backend-specific inference
 renderers, the GGUF reranker template now uses canonical `llm-inference` with
 `task_kind = rerank`, and `puma-lib` exposes a canonical JSON
 `pumas_model_ref` output for Pumas-to-inference graph wiring.
+The canonical `workflow-nodes` `llm-inference` descriptor now also fails closed
+from its local `Task::run` implementation, so standalone graph execution cannot
+issue direct OpenAI-compatible HTTP requests outside the typed inference gateway
+and node-engine lifecycle/diagnostic boundary. The descriptor-local
+`InferenceConfig`/`base_url` public export was removed with that path; canonical
+task and generation options must flow through graph ports and typed inference
+requests instead of a hidden descriptor config.
 Workflow-service capability extraction no longer infers llama.cpp or PyTorch
 requirements from retired node type names; it derives backend requirements from
 canonical `runtime_hint`, `backend_key`, or Pumas `recommended_backend` data and
