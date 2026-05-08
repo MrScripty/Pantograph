@@ -108,6 +108,9 @@ clean workflows through scheduler execution session create/run/close commands.
 That keeps the Graph page on the same canonical run path as Scheduler,
 Diagnostics, and I/O Inspector instead of executing the edit-session graph
 directly.
+Submit disabled reasons are rendered visibly below the toolbar rather than
+being available only as button titles, because Puma-Lib selection and other
+node edits mark workflows dirty and require a save before scheduler submission.
 When the run snapshot boundary reports that the current semantic version
 already belongs to another execution fingerprint, the toolbar bumps the patch
 version and retries once instead of asking the backend to weaken workflow

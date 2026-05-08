@@ -33,6 +33,7 @@
     isNumericWorkflowSemanticVersion,
     isWorkflowSemanticVersionConflictError,
     nextWorkflowPatchSemanticVersion,
+    workflowSubmitDisabledReason,
   } from './workflowToolbarEvents';
 
   const DEFAULT_WORKFLOW_SEMANTIC_VERSION = '0.1.0';
@@ -48,19 +49,22 @@
       ? $availableWorkflows.find((workflow) => (workflow.id ?? workflow.name) === $currentGraphId)
       : undefined,
   );
-  let submitDisabled = $derived(
-    $isExecuting ||
-      $isReadOnly ||
-      $isDirty ||
-      !currentSavedWorkflow ||
-      !$currentGraphId ||
-      !isNumericWorkflowSemanticVersion(workflowSemanticVersion),
-  );
   let workflowSemanticVersionInvalid = $derived(
     workflowSemanticVersion.trim().length > 0 &&
       !isNumericWorkflowSemanticVersion(workflowSemanticVersion),
   );
-  let submitTitle = $derived(submitButtonTitle());
+  let submitDisabledReason = $derived(
+    workflowSubmitDisabledReason({
+      isExecuting: $isExecuting,
+      isReadOnly: $isReadOnly,
+      isDirty: $isDirty,
+      hasSavedWorkflow: Boolean(currentSavedWorkflow),
+      hasWorkflowId: Boolean($currentGraphId),
+      semanticVersionInvalid: workflowSemanticVersionInvalid,
+    }),
+  );
+  let submitDisabled = $derived(submitDisabledReason !== null);
+  let submitTitle = $derived(submitDisabledReason ?? 'Submit workflow to the scheduler');
   let workflowErrorMessage = $derived(workflowError ? formatWorkflowCommandError(workflowError) : null);
   let workflowErrorDiagnostics = $derived(workflowError?.diagnostics ?? null);
   let canOpenWorkflowErrorDiagnostics = $derived(
@@ -71,17 +75,6 @@
         currentGraphType: $currentGraphType,
       }),
   );
-
-  function submitButtonTitle(): string {
-    if ($isReadOnly) return 'Cannot submit a read-only graph';
-    if ($isDirty) return 'Save workflow changes before submitting';
-    if (!currentSavedWorkflow || !$currentGraphId) return 'Save the workflow before submitting';
-    if (workflowSemanticVersionInvalid) {
-      return 'Workflow version must use numeric major.minor.patch format';
-    }
-    if ($isExecuting) return 'Workflow submission is in progress';
-    return 'Submit workflow to the scheduler';
-  }
 
   function workflowSemanticVersionStorageKey(workflowId: string): string {
     return `${WORKFLOW_SEMANTIC_VERSION_STORAGE_KEY_PREFIX}${workflowId}`;
@@ -277,6 +270,7 @@
         onclick={handleSubmit}
         disabled={submitDisabled}
         title={submitTitle}
+        aria-describedby={submitDisabledReason ? 'workflow-submit-disabled-reason' : undefined}
       >
         {#if $isExecuting}
           <Loader2 size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
@@ -288,6 +282,15 @@
       </button>
     </div>
   </div>
+
+  {#if submitDisabledReason && !$isExecuting}
+    <div
+      id="workflow-submit-disabled-reason"
+      class="border-b border-amber-900 bg-amber-950/40 px-4 py-2 text-xs text-amber-200"
+    >
+      Submit unavailable: {submitDisabledReason}
+    </div>
+  {/if}
 
   {#if workflowErrorMessage}
     <div class="flex items-center justify-between gap-3 border-b border-red-700 bg-red-900/70 px-4 py-2 text-xs text-red-200">

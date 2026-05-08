@@ -8,6 +8,7 @@ import {
   isNumericWorkflowSemanticVersion,
   isWorkflowSemanticVersionConflictError,
   nextWorkflowPatchSemanticVersion,
+  workflowSubmitDisabledReason,
 } from './workflowToolbarEvents.ts';
 import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/types.ts';
 
@@ -126,6 +127,35 @@ test('nextWorkflowPatchSemanticVersion increments valid patch versions', () => {
   assert.equal(nextWorkflowPatchSemanticVersion('0.1.0'), '0.1.1');
   assert.equal(nextWorkflowPatchSemanticVersion('2.4.9'), '2.4.10');
   assert.equal(nextWorkflowPatchSemanticVersion('bad'), '0.1.0');
+});
+
+test('workflowSubmitDisabledReason explains every disabled submit gate', () => {
+  const enabled = {
+    isExecuting: false,
+    isReadOnly: false,
+    isDirty: false,
+    hasSavedWorkflow: true,
+    hasWorkflowId: true,
+    semanticVersionInvalid: false,
+  };
+
+  assert.equal(workflowSubmitDisabledReason(enabled), null);
+  assert.equal(
+    workflowSubmitDisabledReason({ ...enabled, isDirty: true }),
+    'Save workflow changes before submitting',
+  );
+  assert.equal(
+    workflowSubmitDisabledReason({ ...enabled, hasSavedWorkflow: false }),
+    'Save the workflow before submitting',
+  );
+  assert.equal(
+    workflowSubmitDisabledReason({ ...enabled, semanticVersionInvalid: true }),
+    'Workflow version must use numeric major.minor.patch format',
+  );
+  assert.equal(
+    workflowSubmitDisabledReason({ ...enabled, isReadOnly: true, isDirty: true }),
+    'Cannot submit a read-only graph',
+  );
 });
 
 test('isWorkflowSemanticVersionConflictError detects attribution conflicts', () => {

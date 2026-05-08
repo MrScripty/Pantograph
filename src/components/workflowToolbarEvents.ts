@@ -38,6 +38,15 @@ export interface WorkflowSubmitFailureContext {
   currentGraphType: string | null | undefined;
 }
 
+export interface WorkflowSubmitDisabledReasonInput {
+  isExecuting: boolean;
+  isReadOnly: boolean;
+  isDirty: boolean;
+  hasSavedWorkflow: boolean;
+  hasWorkflowId: boolean;
+  semanticVersionInvalid: boolean;
+}
+
 export function isNumericWorkflowSemanticVersion(version: string): boolean {
   const parts = version.split('.');
   return (
@@ -53,6 +62,22 @@ export function nextWorkflowPatchSemanticVersion(version: string): string {
 
   const [major, minor, patch] = version.split('.').map((part) => Number.parseInt(part, 10));
   return `${major}.${minor}.${patch + 1}`;
+}
+
+export function workflowSubmitDisabledReason({
+  isExecuting,
+  isReadOnly,
+  isDirty,
+  hasSavedWorkflow,
+  hasWorkflowId,
+  semanticVersionInvalid,
+}: WorkflowSubmitDisabledReasonInput): string | null {
+  if (isReadOnly) return 'Cannot submit a read-only graph';
+  if (isDirty) return 'Save workflow changes before submitting';
+  if (!hasSavedWorkflow || !hasWorkflowId) return 'Save the workflow before submitting';
+  if (semanticVersionInvalid) return 'Workflow version must use numeric major.minor.patch format';
+  if (isExecuting) return 'Workflow submission is in progress';
+  return null;
 }
 
 export function isWorkflowSemanticVersionConflictError(error: unknown): boolean {
