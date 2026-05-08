@@ -1343,7 +1343,7 @@ handoff between the Library page and graph `puma-lib` node.
   `INTEROP-STANDARDS.md`.
 - `git diff --check`.
 
-**Status:** Partially implemented. First contract-only slice added
+**Status:** Implemented. The contract-only slice added
 `crates/inference/src/model_contracts.rs`, public re-exports, README contract
 docs, and crate-local executable fixtures/tests for package facts, task
 evidence, generation defaults, option diagnostics, lifecycle phases,
@@ -1352,8 +1352,8 @@ Pantograph-local technical-fit candidate facts, compact
 Runtime facts now use the wrapper `RuntimeFactSnapshot` projected from
 `ServerModeInfo`/`RuntimeLifecycleSnapshot`; explicit non-`auto` device facts
 are carried through the wrapper instead of extending the lifecycle snapshot.
-The implementation strategy now freezes the validated vertical-slice order and
-minimum cross-layer fixture requirements, while public inference contract tests
+The implementation strategy freezes the validated vertical-slice order and
+minimum cross-layer fixture requirements. Public inference contract tests
 guard representative DTO JSON keys against scheduler-policy terminology such
 as admission, reservation, priority, eviction, scheduler-policy, and
 selected-best-backend.
@@ -1487,7 +1487,7 @@ Detailed Pumas-side work is split into
   Pumas `metadata_json`, SQLite layout, or search-cache internals.
 - `git diff --check`.
 
-**Status:** Partially implemented. Pantograph now has crate-local package-fact
+**Status:** Implemented. Pantograph now has crate-local package-fact
 contracts/fixtures that decode the canonical Pumas full-detail producer shape
 and an embedded-runtime projection that derives `pumas_package_facts`
 technical-fit candidates from those facts. Remote MLX/vLLM search tags do not
@@ -2634,8 +2634,9 @@ The Rust package-derived load envelope now reaches the PyTorch backend load
 edge through `load_transformers_package`: package facts build and validate the
 worker envelope, then Rust sends that envelope to a backend-local Python
 worker entrypoint that validates the contract and adapts into the current
-embedded `load_model` implementation. Full envelope dispatch for generation,
-streaming, and KV operations remains a later adapter-local step.
+embedded `load_model` implementation. Later recorded slices extend the same
+versioned worker-envelope dispatch pattern to generation, streaming,
+audio-transcription, unload, loaded-model inspection, and live-KV operations.
 The torch-free Python `worker_contract.py` module now owns pure envelope
 validation/projection helpers so malformed contract version, operation,
 payload, and trust-policy shapes can be tested without importing torch or
@@ -2645,8 +2646,9 @@ worker envelope instead of ad hoc PyO3 keyword arguments. Python validates the
 envelope through `worker_contract.py`, adapts it to the existing backend-local
 `generate` implementation, and returns the Rust worker response envelope so
 generation failures normalize through `PyTorchWorkerFailure` with request
-correlation. Streaming generation and full typed `GenerationOptions` threading
-remain follow-up slices.
+correlation. Later recorded slices route streaming generation through the same
+typed worker envelope and thread supported typed generation options through
+backend-local Transformers kwargs.
 The PyTorch streaming generation path now sends the same typed
 `PyTorchGenerateTextRequest` payload through a `generate_text_stream` worker
 envelope before delegating to the existing Python `generate_tokens` generator,
@@ -2930,10 +2932,11 @@ canonical task options, and records unresolved Pumas model-reference
 diagnostics. Legacy llama.cpp migration now preserves `mmproj_path` evidence in
 unresolved Pumas model-reference diagnostics, and node-engine canonical input
 hydration carries resolved `.mmproj` companion artifacts into llama.cpp runtime
-startup/matching. Pumas-backed GGUF/HF resolution, frontend/template, and
-validation slices remain open. Frontend mock registries now expose canonical
-Puma-Lib and `llm-inference` ports for Pumas model refs, resolved model
-sources, task/runtime hints, task options, diagnostics, and dependency facts so
+startup/matching. Later recorded slices close Pumas-backed GGUF/HF resolution,
+frontend/template, and validation coverage. Frontend mock registries now expose
+canonical Puma-Lib and `llm-inference` ports for Pumas model refs, resolved
+model sources, task/runtime hints, task options, diagnostics, and dependency
+facts so
 frontend-only sessions exercise the same graph-facing contract as Rust-backed
 sessions. Rust workflow-node
 inventory no longer registers retired `llamacpp-inference`,
