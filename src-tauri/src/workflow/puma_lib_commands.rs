@@ -162,13 +162,13 @@ pub async fn model_package_facts_summary_snapshot(
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> Result<pumas_library::models::ModelPackageFactsSummarySnapshot, String> {
-    let api = require_pumas_api(&extensions).await?;
-    api.model_package_facts_summary_snapshot(
-        validate_pumas_model_library_page_limit(limit.unwrap_or(100))?,
-        offset.unwrap_or(0),
-    )
-    .await
-    .map_err(|error| error.to_string())
+    let limit = validate_pumas_model_library_page_limit(limit.unwrap_or(100))?;
+    let offset = offset.unwrap_or(0);
+    let selector_access = {
+        let ext = extensions.read().await;
+        pumas_update_feed_access_from_extensions(&ext)
+    };
+    model_package_facts_summary_snapshot_from_access(selector_access, limit, offset).await
 }
 
 pub async fn resolve_model_package_facts_summary(
@@ -176,10 +176,11 @@ pub async fn resolve_model_package_facts_summary(
     model_id: String,
 ) -> Result<pumas_library::models::ModelPackageFactsSummaryResult, String> {
     let model_id = validate_pumas_model_id_for_lookup(&model_id)?;
-    let api = require_pumas_api(&extensions).await?;
-    api.resolve_model_package_facts_summary(model_id)
-        .await
-        .map_err(|error| error.to_string())
+    let selector_access = {
+        let ext = extensions.read().await;
+        pumas_update_feed_access_from_extensions(&ext)
+    };
+    resolve_model_package_facts_summary_from_access(selector_access, &model_id).await
 }
 
 pub async fn list_model_library_updates_since(
@@ -203,6 +204,52 @@ async fn list_model_library_updates_since_from_extensions(
 ) -> Result<pumas_library::models::ModelLibraryUpdateFeed, String> {
     let selector_access = pumas_update_feed_access_from_extensions(extensions);
     list_model_library_updates_since_from_access(selector_access, cursor, limit).await
+}
+
+async fn model_package_facts_summary_snapshot_from_extensions(
+    extensions: &node_engine::ExecutorExtensions,
+    limit: usize,
+    offset: usize,
+) -> Result<pumas_library::models::ModelPackageFactsSummarySnapshot, String> {
+    let selector_access = pumas_update_feed_access_from_extensions(extensions);
+    model_package_facts_summary_snapshot_from_access(selector_access, limit, offset).await
+}
+
+async fn model_package_facts_summary_snapshot_from_access(
+    selector_access: Option<Arc<PumasSelectorAccess>>,
+    limit: usize,
+    offset: usize,
+) -> Result<pumas_library::models::ModelPackageFactsSummarySnapshot, String> {
+    if let Some(selector_access) = selector_access {
+        return selector_access
+            .model_package_facts_summary_snapshot(limit, offset)
+            .await
+            .map_err(|error| error.to_string());
+    }
+
+    Err("Pumas selector access not available in executor extensions".to_string())
+}
+
+async fn resolve_model_package_facts_summary_from_extensions(
+    extensions: &node_engine::ExecutorExtensions,
+    model_id: &str,
+) -> Result<pumas_library::models::ModelPackageFactsSummaryResult, String> {
+    let selector_access = pumas_update_feed_access_from_extensions(extensions);
+    resolve_model_package_facts_summary_from_access(selector_access, model_id).await
+}
+
+async fn resolve_model_package_facts_summary_from_access(
+    selector_access: Option<Arc<PumasSelectorAccess>>,
+    model_id: &str,
+) -> Result<pumas_library::models::ModelPackageFactsSummaryResult, String> {
+    if let Some(selector_access) = selector_access {
+        return selector_access
+            .resolve_model_package_facts_summary(model_id)
+            .await
+            .map_err(|error| error.to_string());
+    }
+
+    Err("Pumas selector access not available in executor extensions".to_string())
 }
 
 fn pumas_update_feed_access_from_extensions(
@@ -1179,6 +1226,70 @@ mod tests {
                 .is_none(),
             "read-only selector access must not require raw PUMAS_API"
         );
+    }
+
+    #[tokio::test]
+    async fn package_facts_summary_snapshot_uses_read_only_selector_access_without_pumas_api() {
+        let temp_dir = create_test_env();
+        let model_id = "llm/imported/test-gguf";
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models")
+            .join(model_id);
+        write_library_owned_file_model(&model_dir, model_id);
+        let api = pumas_library::PumasApi::builder(temp_dir.path())
+            .build()
+            .await
+            .unwrap();
+        api.rebuild_model_index().await.unwrap();
+        let read_only = pumas_library::PumasReadOnlyLibrary::open(
+            temp_dir.path().join("shared-resources/models"),
+        )
+        .unwrap();
+        let mut extensions = node_engine::ExecutorExtensions::new();
+        extensions.set(
+            PUMAS_SELECTOR_ACCESS,
+            Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
+        );
+
+        let snapshot = model_package_facts_summary_snapshot_from_extensions(&extensions, 100, 0)
+            .await
+            .expect("read-only selector summary snapshot should load");
+
+        assert!(snapshot.cursor.starts_with("model-library-updates:"));
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(snapshot.items[0].model_id, model_id);
+    }
+
+    #[tokio::test]
+    async fn resolve_package_facts_summary_uses_read_only_selector_access_without_pumas_api() {
+        let temp_dir = create_test_env();
+        let model_id = "llm/imported/test-gguf";
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models")
+            .join(model_id);
+        write_library_owned_file_model(&model_dir, model_id);
+        let api = pumas_library::PumasApi::builder(temp_dir.path())
+            .build()
+            .await
+            .unwrap();
+        api.rebuild_model_index().await.unwrap();
+        let read_only = pumas_library::PumasReadOnlyLibrary::open(
+            temp_dir.path().join("shared-resources/models"),
+        )
+        .unwrap();
+        let mut extensions = node_engine::ExecutorExtensions::new();
+        extensions.set(
+            PUMAS_SELECTOR_ACCESS,
+            Arc::new(PumasSelectorAccess::ReadOnly(Arc::new(read_only))),
+        );
+
+        let summary = resolve_model_package_facts_summary_from_extensions(&extensions, model_id)
+            .await
+            .expect("read-only selector summary should resolve");
+
+        assert_eq!(summary.model_id, model_id);
     }
 
     #[test]

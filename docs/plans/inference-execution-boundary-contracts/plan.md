@@ -1669,7 +1669,13 @@ the Tauri shared-extension lock is not held across async work. Raw `PUMAS_API`
 injection is intentionally not a fallback for update-feed routing because the
 selector-access role is the Pantograph boundary source of truth.
 
-Validation for the local-client update-feed slice passed with
+The summary snapshot slice now routes Tauri package-facts summary snapshot and
+single-summary commands through the same selector-access role. Owner access can
+call Pumas summary APIs directly; local-client and read-only access project
+bounded selector-row summary status and cached summary facts without requiring
+raw owner `PUMAS_API` for list views.
+
+Validation for the selector-access summary slice passed with
 `cargo test -p workflow-nodes --features model-library local_client_update_feed`,
 `cargo test -p workflow-nodes --features model-library read_only_update_feed`,
 `cargo test -p workflow-nodes --features model-library --lib setup`,
@@ -3346,7 +3352,10 @@ drift back into inference.
   selector-access-role dependent: owner/local-client access may expose batch
   detail facts, read-only access may expose selector-row facts only, and neither
   boundary may infer runtime/scheduler policy or inspect Pumas storage
-  internals.
+  internals. Workflow-nodes and Tauri workflow README contract notes now also
+  make package-facts summary snapshot/list views selector-access-role backed,
+  with read-only/local-client paths projecting selector-row summaries instead
+  of requiring raw owner `PUMAS_API`.
 - [ ] Update generated bindings, host-language types, or shared schemas in the
   same implementation slice as native DTO changes when those bindings are
   public contract surface. Frontend workflow service and shared svelte-graph

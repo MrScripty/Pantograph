@@ -131,6 +131,9 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   owner access lists updates directly, local-client access converts the Pumas
   subscription recovery handshake into an update feed, and read-only access
   reports update-feed unavailability without starting lifecycle work.
+  Summary snapshot and single-summary reads also route through the adapter:
+  owner access may call Pumas summary APIs directly, while local-client and
+  read-only access project bounded selector-row summaries.
   The adapter also owns selected-model detail hydration: owner and local-client
   roles use Pumas batch detail APIs, while read-only access may project a
   bounded selector row without claiming package-summary or inference-settings

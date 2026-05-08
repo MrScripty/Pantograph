@@ -132,6 +132,68 @@ impl PumasSelectorAccess {
             }),
         }
     }
+
+    pub async fn model_package_facts_summary_snapshot(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> pumas_library::Result<pumas_library::models::ModelPackageFactsSummarySnapshot> {
+        match self {
+            Self::Owner(api) => {
+                api.model_package_facts_summary_snapshot(limit, offset)
+                    .await
+            }
+            Self::LocalClient(_) | Self::ReadOnly(_) => {
+                let snapshot = self
+                    .model_library_selector_snapshot(
+                        pumas_library::models::ModelLibrarySelectorSnapshotRequest {
+                            offset: Some(offset.min(u32::MAX as usize) as u32),
+                            limit: Some(limit.min(u32::MAX as usize) as u32),
+                            ..Default::default()
+                        },
+                    )
+                    .await?;
+                Ok(package_facts_summary_snapshot_from_selector(snapshot))
+            }
+        }
+    }
+
+    pub async fn resolve_model_package_facts_summary(
+        &self,
+        model_id: &str,
+    ) -> pumas_library::Result<pumas_library::models::ModelPackageFactsSummaryResult> {
+        match self {
+            Self::Owner(api) => api.resolve_model_package_facts_summary(model_id).await,
+            Self::LocalClient(client) => client
+                .resolve_model_package_facts_summaries(vec![model_id.to_string()])
+                .await?
+                .into_iter()
+                .find(|item| item.model_id == model_id)
+                .and_then(|item| item.result)
+                .ok_or_else(|| pumas_library::PumasError::NotFound {
+                    resource: format!("model package facts summary '{model_id}'"),
+                }),
+            Self::ReadOnly(_) => {
+                let snapshot = self
+                    .model_library_selector_snapshot(
+                        pumas_library::models::ModelLibrarySelectorSnapshotRequest {
+                            search: Some(model_id.to_string()),
+                            limit: Some(25),
+                            ..Default::default()
+                        },
+                    )
+                    .await?;
+                snapshot
+                    .rows
+                    .into_iter()
+                    .find(|row| row.model_id == model_id || row.model_ref.model_id == model_id)
+                    .map(package_facts_summary_result_from_selector_row)
+                    .ok_or_else(|| pumas_library::PumasError::NotFound {
+                        resource: format!("model package facts summary '{model_id}'"),
+                    })
+            }
+        }
+    }
 }
 
 #[cfg(feature = "model-library")]
@@ -162,6 +224,37 @@ fn selected_model_detail_from_batch_owner(
         package_summary_result,
         inference_settings,
     })
+}
+
+#[cfg(feature = "model-library")]
+fn package_facts_summary_snapshot_from_selector(
+    snapshot: pumas_library::models::ModelLibrarySelectorSnapshot,
+) -> pumas_library::models::ModelPackageFactsSummarySnapshot {
+    pumas_library::models::ModelPackageFactsSummarySnapshot {
+        cursor: snapshot.cursor,
+        items: snapshot
+            .rows
+            .into_iter()
+            .map(
+                |row| pumas_library::models::ModelPackageFactsSummarySnapshotItem {
+                    model_id: row.model_ref.model_id,
+                    status: row.package_facts_summary_status,
+                    summary: row.package_facts_summary,
+                },
+            )
+            .collect(),
+    }
+}
+
+#[cfg(feature = "model-library")]
+fn package_facts_summary_result_from_selector_row(
+    row: pumas_library::models::ModelLibrarySelectorSnapshotRow,
+) -> pumas_library::models::ModelPackageFactsSummaryResult {
+    pumas_library::models::ModelPackageFactsSummaryResult {
+        model_id: row.model_ref.model_id,
+        status: row.package_facts_summary_status,
+        summary: row.package_facts_summary,
+    }
 }
 
 /// Initialize optional runtime dependencies in `ExecutorExtensions`.

@@ -70,6 +70,10 @@ while still handling desktop runtime execution concerns.
   project the subscription recovery handshake as an update feed, and read-only
   selector access must report feed unavailability without starting Pumas
   lifecycle work.
+- Pumas package-facts summary snapshot commands must also route through the
+  selector-access role. Read-only and local-client paths may project selector
+  row summaries; they must not require raw owner `PUMAS_API` access for list
+  views.
 - Puma-Lib selected model hydration must prefer the explicit selector-access
   role for `model_id` requests. Tauri may use owner/local-client batch detail
   facts or read-only selector-row facts, but it must not require raw owner
