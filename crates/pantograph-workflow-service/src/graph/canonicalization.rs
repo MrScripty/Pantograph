@@ -9,7 +9,7 @@ use self::inference::{
 };
 use self::legacy_migration::{canonicalize_legacy_node_types, legacy_node_type_migration_records};
 use super::registry::NodeRegistry;
-use super::types::{GraphEdge, WorkflowGraph};
+use super::types::{GraphEdge, GraphNode, WorkflowGraph};
 
 #[path = "canonicalization_inference.rs"]
 mod inference;
@@ -34,6 +34,7 @@ pub fn canonicalize_workflow_graph_with_migrations(
     let mut migration_records = legacy_node_type_migration_records(&migrated_legacy_nodes);
     let mut nodes = graph.nodes;
     let mut edges = graph.edges;
+    canonicalize_inference_text_output_edges(&nodes, &mut edges);
     let node_indices = nodes
         .iter()
         .enumerate()
@@ -138,6 +139,28 @@ pub fn canonicalize_workflow_graph_with_migrations(
     WorkflowGraphCanonicalizationResult {
         graph,
         migration_records,
+    }
+}
+
+fn canonicalize_inference_text_output_edges(nodes: &[GraphNode], edges: &mut [GraphEdge]) {
+    let node_types = nodes
+        .iter()
+        .map(|node| (node.id.as_str(), node.node_type.as_str()))
+        .collect::<HashMap<_, _>>();
+
+    for edge in edges {
+        let source_is_llm = node_types.get(edge.source.as_str()).copied() == Some("llm-inference");
+        let target_is_text_output =
+            node_types.get(edge.target.as_str()).copied() == Some("text-output");
+        if source_is_llm
+            && target_is_text_output
+            && edge.source_handle == "stream"
+            && edge.target_handle == "stream"
+        {
+            edge.source_handle = "response".to_string();
+            edge.target_handle = "text".to_string();
+            edge.id = format!("{}-response-{}-text", edge.source, edge.target);
+        }
     }
 }
 

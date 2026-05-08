@@ -452,6 +452,53 @@ fn canonicalize_workflow_graph_migrates_legacy_llamacpp_nodes() {
 }
 
 #[test]
+fn canonicalize_workflow_graph_repairs_llm_stream_edge_to_text_output() {
+    let registry = NodeRegistry::new();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "llm".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 0.0 },
+                data: json!({
+                    "task_kind": "text_generation",
+                    "runtime_hint": "llamacpp",
+                    "pumas_model_ref": {
+                        "source": "puma-lib",
+                        "status": "resolved",
+                        "model_id": "family/model",
+                        "model_path": "/models/model.gguf"
+                    }
+                }),
+            },
+            GraphNode {
+                id: "output".to_string(),
+                node_type: "text-output".to_string(),
+                position: super::super::types::Position { x: 100.0, y: 0.0 },
+                data: json!({}),
+            },
+        ],
+        edges: vec![GraphEdge {
+            id: "llm-stream-output-stream".to_string(),
+            source: "llm".to_string(),
+            source_handle: "stream".to_string(),
+            target: "output".to_string(),
+            target_handle: "stream".to_string(),
+        }],
+        derived_graph: None,
+    };
+
+    let canonical = canonicalize_workflow_graph(graph, &registry);
+
+    assert_eq!(canonical.edges.len(), 1);
+    assert_eq!(canonical.edges[0].source, "llm");
+    assert_eq!(canonical.edges[0].source_handle, "response");
+    assert_eq!(canonical.edges[0].target, "output");
+    assert_eq!(canonical.edges[0].target_handle, "text");
+    assert_eq!(canonical.edges[0].id, "llm-response-output-text");
+}
+
+#[test]
 fn canonicalize_workflow_graph_migrates_legacy_pytorch_nodes() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {
