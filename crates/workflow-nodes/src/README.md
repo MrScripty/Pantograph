@@ -121,6 +121,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
 - Canonical `llm-inference` declares `task_kind` and `runtime_hint` as
   optional graph-visible inputs because saved-workflow migration, preflight,
   and execution already consume those fields as canonical node data.
+- Direct `diffusion-inference` is retired from the built-in descriptor
+  inventory. New image-generation authoring must use canonical
+  `llm-inference` with `task_kind = image_generation`; old direct-diffusion
+  stubs are not graph-visible compatibility targets.
 - Pumas model selectors use an explicit selector-access extension role:
   owner `PumasApi`, local `PumasLocalClient`, or read-only
   `PumasReadOnlyLibrary`; selector queries must not reconstruct that role from

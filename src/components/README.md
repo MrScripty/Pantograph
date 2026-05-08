@@ -286,6 +286,9 @@ component.
   group-node coloring ahead of category coloring.
 - `workflowGraphTypes.ts` must include every node type referenced by bundled
   templates and architecture graphs before falling back to generic renderers.
+- `workflowGraphTypes.ts` must not reintroduce retired direct inference nodes
+  such as `diffusion-inference`; image generation uses canonical
+  `llm-inference` renderer metadata.
 - App cut gestures must delegate to the package `CutTool` so the package and app
   canvases share modifier, line-sampling, and overlay behavior.
 - `edgeInsertInteraction.ts` must keep rendered-edge hit testing, commit

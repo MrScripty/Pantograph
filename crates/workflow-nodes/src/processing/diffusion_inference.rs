@@ -1,9 +1,9 @@
-//! Diffusion Inference Task — Stub Descriptor
+//! Diffusion Inference Task — Retired Stub
 //!
-//! Provides metadata so that `register_builtins()` discovers the
-//! `diffusion-inference` node type for image generation workflows.
-//! Actual execution is delegated to `CoreTaskExecutor`, so `run()`
-//! always returns an error directing callers to that path.
+//! Retained only for compile-time references while image-generation authoring
+//! uses canonical `llm-inference` with `task_kind = image_generation`.
+//! This module deliberately does not submit an inventory descriptor, so
+//! `register_builtins()` no longer exposes `diffusion-inference`.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
@@ -25,11 +25,7 @@ const PORT_IMAGE: &str = "image";
 const PORT_SEED_USED: &str = "seed_used";
 const PORT_STREAM: &str = "stream";
 
-/// Stub descriptor for the diffusion inference node.
-///
-/// The node metadata is registered via `inventory` so the frontend can
-/// render the node and validate connections, but all inference work is
-/// performed by `CoreTaskExecutor` once the Python worker is implemented.
+/// Retired descriptor for the diffusion inference node.
 #[derive(Clone)]
 pub struct DiffusionInferenceTask {
     task_id: String,
@@ -80,10 +76,6 @@ impl TaskDescriptor for DiffusionInferenceTask {
         }
     }
 }
-
-inventory::submit!(node_engine::DescriptorFn(
-    DiffusionInferenceTask::descriptor
-));
 
 #[async_trait]
 impl Task for DiffusionInferenceTask {

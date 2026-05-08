@@ -13,7 +13,6 @@ import AudioOutputNode from './nodes/workflow/AudioOutputNode.svelte';
 import BooleanInputNode from './nodes/workflow/BooleanInputNode.svelte';
 import DependencyEnvironmentNode from './nodes/workflow/DependencyEnvironmentNode.svelte';
 import DepthEstimationNode from './nodes/workflow/DepthEstimationNode.svelte';
-import DiffusionInferenceNode from './nodes/workflow/DiffusionInferenceNode.svelte';
 import ExpandSettingsNode from './nodes/workflow/ExpandSettingsNode.svelte';
 import GenericNode from './nodes/workflow/GenericNode.svelte';
 import ImageOutputNode from './nodes/workflow/ImageOutputNode.svelte';
@@ -44,7 +43,6 @@ export const workflowNodeTypes: NodeTypes = {
   'vector-input': VectorInputNode,
   'llm-inference': LLMInferenceNode,
   'onnx-inference': OnnxInferenceNode,
-  'diffusion-inference': DiffusionInferenceNode,
   'model-provider': ModelProviderNode,
   'text-output': TextOutputNode,
   'vector-output': VectorOutputNode,

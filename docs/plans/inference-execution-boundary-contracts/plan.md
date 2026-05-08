@@ -4563,6 +4563,11 @@ Update during implementation:
   guardrail now scans every registered built-in workflow template for retired
   direct inference node types so new starters stay on canonical `llm-inference`
   task shapes.
+- 2026-05-08: The retired direct `diffusion-inference` descriptor is no longer
+  submitted to the workflow-node inventory, so built-in node definitions and
+  frontend registry maps no longer expose it as an authorable graph node. Old
+  execution internals remain separate until deeper direct-diffusion removal can
+  be done without touching Python-sidecar audio/ONNX behavior.
 - 2026-05-08: Puma-Lib hydration dependency preflight now infers canonical
   `llm-inference` for `text-to-image` and `image-to-image` package facts instead
   of routing the request through the retired direct `diffusion-inference` node

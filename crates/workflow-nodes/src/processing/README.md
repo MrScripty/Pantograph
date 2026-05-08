@@ -10,7 +10,7 @@ adapters such as the Python runtime.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `diffusion_inference.rs` | Declares the graph contract for process-backed diffusion generation, including optional dependency-environment handoff. |
+| `diffusion_inference.rs` | Retired direct diffusion stub retained for compile-time references; new image-generation authoring uses canonical `llm-inference`. |
 | `audio_generation.rs` | Declares the Stable Audio generation node contract. |
 | `reranker.rs` | Declares the GGUF reranker node contract used to rank candidate documents via llama.cpp. |
 | `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |

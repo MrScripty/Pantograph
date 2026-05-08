@@ -14,7 +14,6 @@ import NumberInputNode from '../components/nodes/workflow/NumberInputNode.svelte
 import BooleanInputNode from '../components/nodes/workflow/BooleanInputNode.svelte';
 import VectorInputNode from '../components/nodes/workflow/VectorInputNode.svelte';
 import LLMInferenceNode from '../components/nodes/workflow/LLMInferenceNode.svelte';
-import DiffusionInferenceNode from '../components/nodes/workflow/DiffusionInferenceNode.svelte';
 import ModelProviderNode from '../components/nodes/workflow/ModelProviderNode.svelte';
 import TextOutputNode from '../components/nodes/workflow/TextOutputNode.svelte';
 import VectorOutputNode from '../components/nodes/workflow/VectorOutputNode.svelte';
@@ -44,7 +43,6 @@ const SPECIALIZED_NODES: Record<string, Component<Record<string, unknown>>> = {
   'boolean-input': BooleanInputNode,
   'vector-input': VectorInputNode,
   'llm-inference': LLMInferenceNode,
-  'diffusion-inference': DiffusionInferenceNode,
   'model-provider': ModelProviderNode,
   'text-output': TextOutputNode,
   'vector-output': VectorOutputNode,

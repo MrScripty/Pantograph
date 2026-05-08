@@ -13,7 +13,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including ArtifactStore stream-reference preview reads, rerun cleanup of execution-local playback state, and explicit artifact format overrides. |
 | `ImageOutputNode.svelte` | Renders image output previews and explicit artifact format overrides for image artifacts. |
 | `PointCloudOutputNode.svelte` | Renders point-cloud previews and explicit artifact format overrides for 3D artifacts. |
-| `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
+| `DiffusionInferenceNode.svelte` | Retired direct diffusion renderer kept only until the old component file is deleted; new image-generation authoring uses canonical `LLMInferenceNode.svelte`. |
 | `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
 | `DependencyEnvironmentBindingsPanel.svelte` | Renders binding selection, manual override summary controls, and per-requirement override fields. |
 | `DependencyEnvironmentModeControls.svelte` | Renders the dependency environment automatic/manual mode selector. |
@@ -79,9 +79,9 @@ that the toolbar forwards from node outputs into the output node so scrub/replay
 controls do not depend solely on browser metadata timing. `AudioGenerationNode`
 also surfaces the batch-only capability boundary so users can distinguish Stable
 Audio final renders from ONNX-backed live chunk playback. `PumaLibNode.svelte`
-also owns the UI-side routing hints that send diffusion models to
-`diffusion-inference` and reranker models to the dedicated reranker node
-instead of the text-only PyTorch or llama.cpp generation nodes.
+must hand model identity and package facts to canonical `llm-inference` task
+shapes instead of routing diffusion or reranker packages to retired direct
+inference nodes.
 `ExpandSettingsNode.svelte` stays presentation-only: it shows schema details and
 the effective value currently flowing through each setting, while
 override-capable handles come from the shared node definition supplied by the

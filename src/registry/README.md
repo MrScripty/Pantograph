@@ -36,6 +36,9 @@ backend-owned node ids from graph data.
 - Registry keys are backend node type ids.
 - Registry values are Svelte components or package-compatible node renderers.
 - Mapping changes must coordinate with workflow templates and saved workflows.
+- Retired direct inference nodes such as `diffusion-inference` must not be
+  reintroduced into this registry; new image-generation authoring uses
+  canonical `llm-inference` task metadata.
 
 ## Revisit Triggers
 - Node registry becomes generated from backend descriptors.

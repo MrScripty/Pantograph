@@ -46,14 +46,14 @@ mod tests {
         #[cfg(feature = "desktop")]
         assert_eq!(
             all.len(),
-            40,
-            "Expected 40 built-in nodes with desktop feature"
+            39,
+            "Expected 39 built-in nodes with desktop feature"
         );
         #[cfg(not(feature = "desktop"))]
         assert_eq!(
             all.len(),
-            37,
-            "Expected 37 built-in nodes without desktop feature"
+            36,
+            "Expected 36 built-in nodes without desktop feature"
         );
 
         // Spot-check known types
@@ -67,7 +67,6 @@ mod tests {
         assert!(registry.has_node_type("text-output"));
         assert!(registry.has_node_type("vector-output"));
         assert!(registry.has_node_type("image-output"));
-        assert!(registry.has_node_type("diffusion-inference"));
         assert!(registry.has_node_type("audio-input"));
         assert!(registry.has_node_type("audio-output"));
         assert!(registry.has_node_type("audio-generation"));
@@ -89,6 +88,7 @@ mod tests {
         for retired_node_type in [
             "llamacpp-inference",
             "pytorch-inference",
+            "diffusion-inference",
             "embedding",
             "reranker",
         ] {
