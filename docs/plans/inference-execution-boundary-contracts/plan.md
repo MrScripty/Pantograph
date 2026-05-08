@@ -3310,7 +3310,7 @@ and backend capability checks prove execution support.
 drift back into inference.
 
 **Tasks:**
-- [ ] Update runtime registry, workflow service, node engine, Tauri, or
+- [x] Update runtime registry, workflow service, node engine, Tauri, or
   frontend consumers only as needed to consume the new facts. Workflow-service
   graph registry conversion now preserves canonical port `inference_payloads`
   and reverse `PortDefinition` contract projection keeps those payloads intact;
@@ -3351,7 +3351,7 @@ drift back into inference.
   `node.data.definition` dynamic port overlays preserve structured
   `inference_payloads` task/result/role metadata through both effective
   definition and effective contract projection.
-- [ ] Remove backend-name conditionals where new capability/runtime facts are
+- [x] Remove backend-name conditionals where new capability/runtime facts are
   sufficient. Embedded-runtime host capability projection now uses the shared
   Python-sidecar runtime-id set instead of a direct `pytorch` backend-key
   comparison, so aliases such as `torch` and neighboring Python sidecar
@@ -3404,7 +3404,7 @@ drift back into inference.
   Node-engine dependency-preflight compatibility-report tests are now
   cfg-gated to `pytorch-nodes`, matching the PyTorch producer that emits those
   reports.
-- [ ] Update host-facing README `API Consumer Contract` and `Structured Producer
+- [x] Update host-facing README `API Consumer Contract` and `Structured Producer
   Contract` sections for every touched source directory that publishes or
   consumes machine-readable inference/Pumas/workflow DTOs. Frontend workflow
   service README contract sections now document workflow backend capability
@@ -3418,7 +3418,7 @@ drift back into inference.
   make package-facts summary snapshot/list views selector-access-role backed,
   with read-only/local-client paths projecting selector-row summaries instead
   of requiring raw owner `PUMAS_API`.
-- [ ] Update generated bindings, host-language types, or shared schemas in the
+- [x] Update generated bindings, host-language types, or shared schemas in the
   same implementation slice as native DTO changes when those bindings are
   public contract surface. Frontend workflow service and shared svelte-graph
   TypeScript `PortDefinition` types now mirror workflow-service
@@ -3437,7 +3437,7 @@ drift back into inference.
   snake_case task/result labels.
 - [x] Add tests proving scheduler/runtime-registry policy remains outside
   inference.
-- [ ] Update source READMEs and any ADR links affected by boundary changes.
+- [x] Update source READMEs and any ADR links affected by boundary changes.
   Node-engine and workflow-nodes source READMEs now document executable
   canonical image-generation as part of the typed `llm-inference` boundary and
   preserve the diagnostic hygiene rules for prompt/generated image payloads.
@@ -3520,7 +3520,7 @@ drift back into inference.
   artifacts change.
 - Cross-layer acceptance check for any changed host-facing DTO projection.
 
-**Status:** In progress. Node-engine now consumes the typed inference boundary
+**Status:** Implemented. Node-engine now consumes the typed inference boundary
 for canonical `llm-inference` text/chat streaming and non-streaming execution,
 embedding, and rerank execution while preserving graph `TaskStream` event output
 as the host-visible streaming surface. Inference contract fixture coverage now
