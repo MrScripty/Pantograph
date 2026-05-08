@@ -55,6 +55,25 @@ export function nextWorkflowPatchSemanticVersion(version: string): string {
   return `${major}.${minor}.${patch + 1}`;
 }
 
+export function isWorkflowSemanticVersionConflictError(error: unknown): boolean {
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    details?: unknown;
+    backendEnvelope?: { message?: unknown } | null;
+  };
+  const message = typeof candidate.message === 'string'
+    ? candidate.message
+    : typeof candidate.backendEnvelope?.message === 'string'
+      ? candidate.backendEnvelope.message
+      : '';
+
+  return (
+    candidate.code === 'internal_error' &&
+    message.toLowerCase().includes('workflow semantic version already points')
+  );
+}
+
 export function isCurrentWorkflowSubmitFailure({
   submittedWorkflowId,
   currentGraphId,

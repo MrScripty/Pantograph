@@ -108,6 +108,10 @@ clean workflows through scheduler execution session create/run/close commands.
 That keeps the Graph page on the same canonical run path as Scheduler,
 Diagnostics, and I/O Inspector instead of executing the edit-session graph
 directly.
+When the run snapshot boundary reports that the current semantic version
+already belongs to another execution fingerprint, the toolbar bumps the patch
+version and retries once instead of asking the backend to weaken workflow
+version immutability.
 The app workflow graph delegates orchestration boundary overlay rendering to
 `WorkflowContainerBoundary.svelte` and boundary math to
 `workflowContainerBoundary.ts`, while the parent keeps viewport tracking,

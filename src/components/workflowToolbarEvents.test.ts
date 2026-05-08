@@ -6,6 +6,7 @@ import {
   applyWorkflowToolbarEvent,
   isCurrentWorkflowSubmitFailure,
   isNumericWorkflowSemanticVersion,
+  isWorkflowSemanticVersionConflictError,
   nextWorkflowPatchSemanticVersion,
 } from './workflowToolbarEvents.ts';
 import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/types.ts';
@@ -125,6 +126,30 @@ test('nextWorkflowPatchSemanticVersion increments valid patch versions', () => {
   assert.equal(nextWorkflowPatchSemanticVersion('0.1.0'), '0.1.1');
   assert.equal(nextWorkflowPatchSemanticVersion('2.4.9'), '2.4.10');
   assert.equal(nextWorkflowPatchSemanticVersion('bad'), '0.1.0');
+});
+
+test('isWorkflowSemanticVersionConflictError detects attribution conflicts', () => {
+  assert.equal(
+    isWorkflowSemanticVersionConflictError({
+      code: 'internal_error',
+      message: 'workflow semantic version already points at a different execution fingerprint',
+    }),
+    true,
+  );
+  assert.equal(
+    isWorkflowSemanticVersionConflictError({
+      code: 'invalid_request',
+      message: 'workflow semantic version already points at a different execution fingerprint',
+    }),
+    false,
+  );
+  assert.equal(
+    isWorkflowSemanticVersionConflictError({
+      code: 'internal_error',
+      message: 'workflow semantic version is invalid',
+    }),
+    false,
+  );
 });
 
 test('applyWorkflowToolbarEvent replays graph-modified dirty tasks into idle state without clearing waiting input state', () => {

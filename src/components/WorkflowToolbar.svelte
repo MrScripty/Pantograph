@@ -31,6 +31,7 @@
   import {
     isCurrentWorkflowSubmitFailure,
     isNumericWorkflowSemanticVersion,
+    isWorkflowSemanticVersionConflictError,
     nextWorkflowPatchSemanticVersion,
   } from './workflowToolbarEvents';
 
@@ -158,28 +159,47 @@
         throw new Error('Workflow version must use numeric major.minor.patch format');
       }
 
-      persistWorkflowSemanticVersion(submittedWorkflowId, workflowSemanticVersion);
       const executionSession = await workflowService.createWorkflowExecutionSession({
         workflow_id: submittedWorkflowId,
         usage_profile: null,
         keep_alive: false,
       });
-      const runPromise = workflowService.runWorkflowExecutionSession({
-        session_id: executionSession.session_id,
-        workflow_semantic_version: workflowSemanticVersion,
-        inputs: [],
-        output_targets: null,
-        override_selection: null,
-        timeout_ms: null,
-        priority: null,
-      });
 
       try {
-        const response = await runPromise;
+        const runRequestBase = {
+          session_id: executionSession.session_id,
+          inputs: [],
+          output_targets: null,
+          override_selection: null,
+          timeout_ms: null,
+          priority: null,
+        };
+        let submittedVersion = workflowSemanticVersion;
+        let response;
+        try {
+          response = await workflowService.runWorkflowExecutionSession({
+            ...runRequestBase,
+            workflow_semantic_version: submittedVersion,
+          });
+        } catch (runError) {
+          const normalizedRunError = normalizeWorkflowServiceError(runError);
+          if (!isWorkflowSemanticVersionConflictError(normalizedRunError)) {
+            throw normalizedRunError;
+          }
+
+          submittedVersion = nextWorkflowPatchSemanticVersion(submittedVersion);
+          workflowSemanticVersion = submittedVersion;
+          response = await workflowService.runWorkflowExecutionSession({
+            ...runRequestBase,
+            workflow_semantic_version: submittedVersion,
+          });
+        }
+
+        persistWorkflowSemanticVersion(submittedWorkflowId, submittedVersion);
         selectActiveWorkflowRun({
           workflow_run_id: response.workflow_run_id,
           workflow_id: submittedWorkflowId,
-          workflow_semantic_version: workflowSemanticVersion,
+          workflow_semantic_version: submittedVersion,
           status: 'completed',
         });
         setWorkbenchPage('scheduler');
