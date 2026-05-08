@@ -1570,7 +1570,10 @@ Pumas owner access. Validation for this slice passed with
 `cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands`,
 `cargo test -p workflow-nodes --features model-library --lib setup`,
 `cargo check -p workflow-nodes --features model-library`, `cargo fmt --all`,
-and `git diff --check`.
+and `git diff --check`. A follow-up validation hardening slice added a
+Pantograph-side local-client selected-detail IPC fixture proving the same
+adapter method calls Pumas batch descriptor, package-summary, and
+inference-settings methods for same-device clients.
 
 Validation for the selector slice passed with
 `cargo test -p workflow-nodes --features model-library --lib puma_lib`,

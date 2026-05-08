@@ -134,7 +134,9 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   The adapter also owns selected-model detail hydration: owner and local-client
   roles use Pumas batch detail APIs, while read-only access may project a
   bounded selector row without claiming package-summary or inference-settings
-  detail ownership.
+  detail ownership. Local-client selected-detail coverage uses an IPC fixture
+  to prove the adapter calls the same Pumas batch detail methods rather than
+  reconstructing owner API access.
 
 ## Testing
 ```bash

@@ -421,6 +421,8 @@ mod tests {
         library: ModelLibrary,
     }
 
+    struct SelectedDetailDispatch;
+
     #[async_trait]
     impl IpcDispatch for UpdateStreamDispatch {
         async fn dispatch(
@@ -444,6 +446,111 @@ mod tests {
                     .subscribe_model_library_update_stream_since(cursor)
                     .await?,
             ))
+        }
+    }
+
+    #[async_trait]
+    impl IpcDispatch for SelectedDetailDispatch {
+        async fn dispatch(
+            &self,
+            method: &str,
+            _params: serde_json::Value,
+        ) -> pumas_library::Result<serde_json::Value> {
+            let model_id = "llm/imported/local-client-test";
+            match method {
+                "model_library_selector_snapshot" => {
+                    serde_json::to_value(pumas_library::models::ModelLibrarySelectorSnapshot {
+                        selector_snapshot_contract_version:
+                            pumas_library::models::MODEL_LIBRARY_SELECTOR_SNAPSHOT_CONTRACT_VERSION,
+                        cursor: "model-library-updates:7".to_string(),
+                        rows: vec![pumas_library::models::ModelLibrarySelectorSnapshotRow {
+                            model_id: model_id.to_string(),
+                            model_ref: pumas_library::models::PumasModelRef {
+                                model_id: model_id.to_string(),
+                                selected_artifact_id: Some("model.gguf".to_string()),
+                                selected_artifact_path: Some(format!("{model_id}/model.gguf")),
+                                ..Default::default()
+                            },
+                            repo_id: None,
+                            selected_artifact_id: Some("model.gguf".to_string()),
+                            selected_artifact_path: Some(format!("{model_id}/model.gguf")),
+                            entry_path: Some("/tmp/pumas/model.gguf".to_string()),
+                            entry_path_state: pumas_library::models::ModelEntryPathState::Ready,
+                            artifact_state: pumas_library::models::ModelArtifactState::Ready,
+                            display_name: "Local Client Test".to_string(),
+                            model_type: Some("llm".to_string()),
+                            tags: vec!["gguf".to_string()],
+                            indexed_path: Some(model_id.to_string()),
+                            task_type_primary: Some("text-generation".to_string()),
+                            pipeline_tag: Some("text-generation".to_string()),
+                            recommended_backend: Some("llamacpp".to_string()),
+                            runtime_engine_hints: vec!["llamacpp".to_string()],
+                            storage_kind: Some(pumas_library::models::StorageKind::LibraryOwned),
+                            validation_state: Some(
+                                pumas_library::models::AssetValidationState::Valid,
+                            ),
+                            package_facts_summary_status:
+                                pumas_library::models::ModelPackageFactsSummaryStatus::Cached,
+                            package_facts_summary: None,
+                            detail_state:
+                                pumas_library::models::ModelLibrarySelectorDetailState::Complete,
+                            updated_at: Some("2026-05-08T00:00:00Z".to_string()),
+                        }],
+                        total_count: Some(1),
+                    })
+                    .map_err(|error| pumas_library::PumasError::Other(error.to_string()))
+                }
+                "resolve_model_execution_descriptors_batch" => serde_json::to_value(vec![
+                    pumas_library::models::ModelExecutionDescriptorBatchItem {
+                        model_id: model_id.to_string(),
+                        descriptor: Some(pumas_library::models::ModelExecutionDescriptor {
+                            execution_contract_version: 1,
+                            model_id: model_id.to_string(),
+                            entry_path: "/tmp/pumas/model.gguf".to_string(),
+                            model_type: "llm".to_string(),
+                            task_type_primary: "text-generation".to_string(),
+                            recommended_backend: Some("llamacpp".to_string()),
+                            runtime_engine_hints: vec!["llamacpp".to_string()],
+                            storage_kind: pumas_library::models::StorageKind::LibraryOwned,
+                            validation_state: pumas_library::models::AssetValidationState::Valid,
+                            dependency_resolution: Some(serde_json::json!({
+                                "bindings": [{
+                                    "binding_id": "binding-a",
+                                    "backend_key": "llamacpp"
+                                }]
+                            })),
+                        }),
+                        error: None,
+                    },
+                ])
+                .map_err(|error| pumas_library::PumasError::Other(error.to_string())),
+                "resolve_model_package_facts_summaries" => serde_json::to_value(vec![
+                    pumas_library::models::ModelPackageFactsSummaryBatchItem {
+                        model_id: model_id.to_string(),
+                        result: None,
+                        error: None,
+                    },
+                ])
+                .map_err(|error| pumas_library::PumasError::Other(error.to_string())),
+                "get_inference_settings_batch" => serde_json::to_value(vec![
+                    pumas_library::models::ModelInferenceSettingsBatchItem {
+                        model_id: model_id.to_string(),
+                        settings: vec![pumas_library::models::InferenceParamSchema {
+                            key: "temperature".to_string(),
+                            label: "Temperature".to_string(),
+                            param_type: pumas_library::models::ParamType::Number,
+                            default: serde_json::json!(0.7),
+                            description: None,
+                            constraints: None,
+                        }],
+                        error: None,
+                    },
+                ])
+                .map_err(|error| pumas_library::PumasError::Other(error.to_string())),
+                _ => Err(pumas_library::PumasError::Other(format!(
+                    "unexpected IPC method: {method}"
+                ))),
+            }
         }
     }
 
@@ -592,6 +699,38 @@ mod tests {
         assert!(feed.cursor.starts_with("model-library-updates:"));
         assert_eq!(feed.events.len(), 1);
         assert_eq!(feed.events[0].model_id, "__library__/model-library-refresh");
+    }
+
+    #[tokio::test]
+    async fn local_client_selected_model_detail_uses_batch_detail_methods() {
+        let Some(server) = IpcServer::start(Arc::new(SelectedDetailDispatch))
+            .await
+            .ok()
+        else {
+            eprintln!("Skipping local_client_selected_model_detail_uses_batch_detail_methods");
+            return;
+        };
+        let client = pumas_library::PumasLocalClient::connect(ready_instance(server.port))
+            .await
+            .unwrap();
+        let access = PumasSelectorAccess::LocalClient(Arc::new(client));
+
+        let detail = access
+            .selected_model_detail("llm/imported/local-client-test")
+            .await
+            .expect("local client selected detail should load from batch APIs");
+
+        assert_eq!(
+            detail
+                .selector_row
+                .as_ref()
+                .map(|row| row.display_name.as_str()),
+            Some("Local Client Test")
+        );
+        let descriptor = detail.descriptor.expect("descriptor should hydrate");
+        assert_eq!(descriptor.recommended_backend.as_deref(), Some("llamacpp"));
+        assert_eq!(detail.inference_settings.len(), 1);
+        assert_eq!(detail.inference_settings[0].key, "temperature");
     }
 
     #[tokio::test]
