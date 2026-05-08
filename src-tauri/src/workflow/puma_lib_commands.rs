@@ -688,9 +688,12 @@ fn build_hydrated_node_data(
         .get("dependency_bindings")
         .cloned()
         .unwrap_or_else(|| Value::Array(Vec::new()));
-    let backend_key = unique_binding_backend(&dependency_bindings)
-        .or_else(|| recommended_backend.clone())
-        .or_else(|| infer_backend_key_from_task(task_type_primary.as_deref()));
+    let backend_key = backend_key_for_pumas_option(
+        metadata,
+        &dependency_bindings,
+        recommended_backend.as_deref(),
+        task_type_primary.as_deref(),
+    );
 
     let node_data = json!({
         "modelPath": model_path,
@@ -964,6 +967,63 @@ fn unique_binding_backend(bindings: &Value) -> Option<String> {
     }
 }
 
+fn backend_key_for_pumas_option(
+    metadata: &Map<String, Value>,
+    dependency_bindings: &Value,
+    recommended_backend: Option<&str>,
+    task_type_primary: Option<&str>,
+) -> Option<String> {
+    if metadata_indicates_gguf(metadata) {
+        return Some("llamacpp".to_string());
+    }
+
+    unique_binding_backend(dependency_bindings)
+        .or_else(|| normalize_backend_key(recommended_backend))
+        .or_else(|| infer_backend_key_from_task(task_type_primary))
+}
+
+fn metadata_indicates_gguf(metadata: &Map<String, Value>) -> bool {
+    metadata
+        .get("package_facts_summary")
+        .and_then(|summary| {
+            summary
+                .get("artifact_kind")
+                .or_else(|| summary.get("artifactKind"))
+        })
+        .and_then(Value::as_str)
+        .is_some_and(|artifact| artifact.eq_ignore_ascii_case("gguf"))
+        || metadata
+            .get("tags")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|tag| {
+                tag.as_str()
+                    .is_some_and(|candidate| candidate.eq_ignore_ascii_case("gguf"))
+            })
+        || metadata_path_fields(metadata).any(path_has_gguf_extension)
+}
+
+fn metadata_path_fields<'a>(metadata: &'a Map<String, Value>) -> impl Iterator<Item = &'a str> {
+    [
+        "modelPath",
+        "model_path",
+        "entry_path",
+        "entryPath",
+        "selected_artifact_path",
+        "selectedArtifactPath",
+    ]
+    .into_iter()
+    .filter_map(|key| metadata.get(key).and_then(Value::as_str))
+}
+
+fn path_has_gguf_extension(path: &str) -> bool {
+    std::path::Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"))
+}
+
 fn infer_backend_key_from_task(task_type_primary: Option<&str>) -> Option<String> {
     let task = task_type_primary?.trim().to_ascii_lowercase();
     if task.is_empty() {
@@ -1102,6 +1162,34 @@ mod tests {
         assert_eq!(node_data["selected_binding_ids"], json!(["binding-a"]));
         assert_eq!(node_data["inference_settings"], json!([{ "key": "steps" }]));
         assert!(node_data["dependency_requirements"].is_null());
+    }
+
+    #[test]
+    fn build_hydrated_node_data_routes_gguf_to_llamacpp() {
+        let option = node_engine::PortOption {
+            value: json!("/models/tiny/model.gguf"),
+            label: "Tiny GGUF".to_string(),
+            description: None,
+            metadata: Some(json!({
+                "id": "llm/imported/tiny",
+                "model_type": "llm",
+                "task_type_primary": "text-generation",
+                "recommended_backend": "candle",
+                "tags": ["gguf"],
+                "selected_artifact_path": "llm/imported/tiny/model.gguf",
+                "dependency_bindings": [
+                    {
+                        "binding_id": "stale-candle",
+                        "backend_key": "candle"
+                    }
+                ]
+            })),
+        };
+
+        let node_data = build_hydrated_node_data(&option, Vec::new()).expect("node data");
+
+        assert_eq!(node_data["backend_key"], json!("llamacpp"));
+        assert_eq!(node_data["recommended_backend"], json!("candle"));
     }
 
     #[tokio::test]

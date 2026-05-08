@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use pantograph_runtime_identity::canonical_runtime_backend_key;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -43,7 +42,11 @@ pub trait WorkflowHost: Send + Sync {
         capabilities::DEFAULT_MAX_VALUE_BYTES
     }
 
-    /// Backend identifier used when workflow data does not declare one.
+    /// Backend identifier exposed for hosts that still need a display fallback.
+    ///
+    /// Workflow capability preflight must not use this as a required backend:
+    /// backend requirements come from graph contracts and resolved model facts,
+    /// not whichever runtime happens to be selected in the app.
     async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
         Ok("unknown".to_string())
     }
@@ -101,11 +104,6 @@ pub trait WorkflowHost: Send + Sync {
         let stored = capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots())?;
         let required_models = capabilities::extract_required_models(stored.nodes());
         let mut required_backends = capabilities::extract_required_backends(stored.nodes());
-        if required_backends.is_empty() {
-            required_backends.push(canonical_runtime_backend_key(
-                &self.default_backend_name().await?,
-            ));
-        }
         required_backends.sort();
         required_backends.dedup();
 

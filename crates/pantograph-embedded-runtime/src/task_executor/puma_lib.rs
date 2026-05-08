@@ -137,6 +137,21 @@ impl TauriTaskExecutor {
         }
     }
 
+    fn infer_model_id_from_pumas_model_path(model_path: &str) -> Option<String> {
+        let marker = "shared-resources/models/";
+        let normalized = model_path.replace('\\', "/");
+        let (_, model_id) = normalized.rsplit_once(marker)?;
+        let model_id = model_id
+            .trim_matches('/')
+            .trim_end_matches("/metadata.json")
+            .trim();
+        if model_id.is_empty() {
+            None
+        } else {
+            Some(model_id.to_string())
+        }
+    }
+
     async fn resolve_puma_lib_full_package_facts(
         api: &Arc<pumas_library::PumasApi>,
         model_id: &str,
@@ -192,6 +207,10 @@ impl TauriTaskExecutor {
         let mut owner_api_for_package_facts = extensions
             .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
             .cloned();
+
+        if model_id.is_none() {
+            model_id = Self::infer_model_id_from_pumas_model_path(&model_path);
+        }
 
         let requested_model_id = model_id.clone();
         if let Some(requested_model_id) = requested_model_id.as_deref() {
@@ -358,5 +377,29 @@ impl TauriTaskExecutor {
 
         log::debug!("PumaLib: providing model path '{}'", model_path);
         Ok(outputs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TauriTaskExecutor;
+
+    #[test]
+    fn infer_model_id_from_pumas_model_path_uses_shared_resources_suffix() {
+        assert_eq!(
+            TauriTaskExecutor::infer_model_id_from_pumas_model_path(
+                "/opt/Pumas-Library/shared-resources/models/llm/gen-verse/trado-8b-instruct"
+            )
+            .as_deref(),
+            Some("llm/gen-verse/trado-8b-instruct")
+        );
+    }
+
+    #[test]
+    fn infer_model_id_from_pumas_model_path_ignores_non_pumas_paths() {
+        assert_eq!(
+            TauriTaskExecutor::infer_model_id_from_pumas_model_path("/models/model.gguf"),
+            None
+        );
     }
 }

@@ -366,6 +366,10 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   and unknown model cache state where applicable. Future scheduler metadata may
   refine those estimates, but submission estimates must not read mutable graph
   files after the snapshot is created.
+- Workflow capability preflight must not invent a required backend from the
+  app's currently selected runtime when the graph lacks backend facts. Missing
+  backend requirements stay empty until graph contracts, Pumas facts, or node
+  data provide an explicit backend.
 - Diagnostics: usage diagnostics accept workflow-version and node contract
   version/digest filters so historic comparisons can avoid mixing different
   executable node behavior.

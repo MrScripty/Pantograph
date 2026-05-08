@@ -261,7 +261,7 @@ pub fn extract_model_usages(nodes: &[StoredGraphNode]) -> Vec<ModelUsage> {
 pub fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
     let mut out = HashSet::new();
     for node in nodes {
-        extract_backend_keys_from_value(&node.data, &mut out);
+        extract_backend_keys_from_value(&node.data, &mut out, false);
     }
     let mut backends = out.into_iter().collect::<Vec<_>>();
     backends.sort();
@@ -474,9 +474,17 @@ fn extract_model_ids_from_value(value: &serde_json::Value, out: &mut HashSet<Str
     }
 }
 
-fn extract_backend_keys_from_value(value: &serde_json::Value, out: &mut HashSet<String>) {
+fn extract_backend_keys_from_value(
+    value: &serde_json::Value,
+    out: &mut HashSet<String>,
+    gguf_context: bool,
+) {
     match value {
         serde_json::Value::Object(map) => {
+            let gguf_context = gguf_context || object_has_gguf_artifact_evidence(map);
+            if gguf_context {
+                out.insert("llama_cpp".to_string());
+            }
             for (key, child) in map {
                 if key.eq_ignore_ascii_case("backend_key")
                     || key.eq_ignore_ascii_case("backendKey")
@@ -485,7 +493,9 @@ fn extract_backend_keys_from_value(value: &serde_json::Value, out: &mut HashSet<
                 {
                     if let Some(raw) = child.as_str() {
                         let canonical_backend_key = canonical_runtime_backend_key(raw);
-                        if !canonical_backend_key.is_empty() {
+                        if !canonical_backend_key.is_empty()
+                            && (!gguf_context || canonical_backend_key == "llama_cpp")
+                        {
                             out.insert(canonical_backend_key);
                         }
                     }
@@ -495,20 +505,66 @@ fn extract_backend_keys_from_value(value: &serde_json::Value, out: &mut HashSet<
                 {
                     if let Some(raw) = child.as_str() {
                         if let Some(backend_key) = backend_key_for_runtime_hint(raw) {
-                            out.insert(backend_key);
+                            if !gguf_context || backend_key == "llama_cpp" {
+                                out.insert(backend_key);
+                            }
                         }
                     }
                 }
-                extract_backend_keys_from_value(child, out);
+                extract_backend_keys_from_value(child, out, gguf_context);
             }
         }
         serde_json::Value::Array(values) => {
             for child in values {
-                extract_backend_keys_from_value(child, out);
+                extract_backend_keys_from_value(child, out, gguf_context);
             }
         }
         _ => {}
     }
+}
+
+fn object_has_gguf_artifact_evidence(map: &serde_json::Map<String, serde_json::Value>) -> bool {
+    for (key, value) in map {
+        if key.eq_ignore_ascii_case("artifact_kind") || key.eq_ignore_ascii_case("artifactKind") {
+            if value
+                .as_str()
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case("gguf"))
+            {
+                return true;
+            }
+        }
+
+        if key.eq_ignore_ascii_case("tags") {
+            if value.as_array().into_iter().flatten().any(|tag| {
+                tag.as_str()
+                    .is_some_and(|candidate| candidate.eq_ignore_ascii_case("gguf"))
+            }) {
+                return true;
+            }
+        }
+
+        if matches!(
+            key.as_str(),
+            "model_path"
+                | "modelPath"
+                | "entry_path"
+                | "entryPath"
+                | "selected_artifact_path"
+                | "selectedArtifactPath"
+        ) && value.as_str().is_some_and(path_has_gguf_extension)
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn path_has_gguf_extension(path: &str) -> bool {
+    Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"))
 }
 
 fn backend_key_for_runtime_hint(raw: &str) -> Option<String> {
@@ -700,6 +756,30 @@ mod tests {
         assert_eq!(
             extract_required_backends(&nodes),
             vec!["llama_cpp".to_string(), "pytorch".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_required_backends_routes_gguf_evidence_to_llamacpp() {
+        let nodes = vec![StoredGraphNode {
+            id: "puma".to_string(),
+            node_type: "puma-lib".to_string(),
+            data: serde_json::json!({
+                "backend_key": "candle",
+                "selected_artifact_path": "models/tiny/model.gguf",
+                "dependency_bindings": [
+                    {
+                        "binding_id": "stale-candle",
+                        "backend_key": "candle"
+                    }
+                ]
+            }),
+            position: StoredPosition::default(),
+        }];
+
+        assert_eq!(
+            extract_required_backends(&nodes),
+            vec!["llama_cpp".to_string()]
         );
     }
 

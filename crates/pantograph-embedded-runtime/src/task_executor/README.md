@@ -71,6 +71,10 @@ same behavior without exposing helper paths outside this module boundary.
 - Puma-Lib selected `model_id` refresh must use `PUMAS_SELECTOR_ACCESS`.
   Read-only selector rows may rebind executable path/backend/task metadata, but
   only owner `PumasApi` access may enrich outputs with full package facts.
+- Legacy Puma-Lib nodes that persisted only a library-owned
+  `shared-resources/models/...` path may recover the relative Pumas `model_id`
+  from that path before selected-detail hydration. This is a compatibility
+  bridge to current Pumas facts, not a second model index.
 - Owner and local-client selected-detail hydration may replace saved
   `inference_settings` with Pumas batch settings when they are non-empty.
   Read-only selector access must leave saved settings intact because selector

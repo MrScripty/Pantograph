@@ -248,6 +248,9 @@ use pantograph_workflow_service::{
   `resolved_model_source`, `resolved_model_package_facts`, runtime hints, typed
   options, and migration diagnostics as the stable graph data fields for
   migrated `llm-inference` nodes.
+- Required backend extraction treats GGUF artifact evidence as a llama.cpp
+  requirement and suppresses conflicting backend hints inside that model-fact
+  context; workflow-service must not route GGUF through Candle/PyTorch hints.
 - Regeneration/migration: response-shape changes must update Tauri wire
   contracts, frontend stores, binding wrappers, examples, and contract tests in
   the same slice.

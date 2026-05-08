@@ -433,3 +433,6 @@ let snapshot = workflow_service
 - Pumas pipeline tags and node-type hints may classify reranking additively, but
   they must still resolve to executable backend/runtime metadata before
   execution starts.
+- Puma-Lib node hydration must treat GGUF artifact evidence as a llama.cpp
+  backend requirement even when stale dependency bindings or recommendations
+  name Candle. Candle does not execute GGUF artifacts in Pantograph.
