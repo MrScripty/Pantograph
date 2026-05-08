@@ -411,6 +411,16 @@ fn workflow_runtime_preflight_from_decision(
     runtime_capabilities: &[WorkflowRuntimeCapability],
 ) -> WorkflowRuntimePreflightAssessment {
     let decision = decision.normalized();
+    if decision_conflicts_with_required_backends(&decision, required_backends) {
+        let (runtime_warnings, blocking_runtime_issues) =
+            evaluate_runtime_preflight(required_backends, runtime_capabilities);
+        return WorkflowRuntimePreflightAssessment {
+            technical_fit_decision: Some(decision),
+            runtime_warnings,
+            blocking_runtime_issues,
+        };
+    }
+
     let enforce_runtime_readiness =
         decision_enforces_runtime_readiness(&decision, required_backends, required_models);
     let required_backend_key = decision
@@ -498,6 +508,28 @@ fn workflow_runtime_preflight_from_decision(
         runtime_warnings,
         blocking_runtime_issues,
     }
+}
+
+fn decision_conflicts_with_required_backends(
+    decision: &WorkflowTechnicalFitDecision,
+    required_backends: &[String],
+) -> bool {
+    let Some(selected_backend_key) = decision
+        .selected_backend_key
+        .as_deref()
+        .and_then(|backend| normalize_backend_key(Some(backend)))
+    else {
+        return false;
+    };
+
+    let required_backend_keys = required_backends
+        .iter()
+        .filter_map(|backend| normalize_backend_key(Some(backend)))
+        .collect::<Vec<_>>();
+    !required_backend_keys.is_empty()
+        && !required_backend_keys
+            .iter()
+            .any(|required| required == &selected_backend_key)
 }
 
 fn decision_enforces_runtime_readiness(
@@ -737,6 +769,27 @@ mod tests {
         }
     }
 
+    fn ready_llama_runtime() -> WorkflowRuntimeCapability {
+        WorkflowRuntimeCapability {
+            runtime_id: "llama_cpp".to_string(),
+            display_name: "llama.cpp".to_string(),
+            install_state: WorkflowRuntimeInstallState::Installed,
+            available: true,
+            configured: true,
+            can_install: false,
+            can_remove: false,
+            source_kind: WorkflowRuntimeSourceKind::Managed,
+            selected: false,
+            readiness_state: Some(WorkflowRuntimeReadinessState::Ready),
+            selected_version: Some("test".to_string()),
+            supports_external_connection: false,
+            backend_capability_facts: None,
+            backend_keys: vec!["llama_cpp".to_string(), "llamacpp".to_string()],
+            missing_files: Vec::new(),
+            unavailable_reason: None,
+        }
+    }
+
     #[test]
     fn build_workflow_technical_fit_request_normalizes_inputs() {
         let request = build_workflow_technical_fit_request(
@@ -903,5 +956,33 @@ mod tests {
         assert!(assessment.blocking_runtime_issues[0]
             .message
             .contains("workflow requires backend 'candle'"));
+    }
+
+    #[test]
+    fn technical_fit_preflight_uses_required_backend_when_decision_conflicts() {
+        let decision = WorkflowTechnicalFitDecision {
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+            selected_candidate_id: Some("candle|vlm/qwen".to_string()),
+            selected_runtime_id: Some("candle".to_string()),
+            selected_backend_key: Some("candle".to_string()),
+            selected_model_id: Some("vlm/qwen".to_string()),
+            reasons: vec![WorkflowTechnicalFitReason::new(
+                WorkflowTechnicalFitReasonCode::RuntimeRequirements,
+                Some("candle|vlm/qwen"),
+            )],
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        };
+
+        let assessment = workflow_runtime_preflight_from_decision(
+            &decision,
+            &["llama_cpp".to_string()],
+            &["vlm/qwen".to_string()],
+            &[unavailable_candle_runtime(), ready_llama_runtime()],
+        );
+
+        assert!(assessment.runtime_warnings.is_empty());
+        assert!(assessment.blocking_runtime_issues.is_empty());
     }
 }
