@@ -609,6 +609,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Model dependency resolver tests and Pumas descriptor fixture helpers stay in
   `model_dependencies_tests.rs` so production resolver changes are not coupled
   to integration-fixture churn.
+- Embedded workflow and data-graph runtime tests must not construct retired
+  direct `diffusion-inference` workflows. Python-sidecar scheduler and
+  registry coverage uses audio/ONNX fixtures while image generation remains on
+  canonical inference task contracts.
 - Python-backed execution always crosses the adapter/process boundary; callers
   must expect process-launch and external-runtime failures to surface as
   execution errors.

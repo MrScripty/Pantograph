@@ -6,6 +6,17 @@ async fn run_workflow_through_scheduler(
     inputs: Vec<WorkflowPortBinding>,
     output_targets: Option<Vec<WorkflowOutputTarget>>,
 ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+    run_workflow_through_scheduler_with_override(runtime, workflow_id, inputs, output_targets, None)
+        .await
+}
+
+async fn run_workflow_through_scheduler_with_override(
+    runtime: &EmbeddedRuntime,
+    workflow_id: &str,
+    inputs: Vec<WorkflowPortBinding>,
+    output_targets: Option<Vec<WorkflowOutputTarget>>,
+    override_selection: Option<WorkflowTechnicalFitOverride>,
+) -> Result<WorkflowRunResponse, WorkflowServiceError> {
     let created = runtime
         .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: workflow_id.to_string(),
@@ -20,7 +31,7 @@ async fn run_workflow_through_scheduler(
             workflow_semantic_version: "0.1.0".to_string(),
             inputs,
             output_targets,
-            override_selection: None,
+            override_selection,
             timeout_ms: None,
             priority: None,
         })
@@ -231,15 +242,15 @@ async fn workflow_run_execution_session_returns_invalid_request_for_human_input_
 }
 
 #[tokio::test]
-async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
+async fn test_runtime_routes_onnx_audio_workflow_through_python_adapter() {
     let temp = TempDir::new().expect("temp dir");
-    write_mock_diffusion_workflow(temp.path(), "runtime-diffusion");
+    write_mock_onnx_audio_workflow(temp.path(), "runtime-onnx-audio");
 
     let app_data_dir = temp.path().join("app-data");
     std::fs::create_dir_all(&app_data_dir).expect("app data dir");
     install_fake_default_runtime(&app_data_dir);
 
-    let python_runtime = Arc::new(MockImagePythonRuntime {
+    let python_runtime = Arc::new(MockMediaPythonRuntime {
         requests: Mutex::new(Vec::new()),
     });
     let runtime = EmbeddedRuntime::from_components(
@@ -255,43 +266,48 @@ async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
         None,
         python_runtime.clone(),
     )
+    .with_additional_runtime_capabilities(vec![onnx_python_sidecar_capability()])
     .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
 
-    let response = run_workflow_through_scheduler(
+    let response = run_workflow_through_scheduler_with_override(
         &runtime,
-        "runtime-diffusion",
+        "runtime-onnx-audio",
         vec![WorkflowPortBinding {
             node_id: "text-input-1".to_string(),
             port_id: "text".to_string(),
             value: serde_json::json!("a tiny painted robot"),
         }],
         Some(vec![WorkflowOutputTarget {
-            node_id: "image-output-1".to_string(),
-            port_id: "image".to_string(),
+            node_id: "audio-output-1".to_string(),
+            port_id: "audio".to_string(),
         }]),
+        Some(WorkflowTechnicalFitOverride {
+            model_id: None,
+            backend_key: Some("onnx-runtime".to_string()),
+        }),
     )
     .await
     .expect("workflow run through scheduler");
 
     assert_eq!(response.outputs.len(), 1);
-    assert_eq!(response.outputs[0].node_id, "image-output-1");
-    assert_eq!(response.outputs[0].port_id, "image");
+    assert_eq!(response.outputs[0].node_id, "audio-output-1");
+    assert_eq!(response.outputs[0].port_id, "audio");
     assert_eq!(
         response.outputs[0].value["artifact_role"],
         serde_json::json!("workflow_output")
     );
     assert_eq!(
         response.outputs[0].value["payload_kind"],
-        serde_json::json!("image")
+        serde_json::json!("audio")
     );
     assert_eq!(
         response.outputs[0].value["attribution"]["workflow_id"],
-        serde_json::json!("runtime-diffusion")
+        serde_json::json!("runtime-onnx-audio")
     );
 
     let requests = python_runtime.requests.lock().expect("requests lock");
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].node_type, "diffusion-inference");
+    assert_eq!(requests[0].node_type, "onnx-inference");
     assert_eq!(
         requests[0].inputs.get("prompt"),
         Some(&serde_json::json!("a tiny painted robot"))
@@ -301,9 +317,9 @@ async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
 #[tokio::test]
 async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input_ids() {
     let temp = TempDir::new().expect("temp dir");
-    write_mock_diffusion_workflow_with_prompt_node(
+    write_mock_onnx_audio_workflow_with_prompt_node(
         temp.path(),
-        "runtime-diffusion",
+        "runtime-onnx-audio",
         "prompt-input",
     );
 
@@ -311,7 +327,7 @@ async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input
     std::fs::create_dir_all(&app_data_dir).expect("app data dir");
     install_fake_default_runtime(&app_data_dir);
 
-    let python_runtime = Arc::new(MockImagePythonRuntime {
+    let python_runtime = Arc::new(MockMediaPythonRuntime {
         requests: Mutex::new(Vec::new()),
     });
     let runtime = EmbeddedRuntime::from_components(
@@ -327,20 +343,25 @@ async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input
         None,
         python_runtime.clone(),
     )
+    .with_additional_runtime_capabilities(vec![onnx_python_sidecar_capability()])
     .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
 
-    let response = run_workflow_through_scheduler(
+    let response = run_workflow_through_scheduler_with_override(
         &runtime,
-        "runtime-diffusion",
+        "runtime-onnx-audio",
         vec![WorkflowPortBinding {
             node_id: "prompt-input".to_string(),
             port_id: "text".to_string(),
             value: serde_json::json!("a GUI style prompt node"),
         }],
         Some(vec![WorkflowOutputTarget {
-            node_id: "image-output-1".to_string(),
-            port_id: "image".to_string(),
+            node_id: "audio-output-1".to_string(),
+            port_id: "audio".to_string(),
         }]),
+        Some(WorkflowTechnicalFitOverride {
+            model_id: None,
+            backend_key: Some("onnx-runtime".to_string()),
+        }),
     )
     .await
     .expect("workflow run through scheduler");
@@ -357,7 +378,7 @@ async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input
 #[tokio::test]
 async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
     let temp = TempDir::new().expect("temp dir");
-    write_mock_diffusion_workflow(temp.path(), "runtime-diffusion");
+    write_mock_onnx_audio_workflow(temp.path(), "runtime-onnx-audio");
 
     let app_data_dir = temp.path().join("app-data");
     std::fs::create_dir_all(&app_data_dir).expect("app data dir");
@@ -375,36 +396,41 @@ async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         workflow_service_with_artifact_store(&temp),
         None,
-        Arc::new(MockImagePythonRuntime {
+        Arc::new(MockMediaPythonRuntime {
             requests: Mutex::new(Vec::new()),
         }),
     )
+    .with_additional_runtime_capabilities(vec![onnx_python_sidecar_capability()])
     .with_runtime_registry(runtime_registry.clone());
 
-    run_workflow_through_scheduler(
+    run_workflow_through_scheduler_with_override(
         &runtime,
-        "runtime-diffusion",
+        "runtime-onnx-audio",
         vec![WorkflowPortBinding {
             node_id: "text-input-1".to_string(),
             port_id: "text".to_string(),
             value: serde_json::json!("a tiny painted robot"),
         }],
         Some(vec![WorkflowOutputTarget {
-            node_id: "image-output-1".to_string(),
-            port_id: "image".to_string(),
+            node_id: "audio-output-1".to_string(),
+            port_id: "audio".to_string(),
         }]),
+        Some(WorkflowTechnicalFitOverride {
+            model_id: None,
+            backend_key: Some("onnx-runtime".to_string()),
+        }),
     )
     .await
     .expect("workflow run through scheduler");
 
     let snapshot = runtime_registry.snapshot();
-    let pytorch = snapshot
+    let onnx = snapshot
         .runtimes
         .iter()
-        .find(|runtime| runtime.runtime_id == "pytorch")
+        .find(|runtime| runtime.runtime_id == "onnx-runtime")
         .expect("python runtime should be observed");
-    assert_eq!(pytorch.display_name, "PyTorch (Python sidecar)");
-    assert_eq!(pytorch.status, RuntimeRegistryStatus::Stopped);
-    assert!(pytorch.runtime_instance_id.is_none());
-    assert!(pytorch.models.is_empty());
+    assert_eq!(onnx.display_name, "ONNX Runtime (Python sidecar)");
+    assert_eq!(onnx.status, RuntimeRegistryStatus::Stopped);
+    assert!(onnx.runtime_instance_id.is_none());
+    assert!(onnx.models.is_empty());
 }

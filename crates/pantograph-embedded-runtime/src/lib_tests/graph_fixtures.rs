@@ -1,7 +1,7 @@
-pub(super) fn runtime_diffusion_data_graph() -> node_engine::WorkflowGraph {
+pub(super) fn runtime_onnx_audio_data_graph() -> node_engine::WorkflowGraph {
     node_engine::WorkflowGraph {
-        id: "runtime-diffusion-data-graph".to_string(),
-        name: "Runtime Diffusion Data Graph".to_string(),
+        id: "runtime-onnx-audio-data-graph".to_string(),
+        name: "Runtime ONNX Audio Data Graph".to_string(),
         nodes: vec![
             node_engine::GraphNode {
                 id: "text-input-1".to_string(),
@@ -10,21 +10,22 @@ pub(super) fn runtime_diffusion_data_graph() -> node_engine::WorkflowGraph {
                 position: (0.0, 0.0),
             },
             node_engine::GraphNode {
-                id: "diffusion-inference-1".to_string(),
-                node_type: "diffusion-inference".to_string(),
+                id: "onnx-inference-1".to_string(),
+                node_type: "onnx-inference".to_string(),
                 data: serde_json::json!({
-                    "model_path": "/tmp/mock-diffusion-model",
-                    "model_type": "diffusion",
+                    "model_path": "/tmp/mock-onnx-model",
+                    "backend_key": "onnx-runtime",
+                    "model_type": "audio",
                     "environment_ref": {
                         "state": "ready",
-                        "env_ids": ["mock-python-env"]
+                        "env_ids": ["mock-onnx-env"]
                     }
                 }),
                 position: (240.0, 0.0),
             },
             node_engine::GraphNode {
-                id: "image-output-1".to_string(),
-                node_type: "image-output".to_string(),
+                id: "audio-output-1".to_string(),
+                node_type: "audio-output".to_string(),
                 data: serde_json::json!({}),
                 position: (520.0, 0.0),
             },
@@ -34,15 +35,15 @@ pub(super) fn runtime_diffusion_data_graph() -> node_engine::WorkflowGraph {
                 id: "e-prompt".to_string(),
                 source: "text-input-1".to_string(),
                 source_handle: "text".to_string(),
-                target: "diffusion-inference-1".to_string(),
+                target: "onnx-inference-1".to_string(),
                 target_handle: "prompt".to_string(),
             },
             node_engine::GraphEdge {
-                id: "e-image".to_string(),
-                source: "diffusion-inference-1".to_string(),
-                source_handle: "image".to_string(),
-                target: "image-output-1".to_string(),
-                target_handle: "image".to_string(),
+                id: "e-audio".to_string(),
+                source: "onnx-inference-1".to_string(),
+                source_handle: "audio".to_string(),
+                target: "audio-output-1".to_string(),
+                target_handle: "audio".to_string(),
             },
         ],
         groups: Vec::new(),
@@ -67,15 +68,15 @@ pub(super) fn multi_python_runtime_data_graph() -> node_engine::WorkflowGraph {
                 position: (0.0, 180.0),
             },
             node_engine::GraphNode {
-                id: "diffusion-inference-1".to_string(),
-                node_type: "diffusion-inference".to_string(),
+                id: "audio-generation-1".to_string(),
+                node_type: "audio-generation".to_string(),
                 data: serde_json::json!({
-                    "model_path": "/tmp/mock-diffusion-model",
-                    "backend_key": "diffusers",
-                    "model_type": "diffusion",
+                    "model_path": "/tmp/mock-audio-model",
+                    "backend_key": "stable_audio",
+                    "model_type": "audio",
                     "environment_ref": {
                         "state": "ready",
-                        "env_ids": ["mock-python-env"]
+                        "env_ids": ["mock-audio-env"]
                     }
                 }),
                 position: (240.0, 0.0),
@@ -85,7 +86,7 @@ pub(super) fn multi_python_runtime_data_graph() -> node_engine::WorkflowGraph {
                 node_type: "onnx-inference".to_string(),
                 data: serde_json::json!({
                     "model_path": "/tmp/mock-onnx-model",
-                    "backend_key": "onnxruntime",
+                    "backend_key": "onnx-runtime",
                     "model_type": "audio",
                     "environment_ref": {
                         "state": "ready",
@@ -100,7 +101,7 @@ pub(super) fn multi_python_runtime_data_graph() -> node_engine::WorkflowGraph {
                 id: "e-prompt".to_string(),
                 source: "text-input-1".to_string(),
                 source_handle: "text".to_string(),
-                target: "diffusion-inference-1".to_string(),
+                target: "audio-generation-1".to_string(),
                 target_handle: "prompt".to_string(),
             },
             node_engine::GraphEdge {

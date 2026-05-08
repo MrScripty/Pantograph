@@ -22,6 +22,7 @@ use pantograph_workflow_service::{
     WorkflowRunOptions, WorkflowRunResponse, WorkflowRuntimeInstallState,
     WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
     WorkflowSchedulerRuntimeWarmupReason, WorkflowService, WorkflowServiceError,
+    WorkflowTechnicalFitOverride,
 };
 use std::path::Path;
 use std::pin::Pin;
@@ -54,7 +55,7 @@ mod session_runtime_lifecycle_tests;
 mod workflow_run_execution_tests;
 
 use graph_fixtures::{
-    multi_python_runtime_data_graph, runtime_diffusion_data_graph,
+    multi_python_runtime_data_graph, runtime_onnx_audio_data_graph,
     synthetic_kv_node_memory_snapshot,
 };
 
@@ -135,7 +136,7 @@ async fn runtime_extensions_apply_pumas_selector_access() {
     }
 }
 
-struct MockImagePythonRuntime {
+struct MockMediaPythonRuntime {
     requests: Mutex<Vec<PythonNodeExecutionRequest>>,
 }
 
@@ -155,15 +156,15 @@ struct MockProcessHandle;
 struct MockProcessSpawner;
 
 #[async_trait::async_trait]
-impl PythonRuntimeAdapter for MockImagePythonRuntime {
+impl PythonRuntimeAdapter for MockMediaPythonRuntime {
     async fn execute_node(
         &self,
         request: PythonNodeExecutionRequest,
     ) -> Result<HashMap<String, serde_json::Value>, String> {
         self.requests.lock().expect("requests lock").push(request);
         Ok(HashMap::from([(
-            "image".to_string(),
-            serde_json::json!("data:image/png;base64,bW9jay1pbWFnZQ=="),
+            "audio".to_string(),
+            serde_json::json!("data:audio/wav;base64,bW9jay1hdWRpbw=="),
         )]))
     }
 }
@@ -710,11 +711,32 @@ fn workflow_port_definition(id: &str, label: &str, data_type: &str) -> serde_jso
     })
 }
 
-fn write_mock_diffusion_workflow(root: &Path, workflow_id: &str) {
-    write_mock_diffusion_workflow_with_prompt_node(root, workflow_id, "text-input-1");
+fn onnx_python_sidecar_capability() -> WorkflowRuntimeCapability {
+    WorkflowRuntimeCapability {
+        runtime_id: "onnx-runtime".to_string(),
+        display_name: "ONNX Runtime (Python sidecar)".to_string(),
+        install_state: WorkflowRuntimeInstallState::SystemProvided,
+        available: true,
+        configured: true,
+        can_install: false,
+        can_remove: false,
+        source_kind: WorkflowRuntimeSourceKind::System,
+        selected: true,
+        readiness_state: Some(pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready),
+        selected_version: None,
+        supports_external_connection: false,
+        backend_capability_facts: None,
+        backend_keys: vec!["onnx-runtime".to_string(), "onnxruntime".to_string()],
+        missing_files: Vec::new(),
+        unavailable_reason: None,
+    }
 }
 
-fn write_mock_diffusion_workflow_with_prompt_node(
+fn write_mock_onnx_audio_workflow(root: &Path, workflow_id: &str) {
+    write_mock_onnx_audio_workflow_with_prompt_node(root, workflow_id, "text-input-1");
+}
+
+fn write_mock_onnx_audio_workflow_with_prompt_node(
     root: &Path,
     workflow_id: &str,
     prompt_node_id: &str,
@@ -724,7 +746,7 @@ fn write_mock_diffusion_workflow_with_prompt_node(
     let workflow_json = serde_json::json!({
         "version": "1.0",
         "metadata": {
-            "name": "Mock Diffusion Workflow",
+            "name": "Mock ONNX Audio Workflow",
             "created": "2026-01-01T00:00:00Z",
             "modified": "2026-01-01T00:00:00Z"
         },
@@ -747,29 +769,30 @@ fn write_mock_diffusion_workflow_with_prompt_node(
                     "position": { "x": 0.0, "y": 0.0 }
                 },
                 {
-                    "id": "diffusion-inference-1",
-                    "node_type": "diffusion-inference",
+                    "id": "onnx-inference-1",
+                    "node_type": "onnx-inference",
                     "data": {
-                        "model_path": "/tmp/mock-diffusion-model",
-                        "model_type": "diffusion",
+                        "model_path": "/tmp/mock-onnx-model",
+                        "backend_key": "onnx-runtime",
+                        "model_type": "audio",
                         "environment_ref": {
                             "state": "ready",
-                            "env_ids": ["mock-python-env"]
+                            "env_ids": ["mock-onnx-env"]
                         }
                     },
                     "position": { "x": 240.0, "y": 0.0 }
                 },
                 {
-                    "id": "image-output-1",
-                    "node_type": "image-output",
+                    "id": "audio-output-1",
+                    "node_type": "audio-output",
                     "data": {
                         "definition": {
                             "category": "output",
                             "io_binding_origin": "client_session",
-                            "label": "Generated Image",
-                            "description": "Generated image output",
-                            "inputs": [workflow_port_definition("image", "Image", "image")],
-                            "outputs": [workflow_port_definition("image", "Image", "image")]
+                            "label": "Generated Audio",
+                            "description": "Generated audio output",
+                            "inputs": [workflow_port_definition("audio", "Audio", "audio")],
+                            "outputs": [workflow_port_definition("audio", "Audio", "audio")]
                         }
                     },
                     "position": { "x": 520.0, "y": 0.0 }
@@ -780,15 +803,15 @@ fn write_mock_diffusion_workflow_with_prompt_node(
                     "id": "e-prompt",
                     "source": prompt_node_id,
                     "source_handle": "text",
-                    "target": "diffusion-inference-1",
+                    "target": "onnx-inference-1",
                     "target_handle": "prompt"
                 },
                 {
-                    "id": "e-image",
-                    "source": "diffusion-inference-1",
-                    "source_handle": "image",
-                    "target": "image-output-1",
-                    "target_handle": "image"
+                    "id": "e-audio",
+                    "source": "onnx-inference-1",
+                    "source_handle": "audio",
+                    "target": "audio-output-1",
+                    "target_handle": "audio"
                 }
             ]
         }
@@ -881,16 +904,16 @@ fn multi_python_edit_session_graph() -> WorkflowGraph {
                 data: serde_json::json!({ "text": "tiny waveform" }),
             },
             GraphNode {
-                id: "diffusion-inference-1".to_string(),
-                node_type: "diffusion-inference".to_string(),
+                id: "audio-generation-1".to_string(),
+                node_type: "audio-generation".to_string(),
                 position: Position { x: 240.0, y: 0.0 },
                 data: serde_json::json!({
-                    "model_path": "/tmp/mock-diffusion-model",
-                    "backend_key": "diffusers",
-                    "model_type": "diffusion",
+                    "model_path": "/tmp/mock-audio-model",
+                    "backend_key": "stable_audio",
+                    "model_type": "audio",
                     "environment_ref": {
                         "state": "ready",
-                        "env_ids": ["mock-python-env"]
+                        "env_ids": ["mock-audio-env"]
                     }
                 }),
             },
@@ -900,7 +923,7 @@ fn multi_python_edit_session_graph() -> WorkflowGraph {
                 position: Position { x: 240.0, y: 180.0 },
                 data: serde_json::json!({
                     "model_path": "/tmp/mock-onnx-model",
-                    "backend_key": "onnxruntime",
+                    "backend_key": "onnx-runtime",
                     "model_type": "audio",
                     "environment_ref": {
                         "state": "ready",
@@ -914,7 +937,7 @@ fn multi_python_edit_session_graph() -> WorkflowGraph {
                 id: "e-prompt".to_string(),
                 source: "text-input-1".to_string(),
                 source_handle: "text".to_string(),
-                target: "diffusion-inference-1".to_string(),
+                target: "audio-generation-1".to_string(),
                 target_handle: "prompt".to_string(),
             },
             GraphEdge {

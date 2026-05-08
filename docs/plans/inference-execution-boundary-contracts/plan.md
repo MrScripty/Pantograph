@@ -4587,6 +4587,11 @@ Update during implementation:
   longer preserve a direct `diffusion-inference` backend default. Diffusers
   descriptor tests now use canonical `llm-inference` dependency requests with
   explicit task/backend facts from Pumas.
+- 2026-05-08 follow-up: embedded-runtime saved-workflow and data-graph
+  integration fixtures no longer construct retired direct `diffusion-inference`
+  graphs. Python-sidecar scheduler, registry, and edit-session coverage now
+  uses audio/ONNX fixtures while image-generation execution remains on the
+  canonical inference task contract.
 - 2026-05-08: Puma-Lib hydration dependency preflight now infers canonical
   `llm-inference` for `text-to-image` and `image-to-image` package facts instead
   of routing the request through the retired direct `diffusion-inference` node

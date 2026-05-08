@@ -57,6 +57,10 @@ fixtures and provide a safe first boundary.
   over growing `lib_tests.rs`.
 - Runtime-registry error mapping tests must assert workflow-service error codes
   as well as variants so adapters do not drift on caller-visible failures.
+- Scheduler, edit-session, and data-graph fixtures must not construct retired
+  direct inference node shapes such as `diffusion-inference`. Python-sidecar
+  integration coverage should use audio/ONNX fixtures; image generation belongs
+  on canonical inference task contracts.
 
 ## Revisit Triggers
 - `lib_tests.rs` stops owning shared fixtures and this directory can switch from

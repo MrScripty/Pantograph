@@ -531,7 +531,7 @@ async fn execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metr
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         Arc::new(WorkflowService::new()),
         None,
-        Arc::new(MockImagePythonRuntime {
+        Arc::new(MockMediaPythonRuntime {
             requests: Mutex::new(Vec::new()),
         }),
     );
@@ -562,7 +562,7 @@ async fn execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metr
     );
     assert_eq!(
         outcome.trace_runtime_metrics.observed_runtime_ids,
-        vec!["onnx-runtime".to_string(), "diffusers".to_string()]
+        vec!["onnx-runtime".to_string(), "stable_audio".to_string()]
     );
     assert_eq!(
         outcome.trace_runtime_metrics.model_target.as_deref(),

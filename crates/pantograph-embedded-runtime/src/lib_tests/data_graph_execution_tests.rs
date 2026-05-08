@@ -20,7 +20,7 @@ async fn execute_data_graph_reconciles_python_sidecar_runtime_into_registry() {
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         Arc::new(WorkflowService::new()),
         None,
-        Arc::new(MockImagePythonRuntime {
+        Arc::new(MockMediaPythonRuntime {
             requests: Mutex::new(Vec::new()),
         }),
     )
@@ -28,8 +28,8 @@ async fn execute_data_graph_reconciles_python_sidecar_runtime_into_registry() {
 
     let outputs = runtime
         .execute_data_graph(
-            "runtime-diffusion-data-graph",
-            &runtime_diffusion_data_graph(),
+            "runtime-onnx-audio-data-graph",
+            &runtime_onnx_audio_data_graph(),
             &HashMap::from([(
                 "text".to_string(),
                 serde_json::json!("a tiny painted robot"),
@@ -40,24 +40,24 @@ async fn execute_data_graph_reconciles_python_sidecar_runtime_into_registry() {
         .expect("data graph execution");
 
     assert_eq!(
-        outputs.get("image"),
-        Some(&serde_json::json!("data:image/png;base64,bW9jay1pbWFnZQ=="))
+        outputs.get("audio"),
+        Some(&serde_json::json!("data:audio/wav;base64,bW9jay1hdWRpbw=="))
     );
     assert_eq!(
         outputs.get("_graph_id"),
-        Some(&serde_json::json!("runtime-diffusion-data-graph"))
+        Some(&serde_json::json!("runtime-onnx-audio-data-graph"))
     );
 
     let snapshot = runtime_registry.snapshot();
-    let pytorch = snapshot
+    let onnx = snapshot
         .runtimes
         .iter()
-        .find(|runtime| runtime.runtime_id == "pytorch")
+        .find(|runtime| runtime.runtime_id == "onnx-runtime")
         .expect("python runtime should be observed");
-    assert_eq!(pytorch.display_name, "PyTorch (Python sidecar)");
-    assert_eq!(pytorch.status, RuntimeRegistryStatus::Stopped);
-    assert!(pytorch.runtime_instance_id.is_none());
-    assert!(pytorch.models.is_empty());
+    assert_eq!(onnx.display_name, "ONNX Runtime (Python sidecar)");
+    assert_eq!(onnx.status, RuntimeRegistryStatus::Stopped);
+    assert!(onnx.runtime_instance_id.is_none());
+    assert!(onnx.models.is_empty());
 }
 
 #[tokio::test]
@@ -80,7 +80,7 @@ async fn execute_data_graph_reconciles_multiple_python_sidecar_runtimes_into_reg
         Arc::new(RwLock::new(ExecutorExtensions::new())),
         Arc::new(WorkflowService::new()),
         None,
-        Arc::new(MockImagePythonRuntime {
+        Arc::new(MockMediaPythonRuntime {
             requests: Mutex::new(Vec::new()),
         }),
     )
@@ -97,14 +97,14 @@ async fn execute_data_graph_reconciles_multiple_python_sidecar_runtimes_into_reg
         .expect("data graph execution");
 
     let snapshot = runtime_registry.snapshot();
-    let diffusers = snapshot
+    let stable_audio = snapshot
         .runtimes
         .iter()
-        .find(|runtime| runtime.runtime_id == "diffusers")
-        .expect("diffusers runtime should be observed");
-    assert_eq!(diffusers.status, RuntimeRegistryStatus::Stopped);
-    assert!(diffusers.runtime_instance_id.is_none());
-    assert!(diffusers.models.is_empty());
+        .find(|runtime| runtime.runtime_id == "stable_audio")
+        .expect("Stable Audio runtime should be observed");
+    assert_eq!(stable_audio.status, RuntimeRegistryStatus::Stopped);
+    assert!(stable_audio.runtime_instance_id.is_none());
+    assert!(stable_audio.models.is_empty());
 
     let onnx = snapshot
         .runtimes
