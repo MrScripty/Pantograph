@@ -70,6 +70,11 @@ while still handling desktop runtime execution concerns.
   project the subscription recovery handshake as an update feed, and read-only
   selector access must report feed unavailability without starting Pumas
   lifecycle work.
+- Puma-Lib selected model hydration must prefer the explicit selector-access
+  role for `model_id` requests. Tauri may use owner/local-client batch detail
+  facts or read-only selector-row facts, but it must not require raw owner
+  `PUMAS_API` access unless the request is path-only and needs owner-side model
+  reference migration.
 - Tauri execution-handle lifecycle and undo/redo projection must stay thin
   wrappers around backend-owned `node-engine` behavior rather than becoming a
   second owner of workflow-session policy.

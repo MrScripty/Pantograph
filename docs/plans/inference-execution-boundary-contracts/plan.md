@@ -1556,8 +1556,21 @@ setup resolves direct model roots, launcher roots, and Pumas build-output paths
 to the model-library directory containing `models.db` without creating a
 missing index. `puma-lib` model options now use the selector access extension
 as the only selector snapshot source instead of reconstructing selector access
-from raw `PUMAS_API` injection. Selected-model detail hydration remains on the
-full API path until the local-client/detail hydration slice is planned.
+from raw `PUMAS_API` injection. At this point selected-model detail hydration
+still remained on the full API path pending a later local-client/detail slice.
+
+The local-client/detail hydration slice now routes `model_id` hydration through
+the explicit Pumas selector-access adapter before falling back to raw owner API
+access. Owner and same-device local-client roles hydrate the selected model via
+Pumas batch descriptor, package-summary, and inference-settings APIs; read-only
+access projects the bounded selector row only, leaving inference settings empty
+instead of pretending to own unavailable detail facts. Path-only hydration still
+uses owner-side `resolve_pumas_model_ref` because that migration belongs to
+Pumas owner access. Validation for this slice passed with
+`cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands`,
+`cargo test -p workflow-nodes --features model-library --lib setup`,
+`cargo check -p workflow-nodes --features model-library`, `cargo fmt --all`,
+and `git diff --check`.
 
 Validation for the selector slice passed with
 `cargo test -p workflow-nodes --features model-library --lib puma_lib`,

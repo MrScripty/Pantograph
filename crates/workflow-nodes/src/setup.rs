@@ -24,6 +24,15 @@ pub enum PumasSelectorAccess {
 }
 
 #[cfg(feature = "model-library")]
+#[derive(Debug, Clone)]
+pub struct PumasSelectedModelDetail {
+    pub selector_row: Option<pumas_library::models::ModelLibrarySelectorSnapshotRow>,
+    pub descriptor: Option<pumas_library::models::ModelExecutionDescriptor>,
+    pub package_summary_result: Option<pumas_library::models::ModelPackageFactsSummaryResult>,
+    pub inference_settings: Vec<pumas_library::models::InferenceParamSchema>,
+}
+
+#[cfg(feature = "model-library")]
 impl PumasSelectorAccess {
     pub fn role_name(&self) -> &'static str {
         match self {
@@ -73,6 +82,86 @@ impl PumasSelectorAccess {
             }),
         }
     }
+
+    pub async fn selected_model_detail(
+        &self,
+        model_id: &str,
+    ) -> pumas_library::Result<PumasSelectedModelDetail> {
+        let selector_row = self
+            .model_library_selector_snapshot(
+                pumas_library::models::ModelLibrarySelectorSnapshotRequest {
+                    search: Some(model_id.to_string()),
+                    limit: Some(25),
+                    ..Default::default()
+                },
+            )
+            .await?
+            .rows
+            .into_iter()
+            .find(|row| row.model_id == model_id || row.model_ref.model_id == model_id);
+
+        match self {
+            Self::Owner(api) => selected_model_detail_from_batch_owner(
+                model_id,
+                selector_row,
+                api.resolve_model_execution_descriptors_batch(vec![model_id.to_string()])
+                    .await?,
+                api.resolve_model_package_facts_summaries(vec![model_id.to_string()])
+                    .await?,
+                api.get_inference_settings_batch(vec![model_id.to_string()])
+                    .await?,
+            ),
+            Self::LocalClient(client) => selected_model_detail_from_batch_owner(
+                model_id,
+                selector_row,
+                client
+                    .resolve_model_execution_descriptors_batch(vec![model_id.to_string()])
+                    .await?,
+                client
+                    .resolve_model_package_facts_summaries(vec![model_id.to_string()])
+                    .await?,
+                client
+                    .get_inference_settings_batch(vec![model_id.to_string()])
+                    .await?,
+            ),
+            Self::ReadOnly(_) => Ok(PumasSelectedModelDetail {
+                selector_row,
+                descriptor: None,
+                package_summary_result: None,
+                inference_settings: Vec::new(),
+            }),
+        }
+    }
+}
+
+#[cfg(feature = "model-library")]
+fn selected_model_detail_from_batch_owner(
+    model_id: &str,
+    selector_row: Option<pumas_library::models::ModelLibrarySelectorSnapshotRow>,
+    descriptors: Vec<pumas_library::models::ModelExecutionDescriptorBatchItem>,
+    summaries: Vec<pumas_library::models::ModelPackageFactsSummaryBatchItem>,
+    settings: Vec<pumas_library::models::ModelInferenceSettingsBatchItem>,
+) -> pumas_library::Result<PumasSelectedModelDetail> {
+    let descriptor = descriptors
+        .into_iter()
+        .find(|item| item.model_id == model_id)
+        .and_then(|item| item.descriptor);
+    let package_summary_result = summaries
+        .into_iter()
+        .find(|item| item.model_id == model_id)
+        .and_then(|item| item.result);
+    let inference_settings = settings
+        .into_iter()
+        .find(|item| item.model_id == model_id)
+        .map(|item| item.settings)
+        .unwrap_or_default();
+
+    Ok(PumasSelectedModelDetail {
+        selector_row,
+        descriptor,
+        package_summary_result,
+        inference_settings,
+    })
 }
 
 /// Initialize optional runtime dependencies in `ExecutorExtensions`.
