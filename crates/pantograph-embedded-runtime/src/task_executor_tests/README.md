@@ -14,7 +14,7 @@ input normalization, and Puma-Lib coverage below the large-file threshold.
 | `dependency_fallback.rs` | Environment-ref gate and local Python fallback behavior for dependency preflight. |
 | `dependency_preflight.rs` | Blocking, successful model-ref resolution, diffusion routing, and ONNX routing through dependency preflight. |
 | `input_helpers.rs` | Inference setting defaults, runtime environment id collection, stable hashing, and dependency request shaping. |
-| `puma_lib.rs` | Puma-Lib owner and selector-access model lookup plus stale model-path rebinding coverage. |
+| `puma_lib.rs` | Puma-Lib owner and selector-access model lookup plus stale model-path, backend metadata, and selected-detail inference-settings rebinding coverage. |
 | `recorder_stream.rs` | Python runtime recorder identity/health coverage and stream event replay behavior. |
 
 ## Problem
@@ -57,6 +57,9 @@ module imports the shared parent test scope and covers one behavior family.
   installation policy.
 - Puma-Lib selector-access tests must prove read-only rows can rebind selected
   model metadata without promoting selector summaries to full package facts.
+- Puma-Lib selected-detail tests may assert owner/local-client inference-setting
+  refresh, but read-only selector rows must not be treated as rich
+  inference-setting detail.
 
 ## Usage Examples
 

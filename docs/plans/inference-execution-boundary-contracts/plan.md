@@ -1585,6 +1585,12 @@ passed with `cargo test -p pantograph-embedded-runtime puma_lib`,
 `cargo test -p workflow-nodes --features model-library --lib setup`,
 `cargo fmt --all`, and `git diff --check`.
 
+The selected-detail inference-settings execution slice now replaces stale saved
+`puma-lib` `inference_settings` with non-empty settings from Pumas selected
+detail when owner or local-client selector access can hydrate the selected
+model. Read-only selector access continues to leave saved settings intact
+because selector rows do not own rich inference-setting detail.
+
 Validation for the selector slice passed with
 `cargo test -p workflow-nodes --features model-library --lib puma_lib`,
 `cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands`,
@@ -4559,6 +4565,11 @@ Update during implementation:
   `ModelExecutionDescriptor.recommended_backend` fact when descriptor lookup
   succeeds, while preserving saved fallback behavior when Pumas facts are
   unavailable.
+- 2026-05-08: Tightened embedded-runtime `puma-lib` inference-settings
+  consumption so selected-detail batch settings from owner/local-client Pumas
+  selector access replace stale saved node settings when non-empty, while
+  read-only selector access preserves saved settings because selector rows do
+  not own rich settings facts.
 - 2026-05-04: Added append-only terminal `ChatChunk` usage counts and threaded
   typed text-generation usage into result and backend-execution lifecycle
   summaries, with regression coverage proving prompt/result text stays out of
