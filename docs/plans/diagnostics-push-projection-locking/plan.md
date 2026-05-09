@@ -628,16 +628,16 @@ without lock errors.
 
 **Tasks:**
 
-- [ ] Add or update a cross-layer test that appends diagnostics events, refreshes
+- [x] Add or update a cross-layer test that appends diagnostics events, refreshes
       projections, emits an invalidation, and causes the frontend service/page
       path to refresh projection data.
-- [ ] Add a contention regression that runs append, projection refresh, and
+- [x] Add a contention regression that runs append, projection refresh, and
       query workloads concurrently against a temp diagnostics database.
-- [ ] Add a burst regression showing many events for one run produce bounded
+- [x] Add a burst regression showing many events for one run produce bounded
       refresh calls.
-- [ ] Add a missed-event regression showing page initial load recovers without
+- [x] Add a missed-event regression showing page initial load recovers without
       receiving an event.
-- [ ] Add a retention cleanup regression showing affected run/artifact
+- [x] Add a retention cleanup regression showing affected run/artifact
       projections are invalidated.
 - [ ] Run full affected Rust and frontend verification.
 - [ ] Build release artifacts.
@@ -652,7 +652,11 @@ without lock errors.
 - `npm run test:frontend`
 - `bash launcher.sh --build-release`
 
-**Status:** Not started.
+**Status:** In progress. Focused acceptance coverage now includes
+workflow-service append-refresh-query and contention regressions, Tauri bridge
+burst coalescing, frontend missed-event recovery, and retention cleanup
+projection coverage. Remaining work is full affected verification, release
+artifact build, and final validation summary.
 
 ## Ownership And Lifecycle
 
@@ -795,6 +799,10 @@ parallel by multiple workers.
   expectations without an explicitly injected test ledger.
 - 2026-05-09: Milestone 6 completed with lifecycle coverage for the bridge task
   owner shutdown path used by `AppTaskRegistry`.
+- 2026-05-09: Milestone 9 acceptance coverage started. Added
+  workflow-service append-refresh-query and contention regressions, and reused
+  validated bridge coalescing, frontend missed-event recovery, and retention
+  cleanup projection regressions as the burst/missed/cleanup acceptance checks.
 
 ## Commit Cadence Notes
 
@@ -821,6 +829,8 @@ parallel by multiple workers.
   reuse, and missed-event recovery boundary tests.
 - Milestone 2: live diagnostics and durable ledger ownership split.
 - Milestone 6: backend push invalidation transport and lifecycle ownership.
+- Milestone 9 partial: cross-layer append-refresh-query, contention, burst,
+  missed-event, and retention cleanup acceptance coverage.
 
 ### Deviations
 
@@ -846,6 +856,10 @@ parallel by multiple workers.
 - `npm run typecheck`
 - `cargo test --manifest-path src-tauri/Cargo.toml default_diagnostics_store_keeps_timing_history_memory_only`
 - `cargo test --manifest-path src-tauri/Cargo.toml app_task_registry_shutdown_aborts_bridge_owner_tasks`
+- `cargo test -p pantograph-workflow-service workflow_diagnostics_append_refresh_query_cross_layer_path`
+- `cargo test -p pantograph-workflow-service workflow_diagnostics_append_refresh_query_contention_uses_single_ledger_owner`
+- `cargo test --manifest-path src-tauri/Cargo.toml coalesce_projection_refresh_requests_merges_same_scope`
+- `cargo test -p pantograph-workflow-service workflow_retention_cleanup_expires_artifacts_through_projection`
 
 ### Traceability Links
 

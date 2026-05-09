@@ -1855,6 +1855,121 @@ fn workflow_diagnostic_io_event_requests_io_projection_refresh() {
 }
 
 #[test]
+fn workflow_diagnostics_append_refresh_query_cross_layer_path() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+    service
+        .workflow_diagnostic_event_record(sample_run_snapshot_event())
+        .expect("run snapshot event records");
+    service
+        .workflow_diagnostic_event_record(sample_node_status_event(
+            "node-a",
+            NodeExecutionProjectionStatus::Completed,
+            42,
+        ))
+        .expect("node status event records");
+
+    let refresh = service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![
+                WorkflowDiagnosticsProjectionKind::RunDetail,
+                WorkflowDiagnosticsProjectionKind::NodeStatus,
+            ],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::DiagnosticEventAppended,
+            batch_size: 10,
+        })
+        .expect("projection refresh");
+    assert!(refresh.failed.is_empty());
+    assert_eq!(refresh.invalidations.len(), 2);
+
+    let detail = service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            projection_batch_size: Some(10),
+        })
+        .expect("run detail query");
+    assert!(detail.run.is_some());
+    assert_eq!(detail.node_statuses.len(), 1);
+    assert_eq!(detail.node_statuses[0].node_id, "node-a");
+    assert_eq!(
+        detail.node_statuses[0].status,
+        NodeExecutionProjectionStatus::Completed
+    );
+    assert_eq!(detail.projection_state.last_applied_event_seq, 2);
+    assert_eq!(detail.node_projection_state.last_applied_event_seq, 2);
+}
+
+#[test]
+fn workflow_diagnostics_append_refresh_query_contention_uses_single_ledger_owner() {
+    let service = Arc::new(WorkflowService::with_ephemeral_diagnostics_ledger().expect("service"));
+    service
+        .workflow_diagnostic_event_record(sample_run_snapshot_event())
+        .expect("run snapshot event records");
+
+    let append_service = service.clone();
+    let append_worker = std::thread::spawn(move || {
+        for offset in 0..20 {
+            append_service
+                .workflow_diagnostic_event_record(sample_node_status_event(
+                    "node-a",
+                    NodeExecutionProjectionStatus::Running,
+                    50 + offset,
+                ))
+                .expect("node status event records under contention");
+        }
+    });
+
+    let refresh_service = service.clone();
+    let refresh_worker = std::thread::spawn(move || {
+        for _ in 0..20 {
+            refresh_service
+                .workflow_diagnostics_projection_refresh(
+                    WorkflowDiagnosticsProjectionRefreshRequest {
+                        projections: vec![
+                            WorkflowDiagnosticsProjectionKind::RunDetail,
+                            WorkflowDiagnosticsProjectionKind::NodeStatus,
+                        ],
+                        workflow_run_id: Some("run-a".to_string()),
+                        workflow_id: Some("workflow-a".to_string()),
+                        reason: WorkflowDiagnosticsProjectionRefreshReason::DiagnosticEventAppended,
+                        batch_size: 10,
+                    },
+                )
+                .expect("projection refresh runs under contention");
+        }
+    });
+
+    append_worker.join().expect("append worker joins");
+    refresh_worker.join().expect("refresh worker joins");
+
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![
+                WorkflowDiagnosticsProjectionKind::RunDetail,
+                WorkflowDiagnosticsProjectionKind::NodeStatus,
+            ],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 100,
+        })
+        .expect("final projection refresh");
+    let detail = service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            projection_batch_size: Some(100),
+        })
+        .expect("run detail query");
+    assert!(detail.run.is_some());
+    assert_eq!(detail.node_statuses.len(), 1);
+    assert_eq!(
+        detail.node_statuses[0].status,
+        NodeExecutionProjectionStatus::Running
+    );
+}
+
+#[test]
 fn workflow_library_usage_query_reads_refreshed_projection() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
