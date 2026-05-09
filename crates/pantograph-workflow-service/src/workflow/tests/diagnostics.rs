@@ -796,6 +796,7 @@ fn workflow_run_inspection_query_returns_factual_run_snapshot_parts() {
         .expect("service")
         .with_diagnostics_ledger(ledger);
     refresh_run_detail_and_node_status(&service, 10);
+    refresh_io_artifact(&service, 10);
 
     let response = service
         .workflow_run_inspection_query(WorkflowRunInspectionQueryRequest {
@@ -954,6 +955,18 @@ fn refresh_node_status(service: &WorkflowService, batch_size: u32) {
         .expect("projection refresh");
 }
 
+fn refresh_io_artifact(service: &WorkflowService, batch_size: u32) {
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::IoArtifact],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size,
+        })
+        .expect("projection refresh");
+}
+
 #[test]
 fn workflow_run_detail_query_validates_bounds() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
@@ -979,7 +992,7 @@ fn workflow_run_detail_query_validates_bounds() {
 }
 
 #[test]
-fn workflow_io_artifact_query_drains_and_reads_projection() {
+fn workflow_io_artifact_query_reads_refreshed_projection() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
         .append_diagnostic_event(sample_io_artifact_event(
@@ -1003,6 +1016,7 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
         ))
         .expect("io artifact event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_io_artifact(&service, 10);
 
     let response = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
@@ -1102,6 +1116,52 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
 }
 
 #[test]
+fn workflow_io_artifact_query_does_not_mutate_projection_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "node-a",
+            "node_output",
+            "artifact-a",
+        ))
+        .expect("io artifact event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("io artifact query");
+
+    assert!(response.artifacts.is_empty());
+    assert!(response.retention_summary.is_empty());
+    assert_eq!(
+        response.projection_state.status,
+        ProjectionStatus::NeedsRebuild
+    );
+    assert_eq!(response.projection_state.last_applied_event_seq, 0);
+
+    let ledger = service.diagnostics_ledger_guard().expect("ledger guard");
+    assert!(ledger
+        .projection_state("io_artifact")
+        .expect("io artifact state query")
+        .is_none());
+}
+
+#[test]
 fn workflow_io_artifact_query_groups_node_input_and_output_records_by_run_node() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     for (node_id, artifact_role, artifact_id) in [
@@ -1118,6 +1178,7 @@ fn workflow_io_artifact_query_groups_node_input_and_output_records_by_run_node()
             .expect("io artifact event");
     }
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_io_artifact(&service, 10);
 
     let response = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
@@ -1179,6 +1240,7 @@ fn workflow_io_artifact_query_exposes_expired_retention_state() {
         ))
         .expect("retention state change event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_io_artifact(&service, 10);
 
     let response = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
@@ -1235,6 +1297,7 @@ fn workflow_io_artifact_query_exposes_deleted_retention_state() {
         ))
         .expect("retention state change event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_io_artifact(&service, 10);
 
     let response = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
@@ -1291,6 +1354,7 @@ fn workflow_io_artifact_query_supports_no_active_run_browsing() {
         .append_diagnostic_event(second_artifact)
         .expect("second io artifact event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_io_artifact(&service, 10);
 
     let response = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
@@ -1915,6 +1979,7 @@ fn workflow_retention_cleanup_expires_artifacts_through_projection() {
     assert_eq!(response.cleanup.policy_version, 1);
     assert_eq!(response.cleanup.expired_artifact_count, 1);
     assert!(response.cleanup.last_event_seq.is_some());
+    refresh_io_artifact(&service, 10);
 
     let artifacts = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {

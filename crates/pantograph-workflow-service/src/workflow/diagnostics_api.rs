@@ -913,30 +913,17 @@ impl WorkflowService {
         &self,
         request: WorkflowIoArtifactQueryRequest,
     ) -> Result<WorkflowIoArtifactQueryResponse, WorkflowServiceError> {
-        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
-        if projection_batch_size > 500 {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "projection_batch_size exceeds maximum 500".to_string(),
-            ));
-        }
+        validate_optional_projection_batch_size(
+            "projection_batch_size",
+            request.projection_batch_size,
+        )?;
         let query = request.into_io_artifact_query()?;
         let summary_query = io_artifact_retention_summary_query(&query);
-        let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = match ledger.drain_io_artifact_projection(projection_batch_size) {
-            Ok(projection_state) => projection_state,
-            Err(error) => {
-                drop(ledger);
-                return Err(self.projection_error(
-                    projection_error_scope(
-                        "io_artifact",
-                        "drain",
-                        query.workflow_run_id.clone(),
-                        None,
-                    ),
-                    WorkflowServiceError::from(error),
-                ));
-            }
-        };
+        let ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = read_projection_state_or_empty(
+            &*ledger,
+            WorkflowDiagnosticsProjectionKind::IoArtifact,
+        )?;
         let artifacts = match ledger.query_io_artifact_projection(query.clone()) {
             Ok(artifacts) => artifacts,
             Err(error) => {
