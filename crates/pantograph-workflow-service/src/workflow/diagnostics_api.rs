@@ -682,30 +682,16 @@ impl WorkflowService {
         &self,
         request: WorkflowSchedulerTimelineQueryRequest,
     ) -> Result<WorkflowSchedulerTimelineQueryResponse, WorkflowServiceError> {
-        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
-        if projection_batch_size > 500 {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "projection_batch_size exceeds maximum 500".to_string(),
-            ));
-        }
+        validate_optional_projection_batch_size(
+            "projection_batch_size",
+            request.projection_batch_size,
+        )?;
         let query = request.into_scheduler_timeline_query()?;
-        let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state =
-            match ledger.drain_scheduler_timeline_projection(projection_batch_size) {
-                Ok(projection_state) => projection_state,
-                Err(error) => {
-                    drop(ledger);
-                    return Err(self.projection_error(
-                        projection_error_scope(
-                            "scheduler_timeline",
-                            "drain",
-                            query.workflow_run_id.clone(),
-                            query.workflow_id.clone(),
-                        ),
-                        WorkflowServiceError::from(error),
-                    ));
-                }
-            };
+        let ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = read_projection_state_or_empty(
+            &*ledger,
+            WorkflowDiagnosticsProjectionKind::SchedulerTimeline,
+        )?;
         let events = match ledger.query_scheduler_timeline_projection(query.clone()) {
             Ok(events) => events,
             Err(error) => {

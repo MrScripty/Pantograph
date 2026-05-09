@@ -104,7 +104,7 @@ fn workflow_diagnostics_usage_query_validates_ids_and_bounds() {
 }
 
 #[test]
-fn workflow_scheduler_timeline_query_drains_and_reads_projection() {
+fn workflow_scheduler_timeline_query_reads_refreshed_projection() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
         .append_diagnostic_event(sample_run_snapshot_event())
@@ -116,6 +116,7 @@ fn workflow_scheduler_timeline_query_drains_and_reads_projection() {
         .append_diagnostic_event(sample_scheduler_queue_event())
         .expect("scheduler queue event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_scheduler_timeline(&service, 10);
 
     let response = service
         .workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
@@ -142,6 +143,37 @@ fn workflow_scheduler_timeline_query_drains_and_reads_projection() {
         })
         .expect("scheduler timeline cursor query");
     assert_eq!(cursor_response.events.len(), 2);
+}
+
+#[test]
+fn workflow_scheduler_timeline_query_does_not_mutate_projection_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_scheduler_queue_event())
+        .expect("scheduler queue event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            limit: Some(10),
+            projection_batch_size: Some(10),
+            ..WorkflowSchedulerTimelineQueryRequest::default()
+        })
+        .expect("scheduler timeline query");
+
+    assert!(response.events.is_empty());
+    assert_eq!(
+        response.projection_state.status,
+        ProjectionStatus::NeedsRebuild
+    );
+    assert_eq!(response.projection_state.last_applied_event_seq, 0);
+
+    let ledger = service.diagnostics_ledger_guard().expect("ledger guard");
+    assert!(ledger
+        .projection_state("scheduler_timeline")
+        .expect("scheduler timeline state query")
+        .is_none());
 }
 
 #[test]
@@ -845,6 +877,18 @@ fn refresh_run_detail_and_node_status(service: &WorkflowService, batch_size: u32
                 WorkflowDiagnosticsProjectionKind::RunDetail,
                 WorkflowDiagnosticsProjectionKind::NodeStatus,
             ],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size,
+        })
+        .expect("projection refresh");
+}
+
+fn refresh_scheduler_timeline(service: &WorkflowService, batch_size: u32) {
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::SchedulerTimeline],
             workflow_run_id: Some("run-a".to_string()),
             workflow_id: Some("workflow-a".to_string()),
             reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,

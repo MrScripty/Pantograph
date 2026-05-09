@@ -443,7 +443,7 @@ refresh owner before reading.
 
 **Tasks:**
 
-- [ ] Convert scheduler timeline query to read-only.
+- [x] Convert scheduler timeline query to read-only.
 - [ ] Convert run list and facets query to read-only.
 - [ ] Convert IO artifact query and retention summary query to read-only.
 - [ ] Convert node status query to read-only.
@@ -461,7 +461,8 @@ refresh owner before reading.
 - `cargo test -p pantograph-workflow-service workflow_library_usage_query`
 - `cargo check -p pantograph-workflow-service`
 
-**Status:** Not started.
+**Status:** In progress. Scheduler timeline now reads materialized projection
+state without hidden drains and uses the refresh owner in tests.
 
 ### Milestone 6: Backend Push Invalidation Transport
 
