@@ -629,9 +629,9 @@ executed run detail.
   `cache_invalidated`, or equivalent existing enum.
 - [x] Project cache status from node completion events into durable run detail
   or artifact evidence where the run graph page needs it.
-- [ ] Verify ArtifactStore descriptors are retained for large/binary node IO
+- [x] Verify ArtifactStore descriptors are retained for large/binary node IO
   and that run detail exposes lifecycle and retention state.
-- [ ] Verify retained artifact bodies are readable through existing artifact
+- [x] Verify retained artifact bodies are readable through existing artifact
   read/stream APIs when retention policy allows.
 - [ ] Ensure expired/deleted artifact bodies leave useful descriptor metadata in
   run detail.
@@ -650,7 +650,9 @@ returning silently before node-output artifact retention. Fresh executor
 completions emit `fresh_execution`. Durable node-status projection now carries
 `fresh_execution`, `cache_hit`, and `cache_invalidated` from node completion
 events into run detail and node-status queries, and the run graph page displays
-the cache status when present.
+the cache status when present. Descriptor-first large/binary node outputs are
+covered by embedded-runtime tests that preserve ArtifactStore descriptor
+metadata and read retained bodies through the existing artifact API.
 
 ### Milestone 5: Text Generation Streaming Contract
 
@@ -977,6 +979,15 @@ coverage.
   `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts`,
   and
   `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts src/services/workflow/WorkflowService.projections.test.ts src/components/workbench/networkPagePresenters.test.ts`.
+- 2026-05-09: Descriptor-first node I/O slice added an embedded-runtime
+  regression test proving a large binary `ArtifactDescriptor` emitted as a
+  node output is projected as a retained `node_output` descriptor with payload
+  kind, lifecycle state, retention state, read handle, payload reference, size,
+  and producer port metadata intact. The same test reads a byte range through
+  the existing ArtifactStore body API, so run inspection does not need to
+  inline large/binary bodies.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_projects_descriptor_node_outputs_without_body_inline`.
 
 ## Follow-Up Findings
 
@@ -988,7 +999,7 @@ coverage.
   node should now use the existing node execution event/ledger path. Durable
   run-detail and graph-page node-status projections now carry cache-hit versus
   fresh-execution evidence; remaining artifact work is descriptor lifecycle
-  coverage for large, deleted, or expired bodies.
+  coverage for deleted or expired bodies.
 - Scheduler live streaming now has a channel from backend node events to the
   existing frontend stream handler. Remaining streaming work is persistence-rule
   documentation/tests for `stream` versus `response` connections and any

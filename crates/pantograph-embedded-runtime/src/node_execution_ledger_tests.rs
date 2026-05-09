@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use pantograph_diagnostics_ledger::{
     DiagnosticEventPayload, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
-    LicenseSnapshot, ModelIdentity, ModelOutputMeasurement, NodeExecutionCacheStatus,
-    NodeExecutionProjectionStatus, OutputMeasurementUnavailableReason, OutputModality,
-    SqliteDiagnosticsLedger,
+    IoArtifactLifecycleState, IoArtifactPayloadKind, IoArtifactRetentionState, LicenseSnapshot,
+    ModelIdentity, ModelOutputMeasurement, NodeExecutionCacheStatus, NodeExecutionProjectionStatus,
+    OutputMeasurementUnavailableReason, OutputModality, SqliteDiagnosticsLedger,
 };
 use pantograph_node_contracts::{
     EffectiveNodeContract, NodeAuthoringMetadata, NodeCapabilityRequirement, NodeCategory,
@@ -15,8 +15,9 @@ use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttribution, WorkflowRunId,
 };
 use pantograph_workflow_service::{
-    ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowIoArtifactQueryRequest,
-    WorkflowNodeStatusQueryRequest, WorkflowService,
+    ArtifactAttribution, ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest, ArtifactStore,
+    ArtifactWriteRequest, WorkflowIoArtifactQueryRequest, WorkflowNodeStatusQueryRequest,
+    WorkflowService,
 };
 
 use super::{
@@ -1560,6 +1561,123 @@ fn node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_
         statuses.nodes[0].execution_cache_status,
         Some(NodeExecutionCacheStatus::FreshExecution)
     );
+}
+
+#[test]
+fn node_execution_workflow_sink_projects_descriptor_node_outputs_without_body_inline() {
+    let temp = tempfile::tempdir().expect("temp artifact store");
+    let artifact_store =
+        ArtifactStore::open(temp.path(), retained_node_io_test_artifact_policy()).expect("store");
+    let service = std::sync::Arc::new(
+        WorkflowService::with_ephemeral_diagnostics_ledger()
+            .expect("service")
+            .with_artifact_store(artifact_store),
+    );
+    let descriptor = service
+        .write_artifact(ArtifactWriteRequest {
+            artifact_id: Some("large-node-output".to_string()),
+            payload_kind: ArtifactPayloadKind::GenericBinary,
+            media_type: "application/octet-stream".to_string(),
+            format: None,
+            attribution: ArtifactAttribution {
+                workflow_run_id: "run-a".to_string(),
+                workflow_id: Some("workflow-a".to_string()),
+                workflow_version_id: None,
+                node_id: Some("node-a".to_string()),
+                port_id: Some("binary".to_string()),
+                model_id: None,
+                runtime_id: None,
+            },
+            artifact_role: Some("node_output".to_string()),
+            parent_artifact_id: None,
+            revision_index: None,
+            body: vec![7_u8; 128 * 1024],
+        })
+        .expect("large artifact writes");
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![node_engine::GraphNode {
+            id: "node-a".to_string(),
+            node_type: "binary-output".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        }],
+        edges: Vec::new(),
+        groups: Vec::new(),
+    };
+    let sink = NodeExecutionWorkflowLedgerSink::try_new(
+        service.clone(),
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+        None,
+    )
+    .expect("sink");
+
+    node_engine::EventSink::send(
+        &sink,
+        node_engine::WorkflowEvent::TaskCompleted {
+            task_id: "node-a".to_string(),
+            execution_id: "run-a".to_string(),
+            output: Some(serde_json::json!({
+                "binary": descriptor
+            })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
+            occurred_at_ms: Some(200),
+        },
+    )
+    .expect("descriptor output should record");
+
+    let artifacts = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: Some("node_output".to_string()),
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("io artifact query");
+
+    assert_eq!(artifacts.artifacts.len(), 1);
+    let artifact = &artifacts.artifacts[0];
+    assert_eq!(artifact.artifact_id, "large-node-output");
+    assert_eq!(artifact.producer_node_id.as_deref(), Some("node-a"));
+    assert_eq!(artifact.producer_port_id.as_deref(), Some("binary"));
+    assert_eq!(
+        artifact.payload_ref.as_deref(),
+        Some("artifact://large-node-output")
+    );
+    assert_eq!(artifact.retention_state, IoArtifactRetentionState::Retained);
+    assert_eq!(
+        artifact.lifecycle_state,
+        Some(IoArtifactLifecycleState::Retained)
+    );
+    assert_eq!(
+        artifact.payload_kind,
+        Some(IoArtifactPayloadKind::GenericBinary)
+    );
+    assert_eq!(artifact.size_bytes, Some(128 * 1024));
+    assert!(artifact.read_handle.is_some());
+
+    let body = service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id: artifact.artifact_id.clone(),
+            byte_range_start: Some(0),
+            byte_range_end_exclusive: Some(4),
+        })
+        .expect("retained descriptor body should be readable");
+    assert_eq!(body.body, vec![7_u8; 4]);
 }
 
 #[test]
