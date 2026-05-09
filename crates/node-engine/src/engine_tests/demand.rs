@@ -131,6 +131,24 @@ async fn test_demand_cache_hit_emits_completed_outputs_with_cache_status() {
     assert!(completed.iter().all(|(_, output, cache_status)| {
         output.is_some() && **cache_status == Some(TaskExecutionCacheStatus::CacheHit)
     }));
+
+    let resolved_inputs = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkflowEvent::TaskInputsResolved {
+                task_id,
+                input,
+                cache_status,
+                ..
+            } => Some((task_id.as_str(), input, cache_status)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(resolved_inputs.len(), 3);
+    assert!(resolved_inputs.iter().all(|(_, input, cache_status)| {
+        input.is_some() && **cache_status == Some(TaskExecutionCacheStatus::CacheHit)
+    }));
 }
 
 #[tokio::test]

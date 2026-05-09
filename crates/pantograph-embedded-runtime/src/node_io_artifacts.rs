@@ -37,13 +37,51 @@ pub(crate) fn node_output_artifact_metadata(
     port_id: &str,
     value: &serde_json::Value,
 ) -> NodeIoArtifactMetadata {
+    node_io_artifact_metadata(
+        service,
+        workflow_run_id,
+        workflow_id,
+        "node_output",
+        node_id,
+        port_id,
+        value,
+    )
+}
+
+pub(crate) fn node_input_artifact_metadata(
+    service: &WorkflowService,
+    workflow_run_id: &WorkflowRunId,
+    workflow_id: &WorkflowId,
+    node_id: &str,
+    port_id: &str,
+    value: &serde_json::Value,
+) -> NodeIoArtifactMetadata {
+    node_io_artifact_metadata(
+        service,
+        workflow_run_id,
+        workflow_id,
+        "node_input",
+        node_id,
+        port_id,
+        value,
+    )
+}
+
+fn node_io_artifact_metadata(
+    service: &WorkflowService,
+    workflow_run_id: &WorkflowRunId,
+    workflow_id: &WorkflowId,
+    role_label: &str,
+    node_id: &str,
+    port_id: &str,
+    value: &serde_json::Value,
+) -> NodeIoArtifactMetadata {
     if let Ok(descriptor) = serde_json::from_value::<ArtifactDescriptor>(value.clone()) {
         return node_io_artifact_metadata_from_descriptor(descriptor);
     }
 
     let materialized = node_io_artifact_body(value);
-    let artifact_id =
-        node_io_artifact_id(workflow_run_id.as_str(), "node_output", node_id, port_id);
+    let artifact_id = node_io_artifact_id(workflow_run_id.as_str(), role_label, node_id, port_id);
     if materialized.body.len() <= RETAINED_NODE_IO_VALUE_MAX_BYTES {
         let descriptor = service.write_artifact(ArtifactWriteRequest {
             artifact_id: Some(artifact_id.clone()),
@@ -59,7 +97,7 @@ pub(crate) fn node_output_artifact_metadata(
                 model_id: None,
                 runtime_id: None,
             },
-            artifact_role: Some("node_output".to_string()),
+            artifact_role: Some(role_label.to_string()),
             parent_artifact_id: None,
             revision_index: None,
             body: materialized.body.clone(),
@@ -71,7 +109,7 @@ pub(crate) fn node_output_artifact_metadata(
 
     node_io_artifact_metadata_only(
         workflow_run_id.as_str(),
-        "node_output",
+        role_label,
         node_id,
         port_id,
         &materialized.body,

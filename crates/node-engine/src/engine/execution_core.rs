@@ -45,6 +45,21 @@ impl<'a> DemandExecutionCore<'a> {
                     node_id,
                     input_version,
                 )? {
+                    if let Some(serde_json::Value::Object(input_snapshot)) =
+                        self.engine.last_inputs.get(node_id)
+                    {
+                        let cached_inputs = input_snapshot
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone()))
+                            .collect();
+                        super::execution_events::emit_task_inputs_resolved(
+                            self.runtime.event_sink,
+                            node_id.clone(),
+                            self.engine.execution_id.clone(),
+                            &cached_inputs,
+                            TaskExecutionCacheStatus::CacheHit,
+                        )?;
+                    }
                     super::execution_events::emit_task_completed(
                         self.runtime.event_sink,
                         node_id.clone(),
@@ -66,11 +81,21 @@ impl<'a> DemandExecutionCore<'a> {
                     )?;
                 }
 
-                if let Some(prompt) = super::node_preparation::prepare_node_inputs(
+                let wait_prompt = super::node_preparation::prepare_node_inputs(
                     self.runtime.graph,
                     node_id,
                     &mut inputs,
-                ) {
+                );
+                let task_inputs = inputs.clone();
+                super::execution_events::emit_task_inputs_resolved(
+                    self.runtime.event_sink,
+                    node_id.clone(),
+                    self.engine.execution_id.clone(),
+                    &task_inputs,
+                    TaskExecutionCacheStatus::FreshExecution,
+                )?;
+
+                if let Some(prompt) = wait_prompt {
                     super::execution_events::emit_task_started(
                         self.runtime.event_sink,
                         node_id.clone(),
@@ -92,7 +117,6 @@ impl<'a> DemandExecutionCore<'a> {
                     self.engine.execution_id.clone(),
                 );
 
-                let task_inputs = inputs.clone();
                 let outputs = match self
                     .runtime
                     .executor

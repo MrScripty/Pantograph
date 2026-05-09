@@ -138,6 +138,18 @@ pub enum WorkflowEvent {
         occurred_at_ms: Option<u64>,
     },
 
+    /// A task's execution inputs were resolved.
+    #[serde(rename_all = "camelCase")]
+    TaskInputsResolved {
+        task_id: String,
+        execution_id: String,
+        input: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache_status: Option<TaskExecutionCacheStatus>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        occurred_at_ms: Option<u64>,
+    },
+
     /// A task completed successfully.
     #[serde(rename_all = "camelCase")]
     TaskCompleted {
@@ -267,6 +279,7 @@ impl WorkflowEvent {
             | Self::WorkflowCancelled { occurred_at_ms, .. }
             | Self::WaitingForInput { occurred_at_ms, .. }
             | Self::TaskStarted { occurred_at_ms, .. }
+            | Self::TaskInputsResolved { occurred_at_ms, .. }
             | Self::TaskCompleted { occurred_at_ms, .. }
             | Self::TaskFailed { occurred_at_ms, .. }
             | Self::TaskProgress { occurred_at_ms, .. }
@@ -300,6 +313,10 @@ impl WorkflowEvent {
                 ..
             }
             | Self::TaskStarted {
+                occurred_at_ms: slot,
+                ..
+            }
+            | Self::TaskInputsResolved {
                 occurred_at_ms: slot,
                 ..
             }

@@ -37,6 +37,10 @@ async fn test_workflow_executor_human_input_emits_waiting_for_input() {
     assert!(matches!(
         events.as_slice(),
         [
+            WorkflowEvent::TaskInputsResolved {
+                task_id: input_task_id,
+                ..
+            },
             WorkflowEvent::TaskStarted { task_id, .. },
             WorkflowEvent::WaitingForInput {
                 workflow_id,
@@ -44,7 +48,8 @@ async fn test_workflow_executor_human_input_emits_waiting_for_input() {
                 prompt: Some(prompt),
                 ..
             }
-        ] if task_id == "approval"
+        ] if input_task_id == "approval"
+            && task_id == "approval"
             && workflow_id == "interactive-workflow"
             && waiting_task_id == "approval"
             && prompt == "Approve deployment?"
@@ -83,11 +88,17 @@ async fn test_workflow_executor_human_input_continues_with_response() {
     assert!(matches!(
         events.as_slice(),
         [
+            WorkflowEvent::TaskInputsResolved {
+                task_id: input_task_id,
+                ..
+            },
             WorkflowEvent::TaskStarted { task_id, .. },
             WorkflowEvent::TaskCompleted {
                 task_id: completed_task_id,
                 ..
             }
-        ] if task_id == "approval" && completed_task_id == "approval"
+        ] if input_task_id == "approval"
+            && task_id == "approval"
+            && completed_task_id == "approval"
     ));
 }

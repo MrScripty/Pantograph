@@ -564,12 +564,12 @@ retention and projection systems.
   than adding ad hoc event construction at each execution or UI boundary.
 - [ ] Repair the existing execution-event, ledger, projection, or frontend read
   path identified by Milestone 1.
-- [ ] Emit or project existing
+- [x] Emit or project existing
   `DiagnosticEventPayload::IoArtifactObserved` records with
   `IoArtifactRole::NodeInput` and `IoArtifactRole::NodeOutput` for each
   executed node, using the existing workflow-level artifact path as the shape
   reference.
-- [ ] Ensure retained node inputs are the resolved execution inputs after graph
+- [x] Ensure retained node inputs are the resolved execution inputs after graph
   dependency resolution and explicit user bindings, not stale graph node data.
 - [x] Ensure retained node outputs are the actual executor outputs, not only
   terminal workflow outputs.
@@ -601,8 +601,10 @@ retention and projection systems.
 **Status:** Partially implemented. Executed node outputs now flow from
 node-engine `TaskCompleted` events through embedded-runtime ledger projection
 as `node_output` I/O artifacts, including retained small text/JSON ArtifactStore
-bodies when available. Resolved node inputs and cache-hit output records remain
-open.
+bodies when available. Resolved node inputs now flow from node-engine
+`TaskInputsResolved` events through the same ledger projection as `node_input`
+I/O artifacts. Preview/truncation policy, graph-page query integration, and
+large/binary descriptor coverage remain open.
 
 ### Milestone 4: Cached Execution IO And Artifact Retention
 
@@ -895,13 +897,27 @@ coverage.
   `cargo test -p node-engine events::tests::`,
   `cargo test -p pantograph-embedded-runtime node_execution_diagnostics::tests:: --features backend-llamacpp`,
   and `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests::node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts --features backend-llamacpp`.
+- 2026-05-08: Resolved node-input slice added node-engine
+  `TaskInputsResolved` events after dependency input resolution and node-data
+  preparation, including cache-hit replay from demand-engine input snapshots.
+  Embedded runtime now projects those events into `IoArtifactObserved`
+  `node_input` records using the same ArtifactStore materialization helper as
+  node outputs.
+- 2026-05-08: Verification passed:
+  `cargo test -p node-engine engine::tests::demand::test_demand_cache_hit_emits_completed_outputs_with_cache_status`,
+  `cargo test -p node-engine events::tests::`,
+  `cargo test -p node-engine engine::tests::human_input::`,
+  `cargo test -p node-engine engine::tests::demand::`,
+  `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests::node_execution_workflow_sink_records_resolved_inputs_as_retained_node_artifacts --features backend-llamacpp`,
+  `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests::node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts --features backend-llamacpp`,
+  and `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests:: --features backend-llamacpp`.
 
 ## Follow-Up Findings
 
-- Full per-node input inspection needs a small node-engine/embedded-runtime
-  contract addition or equivalent event boundary for resolved node inputs.
-  Submitted workflow inputs are now retained as `node_input`, but dependency
-  resolved inputs for intermediate nodes are not yet durable facts.
+- Full per-node input inspection now has a node-engine/embedded-runtime event
+  boundary for resolved node inputs. Remaining work is graph-page query
+  integration, preview limits, and descriptor behavior rather than event
+  availability.
 - Full per-node output inspection for every executed or cached intermediate
   node should now use the existing node execution event/ledger path. Durable
   artifact/run-detail projections still need an explicit cache-status surface

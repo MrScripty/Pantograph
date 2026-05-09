@@ -287,6 +287,55 @@ impl NodeExecutionWorkflowLedgerSink {
         Ok(())
     }
 
+    fn record_node_input_artifacts(
+        &self,
+        event: &node_engine::WorkflowEvent,
+    ) -> Result<(), node_engine::EventError> {
+        let node_engine::WorkflowEvent::TaskInputsResolved {
+            task_id,
+            execution_id,
+            input: Some(input),
+            occurred_at_ms,
+            ..
+        } = event
+        else {
+            return Ok(());
+        };
+        if execution_id != &self.execution_id {
+            return Ok(());
+        }
+        let Some(context) = self.contexts_by_node_id.get(task_id) else {
+            return Ok(());
+        };
+
+        let Some(inputs) = input.as_object() else {
+            self.record_node_input_artifact(context, "input", input, occurred_at_ms)?;
+            return Ok(());
+        };
+
+        for (port_id, value) in inputs {
+            self.record_node_input_artifact(context, port_id, value, occurred_at_ms)?;
+        }
+
+        Ok(())
+    }
+
+    fn record_node_input_artifact(
+        &self,
+        context: &NodeExecutionWorkflowLedgerNodeContext,
+        port_id: &str,
+        value: &serde_json::Value,
+        occurred_at_ms: &Option<u64>,
+    ) -> Result<(), node_engine::EventError> {
+        self.record_node_io_artifact(
+            IoArtifactRole::NodeInput,
+            context,
+            port_id,
+            value,
+            occurred_at_ms,
+        )
+    }
+
     fn record_node_output_artifact(
         &self,
         context: &NodeExecutionWorkflowLedgerNodeContext,
@@ -294,14 +343,57 @@ impl NodeExecutionWorkflowLedgerSink {
         value: &serde_json::Value,
         occurred_at_ms: &Option<u64>,
     ) -> Result<(), node_engine::EventError> {
-        let artifact = crate::node_io_artifacts::node_output_artifact_metadata(
-            &self.workflow_service,
-            &self.workflow_run_id,
-            &self.workflow_id,
-            &context.node_id,
+        self.record_node_io_artifact(
+            IoArtifactRole::NodeOutput,
+            context,
             port_id,
             value,
-        );
+            occurred_at_ms,
+        )
+    }
+
+    fn record_node_io_artifact(
+        &self,
+        artifact_role: IoArtifactRole,
+        context: &NodeExecutionWorkflowLedgerNodeContext,
+        port_id: &str,
+        value: &serde_json::Value,
+        occurred_at_ms: &Option<u64>,
+    ) -> Result<(), node_engine::EventError> {
+        let artifact = match artifact_role {
+            IoArtifactRole::NodeInput => crate::node_io_artifacts::node_input_artifact_metadata(
+                &self.workflow_service,
+                &self.workflow_run_id,
+                &self.workflow_id,
+                &context.node_id,
+                port_id,
+                value,
+            ),
+            IoArtifactRole::NodeOutput => crate::node_io_artifacts::node_output_artifact_metadata(
+                &self.workflow_service,
+                &self.workflow_run_id,
+                &self.workflow_id,
+                &context.node_id,
+                port_id,
+                value,
+            ),
+            IoArtifactRole::WorkflowInput | IoArtifactRole::WorkflowOutput => {
+                return Ok(());
+            }
+        };
+        let producer_node_id =
+            (artifact_role == IoArtifactRole::NodeOutput).then(|| context.node_id.clone());
+        let producer_port_id =
+            (artifact_role == IoArtifactRole::NodeOutput).then(|| port_id.to_string());
+        let consumer_node_id =
+            (artifact_role == IoArtifactRole::NodeInput).then(|| context.node_id.clone());
+        let consumer_port_id =
+            (artifact_role == IoArtifactRole::NodeInput).then(|| port_id.to_string());
+        let diagnostic_label = match artifact_role {
+            IoArtifactRole::NodeInput => "node input artifact",
+            IoArtifactRole::NodeOutput => "node output artifact",
+            IoArtifactRole::WorkflowInput | IoArtifactRole::WorkflowOutput => "workflow artifact",
+        };
         let request = DiagnosticEventAppendRequest {
             source_component: DiagnosticEventSourceComponent::NodeExecution,
             source_instance_id: Some(self.execution_id.clone()),
@@ -331,11 +423,11 @@ impl NodeExecutionWorkflowLedgerSink {
             payload_ref: artifact.payload_ref,
             payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
                 artifact_id: artifact.artifact_id,
-                artifact_role: IoArtifactRole::NodeOutput,
-                producer_node_id: Some(context.node_id.clone()),
-                producer_port_id: Some(port_id.to_string()),
-                consumer_node_id: None,
-                consumer_port_id: None,
+                artifact_role,
+                producer_node_id,
+                producer_port_id,
+                consumer_node_id,
+                consumer_port_id,
                 media_type: artifact.media_type,
                 size_bytes: artifact.size_bytes,
                 content_hash: artifact.content_hash,
@@ -353,7 +445,7 @@ impl NodeExecutionWorkflowLedgerSink {
         self.workflow_service
             .workflow_diagnostic_event_record(request)
             .map(|_| ())
-            .map_err(|error| diagnostics_unavailable_event_error("node output artifact", &error))
+            .map_err(|error| diagnostics_unavailable_event_error(diagnostic_label, &error))
     }
 }
 
@@ -407,14 +499,16 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
 impl node_engine::EventSink for NodeExecutionWorkflowLedgerSink {
     fn send(&self, event: node_engine::WorkflowEvent) -> Result<(), node_engine::EventError> {
         let diagnostic_result = self.record_kv_cache_diagnostic(&event);
-        let io_result = self.record_node_output_artifacts(&event);
+        let input_io_result = self.record_node_input_artifacts(&event);
+        let output_io_result = self.record_node_output_artifacts(&event);
 
         if let Some(inner) = &self.inner {
             inner.send(event)?;
         }
 
         diagnostic_result?;
-        io_result
+        input_io_result?;
+        output_io_result
     }
 }
 

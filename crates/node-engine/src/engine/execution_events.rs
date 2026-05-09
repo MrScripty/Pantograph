@@ -28,6 +28,23 @@ pub(super) fn emit_waiting_for_input(
     });
 }
 
+pub(super) fn emit_task_inputs_resolved(
+    event_sink: &dyn EventSink,
+    task_id: NodeId,
+    execution_id: String,
+    inputs: &HashMap<String, serde_json::Value>,
+    cache_status: TaskExecutionCacheStatus,
+) -> Result<()> {
+    let _ = event_sink.send(WorkflowEvent::TaskInputsResolved {
+        task_id,
+        execution_id,
+        input: Some(serde_json::to_value(inputs)?),
+        cache_status: Some(cache_status),
+        occurred_at_ms: Some(unix_timestamp_ms()),
+    });
+    Ok(())
+}
+
 pub(super) fn emit_task_completed(
     event_sink: &dyn EventSink,
     task_id: NodeId,
@@ -75,6 +92,35 @@ mod tests {
                 && execution_id == "exec-1"
                 && task_id == "approval"
                 && prompt == "Approve deployment?"
+        ));
+    }
+
+    #[test]
+    fn emit_task_inputs_resolved_serializes_inputs() {
+        let sink = VecEventSink::new();
+        let inputs = HashMap::from([("prompt".to_string(), serde_json::json!("hello"))]);
+
+        emit_task_inputs_resolved(
+            &sink,
+            "node-a".to_string(),
+            "exec-1".to_string(),
+            &inputs,
+            TaskExecutionCacheStatus::FreshExecution,
+        )
+        .expect("emit inputs");
+
+        let events = sink.events();
+        assert!(matches!(
+            events.as_slice(),
+            [WorkflowEvent::TaskInputsResolved {
+                task_id,
+                execution_id,
+                input: Some(input),
+                cache_status: Some(TaskExecutionCacheStatus::FreshExecution),
+                ..
+            }] if task_id == "node-a"
+                && execution_id == "exec-1"
+                && input == &serde_json::json!({ "prompt": "hello" })
         ));
     }
 
