@@ -190,6 +190,7 @@ pub(crate) async fn run_session_workflow(
     host: &EmbeddedWorkflowHost,
     workflow_id: &str,
     workflow_execution_session_id: &str,
+    workflow_run_id: &str,
     inputs: &[WorkflowPortBinding],
     output_targets: Option<&[WorkflowOutputTarget]>,
     run_handle: WorkflowRunHandle,
@@ -278,10 +279,13 @@ pub(crate) async fn run_session_workflow(
     let node_execution_sink = NodeExecutionWorkflowLedgerSink::try_new(
         host.workflow_service.clone(),
         workflow_id.to_string(),
-        workflow_execution_session_id.to_string(),
+        workflow_run_id.to_string(),
         workflow_execution_session_id.to_string(),
         &graph,
-        None,
+        crate::workflow_event_identity::workflow_run_event_sink(
+            host.node_event_sink.clone(),
+            workflow_run_id,
+        ),
     )
     .ok()
     .map(|sink| Arc::new(sink) as Arc<dyn node_engine::EventSink>);
@@ -342,7 +346,7 @@ pub(crate) async fn run_session_workflow(
         InferenceLifecycleWorkflowLedgerSink::try_new(
             host.workflow_service.clone(),
             workflow_id.to_string(),
-            workflow_execution_session_id.to_string(),
+            workflow_run_id.to_string(),
             workflow_execution_session_id.to_string(),
             &graph,
         )

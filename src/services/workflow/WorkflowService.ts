@@ -51,6 +51,10 @@ interface WorkflowSessionQueueListRequest {
 export class WorkflowService extends WorkflowCommandService {
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
 
+  protected override emitWorkflowEvent(event: WorkflowEvent): void {
+    this.eventListeners.forEach((listener) => listener(event));
+  }
+
   // --- Node Definitions ---
 
   async getNodeDefinitions(): Promise<NodeDefinition[]> {

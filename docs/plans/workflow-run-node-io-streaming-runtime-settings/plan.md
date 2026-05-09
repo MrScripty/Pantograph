@@ -587,6 +587,8 @@ retention and projection systems.
 - [x] Carry resolved-input evidence through Tauri and frontend event transport
   as a handled no-op live event so execution ownership, diagnostics overlays,
   and consumer event stores stay exhaustive without redefining retained IO.
+- [x] Ensure scheduler-session node IO and live node events are attributed to
+  the backend workflow run id, not the transient workflow execution session id.
 - [ ] Do not add node IO fields to `RunDetailProjectionRecord` unless the
   implementation proves a composite DTO is needed for read performance or API
   stability.
@@ -656,16 +658,16 @@ remains open.
 **Tasks:**
 - [x] Confirm llama.cpp currently emits text chunks on `TaskStream.port =
   "response"` and final completed output as `response`.
-- [ ] Audit scheduler-run event transport from node-engine `TaskStream` through
+- [x] Audit scheduler-run event transport from node-engine `TaskStream` through
   embedded runtime, Tauri event adapter, frontend toolbar event handling, and
   active-run ownership filtering.
-- [ ] Verify scheduler-submitted retained runs use the same `NodeStream` path as
+- [x] Verify scheduler-submitted retained runs use the same `NodeStream` path as
   toolbar/local execution, or define the smallest adapter needed to make them
   converge.
-- [ ] Keep backend stream semantics in backend/node-engine contracts. Tauri may
+- [x] Keep backend stream semantics in backend/node-engine contracts. Tauri may
   translate events to frontend event names, but it must not redefine which port
   carries canonical text chunks.
-- [ ] Define the canonical text streaming rule: live chunks are associated with
+- [x] Define the canonical text streaming rule: live chunks are associated with
   `response`; final retained text is `response`; `stream` remains a live/event
   or non-text/media stream surface, not the required text-output connection.
 - [ ] Define the persistence rule: choosing a live `stream` connection versus
@@ -931,6 +933,30 @@ coverage.
   `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter::tests::translation_projection::translated_task_inputs_resolved_event_preserves_inputs_without_trace_noise`,
   `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter::tests::`,
   and `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics::tests::`.
+- 2026-05-09: Scheduler live-event slice found that the app-facing submit path
+  used headless `workflow_run_execution_session` without a Tauri channel, while
+  the existing `applyWorkflowToolbarEvent` stream handler was only reachable
+  through subscribed workflow events. The slice adds a channel to scheduler
+  session runs, forwards node-engine events through `TauriEventAdapter`, and
+  keeps `response` as the backend-owned canonical text stream/output port.
+- 2026-05-09: The same slice found a run-inspection attribution bug:
+  embedded session execution only knew the workflow execution session id, so
+  node-level ledger artifacts and live events could be keyed to the session
+  instead of the backend-generated workflow run id. `WorkflowRunOptions` now
+  carries the workflow run id, and embedded runtime uses it for node IO ledger
+  attribution and live event ownership while still using the session id for
+  warm executor residency.
+- 2026-05-09: Decomposition review for the scheduler live-event slice moved
+  workflow event ownership rewriting into `workflow_event_identity.rs` instead
+  of growing `embedded_workflow_host.rs`; the host remains focused on runtime
+  execution while the new module owns node-engine event id projection.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-workflow-service workflow::tests::session_execution::`,
+  `cargo test -p pantograph-embedded-runtime scheduler_session_live_events_use_backend_workflow_run_id --features backend-llamacpp`,
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter::tests:: --features backend-llamacpp`,
+  `node --experimental-strip-types --test src/services/workflow/WorkflowService.commands.test.ts src/components/workflowToolbarEvents.test.ts`,
+  `npm run typecheck`, and
+  `cargo check --manifest-path src-tauri/Cargo.toml --features backend-llamacpp`.
 
 ## Follow-Up Findings
 
@@ -943,6 +969,10 @@ coverage.
   artifact/run-detail projections still need an explicit cache-status surface
   where graph-page inspection needs to distinguish cache-hit evidence from
   fresh-execution evidence.
+- Scheduler live streaming now has a channel from backend node events to the
+  existing frontend stream handler. Remaining streaming work is persistence-rule
+  documentation/tests for `stream` versus `response` connections and any
+  user-facing run view refresh needed after the terminal command response.
 - Effective llama.cpp settings are applied but not yet emitted as a structured
   runtime settings snapshot with source attribution in run diagnostics. That is
   still needed before frontend controls can show whether values came from

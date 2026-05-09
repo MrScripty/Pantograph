@@ -113,6 +113,7 @@ impl WorkflowService {
         let run_options = WorkflowRunOptions {
             timeout_ms: request.timeout_ms,
             workflow_execution_session_id,
+            workflow_run_id: Some(workflow_run_id_value.clone()),
         };
         let run_handle = WorkflowRunHandle::new();
         let mut run_future = Box::pin(host.run_workflow(

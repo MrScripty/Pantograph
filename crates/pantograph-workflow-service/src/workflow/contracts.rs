@@ -1200,6 +1200,8 @@ pub struct WorkflowRunOptions {
     pub timeout_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_execution_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_run_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]

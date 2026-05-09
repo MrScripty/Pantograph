@@ -475,6 +475,8 @@ test('execution session commands preserve scheduler-backed request boundaries', 
     assert.deepEqual(created, createResponse);
     assert.deepEqual(run, runResponse);
     assert.deepEqual(closed, closeResponse);
+    const runArgs = calls[1]?.args as { request?: unknown; channel?: unknown };
+    assert.equal(typeof runArgs.channel, 'object');
     assert.deepEqual(calls, [
       {
         cmd: 'workflow_create_execution_session',
@@ -498,6 +500,7 @@ test('execution session commands preserve scheduler-backed request boundaries', 
             timeout_ms: null,
             priority: null,
           },
+          channel: runArgs.channel,
         },
       },
       {

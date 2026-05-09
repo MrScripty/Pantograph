@@ -4,6 +4,7 @@
 //! Pantograph embedded runtime.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use pantograph_managed_dependencies::{
     activate_managed_redistributable_version, install_managed_redistributable_from_staging,
@@ -50,12 +51,13 @@ use pantograph_workflow_service::{
     WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
     WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
 };
-use tauri::{AppHandle, State};
+use tauri::{ipc::Channel, AppHandle, State};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
-use super::commands::{SharedExtensions, SharedWorkflowService};
+use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
+use super::events::WorkflowEvent;
 use super::headless_diagnostics::workflow_scheduler_snapshot_response;
 pub(crate) use super::headless_runtime::build_runtime;
 
@@ -188,6 +190,8 @@ pub async fn workflow_run_execution_session(
     extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+    channel: Channel<WorkflowEvent>,
 ) -> Result<WorkflowRunResponse, String> {
     let runtime = build_runtime(
         &app,
@@ -198,8 +202,23 @@ pub async fn workflow_run_execution_session(
         Some(rag_manager.inner()),
     )
     .await?;
+    let workflow_id = workflow_service
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
+            session_id: request.session_id.clone(),
+        })
+        .await
+        .map(|response| response.session.workflow_id)
+        .unwrap_or_else(|_| "workflow".to_string());
+    let event_sink = Arc::new(
+        super::event_adapter::TauriEventAdapter::new(
+            channel,
+            workflow_id,
+            diagnostics_store.inner().clone(),
+        )
+        .with_workflow_service(workflow_service.inner().clone()),
+    ) as Arc<dyn node_engine::EventSink>;
     runtime
-        .run_workflow_execution_session(request)
+        .run_workflow_execution_session_with_event_sink(request, event_sink)
         .await
         .map_err(workflow_error_json)
 }

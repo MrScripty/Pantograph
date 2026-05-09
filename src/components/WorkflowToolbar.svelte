@@ -6,6 +6,11 @@
     resetExecutionStates,
     clearNodeRuntimeData,
     clearStreamContent,
+    edges,
+    setNodeExecutionState,
+    updateNodeRuntimeData,
+    appendStreamContent,
+    setStreamContent,
   } from '../stores/workflowStore';
   import {
     availableWorkflows,
@@ -29,6 +34,7 @@
   import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
   import {
+    applyWorkflowToolbarEvent,
     isCurrentWorkflowSubmitFailure,
     isNumericWorkflowSemanticVersion,
     isWorkflowSemanticVersionConflictError,
@@ -44,6 +50,8 @@
   let workflowErrorWorkflowId = $state<string | null>(null);
   let workflowSemanticVersion = $state(DEFAULT_WORKFLOW_SEMANTIC_VERSION);
   let previousWorkflowId = $state<string | null>(null);
+  let activeWorkflowRunId = $state<string | null>(null);
+  let waitingForInput = $state(false);
 
   let currentSavedWorkflow = $derived(
     $currentGraphType === 'workflow'
@@ -120,6 +128,25 @@
       : DEFAULT_WORKFLOW_SEMANTIC_VERSION;
   });
 
+  $effect(() => {
+    return workflowService.subscribeEvents((event) => {
+      const result = applyWorkflowToolbarEvent({
+        event,
+        activeWorkflowRunId,
+        waitingForInput,
+        edges: $edges,
+        workflow: {
+          setNodeExecutionState,
+          updateNodeRuntimeData,
+          appendStreamContent,
+          setStreamContent,
+        },
+      });
+      activeWorkflowRunId = result.activeWorkflowRunId;
+      waitingForInput = result.waitingForInput;
+    });
+  });
+
   async function closeExecutionSession(sessionId: string): Promise<void> {
     try {
       await workflowService.closeWorkflowExecutionSession({ session_id: sessionId });
@@ -134,6 +161,8 @@
     workflowError = null;
     workflowErrorWorkflowId = null;
     isExecuting.set(true);
+    activeWorkflowRunId = null;
+    waitingForInput = false;
     clearNodeRuntimeData([...AUDIO_RUNTIME_DATA_KEYS]);
     resetExecutionStates();
     clearStreamContent();

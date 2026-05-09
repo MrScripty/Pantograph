@@ -122,6 +122,75 @@ async fn test_runtime_run_and_session_execution() {
 }
 
 #[tokio::test]
+async fn scheduler_session_live_events_use_backend_workflow_run_id() {
+    let temp = TempDir::new().expect("temp dir");
+    write_test_workflow(temp.path(), "runtime-text");
+
+    let app_data_dir = temp.path().join("app-data");
+    std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+    install_fake_default_runtime(&app_data_dir);
+
+    let runtime = EmbeddedRuntime::with_default_python_runtime(
+        EmbeddedRuntimeConfig {
+            app_data_dir,
+            project_root: temp.path().to_path_buf(),
+            workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            max_loaded_sessions: None,
+        },
+        Arc::new(inference::InferenceGateway::new()),
+        Arc::new(RwLock::new(ExecutorExtensions::new())),
+        Arc::new(WorkflowService::new()),
+        None,
+    )
+    .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
+    let created = runtime
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
+            workflow_id: "runtime-text".to_string(),
+            usage_profile: None,
+            keep_alive: false,
+        })
+        .await
+        .expect("create session");
+    let session_id = created.session_id.clone();
+    let event_sink = Arc::new(node_engine::VecEventSink::new());
+
+    let response = runtime
+        .run_workflow_execution_session_with_event_sink(
+            WorkflowExecutionSessionRunRequest {
+                session_id: session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+            event_sink.clone(),
+        )
+        .await
+        .expect("run session");
+
+    let events = event_sink.events();
+    assert!(events.iter().any(|event| matches!(
+        event,
+        node_engine::WorkflowEvent::TaskCompleted { task_id, execution_id, .. }
+            if task_id == "text-output-1" && execution_id == &response.workflow_run_id
+    )));
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        node_engine::WorkflowEvent::TaskCompleted { execution_id, .. }
+            if execution_id == &session_id
+    )));
+}
+
+#[tokio::test]
 async fn embedded_workflow_host_run_workflow_returns_cancelled_for_precancelled_run_handle() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");
@@ -163,6 +232,7 @@ async fn embedded_workflow_host_run_workflow_returns_cancelled_for_precancelled_
             WorkflowRunOptions {
                 timeout_ms: None,
                 workflow_execution_session_id: None,
+                workflow_run_id: Some("pre-cancelled-run".to_string()),
             },
             run_handle,
         )

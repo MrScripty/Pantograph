@@ -187,6 +187,8 @@ pub async fn workflow_run_execution_session(
     extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+    channel: tauri::ipc::Channel<super::events::WorkflowEvent>,
 ) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
     super::headless_workflow_commands::workflow_run_execution_session(
         request,
@@ -196,6 +198,8 @@ pub async fn workflow_run_execution_session(
         extensions,
         rag_manager,
         workflow_service,
+        diagnostics_store,
+        channel,
     )
     .await
 }

@@ -243,6 +243,7 @@ impl EmbeddedRuntime {
             rag_backend: self.rag_backend.clone(),
             python_runtime: self.python_runtime.clone(),
             additional_runtime_capabilities: self.additional_runtime_capabilities.clone(),
+            node_event_sink: None,
         }
     }
 }

@@ -22,6 +22,16 @@ use crate::{
     NodeExecutionWorkflowLedgerSink, RuntimeExtensionsSnapshot,
 };
 
+impl EmbeddedWorkflowHost {
+    pub(crate) fn with_node_event_sink(
+        mut self,
+        node_event_sink: Arc<dyn node_engine::EventSink>,
+    ) -> Self {
+        self.node_event_sink = Some(node_event_sink);
+        self
+    }
+}
+
 #[async_trait::async_trait]
 impl WorkflowHost for EmbeddedWorkflowHost {
     fn workflow_roots(&self) -> Vec<PathBuf> {
@@ -256,10 +266,15 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         if let Some(workflow_execution_session_id) =
             run_options.workflow_execution_session_id.as_deref()
         {
+            let workflow_run_id = run_options
+                .workflow_run_id
+                .as_deref()
+                .unwrap_or(workflow_execution_session_id);
             return workflow_execution_session_execution::run_session_workflow(
                 self,
                 workflow_id,
                 workflow_execution_session_id,
+                workflow_run_id,
                 inputs,
                 output_targets,
                 run_handle,
@@ -284,14 +299,21 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         )
         .await;
 
-        let execution_id = Uuid::new_v4().to_string();
+        let execution_id = run_options
+            .workflow_run_id
+            .clone()
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
+        let live_event_sink = crate::workflow_event_identity::workflow_run_event_sink(
+            self.node_event_sink.clone(),
+            &execution_id,
+        );
         let node_execution_sink = NodeExecutionWorkflowLedgerSink::try_new(
             self.workflow_service.clone(),
             workflow_id.to_string(),
             execution_id.clone(),
             execution_id.clone(),
             &graph,
-            None,
+            live_event_sink,
         )
         .ok()
         .map(|sink| Arc::new(sink) as Arc<dyn node_engine::EventSink>);

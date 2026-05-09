@@ -180,6 +180,16 @@ impl EmbeddedRuntime {
             .await
     }
 
+    pub async fn run_workflow_execution_session_with_event_sink(
+        &self,
+        request: WorkflowExecutionSessionRunRequest,
+        event_sink: std::sync::Arc<dyn node_engine::EventSink>,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.workflow_service
+            .run_workflow_execution_session(&self.host().with_node_event_sink(event_sink), request)
+            .await
+    }
+
     pub async fn close_workflow_execution_session(
         &self,
         request: WorkflowExecutionSessionCloseRequest,

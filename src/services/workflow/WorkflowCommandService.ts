@@ -1,3 +1,4 @@
+import { Channel } from '@tauri-apps/api/core';
 import type {
   DiagnosticsRetentionPolicy,
   PumasHfDownloadRequest,
@@ -40,6 +41,7 @@ import type {
   WorkflowExecutionSessionCreateRequest,
   WorkflowExecutionSessionCreateResponse,
   WorkflowExecutionSessionRunRequest,
+  WorkflowEvent,
   WorkflowManagedMediaDependencyId,
   WorkflowManagedMediaDependencyInstallFromStagingRequest,
   WorkflowManagedMediaDependencyStatus,
@@ -58,6 +60,8 @@ import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 import { invokeWorkflowCommand } from './workflowServiceErrors.ts';
 
 export class WorkflowCommandService extends WorkflowProjectionService {
+  protected emitWorkflowEvent(_event: WorkflowEvent): void {}
+
   async createWorkflowExecutionSession(
     request: WorkflowExecutionSessionCreateRequest,
   ): Promise<WorkflowExecutionSessionCreateResponse> {
@@ -86,8 +90,14 @@ export class WorkflowCommandService extends WorkflowProjectionService {
       };
     }
 
+    const channel = new Channel<WorkflowEvent>();
+    channel.onmessage = (event: WorkflowEvent) => {
+      this.emitWorkflowEvent(event);
+    };
+
     return invokeWorkflowCommand<WorkflowRunResponse>('workflow_run_execution_session', {
       request,
+      channel,
     });
   }
 

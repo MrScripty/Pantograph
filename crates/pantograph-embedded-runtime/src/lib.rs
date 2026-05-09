@@ -39,6 +39,7 @@ mod runtime_registry_lifecycle;
 mod runtime_registry_observations;
 pub mod task_executor;
 pub mod technical_fit;
+mod workflow_event_identity;
 mod workflow_execution_session_execution;
 pub mod workflow_runtime;
 mod workflow_scheduler_diagnostics;
@@ -125,6 +126,7 @@ pub(crate) struct EmbeddedWorkflowHost {
     rag_backend: Option<Arc<dyn RagBackend>>,
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
     additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
+    node_event_sink: Option<Arc<dyn node_engine::EventSink>>,
 }
 
 #[cfg(test)]
