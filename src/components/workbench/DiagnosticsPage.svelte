@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { RefreshCw } from 'lucide-svelte';
   import type {
     IoArtifactRetentionSummaryRecord,
@@ -9,6 +10,7 @@
     RunListProjectionRecord,
     SchedulerTimelineProjectionRecord,
   } from '../../services/diagnostics/types';
+  import { subscribeDiagnosticsProjectionInvalidations } from '../../services/workflow/WorkflowProjectionSubscriptionService';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun, diagnosticsFocus, focusWorkflowDiagnostics } from '../../stores/workbenchStore';
   import type { DiagnosticsComparisonFilters, DiagnosticsExecutionFilters } from './diagnosticsPagePresenters';
@@ -108,6 +110,10 @@
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
+  }
+
+  function recordSubscriptionError(subscriptionError: unknown): void {
+    error = formatWorkflowCommandError(subscriptionError);
   }
 
   function nodeDiagnosticErrorEventId(node: NodeStatusProjectionRecord): string | null {
@@ -238,6 +244,30 @@
   $effect(() => {
     const runId = activeRunId();
     void refreshDiagnostics(runId);
+  });
+
+  onMount(() => {
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+    void subscribeDiagnosticsProjectionInvalidations({
+      projections: ['run_detail', 'run_list', 'node_status', 'io_artifact', 'scheduler_timeline'],
+      getActiveRunId: activeRunId,
+      refresh: () => refreshDiagnostics(),
+      onRefreshError: recordSubscriptionError,
+    })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        unlisten = nextUnlisten;
+      })
+      .catch(recordSubscriptionError);
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   });
 </script>
 

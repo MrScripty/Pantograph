@@ -544,7 +544,7 @@ type DiagnosticsProjectionSubscriptionOptions = {
       responses and affected tests.
 - [x] Add or extend shared projection health/freshness presentation helpers.
 - [x] Provide unsubscribe cleanup and stale-response guards.
-- [ ] Preserve initial snapshot fetches on page mount and active-run changes.
+- [x] Preserve initial snapshot fetches on page mount and active-run changes.
 - [x] Debounce/coalesce refresh requests per active run and projection kind.
 - [x] Ignore invalidations that do not affect the active page/run/filter scope.
 - [x] Add unit tests proving subscriptions call listeners, coalesce refreshes
@@ -566,7 +566,7 @@ small Tauri-event subscription helper that filters projection/run scope,
 coalesces callbacks, and cleans up listeners, a shared mock projection-state
 helper used by projection service mocks, and a shared freshness presenter that
 surfaces backend projection failure details consistently. Remaining work is
-missed-event recovery tests and page integration.
+missed-event recovery tests and additional page integration.
 
 ### Milestone 8: Workbench Page Conversion
 
@@ -575,7 +575,7 @@ event-driven refreshes on affected pages.
 
 **Tasks:**
 
-- [ ] Update `DiagnosticsPage.svelte` to load initial data once on mount or
+- [x] Update `DiagnosticsPage.svelte` to load initial data once on mount or
       active-run change, then subscribe to projection invalidations for the
       active run and affected comparison scopes.
 - [ ] Update `SchedulerPage.svelte` run list/timeline refresh behavior to
@@ -601,7 +601,10 @@ event-driven refreshes on affected pages.
 - Focused component/service tests for subscription cleanup and stale response
   handling.
 
-**Status:** Not started.
+**Status:** In progress. `DiagnosticsPage.svelte` now keeps its active-run
+initial fetch/manual refresh behavior and subscribes to backend diagnostics
+projection invalidations for run detail, run list, node status, I/O artifact,
+and scheduler timeline scopes.
 
 ### Milestone 9: Cross-Layer Acceptance And Release Verification
 
