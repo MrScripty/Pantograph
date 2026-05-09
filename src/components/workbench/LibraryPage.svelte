@@ -6,6 +6,7 @@
     PumasHfModelSearchResult,
     ProjectionStateRecord,
   } from '../../services/diagnostics/types';
+  import { subscribeDiagnosticsProjectionInvalidations } from '../../services/workflow/WorkflowProjectionSubscriptionService';
   import type { PortOption } from '../../services/workflow/types';
   import {
     invalidatePumasModelOptionsCache,
@@ -41,6 +42,7 @@
   let downloadModelType = $state('');
   let deleteModelId = $state('');
   let requestSerial = 0;
+  let projectionUnsubscribe: (() => void) | null = null;
 
   function formatTimestamp(value: number): string {
     return new Date(value).toLocaleString();
@@ -93,6 +95,10 @@
       invalidatePumasModelOptionsCache();
     }
     await Promise.all([refreshLibraryUsage(), refreshPumasModels(forcePumasReload)]);
+  }
+
+  function recordSubscriptionError(subscriptionError: unknown): void {
+    error = formatWorkflowCommandError(subscriptionError);
   }
 
   async function searchHfModels(): Promise<void> {
@@ -155,7 +161,27 @@
   }
 
   onMount(() => {
+    let disposed = false;
     void refreshLibraryPage();
+    void subscribeDiagnosticsProjectionInvalidations({
+      projections: ['library_usage'],
+      refresh: () => refreshLibraryUsage(),
+      onRefreshError: recordSubscriptionError,
+    })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        projectionUnsubscribe = nextUnlisten;
+      })
+      .catch(recordSubscriptionError);
+
+    return () => {
+      disposed = true;
+      projectionUnsubscribe?.();
+      projectionUnsubscribe = null;
+    };
   });
 </script>
 

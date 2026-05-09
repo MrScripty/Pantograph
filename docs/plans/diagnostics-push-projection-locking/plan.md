@@ -584,7 +584,7 @@ event-driven refreshes on affected pages.
       and library-usage refreshes to respond to invalidations.
 - [x] Update `IoInspectorPage.svelte` selected-run graph/node/artifact refresh
       behavior to respond to invalidations.
-- [ ] Update `LibraryPage.svelte` library-usage refresh behavior to respond to
+- [x] Update `LibraryPage.svelte` library-usage refresh behavior to respond to
       library-usage invalidations.
 - [ ] Keep manual refresh buttons and active-run change refreshes.
 - [ ] Remove any redundant timers or repeated polling loops introduced by these
@@ -611,6 +611,8 @@ event compatibility path. `NetworkPage.svelte` now subscribes to scheduler
 timeline, node-status, and library-usage invalidations for the selected run.
 `IoInspectorPage.svelte` now subscribes to run-detail, node-status, and
 I/O-artifact invalidations for the selected run.
+`LibraryPage.svelte` now subscribes to library-usage invalidations while
+leaving Pumas model-list refresh ownership unchanged.
 
 ### Milestone 9: Cross-Layer Acceptance And Release Verification
 
