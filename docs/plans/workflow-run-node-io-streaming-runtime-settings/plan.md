@@ -644,7 +644,7 @@ executed run detail.
 - Frontend IO inspector or graph run page tests cover descriptor display and
   missing-body states.
 
-**Status:** Partially implemented. Demand-engine cache hits now emit
+**Status:** Implemented for the current slice. Demand-engine cache hits now emit
 `TaskCompleted` events with retained outputs and `cache_hit` status instead of
 returning silently before node-output artifact retention. Fresh executor
 completions emit `fresh_execution`. Durable node-status projection now carries
