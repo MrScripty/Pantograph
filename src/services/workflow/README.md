@@ -71,7 +71,9 @@ Projection invalidation subscription wiring lives in
 `WorkflowProjectionSubscriptionService.ts`. It normalizes backend invalidation
 events, filters by projection kind and active run, coalesces refresh callbacks,
 and owns unsubscribe cleanup without caching diagnostics facts or becoming a
-frontend diagnostics store.
+frontend diagnostics store. Workbench pages still own initial snapshot fetches
+and manual refresh actions, so a missed invalidation is recovered by the next
+projection read rather than by any frontend cache.
 Mock projection responses use the shared `mockProjectionState` helper from
 `src/services/diagnostics/projectionState.ts` so additive projection metadata,
 including health fields, stays consistent across frontend service fixtures.

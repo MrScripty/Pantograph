@@ -553,9 +553,9 @@ type DiagnosticsProjectionSubscriptionOptions = {
 - [x] Ignore invalidations that do not affect the active page/run/filter scope.
 - [x] Add unit tests proving subscriptions call listeners, coalesce refreshes
       where owned by the service, and unsubscribe cleanly.
-- [ ] Add unit tests proving missed events are recovered by initial snapshot and
+- [x] Add unit tests proving missed events are recovered by initial snapshot and
       manual refresh paths.
-- [ ] Update `src/services/workflow/README.md` or diagnostics README with the
+- [x] Update `src/services/workflow/README.md` or diagnostics README with the
       new event-driven boundary.
 
 **Verification:**
@@ -569,8 +569,9 @@ diagnostics projection invalidation DTOs, optional projection health fields, a
 small Tauri-event subscription helper that filters projection/run scope,
 coalesces callbacks, and cleans up listeners, a shared mock projection-state
 helper used by projection service mocks, and a shared freshness presenter that
-surfaces backend projection failure details consistently. Remaining work is
-missed-event recovery tests and additional page integration.
+surfaces backend projection failure details consistently. Subscription tests
+now cover the page-owned initial snapshot and manual refresh recovery boundary.
+Milestone 7 is complete.
 
 ### Milestone 8: Workbench Page Conversion
 
@@ -781,6 +782,10 @@ parallel by multiple workers.
   `AppTaskRegistry` for shutdown. The bridge coalesces requests before
   refreshing projections and emits only backend invalidation DTOs returned by
   successful refreshes.
+- 2026-05-09: Milestone 7 completed missed-event recovery coverage. Frontend
+  subscription tests now prove the helper does not perform initial snapshot
+  fetches or manual refreshes itself; those recovery reads remain page-owned and
+  independent of invalidation delivery.
 
 ## Commit Cadence Notes
 
@@ -803,6 +808,8 @@ parallel by multiple workers.
   diagnostic-event-to-projection mapping.
 - Milestone 6 partial: Tauri projection invalidation bridge startup,
   coalescing, refresh invocation, and app-wide invalidation broadcast.
+- Milestone 7: frontend projection subscription service, mock/freshness helper
+  reuse, and missed-event recovery boundary tests.
 
 ### Deviations
 
@@ -824,6 +831,8 @@ parallel by multiple workers.
 - `cargo check -p pantograph-workflow-service`
 - `cargo test --manifest-path src-tauri/Cargo.toml projection_invalidation_bridge`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
+- `node --experimental-strip-types --test src/services/workflow/WorkflowProjectionSubscriptionService.test.ts`
+- `npm run typecheck`
 
 ### Traceability Links
 

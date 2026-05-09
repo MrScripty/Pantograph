@@ -133,3 +133,68 @@ test('subscribeDiagnosticsProjectionInvalidations reports refresh errors', async
 
   assert.deepEqual(errors, [error]);
 });
+
+test('subscribeDiagnosticsProjectionInvalidations leaves initial snapshots to page owners', async () => {
+  const harness = createListenerHarness();
+  const refreshed: DiagnosticsProjectionInvalidation[] = [];
+  let snapshotRefreshes = 0;
+  const refreshSnapshot = async () => {
+    snapshotRefreshes += 1;
+  };
+
+  await refreshSnapshot();
+  await subscribeDiagnosticsProjectionInvalidations(
+    {
+      projections: ['run_detail'],
+      getActiveRunId: () => 'run-a',
+      refresh: (event) => {
+        refreshed.push(event);
+      },
+    },
+    harness.listenEvent,
+  );
+  await flushMicrotasks();
+
+  assert.equal(snapshotRefreshes, 1);
+  assert.deepEqual(refreshed, []);
+
+  await refreshSnapshot();
+  assert.equal(snapshotRefreshes, 2);
+});
+
+test('subscribeDiagnosticsProjectionInvalidations lets manual refresh recover missed events', async () => {
+  const harness = createListenerHarness();
+  const refreshed: DiagnosticsProjectionInvalidation[] = [];
+  let manualRefreshes = 0;
+  const manualRefresh = async () => {
+    manualRefreshes += 1;
+  };
+
+  await subscribeDiagnosticsProjectionInvalidations(
+    {
+      projections: ['run_detail'],
+      getActiveRunId: () => 'run-a',
+      refresh: (event) => {
+        refreshed.push(event);
+      },
+    },
+    harness.listenEvent,
+  );
+
+  await manualRefresh();
+  await flushMicrotasks();
+
+  assert.equal(manualRefreshes, 1);
+  assert.deepEqual(refreshed, []);
+
+  harness.emit({
+    invalidations: [invalidation('run_detail', 'run-a', 8)],
+  });
+  await flushMicrotasks();
+
+  assert.equal(manualRefreshes, 1);
+  assert.equal(refreshed.length, 1);
+  const delivered = refreshed[0] as DiagnosticsProjectionInvalidation | undefined;
+  assert.ok(delivered);
+  assert.equal(delivered.last_event_seq, 8);
+});
