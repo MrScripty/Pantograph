@@ -461,7 +461,7 @@ fn workflow_diagnostic_error_recorder_appends_global_projection_error() {
 }
 
 #[test]
-fn workflow_run_list_query_drains_and_reads_projection() {
+fn workflow_run_list_query_reads_refreshed_projection() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
         .append_diagnostic_event(sample_run_snapshot_event())
@@ -476,6 +476,7 @@ fn workflow_run_list_query_drains_and_reads_projection() {
         .append_diagnostic_event(sample_run_terminal_event())
         .expect("run terminal event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_run_list(&service, 10);
 
     let response = service
         .workflow_run_list_query(WorkflowRunListQueryRequest {
@@ -543,6 +544,38 @@ fn workflow_run_list_query_drains_and_reads_projection() {
         .expect("run list scope query");
     assert_eq!(scoped_response.runs.len(), 1);
     assert_eq!(scoped_response.runs[0].workflow_run_id.as_str(), "run-a");
+}
+
+#[test]
+fn workflow_run_list_query_does_not_mutate_projection_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_run_list_query(WorkflowRunListQueryRequest {
+            workflow_id: Some("workflow-a".to_string()),
+            limit: Some(10),
+            projection_batch_size: Some(10),
+            ..WorkflowRunListQueryRequest::default()
+        })
+        .expect("run list query");
+
+    assert!(response.runs.is_empty());
+    assert!(response.facets.is_empty());
+    assert_eq!(
+        response.projection_state.status,
+        ProjectionStatus::NeedsRebuild
+    );
+    assert_eq!(response.projection_state.last_applied_event_seq, 0);
+
+    let ledger = service.diagnostics_ledger_guard().expect("ledger guard");
+    assert!(ledger
+        .projection_state("run_list")
+        .expect("run list state query")
+        .is_none());
 }
 
 #[test]
@@ -889,6 +922,18 @@ fn refresh_scheduler_timeline(service: &WorkflowService, batch_size: u32) {
     service
         .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
             projections: vec![WorkflowDiagnosticsProjectionKind::SchedulerTimeline],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size,
+        })
+        .expect("projection refresh");
+}
+
+fn refresh_run_list(service: &WorkflowService, batch_size: u32) {
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::RunList],
             workflow_run_id: Some("run-a".to_string()),
             workflow_id: Some("workflow-a".to_string()),
             reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,

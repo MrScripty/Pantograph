@@ -718,25 +718,15 @@ impl WorkflowService {
         &self,
         request: WorkflowRunListQueryRequest,
     ) -> Result<WorkflowRunListQueryResponse, WorkflowServiceError> {
-        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
-        if projection_batch_size > 500 {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "projection_batch_size exceeds maximum 500".to_string(),
-            ));
-        }
+        validate_optional_projection_batch_size(
+            "projection_batch_size",
+            request.projection_batch_size,
+        )?;
         let query = request.into_run_list_query()?;
         let facet_query = query.clone();
-        let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = match ledger.drain_run_list_projection(projection_batch_size) {
-            Ok(projection_state) => projection_state,
-            Err(error) => {
-                drop(ledger);
-                return Err(self.projection_error(
-                    projection_error_scope("run_list", "drain", None, query.workflow_id.clone()),
-                    WorkflowServiceError::from(error),
-                ));
-            }
-        };
+        let ledger = self.diagnostics_ledger_guard()?;
+        let projection_state =
+            read_projection_state_or_empty(&*ledger, WorkflowDiagnosticsProjectionKind::RunList)?;
         let runs = match ledger.query_run_list_projection(query.clone()) {
             Ok(runs) => runs,
             Err(error) => {
