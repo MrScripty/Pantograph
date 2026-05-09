@@ -34,5 +34,6 @@ pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" 
 pantograph-media-conversion = { path = "../pantograph-media-conversion" }
 
 [dev-dependencies]
+rusqlite.workspace = true
 tokio.workspace = true
 tempfile.workspace = true

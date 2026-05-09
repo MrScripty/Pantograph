@@ -1648,6 +1648,59 @@ fn workflow_diagnostics_projection_refresh_advances_selected_projections() {
 }
 
 #[test]
+fn workflow_diagnostics_projection_refresh_failure_updates_health_without_events() {
+    let temp = tempfile::tempdir().expect("temp diagnostics ledger");
+    let ledger_path = temp.path().join("workflow-diagnostics.sqlite");
+    let mut ledger = SqliteDiagnosticsLedger::open(&ledger_path).expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    rusqlite::Connection::open(&ledger_path)
+        .expect("corrupting connection opens")
+        .execute("DROP TABLE run_list_projection", [])
+        .expect("projection table is dropped");
+
+    let response = service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::RunList],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("wf-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 10,
+        })
+        .expect("projection refresh reports per-projection failure");
+
+    assert!(response.advanced.is_empty());
+    assert!(response.invalidations.is_empty());
+    assert_eq!(response.failed.len(), 1);
+    let failure = &response.failed[0];
+    assert_eq!(
+        failure.projection_kind,
+        WorkflowDiagnosticsProjectionKind::RunList
+    );
+    assert_eq!(failure.projection_state.projection_name, "run_list");
+    assert_eq!(failure.projection_state.status, ProjectionStatus::Failed);
+    assert_eq!(failure.projection_state.last_applied_event_seq, 0);
+    assert_eq!(failure.projection_state.last_failed_event_seq, Some(0));
+    assert!(failure.projection_state.last_error.is_some());
+    assert!(failure.projection_state.last_error_at_ms.is_some());
+
+    let ledger = service.diagnostics_ledger_guard().expect("ledger guard");
+    let state = ledger
+        .projection_state("run_list")
+        .expect("run list state query")
+        .expect("failed run list state exists");
+    assert_eq!(state.status, ProjectionStatus::Failed);
+    assert!(state.last_error.is_some());
+    let events = ledger
+        .diagnostic_events_after(0, 10)
+        .expect("diagnostic events query");
+    assert_eq!(events.len(), 1);
+}
+
+#[test]
 fn workflow_diagnostics_projection_refresh_validates_request() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
 

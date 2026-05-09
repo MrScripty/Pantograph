@@ -7401,6 +7401,7 @@ dependencies = [
  "pantograph-runtime-attribution",
  "pantograph-runtime-identity",
  "parking_lot",
+ "rusqlite",
  "serde",
  "serde_json",
  "sysinfo",

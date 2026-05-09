@@ -389,9 +389,9 @@ pub struct DiagnosticsProjectionRefreshResult {
       required by the outer Tauri event transport.
 - [x] Add tests proving the refresh owner advances projection state and returns
       affected projection names.
-- [ ] Add tests proving failed refreshes do not emit success invalidations and
+- [x] Add tests proving failed refreshes do not emit success invalidations and
       do update projection health/error state.
-- [ ] Add tests proving projection refresh failures do not append workflow
+- [x] Add tests proving projection refresh failures do not append workflow
       diagnostic events.
 - [x] Document that notifications are invalidations and projection queries
       remain the source of full facts.
@@ -403,11 +403,12 @@ pub struct DiagnosticsProjectionRefreshResult {
 - `cargo check -p pantograph-diagnostics-ledger`
 - `cargo check -p pantograph-workflow-service`
 
-**Status:** In progress. The workflow-service core now has typed projection
-kinds, refresh reasons, refresh request/response DTOs, successful invalidation
-payloads, internal string-name mapping for rebuild, and a synchronous bounded
-refresh method. Remaining work in this milestone is focused failure-path
-coverage for refresh errors.
+**Status:** Completed 2026-05-09. The workflow-service core now has typed
+projection kinds, refresh reasons, refresh request/response DTOs, successful
+invalidation payloads, internal string-name mapping for rebuild, and a
+synchronous bounded refresh method. Failure-path coverage proves failed refreshes
+record durable projection health, emit no success invalidation, and do not
+append workflow diagnostic events.
 
 ### Milestone 4: Read-Only Projection Query Slice
 
@@ -757,6 +758,8 @@ parallel by multiple workers.
 - Milestone 1: SQLite lock hardening.
 - Milestone 3 partial: diagnostics-ledger projection health schema and
   projection-state helper foundation.
+- Milestone 3: workflow-service projection refresh contract and failure
+  handling.
 
 ### Deviations
 
@@ -772,6 +775,7 @@ parallel by multiple workers.
 - `cargo check -p pantograph-diagnostics-ledger`
 - `cargo test -p pantograph-diagnostics-ledger projection_state`
 - `cargo test -p pantograph-diagnostics-ledger`
+- `cargo test -p pantograph-workflow-service workflow_diagnostics_projection_refresh_failure_updates_health_without_events`
 
 ### Traceability Links
 
