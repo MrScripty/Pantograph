@@ -15,6 +15,7 @@ use tokio::sync::RwLock;
 use crate::config::DeviceConfig;
 use crate::constants::{device_types, hosts, ports, timeouts};
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::ServerModeInfo;
 
 const SIDECAR_PID_FILE: &str = "llama-server.pid";
@@ -660,28 +661,18 @@ impl LlamaServer {
         port_override: Option<u16>,
     ) -> bool {
         let expected_port = port_override.unwrap_or(ports::SERVER);
-        self.ready
-            && matches!(
-                &self.mode,
-                ServerMode::SidecarInference {
-                    port: active_port,
-                    model_path: active_model_path,
-                    mmproj_path: active_mmproj_path,
-                    device: active_device,
-                    context_size: active_context_size,
-                    cpu_threads: active_cpu_threads,
-                    batch_size: active_batch_size,
-                    ubatch_size: active_ubatch_size,
-                    ..
-                } if active_model_path == model_path
-                    && active_mmproj_path.as_deref() == mmproj_path
-                    && active_device == device
-                    && *active_context_size == context_size
-                    && *active_cpu_threads == cpu_threads
-                    && *active_batch_size == batch_size
-                    && *active_ubatch_size == ubatch_size
-                    && *active_port == expected_port
-            )
+        let Some(active) = self.active_runtime_descriptor() else {
+            return false;
+        };
+        active.mode == LlamaCppRuntimeMode::Inference
+            && active.model_path == PathBuf::from(model_path)
+            && active.mmproj_path == mmproj_path.map(PathBuf::from)
+            && active.device == *device
+            && active.context_size == Some(context_size)
+            && active.cpu_threads == cpu_threads
+            && active.batch_size == batch_size
+            && active.ubatch_size == ubatch_size
+            && active.port == expected_port
     }
 
     pub fn matches_embedding_runtime(
@@ -691,18 +682,13 @@ impl LlamaServer {
         port_override: Option<u16>,
     ) -> bool {
         let expected_port = port_override.unwrap_or(ports::SERVER);
-        self.ready
-            && matches!(
-                &self.mode,
-                ServerMode::SidecarEmbedding {
-                    port: active_port,
-                    model_path: active_model_path,
-                    device: active_device,
-                    ..
-                } if active_model_path == model_path
-                    && active_device == device
-                    && *active_port == expected_port
-            )
+        let Some(active) = self.active_runtime_descriptor() else {
+            return false;
+        };
+        active.mode == LlamaCppRuntimeMode::Embedding
+            && active.model_path == PathBuf::from(model_path)
+            && active.device == *device
+            && active.port == expected_port
     }
 
     pub fn matches_reranking_runtime(
@@ -712,18 +698,13 @@ impl LlamaServer {
         port_override: Option<u16>,
     ) -> bool {
         let expected_port = port_override.unwrap_or(ports::SERVER);
-        self.ready
-            && matches!(
-                &self.mode,
-                ServerMode::SidecarReranking {
-                    port: active_port,
-                    model_path: active_model_path,
-                    device: active_device,
-                    ..
-                } if active_model_path == model_path
-                    && active_device == device
-                    && *active_port == expected_port
-            )
+        let Some(active) = self.active_runtime_descriptor() else {
+            return false;
+        };
+        active.mode == LlamaCppRuntimeMode::Reranking
+            && active.model_path == PathBuf::from(model_path)
+            && active.device == *device
+            && active.port == expected_port
     }
 
     pub fn matches_external_runtime(&self, url: &str) -> bool {
@@ -738,6 +719,66 @@ impl LlamaServer {
     /// Get the current mode
     pub fn current_mode(&self) -> &ServerMode {
         &self.mode
+    }
+
+    pub fn active_runtime_descriptor(&self) -> Option<LlamaCppActiveRuntimeDescriptor> {
+        if !self.ready {
+            return None;
+        }
+
+        match &self.mode {
+            ServerMode::SidecarInference {
+                port,
+                model_path,
+                mmproj_path,
+                device,
+                context_size,
+                cpu_threads,
+                batch_size,
+                ubatch_size,
+            } => Some(LlamaCppActiveRuntimeDescriptor {
+                mode: LlamaCppRuntimeMode::Inference,
+                port: *port,
+                model_path: PathBuf::from(model_path),
+                mmproj_path: mmproj_path.as_deref().map(PathBuf::from),
+                device: device.clone(),
+                context_size: Some(*context_size),
+                cpu_threads: *cpu_threads,
+                batch_size: *batch_size,
+                ubatch_size: *ubatch_size,
+            }),
+            ServerMode::SidecarEmbedding {
+                port,
+                model_path,
+                device,
+            } => Some(LlamaCppActiveRuntimeDescriptor {
+                mode: LlamaCppRuntimeMode::Embedding,
+                port: *port,
+                model_path: PathBuf::from(model_path),
+                mmproj_path: None,
+                device: device.clone(),
+                context_size: None,
+                cpu_threads: None,
+                batch_size: None,
+                ubatch_size: None,
+            }),
+            ServerMode::SidecarReranking {
+                port,
+                model_path,
+                device,
+            } => Some(LlamaCppActiveRuntimeDescriptor {
+                mode: LlamaCppRuntimeMode::Reranking,
+                port: *port,
+                model_path: PathBuf::from(model_path),
+                mmproj_path: None,
+                device: device.clone(),
+                context_size: None,
+                cpu_threads: None,
+                batch_size: None,
+                ubatch_size: None,
+            }),
+            ServerMode::None | ServerMode::External { .. } => None,
+        }
     }
 
     async fn execute_slot_action(

@@ -19,6 +19,7 @@ use super::{
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
+use crate::runtime_load::LlamaCppActiveRuntimeDescriptor;
 use crate::server::LlamaServer;
 use crate::types::{RerankRequest, RerankResponse};
 use crate::{BackendHintLabel, ModelArtifactKind};
@@ -286,6 +287,10 @@ impl InferenceBackend for LlamaCppBackend {
 
     fn base_url(&self) -> Option<String> {
         self.server.base_url()
+    }
+
+    fn active_llamacpp_runtime_descriptor(&self) -> Option<LlamaCppActiveRuntimeDescriptor> {
+        self.server.active_runtime_descriptor()
     }
 
     async fn chat_completion_stream(

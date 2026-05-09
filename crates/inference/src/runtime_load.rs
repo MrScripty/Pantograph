@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ManagedBinaryId, ManagedRuntimeJobState, ManagedRuntimeReadinessState, ManagedRuntimeSnapshot,
-    ResolvedCommand,
+    DeviceConfig, ManagedBinaryId, ManagedRuntimeJobState, ManagedRuntimeReadinessState,
+    ManagedRuntimeSnapshot, ResolvedCommand,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -81,7 +81,11 @@ pub struct LlamaCppActiveRuntimeDescriptor {
     pub port: u16,
     pub model_path: PathBuf,
     pub mmproj_path: Option<PathBuf>,
-    pub device: String,
+    pub device: DeviceConfig,
+    pub context_size: Option<u32>,
+    pub cpu_threads: Option<u32>,
+    pub batch_size: Option<u32>,
+    pub ubatch_size: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

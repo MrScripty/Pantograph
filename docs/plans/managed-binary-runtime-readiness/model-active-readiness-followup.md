@@ -43,10 +43,15 @@ descriptor shape, and managed-runtime readiness errors without expanding
 
 ### 2. llama.cpp Active Model Proof
 
-- [ ] Extend `LlamaServer`/gateway state with a structured active-runtime
+- [x] Extend `LlamaServer`/gateway state with a structured active-runtime
       descriptor for mode, port, model path, mmproj path, and device.
-- [ ] Verify reused runtimes against that descriptor before reporting ready.
-- [ ] Add wrong-model and wrong-mode reuse regressions.
+- [x] Verify reused runtimes against that descriptor before reporting ready.
+- [x] Add wrong-model and wrong-mode reuse regressions.
+
+Status: Complete for the server/gateway descriptor slice. `LlamaServer`
+projects a ready managed llama.cpp sidecar into
+`LlamaCppActiveRuntimeDescriptor`; the backend trait and gateway expose that
+descriptor, and the runtime reuse matchers now compare against it.
 
 ### 3. Scheduler Diagnostics Ownership
 
@@ -60,6 +65,10 @@ descriptor shape, and managed-runtime readiness errors without expanding
       `cargo test -p inference runtime_load`
 - [x] Runtime phase contract slice:
       `cargo check -p inference`
+- [x] Active runtime descriptor slice:
+      `cargo test -p inference active_runtime_descriptor`
+- [x] Active runtime descriptor slice:
+      `cargo test -p inference inference_runtime_matcher_requires_matching_port`
 - [ ] Full llama.cpp/runtime verification:
       `cargo test -p inference llamacpp`
 - [ ] `cargo test -p pantograph-workflow-service session_execution`
@@ -82,17 +91,27 @@ descriptor shape, and managed-runtime readiness errors without expanding
 - 2026-05-09: Verification passed:
   `cargo test -p inference runtime_load`, `cargo check -p inference`, and
   `cargo fmt --all -- --check`.
+- 2026-05-09: Active runtime descriptor slice added
+  `LlamaServer::active_runtime_descriptor`, exposed it through the backend
+  trait and `InferenceGateway`, and changed llama.cpp runtime reuse matching
+  to compare against the structured descriptor. The descriptor includes mode,
+  port, model path, optional mmproj path, device config, context size, and
+  llama.cpp performance knobs so reuse decisions remain as strict as the
+  existing direct matcher.
+- 2026-05-09: Verification passed:
+  `cargo test -p inference active_runtime_descriptor`,
+  `cargo test -p inference inference_runtime_matcher_requires_matching_port`,
+  `cargo check -p inference`, and `cargo fmt --all -- --check`.
 
 ## Completion Summary
 
 ### Completed
 
 - Milestone 1 runtime phase contract.
+- Milestone 2 llama.cpp active runtime descriptor and reuse checks.
 
 ### Remaining
 
-- Milestone 2: wire structured active llama.cpp runtime descriptors into
-  `LlamaServer`/gateway state and harden reuse checks.
 - Milestone 3: move scheduler lifecycle emission behind the runtime-load owner
   and emit `load_completed` only after requested-model-active proof.
 - Milestone 4: run full cross-crate and release verification after behavior is

@@ -27,6 +27,7 @@ use crate::model_contracts::{
     OptionCompatibilityDiagnostic, OptionSupportState,
 };
 use crate::process::ProcessSpawner;
+use crate::runtime_load::LlamaCppActiveRuntimeDescriptor;
 use crate::types::{
     bounded_inference_artifact_ref, AudioTranscriptionRequest, AudioTranscriptionResult,
     ChatMessage, ChatRequest, ContentPart, ImageGenerationRequest, ImageGenerationResult,
@@ -678,6 +679,13 @@ impl InferenceGateway {
     /// intend to restart the exact active mode.
     pub async fn restart_runtime_config(&self) -> Option<BackendConfig> {
         self.current_runtime_config.read().await.clone()
+    }
+
+    pub async fn active_llamacpp_runtime_descriptor(
+        &self,
+    ) -> Option<LlamaCppActiveRuntimeDescriptor> {
+        let guard = self.backend.read().await;
+        guard.active_llamacpp_runtime_descriptor()
     }
 
     /// Restore the last non-embedding inference runtime when available.

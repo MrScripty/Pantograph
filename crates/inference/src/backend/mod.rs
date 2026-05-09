@@ -31,6 +31,7 @@ use crate::model_contracts::{
     ModelArtifactKind, SupportTier, TaskModalitySignature,
 };
 use crate::process::ProcessSpawner;
+use crate::runtime_load::LlamaCppActiveRuntimeDescriptor;
 use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, ImageGenerationRequest,
     ImageGenerationResult, InferenceUsage, RerankRequest, RerankResponse,
@@ -906,6 +907,12 @@ pub trait InferenceBackend: Send + Sync {
     /// Get the base URL for this backend (if HTTP-based)
     /// Returns None for in-process backends like Candle
     fn base_url(&self) -> Option<String>;
+
+    /// Structured llama.cpp runtime identity when this backend owns a ready
+    /// managed llama.cpp sidecar.
+    fn active_llamacpp_runtime_descriptor(&self) -> Option<LlamaCppActiveRuntimeDescriptor> {
+        None
+    }
 
     // ─── INFERENCE ──────────────────────────────────────────────────
 

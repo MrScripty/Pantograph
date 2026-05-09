@@ -1,6 +1,7 @@
 use super::{parse_sidecar_pid, LlamaServer, ServerMode};
 use crate::config::DeviceConfig;
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+use crate::runtime_load::LlamaCppRuntimeMode;
 use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::{
@@ -93,6 +94,18 @@ fn inference_runtime_matcher_requires_matching_port() {
         Some(11434),
     ));
     assert!(!server.matches_inference_runtime(
+        "/models/other.gguf",
+        Some("/models/vision.mmproj"),
+        &device,
+        4096,
+        Some(8),
+        Some(512),
+        Some(128),
+        Some(11434),
+    ));
+    assert!(!server.matches_embedding_runtime("/models/main.gguf", &device, Some(11434),));
+    assert!(!server.matches_reranking_runtime("/models/main.gguf", &device, Some(11434),));
+    assert!(!server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
         &device,
@@ -122,6 +135,72 @@ fn inference_runtime_matcher_requires_matching_port() {
         Some(128),
         Some(11434),
     ));
+}
+
+#[test]
+fn active_runtime_descriptor_reports_ready_sidecar_identity() {
+    let mut server = LlamaServer::new();
+    let device = DeviceConfig {
+        device: "Vulkan0".to_string(),
+        gpu_layers: 40,
+    };
+    server.set_test_runtime_state(
+        ServerMode::SidecarInference {
+            port: 11434,
+            model_path: "/models/main.gguf".to_string(),
+            mmproj_path: Some("/models/vision.mmproj".to_string()),
+            device: device.clone(),
+            context_size: 4096,
+            cpu_threads: Some(8),
+            batch_size: Some(512),
+            ubatch_size: Some(128),
+        },
+        true,
+    );
+
+    let descriptor = server
+        .active_runtime_descriptor()
+        .expect("ready sidecar descriptor");
+
+    assert_eq!(descriptor.mode, LlamaCppRuntimeMode::Inference);
+    assert_eq!(descriptor.port, 11434);
+    assert_eq!(descriptor.model_path, PathBuf::from("/models/main.gguf"));
+    assert_eq!(
+        descriptor.mmproj_path,
+        Some(PathBuf::from("/models/vision.mmproj"))
+    );
+    assert_eq!(descriptor.device, device);
+    assert_eq!(descriptor.context_size, Some(4096));
+    assert_eq!(descriptor.cpu_threads, Some(8));
+    assert_eq!(descriptor.batch_size, Some(512));
+    assert_eq!(descriptor.ubatch_size, Some(128));
+}
+
+#[test]
+fn active_runtime_descriptor_requires_ready_managed_sidecar() {
+    let mut server = LlamaServer::new();
+    server.set_test_runtime_state(
+        ServerMode::SidecarEmbedding {
+            port: 11434,
+            model_path: "/models/embed.gguf".to_string(),
+            device: DeviceConfig {
+                device: "auto".to_string(),
+                gpu_layers: -1,
+            },
+        },
+        false,
+    );
+
+    assert!(server.active_runtime_descriptor().is_none());
+
+    server.set_test_runtime_state(
+        ServerMode::External {
+            url: "http://127.0.0.1:11434".to_string(),
+        },
+        true,
+    );
+
+    assert!(server.active_runtime_descriptor().is_none());
 }
 
 struct ErroringProcessHandle {
