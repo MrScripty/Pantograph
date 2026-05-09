@@ -10,12 +10,16 @@ use pantograph_diagnostics_ledger::{
     LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation,
     LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, ModelLicenseUsageEvent,
     NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
-    ProjectionStateRecord, RetentionClass, RetentionPolicyActorScope,
-    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
-    RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    RunTerminalPayload, RunTerminalStatus, SchedulerModelCacheState,
+    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus, RetentionClass,
+    RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
+    RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
+    RunListProjectionStatus, RunTerminalPayload, RunTerminalStatus, SchedulerModelCacheState,
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    UpdateRetentionPolicyCommand,
+    UpdateRetentionPolicyCommand, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use serde::{Deserialize, Serialize};
@@ -433,6 +437,75 @@ pub struct WorkflowLibraryAssetAccessRecordResponse {
 pub struct WorkflowDiagnosticEventRecordResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event_seq: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowDiagnosticsProjectionKind {
+    SchedulerTimeline,
+    RunList,
+    RunDetail,
+    IoArtifact,
+    NodeStatus,
+    LibraryUsage,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowDiagnosticsProjectionRefreshReason {
+    DiagnosticEventAppended,
+    ExplicitRefresh,
+    ProjectionRebuild,
+    StartupCatchUp,
+    RetentionCleanup,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowDiagnosticsProjectionRefreshRequest {
+    pub projections: Vec<WorkflowDiagnosticsProjectionKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    pub reason: WorkflowDiagnosticsProjectionRefreshReason,
+    pub batch_size: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowDiagnosticsProjectionAdvance {
+    pub projection_kind: WorkflowDiagnosticsProjectionKind,
+    pub projection_state: ProjectionStateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowDiagnosticsProjectionFailure {
+    pub projection_kind: WorkflowDiagnosticsProjectionKind,
+    pub projection_state: ProjectionStateRecord,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowDiagnosticsProjectionInvalidation {
+    pub projection_kind: WorkflowDiagnosticsProjectionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    pub last_event_seq: i64,
+    pub reason: WorkflowDiagnosticsProjectionRefreshReason,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowDiagnosticsProjectionRefreshResponse {
+    pub advanced: Vec<WorkflowDiagnosticsProjectionAdvance>,
+    pub failed: Vec<WorkflowDiagnosticsProjectionFailure>,
+    pub invalidations: Vec<WorkflowDiagnosticsProjectionInvalidation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1106,6 +1179,67 @@ impl WorkflowService {
         })
     }
 
+    pub fn workflow_diagnostics_projection_refresh(
+        &self,
+        request: WorkflowDiagnosticsProjectionRefreshRequest,
+    ) -> Result<WorkflowDiagnosticsProjectionRefreshResponse, WorkflowServiceError> {
+        if request.projections.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "projections must be non-empty".to_string(),
+            ));
+        }
+        validate_projection_batch_size("batch_size", request.batch_size)?;
+        let workflow_run_id =
+            parse_optional_id::<WorkflowRunId>("workflow_run_id", request.workflow_run_id)?
+                .map(|value| value.to_string());
+        let workflow_id = parse_optional_id::<WorkflowId>("workflow_id", request.workflow_id)?
+            .map(|value| value.to_string());
+
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let mut advanced = Vec::new();
+        let mut failed = Vec::new();
+        let mut invalidations = Vec::new();
+
+        for projection_kind in request.projections {
+            match drain_projection_kind(&mut *ledger, projection_kind, request.batch_size) {
+                Ok(projection_state) => {
+                    invalidations.push(WorkflowDiagnosticsProjectionInvalidation {
+                        projection_kind,
+                        workflow_run_id: workflow_run_id.clone(),
+                        workflow_id: workflow_id.clone(),
+                        last_event_seq: projection_state.last_applied_event_seq,
+                        reason: request.reason,
+                        updated_at_ms: projection_state.updated_at_ms,
+                    });
+                    advanced.push(WorkflowDiagnosticsProjectionAdvance {
+                        projection_kind,
+                        projection_state,
+                    });
+                }
+                Err(error) => {
+                    let error = WorkflowServiceError::from(error);
+                    let error_message = error.message().to_string();
+                    let projection_state = mark_projection_refresh_failed(
+                        &mut *ledger,
+                        projection_kind,
+                        error_message.clone(),
+                    )?;
+                    failed.push(WorkflowDiagnosticsProjectionFailure {
+                        projection_kind,
+                        projection_state,
+                        error: error_message,
+                    });
+                }
+            }
+        }
+
+        Ok(WorkflowDiagnosticsProjectionRefreshResponse {
+            advanced,
+            failed,
+            invalidations,
+        })
+    }
+
     pub fn workflow_projection_rebuild(
         &self,
         request: WorkflowProjectionRebuildRequest,
@@ -1116,19 +1250,21 @@ impl WorkflowService {
                 "batch_size exceeds maximum 500".to_string(),
             ));
         }
+        let projection_kind =
+            WorkflowDiagnosticsProjectionKind::from_projection_name(&request.projection_name)?;
         let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = match ledger.rebuild_projection(&request.projection_name, batch_size)
-        {
-            Ok(projection_state) => projection_state,
-            Err(error) => {
-                let projection_name = request.projection_name.clone();
-                drop(ledger);
-                return Err(self.projection_error(
-                    projection_error_scope(projection_name, "rebuild", None, None),
-                    WorkflowServiceError::from(error),
-                ));
-            }
-        };
+        let projection_state =
+            match ledger.rebuild_projection(projection_kind.projection_name(), batch_size) {
+                Ok(projection_state) => projection_state,
+                Err(error) => {
+                    let projection_name = projection_kind.projection_name().to_string();
+                    drop(ledger);
+                    return Err(self.projection_error(
+                        projection_error_scope(projection_name, "rebuild", None, None),
+                        WorkflowServiceError::from(error),
+                    ));
+                }
+            };
 
         Ok(WorkflowProjectionRebuildResponse { projection_state })
     }
@@ -1231,6 +1367,117 @@ impl WorkflowService {
 
         Ok(WorkflowRetentionCleanupResponse { cleanup })
     }
+}
+
+impl WorkflowDiagnosticsProjectionKind {
+    fn from_projection_name(projection_name: &str) -> Result<Self, WorkflowServiceError> {
+        match projection_name {
+            SCHEDULER_TIMELINE_PROJECTION_NAME => Ok(Self::SchedulerTimeline),
+            RUN_LIST_PROJECTION_NAME => Ok(Self::RunList),
+            RUN_DETAIL_PROJECTION_NAME => Ok(Self::RunDetail),
+            IO_ARTIFACT_PROJECTION_NAME => Ok(Self::IoArtifact),
+            NODE_STATUS_PROJECTION_NAME => Ok(Self::NodeStatus),
+            LIBRARY_USAGE_PROJECTION_NAME => Ok(Self::LibraryUsage),
+            _ => Err(WorkflowServiceError::InvalidRequest(format!(
+                "unknown diagnostics projection '{}'",
+                projection_name
+            ))),
+        }
+    }
+
+    fn projection_name(self) -> &'static str {
+        match self {
+            Self::SchedulerTimeline => SCHEDULER_TIMELINE_PROJECTION_NAME,
+            Self::RunList => RUN_LIST_PROJECTION_NAME,
+            Self::RunDetail => RUN_DETAIL_PROJECTION_NAME,
+            Self::IoArtifact => IO_ARTIFACT_PROJECTION_NAME,
+            Self::NodeStatus => NODE_STATUS_PROJECTION_NAME,
+            Self::LibraryUsage => LIBRARY_USAGE_PROJECTION_NAME,
+        }
+    }
+
+    fn projection_version(self) -> i64 {
+        match self {
+            Self::SchedulerTimeline => SCHEDULER_TIMELINE_PROJECTION_VERSION,
+            Self::RunList => RUN_LIST_PROJECTION_VERSION,
+            Self::RunDetail => RUN_DETAIL_PROJECTION_VERSION,
+            Self::IoArtifact => IO_ARTIFACT_PROJECTION_VERSION,
+            Self::NodeStatus => NODE_STATUS_PROJECTION_VERSION,
+            Self::LibraryUsage => LIBRARY_USAGE_PROJECTION_VERSION,
+        }
+    }
+}
+
+fn validate_projection_batch_size(
+    field: &'static str,
+    batch_size: u32,
+) -> Result<(), WorkflowServiceError> {
+    if batch_size == 0 {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "{} must be at least 1",
+            field
+        )));
+    }
+    if batch_size > 500 {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "{} exceeds maximum 500",
+            field
+        )));
+    }
+    Ok(())
+}
+
+fn drain_projection_kind(
+    ledger: &mut impl DiagnosticsLedgerRepository,
+    projection_kind: WorkflowDiagnosticsProjectionKind,
+    batch_size: u32,
+) -> Result<ProjectionStateRecord, pantograph_diagnostics_ledger::DiagnosticsLedgerError> {
+    match projection_kind {
+        WorkflowDiagnosticsProjectionKind::SchedulerTimeline => {
+            ledger.drain_scheduler_timeline_projection(batch_size)
+        }
+        WorkflowDiagnosticsProjectionKind::RunList => ledger.drain_run_list_projection(batch_size),
+        WorkflowDiagnosticsProjectionKind::RunDetail => {
+            ledger.drain_run_detail_projection(batch_size)
+        }
+        WorkflowDiagnosticsProjectionKind::IoArtifact => {
+            ledger.drain_io_artifact_projection(batch_size)
+        }
+        WorkflowDiagnosticsProjectionKind::NodeStatus => {
+            ledger.drain_node_status_projection(batch_size)
+        }
+        WorkflowDiagnosticsProjectionKind::LibraryUsage => {
+            ledger.drain_library_usage_projection(batch_size)
+        }
+    }
+}
+
+fn mark_projection_refresh_failed(
+    ledger: &mut impl DiagnosticsLedgerRepository,
+    projection_kind: WorkflowDiagnosticsProjectionKind,
+    error_message: String,
+) -> Result<ProjectionStateRecord, WorkflowServiceError> {
+    let current = ledger
+        .projection_state(projection_kind.projection_name())
+        .map_err(WorkflowServiceError::from)?;
+    let last_applied_event_seq = current
+        .as_ref()
+        .map(|state| state.last_applied_event_seq)
+        .unwrap_or(0);
+    let rebuilt_at_ms = current.as_ref().and_then(|state| state.rebuilt_at_ms);
+
+    ledger
+        .upsert_projection_state(ProjectionStateUpdate {
+            projection_name: projection_kind.projection_name().to_string(),
+            projection_version: projection_kind.projection_version(),
+            last_applied_event_seq,
+            status: ProjectionStatus::Failed,
+            rebuilt_at_ms,
+            last_error: Some(error_message),
+            last_error_at_ms: Some(unix_timestamp_ms() as i64),
+            last_failed_event_seq: Some(last_applied_event_seq),
+        })
+        .map_err(WorkflowServiceError::from)
 }
 
 impl WorkflowDiagnosticsUsageQueryRequest {

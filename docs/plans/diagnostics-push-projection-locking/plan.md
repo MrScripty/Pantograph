@@ -366,29 +366,29 @@ pub struct DiagnosticsProjectionRefreshResult {
       fields can be recorded, cleared, serialized, and queried consistently.
 - [x] Ensure successful projection refreshes and rebuilds clear stale projection
       error metadata.
-- [ ] Ensure failed projection refreshes mark the affected projection as
+- [x] Ensure failed projection refreshes mark the affected projection as
       `failed` and persist the error metadata without appending a diagnostic
       event.
-- [ ] Add DTOs for diagnostics projection update/invalidation events, including
+- [x] Add DTOs for diagnostics projection update/invalidation events, including
       `workflow_run_id`, `last_event_seq`, affected typed projection kinds, and
-      optional reason.
-- [ ] Define typed projection-kind DTOs instead of adding new stringly typed
+      refresh reason.
+- [x] Define typed projection-kind DTOs instead of adding new stringly typed
       projection names at workflow-service, Tauri, or frontend boundaries.
-- [ ] Add internal mapping from current string projection names to typed
+- [x] Add internal mapping from current string projection names to typed
       projection kinds for existing rebuild and compatibility paths.
-- [ ] Define projection health metadata for stale or failed refreshes using the
+- [x] Define projection health metadata for stale or failed refreshes using the
       durable `projection_state` health fields.
-- [ ] Add a workflow-service projection refresh owner interface that can drain
+- [x] Add a workflow-service projection refresh owner interface that can drain
       selected projections by batch size.
-- [ ] Keep refresh logic synchronous in workflow-service core unless async is
+- [x] Keep refresh logic synchronous in workflow-service core unless async is
       required by the outer Tauri event transport.
-- [ ] Add tests proving the refresh owner advances projection state and returns
+- [x] Add tests proving the refresh owner advances projection state and returns
       affected projection names.
 - [ ] Add tests proving failed refreshes do not emit success invalidations and
       do update projection health/error state.
 - [ ] Add tests proving projection refresh failures do not append workflow
       diagnostic events.
-- [ ] Document that notifications are invalidations and projection queries
+- [x] Document that notifications are invalidations and projection queries
       remain the source of full facts.
 
 **Verification:**
@@ -398,7 +398,11 @@ pub struct DiagnosticsProjectionRefreshResult {
 - `cargo check -p pantograph-diagnostics-ledger`
 - `cargo check -p pantograph-workflow-service`
 
-**Status:** In progress.
+**Status:** In progress. The workflow-service core now has typed projection
+kinds, refresh reasons, refresh request/response DTOs, successful invalidation
+payloads, internal string-name mapping for rebuild, and a synchronous bounded
+refresh method. Remaining work in this milestone is focused failure-path
+coverage for refresh errors.
 
 ### Milestone 4: Read-Only Projection Query Slice
 

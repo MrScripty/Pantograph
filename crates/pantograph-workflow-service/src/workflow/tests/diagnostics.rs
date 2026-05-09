@@ -1278,6 +1278,111 @@ fn workflow_projection_rebuild_delegates_to_ledger() {
 }
 
 #[test]
+fn workflow_diagnostics_projection_refresh_advances_selected_projections() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    ledger
+        .append_diagnostic_event(sample_run_terminal_event())
+        .expect("run terminal event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![
+                WorkflowDiagnosticsProjectionKind::RunList,
+                WorkflowDiagnosticsProjectionKind::RunDetail,
+            ],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("wf-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 10,
+        })
+        .expect("projection refresh");
+
+    assert_eq!(response.advanced.len(), 2);
+    assert!(response.failed.is_empty());
+    assert_eq!(response.invalidations.len(), 2);
+    assert_eq!(
+        response.invalidations[0].workflow_run_id.as_deref(),
+        Some("run-a")
+    );
+    assert_eq!(
+        response.invalidations[0].reason,
+        WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh
+    );
+    assert_eq!(response.advanced[0].projection_state.last_error, None);
+    assert_eq!(
+        response.advanced[0].projection_state.last_applied_event_seq,
+        2
+    );
+    assert_eq!(
+        response.advanced[1].projection_state.last_applied_event_seq,
+        2
+    );
+
+    let ledger = service.diagnostics_ledger_guard().expect("ledger guard");
+    let run_list_state = ledger
+        .projection_state("run_list")
+        .expect("run list state query")
+        .expect("run list state exists");
+    let run_detail_state = ledger
+        .projection_state("run_detail")
+        .expect("run detail state query")
+        .expect("run detail state exists");
+    assert_eq!(run_list_state.last_applied_event_seq, 2);
+    assert_eq!(run_detail_state.last_applied_event_seq, 2);
+}
+
+#[test]
+fn workflow_diagnostics_projection_refresh_validates_request() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let empty = service.workflow_diagnostics_projection_refresh(
+        WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: Vec::new(),
+            workflow_run_id: None,
+            workflow_id: None,
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 10,
+        },
+    );
+    assert!(matches!(
+        empty,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let zero_batch = service.workflow_diagnostics_projection_refresh(
+        WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::RunList],
+            workflow_run_id: None,
+            workflow_id: None,
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 0,
+        },
+    );
+    assert!(matches!(
+        zero_batch,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let invalid_id = service.workflow_diagnostics_projection_refresh(
+        WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::RunList],
+            workflow_run_id: Some("bad\nid".to_string()),
+            workflow_id: None,
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 10,
+        },
+    );
+    assert!(matches!(
+        invalid_id,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+}
+
+#[test]
 fn workflow_projection_rebuild_validates_bounds() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
 

@@ -134,6 +134,7 @@
         "selected_backend_key": "llama_cpp",
         "model_id": "pumas://models/tiny-gguf",
         "model_version": "rev-1",
+        "execution_cache_status": null,
         "status": "completed",
         "started_at_ms": 1020,
         "completed_at_ms": 1100,

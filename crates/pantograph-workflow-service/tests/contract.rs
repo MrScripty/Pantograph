@@ -23,14 +23,18 @@ use pantograph_workflow_service::{
     WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendRequestCancellationSemantics,
     WorkflowBackendRequestCleanupSemantics, WorkflowBackendRequestLifecycleFacts,
     WorkflowBackendRequestLifecyclePhaseFacts, WorkflowBackendTaskCapability,
-    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
-    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
-    WorkflowInferenceExecutionInputKind, WorkflowInferenceExecutionResultKind,
-    WorkflowInferenceLifecyclePhase, WorkflowInferenceModality, WorkflowInferenceTaskId,
-    WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
-    WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryAssetAccessRecordRequest,
+    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowDiagnosticsProjectionAdvance,
+    WorkflowDiagnosticsProjectionFailure, WorkflowDiagnosticsProjectionInvalidation,
+    WorkflowDiagnosticsProjectionKind, WorkflowDiagnosticsProjectionRefreshReason,
+    WorkflowDiagnosticsProjectionRefreshRequest, WorkflowDiagnosticsProjectionRefreshResponse,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary, WorkflowHost,
+    WorkflowHostCapabilities, WorkflowInferenceExecutionInputKind,
+    WorkflowInferenceExecutionResultKind, WorkflowInferenceLifecyclePhase,
+    WorkflowInferenceModality, WorkflowInferenceTaskId, WorkflowIoArtifactQueryRequest,
+    WorkflowIoArtifactQueryResponse, WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest,
+    WorkflowIoResponse, WorkflowLibraryAssetAccessRecordRequest,
     WorkflowLibraryAssetAccessRecordResponse, WorkflowLibraryUsageQueryRequest,
     WorkflowLibraryUsageQueryResponse, WorkflowLocalNetworkStatusQueryResponse,
     WorkflowModelArtifactKind, WorkflowNodeStatusQueryRequest, WorkflowNodeStatusQueryResponse,
@@ -729,6 +733,9 @@ fn workflow_scheduler_timeline_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1010,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
     };
 
@@ -866,6 +873,9 @@ fn workflow_run_list_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1110,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
     };
 
@@ -1053,6 +1063,9 @@ fn workflow_run_detail_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1110,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
         node_projection_state: ProjectionStateRecord {
             projection_name: "node_status".to_string(),
@@ -1061,6 +1074,9 @@ fn workflow_run_detail_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1110,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
     };
 
@@ -1205,6 +1221,9 @@ fn workflow_run_inspection_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1110,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
         node_projection_state: ProjectionStateRecord {
             projection_name: "node_status".to_string(),
@@ -1213,6 +1232,9 @@ fn workflow_run_inspection_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1110,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
         io_projection_state: ProjectionStateRecord {
             projection_name: "io_artifact".to_string(),
@@ -1221,6 +1243,9 @@ fn workflow_run_inspection_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1110,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
     };
 
@@ -1408,6 +1433,9 @@ fn workflow_io_artifact_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1210,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
     };
 
@@ -1534,6 +1562,9 @@ fn workflow_node_status_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1510,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
     };
 
@@ -1604,6 +1635,9 @@ fn workflow_projection_rebuild_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1300,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
     };
 
@@ -1624,6 +1658,108 @@ fn workflow_projection_rebuild_contract_snapshot() {
             "rebuilt_at_ms": null,
             "updated_at_ms": 1300
         }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_diagnostics_projection_refresh_contract_snapshot() {
+    let request = WorkflowDiagnosticsProjectionRefreshRequest {
+        projections: vec![
+            WorkflowDiagnosticsProjectionKind::RunDetail,
+            WorkflowDiagnosticsProjectionKind::NodeStatus,
+        ],
+        workflow_run_id: Some("run-1".to_string()),
+        workflow_id: Some("wf-1".to_string()),
+        reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+        batch_size: 100,
+    };
+    let response = WorkflowDiagnosticsProjectionRefreshResponse {
+        advanced: vec![WorkflowDiagnosticsProjectionAdvance {
+            projection_kind: WorkflowDiagnosticsProjectionKind::RunDetail,
+            projection_state: ProjectionStateRecord {
+                projection_name: "run_detail".to_string(),
+                projection_version: 6,
+                last_applied_event_seq: 42,
+                status: ProjectionStatus::Current,
+                rebuilt_at_ms: None,
+                updated_at_ms: 1300,
+                last_error: None,
+                last_error_at_ms: None,
+                last_failed_event_seq: None,
+            },
+        }],
+        failed: vec![WorkflowDiagnosticsProjectionFailure {
+            projection_kind: WorkflowDiagnosticsProjectionKind::NodeStatus,
+            projection_state: ProjectionStateRecord {
+                projection_name: "node_status".to_string(),
+                projection_version: 6,
+                last_applied_event_seq: 40,
+                status: ProjectionStatus::Failed,
+                rebuilt_at_ms: None,
+                updated_at_ms: 1305,
+                last_error: Some("projection drain failed".to_string()),
+                last_error_at_ms: Some(1305),
+                last_failed_event_seq: Some(40),
+            },
+            error: "projection drain failed".to_string(),
+        }],
+        invalidations: vec![WorkflowDiagnosticsProjectionInvalidation {
+            projection_kind: WorkflowDiagnosticsProjectionKind::RunDetail,
+            workflow_run_id: Some("run-1".to_string()),
+            workflow_id: Some("wf-1".to_string()),
+            last_event_seq: 42,
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            updated_at_ms: 1300,
+        }],
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize projection request");
+    let expected_request = serde_json::json!({
+        "projections": ["run_detail", "node_status"],
+        "workflow_run_id": "run-1",
+        "workflow_id": "wf-1",
+        "reason": "explicit_refresh",
+        "batch_size": 100
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize projection response");
+    let expected_response = serde_json::json!({
+        "advanced": [{
+            "projection_kind": "run_detail",
+            "projection_state": {
+                "projection_name": "run_detail",
+                "projection_version": 6,
+                "last_applied_event_seq": 42,
+                "status": "current",
+                "rebuilt_at_ms": null,
+                "updated_at_ms": 1300
+            }
+        }],
+        "failed": [{
+            "projection_kind": "node_status",
+            "projection_state": {
+                "projection_name": "node_status",
+                "projection_version": 6,
+                "last_applied_event_seq": 40,
+                "status": "failed",
+                "rebuilt_at_ms": null,
+                "updated_at_ms": 1305,
+                "last_error": "projection drain failed",
+                "last_error_at_ms": 1305,
+                "last_failed_event_seq": 40
+            },
+            "error": "projection drain failed"
+        }],
+        "invalidations": [{
+            "projection_kind": "run_detail",
+            "workflow_run_id": "run-1",
+            "workflow_id": "wf-1",
+            "last_event_seq": 42,
+            "reason": "explicit_refresh",
+            "updated_at_ms": 1300
+        }]
     });
     assert_eq!(response_value, expected_response);
 }
@@ -1665,6 +1801,9 @@ fn workflow_library_usage_query_contract_snapshot() {
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
             updated_at_ms: 1410,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         },
     };
 
