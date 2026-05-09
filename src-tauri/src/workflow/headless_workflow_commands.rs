@@ -25,6 +25,7 @@ use pantograph_workflow_service::{
     WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowDiagnosticsProjectionRefreshRequest, WorkflowDiagnosticsProjectionRefreshResponse,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionRequest,
     WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
     WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
@@ -532,6 +533,15 @@ pub async fn workflow_projection_rebuild(
 ) -> Result<WorkflowProjectionRebuildResponse, String> {
     workflow_service
         .workflow_projection_rebuild(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_diagnostics_projection_refresh(
+    request: WorkflowDiagnosticsProjectionRefreshRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowDiagnosticsProjectionRefreshResponse, String> {
+    workflow_service
+        .workflow_diagnostics_projection_refresh(request)
         .map_err(workflow_error_json)
 }
 

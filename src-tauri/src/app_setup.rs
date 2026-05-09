@@ -478,6 +478,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_remove_managed_media_dependency_version,
             crate::workflow::commands::workflow_node_status_query,
             crate::workflow::commands::workflow_projection_rebuild,
+            crate::workflow::commands::workflow_diagnostics_projection_refresh,
             crate::workflow::commands::workflow_library_usage_query,
             crate::workflow::commands::workflow_retention_policy_query,
             crate::workflow::commands::workflow_retention_policy_update,

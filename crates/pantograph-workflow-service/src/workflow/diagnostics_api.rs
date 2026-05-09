@@ -439,7 +439,7 @@ pub struct WorkflowDiagnosticEventRecordResponse {
     pub event_seq: Option<i64>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowDiagnosticsProjectionKind {
     SchedulerTimeline,

@@ -573,6 +573,25 @@ pub async fn workflow_projection_rebuild(
 }
 
 #[command]
+pub async fn workflow_diagnostics_projection_refresh(
+    request: pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshRequest,
+    app: AppHandle,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshResponse, String> {
+    let response = super::headless_workflow_commands::workflow_diagnostics_projection_refresh(
+        request,
+        workflow_service,
+    )
+    .await?;
+    super::projection_invalidation_transport::emit_projection_invalidations(
+        &app,
+        &response.invalidations,
+    )
+    .map_err(|error| format!("failed to emit diagnostics projection invalidation: {error}"))?;
+    Ok(response)
+}
+
+#[command]
 pub async fn workflow_library_usage_query(
     request: pantograph_workflow_service::WorkflowLibraryUsageQueryRequest,
     workflow_service: State<'_, SharedWorkflowService>,

@@ -32,6 +32,7 @@ owner of that policy itself.
 | `headless_runtime.rs` | Shared host-resource composition for backend-owned embedded workflow runtime construction. |
 | `headless_workflow_commands_tests.rs` | Shared fixtures and module index for headless workflow command diagnostics, trace, scheduler, runtime metadata, and transport tests. |
 | `headless_workflow_commands_tests/` | Focused headless workflow command tests split by diagnostics helper recording, transport responses/errors, and diagnostics projection/storage behavior. |
+| `projection_invalidation_transport.rs` | Compact diagnostics projection invalidation event payload and coalescing transport helper. |
 | `managed_media_conversion.rs` | Desktop host adapter that leases managed FFmpeg/OpenImageIO/OpenColorIO tools, runs bounded stdin/stdout conversion pipelines, and returns typed conversion attribution to `pantograph-workflow-service`. |
 
 ## Problem
@@ -193,6 +194,12 @@ dropped after acquisition.
 Focused adapter tests cover fake-runner lease attribution, dropped-future
 cleanup, managed executable fixture invocation through `StdProcessRunner`, and
 dependency removal refusal while a conversion lease is active.
+Diagnostics projection refresh command handlers call the workflow-service
+refresh contract first, then emit compact
+`workflow://diagnostics/projection-invalidated` events from the successful
+backend invalidations. Tauri owns only event transport and burst coalescing; the
+projection kind, run/workflow scope, cursor, reason, and health semantics remain
+owned by `pantograph-workflow-service`.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -220,6 +227,9 @@ dependency removal refusal while a conversion lease is active.
 - Diagnostics snapshot commands and event bridge emissions must preserve
   backend-authored projection context rather than requiring frontend-local
   execution-id claiming for diagnostics relevance.
+- Diagnostics projection invalidation events must be emitted only from
+  successful workflow-service refresh invalidations; Tauri may coalesce payloads
+  but must not invent projection freshness, scope, or health facts.
 - Workflow run commands must submit through the scheduler and return the
   scheduler-generated `workflow_run_id`; Tauri command payloads must not accept
   caller-authored run ids or workflow-name diagnostics side channels.

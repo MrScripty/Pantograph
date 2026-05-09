@@ -481,15 +481,15 @@ the desktop frontend.
 
 - [ ] Add a Tauri event bridge that subscribes to workflow-service projection
       update events.
-- [ ] Ensure Tauri payloads mirror backend DTOs and do not create new
+- [x] Ensure Tauri payloads mirror backend DTOs and do not create new
       diagnostics semantics.
-- [ ] Coalesce bursts by projection kind and workflow run id.
+- [x] Coalesce bursts by projection kind and workflow run id.
 - [ ] Broadcast one backend invalidation to all open windows while keeping one
       backend refresh owner.
-- [ ] Ensure invalidations are emitted only after projection state advances.
+- [x] Ensure invalidations are emitted only after projection state advances.
 - [ ] Ensure event sender lifecycle is started at app setup and stopped on app
       shutdown.
-- [ ] Add transport tests for payload shape and coalescing.
+- [x] Add transport tests for payload shape and coalescing.
 - [ ] Add lifecycle tests for shutdown/cleanup of the bridge owner.
 
 **Verification:**
@@ -497,7 +497,14 @@ the desktop frontend.
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - Targeted `src-tauri` workflow event adapter tests.
 
-**Status:** Not started.
+**Status:** In progress. Tauri now registers an explicit
+`workflow_diagnostics_projection_refresh` command that calls the
+workflow-service refresh contract and emits
+`workflow://diagnostics/projection-invalidated` only from successful backend
+invalidations. The transport payload is a compact batch of backend invalidation
+DTOs, and Tauri coalesces duplicate projection/run/workflow scopes before
+emitting. The remaining work is the long-lived backend refresh/event owner,
+multi-window broadcast lifecycle, and shutdown coverage.
 
 ### Milestone 7: Frontend Subscription Service
 
