@@ -700,7 +700,7 @@ reason after payload references are removed.
   hide or discard the canonical final `response` path.
 - [x] Ensure final `TaskCompleted.response` reconciles the text output after
   streaming completes.
-- [ ] Do not store raw token-by-token stream chunks as the only retained output;
+- [x] Do not store raw token-by-token stream chunks as the only retained output;
   retain the final response and optional bounded stream summary.
 - [ ] Add stream sequence/run/node/port reconciliation checks so stale stream
   events cannot update the wrong active run or node.
@@ -724,8 +724,8 @@ reason after payload references are removed.
 `TaskCompleted.response` reconciles the connected text output. Stream events
 now pass through the same active-run ownership gate as other execution events
 so stale chunks cannot update another active run. Remaining work is explicit
-coverage for raw-token retention summary rules, optional sequence ordering, and
-render coalescing if token-rate updates prove noisy.
+coverage for optional stream sequence ordering and render coalescing if
+token-rate updates prove noisy.
 
 ### Milestone 6: Llama.cpp Runtime Device Settings Slice
 
@@ -1070,6 +1070,12 @@ coverage.
   run inspection.
 - 2026-05-09: Verification passed:
   `cargo test -p pantograph-workflow-service connect_canonicalizes_llm_stream_drop_to_text_output_response_edge`.
+- 2026-05-09: Stream-retention slice added ledger coverage proving
+  `TaskStream(port="response")` chunks do not create retained node-output
+  artifacts by themselves, while final `TaskCompleted.response` creates the
+  retained artifact body used by run inspection.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_retains_final_response_not_raw_stream_chunks`.
 
 ## Follow-Up Findings
 

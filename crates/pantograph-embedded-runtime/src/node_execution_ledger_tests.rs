@@ -1564,6 +1564,119 @@ fn node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_
 }
 
 #[test]
+fn node_execution_workflow_sink_retains_final_response_not_raw_stream_chunks() {
+    let temp = tempfile::tempdir().expect("temp artifact store");
+    let artifact_store =
+        ArtifactStore::open(temp.path(), retained_node_io_test_artifact_policy()).expect("store");
+    let service = std::sync::Arc::new(
+        WorkflowService::with_ephemeral_diagnostics_ledger()
+            .expect("service")
+            .with_artifact_store(artifact_store),
+    );
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![node_engine::GraphNode {
+            id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        }],
+        edges: Vec::new(),
+        groups: Vec::new(),
+    };
+    let sink = NodeExecutionWorkflowLedgerSink::try_new(
+        service.clone(),
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+        None,
+    )
+    .expect("sink");
+
+    node_engine::EventSink::send(
+        &sink,
+        node_engine::WorkflowEvent::TaskStream {
+            task_id: "node-a".to_string(),
+            execution_id: "run-a".to_string(),
+            port: "response".to_string(),
+            data: serde_json::json!("partial token"),
+            occurred_at_ms: Some(190),
+        },
+    )
+    .expect("stream chunk should not fail ledger recording");
+
+    let before_completion = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: Some("node_output".to_string()),
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("io artifact query before completion");
+    assert!(
+        before_completion.artifacts.is_empty(),
+        "stream chunks must not become the only retained node output"
+    );
+
+    node_engine::EventSink::send(
+        &sink,
+        node_engine::WorkflowEvent::TaskCompleted {
+            task_id: "node-a".to_string(),
+            execution_id: "run-a".to_string(),
+            output: Some(serde_json::json!({
+                "response": "final retained response"
+            })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
+            occurred_at_ms: Some(200),
+        },
+    )
+    .expect("final response should record");
+
+    let artifacts = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: Some("node_output".to_string()),
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("io artifact query after completion");
+    assert_eq!(artifacts.artifacts.len(), 1);
+    let artifact = &artifacts.artifacts[0];
+    assert_eq!(artifact.producer_port_id.as_deref(), Some("response"));
+
+    let body = service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id: artifact.artifact_id.clone(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("final response artifact body should be readable");
+    assert_eq!(body.body, b"final retained response");
+}
+
+#[test]
 fn node_execution_workflow_sink_projects_descriptor_node_outputs_without_body_inline() {
     let temp = tempfile::tempdir().expect("temp artifact store");
     let artifact_store =
