@@ -162,8 +162,11 @@ export interface IoArtifactProjectionRecord {
   selected_backend_key?: string | null;
   model_id?: string | null;
   model_version?: string | null;
+  artifact_fact_id?: string | null;
+  payload_artifact_id?: string | null;
   artifact_id: string;
   artifact_role: string;
+  logical_payload_lineage_id?: string | null;
   producer_node_id?: string | null;
   producer_port_id?: string | null;
   consumer_node_id?: string | null;

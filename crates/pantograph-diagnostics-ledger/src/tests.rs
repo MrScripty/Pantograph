@@ -2397,6 +2397,80 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
 }
 
 #[test]
+fn io_artifact_projection_allows_multiple_facts_for_one_payload() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    let mut produced = sample_io_artifact_event(
+        "workflow_run_alpha",
+        "node_image",
+        "node_output",
+        "artifact_payload",
+    );
+    if let DiagnosticEventPayload::IoArtifactObserved(payload) = &mut produced.payload {
+        payload.artifact_fact_id = Some("fact_node_image_out".to_string());
+        payload.payload_artifact_id = Some("artifact_payload".to_string());
+        payload.logical_payload_lineage_id = Some("lineage_node_image_out".to_string());
+    }
+    ledger
+        .append_diagnostic_event(produced)
+        .expect("produced artifact event appends");
+
+    let mut workflow_output = sample_io_artifact_event(
+        "workflow_run_alpha",
+        "node_image",
+        "workflow_output",
+        "artifact_payload",
+    );
+    if let DiagnosticEventPayload::IoArtifactObserved(payload) = &mut workflow_output.payload {
+        payload.artifact_fact_id = Some("fact_workflow_output".to_string());
+        payload.payload_artifact_id = Some("artifact_payload".to_string());
+        payload.logical_payload_lineage_id = Some("lineage_node_image_out".to_string());
+    }
+    ledger
+        .append_diagnostic_event(workflow_output)
+        .expect("workflow output artifact event appends");
+
+    ledger
+        .drain_io_artifact_projection(10)
+        .expect("io artifact projection drains");
+
+    let records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: None,
+            producer_node_id: Some("node_image".to_string()),
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("io artifact projection loads");
+
+    assert_eq!(records.len(), 2);
+    assert_eq!(
+        records
+            .iter()
+            .map(|record| record.artifact_fact_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["fact_node_image_out", "fact_workflow_output"]
+    );
+    assert!(records
+        .iter()
+        .all(|record| record.payload_artifact_id == "artifact_payload"));
+    assert!(records.iter().all(
+        |record| record.logical_payload_lineage_id.as_deref() == Some("lineage_node_image_out")
+    ));
+}
+
+#[test]
 fn io_artifact_projection_inherits_producer_execution_context() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
@@ -4706,8 +4780,11 @@ fn sample_io_artifact_event(
         retention_class: DiagnosticEventRetentionClass::PayloadReference,
         payload_ref: Some(format!("artifact://{artifact_id}")),
         payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+            artifact_fact_id: None,
+            payload_artifact_id: None,
             artifact_id: artifact_id.to_string(),
             artifact_role: io_artifact_role(artifact_role),
+            logical_payload_lineage_id: None,
             producer_node_id: matches!(artifact_role, "node_output" | "workflow_output")
                 .then(|| node_id.to_string()),
             producer_port_id: matches!(artifact_role, "node_output" | "workflow_output")

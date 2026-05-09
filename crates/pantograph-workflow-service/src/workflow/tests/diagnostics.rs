@@ -1855,8 +1855,11 @@ fn sample_io_artifact_event(
         retention_class: DiagnosticEventRetentionClass::PayloadReference,
         payload_ref: Some(format!("artifact://{artifact_id}")),
         payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+            artifact_fact_id: None,
+            payload_artifact_id: None,
             artifact_id: artifact_id.to_string(),
             artifact_role: io_artifact_role(artifact_role),
+            logical_payload_lineage_id: None,
             producer_node_id: matches!(artifact_role, "node_output" | "workflow_output")
                 .then(|| "node-b".to_string()),
             producer_port_id: matches!(artifact_role, "node_output" | "workflow_output")

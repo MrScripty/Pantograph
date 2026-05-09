@@ -1039,8 +1039,14 @@ impl IoArtifactFormatMetadata {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IoArtifactObservedPayload {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_fact_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload_artifact_id: Option<String>,
     pub artifact_id: String,
     pub artifact_role: IoArtifactRole,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logical_payload_lineage_id: Option<String>,
     #[serde(default)]
     pub producer_node_id: Option<String>,
     #[serde(default)]
@@ -1073,6 +1079,21 @@ pub struct IoArtifactObservedPayload {
 impl IoArtifactObservedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("artifact_id", &self.artifact_id, MAX_ID_LEN)?;
+        validate_optional_text(
+            "artifact_fact_id",
+            self.artifact_fact_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "payload_artifact_id",
+            self.payload_artifact_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "logical_payload_lineage_id",
+            self.logical_payload_lineage_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text(
             "producer_node_id",
             self.producer_node_id.as_deref(),
@@ -2490,8 +2511,11 @@ pub struct IoArtifactProjectionRecord {
     pub selected_backend_key: Option<String>,
     pub model_id: Option<String>,
     pub model_version: Option<String>,
+    pub artifact_fact_id: String,
+    pub payload_artifact_id: String,
     pub artifact_id: String,
     pub artifact_role: String,
+    pub logical_payload_lineage_id: Option<String>,
     pub producer_node_id: Option<String>,
     pub producer_port_id: Option<String>,
     pub consumer_node_id: Option<String>,

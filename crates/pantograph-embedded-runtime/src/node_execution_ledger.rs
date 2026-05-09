@@ -512,8 +512,11 @@ impl NodeExecutionWorkflowLedgerSink {
             retention_class: artifact.retention_class,
             payload_ref: artifact.payload_ref,
             payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+                artifact_fact_id: None,
+                payload_artifact_id: None,
                 artifact_id: artifact.artifact_id,
                 artifact_role,
+                logical_payload_lineage_id: None,
                 producer_node_id,
                 producer_port_id,
                 consumer_node_id,

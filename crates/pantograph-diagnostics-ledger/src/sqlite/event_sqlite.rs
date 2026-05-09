@@ -832,7 +832,10 @@ pub(super) fn query_io_artifact_projection(
         "SELECT event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
                 workflow_id, workflow_version_id, workflow_semantic_version, node_id,
                 node_type, node_version, runtime_id, runtime_version,
-                selected_backend_key, model_id, model_version, artifact_id, artifact_role, producer_node_id,
+                selected_backend_key, model_id, model_version,
+                COALESCE(artifact_fact_id, artifact_id),
+                COALESCE(payload_artifact_id, artifact_id),
+                artifact_id, artifact_role, logical_payload_lineage_id, producer_node_id,
                 producer_port_id, consumer_node_id, consumer_port_id, media_type,
                 size_bytes, content_hash, payload_ref, retention_state,
                 retention_reason, retention_policy_id, payload_kind, lifecycle_state,
@@ -930,7 +933,10 @@ pub(super) fn query_expirable_io_artifact_projection(
         "SELECT event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
                 workflow_id, workflow_version_id, workflow_semantic_version, node_id,
                 node_type, node_version, runtime_id, runtime_version,
-                selected_backend_key, model_id, model_version, artifact_id, artifact_role, producer_node_id,
+                selected_backend_key, model_id, model_version,
+                COALESCE(artifact_fact_id, artifact_id),
+                COALESCE(payload_artifact_id, artifact_id),
+                artifact_id, artifact_role, logical_payload_lineage_id, producer_node_id,
                 producer_port_id, consumer_node_id, consumer_port_id, media_type,
                 size_bytes, content_hash, payload_ref, retention_state,
                 retention_reason, retention_policy_id, payload_kind, lifecycle_state,
@@ -1972,6 +1978,14 @@ fn io_artifact_projection_record_from_event(
         payload.producer_node_id.as_deref(),
         event.event_seq,
     )?;
+    let artifact_fact_id = payload
+        .artifact_fact_id
+        .clone()
+        .unwrap_or_else(|| payload.artifact_id.clone());
+    let payload_artifact_id = payload
+        .payload_artifact_id
+        .clone()
+        .unwrap_or_else(|| payload.artifact_id.clone());
 
     Ok(Some(IoArtifactProjectionRecord {
         event_seq: event.event_seq,
@@ -2013,8 +2027,11 @@ fn io_artifact_projection_record_from_event(
                 .as_ref()
                 .and_then(|context| context.model_version.clone())
         }),
+        artifact_fact_id,
+        payload_artifact_id,
         artifact_id: payload.artifact_id,
         artifact_role: payload.artifact_role.as_db().to_string(),
+        logical_payload_lineage_id: payload.logical_payload_lineage_id,
         producer_node_id: payload.producer_node_id,
         producer_port_id: payload.producer_port_id,
         consumer_node_id: payload.consumer_node_id,
@@ -2093,7 +2110,7 @@ fn apply_io_artifact_retention_state_change(
              retention_policy_id = COALESCE(?9, retention_policy_id),
              lifecycle_state = COALESCE(?10, lifecycle_state)
          WHERE workflow_run_id = ?11
-           AND artifact_id = ?12",
+           AND (artifact_id = ?12 OR COALESCE(payload_artifact_id, artifact_id) = ?12)",
         params![
             event.event_seq,
             event.event_id.as_str(),
@@ -3265,22 +3282,27 @@ fn insert_io_artifact_projection(
     tx.execute(
         "DELETE FROM io_artifact_projection
          WHERE workflow_run_id = ?1
-           AND artifact_id = ?2",
-        params![record.workflow_run_id.as_str(), record.artifact_id.as_str()],
+           AND COALESCE(artifact_fact_id, artifact_id) = ?2",
+        params![
+            record.workflow_run_id.as_str(),
+            record.artifact_fact_id.as_str()
+        ],
     )?;
     tx.execute(
         "INSERT INTO io_artifact_projection
             (event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
              workflow_id, workflow_version_id, workflow_semantic_version, node_id,
              node_type, node_version, runtime_id, runtime_version,
-             selected_backend_key, model_id, model_version, artifact_id, artifact_role, producer_node_id,
-             producer_port_id, consumer_node_id, consumer_port_id, media_type,
+             selected_backend_key, model_id, model_version, artifact_fact_id,
+             payload_artifact_id, artifact_id, artifact_role, logical_payload_lineage_id,
+             producer_node_id, producer_port_id, consumer_node_id, consumer_port_id, media_type,
              size_bytes, content_hash, payload_ref, retention_state,
              retention_reason, retention_policy_id, payload_kind, lifecycle_state,
              access_modes_json, read_handle, stream_handle, format_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
                  ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24,
-                 ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35)",
+                 ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35,
+                 ?36, ?37, ?38)",
         params![
             record.event_seq,
             record.event_id.as_str(),
@@ -3301,8 +3323,11 @@ fn insert_io_artifact_projection(
             record.selected_backend_key.as_deref(),
             record.model_id.as_deref(),
             record.model_version.as_deref(),
+            record.artifact_fact_id.as_str(),
+            record.payload_artifact_id.as_str(),
             record.artifact_id.as_str(),
             record.artifact_role.as_str(),
+            record.logical_payload_lineage_id.as_deref(),
             record.producer_node_id.as_deref(),
             record.producer_port_id.as_deref(),
             record.consumer_node_id.as_deref(),
@@ -3600,43 +3625,46 @@ fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifact
         selected_backend_key: row.get(13)?,
         model_id: row.get(14)?,
         model_version: row.get(15)?,
-        artifact_id: row.get(16)?,
-        artifact_role: row.get(17)?,
-        producer_node_id: row.get(18)?,
-        producer_port_id: row.get(19)?,
-        consumer_node_id: row.get(20)?,
-        consumer_port_id: row.get(21)?,
-        media_type: row.get(22)?,
+        artifact_fact_id: row.get(16)?,
+        payload_artifact_id: row.get(17)?,
+        artifact_id: row.get(18)?,
+        artifact_role: row.get(19)?,
+        logical_payload_lineage_id: row.get(20)?,
+        producer_node_id: row.get(21)?,
+        producer_port_id: row.get(22)?,
+        consumer_node_id: row.get(23)?,
+        consumer_port_id: row.get(24)?,
+        media_type: row.get(25)?,
         size_bytes: row
-            .get::<_, Option<i64>>(23)?
+            .get::<_, Option<i64>>(26)?
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
-        content_hash: row.get(24)?,
-        payload_ref: row.get(25)?,
-        retention_state: row.get::<_, String>(26).and_then(|value| {
+        content_hash: row.get(27)?,
+        payload_ref: row.get(28)?,
+        retention_state: row.get::<_, String>(29).and_then(|value| {
             IoArtifactRetentionState::from_db(&value).map_err(sqlite_conversion_error)
         })?,
-        retention_reason: row.get(27)?,
-        retention_policy_id: row.get(28)?,
+        retention_reason: row.get(30)?,
+        retention_policy_id: row.get(31)?,
         payload_kind: row
-            .get::<_, Option<String>>(29)?
+            .get::<_, Option<String>>(32)?
             .map(|value| IoArtifactPayloadKind::from_db(&value))
             .transpose()
             .map_err(sqlite_conversion_error)?,
         lifecycle_state: row
-            .get::<_, Option<String>>(30)?
+            .get::<_, Option<String>>(33)?
             .map(|value| IoArtifactLifecycleState::from_db(&value))
             .transpose()
             .map_err(sqlite_conversion_error)?,
         access_modes: row
-            .get::<_, Option<String>>(31)?
+            .get::<_, Option<String>>(34)?
             .map(|value| serde_json::from_str(&value))
             .transpose()
             .map_err(sqlite_conversion_error)?
             .unwrap_or_default(),
-        read_handle: row.get(32)?,
-        stream_handle: row.get(33)?,
+        read_handle: row.get(35)?,
+        stream_handle: row.get(36)?,
         format: row
-            .get::<_, Option<String>>(34)?
+            .get::<_, Option<String>>(37)?
             .map(|value| serde_json::from_str(&value))
             .transpose()
             .map_err(sqlite_conversion_error)?,

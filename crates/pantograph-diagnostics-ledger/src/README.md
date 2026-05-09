@@ -232,8 +232,13 @@ with a ledger/storage failure.
   consumers after an explicit incremental drain; normal artifact gallery reads
   do not replay raw event rows or load artifact bodies.
 - `io_artifact_projection` keeps the latest current row per
-  `workflow_run_id` and `artifact_id`; append-only ledger events remain the
-  source of historical observation and retention cleanup decisions.
+  `workflow_run_id` and `artifact_fact_id`; append-only ledger events remain
+  the source of historical observation and retention cleanup decisions.
+- I/O artifact facts distinguish durable fact identity from retained body
+  identity. `artifact_fact_id` identifies the projected observation row,
+  `payload_artifact_id` identifies the ArtifactStore/read target, and
+  `artifact_id` remains a compatibility field until workflow-service callers
+  complete the read-target cutover.
 - `io_artifact_projection` and durable I/O artifact events preserve
   conversion id, conversion status, conversion command id, and per-conversion
   dependency lease attribution in format metadata when producers provide those
