@@ -7,6 +7,7 @@
     ProjectionStateRecord,
     SchedulerTimelineProjectionRecord,
   } from '../../services/diagnostics/types';
+  import { subscribeDiagnosticsProjectionInvalidations } from '../../services/workflow/WorkflowProjectionSubscriptionService';
   import type { WorkflowLocalNetworkStatusQueryResponse } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
@@ -61,6 +62,7 @@
   let resourceRequestSerial = 0;
   let nodeStatusRequestSerial = 0;
   let timelineRequestSerial = 0;
+  let projectionUnsubscribe: (() => void) | null = null;
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -198,8 +200,47 @@
     ]);
   }
 
+  function recordSubscriptionError(subscriptionError: unknown): void {
+    error = formatWorkflowCommandError(subscriptionError);
+  }
+
+  async function refreshFromProjectionInvalidation(projectionKind: string): Promise<void> {
+    if (projectionKind === 'scheduler_timeline') {
+      await refreshTimeline();
+      return;
+    }
+    if (projectionKind === 'library_usage') {
+      await refreshSelectedRunResources();
+      return;
+    }
+    if (projectionKind === 'node_status') {
+      await refreshSelectedRunNodeStatuses();
+    }
+  }
+
   onMount(() => {
+    let disposed = false;
     void refreshStatus();
+    void subscribeDiagnosticsProjectionInvalidations({
+      projections: ['scheduler_timeline', 'library_usage', 'node_status'],
+      getActiveRunId: activeRunId,
+      refresh: (event) => refreshFromProjectionInvalidation(event.projection_kind),
+      onRefreshError: recordSubscriptionError,
+    })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        projectionUnsubscribe = nextUnlisten;
+      })
+      .catch(recordSubscriptionError);
+
+    return () => {
+      disposed = true;
+      projectionUnsubscribe?.();
+      projectionUnsubscribe = null;
+    };
   });
 
   $effect(() => {
