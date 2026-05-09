@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -121,6 +121,7 @@ pub struct NodeExecutionWorkflowLedgerSink {
     workflow_run_id: WorkflowRunId,
     execution_id: String,
     contexts_by_node_id: BTreeMap<String, NodeExecutionWorkflowLedgerNodeContext>,
+    connected_input_ports_by_node_id: BTreeMap<String, BTreeSet<String>>,
     inner: Option<std::sync::Arc<dyn node_engine::EventSink>>,
 }
 
@@ -226,6 +227,14 @@ impl NodeExecutionWorkflowLedgerSink {
                 )
             })
             .collect();
+        let mut connected_input_ports_by_node_id: BTreeMap<String, BTreeSet<String>> =
+            BTreeMap::new();
+        for edge in &graph.edges {
+            connected_input_ports_by_node_id
+                .entry(edge.target.clone())
+                .or_default()
+                .insert(edge.target_handle.clone());
+        }
 
         Ok(Self {
             workflow_service,
@@ -233,6 +242,7 @@ impl NodeExecutionWorkflowLedgerSink {
             workflow_run_id,
             execution_id: execution_id.into(),
             contexts_by_node_id,
+            connected_input_ports_by_node_id,
             inner,
         })
     }
@@ -417,6 +427,13 @@ impl NodeExecutionWorkflowLedgerSink {
         value: &serde_json::Value,
         occurred_at_ms: &Option<u64>,
     ) -> Result<(), node_engine::EventError> {
+        if self
+            .connected_input_ports_by_node_id
+            .get(&context.node_id)
+            .is_some_and(|ports| ports.contains(port_id))
+        {
+            return Ok(());
+        }
         self.record_node_io_artifact(
             IoArtifactRole::NodeInput,
             context,

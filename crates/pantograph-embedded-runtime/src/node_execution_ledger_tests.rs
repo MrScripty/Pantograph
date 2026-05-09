@@ -2032,6 +2032,93 @@ fn node_execution_workflow_sink_records_resolved_inputs_as_retained_node_artifac
 }
 
 #[test]
+fn node_execution_workflow_sink_skips_connected_resolved_inputs() {
+    let temp = tempfile::tempdir().expect("temp artifact store");
+    let artifact_store =
+        ArtifactStore::open(temp.path(), retained_node_io_test_artifact_policy()).expect("store");
+    let service = std::sync::Arc::new(
+        WorkflowService::with_ephemeral_diagnostics_ledger()
+            .expect("service")
+            .with_artifact_store(artifact_store),
+    );
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![
+            node_engine::GraphNode {
+                id: "node-source".to_string(),
+                node_type: "text-input".to_string(),
+                data: serde_json::json!({}),
+                position: (0.0, 0.0),
+            },
+            node_engine::GraphNode {
+                id: "node-a".to_string(),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({}),
+                position: (1.0, 0.0),
+            },
+        ],
+        edges: vec![node_engine::GraphEdge {
+            id: "edge-source-prompt".to_string(),
+            source: "node-source".to_string(),
+            source_handle: "text".to_string(),
+            target: "node-a".to_string(),
+            target_handle: "prompt".to_string(),
+        }],
+        groups: Vec::new(),
+    };
+    let sink = NodeExecutionWorkflowLedgerSink::try_new(
+        service.clone(),
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+        None,
+    )
+    .expect("sink");
+
+    node_engine::EventSink::send(
+        &sink,
+        node_engine::WorkflowEvent::TaskInputsResolved {
+            task_id: "node-a".to_string(),
+            execution_id: "run-a".to_string(),
+            input: Some(serde_json::json!({
+                "prompt": "derived upstream prompt",
+                "temperature": 0.7
+            })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
+            occurred_at_ms: Some(200),
+        },
+    )
+    .expect("node input artifact handling should not fail");
+
+    let input_artifacts = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: Some("node_input".to_string()),
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("io artifact query");
+
+    assert_eq!(input_artifacts.artifacts.len(), 1);
+    assert_eq!(
+        input_artifacts.artifacts[0].consumer_port_id.as_deref(),
+        Some("temperature")
+    );
+}
+
+#[test]
 fn inference_lifecycle_recorder_projects_terminal_duration_after_started() {
     let context = context();
     let mut recorder = InferenceLifecycleLedgerRecorder::new();

@@ -337,7 +337,10 @@ same logical payload lineage while preserving descriptor metadata.
   content does not alias, and different content does not alias.
 - Add a descriptor-backed media test proving no duplicate body is written.
 
-**Status:** Not started
+**Status:** In progress. Embedded-runtime now suppresses durable `node_input`
+facts for resolved input ports that are connected in the immutable execution
+graph, while still recording unconnected literal/default input ports. Workflow
+service paired boundary emission and resolved-node-I/O query assembly remain.
 
 ### Milestone 4: Artifact Fact Materialization Cutover
 
@@ -517,6 +520,10 @@ for large payloads.
   payload ids (`input` vs `output`) while keeping fact ids role-specific. This
   lets `node_output` and `workflow_output` facts for the same node/port share
   a body without risking input/output port name collisions.
+- 2026-05-09: Connected-input suppression slice updated embedded-runtime so
+  `TaskInputsResolved` values for graph-connected target ports are not emitted
+  as durable `node_input` artifacts. Unconnected input ports continue to record
+  explicit node-input facts until the resolved-input exception DTO is added.
 
 ## Commit Cadence Notes
 
@@ -596,6 +603,8 @@ types must be edited serially or by one explicit owner.
 - Lineage-scoped payload id slice: paired workflow/node boundary artifact facts
   now share retained payload ids by input/output family while preserving
   distinct fact ids.
+- Connected-input suppression slice: embedded-runtime no longer records
+  ordinary graph-connected resolved input ports as durable input artifacts.
 
 ### Deviations
 
@@ -622,6 +631,10 @@ types must be edited serially or by one explicit owner.
   - `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
   - `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts`
   - `cargo check -p pantograph-workflow-service -p pantograph-embedded-runtime`
+- 2026-05-09:
+  - `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_skips_connected_resolved_inputs`
+  - `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_records_resolved_inputs_as_retained_node_artifacts`
+  - `cargo check -p pantograph-embedded-runtime`
 - 2026-05-09:
   - `npm run typecheck`
   - `npm run test:frontend`
