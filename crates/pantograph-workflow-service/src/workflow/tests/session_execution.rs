@@ -492,7 +492,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 18);
+    assert_eq!(diagnostic_events.len(), 17);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -804,7 +804,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::IoArtifactObserved
         })
         .collect::<Vec<_>>();
-    assert_eq!(io_events.len(), 4);
+    assert_eq!(io_events.len(), 3);
     assert!(io_events[0].event_seq > reservation_events[1].event_seq);
     assert!(io_events.iter().any(|event| event
         .payload_json
@@ -812,9 +812,6 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(io_events.iter().any(|event| event
         .payload_json
         .contains("\"artifact_role\":\"workflow_output\"")));
-    assert!(io_events.iter().any(|event| event
-        .payload_json
-        .contains("\"artifact_role\":\"node_input\"")));
     assert!(io_events.iter().any(|event| event
         .payload_json
         .contains("\"artifact_role\":\"node_output\"")));

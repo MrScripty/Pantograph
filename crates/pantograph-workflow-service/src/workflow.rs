@@ -40,6 +40,7 @@ mod session_io_artifacts;
 mod session_lifecycle_api;
 mod session_queue_api;
 mod session_runtime;
+mod session_runtime_load_lifecycle;
 mod validation;
 mod workflow_run_api;
 

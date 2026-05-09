@@ -55,9 +55,17 @@ descriptor, and the runtime reuse matchers now compare against it.
 
 ### 3. Scheduler Diagnostics Ownership
 
-- [ ] Move lifecycle phase emission behind a single runtime-load owner.
+- [x] Move lifecycle phase emission behind a single runtime-load owner.
 - [ ] Emit `load_completed` only after requested-model-active proof.
-- [ ] Convert spawn/HTTP/model mismatch failures into terminal run failures.
+- [x] Convert spawn/HTTP/model mismatch failures into terminal run failures.
+
+Status: Partially complete. Workflow-service runtime-load lifecycle event
+construction now flows through `session_runtime_load_lifecycle.rs` instead of
+being hand-built in the scheduler admission path. Runtime-load failures still
+record canonical diagnostics, emit `load_failed`, release the scheduler
+reservation, and finish the run as failed. `load_completed` remains intentionally
+unemitted until a host/runtime proof can be represented separately from generic
+admission success.
 
 ### 4. Verification
 
@@ -69,6 +77,12 @@ descriptor, and the runtime reuse matchers now compare against it.
       `cargo test -p inference active_runtime_descriptor`
 - [x] Active runtime descriptor slice:
       `cargo test -p inference inference_runtime_matcher_requires_matching_port`
+- [x] Scheduler lifecycle owner slice:
+      `cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution`
+- [x] Scheduler terminal load failure slice:
+      `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_load_failure_records_canonical_error`
+- [x] Scheduler lifecycle owner slice:
+      `cargo check -p pantograph-workflow-service`
 - [ ] Full llama.cpp/runtime verification:
       `cargo test -p inference llamacpp`
 - [ ] `cargo test -p pantograph-workflow-service session_execution`
@@ -102,6 +116,19 @@ descriptor, and the runtime reuse matchers now compare against it.
   `cargo test -p inference active_runtime_descriptor`,
   `cargo test -p inference inference_runtime_matcher_requires_matching_port`,
   `cargo check -p inference`, and `cargo fmt --all -- --check`.
+- 2026-05-09: Scheduler lifecycle owner slice added
+  `session_runtime_load_lifecycle.rs` so load-requested, dependency-resolved,
+  and load-failed event construction has one workflow-service owner. The
+  generic scheduler model lifecycle writer remains shared for unload events.
+  Runtime-load failures continue to terminate the admitted run instead of
+  leaving it running. The session execution snapshot test was reconciled with
+  the minimal factual artifact model: it now expects the three retained factual
+  observations instead of the removed derived `node_input` duplicate.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution`,
+  `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_load_failure_records_canonical_error`,
+  `cargo check -p pantograph-workflow-service`, and
+  `cargo fmt --all -- --check`.
 
 ## Completion Summary
 
@@ -109,11 +136,13 @@ descriptor, and the runtime reuse matchers now compare against it.
 
 - Milestone 1 runtime phase contract.
 - Milestone 2 llama.cpp active runtime descriptor and reuse checks.
+- Milestone 3 scheduler lifecycle owner and terminal runtime-load failure
+  behavior.
 
 ### Remaining
 
-- Milestone 3: move scheduler lifecycle emission behind the runtime-load owner
-  and emit `load_completed` only after requested-model-active proof.
+- Milestone 3: represent requested-model-active proof at the workflow-service
+  host boundary before any `load_completed` event can be emitted.
 - Milestone 4: run full cross-crate and release verification after behavior is
   wired through.
 

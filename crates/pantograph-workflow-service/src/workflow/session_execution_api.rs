@@ -30,6 +30,9 @@ use super::diagnostic_errors::{
 };
 use super::session_io_artifacts::workflow_io_artifact_metadata;
 use super::session_runtime::WorkflowSessionRuntimeAdmissionDiagnosticContext;
+use super::session_runtime_load_lifecycle::{
+    WorkflowRuntimeLoadLifecycleContext, WorkflowRuntimeLoadLifecycleEvent,
+};
 use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms, validate_workflow_id,
     validate_workflow_semantic_version,
@@ -50,19 +53,19 @@ const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
 const WORKFLOW_SESSION_RETENTION_KEEP_ALIVE: &str = "keep_alive";
 const WORKFLOW_SESSION_RETENTION_EPHEMERAL: &str = "ephemeral";
 
-struct SchedulerModelLifecycleEventRequest<'a> {
-    session: &'a WorkflowExecutionSessionSummary,
-    snapshot: Option<&'a WorkflowRunSnapshotRecord>,
-    workflow_run_id: &'a str,
-    workflow_semantic_version: &'a str,
-    selected_runtime_id: Option<&'a str>,
-    required_backends: &'a [String],
-    required_models: &'a [String],
-    transition: SchedulerModelLifecycleTransition,
-    reason: Option<&'a str>,
-    duration_ms: Option<u64>,
-    error: Option<&'a str>,
-    canonical_error_event_id: Option<&'a str>,
+pub(super) struct SchedulerModelLifecycleEventRequest<'a> {
+    pub(super) session: &'a WorkflowExecutionSessionSummary,
+    pub(super) snapshot: Option<&'a WorkflowRunSnapshotRecord>,
+    pub(super) workflow_run_id: &'a str,
+    pub(super) workflow_semantic_version: &'a str,
+    pub(super) selected_runtime_id: Option<&'a str>,
+    pub(super) required_backends: &'a [String],
+    pub(super) required_models: &'a [String],
+    pub(super) transition: SchedulerModelLifecycleTransition,
+    pub(super) reason: Option<&'a str>,
+    pub(super) duration_ms: Option<u64>,
+    pub(super) error: Option<&'a str>,
+    pub(super) canonical_error_event_id: Option<&'a str>,
 }
 
 struct SchedulerReservationContext {
@@ -385,23 +388,20 @@ impl WorkflowService {
         );
         let required_backends = preflight_cache.required_backends.clone();
         let required_models = preflight_cache.required_models.clone();
+        let runtime_load_lifecycle_context = WorkflowRuntimeLoadLifecycleContext {
+            session: &session,
+            snapshot: run_snapshot.as_ref(),
+            workflow_run_id: &workflow_run_id,
+            workflow_semantic_version: &queued_workflow_semantic_version,
+            selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
+            required_backends: &required_backends,
+            required_models: &required_models,
+        };
 
         let runtime_load_started_at_ms = unix_timestamp_ms();
-        self.record_scheduler_model_lifecycle_events_if_configured(
-            SchedulerModelLifecycleEventRequest {
-                session: &session,
-                snapshot: run_snapshot.as_ref(),
-                workflow_run_id: &workflow_run_id,
-                workflow_semantic_version: &queued_workflow_semantic_version,
-                selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
-                required_backends: &required_backends,
-                required_models: &required_models,
-                transition: SchedulerModelLifecycleTransition::LoadRequested,
-                reason: Some("runtime admission requested required models"),
-                duration_ms: None,
-                error: None,
-                canonical_error_event_id: None,
-            },
+        self.record_runtime_load_lifecycle_event_if_configured(
+            runtime_load_lifecycle_context,
+            WorkflowRuntimeLoadLifecycleEvent::Requested,
         )?;
         let runtime_load_result = self
             .ensure_session_runtime_loaded(
@@ -418,20 +418,10 @@ impl WorkflowService {
         let runtime_load_duration_ms =
             unix_timestamp_ms().saturating_sub(runtime_load_started_at_ms);
         match &runtime_load_result {
-            Ok(()) => self.record_scheduler_model_lifecycle_events_if_configured(
-                SchedulerModelLifecycleEventRequest {
-                    session: &session,
-                    snapshot: run_snapshot.as_ref(),
-                    workflow_run_id: &workflow_run_id,
-                    workflow_semantic_version: &queued_workflow_semantic_version,
-                    selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
-                    required_backends: &required_backends,
-                    required_models: &required_models,
-                    transition: SchedulerModelLifecycleTransition::LoadDependencyResolved,
-                    reason: Some("runtime admission resolved required model dependencies"),
-                    duration_ms: Some(runtime_load_duration_ms),
-                    error: None,
-                    canonical_error_event_id: None,
+            Ok(()) => self.record_runtime_load_lifecycle_event_if_configured(
+                runtime_load_lifecycle_context,
+                WorkflowRuntimeLoadLifecycleEvent::DependencyResolved {
+                    duration_ms: runtime_load_duration_ms,
                 },
             )?,
             Err(_) => {}
@@ -480,19 +470,11 @@ impl WorkflowService {
             };
             let canonical_error_event_id = diagnostic_outcome.event_id.as_deref();
             let error_text = sanitize_diagnostic_error_text(&error.to_string());
-            self.record_scheduler_model_lifecycle_events_if_configured(
-                SchedulerModelLifecycleEventRequest {
-                    session: &session,
-                    snapshot: run_snapshot.as_ref(),
-                    workflow_run_id: &workflow_run_id,
-                    workflow_semantic_version: &queued_workflow_semantic_version,
-                    selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
-                    required_backends: &required_backends,
-                    required_models: &required_models,
-                    transition: SchedulerModelLifecycleTransition::LoadFailed,
-                    reason: Some("runtime admission failed to load required models"),
-                    duration_ms: Some(runtime_load_duration_ms),
-                    error: Some(error_text.as_str()),
+            self.record_runtime_load_lifecycle_event_if_configured(
+                runtime_load_lifecycle_context,
+                WorkflowRuntimeLoadLifecycleEvent::Failed {
+                    duration_ms: runtime_load_duration_ms,
+                    error: error_text.as_str(),
                     canonical_error_event_id,
                 },
             )?;
@@ -1194,7 +1176,7 @@ impl WorkflowService {
         .map_err(WorkflowServiceError::from)
     }
 
-    fn record_scheduler_model_lifecycle_events_if_configured(
+    pub(super) fn record_scheduler_model_lifecycle_events_if_configured(
         &self,
         request: SchedulerModelLifecycleEventRequest<'_>,
     ) -> Result<(), WorkflowServiceError> {
