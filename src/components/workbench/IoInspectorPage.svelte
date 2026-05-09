@@ -20,7 +20,6 @@
     IoArtifactRetentionSummaryRecord,
     NodeStatusProjectionRecord,
     ProjectionStateRecord,
-    WorkflowIoArtifactQueryRequest,
   } from '../../services/diagnostics/types';
   import type {
     WorkflowArtifactBodyRead,
@@ -128,36 +127,29 @@
     }
 
     try {
-      const artifactRequest: WorkflowIoArtifactQueryRequest = {
-        workflow_run_id: runId,
-        limit: 250,
-      };
       const selectedBackendKey = backendFilterValue.trim();
-      if (selectedBackendKey.length > 0) {
-        artifactRequest.selected_backend_key = selectedBackendKey;
-      }
-
-      const [inspectionResponse, artifactResponse] = await Promise.all([
-        workflowService.queryRunInspection({
-          workflow_run_id: runId,
-          artifact_limit: 250,
-        }),
-        workflowService.queryIoArtifacts(artifactRequest),
-      ]);
+      const inspectionResponse = await workflowService.queryRunInspection({
+        workflow_run_id: runId,
+        artifact_limit: 250,
+      });
       if (requestSerial !== inspectorRequestSerial) {
         return;
       }
 
-      revokeMissingArtifactObjectUrls(artifactResponse.artifacts);
+      const nextArtifacts =
+        selectedBackendKey.length > 0
+          ? inspectionResponse.io_artifacts.filter((artifact) => artifact.selected_backend_key === selectedBackendKey)
+          : inspectionResponse.io_artifacts;
+      revokeMissingArtifactObjectUrls(nextArtifacts);
       runGraph = inspectionResponse.run_graph ?? null;
       runNodeStatuses = inspectionResponse.node_statuses;
-      artifacts = artifactResponse.artifacts;
-      retentionSummary = artifactResponse.retention_summary;
-      projectionState = artifactResponse.projection_state;
+      artifacts = nextArtifacts;
+      retentionSummary = inspectionResponse.retention_summary;
+      projectionState = inspectionResponse.io_projection_state;
       selectedNodeId = resolveSelectedNodeId(
         selectedNodeId,
         inspectionResponse.run_graph,
-        artifactResponse.artifacts,
+        nextArtifacts,
       );
     } catch (error) {
       if (requestSerial !== inspectorRequestSerial) {

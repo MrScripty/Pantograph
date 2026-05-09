@@ -421,7 +421,11 @@ resolves node inputs from graph edges or explicit input facts.
 - Query a completed run with two unrelated identical outputs and confirm they
   remain separate produced-output facts.
 
-**Status:** Not started
+**Status:** In progress. I/O Inspector now uses
+`workflow_run_inspection_query` as the single backend query for run graph, node
+status, raw artifact facts, retention summary, and projection state. It still
+renders the existing raw artifact cards; the final resolved-node-I/O rendering
+cutover remains.
 
 ### Milestone 6: I/O Inspector Resolved IO View
 
@@ -538,6 +542,11 @@ for large payloads.
   `WorkflowRunInspectionQueryResponse.resolved_node_io`, with backend assembly
   for produced outputs, explicit input facts, workflow boundary facts, and
   graph-derived connected inputs when upstream output facts are available.
+- 2026-05-09: I/O Inspector query slice removed the normal
+  `queryIoArtifacts` double-fetch and now uses `workflow_run_inspection_query`
+  as the source for graph, node statuses, artifact facts, retention summary,
+  and I/O projection state. Backend filtering is temporarily applied locally
+  until the resolved-node-I/O rendering cutover lands.
 
 ## Commit Cadence Notes
 
@@ -623,6 +632,9 @@ types must be edited serially or by one explicit owner.
   workflow input bindings as `node_input` artifacts.
 - Resolved-node-I/O query slice: run inspection responses now expose
   backend-owned logical node I/O records alongside raw artifact facts.
+- I/O Inspector query slice: normal inspector refresh no longer calls the raw
+  `workflow_io_artifact_query`; it consumes run-inspection artifacts and
+  projection state from the backend run inspection response.
 
 ### Deviations
 
@@ -660,6 +672,9 @@ types must be edited serially or by one explicit owner.
   - `cargo test -p pantograph-workflow-service diagnostics`
   - `cargo test -p pantograph-workflow-service --test contract workflow_run_inspection_query_contract_snapshot`
   - `npm run typecheck`
+- 2026-05-09:
+  - `npm run typecheck`
+  - `npm run test:frontend`
 - 2026-05-09:
   - `npm run typecheck`
   - `npm run test:frontend`
