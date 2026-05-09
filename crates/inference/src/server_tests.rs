@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 use tokio::sync::mpsc;
 
@@ -41,6 +41,7 @@ fn base_url_reflects_sidecar_port_override() {
                 device: "auto".to_string(),
                 gpu_layers: -1,
             },
+            context_size: crate::constants::defaults::CONTEXT_SIZE,
         },
         true,
     );
@@ -70,6 +71,7 @@ fn inference_runtime_matcher_requires_matching_port() {
             model_path: "/models/main.gguf".to_string(),
             mmproj_path: Some("/models/vision.mmproj".to_string()),
             device: device.clone(),
+            context_size: 4096,
         },
         true,
     );
@@ -78,13 +80,22 @@ fn inference_runtime_matcher_requires_matching_port() {
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
         &device,
+        4096,
         Some(11434),
     ));
     assert!(!server.matches_inference_runtime(
         "/models/main.gguf",
         Some("/models/vision.mmproj"),
         &device,
+        4096,
         Some(18080),
+    ));
+    assert!(!server.matches_inference_runtime(
+        "/models/main.gguf",
+        Some("/models/vision.mmproj"),
+        &device,
+        8192,
+        Some(11434),
     ));
 }
 
@@ -106,6 +117,7 @@ impl ProcessHandle for ErroringProcessHandle {
 struct ErroringProcessSpawner {
     app_data_dir: PathBuf,
     killed: Arc<AtomicBool>,
+    captured_args: Option<Arc<Mutex<Vec<String>>>>,
 }
 
 #[async_trait]
@@ -115,6 +127,11 @@ impl ProcessSpawner for ErroringProcessSpawner {
         _sidecar_name: &str,
         args: &[&str],
     ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
+        if let Some(captured_args) = &self.captured_args {
+            *captured_args.lock().expect("captured args lock") =
+                args.iter().map(|arg| (*arg).to_string()).collect();
+        }
+
         if let Some(pid_path) = pid_path_arg(args) {
             std::fs::write(pid_path, "1234\n").expect("write pid file");
         }
@@ -159,6 +176,7 @@ async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
             Arc::new(ErroringProcessSpawner {
                 app_data_dir: temp.path().to_path_buf(),
                 killed: killed.clone(),
+                captured_args: None,
             }),
             "/models/main.gguf",
             None,
@@ -166,6 +184,7 @@ async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
                 device: "auto".to_string(),
                 gpu_layers: -1,
             },
+            4096,
             Some(18080),
         )
         .await;
@@ -181,4 +200,45 @@ async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
 
     server.stop();
     assert_eq!(server.mode_info().mode, "none");
+}
+
+#[tokio::test]
+async fn start_sidecar_inference_applies_runtime_settings_to_llama_server_args() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let killed = Arc::new(AtomicBool::new(false));
+    let captured_args = Arc::new(Mutex::new(Vec::<String>::new()));
+    let mut server = LlamaServer::new();
+
+    let result = server
+        .start_sidecar_inference(
+            Arc::new(ErroringProcessSpawner {
+                app_data_dir: temp.path().to_path_buf(),
+                killed,
+                captured_args: Some(captured_args.clone()),
+            }),
+            "/models/main.gguf",
+            Some("/models/mmproj.gguf"),
+            &DeviceConfig {
+                device: "Vulkan0".to_string(),
+                gpu_layers: 12,
+            },
+            16384,
+            Some(18080),
+        )
+        .await;
+
+    assert!(result.is_err());
+    let args = captured_args.lock().expect("captured args lock").clone();
+    assert_arg_pair(&args, "-c", "16384");
+    assert_arg_pair(&args, "-ngl", "12");
+    assert_arg_pair(&args, "--device", "Vulkan0");
+    assert_arg_pair(&args, "--mmproj", "/models/mmproj.gguf");
+}
+
+fn assert_arg_pair(args: &[String], name: &str, value: &str) {
+    assert!(
+        args.windows(2)
+            .any(|window| window[0] == name && window[1] == value),
+        "expected arg pair {name} {value} in {args:?}"
+    );
 }

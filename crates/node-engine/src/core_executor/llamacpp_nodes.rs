@@ -11,7 +11,8 @@ use crate::model_dependencies::ModelRefV2;
 
 use super::{
     build_extra_settings, build_model_ref_v2, infer_task_type_primary, kv_cache,
-    normalize_generation_options_value, require_gateway, resolve_gguf_path,
+    normalize_generation_options_value, read_optional_input_string, require_gateway,
+    resolve_gguf_path,
 };
 
 pub(crate) async fn execute_llamacpp_inference(
@@ -53,30 +54,14 @@ pub(crate) async fn execute_llamacpp_inference(
 
     // Read model-specific inference settings
     let extra_settings = build_extra_settings(inputs);
+    let config =
+        llama_cpp_backend_config(&model_path, mmproj_path.as_deref(), inputs, &extra_settings);
 
     // Ensure the gateway is running the model requested by this node. A ready
     // llama.cpp gateway may still be serving a previous workflow's model.
-    if !llamacpp_gateway_matches_requested_model(gw, &model_path, mmproj_path.as_deref()).await {
-        let mut config = inference::BackendConfig {
-            model_path: Some(PathBuf::from(&model_path)),
-            mmproj_path: mmproj_path.as_ref().map(PathBuf::from),
-            device: Some("auto".to_string()),
-            gpu_layers: Some(-1),
-            embedding_mode: false,
-            ..Default::default()
-        };
-
-        // Apply model-specific settings to backend config
-        if let Some(v) = extra_settings.get("gpu_layers").and_then(|v| v.as_i64()) {
-            config.gpu_layers = Some(v as i32);
-        }
-        if let Some(v) = extra_settings
-            .get("context_length")
-            .and_then(|v| v.as_i64())
-        {
-            config.context_size = Some(v as u32);
-        }
-
+    if !llamacpp_gateway_matches_requested_runtime(gw, &model_path, mmproj_path.as_deref(), &config)
+        .await
+    {
         log::info!(
             "LlamaCppInference: starting server with model '{}'",
             model_path
@@ -258,6 +243,70 @@ pub(crate) async fn execute_llamacpp_inference(
     Ok(outputs)
 }
 
+fn llama_cpp_backend_config(
+    model_path: &str,
+    mmproj_path: Option<&str>,
+    inputs: &HashMap<String, serde_json::Value>,
+    extra_settings: &HashMap<String, serde_json::Value>,
+) -> inference::BackendConfig {
+    let device = runtime_setting_string(extra_settings, inputs, "device")
+        .unwrap_or_else(|| "auto".to_string());
+    let gpu_layers = runtime_setting_i64(extra_settings, inputs, &["gpu_layers"])
+        .and_then(|value| i32::try_from(value).ok())
+        .unwrap_or(-1);
+    let context_size =
+        runtime_setting_i64(extra_settings, inputs, &["context_size", "context_length"])
+            .and_then(|value| u32::try_from(value).ok());
+
+    inference::BackendConfig {
+        model_path: Some(PathBuf::from(model_path)),
+        mmproj_path: mmproj_path.map(PathBuf::from),
+        device: Some(device),
+        gpu_layers: Some(gpu_layers),
+        context_size,
+        embedding_mode: false,
+        reranking_mode: false,
+        ..Default::default()
+    }
+}
+
+fn runtime_setting_string(
+    extra_settings: &HashMap<String, serde_json::Value>,
+    inputs: &HashMap<String, serde_json::Value>,
+    key: &str,
+) -> Option<String> {
+    extra_settings
+        .get(key)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            read_optional_input_string(inputs, key)
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
+}
+
+fn runtime_setting_i64(
+    extra_settings: &HashMap<String, serde_json::Value>,
+    inputs: &HashMap<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<i64> {
+    keys.iter().find_map(|key| {
+        extra_settings
+            .get(*key)
+            .and_then(|value| value.as_i64())
+            .or_else(|| inputs.get(*key).and_then(|value| value.as_i64()))
+            .or_else(|| {
+                inputs
+                    .get("_data")
+                    .and_then(|data| data.get(*key))
+                    .and_then(|value| value.as_i64())
+            })
+    })
+}
+
 #[derive(Debug, PartialEq)]
 struct LlamaCppRequestGenerationParameters {
     max_tokens: i64,
@@ -298,10 +347,11 @@ fn llama_cpp_request_generation_parameters(
     Ok(parameters)
 }
 
-async fn llamacpp_gateway_matches_requested_model(
+async fn llamacpp_gateway_matches_requested_runtime(
     gw: &InferenceGateway,
     model_path: &str,
     mmproj_path: Option<&str>,
+    requested_config: &inference::BackendConfig,
 ) -> bool {
     if !gw.is_ready().await || gw.is_embedding_mode().await || gw.is_reranking_mode().await {
         return false;
@@ -322,12 +372,33 @@ async fn llamacpp_gateway_matches_requested_model(
     }
 
     match (config.mmproj_path.as_deref(), mmproj_path) {
-        (None, None) => true,
+        (None, None) => llamacpp_runtime_settings_match(&config, requested_config),
         (Some(active_mmproj_path), Some(requested_mmproj_path)) => {
             paths_refer_to_same_file(active_mmproj_path, Path::new(requested_mmproj_path))
+                && llamacpp_runtime_settings_match(&config, requested_config)
         }
         _ => false,
     }
+}
+
+fn llamacpp_runtime_settings_match(
+    active: &inference::BackendConfig,
+    requested: &inference::BackendConfig,
+) -> bool {
+    let active_device = active.device.as_deref().unwrap_or("auto");
+    let requested_device = requested.device.as_deref().unwrap_or("auto");
+    let active_gpu_layers = active.gpu_layers.unwrap_or(-1);
+    let requested_gpu_layers = requested.gpu_layers.unwrap_or(-1);
+    let active_context_size = active
+        .context_size
+        .unwrap_or(inference::constants::defaults::CONTEXT_SIZE);
+    let requested_context_size = requested
+        .context_size
+        .unwrap_or(inference::constants::defaults::CONTEXT_SIZE);
+
+    active_device == requested_device
+        && active_gpu_layers == requested_gpu_layers
+        && active_context_size == requested_context_size
 }
 
 fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
@@ -546,6 +617,42 @@ mod tests {
         assert!((parameters.temperature - 0.9).abs() < f64::EPSILON);
     }
 
+    #[test]
+    fn backend_config_applies_llamacpp_runtime_settings() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "device", "default": "Vulkan0"},
+                {"key": "gpu_layers", "default": 24},
+                {"key": "context_length", "default": 16384}
+            ]),
+        );
+        inputs.insert("gpu_layers".to_string(), serde_json::json!(12));
+
+        let extra_settings = build_extra_settings(&inputs);
+        let config = llama_cpp_backend_config(
+            "/models/main.gguf",
+            Some("/models/mmproj.gguf"),
+            &inputs,
+            &extra_settings,
+        );
+
+        assert_eq!(
+            config.model_path.as_deref(),
+            Some(Path::new("/models/main.gguf"))
+        );
+        assert_eq!(
+            config.mmproj_path.as_deref(),
+            Some(Path::new("/models/mmproj.gguf"))
+        );
+        assert_eq!(config.device.as_deref(), Some("Vulkan0"));
+        assert_eq!(config.gpu_layers, Some(12));
+        assert_eq!(config.context_size, Some(16384));
+        assert!(!config.embedding_mode);
+        assert!(!config.reranking_mode);
+    }
+
     #[tokio::test]
     async fn gateway_match_requires_active_model_path() {
         let model_a = unique_model_path("a");
@@ -563,13 +670,29 @@ mod tests {
             .await
             .expect("start mock backend");
 
-        assert!(
-            llamacpp_gateway_matches_requested_model(&gateway, &model_a.to_string_lossy(), None)
-                .await
+        let requested_config = llama_cpp_backend_config(
+            &model_a.to_string_lossy(),
+            None,
+            &HashMap::new(),
+            &HashMap::new(),
         );
         assert!(
-            !llamacpp_gateway_matches_requested_model(&gateway, &model_b.to_string_lossy(), None)
-                .await
+            llamacpp_gateway_matches_requested_runtime(
+                &gateway,
+                &model_a.to_string_lossy(),
+                None,
+                &requested_config
+            )
+            .await
+        );
+        assert!(
+            !llamacpp_gateway_matches_requested_runtime(
+                &gateway,
+                &model_b.to_string_lossy(),
+                None,
+                &requested_config
+            )
+            .await
         );
 
         let _ = std::fs::remove_file(model_a);
@@ -593,9 +716,20 @@ mod tests {
             .await
             .expect("start mock backend");
 
+        let requested_config = llama_cpp_backend_config(
+            &model.to_string_lossy(),
+            None,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
         assert!(
-            !llamacpp_gateway_matches_requested_model(&gateway, &model.to_string_lossy(), None)
-                .await
+            !llamacpp_gateway_matches_requested_runtime(
+                &gateway,
+                &model.to_string_lossy(),
+                None,
+                &requested_config
+            )
+            .await
         );
 
         let _ = std::fs::remove_file(model);
@@ -620,29 +754,82 @@ mod tests {
             .await
             .expect("start mock backend");
 
+        let requested_config = llama_cpp_backend_config(
+            &model.to_string_lossy(),
+            Some(&mmproj_a.to_string_lossy()),
+            &HashMap::new(),
+            &HashMap::new(),
+        );
         assert!(
-            llamacpp_gateway_matches_requested_model(
+            llamacpp_gateway_matches_requested_runtime(
                 &gateway,
                 &model.to_string_lossy(),
-                Some(&mmproj_a.to_string_lossy())
+                Some(&mmproj_a.to_string_lossy()),
+                &requested_config
             )
             .await
         );
         assert!(
-            !llamacpp_gateway_matches_requested_model(
+            !llamacpp_gateway_matches_requested_runtime(
                 &gateway,
                 &model.to_string_lossy(),
-                Some(&mmproj_b.to_string_lossy())
+                Some(&mmproj_b.to_string_lossy()),
+                &requested_config
             )
             .await
         );
         assert!(
-            !llamacpp_gateway_matches_requested_model(&gateway, &model.to_string_lossy(), None)
-                .await
+            !llamacpp_gateway_matches_requested_runtime(
+                &gateway,
+                &model.to_string_lossy(),
+                None,
+                &requested_config
+            )
+            .await
         );
 
         let _ = std::fs::remove_file(model);
         let _ = std::fs::remove_file(mmproj_a);
         let _ = std::fs::remove_file(mmproj_b);
+    }
+
+    #[tokio::test]
+    async fn gateway_match_rejects_different_runtime_settings() {
+        let model = unique_model_path("settings");
+        let gateway = InferenceGateway::with_backend(
+            Box::new(MockReadyBackend { ready: false }),
+            "llama.cpp",
+        );
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&BackendConfig {
+                model_path: Some(model.clone()),
+                device: Some("Vulkan0".to_string()),
+                gpu_layers: Some(24),
+                context_size: Some(4096),
+                ..BackendConfig::default()
+            })
+            .await
+            .expect("start mock backend");
+
+        let requested_config = BackendConfig {
+            model_path: Some(model.clone()),
+            device: Some("Vulkan0".to_string()),
+            gpu_layers: Some(24),
+            context_size: Some(8192),
+            ..BackendConfig::default()
+        };
+
+        assert!(
+            !llamacpp_gateway_matches_requested_runtime(
+                &gateway,
+                &model.to_string_lossy(),
+                None,
+                &requested_config
+            )
+            .await
+        );
+
+        let _ = std::fs::remove_file(model);
     }
 }

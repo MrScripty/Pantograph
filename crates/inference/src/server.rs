@@ -13,7 +13,7 @@ use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::sync::RwLock;
 
 use crate::config::DeviceConfig;
-use crate::constants::{defaults, device_types, hosts, ports, timeouts};
+use crate::constants::{device_types, hosts, ports, timeouts};
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::types::ServerModeInfo;
 
@@ -129,6 +129,7 @@ pub enum ServerMode {
         model_path: String,
         mmproj_path: Option<String>,
         device: DeviceConfig,
+        context_size: u32,
     },
     /// Sidecar running in embedding mode (for RAG indexing)
     SidecarEmbedding {
@@ -235,6 +236,7 @@ impl LlamaServer {
         model_path: &str,
         mmproj_path: Option<&str>,
         device: &DeviceConfig,
+        context_size: u32,
         port_override: Option<u16>,
     ) -> Result<(), String> {
         // Stop any existing connection
@@ -245,7 +247,7 @@ impl LlamaServer {
         // Build arguments with device configuration
         let gpu_layers_str = device.gpu_layers.to_string();
         let port_str = port.to_string();
-        let context_size_str = defaults::CONTEXT_SIZE.to_string();
+        let context_size_str = context_size.to_string();
 
         let app_data_dir = spawner.app_data_dir()?;
         let pid_file = app_data_dir.join(SIDECAR_PID_FILE);
@@ -288,9 +290,10 @@ impl LlamaServer {
         }
 
         log::info!(
-            "Starting llama-server with device config: device={}, gpu_layers={}",
+            "Starting llama-server with device config: device={}, gpu_layers={}, context_size={}",
             device.device,
-            device.gpu_layers
+            device.gpu_layers,
+            context_size
         );
 
         // Convert to &str for spawner
@@ -307,6 +310,7 @@ impl LlamaServer {
             model_path: model_path.to_string(),
             mmproj_path: mmproj_path.map(|s| s.to_string()),
             device: device.clone(),
+            context_size,
         };
 
         self.wait_for_ready(rx).await
@@ -624,6 +628,7 @@ impl LlamaServer {
         model_path: &str,
         mmproj_path: Option<&str>,
         device: &DeviceConfig,
+        context_size: u32,
         port_override: Option<u16>,
     ) -> bool {
         let expected_port = port_override.unwrap_or(ports::SERVER);
@@ -635,10 +640,12 @@ impl LlamaServer {
                     model_path: active_model_path,
                     mmproj_path: active_mmproj_path,
                     device: active_device,
+                    context_size: active_context_size,
                     ..
                 } if active_model_path == model_path
                     && active_mmproj_path.as_deref() == mmproj_path
                     && active_device == device
+                    && *active_context_size == context_size
                     && *active_port == expected_port
             )
     }

@@ -153,6 +153,9 @@ impl InferenceBackend for LlamaCppBackend {
 
         // Build device config from BackendConfig
         let device_config = llamacpp_support::sidecar_device_config(config);
+        let context_size = config
+            .context_size
+            .unwrap_or(crate::constants::defaults::CONTEXT_SIZE);
 
         if config.embedding_mode {
             // Start in embedding mode
@@ -230,6 +233,7 @@ impl InferenceBackend for LlamaCppBackend {
                 &model_path.to_string_lossy(),
                 mmproj_path.as_deref(),
                 &device_config,
+                context_size,
                 config.port_override,
             ) {
                 return Ok(BackendStartOutcome {
@@ -244,6 +248,7 @@ impl InferenceBackend for LlamaCppBackend {
                     &model_path.to_string_lossy(),
                     mmproj_path.as_deref(),
                     &device_config,
+                    context_size,
                     config.port_override,
                 )
                 .await
@@ -567,6 +572,7 @@ mod tests {
                 device: "Vulkan0".to_string(),
                 gpu_layers: 40,
             },
+            context_size: 8192,
         };
         let config = BackendConfig {
             context_size: Some(8192),
@@ -602,6 +608,7 @@ mod tests {
                 device: "auto".to_string(),
                 gpu_layers: -1,
             },
+            context_size: defaults::CONTEXT_SIZE,
         };
 
         let fingerprint = llamacpp_support::kv_cache_model_fingerprint_for_mode(&mode, None)
@@ -627,6 +634,7 @@ mod tests {
                     device: "Vulkan0".to_string(),
                     gpu_layers: 40,
                 },
+                context_size: 16384,
             },
             true,
         );
@@ -638,6 +646,7 @@ mod tests {
                     mmproj_path: Some(PathBuf::from("/models/vision.mmproj")),
                     device: Some("Vulkan0".to_string()),
                     gpu_layers: Some(40),
+                    context_size: Some(16384),
                     port_override: Some(11434),
                     ..BackendConfig::default()
                 },
@@ -665,6 +674,7 @@ mod tests {
                     device: "Vulkan0".to_string(),
                     gpu_layers: 40,
                 },
+                context_size: defaults::CONTEXT_SIZE,
             },
             true,
         );
@@ -700,6 +710,7 @@ mod tests {
                     device: "Vulkan0".to_string(),
                     gpu_layers: 40,
                 },
+                context_size: defaults::CONTEXT_SIZE,
             },
             true,
         );
@@ -717,6 +728,43 @@ mod tests {
             )
             .await
             .expect_err("mismatched port should not be reused");
+
+        assert!(
+            matches!(error, BackendError::StartupFailed(ref message) if message.contains("spawn_sidecar")),
+            "unexpected error: {error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_does_not_reuse_inference_runtime_when_context_size_differs() {
+        let mut backend = LlamaCppBackend::new();
+        backend.server.set_test_runtime_state(
+            ServerMode::SidecarInference {
+                port: 11434,
+                model_path: "/models/main.gguf".to_string(),
+                mmproj_path: None,
+                device: DeviceConfig {
+                    device: "Vulkan0".to_string(),
+                    gpu_layers: 40,
+                },
+                context_size: 4096,
+            },
+            true,
+        );
+
+        let error = backend
+            .start(
+                &BackendConfig {
+                    model_path: Some(PathBuf::from("/models/main.gguf")),
+                    device: Some("Vulkan0".to_string()),
+                    gpu_layers: Some(40),
+                    context_size: Some(8192),
+                    ..BackendConfig::default()
+                },
+                Arc::new(NoopProcessSpawner),
+            )
+            .await
+            .expect_err("mismatched context size should not be reused");
 
         assert!(
             matches!(error, BackendError::StartupFailed(ref message) if message.contains("spawn_sidecar")),

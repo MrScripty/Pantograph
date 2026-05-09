@@ -686,19 +686,19 @@ executed run detail.
 runtime policy into Pumas or the frontend.
 
 **Tasks:**
-- [ ] Audit current llama.cpp `BackendConfig`, managed runtime startup, and
+- [x] Audit current llama.cpp `BackendConfig`, managed runtime startup, and
   Pumas-selected inference settings.
 - [x] Identify existing first-slice settings: `device`, `gpu_layers`, and
   `context_size`.
 - [x] Identify current gaps: workflow llama.cpp execution hardcodes
   `device = "auto"`, and llama-server startup uses default context size rather
   than `BackendConfig.context_size`.
-- [ ] First wire existing `device`, `gpu_layers`, and `context_size` from
+- [x] First wire existing `device`, `gpu_layers`, and `context_size` from
   backend-owned settings into workflow llama.cpp execution and sidecar startup.
 - [ ] Move any authoritative runtime setting normalization out of Tauri-only
   config surfaces and into backend service/inference contracts where execution
   validation can own it.
-- [ ] Apply `context_size` to llama-server `-c`, `gpu_layers` to llama-server
+- [x] Apply `context_size` to llama-server `-c`, `gpu_layers` to llama-server
   `-ngl`, and `device` to the supported llama.cpp device argument or validated
   no-op with a diagnostic when the installed binary does not support it.
 - [ ] Define next-slice backend-owned settings: CPU threads, batch size, ubatch
@@ -712,7 +712,7 @@ runtime policy into Pumas or the frontend.
 - [ ] Capture effective settings with source attribution when available so
   operators can tell whether a value came from Pumas, workflow defaults, run
   overrides, backend defaults, or validation adjustment.
-- [ ] Ensure changing settings that require reload makes runtime readiness
+- [x] Ensure changing settings that require reload makes runtime readiness
   fail closed or restarts through the existing runtime lifecycle owner.
 - [ ] Add frontend controls in the existing model/runtime settings surface, not
   ad hoc graph-only state.
@@ -725,7 +725,10 @@ runtime policy into Pumas or the frontend.
 - Manual acceptance on a GGUF model confirms GPU/offload settings are visible
   in diagnostics and runtime startup metadata.
 
-**Status:** Not started
+**Status:** Partially implemented. Existing llama.cpp `device`, `gpu_layers`,
+and `context_size` settings are wired through workflow execution and sidecar
+startup. Effective-settings diagnostics, source attribution, additional
+settings, and frontend controls remain open.
 
 ### Milestone 7: Backend Run-Inspection Read Model
 
@@ -851,6 +854,16 @@ coverage.
   conversion details.
 - 2026-05-08: Verification passed:
   `cargo test -p pantograph-workflow-service workflow::tests::session_execution::`.
+- 2026-05-08: Llama.cpp runtime settings slice found that
+  `BackendConfig.context_size` was included in KV-cache fingerprints but not in
+  llama-server startup or sidecar reuse identity. The slice made inference
+  sidecar `context_size` part of runtime identity, passes it to `llama-server
+  -c`, maps workflow `device`, `gpu_layers`, and `context_size`/`context_length`
+  settings into `BackendConfig`, and rejects reuse when runtime settings differ.
+- 2026-05-08: Verification passed:
+  `cargo test -p inference server::tests:: --features backend-llamacpp`,
+  `cargo test -p inference backend::llamacpp::tests:: --features backend-llamacpp`,
+  and `cargo test -p node-engine core_executor::llamacpp_nodes::tests:: --features inference-nodes`.
 
 ## Follow-Up Findings
 
@@ -862,6 +875,10 @@ coverage.
   use the existing node execution event/ledger path. The first slice covers
   terminal node outputs returned to workflow-service; non-terminal node outputs
   still need a node-engine event sink or host response extension.
+- Effective llama.cpp settings are applied but not yet emitted as a structured
+  runtime settings snapshot with source attribution in run diagnostics. That is
+  still needed before frontend controls can show whether values came from
+  Pumas defaults, workflow defaults, run overrides, or backend defaults.
 
 ## Commit Cadence Notes
 
