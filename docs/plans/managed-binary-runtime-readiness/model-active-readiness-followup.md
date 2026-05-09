@@ -88,12 +88,12 @@ when the active descriptor confirms inference mode and the requested GGUF path.
       `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`
 - [x] Runtime load proof slice:
       `cargo check -p pantograph-embedded-runtime`
-- [ ] Full llama.cpp/runtime verification:
+- [x] Full llama.cpp/runtime verification:
       `cargo test -p inference llamacpp`
-- [ ] `cargo test -p pantograph-workflow-service session_execution`
+- [x] `cargo test -p pantograph-workflow-service session_execution`
 - [x] `cargo test -p pantograph-embedded-runtime session_runtime`
-- [ ] `cargo check --manifest-path src-tauri/Cargo.toml`
-- [ ] `bash launcher.sh --build-release`
+- [x] `cargo check --manifest-path src-tauri/Cargo.toml`
+- [x] `bash launcher.sh --build-release`
 
 ## Execution Notes
 
@@ -154,6 +154,14 @@ when the active descriptor confirms inference mode and the requested GGUF path.
 - 2026-05-09: Verification passed:
   `cargo test -p pantograph-embedded-runtime test_session_runtime_load_blocks_when_runtime_preflight_reports_not_ready`
   and `cargo test -p pantograph-embedded-runtime session_runtime`.
+- 2026-05-09: Milestone 4 verification passed:
+  `cargo test -p inference llamacpp`,
+  `cargo test -p pantograph-workflow-service session_execution`,
+  `cargo test -p pantograph-embedded-runtime session_runtime`,
+  `cargo check --manifest-path src-tauri/Cargo.toml`, and
+  `bash launcher.sh --build-release`. The Tauri check and release build still
+  report the existing dead-code warnings in Tauri workflow modules, but both
+  completed successfully.
 
 ## Completion Summary
 
@@ -163,11 +171,11 @@ when the active descriptor confirms inference mode and the requested GGUF path.
 - Milestone 2 llama.cpp active runtime descriptor and reuse checks.
 - Milestone 3 scheduler lifecycle owner and terminal runtime-load failure
   behavior.
+- Milestone 4 cross-crate and release verification.
 
 ### Remaining
 
-- Milestone 4: run full cross-crate and release verification after behavior is
-  wired through.
+- No remaining tasks in this follow-up plan.
 
 ## Re-Plan Triggers
 
