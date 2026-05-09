@@ -254,15 +254,15 @@ uncoordinated durable diagnostics ledger owner.
 - [x] Keep `WorkflowDiagnosticsStore` as the live in-memory runtime,
       scheduler, trace, and debug-overlay projection boundary where those paths
       are still needed.
-- [ ] Add or reuse a narrow workflow-service diagnostics persistence facade for
+- [x] Add or reuse a narrow workflow-service diagnostics persistence facade for
       durable timing, run-summary, and node-status event writes.
-- [ ] Route `WorkflowDiagnosticsStore` durable write needs through that facade
+- [x] Route `WorkflowDiagnosticsStore` durable write needs through that facade
       instead of giving it its own `SqliteDiagnosticsLedger`.
 - [x] Update `src-tauri/src/app_setup.rs` so app startup does not open two
       independent durable diagnostics ledger connections for the same file
       unless they are explicitly configured and owned.
-- [ ] Add tests or startup assertions covering single-owner setup.
-- [ ] Update Tauri workflow diagnostics README with the new boundary.
+- [x] Add tests or startup assertions covering single-owner setup.
+- [x] Update Tauri workflow diagnostics README with the new boundary.
 
 **Verification:**
 
@@ -270,12 +270,13 @@ uncoordinated durable diagnostics ledger owner.
 - Targeted Tauri workflow diagnostics tests.
 - `cargo test -p pantograph-workflow-service diagnostics`
 
-**Status:** In progress. App startup no longer opens a second
+**Status:** Completed 2026-05-09. App startup no longer opens a second
 `workflow-diagnostics.sqlite` connection for `WorkflowDiagnosticsStore`; the
 store now keeps live runtime, scheduler, trace, and debug overlays in memory.
-Durable trace timing persistence remains disabled in the Tauri live diagnostics
-store until a narrow workflow-service persistence facade is added, so that
-facade remains the next ownership-split task.
+Durable diagnostics writes use the workflow-service diagnostics ledger owner.
+The default Tauri diagnostics store has no production durable ledger handle;
+test-only constructors may inject an in-memory timing ledger for DTO/projection
+coverage.
 
 ### Milestone 3: Backend Projection Refresh Owner And Durable Health Contract
 
@@ -786,6 +787,11 @@ parallel by multiple workers.
   subscription tests now prove the helper does not perform initial snapshot
   fetches or manual refreshes itself; those recovery reads remain page-owned and
   independent of invalidation delivery.
+- 2026-05-09: Milestone 2 completed. `WorkflowDiagnosticsStore::default()`
+  remains memory-only for production startup, durable diagnostics writes flow
+  through workflow-service, and a Tauri diagnostics timing regression asserts
+  default stores do not persist timing observations or expose historical timing
+  expectations without an explicitly injected test ledger.
 
 ## Commit Cadence Notes
 
@@ -810,6 +816,7 @@ parallel by multiple workers.
   coalescing, refresh invocation, and app-wide invalidation broadcast.
 - Milestone 7: frontend projection subscription service, mock/freshness helper
   reuse, and missed-event recovery boundary tests.
+- Milestone 2: live diagnostics and durable ledger ownership split.
 
 ### Deviations
 
@@ -833,6 +840,7 @@ parallel by multiple workers.
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `node --experimental-strip-types --test src/services/workflow/WorkflowProjectionSubscriptionService.test.ts`
 - `npm run typecheck`
+- `cargo test --manifest-path src-tauri/Cargo.toml default_diagnostics_store_keeps_timing_history_memory_only`
 
 ### Traceability Links
 

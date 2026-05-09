@@ -13,7 +13,7 @@ TypeScript or command handlers.
 | `attempts.rs` | Owns trace-attempt lookup, execution-id extraction, and overlay reset/record decisions across workflow trace events. |
 | `mod.rs` | Module entrypoint that exposes the diagnostics store and transport-facing DTOs. |
 | `overlay.rs` | Owns retained overlay state, pruning, and workflow-event overlay mutation helpers. |
-| `store.rs` | Owns the diagnostics facade and orchestrates backend trace snapshots, durable timing-ledger configuration, and additive overlay application. |
+| `store.rs` | Owns the diagnostics facade and orchestrates backend trace snapshots and additive overlay application. Production instances are memory-only; test-only constructors may inject a timing ledger for projection coverage. |
 | `trace.rs` | Converts workflow events and backend trace summaries into diagnostics-friendly run projections. |
 | `types.rs` | Defines the Tauri-facing diagnostics DTOs and snapshot request/response shapes. |
 | `tests.rs` | Diagnostics test harness, shared fixtures, request normalization, event timing, and small trace-filter assertions. |
@@ -129,10 +129,12 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
   retention and projection maintenance boundaries.
 - Timing expectations are backend-projected duration comparisons from
   workflow-service traces and the diagnostics ledger. Tauri transports them but
-  must not calculate historical baselines locally.
+  must not calculate historical baselines locally or open its own production
+  diagnostics ledger connection.
 - `workflow_timing_history` may be requested with the opened workflow graph so
   the GUI can display prior ledger diagnostics before a new execution trace
-  exists.
+  exists when a backend-owned ledger projection is available. The default Tauri
+  diagnostics store does not persist timing observations.
 - Workflow error diagnostics originate in `pantograph-workflow-service` through
   registered phase helpers and typed scopes. Tauri diagnostics may surface
   `diagnostic.error_occurred` rows and `diagnostics_unavailable` command

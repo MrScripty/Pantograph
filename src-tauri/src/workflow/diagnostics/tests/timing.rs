@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn default_diagnostics_store_keeps_timing_history_memory_only() {
+    let store = WorkflowDiagnosticsStore::default();
+
+    let projection = record_completed_timing_run(&store, "exec-1", 1_000, 100);
+
+    let run = projection.runs_by_id.get("exec-1").expect("run trace");
+    let node = run.nodes.get("llm-1").expect("node trace");
+    assert!(
+        node.timing_expectation.is_none(),
+        "default Tauri diagnostics store must not own a durable timing ledger"
+    );
+
+    let history = store.workflow_timing_history("wf-timing".to_string(), &sample_graph());
+    let history_node = history.nodes.get("llm-1").expect("node history");
+    assert!(
+        history_node.timing_expectation.is_none(),
+        "historical timing reads require an explicitly injected test ledger"
+    );
+}
+
+#[test]
 fn diagnostics_projection_exposes_backend_timing_expectation() {
     let store = WorkflowDiagnosticsStore::with_default_timing_ledger(
         pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory()
