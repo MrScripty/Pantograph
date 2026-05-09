@@ -1,8 +1,13 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
-  import { edges, nodeExecutionStates, nodes } from '../../../stores/workflowStore';
-  import { resolveEffectiveSettingValue } from './expandSettingsDisplay';
+  import { edges, nodeExecutionStates, nodes, updateNodeData } from '../../../stores/workflowStore';
+  import {
+    parseRuntimeSettingInput,
+    resolveEffectiveSettingValue,
+    runtimeSettingDraftValue,
+    runtimeSettingOptions,
+  } from './expandSettingsDisplay';
 
   interface ParamSchema {
     key: string;
@@ -61,6 +66,16 @@
   function getEffectiveValue(param: ParamSchema): unknown {
     return resolveEffectiveSettingValue(id, data, param, $nodes, $edges);
   }
+
+  function isSettingConnected(param: ParamSchema): boolean {
+    return $edges.some((edge) => edge.target === id && edge.targetHandle === param.key);
+  }
+
+  function updateSetting(param: ParamSchema, value: string | boolean): void {
+    if (isSettingConnected(param)) return;
+    const parsed = parseRuntimeSettingInput(param, value);
+    void updateNodeData(id, { [param.key]: parsed });
+  }
 </script>
 
 <div class="expand-settings-wrapper">
@@ -80,9 +95,48 @@
       {#if settings.length > 0}
         <div class="settings-list">
           {#each settings as param (param.key)}
+            {@const options = runtimeSettingOptions(param)}
+            {@const connected = isSettingConnected(param)}
             <div class="setting-row" title={param.description || ''}>
               <span class="setting-label">{param.label}</span>
               <span class="setting-value">{formatValue(getEffectiveValue(param))}</span>
+            </div>
+            <div class="setting-control-row">
+              {#if options.length > 0}
+                <select
+                  class="setting-control"
+                  disabled={connected}
+                  value={runtimeSettingDraftValue(getEffectiveValue(param))}
+                  title={param.description || param.label}
+                  onchange={(event) => updateSetting(param, event.currentTarget.value)}
+                >
+                  {#each options as option}
+                    <option value={runtimeSettingDraftValue(option.value)}>{option.label}</option>
+                  {/each}
+                </select>
+              {:else if param.param_type === 'Boolean'}
+                <label class="setting-toggle" title={param.description || param.label}>
+                  <input
+                    type="checkbox"
+                    disabled={connected}
+                    checked={Boolean(getEffectiveValue(param))}
+                    onchange={(event) => updateSetting(param, event.currentTarget.checked)}
+                  />
+                  <span>{Boolean(getEffectiveValue(param)) ? 'true' : 'false'}</span>
+                </label>
+              {:else}
+                <input
+                  class="setting-control"
+                  type={param.param_type === 'Number' || param.param_type === 'Integer' ? 'number' : 'text'}
+                  step={param.param_type === 'Integer' ? '1' : 'any'}
+                  min={param.constraints?.min}
+                  max={param.constraints?.max}
+                  disabled={connected}
+                  value={runtimeSettingDraftValue(getEffectiveValue(param))}
+                  title={param.description || param.label}
+                  onchange={(event) => updateSetting(param, event.currentTarget.value)}
+                />
+              {/if}
             </div>
             {#if formatConstraints(param)}
               <div class="setting-constraint">{formatConstraints(param)}</div>
@@ -120,6 +174,11 @@
     gap: 0.75rem;
   }
 
+  .setting-control-row {
+    display: flex;
+    justify-content: flex-end;
+  }
+
   .setting-label {
     font-size: 0.675rem;
     color: #a3a3a3;
@@ -139,5 +198,35 @@
     text-align: right;
     margin-top: -2px;
     margin-bottom: 2px;
+  }
+
+  .setting-control {
+    width: 100%;
+    max-width: 8.5rem;
+    height: 1.5rem;
+    border: 1px solid #3f3f46;
+    border-radius: 4px;
+    background: #18181b;
+    color: #e5e5e5;
+    font-size: 0.675rem;
+    padding: 0 0.35rem;
+  }
+
+  .setting-control:disabled {
+    color: #737373;
+    background: #111113;
+  }
+
+  .setting-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #d4d4d4;
+    font-size: 0.675rem;
+  }
+
+  .setting-toggle input {
+    width: 0.8rem;
+    height: 0.8rem;
   }
 </style>

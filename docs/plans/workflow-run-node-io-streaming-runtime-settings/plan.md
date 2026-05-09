@@ -761,7 +761,7 @@ runtime policy into Pumas or the frontend.
   overrides, backend defaults, or validation adjustment.
 - [x] Ensure changing settings that require reload makes runtime readiness
   fail closed or restarts through the existing runtime lifecycle owner.
-- [ ] Add frontend controls in the existing model/runtime settings surface, not
+- [x] Add frontend controls in the existing model/runtime settings surface, not
   ad hoc graph-only state.
 
 **Verification:**
@@ -772,11 +772,12 @@ runtime policy into Pumas or the frontend.
 - Manual acceptance on a GGUF model confirms GPU/offload settings are visible
   in diagnostics and runtime startup metadata.
 
-**Status:** Partially implemented. Existing llama.cpp `device`, `gpu_layers`,
-`context_size`, `cpu_threads`, `batch_size`, and `ubatch_size` settings are
-wired through workflow execution, sidecar startup, runtime-reuse matching, and
-bounded diagnostics with source attribution. Run-detail read-model surfacing and
-frontend controls remain open.
+**Status:** Implemented for the current llama.cpp settings slice. Existing
+llama.cpp `device`, `gpu_layers`, `context_size`, `cpu_threads`, `batch_size`,
+and `ubatch_size` settings are wired through workflow execution, sidecar
+startup, runtime-reuse matching, bounded diagnostics with source attribution,
+backend run-inspection projections, and the existing Expand Settings frontend
+surface.
 
 ### Milestone 7: Backend Run-Inspection Read Model
 
@@ -1154,6 +1155,15 @@ coverage.
   `cargo test -p pantograph-workflow-service --test contract workflow_node_status_query_contract_snapshot`,
   and
   `cargo test -p pantograph-workflow-service --test contract workflow_run_detail_query_contract_snapshot`.
+- 2026-05-09: Frontend runtime-settings controls slice made the existing
+  `ExpandSettings` node editable. It renders typed controls from the
+  Pumas-provided `inference_settings` schema, writes per-setting values through
+  `updateNodeData`, and leaves connected setting ports source-owned. Those
+  persisted node values are the workflow-default source consumed by backend
+  llama.cpp runtime-setting resolution.
+- 2026-05-09: Verification passed:
+  `node --experimental-strip-types --test src/components/nodes/workflow/expandSettingsDisplay.test.ts`,
+  `npm run typecheck`, `npm run build`, and `git diff --check`.
 
 ## Follow-Up Findings
 
