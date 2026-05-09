@@ -670,7 +670,7 @@ remains open.
 - [x] Define the canonical text streaming rule: live chunks are associated with
   `response`; final retained text is `response`; `stream` remains a live/event
   or non-text/media stream surface, not the required text-output connection.
-- [ ] Define the persistence rule: choosing a live `stream` connection versus
+- [x] Define the persistence rule: choosing a live `stream` connection versus
   a `response` connection affects live delivery/display only, not final
   retained node output artifacts.
 - [ ] Update backend stream emission only if a text backend other than
@@ -957,6 +957,10 @@ coverage.
   `node --experimental-strip-types --test src/services/workflow/WorkflowService.commands.test.ts src/components/workflowToolbarEvents.test.ts`,
   `npm run typecheck`, and
   `cargo check --manifest-path src-tauri/Cargo.toml --features backend-llamacpp`.
+- 2026-05-09: Canonical response-stream frontend slice added a regression test
+  proving `NodeStream(port="response")` appends live text to a connected
+  text-output node while `NodeCompleted.outputs.response` still reconciles the
+  final retained `text` runtime value through the same `response -> text` edge.
 
 ## Follow-Up Findings
 

@@ -345,6 +345,62 @@ test('applyWorkflowToolbarEvent forwards text stream chunks to connected targets
   assert.deepEqual(replaceCalls, [{ nodeId: 'text-target', content: 'hello' }]);
 });
 
+test('applyWorkflowToolbarEvent treats response as the canonical text generation stream port', () => {
+  const edge = {
+    id: 'edge-response',
+    source: 'llm',
+    sourceHandle: 'response',
+    target: 'text-output',
+    targetHandle: 'text',
+  } as Edge;
+  const stream = applyEvent(
+    {
+      type: 'NodeStream',
+      data: {
+        node_id: 'llm',
+        port: 'response',
+        chunk: 'partial text',
+        workflow_run_id: 'run-1',
+      },
+    },
+    {
+      edges: [edge],
+    },
+  );
+  const completed = applyEvent(
+    {
+      type: 'NodeCompleted',
+      data: {
+        node_id: 'llm',
+        outputs: {
+          response: 'final text',
+        },
+        workflow_run_id: 'run-1',
+      },
+    },
+    {
+      edges: [edge],
+    },
+  );
+
+  assert.deepEqual(stream.appendCalls, [{ nodeId: 'text-output', chunk: 'partial text' }]);
+  assert.deepEqual(stream.runtimeDataCalls, []);
+  assert.deepEqual(completed.runtimeDataCalls, [
+    {
+      nodeId: 'llm',
+      data: {
+        response: 'final text',
+      },
+    },
+    {
+      nodeId: 'text-output',
+      data: {
+        text: 'final text',
+      },
+    },
+  ]);
+});
+
 test('applyWorkflowToolbarEvent forwards audio stream references without inline base64', () => {
   const descriptor = {
     artifact_id: 'artifact-audio',
