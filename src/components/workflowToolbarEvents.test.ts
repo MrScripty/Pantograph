@@ -15,8 +15,8 @@ import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/typ
 function createWorkflowActions() {
   const stateCalls: Array<{ nodeId: string; state: NodeExecutionState; message?: string }> = [];
   const runtimeDataCalls: Array<{ nodeId: string; data: Record<string, unknown> }> = [];
-  const appendCalls: Array<{ nodeId: string; chunk: string }> = [];
-  const replaceCalls: Array<{ nodeId: string; content: string }> = [];
+  const appendCalls: Array<{ nodeId: string; chunk: string; sequence?: number | null }> = [];
+  const replaceCalls: Array<{ nodeId: string; content: string; sequence?: number | null }> = [];
 
   return {
     workflow: {
@@ -26,11 +26,11 @@ function createWorkflowActions() {
       updateNodeRuntimeData(nodeId: string, data: Record<string, unknown>) {
         runtimeDataCalls.push({ nodeId, data });
       },
-      appendStreamContent(nodeId: string, chunk: string) {
-        appendCalls.push({ nodeId, chunk });
+      appendStreamContent(nodeId: string, chunk: string, sequence?: number | null) {
+        appendCalls.push({ nodeId, chunk, sequence });
       },
-      setStreamContent(nodeId: string, content: string) {
-        replaceCalls.push({ nodeId, content });
+      setStreamContent(nodeId: string, content: string, sequence?: number | null) {
+        replaceCalls.push({ nodeId, content, sequence });
       },
     },
     stateCalls,
@@ -324,6 +324,7 @@ test('applyWorkflowToolbarEvent forwards text stream chunks to connected targets
         chunk: {
           mode: 'replace',
           text: 'hello',
+          sequence: 7,
         },
         workflow_run_id: 'run-1',
       },
@@ -342,7 +343,7 @@ test('applyWorkflowToolbarEvent forwards text stream chunks to connected targets
   );
 
   assert.deepEqual(appendCalls, []);
-  assert.deepEqual(replaceCalls, [{ nodeId: 'text-target', content: 'hello' }]);
+  assert.deepEqual(replaceCalls, [{ nodeId: 'text-target', content: 'hello', sequence: 7 }]);
 });
 
 test('applyWorkflowToolbarEvent treats response as the canonical text generation stream port', () => {
@@ -383,7 +384,9 @@ test('applyWorkflowToolbarEvent treats response as the canonical text generation
     },
   );
 
-  assert.deepEqual(stream.appendCalls, [{ nodeId: 'text-output', chunk: 'partial text' }]);
+  assert.deepEqual(stream.appendCalls, [
+    { nodeId: 'text-output', chunk: 'partial text', sequence: null },
+  ]);
   assert.deepEqual(stream.runtimeDataCalls, []);
   assert.deepEqual(completed.runtimeDataCalls, [
     {

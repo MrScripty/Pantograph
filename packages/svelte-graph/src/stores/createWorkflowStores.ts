@@ -108,8 +108,8 @@ export interface WorkflowStores {
   resetExecutionStates: () => void;
 
   // Actions — streaming
-  appendStreamContent: (nodeId: string, chunk: string) => void;
-  setStreamContent: (nodeId: string, content: string) => void;
+  appendStreamContent: (nodeId: string, chunk: string, sequence?: number | null) => void;
+  setStreamContent: (nodeId: string, content: string, sequence?: number | null) => void;
   clearStreamContent: () => void;
 
   // Actions — workflow
@@ -339,12 +339,12 @@ export function createWorkflowStores(
 
   // --- Streaming actions ---
 
-  function appendStreamContent(nodeId: string, chunk: string) {
-    graphState.appendStreamContent(nodeId, chunk);
+  function appendStreamContent(nodeId: string, chunk: string, sequence?: number | null) {
+    graphState.appendStreamContent(nodeId, chunk, sequence);
   }
 
-  function setStreamContent(nodeId: string, content: string) {
-    graphState.setStreamContent(nodeId, content);
+  function setStreamContent(nodeId: string, content: string, sequence?: number | null) {
+    graphState.setStreamContent(nodeId, content, sequence);
   }
 
   function clearStreamContent() {

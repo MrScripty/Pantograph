@@ -13,8 +13,8 @@ interface WorkflowToolbarStoreActions {
     message?: string,
   ) => void;
   updateNodeRuntimeData: (nodeId: string, data: Record<string, unknown>) => void;
-  appendStreamContent: (nodeId: string, chunk: string) => void;
-  setStreamContent: (nodeId: string, content: string) => void;
+  appendStreamContent: (nodeId: string, chunk: string, sequence?: number | null) => void;
+  setStreamContent: (nodeId: string, content: string, sequence?: number | null) => void;
 }
 
 export interface WorkflowToolbarEventInput {
@@ -194,9 +194,9 @@ function applyStreamNodeRuntimeData(
   for (const edge of outgoingEdges) {
     if (textChunk) {
       if (textChunk.mode === 'replace') {
-        workflow.setStreamContent(edge.target, textChunk.text);
+        workflow.setStreamContent(edge.target, textChunk.text, textChunk.sequence);
       } else {
-        workflow.appendStreamContent(edge.target, textChunk.text);
+        workflow.appendStreamContent(edge.target, textChunk.text, textChunk.sequence);
       }
       continue;
     }
@@ -226,20 +226,23 @@ function applyStreamNodeRuntimeData(
   }
 }
 
-function parseTextStreamChunk(chunk: unknown): { mode: 'append' | 'replace'; text: string } | null {
+function parseTextStreamChunk(
+  chunk: unknown,
+): { mode: 'append' | 'replace'; text: string; sequence: number | null } | null {
   if (chunk && typeof chunk === 'object' && 'text' in chunk) {
-    const structured = chunk as { mode?: string; text: unknown };
+    const structured = chunk as { mode?: string; text: unknown; sequence?: unknown };
     if (typeof structured.text === 'string') {
       return {
         mode: structured.mode === 'replace' ? 'replace' : 'append',
         text: structured.text,
+        sequence: finiteNumberOrNull(structured.sequence),
       };
     }
     return null;
   }
 
   if (typeof chunk === 'string') {
-    return { mode: 'append', text: chunk };
+    return { mode: 'append', text: chunk, sequence: null };
   }
 
   return null;

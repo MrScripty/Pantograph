@@ -702,7 +702,7 @@ reason after payload references are removed.
   streaming completes.
 - [x] Do not store raw token-by-token stream chunks as the only retained output;
   retain the final response and optional bounded stream summary.
-- [ ] Add stream sequence/run/node/port reconciliation checks so stale stream
+- [x] Add stream sequence/run/node/port reconciliation checks so stale stream
   events cannot update the wrong active run or node.
 - [ ] Add frontend coalescing or throttling if direct token-rate updates create
   excessive renders; keep final `TaskCompleted.response` as the authoritative
@@ -724,8 +724,7 @@ reason after payload references are removed.
 `TaskCompleted.response` reconciles the connected text output. Stream events
 now pass through the same active-run ownership gate as other execution events
 so stale chunks cannot update another active run. Remaining work is explicit
-coverage for optional stream sequence ordering and render coalescing if
-token-rate updates prove noisy.
+coverage for render coalescing if token-rate updates prove noisy.
 
 ### Milestone 6: Llama.cpp Runtime Device Settings Slice
 
@@ -1076,6 +1075,15 @@ coverage.
   retained artifact body used by run inspection.
 - 2026-05-09: Verification passed:
   `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_retains_final_response_not_raw_stream_chunks`.
+- 2026-05-09: Stream reconciliation slice extended text stream overlays with
+  optional sequence handling. Current-run ownership rejects stale run ids,
+  edge filtering keeps stream application scoped to matching node and port, and
+  structured text chunks with older or equal `sequence` values no longer
+  overwrite newer live text overlays.
+- 2026-05-09: Verification passed:
+  `node --experimental-strip-types --test packages/svelte-graph/src/stores/runtimeData.test.ts`,
+  `node --experimental-strip-types --test src/components/workflowToolbarEvents.test.ts`,
+  and `npm run typecheck`.
 
 ## Follow-Up Findings
 

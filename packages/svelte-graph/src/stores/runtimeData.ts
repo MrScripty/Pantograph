@@ -81,10 +81,17 @@ export function appendNodeStreamContentOverlay(
   overlays: NodeRuntimeOverlayMap,
   nodeId: string,
   chunk: string,
+  sequence?: number | null,
 ): NodeRuntimeOverlayMap {
   const currentOverlay = overlays.get(nodeId) ?? {};
+  if (isStaleStreamSequence(currentOverlay, sequence)) {
+    return overlays;
+  }
   return updateNodeRuntimeOverlay(overlays, nodeId, {
     streamContent: `${currentOverlay.streamContent || ''}${chunk}`,
+    ...(sequence === null || typeof sequence === 'undefined'
+      ? {}
+      : { stream_sequence: sequence }),
   });
 }
 
@@ -92,9 +99,17 @@ export function setNodeStreamContentOverlay(
   overlays: NodeRuntimeOverlayMap,
   nodeId: string,
   content: string,
+  sequence?: number | null,
 ): NodeRuntimeOverlayMap {
+  const currentOverlay = overlays.get(nodeId) ?? {};
+  if (isStaleStreamSequence(currentOverlay, sequence)) {
+    return overlays;
+  }
   return updateNodeRuntimeOverlay(overlays, nodeId, {
     streamContent: content,
+    ...(sequence === null || typeof sequence === 'undefined'
+      ? {}
+      : { stream_sequence: sequence }),
   });
 }
 
@@ -109,4 +124,19 @@ export function clearNodeStreamContentOverlay(
     );
   }
   return nextOverlays;
+}
+
+function isStaleStreamSequence(
+  overlay: Record<string, unknown>,
+  nextSequence?: number | null,
+): boolean {
+  if (nextSequence === null || typeof nextSequence === 'undefined') {
+    return false;
+  }
+  const currentSequence = overlay.stream_sequence;
+  return (
+    typeof currentSequence === 'number' &&
+    Number.isFinite(currentSequence) &&
+    nextSequence <= currentSequence
+  );
 }

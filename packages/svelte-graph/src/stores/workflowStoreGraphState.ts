@@ -20,7 +20,7 @@ import {
 
 export interface WorkflowStoreGraphState {
   applyWorkflowGraph: (graph: WorkflowGraph) => WorkflowGraphMaterialization;
-  appendStreamContent: (nodeId: string, chunk: string) => void;
+  appendStreamContent: (nodeId: string, chunk: string, sequence?: number | null) => void;
   clearGraph: () => void;
   clearNodeRuntimeData: (keys: string[]) => void;
   clearRuntimeOverlays: () => void;
@@ -29,7 +29,7 @@ export interface WorkflowStoreGraphState {
   edges: Writable<Edge[]>;
   loadDefaultWorkflow: (definitions: NodeDefinition[]) => void;
   nodes: Readable<Node[]>;
-  setStreamContent: (nodeId: string, content: string) => void;
+  setStreamContent: (nodeId: string, content: string, sequence?: number | null) => void;
   structuralNodes: Writable<Node[]>;
   updateNodeRuntimeData: (nodeId: string, data: Record<string, unknown>) => void;
   workflowGraph: Readable<WorkflowGraph>;
@@ -109,15 +109,23 @@ export function createWorkflowStoreGraphState(params: {
     nodeRuntimeOverlays.update((overlays) => clearNodeRuntimeOverlayKeys(overlays, keys));
   }
 
-  function appendStreamContent(nodeId: string, chunk: string): void {
+  function appendStreamContent(
+    nodeId: string,
+    chunk: string,
+    sequence?: number | null,
+  ): void {
     nodeRuntimeOverlays.update((overlays) =>
-      appendNodeStreamContentOverlay(overlays, nodeId, chunk),
+      appendNodeStreamContentOverlay(overlays, nodeId, chunk, sequence),
     );
   }
 
-  function setStreamContent(nodeId: string, content: string): void {
+  function setStreamContent(
+    nodeId: string,
+    content: string,
+    sequence?: number | null,
+  ): void {
     nodeRuntimeOverlays.update((overlays) =>
-      setNodeStreamContentOverlay(overlays, nodeId, content),
+      setNodeStreamContentOverlay(overlays, nodeId, content, sequence),
     );
   }
 

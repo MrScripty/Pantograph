@@ -114,3 +114,27 @@ test('stream content helpers append set and clear node stream content', () => {
   assert.deepEqual(cleared.get('first'), { streamContent: '' });
   assert.deepEqual(cleared.get('second'), { streamContent: '' });
 });
+
+test('stream content helpers ignore stale sequenced text chunks', () => {
+  const initial = new Map([['first', { streamContent: 'newer', stream_sequence: 4 }]]);
+
+  const staleAppend = appendNodeStreamContentOverlay(initial, 'first', ' older', 3);
+  assert.equal(staleAppend, initial);
+  assert.deepEqual(staleAppend.get('first'), {
+    streamContent: 'newer',
+    stream_sequence: 4,
+  });
+
+  const staleReplace = setNodeStreamContentOverlay(initial, 'first', 'older', 4);
+  assert.equal(staleReplace, initial);
+  assert.deepEqual(staleReplace.get('first'), {
+    streamContent: 'newer',
+    stream_sequence: 4,
+  });
+
+  const fresh = appendNodeStreamContentOverlay(initial, 'first', ' fresh', 5);
+  assert.deepEqual(fresh.get('first'), {
+    streamContent: 'newer fresh',
+    stream_sequence: 5,
+  });
+});
