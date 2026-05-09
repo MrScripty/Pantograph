@@ -586,12 +586,12 @@ event-driven refreshes on affected pages.
       behavior to respond to invalidations.
 - [x] Update `LibraryPage.svelte` library-usage refresh behavior to respond to
       library-usage invalidations.
-- [ ] Keep manual refresh buttons and active-run change refreshes.
-- [ ] Remove any redundant timers or repeated polling loops introduced by these
+- [x] Keep manual refresh buttons and active-run change refreshes.
+- [x] Remove any redundant timers or repeated polling loops introduced by these
       pages.
-- [ ] Display projection stale/error metadata returned by backend projections
+- [x] Display projection stale/error metadata returned by backend projections
       without inventing frontend projection truth.
-- [ ] Keep current `requestSerial` or equivalent stale-response guards on all
+- [x] Keep current `requestSerial` or equivalent stale-response guards on all
       refreshed page data.
 
 **Verification:**
@@ -601,7 +601,7 @@ event-driven refreshes on affected pages.
 - Focused component/service tests for subscription cleanup and stale response
   handling.
 
-**Status:** In progress. `DiagnosticsPage.svelte` now keeps its active-run
+**Status:** Completed 2026-05-09. `DiagnosticsPage.svelte` keeps its active-run
 initial fetch/manual refresh behavior and subscribes to backend diagnostics
 projection invalidations for run detail, run list, node status, I/O artifact,
 and scheduler timeline scopes. `SchedulerPage.svelte` now subscribes to run
