@@ -446,17 +446,17 @@ retention and run-detail path before implementation changes.
 - [x] Identify that runtime config fields exist but workflow llama.cpp
   execution currently hardcodes `device = "auto"` and llama-server startup uses
   the default context size rather than `BackendConfig.context_size`.
-- [ ] Identify whether node inputs are never captured, captured but not
+- [x] Identify whether node inputs are never captured, captured but not
   persisted, persisted but not projected, projected but not rendered, or
   filtered by retention policy.
-- [ ] Identify whether node outputs and artifacts fail at a different layer
+- [x] Identify whether node outputs and artifacts fail at a different layer
   than inputs.
 - [ ] Identify current retention policy defaults and whether they intentionally
   suppress node IO.
 - [ ] Identify whether current artifact IDs intentionally represent
   latest-value-per-run/node/port, or whether attempts/cache hits need distinct
   artifact identity.
-- [ ] Record source findings in this plan's execution notes with file/function
+- [x] Record source findings in this plan's execution notes with file/function
   references.
 - [ ] Confirm whether the retained-run graph should consume node IO through an
   existing composite run-detail DTO, direct artifact query calls, or a small
@@ -465,7 +465,7 @@ retention and run-detail path before implementation changes.
 - [ ] Identify whether GraphPage currently composes graph, node status, and IO
   artifact projections in frontend state in a way that should move behind a
   backend run-inspection read model.
-- [ ] Record any discovered standards violations, stubs, or dead projection
+- [x] Record any discovered standards violations, stubs, or dead projection
   paths as follow-up tasks in this plan before editing source code.
 
 **Verification:**
@@ -487,7 +487,7 @@ Tauri, and frontend code.
 - [ ] Define one internal node IO evidence adapter contract that accepts
   resolved inputs, completed outputs, cache state, node identity, and run
   context, then emits existing `IoArtifactObserved` events.
-- [ ] Define one retained IO value materialization rule: bounded text/JSON
+- [x] Define one retained IO value materialization rule: bounded text/JSON
   values that must be inspectable are written through ArtifactStore; large,
   binary, redacted, or policy-suppressed values become descriptors or
   metadata-only records with explicit retention reasons.
@@ -523,7 +523,7 @@ Tauri, and frontend code.
 - [ ] Define executable boundary validation for persisted, IPC, and
   process-boundary DTOs touched by node IO, run inspection, streaming, or
   runtime settings.
-- [ ] Record decomposition choices for touched oversized files. Split by
+- [x] Record decomposition choices for touched oversized files. Split by
   logical ownership, such as IO event building, retained value materialization,
   llama.cpp config building, or run-inspection read-model assembly. Do not
   split files just to satisfy a numeric line count.
@@ -575,7 +575,7 @@ retention and projection systems.
   terminal workflow outputs.
 - [ ] Preserve terminal `workflow_output` records as run outputs while adding
   distinct per-node `node_output` records for inspection.
-- [ ] Store small structured/text node IO through the retained IO value
+- [x] Store small structured/text node IO through the retained IO value
   materialization rule. Inspectable values should be retrievable through
   ArtifactStore descriptors; metadata-only rows must carry explicit retention
   reasons.
@@ -835,6 +835,33 @@ coverage.
   inline previews, stream sequencing/coalescing guidance, immutable-run wording
   for cache-hit tests, collection-output artifact identity, and one normalized
   effective-settings snapshot with source attribution.
+- 2026-05-08: First implementation slice found the first durable node IO
+  broken hop in workflow-service session completion: `TaskCompleted` and host
+  run responses already carry output values, but
+  `session_execution_api.rs::record_workflow_io_artifact_events_if_configured`
+  only emitted `workflow_input` and `workflow_output` ledger events. The slice
+  now records submitted external inputs as `node_input` and terminal outputs as
+  `node_output`, and materializes bounded text/JSON bodies through
+  ArtifactStore via `session_io_artifacts.rs` when configured. Full resolved
+  per-node input capture remains open because the current node-engine
+  completion event does not expose the resolved input map for every node.
+- 2026-05-08: Decomposition review for the first slice extracted retained IO
+  artifact metadata/materialization into `session_io_artifacts.rs` instead of
+  growing `session_execution_api.rs` with ArtifactStore body and descriptor
+  conversion details.
+- 2026-05-08: Verification passed:
+  `cargo test -p pantograph-workflow-service workflow::tests::session_execution::`.
+
+## Follow-Up Findings
+
+- Full per-node input inspection needs a small node-engine/embedded-runtime
+  contract addition or equivalent event boundary for resolved node inputs.
+  Submitted workflow inputs are now retained as `node_input`, but dependency
+  resolved inputs for intermediate nodes are not yet durable facts.
+- Full per-node output inspection for every executed intermediate node should
+  use the existing node execution event/ledger path. The first slice covers
+  terminal node outputs returned to workflow-service; non-terminal node outputs
+  still need a node-engine event sink or host response extension.
 
 ## Commit Cadence Notes
 

@@ -3,11 +3,9 @@ use std::{collections::HashMap, time::Duration};
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    IoArtifactAccessMode, IoArtifactConversionDependency, IoArtifactConversionStatus,
-    IoArtifactFormatMetadata, IoArtifactLifecycleState, IoArtifactObservedPayload,
-    IoArtifactPayloadKind, IoArtifactRetentionState, IoArtifactRole, LibraryAssetAccessedPayload,
-    LibraryAssetOperation, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
-    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
+    IoArtifactObservedPayload, IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetOperation,
+    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
+    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
     SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
@@ -30,22 +28,22 @@ use super::diagnostic_errors::{
     WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticRunContext, WorkflowDiagnosticRunScope,
     WorkflowDiagnosticRuntimeModelScope, WorkflowDiagnosticSchedulerScope,
 };
+use super::session_io_artifacts::workflow_io_artifact_metadata;
 use super::session_runtime::WorkflowSessionRuntimeAdmissionDiagnosticContext;
 use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms, validate_workflow_id,
     validate_workflow_semantic_version,
 };
 use super::{
-    ArtifactAccessMode, ArtifactConversionStatus, ArtifactDescriptor, ArtifactLifecycleState,
-    ArtifactPayloadKind, AttributionRepository, WorkflowCapabilityModel,
-    WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionAttributedCreateRequest,
-    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
-    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeRequirements,
-    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
+    AttributionRepository, WorkflowCapabilityModel, WorkflowErrorDiagnosticsLink,
+    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
+    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
+    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint,
+    WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason, WorkflowService,
+    WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -70,24 +68,6 @@ struct SchedulerModelLifecycleEventRequest<'a> {
 struct SchedulerReservationContext {
     selected_runtime_id: Option<String>,
     reserved_model_ids: Vec<String>,
-}
-
-struct WorkflowIoArtifactMetadata {
-    artifact_id: String,
-    media_type: Option<String>,
-    size_bytes: Option<u64>,
-    content_hash: Option<String>,
-    payload_ref: Option<String>,
-    privacy_class: DiagnosticEventPrivacyClass,
-    retention_class: DiagnosticEventRetentionClass,
-    retention_state: IoArtifactRetentionState,
-    retention_reason: Option<String>,
-    payload_kind: Option<IoArtifactPayloadKind>,
-    lifecycle_state: Option<IoArtifactLifecycleState>,
-    access_modes: Vec<IoArtifactAccessMode>,
-    read_handle: Option<String>,
-    stream_handle: Option<String>,
-    format: Option<IoArtifactFormatMetadata>,
 }
 
 impl WorkflowService {
@@ -1436,28 +1416,42 @@ impl WorkflowService {
         inputs: &[WorkflowPortBinding],
         outputs: &[WorkflowPortBinding],
     ) -> Result<(), WorkflowServiceError> {
-        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+        let Some(diagnostics_ledger) = self.diagnostics_ledger.as_ref() else {
             return Ok(());
         };
         let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
         let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
         let occurred_at_ms = unix_timestamp_ms() as i64;
         let node_types = workflow_run_node_types(snapshot)?;
-        let mut ledger = ledger.lock().map_err(|_| {
-            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
-        })?;
 
         for (role, role_label, binding) in inputs
             .iter()
-            .map(|binding| (IoArtifactRole::WorkflowInput, "workflow_input", binding))
-            .chain(
-                outputs
-                    .iter()
-                    .map(|binding| (IoArtifactRole::WorkflowOutput, "workflow_output", binding)),
-            )
+            .flat_map(|binding| {
+                [
+                    (IoArtifactRole::WorkflowInput, "workflow_input", binding),
+                    (IoArtifactRole::NodeInput, "node_input", binding),
+                ]
+            })
+            .chain(outputs.iter().flat_map(|binding| {
+                [
+                    (IoArtifactRole::WorkflowOutput, "workflow_output", binding),
+                    (IoArtifactRole::NodeOutput, "node_output", binding),
+                ]
+            }))
         {
-            let metadata =
-                workflow_io_artifact_metadata(workflow_run_id.as_str(), role_label, binding)?;
+            let metadata = workflow_io_artifact_metadata(
+                self,
+                workflow_run_id.as_str(),
+                workflow_id.as_str(),
+                snapshot
+                    .map(|snapshot| snapshot.workflow_version_id.as_str())
+                    .unwrap_or(workflow_semantic_version),
+                role_label,
+                binding,
+            )?;
+            let mut ledger = diagnostics_ledger.lock().map_err(|_| {
+                WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+            })?;
             DiagnosticsLedgerRepository::append_diagnostic_event(
                 &mut *ledger,
                 DiagnosticEventAppendRequest {
@@ -1810,154 +1804,6 @@ fn encode_workflow_run_snapshot_json<T: serde::Serialize>(
             "failed to encode workflow run snapshot {label}: {error}"
         ))
     })
-}
-
-fn workflow_io_artifact_id(
-    workflow_run_id: &str,
-    artifact_role: &str,
-    node_id: &str,
-    port_id: &str,
-) -> String {
-    let hash =
-        blake3::hash(format!("{workflow_run_id}:{artifact_role}:{node_id}:{port_id}").as_bytes());
-    format!("workflow-io-{hash}")
-}
-
-fn workflow_io_artifact_metadata(
-    workflow_run_id: &str,
-    role_label: &str,
-    binding: &WorkflowPortBinding,
-) -> Result<WorkflowIoArtifactMetadata, WorkflowServiceError> {
-    if let Ok(descriptor) = serde_json::from_value::<ArtifactDescriptor>(binding.value.clone()) {
-        return Ok(WorkflowIoArtifactMetadata {
-            artifact_id: descriptor.artifact_id.clone(),
-            media_type: descriptor
-                .format
-                .as_ref()
-                .map(|format| format.media_type.clone()),
-            size_bytes: descriptor.byte_length,
-            content_hash: descriptor.content_hash.clone(),
-            payload_ref: descriptor
-                .read_handle
-                .clone()
-                .or_else(|| Some(format!("artifact://{}", descriptor.artifact_id))),
-            privacy_class: DiagnosticEventPrivacyClass::SensitiveReference,
-            retention_class: DiagnosticEventRetentionClass::PayloadReference,
-            retention_state: descriptor.retention_state,
-            retention_reason: descriptor.retention_reason.clone(),
-            payload_kind: Some(io_artifact_payload_kind(descriptor.payload_kind)),
-            lifecycle_state: Some(io_artifact_lifecycle_state(descriptor.lifecycle_state)),
-            access_modes: descriptor
-                .access_modes
-                .into_iter()
-                .map(io_artifact_access_mode)
-                .collect(),
-            read_handle: descriptor.read_handle,
-            stream_handle: descriptor.stream_handle,
-            format: descriptor.format.map(io_artifact_format_metadata),
-        });
-    }
-
-    let value_json = serde_json::to_vec(&binding.value).map_err(|error| {
-        WorkflowServiceError::CapabilityViolation(format!(
-            "failed to encode workflow {role_label} metadata: {error}"
-        ))
-    })?;
-    Ok(WorkflowIoArtifactMetadata {
-        artifact_id: workflow_io_artifact_id(
-            workflow_run_id,
-            role_label,
-            &binding.node_id,
-            &binding.port_id,
-        ),
-        media_type: Some("application/json".to_string()),
-        size_bytes: Some(value_json.len() as u64),
-        content_hash: Some(format!("blake3:{}", blake3::hash(&value_json))),
-        payload_ref: None,
-        privacy_class: DiagnosticEventPrivacyClass::UserMetadata,
-        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
-        retention_state: IoArtifactRetentionState::MetadataOnly,
-        retention_reason: Some(
-            "workflow value body is not retained in the I/O artifact ledger".to_string(),
-        ),
-        payload_kind: None,
-        lifecycle_state: None,
-        access_modes: Vec::new(),
-        read_handle: None,
-        stream_handle: None,
-        format: None,
-    })
-}
-
-fn io_artifact_payload_kind(kind: ArtifactPayloadKind) -> IoArtifactPayloadKind {
-    match kind {
-        ArtifactPayloadKind::Text => IoArtifactPayloadKind::Text,
-        ArtifactPayloadKind::Image => IoArtifactPayloadKind::Image,
-        ArtifactPayloadKind::Audio => IoArtifactPayloadKind::Audio,
-        ArtifactPayloadKind::Video => IoArtifactPayloadKind::Video,
-        ArtifactPayloadKind::ThreeD => IoArtifactPayloadKind::ThreeD,
-        ArtifactPayloadKind::LargeTable => IoArtifactPayloadKind::LargeTable,
-        ArtifactPayloadKind::GenericBinary => IoArtifactPayloadKind::GenericBinary,
-        ArtifactPayloadKind::Structured => IoArtifactPayloadKind::Structured,
-    }
-}
-
-fn io_artifact_lifecycle_state(state: ArtifactLifecycleState) -> IoArtifactLifecycleState {
-    match state {
-        ArtifactLifecycleState::Declared => IoArtifactLifecycleState::Declared,
-        ArtifactLifecycleState::Writing => IoArtifactLifecycleState::Writing,
-        ArtifactLifecycleState::Streaming => IoArtifactLifecycleState::Streaming,
-        ArtifactLifecycleState::Finalizing => IoArtifactLifecycleState::Finalizing,
-        ArtifactLifecycleState::Retained => IoArtifactLifecycleState::Retained,
-        ArtifactLifecycleState::Failed => IoArtifactLifecycleState::Failed,
-        ArtifactLifecycleState::Expired => IoArtifactLifecycleState::Expired,
-        ArtifactLifecycleState::Deleted => IoArtifactLifecycleState::Deleted,
-    }
-}
-
-fn io_artifact_access_mode(mode: ArtifactAccessMode) -> IoArtifactAccessMode {
-    match mode {
-        ArtifactAccessMode::Read => IoArtifactAccessMode::Read,
-        ArtifactAccessMode::Download => IoArtifactAccessMode::Download,
-        ArtifactAccessMode::Stream => IoArtifactAccessMode::Stream,
-    }
-}
-
-fn io_artifact_format_metadata(format: super::ArtifactFormatMetadata) -> IoArtifactFormatMetadata {
-    IoArtifactFormatMetadata {
-        format_id: format.format_id,
-        media_type: format.media_type,
-        codec_id: format.codec_id,
-        quality_percent: format.quality_percent,
-        bitrate_kbps: format.bitrate_kbps,
-        crf: format.crf,
-        bit_depth: format.bit_depth,
-        color_profile_id: format.color_profile_id,
-        converter_id: format.converter_id,
-        converter_version: format.converter_version,
-        library_version: format.library_version,
-        conversion_id: format.conversion_id,
-        conversion_status: format.conversion_status.map(io_artifact_conversion_status),
-        conversion_command_id: format.conversion_command_id,
-        conversion_dependencies: format
-            .conversion_dependencies
-            .into_iter()
-            .map(|dependency| IoArtifactConversionDependency {
-                dependency_id: dependency.dependency_id,
-                active_version: dependency.active_version,
-                lease_id: dependency.lease_id,
-                lease_holder: dependency.lease_holder,
-            })
-            .collect(),
-    }
-}
-
-fn io_artifact_conversion_status(status: ArtifactConversionStatus) -> IoArtifactConversionStatus {
-    match status {
-        ArtifactConversionStatus::Converted => IoArtifactConversionStatus::Converted,
-        ArtifactConversionStatus::PassedThrough => IoArtifactConversionStatus::PassedThrough,
-        ArtifactConversionStatus::Failed => IoArtifactConversionStatus::Failed,
-    }
 }
 
 fn workflow_run_node_types(

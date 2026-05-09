@@ -36,6 +36,7 @@ mod preflight_api;
 mod runtime_preflight;
 mod service_config;
 mod session_execution_api;
+mod session_io_artifacts;
 mod session_lifecycle_api;
 mod session_queue_api;
 mod session_runtime;

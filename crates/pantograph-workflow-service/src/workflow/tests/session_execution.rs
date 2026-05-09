@@ -76,6 +76,96 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
 }
 
 #[tokio::test]
+async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let temp = tempfile::tempdir().expect("temp artifact store");
+    let artifact_store =
+        ArtifactStore::open(temp.path(), retained_io_test_artifact_policy()).expect("store");
+    let service = WorkflowService::with_max_sessions(2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"))
+        .with_artifact_store(artifact_store);
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-retained-io".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+    let response = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("retained text"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect("run session");
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 20,
+        )
+        .expect("diagnostic events")
+    };
+    let node_output_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::IoArtifactObserved
+                && event
+                    .payload_json
+                    .contains("\"artifact_role\":\"node_output\"")
+        })
+        .expect("node output artifact event");
+    assert_eq!(
+        node_output_event
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    let payload: serde_json::Value =
+        serde_json::from_str(&node_output_event.payload_json).expect("payload json");
+    assert_eq!(payload["retention_state"], "retained");
+    assert_eq!(payload["payload_kind"], "text");
+    let artifact_id = payload["artifact_id"]
+        .as_str()
+        .expect("artifact id")
+        .to_string();
+    assert!(payload["read_handle"].as_str().is_some());
+
+    let retained = service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id,
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("read retained node output artifact");
+    assert_eq!(retained.body, b"retained text");
+}
+
+#[tokio::test]
 async fn workflow_execution_session_run_passes_logical_session_id_in_run_options() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_max_sessions(2);
@@ -354,7 +444,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 16);
+    assert_eq!(diagnostic_events.len(), 18);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -666,7 +756,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::IoArtifactObserved
         })
         .collect::<Vec<_>>();
-    assert_eq!(io_events.len(), 2);
+    assert_eq!(io_events.len(), 4);
     assert!(io_events[0].event_seq > reservation_events[1].event_seq);
     assert!(io_events.iter().any(|event| event
         .payload_json
@@ -674,6 +764,12 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(io_events.iter().any(|event| event
         .payload_json
         .contains("\"artifact_role\":\"workflow_output\"")));
+    assert!(io_events.iter().any(|event| event
+        .payload_json
+        .contains("\"artifact_role\":\"node_input\"")));
+    assert!(io_events.iter().any(|event| event
+        .payload_json
+        .contains("\"artifact_role\":\"node_output\"")));
     assert!(io_events
         .iter()
         .all(|event| event.node_type.as_deref() == Some("text-output")));
@@ -1370,4 +1466,17 @@ async fn workflow_execution_session_runtime_load_failure_uses_phase_hint() {
 
     assert!(error_event.payload_json.contains("managed_binary"));
     assert!(error_event.payload_json.contains("managed_binary_failed"));
+}
+
+fn retained_io_test_artifact_policy() -> ArtifactPolicy {
+    ArtifactPolicy {
+        policy_id: "retained-io-test-policy".to_string(),
+        policy_version: 1,
+        ttl_seconds: None,
+        max_disk_bytes: Some(1024 * 1024),
+        max_memory_bytes: Some(1024 * 1024),
+        max_single_artifact_bytes: Some(1024 * 1024),
+        spill_threshold_bytes: Some(1024),
+        delete_on_consume: false,
+    }
 }
