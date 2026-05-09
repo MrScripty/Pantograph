@@ -14,7 +14,7 @@ use super::{
     openai_embedding_token_count_for_single_result, BackendCapabilities, BackendCapabilityFacts,
     BackendComponentCapability, BackendConfig, BackendError, BackendFeatureCapabilityFacts,
     BackendFeatureSupport, BackendModelSourceCapabilityFacts, BackendStartOutcome,
-    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend, LlamaCppRuntimeSettings,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
@@ -151,11 +151,9 @@ impl InferenceBackend for LlamaCppBackend {
             });
         }
 
-        // Build device config from BackendConfig
-        let device_config = llamacpp_support::sidecar_device_config(config);
-        let context_size = config
-            .context_size
-            .unwrap_or(crate::constants::defaults::CONTEXT_SIZE);
+        let runtime_settings = LlamaCppRuntimeSettings::from_backend_config(config);
+        let device_config = runtime_settings.device_config();
+        let context_size = runtime_settings.context_size;
 
         if config.embedding_mode {
             // Start in embedding mode

@@ -35,6 +35,7 @@ use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, ImageGenerationRequest,
     ImageGenerationResult, InferenceUsage, RerankRequest, RerankResponse,
 };
+use crate::{config::DeviceConfig, constants::defaults};
 
 #[cfg(feature = "backend-llamacpp")]
 pub use llamacpp::LlamaCppBackend;
@@ -718,6 +719,49 @@ pub struct BackendConfig {
     pub model_type: Option<String>,
 }
 
+/// Backend-owned effective llama.cpp runtime settings.
+///
+/// This is the normalization boundary for settings that affect llama.cpp
+/// process startup. Hosts may transport user preferences, but the inference
+/// crate owns the effective execution values consumed by runtime startup.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LlamaCppRuntimeSettings {
+    /// Effective llama.cpp device selector.
+    pub device: String,
+    /// Effective number of GPU layers (`-1` means all layers).
+    pub gpu_layers: i32,
+    /// Effective context size used for llama-server `-c`.
+    pub context_size: u32,
+}
+
+impl LlamaCppRuntimeSettings {
+    /// Normalize a backend start config into effective llama.cpp settings.
+    #[must_use]
+    pub fn from_backend_config(config: &BackendConfig) -> Self {
+        Self {
+            device: normalize_llamacpp_device(config.device.as_deref()),
+            gpu_layers: config.gpu_layers.unwrap_or(defaults::GPU_LAYERS),
+            context_size: config.context_size.unwrap_or(defaults::CONTEXT_SIZE),
+        }
+    }
+
+    /// Project effective settings into the existing sidecar device DTO.
+    #[must_use]
+    pub fn device_config(&self) -> DeviceConfig {
+        DeviceConfig {
+            device: self.device.clone(),
+            gpu_layers: self.gpu_layers,
+        }
+    }
+}
+
+fn normalize_llamacpp_device(device: Option<&str>) -> String {
+    let Some(device) = device.map(str::trim).filter(|value| !value.is_empty()) else {
+        return defaults::DEVICE.to_string();
+    };
+    device.to_string()
+}
+
 /// Backend-owned outcome for a successful runtime start request.
 #[derive(Debug, Clone, Default)]
 pub struct BackendStartOutcome {
@@ -927,6 +971,46 @@ pub trait InferenceBackend: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn llamacpp_runtime_settings_normalize_backend_config_defaults() {
+        let settings = LlamaCppRuntimeSettings::from_backend_config(&BackendConfig {
+            device: Some("  ".to_string()),
+            gpu_layers: None,
+            context_size: None,
+            ..BackendConfig::default()
+        });
+
+        assert_eq!(settings.device, defaults::DEVICE);
+        assert_eq!(settings.gpu_layers, defaults::GPU_LAYERS);
+        assert_eq!(settings.context_size, defaults::CONTEXT_SIZE);
+        assert_eq!(
+            settings.device_config(),
+            DeviceConfig {
+                device: defaults::DEVICE.to_string(),
+                gpu_layers: defaults::GPU_LAYERS,
+            }
+        );
+    }
+
+    #[test]
+    fn llamacpp_runtime_settings_preserve_explicit_backend_config() {
+        let settings = LlamaCppRuntimeSettings::from_backend_config(&BackendConfig {
+            device: Some("Vulkan0".to_string()),
+            gpu_layers: Some(42),
+            context_size: Some(8192),
+            ..BackendConfig::default()
+        });
+
+        assert_eq!(
+            settings,
+            LlamaCppRuntimeSettings {
+                device: "Vulkan0".to_string(),
+                gpu_layers: 42,
+                context_size: 8192,
+            }
+        );
+    }
 
     #[test]
     fn chat_chunk_serde_omits_absent_usage() {

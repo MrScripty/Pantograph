@@ -741,7 +741,7 @@ runtime policy into Pumas or the frontend.
   than `BackendConfig.context_size`.
 - [x] First wire existing `device`, `gpu_layers`, and `context_size` from
   backend-owned settings into workflow llama.cpp execution and sidecar startup.
-- [ ] Move any authoritative runtime setting normalization out of Tauri-only
+- [x] Move any authoritative runtime setting normalization out of Tauri-only
   config surfaces and into backend service/inference contracts where execution
   validation can own it.
 - [x] Apply `context_size` to llama-server `-c`, `gpu_layers` to llama-server
@@ -1091,6 +1091,16 @@ coverage.
 - 2026-05-09: Verification passed:
   `cargo test -p node-engine pytorch_text_generation_stream_port_uses_canonical_response_output --features pytorch-nodes`
   and `cargo check -p node-engine --features pytorch-nodes`.
+- 2026-05-09: Llama.cpp runtime-settings normalization slice added
+  inference-owned `LlamaCppRuntimeSettings` so effective `device`,
+  `gpu_layers`, and `context_size` are derived in the inference contract before
+  sidecar startup instead of being normalized only in Tauri/app-shell surfaces.
+  Removed the now-dead sidecar helper after wiring startup directly through the
+  effective settings contract.
+- 2026-05-09: Verification passed:
+  `cargo test -p inference llamacpp_runtime_settings --features backend-llamacpp`,
+  `cargo test -p inference start_sidecar_inference_applies_runtime_settings_to_llama_server_args --features backend-llamacpp`,
+  and `cargo fmt`.
 
 ## Follow-Up Findings
 

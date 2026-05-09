@@ -4,7 +4,6 @@ use futures_util::{Stream, StreamExt};
 use serde_json::{Map, Value};
 
 use super::{BackendConfig, BackendError, ChatChunk};
-use crate::config::DeviceConfig;
 use crate::constants::defaults;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
@@ -504,13 +503,6 @@ pub fn kv_cache_model_fingerprint_for_mode(
             context_size
         ),
     })
-}
-
-pub fn sidecar_device_config(config: &BackendConfig) -> DeviceConfig {
-    DeviceConfig {
-        device: config.device.clone().unwrap_or_else(|| "auto".to_string()),
-        gpu_layers: config.gpu_layers.unwrap_or(-1),
-    }
 }
 
 pub fn map_sidecar_start_error(error: String) -> BackendError {
