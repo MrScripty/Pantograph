@@ -56,16 +56,17 @@ descriptor, and the runtime reuse matchers now compare against it.
 ### 3. Scheduler Diagnostics Ownership
 
 - [x] Move lifecycle phase emission behind a single runtime-load owner.
-- [ ] Emit `load_completed` only after requested-model-active proof.
+- [x] Emit `load_completed` only after requested-model-active proof.
 - [x] Convert spawn/HTTP/model mismatch failures into terminal run failures.
 
-Status: Partially complete. Workflow-service runtime-load lifecycle event
-construction now flows through `session_runtime_load_lifecycle.rs` instead of
-being hand-built in the scheduler admission path. Runtime-load failures still
-record canonical diagnostics, emit `load_failed`, release the scheduler
-reservation, and finish the run as failed. `load_completed` remains intentionally
-unemitted until a host/runtime proof can be represented separately from generic
-admission success.
+Status: Complete. Workflow-service runtime-load lifecycle event construction
+now flows through `session_runtime_load_lifecycle.rs` instead of being hand-built
+in the scheduler admission path. Runtime-load failures still record canonical
+diagnostics, emit `load_failed`, release the scheduler reservation, and finish
+the run as failed. `load_completed` is gated behind an additive host-boundary
+`WorkflowSessionRuntimeLoadProof`; generic admission success still only records
+dependency resolution. The embedded runtime returns proof for llama.cpp only
+when the active descriptor confirms inference mode and the requested GGUF path.
 
 ### 4. Verification
 
@@ -83,6 +84,10 @@ admission success.
       `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_load_failure_records_canonical_error`
 - [x] Scheduler lifecycle owner slice:
       `cargo check -p pantograph-workflow-service`
+- [x] Runtime load proof slice:
+      `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`
+- [x] Runtime load proof slice:
+      `cargo check -p pantograph-embedded-runtime`
 - [ ] Full llama.cpp/runtime verification:
       `cargo test -p inference llamacpp`
 - [ ] `cargo test -p pantograph-workflow-service session_execution`
@@ -129,6 +134,17 @@ admission success.
   `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_load_failure_records_canonical_error`,
   `cargo check -p pantograph-workflow-service`, and
   `cargo fmt --all -- --check`.
+- 2026-05-09: Runtime load proof slice added
+  `WorkflowSessionRuntimeLoadProof` and a default host method for returning
+  proof after session runtime load. Workflow-service records `load_completed`
+  only when that proof says the requested model is active. Embedded runtime maps
+  the llama.cpp active descriptor into proof only for ready managed inference
+  sidecars whose active model path matches the requested workflow GGUF.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+  `cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution`,
+  `cargo check -p pantograph-embedded-runtime`, and
+  `cargo fmt --all -- --check`.
 
 ## Completion Summary
 
@@ -141,8 +157,6 @@ admission success.
 
 ### Remaining
 
-- Milestone 3: represent requested-model-active proof at the workflow-service
-  host boundary before any `load_completed` event can be emitted.
 - Milestone 4: run full cross-crate and release verification after behavior is
   wired through.
 

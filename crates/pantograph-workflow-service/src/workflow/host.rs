@@ -16,7 +16,7 @@ use super::{
     WorkflowCapabilityModel, WorkflowHostCapabilities, WorkflowHostModelDescriptor,
     WorkflowIoResponse, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
     WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowRuntimeRequirements,
-    WorkflowServiceError,
+    WorkflowServiceError, WorkflowSessionRuntimeLoadProof,
 };
 
 /// Trait boundary for host/runtime concerns needed by workflow service.
@@ -206,6 +206,15 @@ pub trait WorkflowHost: Send + Sync {
         _retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
         Ok(())
+    }
+
+    /// Return proof that the requested runtime/model became active during load.
+    async fn session_runtime_load_proof(
+        &self,
+        _session_id: &str,
+        _workflow_id: &str,
+    ) -> Result<Option<WorkflowSessionRuntimeLoadProof>, WorkflowServiceError> {
+        Ok(None)
     }
 
     /// Unload session runtime resources when scheduler rebalances or session closes.

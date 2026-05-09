@@ -894,6 +894,111 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
 }
 
 #[tokio::test]
+async fn workflow_execution_session_records_load_completed_only_with_runtime_proof() {
+    let host = MockWorkflowHost::with_runtime_load_proof(
+        8,
+        1024,
+        WorkflowSessionRuntimeLoadProof {
+            backend_key: "llama_cpp".to_string(),
+            runtime_id: Some("managed-llama-slot".to_string()),
+            model_id: Some("model-a".to_string()),
+            active_model_path: Some("/models/model-a.gguf".to_string()),
+            requested_model_active: true,
+        },
+    );
+    let service = WorkflowService::with_max_sessions(2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-runtime-proof".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let response = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello"),
+                }],
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect("run session");
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 30,
+        )
+        .expect("diagnostic events")
+    };
+    let lifecycle_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerModelLifecycleChanged
+                && event
+                    .workflow_run_id
+                    .as_ref()
+                    .map(|id| id.as_str())
+                    == Some(response.workflow_run_id.as_str())
+        })
+        .collect::<Vec<_>>();
+
+    let load_requested = lifecycle_events
+        .iter()
+        .find(|event| {
+            event
+                .payload_json
+                .contains("\"transition\":\"load_requested\"")
+        })
+        .expect("load requested event");
+    let dependency_resolved = lifecycle_events
+        .iter()
+        .find(|event| {
+            event
+                .payload_json
+                .contains("\"transition\":\"load_dependency_resolved\"")
+        })
+        .expect("dependency resolved event");
+    let load_completed = lifecycle_events
+        .iter()
+        .find(|event| {
+            event
+                .payload_json
+                .contains("\"transition\":\"load_completed\"")
+        })
+        .expect("load completed event");
+
+    assert!(dependency_resolved.event_seq > load_requested.event_seq);
+    assert!(load_completed.event_seq > dependency_resolved.event_seq);
+    assert!(load_completed
+        .payload_json
+        .contains("\"cache_state\":\"loaded\""));
+    assert!(load_completed
+        .payload_json
+        .contains("\"reason\":\"runtime admission proved requested model active\""));
+}
+
+#[tokio::test]
 async fn attributed_workflow_execution_session_carries_client_bucket_into_run_events() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_max_sessions(2)

@@ -20,6 +20,9 @@ pub(super) enum WorkflowRuntimeLoadLifecycleEvent<'a> {
     DependencyResolved {
         duration_ms: u64,
     },
+    Completed {
+        duration_ms: u64,
+    },
     Failed {
         duration_ms: u64,
         error: &'a str,
@@ -44,6 +47,13 @@ impl WorkflowService {
             WorkflowRuntimeLoadLifecycleEvent::DependencyResolved { duration_ms } => (
                 SchedulerModelLifecycleTransition::LoadDependencyResolved,
                 "runtime admission resolved required model dependencies",
+                Some(duration_ms),
+                None,
+                None,
+            ),
+            WorkflowRuntimeLoadLifecycleEvent::Completed { duration_ms } => (
+                SchedulerModelLifecycleTransition::LoadCompleted,
+                "runtime admission proved requested model active",
                 Some(duration_ms),
                 None,
                 None,

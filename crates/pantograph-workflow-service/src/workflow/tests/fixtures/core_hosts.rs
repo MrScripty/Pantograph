@@ -7,6 +7,7 @@ pub(in crate::workflow::tests) struct MockWorkflowHost {
     pub(in crate::workflow::tests) emit_invalid_output_binding: bool,
     pub(in crate::workflow::tests) technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
     pub(in crate::workflow::tests) recorded_run_options: Arc<Mutex<Vec<WorkflowRunOptions>>>,
+    pub(in crate::workflow::tests) runtime_load_proof: Option<WorkflowSessionRuntimeLoadProof>,
 }
 
 impl MockWorkflowHost {
@@ -42,6 +43,7 @@ impl MockWorkflowHost {
             emit_invalid_output_binding: false,
             technical_fit_decision: None,
             recorded_run_options: Arc::new(Mutex::new(Vec::new())),
+            runtime_load_proof: None,
         }
     }
 
@@ -72,6 +74,17 @@ impl MockWorkflowHost {
     ) -> Self {
         Self {
             technical_fit_decision: Some(technical_fit_decision),
+            ..Self::new(max_input_bindings, max_value_bytes)
+        }
+    }
+
+    pub(in crate::workflow::tests) fn with_runtime_load_proof(
+        max_input_bindings: usize,
+        max_value_bytes: usize,
+        runtime_load_proof: WorkflowSessionRuntimeLoadProof,
+    ) -> Self {
+        Self {
+            runtime_load_proof: Some(runtime_load_proof),
             ..Self::new(max_input_bindings, max_value_bytes)
         }
     }
@@ -339,5 +352,13 @@ impl WorkflowHost for MockWorkflowHost {
             port_id: "text".to_string(),
             value: serde_json::json!("default output"),
         }])
+    }
+
+    async fn session_runtime_load_proof(
+        &self,
+        _session_id: &str,
+        _workflow_id: &str,
+    ) -> Result<Option<WorkflowSessionRuntimeLoadProof>, WorkflowServiceError> {
+        Ok(self.runtime_load_proof.clone())
     }
 }

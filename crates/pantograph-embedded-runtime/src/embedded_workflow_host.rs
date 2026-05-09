@@ -177,6 +177,17 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             .await
     }
 
+    async fn session_runtime_load_proof(
+        &self,
+        _session_id: &str,
+        workflow_id: &str,
+    ) -> Result<
+        Option<pantograph_workflow_service::WorkflowSessionRuntimeLoadProof>,
+        WorkflowServiceError,
+    > {
+        self.workflow_session_runtime_load_proof(workflow_id).await
+    }
+
     async fn unload_session_runtime(
         &self,
         session_id: &str,

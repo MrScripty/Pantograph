@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use inference::BackendConfig;
+use inference::{runtime_load::LlamaCppRuntimeMode, BackendConfig};
 use node_engine::WorkflowGraph;
 use pantograph_runtime_identity::canonical_engine_backend_key;
 use pantograph_runtime_registry::{RuntimeReservationRequirements, RuntimeRetentionHint};
@@ -11,7 +11,7 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
     WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionState, WorkflowHost,
     WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeDiagnosticPhaseHint,
-    WorkflowRuntimeRequirements, WorkflowServiceError,
+    WorkflowRuntimeRequirements, WorkflowServiceError, WorkflowSessionRuntimeLoadProof,
 };
 use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
@@ -174,6 +174,33 @@ impl EmbeddedWorkflowHost {
         }
     }
 
+    pub(crate) async fn workflow_session_runtime_load_proof(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<WorkflowSessionRuntimeLoadProof>, WorkflowServiceError> {
+        let Some(model_path) = self
+            .resolve_llamacpp_workflow_model_path(workflow_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let Some(descriptor) = self
+            .active_llamacpp_descriptor_matching_requested_model(&model_path)
+            .await
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(WorkflowSessionRuntimeLoadProof {
+            backend_key: "llama_cpp".to_string(),
+            runtime_id: None,
+            model_id: None,
+            active_model_path: Some(descriptor.model_path.display().to_string()),
+            requested_model_active: true,
+        }))
+    }
+
     async fn llamacpp_gateway_matches_requested_model(&self, model_path: &Path) -> bool {
         if !self.gateway.is_ready().await
             || self.gateway.is_embedding_mode().await
@@ -188,6 +215,14 @@ impl EmbeddedWorkflowHost {
             return false;
         }
 
+        if self
+            .active_llamacpp_descriptor_matching_requested_model(model_path)
+            .await
+            .is_some()
+        {
+            return true;
+        }
+
         let Some(config) = self.gateway.restart_runtime_config().await else {
             return false;
         };
@@ -198,6 +233,20 @@ impl EmbeddedWorkflowHost {
             return false;
         };
         paths_refer_to_same_file(active_model_path, model_path)
+    }
+
+    async fn active_llamacpp_descriptor_matching_requested_model(
+        &self,
+        model_path: &Path,
+    ) -> Option<inference::runtime_load::LlamaCppActiveRuntimeDescriptor> {
+        let descriptor = self.gateway.active_llamacpp_runtime_descriptor().await?;
+        if descriptor.mode != LlamaCppRuntimeMode::Inference {
+            return None;
+        }
+        if !paths_refer_to_same_file(descriptor.model_path.as_path(), model_path) {
+            return None;
+        }
+        Some(descriptor)
     }
 
     async fn resolve_llamacpp_workflow_model_path(

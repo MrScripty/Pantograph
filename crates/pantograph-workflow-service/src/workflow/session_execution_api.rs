@@ -417,13 +417,34 @@ impl WorkflowService {
             .await;
         let runtime_load_duration_ms =
             unix_timestamp_ms().saturating_sub(runtime_load_started_at_ms);
+        let runtime_load_result = match runtime_load_result {
+            Ok(()) => {
+                host.session_runtime_load_proof(&session_id, &session.workflow_id)
+                    .await
+            }
+            Err(error) => Err(error),
+        };
         match &runtime_load_result {
-            Ok(()) => self.record_runtime_load_lifecycle_event_if_configured(
-                runtime_load_lifecycle_context,
-                WorkflowRuntimeLoadLifecycleEvent::DependencyResolved {
-                    duration_ms: runtime_load_duration_ms,
-                },
-            )?,
+            Ok(proof) => {
+                self.record_runtime_load_lifecycle_event_if_configured(
+                    runtime_load_lifecycle_context,
+                    WorkflowRuntimeLoadLifecycleEvent::DependencyResolved {
+                        duration_ms: runtime_load_duration_ms,
+                    },
+                )?;
+                if proof
+                    .as_ref()
+                    .map(|proof| proof.requested_model_active)
+                    .unwrap_or(false)
+                {
+                    self.record_runtime_load_lifecycle_event_if_configured(
+                        runtime_load_lifecycle_context,
+                        WorkflowRuntimeLoadLifecycleEvent::Completed {
+                            duration_ms: runtime_load_duration_ms,
+                        },
+                    )?;
+                }
+            }
             Err(_) => {}
         }
         if let Err(error) = runtime_load_result {

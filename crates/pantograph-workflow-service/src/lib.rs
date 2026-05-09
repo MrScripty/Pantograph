@@ -152,8 +152,9 @@ pub use workflow::{
     WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerSnapshotRequest,
     WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
     WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
-    WorkflowSupportTier, WorkflowTaskModalitySignature, WorkflowTaskRequestContract,
-    WorkflowTaskStreamingSupport, WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    WorkflowSessionRuntimeLoadProof, WorkflowSupportTier, WorkflowTaskModalitySignature,
+    WorkflowTaskRequestContract, WorkflowTaskStreamingSupport, WorkflowVersionRecord,
+    WorkflowVersionResolveRequest,
 };
 pub use workflow::{
     IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,
