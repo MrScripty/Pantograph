@@ -877,6 +877,7 @@ fn workflow_scheduler_estimate_query_returns_estimate_projection() {
         .append_diagnostic_event(sample_scheduler_estimate_event())
         .expect("scheduler estimate event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_run_detail(&service, 10);
 
     let response = service
         .workflow_scheduler_estimate_query(WorkflowSchedulerEstimateQueryRequest {
@@ -902,6 +903,47 @@ fn workflow_scheduler_estimate_query_returns_estimate_projection() {
         Some(SchedulerModelCacheState::Unknown)
     );
     assert_eq!(response.projection_state.last_applied_event_seq, 2);
+}
+
+#[test]
+fn workflow_scheduler_estimate_query_does_not_mutate_projection_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_scheduler_estimate_event())
+        .expect("scheduler estimate event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_scheduler_estimate_query(WorkflowSchedulerEstimateQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            projection_batch_size: Some(10),
+        })
+        .expect("scheduler estimate query");
+
+    assert!(response.estimate.is_none());
+    assert_eq!(
+        response.projection_state.status,
+        ProjectionStatus::NeedsRebuild
+    );
+    assert_eq!(response.projection_state.last_applied_event_seq, 0);
+
+    let ledger = service.diagnostics_ledger_guard().expect("ledger guard");
+    assert!(ledger
+        .projection_state("run_detail")
+        .expect("run detail state query")
+        .is_none());
+}
+
+fn refresh_run_detail(service: &WorkflowService, batch_size: u32) {
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::RunDetail],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size,
+        })
+        .expect("projection refresh");
 }
 
 fn refresh_run_detail_and_node_status(service: &WorkflowService, batch_size: u32) {
