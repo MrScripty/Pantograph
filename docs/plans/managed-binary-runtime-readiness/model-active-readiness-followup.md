@@ -91,7 +91,7 @@ when the active descriptor confirms inference mode and the requested GGUF path.
 - [ ] Full llama.cpp/runtime verification:
       `cargo test -p inference llamacpp`
 - [ ] `cargo test -p pantograph-workflow-service session_execution`
-- [ ] `cargo test -p pantograph-embedded-runtime session_runtime`
+- [x] `cargo test -p pantograph-embedded-runtime session_runtime`
 - [ ] `cargo check --manifest-path src-tauri/Cargo.toml`
 - [ ] `bash launcher.sh --build-release`
 
@@ -145,6 +145,15 @@ when the active descriptor confirms inference mode and the requested GGUF path.
   `cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution`,
   `cargo check -p pantograph-embedded-runtime`, and
   `cargo fmt --all -- --check`.
+- 2026-05-09: Embedded session-runtime verification exposed a stale fixture:
+  `test_session_runtime_load_blocks_when_runtime_preflight_reports_not_ready`
+  was not declaring a required backend or failed selected runtime, so the
+  preflight path could load successfully in the current runtime capability
+  model. The fixture now declares `llama_cpp` and persists a failed selected
+  runtime version before asserting the load is blocked.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-embedded-runtime test_session_runtime_load_blocks_when_runtime_preflight_reports_not_ready`
+  and `cargo test -p pantograph-embedded-runtime session_runtime`.
 
 ## Completion Summary
 

@@ -598,9 +598,12 @@ async fn test_session_runtime_load_waits_for_existing_warmup_transition() {
 async fn test_session_runtime_load_blocks_when_runtime_preflight_reports_not_ready() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");
+    rewrite_test_workflow_required_backend(temp.path(), "runtime-text", "llama_cpp");
 
     let app_data_dir = temp.path().join("app-data");
     std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+    install_fake_default_runtime(&app_data_dir);
+    persist_failed_selected_runtime_version(&app_data_dir, "b8248", "validation failed");
 
     let runtime_registry = Arc::new(RuntimeRegistry::new());
     let runtime = EmbeddedRuntime::with_default_python_runtime(
