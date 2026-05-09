@@ -497,9 +497,9 @@ retention with lazy body reads.
 **Goal:** Close the contract change with documentation and release-grade checks.
 
 **Tasks:**
-- [ ] Update source module READMEs or add an ADR for the new canonical artifact
+- [x] Update source module READMEs or add an ADR for the new canonical artifact
   fact, derived input, and explicit resolved-input exception model.
-- [ ] Update this plan with implementation notes, deviations, and any unresolved
+- [x] Update this plan with implementation notes, deviations, and any unresolved
   follow-ups discovered during execution.
 - [ ] Build release binaries and frontend after all slices pass.
 
@@ -509,7 +509,9 @@ retention with lazy body reads.
 - `npm run build`
 - `bash launcher.sh --build-release`
 
-**Status:** Not started
+**Status:** In progress. Source README notes now document artifact fact versus
+payload identity, resolved node I/O as the I/O Inspector contract, and
+payload-identity retention cleanup behavior.
 
 ## Execution Notes
 
@@ -575,6 +577,10 @@ retention with lazy body reads.
   projection `event_seq` to multiple rows. Workflow-service storage assertions
   now check retained body bytes so workflow output aliases cannot silently
   multiply retained payload storage.
+- 2026-05-09: Documentation slice updated diagnostics-ledger, workflow-service,
+  and workbench README notes so future changes preserve fact identity,
+  payload/read-target identity, resolved-node-I/O ownership, and frontend
+  presentation boundaries.
 
 ## Commit Cadence Notes
 
@@ -672,6 +678,9 @@ types must be edited serially or by one explicit owner.
 - Retention/storage slice: diagnostics cleanup expires shared payload aliases
   once per payload identity, and workflow-service retained-I/O tests assert
   retained body byte counts in addition to body counts.
+- Documentation slice: source README notes describe the canonical artifact
+  fact/payload identity model, backend resolved-node-I/O contract, and
+  frontend display boundary.
 
 ### Deviations
 

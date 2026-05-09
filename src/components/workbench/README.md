@@ -152,18 +152,20 @@ transient UI state without becoming backend scheduler policy.
 - I/O Inspector node grouping and endpoint filters must use producer and
   consumer projection fields. Components may send backend producer/consumer
   filters, but must not infer endpoint ownership from raw payload JSON.
-- I/O Inspector selected-backend filtering must pass `selected_backend_key` to
-  the backend projection query instead of filtering client-side artifact rows.
+- I/O Inspector selected-backend filtering should be backend-owned when the
+  backend contract accepts the filter. Until then, client-side filtering must
+  only filter backend-returned run-inspection rows and must not create new
+  persisted semantics.
 - Library active-run highlighting must use explicit projection facts, not
   inferred workflow or asset name matches.
 - I/O Inspector run graph snapshots are read-only projection views. The
   selected snapshot node is transient UI state used only to filter projected
   artifact rows.
 - I/O Inspector run graph snapshots consume `workflowService.queryRunInspection`
-  for graph and node-status facts and `workflowService.queryIoArtifacts` for
-  artifact facts. Presenter code may group, label, and visually order those
-  facts, but it must not invent persisted run data or projection freshness
-  state.
+  for graph, node-status, artifact fact, retention-summary, projection-state,
+  and `resolved_node_io` facts. Presenter code may group, label, and visually
+  order those facts, but it must not invent persisted run data or projection
+  freshness state.
 - Diagnostics timeline rows render typed scheduler projection summaries and
   payload availability only; detailed payload parsing belongs in backend
   projections or future typed presenters.
@@ -248,13 +250,14 @@ transient UI state without becoming backend scheduler policy.
   I/O projection freshness, not raw ledger events. Selected-run execution
   facets use `workflowService.queryNodeStatus` node status projection rows for
   node, runtime, and model version labels and filters.
-- `IoInspectorPage.svelte` reads selected-run graph and node-status facts
-  through `workflowService.queryRunInspection` and artifact metadata through
-  `workflowService.queryIoArtifacts`. Artifact retention labels come from
+- `IoInspectorPage.svelte` reads selected-run graph, node-status facts,
+  artifact metadata, resolved node I/O, and retention summaries through
+  `workflowService.queryRunInspection`. Artifact retention labels come from
   `IoArtifactProjectionRecord.retention_state`, not from `payload_ref`
   inference. Retention completeness counts come from the response
-  `retention_summary`, not from raw ledger events. Node selection filters
-  artifacts by producer and consumer projection fields.
+  `retention_summary`, not from raw ledger events. Node selection displays
+  backend `resolved_node_io` rows and maps them back to readable payload
+  artifact ids for preview/download/read actions.
 - `SettingsPage.svelte` reads and saves global ArtifactStore policy through
   `workflowService.artifactPolicy` and
   `workflowService.updateArtifactPolicy`. It also reads and saves global

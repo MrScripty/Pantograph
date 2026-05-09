@@ -239,6 +239,11 @@ with a ledger/storage failure.
   `payload_artifact_id` identifies the ArtifactStore/read target, and
   `artifact_id` remains a compatibility field until workflow-service callers
   complete the read-target cutover.
+- Multiple artifact facts may reference the same retained payload identity.
+  Retention cleanup selects one representative row per workflow-run payload
+  identity, emits one typed retention event, and applies the resulting
+  retention state to every projected fact sharing that payload. Projection rows
+  must not receive duplicate `event_seq` values for a single retention event.
 - `io_artifact_projection` and durable I/O artifact events preserve
   conversion id, conversion status, conversion command id, and per-conversion
   dependency lease attribution in format metadata when producers provide those
