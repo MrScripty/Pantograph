@@ -639,9 +639,9 @@ without lock errors.
       receiving an event.
 - [x] Add a retention cleanup regression showing affected run/artifact
       projections are invalidated.
-- [ ] Run full affected Rust and frontend verification.
-- [ ] Build release artifacts.
-- [ ] Update completion summary with exact validation results.
+- [x] Run full affected Rust and frontend verification.
+- [x] Build release artifacts.
+- [x] Update completion summary with exact validation results.
 
 **Verification:**
 
@@ -652,11 +652,11 @@ without lock errors.
 - `npm run test:frontend`
 - `bash launcher.sh --build-release`
 
-**Status:** In progress. Focused acceptance coverage now includes
+**Status:** Completed 2026-05-09. Focused acceptance coverage includes
 workflow-service append-refresh-query and contention regressions, Tauri bridge
 burst coalescing, frontend missed-event recovery, and retention cleanup
-projection coverage. Remaining work is full affected verification, release
-artifact build, and final validation summary.
+projection coverage. Full affected Rust/frontend verification passed, and the
+release build produced `/target/release/pantograph`.
 
 ## Ownership And Lifecycle
 
@@ -803,6 +803,10 @@ parallel by multiple workers.
   workflow-service append-refresh-query and contention regressions, and reused
   validated bridge coalescing, frontend missed-event recovery, and retention
   cleanup projection regressions as the burst/missed/cleanup acceptance checks.
+- 2026-05-09: Milestone 9 completed. Full affected validation passed:
+  diagnostics ledger tests, workflow-service diagnostics tests, Tauri check,
+  TypeScript typecheck, frontend test suite, and release build. Release binary
+  was built at `target/release/pantograph`.
 
 ## Commit Cadence Notes
 
@@ -831,6 +835,8 @@ parallel by multiple workers.
 - Milestone 6: backend push invalidation transport and lifecycle ownership.
 - Milestone 9 partial: cross-layer append-refresh-query, contention, burst,
   missed-event, and retention cleanup acceptance coverage.
+- Milestone 9: cross-layer acceptance, full affected verification, and release
+  artifact build.
 
 ### Deviations
 
@@ -838,7 +844,10 @@ parallel by multiple workers.
 
 ### Follow-Ups
 
-- None yet.
+- Existing warnings remain in `src-tauri` for dead code in legacy workflow
+  diagnostics/runtime paths and a Tauri bundle identifier warning because
+  `com.pantograph.app` ends with `.app`; these were not introduced by this
+  plan.
 
 ### Verification Summary
 
@@ -860,6 +869,14 @@ parallel by multiple workers.
 - `cargo test -p pantograph-workflow-service workflow_diagnostics_append_refresh_query_contention_uses_single_ledger_owner`
 - `cargo test --manifest-path src-tauri/Cargo.toml coalesce_projection_refresh_requests_merges_same_scope`
 - `cargo test -p pantograph-workflow-service workflow_retention_cleanup_expires_artifacts_through_projection`
+- `cargo test -p pantograph-diagnostics-ledger` (85 passed)
+- `cargo test -p pantograph-workflow-service diagnostics` (60 unit tests and
+  1 contract snapshot passed)
+- `cargo check --manifest-path src-tauri/Cargo.toml` (passed with existing
+  dead-code warnings)
+- `npm run typecheck`
+- `npm run test:frontend` (422 passed)
+- `bash launcher.sh --build-release` (passed; built `target/release/pantograph`)
 
 ### Traceability Links
 
