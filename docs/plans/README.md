@@ -18,6 +18,7 @@ repository root.
 | `scheduler-only-workflow-execution/` | Focused plan for scheduler-owned workflow execution behavior. |
 | `workflow-duration-expectations/` | Focused plan for workflow timing expectation behavior. |
 | `workflow-run-identity-redesign/` | Focused plan for workflow run identity redesign. |
+| `workflow-run-node-io-streaming-runtime-settings/` | Focused repair plan for retained per-node workflow run IO, text generation streaming visibility, and backend-owned inference runtime device settings. |
 
 ## Problem
 
