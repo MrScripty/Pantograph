@@ -13,6 +13,9 @@ pub(super) fn translated_workflow_run_id(event: &TauriWorkflowEvent) -> &str {
         | TauriWorkflowEvent::NodeStarted {
             workflow_run_id, ..
         }
+        | TauriWorkflowEvent::NodeInputsResolved {
+            workflow_run_id, ..
+        }
         | TauriWorkflowEvent::NodeProgress {
             workflow_run_id, ..
         }
@@ -108,6 +111,26 @@ pub(super) fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWo
             node_type: String::new(),
             workflow_run_id,
         },
+
+        node_engine::WorkflowEvent::TaskInputsResolved {
+            task_id,
+            execution_id: workflow_run_id,
+            input,
+            cache_status,
+            ..
+        } => {
+            let inputs: HashMap<String, PortValue> = input
+                .and_then(|value| value.as_object().cloned())
+                .map(|object| object.into_iter().collect())
+                .unwrap_or_default();
+
+            TauriWorkflowEvent::NodeInputsResolved {
+                node_id: task_id,
+                inputs,
+                cache_status,
+                workflow_run_id,
+            }
+        }
 
         node_engine::WorkflowEvent::TaskCompleted {
             task_id,

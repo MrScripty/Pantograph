@@ -1147,6 +1147,7 @@ export interface WorkflowFile {
 export type WorkflowEventType =
   | 'Started'
   | 'NodeStarted'
+  | 'NodeInputsResolved'
   | 'NodeProgress'
   | 'NodeStream'
   | 'NodeCompleted'
@@ -1174,6 +1175,12 @@ export interface WorkflowEventData {
   NodeStarted: WorkflowEventOwnershipData & {
     node_id: string;
     node_type: string;
+    workflow_run_id?: string;
+  };
+  NodeInputsResolved: WorkflowEventOwnershipData & {
+    node_id: string;
+    inputs: Record<string, unknown>;
+    cache_status?: 'fresh_execution' | 'cache_hit' | 'cache_invalidated' | null;
     workflow_run_id?: string;
   };
   NodeProgress: WorkflowEventOwnershipData & {

@@ -85,6 +85,71 @@ fn translated_task_progress_event_updates_backend_diagnostics_projection() {
 }
 
 #[test]
+fn translated_task_inputs_resolved_event_preserves_inputs_without_trace_noise() {
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::WorkflowStarted {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            occurred_at_ms: Some(10),
+        },
+    );
+
+    let (event, diagnostics_event) = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::TaskInputsResolved {
+            task_id: "node-a".to_string(),
+            execution_id: "exec-1".to_string(),
+            input: Some(serde_json::json!({
+                "prompt": "hello",
+                "temperature": 0.2,
+            })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::CacheHit),
+            occurred_at_ms: Some(21),
+        },
+    );
+
+    match &event {
+        TauriWorkflowEvent::NodeInputsResolved {
+            node_id,
+            inputs,
+            cache_status,
+            workflow_run_id,
+        } => {
+            assert_eq!(node_id, "node-a");
+            assert_eq!(inputs["prompt"], serde_json::json!("hello"));
+            assert_eq!(inputs["temperature"], serde_json::json!(0.2));
+            assert_eq!(
+                *cache_status,
+                Some(node_engine::TaskExecutionCacheStatus::CacheHit)
+            );
+            assert_eq!(workflow_run_id, "exec-1");
+        }
+        other => panic!("unexpected event: {other:?}"),
+    }
+
+    assert_eq!(translated_workflow_run_id(&event), "exec-1");
+    let serialized = serde_json::to_value(&event).expect("serialize event");
+    assert_eq!(serialized["type"], "NodeInputsResolved");
+    assert_eq!(serialized["data"]["inputs"]["prompt"], "hello");
+    assert_eq!(serialized["data"]["cache_status"], "cache_hit");
+    assert_eq!(
+        serialized["data"]["ownership"]["eventWorkflowRunId"],
+        "exec-1"
+    );
+
+    match diagnostics_event {
+        TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
+            let trace = snapshot.runs_by_id.get("exec-1").expect("trace");
+            assert_eq!(trace.event_count, 1);
+            assert!(trace.nodes.get("node-a").is_none());
+        }
+        other => panic!("unexpected diagnostics event: {other:?}"),
+    }
+}
+
+#[test]
 fn translated_task_progress_detail_updates_backend_diagnostics_projection() {
     let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
     let _ = translate_node_event_with_diagnostics(
@@ -422,6 +487,7 @@ fn translated_parallel_root_events_preserve_overlapping_trace_timing() {
             task_id: "left".to_string(),
             execution_id: "exec-parallel".to_string(),
             output: Some(serde_json::json!({ "out": "left" })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
             occurred_at_ms: Some(1_040),
         },
     );
@@ -431,6 +497,7 @@ fn translated_parallel_root_events_preserve_overlapping_trace_timing() {
             task_id: "right".to_string(),
             execution_id: "exec-parallel".to_string(),
             output: Some(serde_json::json!({ "out": "right" })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
             occurred_at_ms: Some(1_060),
         },
     );
@@ -506,6 +573,7 @@ fn translated_parallel_waiting_event_preserves_waiting_pause_duration() {
             task_id: "left".to_string(),
             execution_id: "exec-parallel".to_string(),
             output: Some(serde_json::json!({ "out": "left" })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
             occurred_at_ms: Some(2_040),
         },
     );

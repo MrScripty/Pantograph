@@ -48,6 +48,8 @@ export function applyWorkflowExecutionEvent({
       workflow.setNodeExecutionState(data.node_id, 'running');
       return executionEventResult(ownership.activeWorkflowRunId, false, true, false);
     }
+    case 'NodeInputsResolved':
+      return executionEventResult(ownership.activeWorkflowRunId, waitingForInput, true, false);
     case 'IncrementalExecutionStarted': {
       const data = event.data as WorkflowEventData['IncrementalExecutionStarted'];
       for (const taskId of data.task_ids) {

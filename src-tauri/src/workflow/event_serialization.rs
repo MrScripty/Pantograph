@@ -53,6 +53,9 @@ impl WorkflowEvent {
             | Self::NodeStarted {
                 workflow_run_id, ..
             }
+            | Self::NodeInputsResolved {
+                workflow_run_id, ..
+            }
             | Self::NodeProgress {
                 workflow_run_id, ..
             }
@@ -134,6 +137,20 @@ impl WorkflowEvent {
                     "progress": progress,
                     "message": message,
                     "detail": detail,
+                    "workflow_run_id": workflow_run_id,
+                }),
+            ),
+            Self::NodeInputsResolved {
+                node_id,
+                inputs,
+                cache_status,
+                workflow_run_id,
+            } => (
+                "NodeInputsResolved",
+                json!({
+                    "node_id": node_id,
+                    "inputs": inputs,
+                    "cache_status": cache_status,
                     "workflow_run_id": workflow_run_id,
                 }),
             ),

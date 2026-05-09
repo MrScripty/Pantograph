@@ -278,6 +278,7 @@ fn node_engine_parallel_root_trace_projection_tracks_overlapping_node_timing() {
             task_id: "left".to_string(),
             execution_id: "exec-parallel".to_string(),
             output: Some(serde_json::json!({ "out": "left" })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
             occurred_at_ms: Some(1_040),
         },
     );
@@ -287,6 +288,7 @@ fn node_engine_parallel_root_trace_projection_tracks_overlapping_node_timing() {
             task_id: "right".to_string(),
             execution_id: "exec-parallel".to_string(),
             output: Some(serde_json::json!({ "out": "right" })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
             occurred_at_ms: Some(1_060),
         },
     );
@@ -354,6 +356,7 @@ fn node_engine_parallel_waiting_trace_projection_tracks_waiting_state() {
             task_id: "left".to_string(),
             execution_id: "exec-parallel".to_string(),
             output: Some(serde_json::json!({ "out": "left" })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
             occurred_at_ms: Some(2_040),
         },
     );

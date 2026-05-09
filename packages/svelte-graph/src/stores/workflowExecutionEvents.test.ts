@@ -120,6 +120,33 @@ test('applyWorkflowExecutionEvent propagates completed outputs to connected targ
   assert.equal(result.shouldCleanup, false);
 });
 
+test('applyWorkflowExecutionEvent accepts resolved input events without mutating live node state', () => {
+  const { result, stateCalls, updateCalls } = applyEvent(
+    {
+      type: 'NodeInputsResolved',
+      data: {
+        node_id: 'producer',
+        inputs: {
+          prompt: 'hello',
+        },
+        cache_status: 'cache_hit',
+        workflow_run_id: 'run-1',
+      },
+    },
+    {
+      activeWorkflowRunId: 'run-1',
+      waitingForInput: true,
+    },
+  );
+
+  assert.deepEqual(stateCalls, []);
+  assert.deepEqual(updateCalls, []);
+  assert.equal(result.activeWorkflowRunId, 'run-1');
+  assert.equal(result.waitingForInput, true);
+  assert.equal(result.handled, true);
+  assert.equal(result.shouldCleanup, false);
+});
+
 test('applyWorkflowExecutionEvent marks waiting nodes and keeps waiting state true', () => {
   const { result, stateCalls } = applyEvent({
     type: 'WaitingForInput',

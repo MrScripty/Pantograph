@@ -206,6 +206,9 @@ pub(crate) fn event_workflow_run_id(event: &WorkflowEvent) -> Option<String> {
         | WorkflowEvent::NodeStarted {
             workflow_run_id, ..
         }
+        | WorkflowEvent::NodeInputsResolved {
+            workflow_run_id, ..
+        }
         | WorkflowEvent::NodeProgress {
             workflow_run_id, ..
         }
@@ -313,6 +316,7 @@ fn event_type_name(event: &WorkflowEvent) -> &'static str {
     match event {
         WorkflowEvent::Started { .. } => "Started",
         WorkflowEvent::NodeStarted { .. } => "NodeStarted",
+        WorkflowEvent::NodeInputsResolved { .. } => "NodeInputsResolved",
         WorkflowEvent::NodeProgress { .. } => "NodeProgress",
         WorkflowEvent::NodeStream { .. } => "NodeStream",
         WorkflowEvent::NodeCompleted { .. } => "NodeCompleted",
@@ -349,6 +353,7 @@ fn event_workflow_id(event: &WorkflowEvent) -> Option<String> {
 fn event_node_id(event: &WorkflowEvent) -> Option<String> {
     match event {
         WorkflowEvent::NodeStarted { node_id, .. }
+        | WorkflowEvent::NodeInputsResolved { node_id, .. }
         | WorkflowEvent::NodeProgress { node_id, .. }
         | WorkflowEvent::NodeStream { node_id, .. }
         | WorkflowEvent::NodeCompleted { node_id, .. }
@@ -390,6 +395,28 @@ fn event_payload(event: &WorkflowEvent) -> serde_json::Value {
             return serde_json::json!({
                 "node_id": node_id,
                 "outputs": outputs,
+                "workflow_run_id": workflow_run_id,
+            });
+        }
+        WorkflowEvent::NodeInputsResolved {
+            node_id,
+            inputs,
+            cache_status,
+            workflow_run_id,
+        } => {
+            let inputs = inputs
+                .iter()
+                .map(|(port, value)| {
+                    (
+                        port.clone(),
+                        diagnostics_safe_value_for_key(Some(port), value),
+                    )
+                })
+                .collect::<serde_json::Map<_, _>>();
+            return serde_json::json!({
+                "node_id": node_id,
+                "inputs": inputs,
+                "cache_status": cache_status,
                 "workflow_run_id": workflow_run_id,
             });
         }
@@ -578,6 +605,9 @@ fn summarize_event(event: &WorkflowEvent) -> String {
             format!("Workflow started ({} nodes)", node_count)
         }
         WorkflowEvent::NodeStarted { node_id, .. } => format!("Node {} started", node_id),
+        WorkflowEvent::NodeInputsResolved { node_id, .. } => {
+            format!("Node {} inputs resolved", node_id)
+        }
         WorkflowEvent::NodeProgress {
             node_id,
             progress,

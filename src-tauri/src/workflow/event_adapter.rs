@@ -708,6 +708,7 @@ fn node_engine_execution_id(event: &node_engine::WorkflowEvent) -> &str {
         | node_engine::WorkflowEvent::WorkflowCancelled { execution_id, .. }
         | node_engine::WorkflowEvent::WaitingForInput { execution_id, .. }
         | node_engine::WorkflowEvent::TaskStarted { execution_id, .. }
+        | node_engine::WorkflowEvent::TaskInputsResolved { execution_id, .. }
         | node_engine::WorkflowEvent::TaskCompleted { execution_id, .. }
         | node_engine::WorkflowEvent::TaskFailed { execution_id, .. }
         | node_engine::WorkflowEvent::TaskProgress { execution_id, .. }
@@ -755,6 +756,7 @@ fn workflow_event_with_id(
             *event_id = workflow_id.to_string();
         }
         node_engine::WorkflowEvent::TaskStarted { .. }
+        | node_engine::WorkflowEvent::TaskInputsResolved { .. }
         | node_engine::WorkflowEvent::TaskCompleted { .. }
         | node_engine::WorkflowEvent::TaskFailed { .. }
         | node_engine::WorkflowEvent::TaskProgress { .. }

@@ -73,6 +73,18 @@ pub enum WorkflowEvent {
         workflow_run_id: String,
     },
 
+    /// A node's execution inputs have been resolved.
+    NodeInputsResolved {
+        /// ID of the node whose inputs were resolved
+        node_id: String,
+        /// Resolved input values by port
+        inputs: HashMap<String, PortValue>,
+        /// Fresh execution or cache-hit evidence for the input snapshot
+        cache_status: Option<node_engine::TaskExecutionCacheStatus>,
+        /// Unique identifier for this execution
+        workflow_run_id: String,
+    },
+
     /// Progress update from a node (for long-running operations)
     NodeProgress {
         /// ID of the node reporting progress

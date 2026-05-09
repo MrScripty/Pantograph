@@ -584,6 +584,9 @@ retention and projection systems.
   inspection DTOs.
 - [x] Project node IO through the existing `workflow_io_artifact_query` and
   run graph artifact-summary path before extending run-detail DTOs.
+- [x] Carry resolved-input evidence through Tauri and frontend event transport
+  as a handled no-op live event so execution ownership, diagnostics overlays,
+  and consumer event stores stay exhaustive without redefining retained IO.
 - [ ] Do not add node IO fields to `RunDetailProjectionRecord` unless the
   implementation proves a composite DTO is needed for read performance or API
   stability.
@@ -917,13 +920,24 @@ coverage.
   and `RunGraphSnapshot` to show node I/O artifact summaries from the backend
   projection. No `RunDetailProjectionRecord` expansion is needed for the
   current node I/O summary path.
+- 2026-05-09: Resolved-input transport slice added Tauri/frontend
+  `NodeInputsResolved` handling for node-engine `TaskInputsResolved` events.
+  The event is serialized with ownership projection, participates in backend
+  diagnostics overlay summarization, and is explicitly handled as a frontend
+  no-op for live node state so retained input evidence can flow without
+  confusing it with progress, stream, or completion output.
+- 2026-05-09: Verification passed:
+  `node --experimental-strip-types --test packages/svelte-graph/src/stores/workflowExecutionEvents.test.ts`,
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter::tests::translation_projection::translated_task_inputs_resolved_event_preserves_inputs_without_trace_noise`,
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter::tests::`,
+  and `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics::tests::`.
 
 ## Follow-Up Findings
 
 - Full per-node input inspection now has a node-engine/embedded-runtime event
-  boundary for resolved node inputs. Remaining work is graph-page query
-  integration, preview limits, and descriptor behavior rather than event
-  availability.
+  boundary for resolved node inputs and a Tauri/frontend transport path.
+  Remaining work is preview limits and descriptor behavior rather than event
+  availability or graph-page summary query integration.
 - Full per-node output inspection for every executed or cached intermediate
   node should now use the existing node execution event/ledger path. Durable
   artifact/run-detail projections still need an explicit cache-status surface

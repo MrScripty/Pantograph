@@ -86,6 +86,7 @@ pub(crate) fn node_engine_workflow_trace_event(
             node_id: task_id.clone(),
             node_type: None,
         },
+        node_engine::WorkflowEvent::TaskInputsResolved { .. } => return None,
         node_engine::WorkflowEvent::TaskCompleted {
             task_id,
             execution_id: workflow_run_id,
@@ -169,6 +170,7 @@ pub(crate) fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTrac
             node_id: node_id.clone(),
             node_type: (!node_type.trim().is_empty()).then(|| node_type.clone()),
         }),
+        WorkflowEvent::NodeInputsResolved { .. } => None,
         WorkflowEvent::NodeProgress {
             node_id,
             workflow_run_id,
