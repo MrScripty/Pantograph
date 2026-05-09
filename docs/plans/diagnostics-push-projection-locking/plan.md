@@ -582,7 +582,7 @@ event-driven refreshes on affected pages.
       respond to run-list and scheduler-timeline invalidations.
 - [x] Update `NetworkPage.svelte` selected-run timeline/node-status refreshes
       and library-usage refreshes to respond to invalidations.
-- [ ] Update `IoInspectorPage.svelte` selected-run graph/node/artifact refresh
+- [x] Update `IoInspectorPage.svelte` selected-run graph/node/artifact refresh
       behavior to respond to invalidations.
 - [ ] Update `LibraryPage.svelte` library-usage refresh behavior to respond to
       library-usage invalidations.
@@ -609,6 +609,8 @@ list, scheduler timeline, run-detail, and I/O artifact invalidations while
 preserving its active-run refreshes, manual refreshes, and existing workflow
 event compatibility path. `NetworkPage.svelte` now subscribes to scheduler
 timeline, node-status, and library-usage invalidations for the selected run.
+`IoInspectorPage.svelte` now subscribes to run-detail, node-status, and
+I/O-artifact invalidations for the selected run.
 
 ### Milestone 9: Cross-Layer Acceptance And Release Verification
 

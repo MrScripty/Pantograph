@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import {
     Braces,
     Check,
@@ -22,6 +22,7 @@
     ProjectionStateRecord,
     ResolvedNodeIoRecord,
   } from '../../services/diagnostics/types';
+  import { subscribeDiagnosticsProjectionInvalidations } from '../../services/workflow/WorkflowProjectionSubscriptionService';
   import type {
     WorkflowArtifactBodyRead,
     WorkflowArtifactStreamBodyRead,
@@ -93,6 +94,7 @@
   let artifactAccessErrors = $state<Record<string, string>>({});
   let artifactConsumeMessages = $state<Record<string, string>>({});
   let inspectorRequestSerial = 0;
+  let projectionUnsubscribe: (() => void) | null = null;
 
   let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(artifacts));
   let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
@@ -119,6 +121,10 @@
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
+  }
+
+  function recordSubscriptionError(subscriptionError: unknown): void {
+    inspectorError = formatWorkflowCommandError(subscriptionError);
   }
 
   function formatTimestamp(value: number): string {
@@ -471,6 +477,30 @@
     const runId = activeRunId();
     const backendFilterValue = selectedBackendFilter.trim();
     void refreshInspector(runId, backendFilterValue);
+  });
+
+  onMount(() => {
+    let disposed = false;
+    void subscribeDiagnosticsProjectionInvalidations({
+      projections: ['run_detail', 'node_status', 'io_artifact'],
+      getActiveRunId: activeRunId,
+      refresh: () => refreshInspector(),
+      onRefreshError: recordSubscriptionError,
+    })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        projectionUnsubscribe = nextUnlisten;
+      })
+      .catch(recordSubscriptionError);
+
+    return () => {
+      disposed = true;
+      projectionUnsubscribe?.();
+      projectionUnsubscribe = null;
+    };
   });
 
   onDestroy(() => {
