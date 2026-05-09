@@ -307,8 +307,9 @@ before changing storage behavior.
 `artifact_fact_id`, `payload_artifact_id`, and `logical_payload_lineage_id`
 fields and can retain multiple projected facts for one payload id. Workflow
 service and embedded-runtime artifact emissions now populate those fields.
-ArtifactStore read APIs, Tauri command payloads, and frontend read actions
-still need the full payload-id cutover.
+I/O Inspector read, preview, stream, download, and consume actions now prefer
+`payload_artifact_id` when present. ArtifactStore read APIs and Tauri command
+payload field names still need the full payload-id cutover.
 
 ### Milestone 3: Lineage-Scoped ArtifactStore Reuse
 
@@ -503,6 +504,10 @@ for large payloads.
   `artifact_fact_id`, `payload_artifact_id`, and
   `logical_payload_lineage_id`. Existing `artifact_id` remains the read-target
   compatibility field until the ArtifactStore/API cutover lands.
+- 2026-05-09: Frontend read-target slice updated I/O Inspector actions to route
+  descriptor, preview, stream, download, and consume requests through
+  `payload_artifact_id` when present, falling back to `artifact_id` for older
+  records.
 
 ## Commit Cadence Notes
 
@@ -577,6 +582,8 @@ types must be edited serially or by one explicit owner.
   node I/O artifact events populate artifact fact, payload artifact, and
   logical lineage identifiers while preserving the existing `artifact_id` read
   target for current callers.
+- Frontend read-target slice: I/O Inspector now uses `payload_artifact_id` as
+  the retained body target when artifact records expose it.
 
 ### Deviations
 
@@ -603,6 +610,9 @@ types must be edited serially or by one explicit owner.
   - `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
   - `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts`
   - `cargo check -p pantograph-workflow-service -p pantograph-embedded-runtime`
+- 2026-05-09:
+  - `npm run typecheck`
+  - `npm run test:frontend`
 
 ### Traceability Links
 

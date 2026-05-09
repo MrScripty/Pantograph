@@ -50,6 +50,7 @@
     formatIoArtifactRetentionStateLabel,
     formatIoArtifactRoleLabel,
     formatProjectionFreshness,
+    ioArtifactPayloadTargetId,
   } from './ioInspectorPresenters';
   import {
     buildRunGraphNodeArtifactSummaries,
@@ -207,12 +208,13 @@
   }
 
   async function readArtifactPreview(artifact: IoArtifactProjectionRecord): Promise<void> {
+    const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
     setArtifactLoading(artifact.artifact_id, true);
     setArtifactAccessError(artifact.artifact_id, null);
     try {
       await verifyArtifactReadable(artifact);
       const read = await workflowService.readArtifactBody(
-        buildIoArtifactPreviewReadRequest(artifact.artifact_id),
+        buildIoArtifactPreviewReadRequest(payloadArtifactId),
       );
       replaceArtifactBodyPreview(artifact.artifact_id, createArtifactBodyPreview(read));
     } catch (error) {
@@ -223,12 +225,13 @@
   }
 
   async function readArtifactStreamPreview(artifact: IoArtifactProjectionRecord): Promise<void> {
+    const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
     setArtifactLoading(artifact.artifact_id, true);
     setArtifactAccessError(artifact.artifact_id, null);
     try {
       await verifyArtifactStreamReadable(artifact);
       const read = await workflowService.readArtifactStream(
-        buildIoArtifactPreviewReadRequest(artifact.artifact_id),
+        buildIoArtifactPreviewReadRequest(payloadArtifactId),
       );
       replaceArtifactBodyPreview(artifact.artifact_id, createArtifactBodyPreview(read));
     } catch (error) {
@@ -239,16 +242,17 @@
   }
 
   async function downloadArtifactBody(artifact: IoArtifactProjectionRecord): Promise<void> {
+    const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
     setArtifactLoading(artifact.artifact_id, true);
     setArtifactAccessError(artifact.artifact_id, null);
     try {
       await verifyArtifactReadable(artifact);
-      const read = await workflowService.readArtifactBody({ artifact_id: artifact.artifact_id });
+      const read = await workflowService.readArtifactBody({ artifact_id: payloadArtifactId });
       const preview = createArtifactBodyPreview(read);
       const anchor = document.createElement('a');
       anchor.href = preview.objectUrl;
       anchor.download = buildIoArtifactDownloadFilename({
-        artifact_id: artifact.artifact_id,
+        artifact_id: payloadArtifactId,
         media_type: read.response.media_type || artifact.media_type,
         format: artifact.format,
         payload_kind: artifact.payload_kind,
@@ -269,12 +273,13 @@
   }
 
   async function acknowledgeArtifactConsumed(artifact: IoArtifactProjectionRecord): Promise<void> {
+    const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
     setArtifactConsumeLoading(artifact.artifact_id, true);
     setArtifactAccessError(artifact.artifact_id, null);
     artifactConsumeMessages = withoutArtifactKey(artifactConsumeMessages, artifact.artifact_id);
     try {
       const response = await workflowService.acknowledgeArtifactConsumed({
-        artifact_id: artifact.artifact_id,
+        artifact_id: payloadArtifactId,
         consumer_id: 'pantograph-gui-io-inspector',
       });
       if (!response.retained_after_consume) {
@@ -295,7 +300,9 @@
   }
 
   async function verifyArtifactReadable(artifact: IoArtifactProjectionRecord): Promise<void> {
-    const response = await workflowService.artifactDescriptor({ artifact_id: artifact.artifact_id });
+    const response = await workflowService.artifactDescriptor({
+      artifact_id: ioArtifactPayloadTargetId(artifact),
+    });
     const descriptor = response.artifact;
     if (!descriptor) {
       throw new Error('Artifact descriptor unavailable');
@@ -314,7 +321,7 @@
 
   async function verifyArtifactStreamReadable(artifact: IoArtifactProjectionRecord): Promise<void> {
     const descriptor = await workflowService
-      .artifactDescriptor({ artifact_id: artifact.artifact_id })
+      .artifactDescriptor({ artifact_id: ioArtifactPayloadTargetId(artifact) })
       .then((response) => response.artifact ?? null);
     if (!descriptor) {
       throw new Error('Artifact descriptor is unavailable');

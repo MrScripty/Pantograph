@@ -27,6 +27,7 @@ import {
   formatIoArtifactRetentionStateLabel,
   formatIoArtifactRoleLabel,
   formatProjectionFreshness,
+  ioArtifactPayloadTargetId,
   isWorkflowInputArtifact,
   isWorkflowOutputArtifact,
 } from './ioInspectorPresenters.ts';
@@ -79,6 +80,29 @@ test('artifact previews use bounded byte range requests and expose partial state
       complete: true,
     }),
     'text/plain · 128 B',
+  );
+});
+
+test('ioArtifactPayloadTargetId prefers retained payload identity over fact identity', () => {
+  assert.equal(
+    ioArtifactPayloadTargetId({
+      artifact_id: 'fact-node-output',
+      payload_artifact_id: 'payload-node-output',
+    }),
+    'payload-node-output',
+  );
+  assert.equal(
+    ioArtifactPayloadTargetId({
+      artifact_id: 'fact-node-output',
+      payload_artifact_id: '   ',
+    }),
+    'fact-node-output',
+  );
+  assert.equal(
+    ioArtifactPayloadTargetId({
+      artifact_id: 'legacy-artifact',
+    }),
+    'legacy-artifact',
   );
 });
 

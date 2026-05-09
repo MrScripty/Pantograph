@@ -71,6 +71,13 @@ export interface IoArtifactTextPreview {
   truncated: boolean;
 }
 
+export function ioArtifactPayloadTargetId(
+  artifact: Pick<IoArtifactProjectionRecord, 'artifact_id' | 'payload_artifact_id'>,
+): string {
+  const payloadArtifactId = artifact.payload_artifact_id?.trim();
+  return payloadArtifactId && payloadArtifactId.length > 0 ? payloadArtifactId : artifact.artifact_id;
+}
+
 type IoArtifactNodeGroupSource = Pick<
   IoArtifactProjectionRecord,
   | 'node_id'
