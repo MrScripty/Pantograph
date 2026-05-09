@@ -51,7 +51,12 @@
     formatIoArtifactRetentionStateLabel,
     formatIoArtifactRoleLabel,
     formatProjectionFreshness,
+    formatResolvedNodeIoDirectionLabel,
+    formatResolvedNodeIoProvenance,
+    formatResolvedNodeIoResolutionLabel,
     ioArtifactPayloadTargetId,
+    isNormalResolvedNodeIoDisplayRow,
+    type ResolvedNodeIoDisplayRow,
   } from './ioInspectorPresenters';
   import {
     buildRunGraphNodeArtifactSummaries,
@@ -96,7 +101,7 @@
       ? buildResolvedNodeIoDisplayRows(
           resolvedNodeIo.filter((record) => record.node_id === selectedNodeId && record.direction === 'input'),
           artifacts,
-        )
+        ).filter(isNormalResolvedNodeIoDisplayRow).filter(hasResolvedNodeIoArtifact)
       : [],
   );
   let selectedOutputRows = $derived(
@@ -104,16 +109,10 @@
       ? buildResolvedNodeIoDisplayRows(
           resolvedNodeIo.filter((record) => record.node_id === selectedNodeId && record.direction === 'output'),
           artifacts,
-        )
+        ).filter(isNormalResolvedNodeIoDisplayRow).filter(hasResolvedNodeIoArtifact)
       : [],
   );
-  let selectedInputArtifacts = $derived(
-    selectedInputRows.map((row) => row.artifact).filter(isPresentArtifact),
-  );
-  let selectedOutputArtifacts = $derived(
-    selectedOutputRows.map((row) => row.artifact).filter(isPresentArtifact),
-  );
-  let selectedArtifacts = $derived([...selectedOutputArtifacts, ...selectedInputArtifacts]);
+  let selectedRows = $derived([...selectedOutputRows, ...selectedInputRows]);
   let summarizedArtifactCount = $derived(
     retentionSummary.reduce((total, item) => total + item.artifact_count, 0),
   );
@@ -212,10 +211,12 @@
     return artifactNodeId ?? nodeIds[0] ?? null;
   }
 
-  function isPresentArtifact(
-    artifact: IoArtifactProjectionRecord | null,
-  ): artifact is IoArtifactProjectionRecord {
-    return artifact !== null;
+  function hasResolvedNodeIoArtifact(
+    row: ResolvedNodeIoDisplayRow<IoArtifactProjectionRecord>,
+  ): row is ResolvedNodeIoDisplayRow<IoArtifactProjectionRecord> & {
+    artifact: IoArtifactProjectionRecord;
+  } {
+    return row.artifact !== null;
   }
 
   function filterResolvedNodeIoByArtifacts(
@@ -580,10 +581,10 @@
           {#if selectedNodeId}
             <div class="mt-3 flex flex-wrap gap-2 text-xs">
               <span class="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-neutral-300">
-                Outputs {selectedOutputArtifacts.length}
+                Outputs {selectedOutputRows.length}
               </span>
               <span class="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-neutral-300">
-                Inputs {selectedInputArtifacts.length}
+                Inputs {selectedInputRows.length}
               </span>
             </div>
           {/if}
@@ -592,11 +593,12 @@
         <div class="min-h-0 overflow-auto p-4">
           {#if !selectedNodeId}
             <div class="text-sm text-neutral-500">Select a node in the run snapshot to inspect retained I/O.</div>
-          {:else if selectedArtifacts.length === 0}
+          {:else if selectedRows.length === 0}
             <div class="text-sm text-neutral-500">No retained artifact metadata for the selected node.</div>
           {:else}
             <div class="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
-              {#each selectedArtifacts as artifact (artifact.event_id)}
+              {#each selectedRows as row (`${row.nodeIo.direction}:${row.nodeIo.node_id}:${row.nodeIo.port_id}:${row.artifact.event_id}`)}
+                {@const artifact = row.artifact}
                 {@const renderer = buildIoArtifactRendererSummary(artifact)}
                 {@const descriptorRows = buildIoArtifactDescriptorMetadataRows(artifact)}
                 {@const bodyPreview = artifactBodyPreviews[artifact.artifact_id]}
@@ -611,6 +613,9 @@
                           artifact.media_type ?? artifact.format?.media_type,
                           artifact.payload_kind,
                         )}
+                      </div>
+                      <div class="mt-1 text-xs text-neutral-500">
+                        {formatResolvedNodeIoResolutionLabel(row.nodeIo.resolution)} · {formatResolvedNodeIoProvenance(row.nodeIo)}
                       </div>
                     </div>
                     <span class="shrink-0 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
@@ -754,6 +759,16 @@
                       <dd class="mt-0.5 text-neutral-200">{formatIoArtifactBytes(artifact.size_bytes)}</dd>
                     </div>
                     <div>
+                      <dt class="text-neutral-500">Direction</dt>
+                      <dd class="mt-0.5 text-neutral-200">{formatResolvedNodeIoDirectionLabel(row.nodeIo.direction)}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-neutral-500">Port</dt>
+                      <dd class="mt-0.5 truncate font-mono text-neutral-200" title={row.nodeIo.port_id}>
+                        {row.nodeIo.port_id}
+                      </dd>
+                    </div>
+                    <div>
                       <dt class="text-neutral-500">Producer</dt>
                       <dd class="mt-0.5 truncate text-neutral-200" title={formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}>
                         {formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}
@@ -779,6 +794,12 @@
                       <dt class="text-neutral-500">Model</dt>
                       <dd class="mt-0.5 truncate text-neutral-200" title={artifact.model_id ?? ''}>
                         {formatIoArtifactDetailValue(artifact.model_id)}
+                      </dd>
+                    </div>
+                    <div class="col-span-2">
+                      <dt class="text-neutral-500">Provenance</dt>
+                      <dd class="mt-0.5 truncate text-neutral-200" title={formatResolvedNodeIoProvenance(row.nodeIo)}>
+                        {formatResolvedNodeIoProvenance(row.nodeIo)}
                       </dd>
                     </div>
                     <div class="col-span-2">

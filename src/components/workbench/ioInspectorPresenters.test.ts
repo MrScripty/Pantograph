@@ -28,7 +28,11 @@ import {
   formatIoArtifactRetentionStateLabel,
   formatIoArtifactRoleLabel,
   formatProjectionFreshness,
+  formatResolvedNodeIoDirectionLabel,
+  formatResolvedNodeIoProvenance,
+  formatResolvedNodeIoResolutionLabel,
   ioArtifactPayloadTargetId,
+  isNormalResolvedNodeIoDisplayRow,
   isWorkflowInputArtifact,
   isWorkflowOutputArtifact,
 } from './ioInspectorPresenters.ts';
@@ -185,6 +189,48 @@ test('resolved node io rows resolve derived inputs to the upstream retained payl
   assert.equal(rows.length, 1);
   assert.equal(rows[0].nodeIo.upstream_node_id, 'inference');
   assert.equal(rows[0].artifact?.artifact_id, 'fact-inference-output');
+});
+
+test('resolved node io presenters expose provenance and hide diagnostic data ports', () => {
+  assert.equal(formatResolvedNodeIoDirectionLabel('input'), 'Input');
+  assert.equal(formatResolvedNodeIoResolutionLabel('derived_from_edge'), 'Derived from edge');
+  assert.equal(
+    formatResolvedNodeIoProvenance({
+      port_id: 'text',
+      direction: 'input',
+      resolution: 'derived_from_edge',
+      upstream_node_id: 'inference',
+      upstream_port_id: 'response',
+    }),
+    'From inference:response',
+  );
+  assert.equal(
+    formatResolvedNodeIoProvenance({
+      port_id: 'text',
+      direction: 'output',
+      resolution: 'workflow_boundary',
+      upstream_node_id: null,
+      upstream_port_id: null,
+    }),
+    'To workflow output boundary',
+  );
+  assert.equal(
+    isNormalResolvedNodeIoDisplayRow({
+      nodeIo: {
+        node_id: 'node-a',
+        port_id: '_data',
+        direction: 'output',
+        resolution: 'produced_output',
+      },
+      artifact: {
+        artifact_id: 'artifact-data',
+        artifact_fact_id: 'artifact-data',
+        payload_artifact_id: 'artifact-data',
+        producer_port_id: '_data',
+      },
+    }),
+    false,
+  );
 });
 
 test('artifact text previews decode readable artifact families inline', () => {

@@ -107,6 +107,66 @@ export function buildResolvedNodeIoDisplayRows<Artifact extends ResolvedNodeIoAr
   }));
 }
 
+export function isNormalResolvedNodeIoDisplayRow(
+  row: Pick<ResolvedNodeIoDisplayRow<ResolvedNodeIoArtifactIdentity & Partial<IoArtifactProjectionRecord>>, 'nodeIo' | 'artifact'>,
+): boolean {
+  return ![
+    row.nodeIo.port_id,
+    row.artifact?.producer_port_id,
+    row.artifact?.consumer_port_id,
+  ].some(isDiagnosticDataPort);
+}
+
+export function formatResolvedNodeIoDirectionLabel(
+  direction: ResolvedNodeIoRecord['direction'],
+): string {
+  switch (direction) {
+    case 'input':
+      return 'Input';
+    case 'output':
+      return 'Output';
+  }
+}
+
+export function formatResolvedNodeIoResolutionLabel(
+  resolution: ResolvedNodeIoRecord['resolution'],
+): string {
+  switch (resolution) {
+    case 'produced_output':
+      return 'Produced output';
+    case 'derived_from_edge':
+      return 'Derived from edge';
+    case 'explicit_input':
+      return 'Explicit input';
+    case 'workflow_boundary':
+      return 'Workflow boundary';
+  }
+}
+
+export function formatResolvedNodeIoProvenance(
+  record: Pick<
+    ResolvedNodeIoRecord,
+    'direction' | 'resolution' | 'port_id' | 'upstream_node_id' | 'upstream_port_id'
+  >,
+): string {
+  if (record.resolution === 'derived_from_edge') {
+    return record.upstream_node_id && record.upstream_port_id
+      ? `From ${formatIoArtifactEndpointValue(record.upstream_node_id, record.upstream_port_id)}`
+      : 'From graph edge';
+  }
+  if (record.resolution === 'workflow_boundary') {
+    return record.direction === 'input' ? 'From workflow input boundary' : 'To workflow output boundary';
+  }
+  if (record.resolution === 'explicit_input') {
+    return `Resolved input on ${record.port_id}`;
+  }
+  return `Produced on ${record.port_id}`;
+}
+
+function isDiagnosticDataPort(portId: string | null | undefined): boolean {
+  return portId?.trim() === '_data';
+}
+
 function dedupeResolvedNodeIo(records: ResolvedNodeIoRecord[]): ResolvedNodeIoRecord[] {
   const recordsByLogicalPayload = new Map<string, ResolvedNodeIoRecord>();
 
