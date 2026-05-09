@@ -747,7 +747,7 @@ runtime policy into Pumas or the frontend.
 - [x] Apply `context_size` to llama-server `-c`, `gpu_layers` to llama-server
   `-ngl`, and `device` to the supported llama.cpp device argument or validated
   no-op with a diagnostic when the installed binary does not support it.
-- [ ] Define next-slice backend-owned settings: CPU threads, batch size, ubatch
+- [x] Define next-slice backend-owned settings: CPU threads, batch size, ubatch
   size, and any llama.cpp-specific validation required before exposing them.
 - [ ] Define precedence: Pumas model defaults, workflow node defaults, run
   overrides, backend validation/defaults.
@@ -1101,6 +1101,14 @@ coverage.
   `cargo test -p inference llamacpp_runtime_settings --features backend-llamacpp`,
   `cargo test -p inference start_sidecar_inference_applies_runtime_settings_to_llama_server_args --features backend-llamacpp`,
   and `cargo fmt`.
+- 2026-05-09: Llama.cpp performance-settings definition slice added
+  backend-owned optional `cpu_threads`, `batch_size`, and `ubatch_size` fields
+  to `BackendConfig` and `LlamaCppRuntimeSettings`. Zero values fail closed in
+  backend validation before runtime startup; applying these settings to
+  llama-server arguments remains a later runtime-application slice.
+- 2026-05-09: Verification passed:
+  `cargo test -p inference llamacpp_runtime_settings --features backend-llamacpp`,
+  `cargo check -p inference --features backend-llamacpp`, and `cargo fmt`.
 
 ## Follow-Up Findings
 

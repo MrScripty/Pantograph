@@ -151,7 +151,7 @@ impl InferenceBackend for LlamaCppBackend {
             });
         }
 
-        let runtime_settings = LlamaCppRuntimeSettings::from_backend_config(config);
+        let runtime_settings = LlamaCppRuntimeSettings::try_from_backend_config(config)?;
         let device_config = runtime_settings.device_config();
         let context_size = runtime_settings.context_size;
 

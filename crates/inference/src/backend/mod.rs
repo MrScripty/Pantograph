@@ -710,6 +710,12 @@ pub struct BackendConfig {
     pub gpu_layers: Option<i32>,
     /// Context size
     pub context_size: Option<u32>,
+    /// CPU threads for llama.cpp token generation.
+    pub cpu_threads: Option<u32>,
+    /// Logical llama.cpp batch size.
+    pub batch_size: Option<u32>,
+    /// Physical llama.cpp micro-batch size.
+    pub ubatch_size: Option<u32>,
     /// Embedding mode
     pub embedding_mode: bool,
     /// Reranking mode
@@ -732,6 +738,12 @@ pub struct LlamaCppRuntimeSettings {
     pub gpu_layers: i32,
     /// Effective context size used for llama-server `-c`.
     pub context_size: u32,
+    /// Optional CPU thread count for llama.cpp `-t`.
+    pub cpu_threads: Option<u32>,
+    /// Optional logical batch size for llama.cpp `-b`.
+    pub batch_size: Option<u32>,
+    /// Optional physical micro-batch size for llama.cpp `-ub`.
+    pub ubatch_size: Option<u32>,
 }
 
 impl LlamaCppRuntimeSettings {
@@ -742,7 +754,18 @@ impl LlamaCppRuntimeSettings {
             device: normalize_llamacpp_device(config.device.as_deref()),
             gpu_layers: config.gpu_layers.unwrap_or(defaults::GPU_LAYERS),
             context_size: config.context_size.unwrap_or(defaults::CONTEXT_SIZE),
+            cpu_threads: config.cpu_threads,
+            batch_size: config.batch_size,
+            ubatch_size: config.ubatch_size,
         }
+    }
+
+    /// Normalize and validate a backend start config into effective settings.
+    pub fn try_from_backend_config(config: &BackendConfig) -> Result<Self, BackendError> {
+        validate_optional_positive_u32(config.cpu_threads, "cpu_threads")?;
+        validate_optional_positive_u32(config.batch_size, "batch_size")?;
+        validate_optional_positive_u32(config.ubatch_size, "ubatch_size")?;
+        Ok(Self::from_backend_config(config))
     }
 
     /// Project effective settings into the existing sidecar device DTO.
@@ -760,6 +783,18 @@ fn normalize_llamacpp_device(device: Option<&str>) -> String {
         return defaults::DEVICE.to_string();
     };
     device.to_string()
+}
+
+fn validate_optional_positive_u32(
+    value: Option<u32>,
+    field_name: &str,
+) -> Result<(), BackendError> {
+    if value == Some(0) {
+        return Err(BackendError::Config(format!(
+            "llama.cpp runtime setting '{field_name}' must be greater than zero when provided"
+        )));
+    }
+    Ok(())
 }
 
 /// Backend-owned outcome for a successful runtime start request.
@@ -984,6 +1019,9 @@ mod tests {
         assert_eq!(settings.device, defaults::DEVICE);
         assert_eq!(settings.gpu_layers, defaults::GPU_LAYERS);
         assert_eq!(settings.context_size, defaults::CONTEXT_SIZE);
+        assert_eq!(settings.cpu_threads, None);
+        assert_eq!(settings.batch_size, None);
+        assert_eq!(settings.ubatch_size, None);
         assert_eq!(
             settings.device_config(),
             DeviceConfig {
@@ -999,6 +1037,9 @@ mod tests {
             device: Some("Vulkan0".to_string()),
             gpu_layers: Some(42),
             context_size: Some(8192),
+            cpu_threads: Some(8),
+            batch_size: Some(512),
+            ubatch_size: Some(128),
             ..BackendConfig::default()
         });
 
@@ -1008,8 +1049,45 @@ mod tests {
                 device: "Vulkan0".to_string(),
                 gpu_layers: 42,
                 context_size: 8192,
+                cpu_threads: Some(8),
+                batch_size: Some(512),
+                ubatch_size: Some(128),
             }
         );
+    }
+
+    #[test]
+    fn llamacpp_runtime_settings_reject_zero_sized_performance_knobs() {
+        for (field_name, config) in [
+            (
+                "cpu_threads",
+                BackendConfig {
+                    cpu_threads: Some(0),
+                    ..BackendConfig::default()
+                },
+            ),
+            (
+                "batch_size",
+                BackendConfig {
+                    batch_size: Some(0),
+                    ..BackendConfig::default()
+                },
+            ),
+            (
+                "ubatch_size",
+                BackendConfig {
+                    ubatch_size: Some(0),
+                    ..BackendConfig::default()
+                },
+            ),
+        ] {
+            let error = LlamaCppRuntimeSettings::try_from_backend_config(&config)
+                .expect_err("zero setting should fail closed");
+            assert!(
+                error.to_string().contains(field_name),
+                "expected {field_name} in {error}"
+            );
+        }
     }
 
     #[test]
