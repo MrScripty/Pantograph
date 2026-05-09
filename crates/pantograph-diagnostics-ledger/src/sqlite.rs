@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -43,6 +43,7 @@ pub struct SqliteDiagnosticsLedger {
 impl SqliteDiagnosticsLedger {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, DiagnosticsLedgerError> {
         let conn = Connection::open(path)?;
+        configure_file_backed_connection(&conn)?;
         Self::from_connection(conn)
     }
 
@@ -77,6 +78,13 @@ impl SqliteDiagnosticsLedger {
     ) -> Result<Vec<String>, DiagnosticsLedgerError> {
         timing_sqlite::workflow_ids_for_timing_graph_fingerprint(self, graph_fingerprint)
     }
+}
+
+fn configure_file_backed_connection(conn: &Connection) -> Result<(), DiagnosticsLedgerError> {
+    conn.busy_timeout(Duration::from_millis(5000))?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    Ok(())
 }
 
 impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {

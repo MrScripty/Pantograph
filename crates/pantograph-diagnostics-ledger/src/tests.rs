@@ -1,3 +1,9 @@
+use std::{
+    sync::mpsc,
+    thread,
+    time::{Duration, Instant},
+};
+
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
 };
@@ -225,6 +231,47 @@ fn persisted_events_survive_reopen() {
         .expect("events query succeeds");
 
     assert_eq!(projection.events, vec![event]);
+}
+
+#[test]
+fn file_backed_connection_waits_for_busy_writer() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    SqliteDiagnosticsLedger::open(&path).expect("initial ledger creates schema");
+
+    let locker = Connection::open(&path).expect("lock connection opens");
+    locker
+        .execute_batch("BEGIN IMMEDIATE")
+        .expect("write lock starts");
+
+    let writer_path = path.clone();
+    let (sender, receiver) = mpsc::channel();
+    let started_at = Instant::now();
+    let writer = thread::spawn(move || {
+        let result = SqliteDiagnosticsLedger::open(&writer_path).and_then(|mut ledger| {
+            ledger.record_usage_event(sample_event("usage_busy_wait", "model-a", 10, 20))
+        });
+        sender
+            .send(result.map(|_| ()))
+            .expect("test receiver remains alive");
+    });
+
+    thread::sleep(Duration::from_millis(100));
+    assert!(
+        receiver.try_recv().is_err(),
+        "writer should wait for the held SQLite write lock"
+    );
+
+    locker.execute_batch("COMMIT").expect("write lock releases");
+    let result = receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("writer finishes after lock release");
+    writer.join().expect("writer thread joins");
+    result.expect("writer succeeds after busy wait");
+    assert!(
+        started_at.elapsed() >= Duration::from_millis(100),
+        "writer should not bypass the held write lock"
+    );
 }
 
 #[test]
