@@ -5,6 +5,7 @@ import {
   buildIoArtifactDescriptorMetadataRows,
   buildIoArtifactDownloadFilename,
   buildIoArtifactNodeGroups,
+  buildIoArtifactPreviewReadRequest,
   buildIoArtifactRendererSummary,
   buildRetentionCleanupDetailRows,
   buildRetentionPolicyDetailRows,
@@ -20,6 +21,7 @@ import {
   formatIoArtifactLifecycleStateLabel,
   formatIoArtifactMediaLabel,
   formatIoArtifactPayloadKindLabel,
+  formatIoArtifactPreviewExtent,
   formatIoArtifactRetentionStateLabel,
   formatIoArtifactRoleLabel,
   formatProjectionFreshness,
@@ -47,6 +49,35 @@ test('formatIoArtifactMediaLabel exposes stable UI labels', () => {
   assert.equal(formatIoArtifactMediaLabel('image/jpeg'), 'Image');
   assert.equal(formatIoArtifactMediaLabel(undefined, '3d'), '3D');
   assert.equal(formatIoArtifactMediaLabel(undefined), 'Unknown');
+});
+
+test('artifact previews use bounded byte range requests and expose partial state', () => {
+  assert.deepEqual(buildIoArtifactPreviewReadRequest('artifact-a'), {
+    artifact_id: 'artifact-a',
+    byte_range_start: 0,
+    byte_range_end_exclusive: 64 * 1024,
+  });
+  assert.deepEqual(buildIoArtifactPreviewReadRequest('artifact-a', 0), {
+    artifact_id: 'artifact-a',
+    byte_range_start: 0,
+    byte_range_end_exclusive: 1,
+  });
+  assert.equal(
+    formatIoArtifactPreviewExtent({
+      mediaType: 'text/plain',
+      byteLength: 64 * 1024,
+      complete: false,
+    }),
+    'text/plain · 64.0 KiB · partial preview',
+  );
+  assert.equal(
+    formatIoArtifactPreviewExtent({
+      mediaType: 'text/plain',
+      byteLength: 128,
+      complete: true,
+    }),
+    'text/plain · 128 B',
+  );
 });
 
 test('buildIoArtifactRendererSummary maps media families to renderer states', () => {

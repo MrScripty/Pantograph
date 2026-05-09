@@ -52,6 +52,20 @@ export interface IoRetentionDetailRow {
   mono: boolean;
 }
 
+export const IO_ARTIFACT_PREVIEW_MAX_BYTES = 64 * 1024;
+
+export interface IoArtifactPreviewReadRequest {
+  artifact_id: string;
+  byte_range_start: number;
+  byte_range_end_exclusive: number;
+}
+
+export interface IoArtifactPreviewExtent {
+  mediaType: string;
+  byteLength: number;
+  complete: boolean;
+}
+
 type IoArtifactNodeGroupSource = Pick<
   IoArtifactProjectionRecord,
   | 'node_id'
@@ -571,6 +585,22 @@ export function formatIoArtifactBytes(bytes: number | null | undefined): string 
     return `${(bytes / 1_024).toFixed(1)} KiB`;
   }
   return `${bytes} B`;
+}
+
+export function buildIoArtifactPreviewReadRequest(
+  artifactId: string,
+  maxBytes = IO_ARTIFACT_PREVIEW_MAX_BYTES,
+): IoArtifactPreviewReadRequest {
+  return {
+    artifact_id: artifactId,
+    byte_range_start: 0,
+    byte_range_end_exclusive: Math.max(1, Math.trunc(maxBytes)),
+  };
+}
+
+export function formatIoArtifactPreviewExtent(preview: IoArtifactPreviewExtent): string {
+  const base = `${preview.mediaType} · ${formatIoArtifactBytes(preview.byteLength)}`;
+  return preview.complete ? base : `${base} · partial preview`;
 }
 
 export function formatProjectionFreshness(state: ProjectionStateRecord | null): string {

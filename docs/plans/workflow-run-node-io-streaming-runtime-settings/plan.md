@@ -579,7 +579,7 @@ retention and projection systems.
   materialization rule. Inspectable values should be retrievable through
   ArtifactStore descriptors; metadata-only rows must carry explicit retention
   reasons.
-- [ ] Apply named preview limits and truncation metadata for inline text/JSON
+- [x] Apply named preview limits and truncation metadata for inline text/JSON
   previews. Do not inline unbounded values into diagnostics events or run
   inspection DTOs.
 - [x] Project node IO through the existing `workflow_io_artifact_query` and
@@ -612,7 +612,9 @@ I/O artifacts. Existing GraphPage read-side code already queries
 `workflow_io_artifact_query` and summarizes node artifacts for the run snapshot.
 Workflow-service projection coverage now proves `node_input` and `node_output`
 records can be fetched together by run id and grouped by node for the run graph
-page. Preview/truncation policy remains open.
+page. IO inspector previews now use a named 64 KiB byte-range request and
+surface the backend `complete=false` response as a partial preview instead of
+loading full retained bodies for inspection.
 
 ### Milestone 4: Cached Execution IO And Artifact Retention
 
@@ -1016,6 +1018,15 @@ coverage.
   run graph page without a per-node query loop.
 - 2026-05-09: Verification passed:
   `cargo test -p pantograph-workflow-service workflow_io_artifact_query_groups_node_input_and_output_records_by_run_node`.
+- 2026-05-09: Bounded artifact preview slice added
+  `IO_ARTIFACT_PREVIEW_MAX_BYTES` and a pure request builder so IO inspector
+  preview actions read at most the first 64 KiB through the existing artifact
+  read/stream APIs. The UI now renders `complete=false` responses as partial
+  previews using backend metadata instead of loading full retained bodies for
+  inspection.
+- 2026-05-09: Verification passed:
+  `node --experimental-strip-types --test src/components/workbench/ioInspectorPresenters.test.ts`
+  and `npm run typecheck`.
 
 ## Follow-Up Findings
 

@@ -31,6 +31,7 @@
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
     buildIoArtifactDownloadFilename,
+    buildIoArtifactPreviewReadRequest,
     buildIoArtifactNodeGroups,
     buildIoArtifactDescriptorMetadataRows,
     buildIoArtifactRendererSummary,
@@ -44,6 +45,7 @@
     formatIoArtifactDetailValue,
     formatIoArtifactEndpointValue,
     formatIoArtifactMediaLabel,
+    formatIoArtifactPreviewExtent,
     formatIoArtifactRetentionStateLabel,
     formatIoArtifactRoleLabel,
     formatProjectionFreshness,
@@ -156,7 +158,9 @@
     setArtifactAccessError(artifact.artifact_id, null);
     try {
       await verifyArtifactReadable(artifact);
-      const read = await workflowService.readArtifactBody({ artifact_id: artifact.artifact_id });
+      const read = await workflowService.readArtifactBody(
+        buildIoArtifactPreviewReadRequest(artifact.artifact_id),
+      );
       replaceArtifactBodyPreview(artifact.artifact_id, createArtifactBodyPreview(read));
     } catch (error) {
       setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
@@ -170,7 +174,9 @@
     setArtifactAccessError(artifact.artifact_id, null);
     try {
       await verifyArtifactStreamReadable(artifact);
-      const read = await workflowService.readArtifactStream({ artifact_id: artifact.artifact_id });
+      const read = await workflowService.readArtifactStream(
+        buildIoArtifactPreviewReadRequest(artifact.artifact_id),
+      );
       replaceArtifactBodyPreview(artifact.artifact_id, createArtifactBodyPreview(read));
     } catch (error) {
       setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
@@ -718,8 +724,7 @@
                     {/if}
                   </div>
                   <div class="mt-2 text-xs text-neutral-500">
-                    {bodyPreview.mediaType} · {formatIoArtifactBytes(bodyPreview.byteLength)}
-                    {bodyPreview.complete ? '' : ' · partial'}
+                    {formatIoArtifactPreviewExtent(bodyPreview)}
                   </div>
                 {/if}
               </div>
