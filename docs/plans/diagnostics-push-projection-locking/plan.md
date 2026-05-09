@@ -448,11 +448,11 @@ refresh owner before reading.
 - [x] Convert IO artifact query and retention summary query to read-only.
 - [x] Convert node status query to read-only.
 - [x] Convert scheduler estimate query to read-only.
-- [ ] Convert library usage query to read-only.
-- [ ] Keep explicit projection rebuild/refresh commands as the write path.
-- [ ] Keep startup repair, projection rebuild, retention cleanup, and explicit
+- [x] Convert library usage query to read-only.
+- [x] Keep explicit projection rebuild/refresh commands as the write path.
+- [x] Keep startup repair, projection rebuild, retention cleanup, and explicit
       refresh as named maintenance/write paths rather than hidden query work.
-- [ ] Update tests that currently expect query commands to drain projections.
+- [x] Update tests that currently expect query commands to drain projections.
 
 **Verification:**
 
@@ -461,10 +461,10 @@ refresh owner before reading.
 - `cargo test -p pantograph-workflow-service workflow_library_usage_query`
 - `cargo check -p pantograph-workflow-service`
 
-**Status:** In progress. Scheduler timeline, run list and facets, IO artifact
-and retention summary, node status, and scheduler estimate now read
-materialized projection state without hidden drains and use the refresh owner
-in tests.
+**Status:** Completed 2026-05-09. Scheduler timeline, run list and facets, IO
+artifact and retention summary, node status, scheduler estimate, and library
+usage now read materialized projection state without hidden drains and use the
+refresh owner in tests.
 
 ### Milestone 6: Backend Push Invalidation Transport
 

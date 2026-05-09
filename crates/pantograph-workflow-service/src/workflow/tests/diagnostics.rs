@@ -1009,6 +1009,18 @@ fn refresh_io_artifact(service: &WorkflowService, batch_size: u32) {
         .expect("projection refresh");
 }
 
+fn refresh_library_usage(service: &WorkflowService, batch_size: u32) {
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::LibraryUsage],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size,
+        })
+        .expect("projection refresh");
+}
+
 #[test]
 fn workflow_run_detail_query_validates_bounds() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
@@ -1706,7 +1718,7 @@ fn workflow_projection_rebuild_validates_bounds() {
 }
 
 #[test]
-fn workflow_library_usage_query_drains_and_reads_projection() {
+fn workflow_library_usage_query_reads_refreshed_projection() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
         .append_diagnostic_event(sample_library_asset_access_event(
@@ -1723,6 +1735,7 @@ fn workflow_library_usage_query_drains_and_reads_projection() {
         ))
         .expect("library access event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_library_usage(&service, 10);
 
     let response = service
         .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
@@ -1759,7 +1772,45 @@ fn workflow_library_usage_query_drains_and_reads_projection() {
 }
 
 #[test]
-fn workflow_library_usage_query_preserves_catching_up_projection_state() {
+fn workflow_library_usage_query_does_not_mutate_projection_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_library_asset_access_event(
+            "model-a",
+            Some("run-a"),
+            128,
+        ))
+        .expect("library access event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+            asset_id: Some("model-a".to_string()),
+            workflow_run_id: None,
+            workflow_id: Some("workflow-a".to_string()),
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("library usage query");
+
+    assert!(response.assets.is_empty());
+    assert_eq!(
+        response.projection_state.status,
+        ProjectionStatus::NeedsRebuild
+    );
+    assert_eq!(response.projection_state.last_applied_event_seq, 0);
+
+    let ledger = service.diagnostics_ledger_guard().expect("ledger guard");
+    assert!(ledger
+        .projection_state("library_usage")
+        .expect("library usage state query")
+        .is_none());
+}
+
+#[test]
+fn workflow_library_usage_refresh_preserves_catching_up_projection_state() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
         .append_diagnostic_event(sample_library_asset_access_event(
@@ -1776,6 +1827,7 @@ fn workflow_library_usage_query_preserves_catching_up_projection_state() {
         ))
         .expect("library access event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_library_usage(&service, 1);
 
     let catching_up = service
         .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
@@ -1797,6 +1849,7 @@ fn workflow_library_usage_query_preserves_catching_up_projection_state() {
         ProjectionStatus::Rebuilding
     );
 
+    refresh_library_usage(&service, 10);
     let current = service
         .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
             asset_id: Some("model-a".to_string()),

@@ -972,29 +972,16 @@ impl WorkflowService {
         &self,
         request: WorkflowLibraryUsageQueryRequest,
     ) -> Result<WorkflowLibraryUsageQueryResponse, WorkflowServiceError> {
-        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
-        if projection_batch_size > 500 {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "projection_batch_size exceeds maximum 500".to_string(),
-            ));
-        }
+        validate_optional_projection_batch_size(
+            "projection_batch_size",
+            request.projection_batch_size,
+        )?;
         let query = request.into_library_usage_query()?;
-        let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = match ledger.drain_library_usage_projection(projection_batch_size) {
-            Ok(projection_state) => projection_state,
-            Err(error) => {
-                drop(ledger);
-                return Err(self.projection_error(
-                    projection_error_scope(
-                        "library_usage",
-                        "drain",
-                        query.workflow_run_id.clone(),
-                        query.workflow_id.clone(),
-                    ),
-                    WorkflowServiceError::from(error),
-                ));
-            }
-        };
+        let ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = read_projection_state_or_empty(
+            &*ledger,
+            WorkflowDiagnosticsProjectionKind::LibraryUsage,
+        )?;
         let assets = match ledger.query_library_usage_projection(query.clone()) {
             Ok(assets) => assets,
             Err(error) => {
