@@ -66,6 +66,11 @@ export interface IoArtifactPreviewExtent {
   complete: boolean;
 }
 
+export interface IoArtifactTextPreview {
+  text: string;
+  truncated: boolean;
+}
+
 type IoArtifactNodeGroupSource = Pick<
   IoArtifactProjectionRecord,
   | 'node_id'
@@ -601,6 +606,32 @@ export function buildIoArtifactPreviewReadRequest(
 export function formatIoArtifactPreviewExtent(preview: IoArtifactPreviewExtent): string {
   const base = `${preview.mediaType} · ${formatIoArtifactBytes(preview.byteLength)}`;
   return preview.complete ? base : `${base} · partial preview`;
+}
+
+export function canRenderIoArtifactTextPreview(
+  mediaType: string | null | undefined,
+  payloadKind?: IoArtifactPayloadKind | null,
+): boolean {
+  const family = classifyIoArtifactMedia(mediaType, payloadKind);
+  return family === 'text' || family === 'json' || family === 'table';
+}
+
+export function decodeIoArtifactTextPreview(
+  body: number[] | Uint8Array,
+  maxCharacters = 32_000,
+): IoArtifactTextPreview {
+  const byteArray = body instanceof Uint8Array ? body : Uint8Array.from(body);
+  const decoded = new TextDecoder('utf-8', { fatal: false }).decode(byteArray);
+  if (decoded.length <= maxCharacters) {
+    return {
+      text: decoded,
+      truncated: false,
+    };
+  }
+  return {
+    text: decoded.slice(0, Math.max(0, maxCharacters)),
+    truncated: true,
+  };
 }
 
 export function formatProjectionFreshness(state: ProjectionStateRecord | null): string {

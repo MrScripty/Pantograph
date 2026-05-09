@@ -12,7 +12,9 @@ import {
   buildRetentionPolicySettingRows,
   canAcknowledgeIoArtifactConsumed,
   canReadIoArtifactBody,
+  canRenderIoArtifactTextPreview,
   classifyIoArtifactMedia,
+  decodeIoArtifactTextPreview,
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
   formatIoArtifactConversionStatusLabel,
@@ -78,6 +80,23 @@ test('artifact previews use bounded byte range requests and expose partial state
     }),
     'text/plain · 128 B',
   );
+});
+
+test('artifact text previews decode readable artifact families inline', () => {
+  assert.equal(canRenderIoArtifactTextPreview('text/plain'), true);
+  assert.equal(canRenderIoArtifactTextPreview('application/json'), true);
+  assert.equal(canRenderIoArtifactTextPreview('text/csv'), true);
+  assert.equal(canRenderIoArtifactTextPreview('image/png'), false);
+  assert.equal(canRenderIoArtifactTextPreview(null, 'structured'), true);
+
+  assert.deepEqual(decodeIoArtifactTextPreview([72, 101, 108, 108, 111]), {
+    text: 'Hello',
+    truncated: false,
+  });
+  assert.deepEqual(decodeIoArtifactTextPreview(new TextEncoder().encode('abcdef'), 3), {
+    text: 'abc',
+    truncated: true,
+  });
 });
 
 test('buildIoArtifactRendererSummary maps media families to renderer states', () => {

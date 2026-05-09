@@ -38,8 +38,10 @@
     buildRetentionCleanupDetailRows,
     buildRetentionPolicyDetailRows,
     buildRetentionPolicySettingRows,
+    canRenderIoArtifactTextPreview,
     canAcknowledgeIoArtifactConsumed,
     canReadIoArtifactBody,
+    decodeIoArtifactTextPreview,
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
     formatIoArtifactDetailValue,
@@ -60,6 +62,8 @@
     byteLength: number;
     complete: boolean;
     contentHash?: string | null;
+    text?: string | null;
+    textTruncated?: boolean;
   }
 
   const DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS = 30_000;
@@ -280,12 +284,17 @@
     const byteArray = Uint8Array.from(read.body);
     const mediaType = read.response.media_type || 'application/octet-stream';
     const blob = new Blob([byteArray], { type: mediaType });
+    const textPreview = canRenderIoArtifactTextPreview(mediaType)
+      ? decodeIoArtifactTextPreview(byteArray)
+      : null;
     return {
       objectUrl: URL.createObjectURL(blob),
       mediaType,
       byteLength: read.response.byte_length,
       complete: read.response.complete,
       contentHash: 'content_hash' in read.response ? read.response.content_hash : null,
+      text: textPreview?.text ?? null,
+      textTruncated: textPreview?.truncated ?? false,
     };
   }
 
@@ -711,20 +720,29 @@
                         class="w-full"
                         aria-label={`Audio preview of ${artifact.artifact_id}`}
                       ></audio>
+                    {:else if renderer.family === 'video'}
+                      <!-- svelte-ignore a11y_media_has_caption -->
+                      <video
+                        src={bodyPreview.objectUrl}
+                        controls
+                        class="max-h-64 w-full bg-black"
+                        aria-label={`Video preview of ${artifact.artifact_id}`}
+                      ></video>
+                    {:else if bodyPreview.text !== null && bodyPreview.text !== undefined}
+                      <pre
+                        class="max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed text-neutral-100"
+                      >{bodyPreview.text}</pre>
                     {:else}
-                      <a
-                        href={bodyPreview.objectUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Open retained artifact body for ${artifact.artifact_id}`}
-                        class="block px-3 py-2 text-xs text-cyan-200 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-                      >
-                        Open retained artifact body
-                      </a>
+                      <div class="px-3 py-2 text-xs text-neutral-400">
+                        Binary preview loaded. Use Download to inspect the retained body outside Pantograph.
+                      </div>
                     {/if}
                   </div>
                   <div class="mt-2 text-xs text-neutral-500">
                     {formatIoArtifactPreviewExtent(bodyPreview)}
+                    {#if bodyPreview.textTruncated}
+                      · text truncated
+                    {/if}
                   </div>
                 {/if}
               </div>
