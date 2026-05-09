@@ -696,7 +696,7 @@ reason after payload references are removed.
   llama.cpp emits on a noncanonical port.
 - [x] Update frontend event routing so a `response -> text` graph connection
   streams into a connected text output during execution.
-- [ ] Verify dropping a stream-capable connection onto text output does not
+- [x] Verify dropping a stream-capable connection onto text output does not
   hide or discard the canonical final `response` path.
 - [x] Ensure final `TaskCompleted.response` reconciles the text output after
   streaming completes.
@@ -713,6 +713,9 @@ reason after payload references are removed.
   output.
 - Backend test proves llama.cpp/typed text stream events use the canonical
   response path.
+- Backend graph-session test proves the editor connect/drop path canonicalizes
+  `llm-inference.stream -> text-output.stream` into the retained
+  `response -> text` path before returning the graph mutation response.
 - Vertical slice proves live text appears during execution and final run detail
   includes `response`.
 
@@ -721,9 +724,8 @@ reason after payload references are removed.
 `TaskCompleted.response` reconciles the connected text output. Stream events
 now pass through the same active-run ownership gate as other execution events
 so stale chunks cannot update another active run. Remaining work is explicit
-coverage for stream-capable connection normalization, raw-token retention
-summary rules, optional sequence ordering, and render coalescing if token-rate
-updates prove noisy.
+coverage for raw-token retention summary rules, optional sequence ordering, and
+render coalescing if token-rate updates prove noisy.
 
 ### Milestone 6: Llama.cpp Runtime Device Settings Slice
 
@@ -1061,6 +1063,13 @@ coverage.
   `node --experimental-strip-types --test packages/svelte-graph/src/stores/workflowExecutionEvents.test.ts`
   and
   `node --experimental-strip-types --test src/components/workflowToolbarEvents.test.ts`.
+- 2026-05-09: Graph-session connection slice added coverage that the backend
+  editor connect/drop path canonicalizes `llm-inference.stream` to
+  `text-output.stream` into the retained `response -> text` edge. This keeps
+  live stream affordances from hiding the final response path used for retained
+  run inspection.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-workflow-service connect_canonicalizes_llm_stream_drop_to_text_output_response_edge`.
 
 ## Follow-Up Findings
 

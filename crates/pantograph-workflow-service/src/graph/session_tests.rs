@@ -51,6 +51,36 @@ fn disconnected_graph() -> WorkflowGraph {
     graph
 }
 
+fn inference_to_output_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "llm".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({
+                    "task_kind": "text_generation",
+                    "runtime_hint": "llamacpp",
+                    "pumas_model_ref": {
+                        "source": "puma-lib",
+                        "status": "resolved",
+                        "model_id": "family/model",
+                        "model_path": "/models/model.gguf"
+                    }
+                }),
+            },
+            GraphNode {
+                id: "output".to_string(),
+                node_type: "text-output".to_string(),
+                position: Position { x: 120.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+        ],
+        edges: Vec::new(),
+        derived_graph: None,
+    }
+}
+
 fn branching_graph() -> WorkflowGraph {
     let mut graph = sample_graph();
     graph.nodes.push(GraphNode {
@@ -575,4 +605,44 @@ async fn connect_persists_memory_impact_for_later_session_snapshot() {
         memory_impact.node_decisions[0].reason.as_deref(),
         Some("edge_topology_changed")
     );
+}
+
+#[tokio::test]
+async fn connect_canonicalizes_llm_stream_drop_to_text_output_response_edge() {
+    let store = GraphSessionStore::new();
+    let session = store
+        .create_session(inference_to_output_graph(), None)
+        .await;
+
+    let response = store
+        .connect(WorkflowGraphConnectRequest {
+            session_id: session.session_id.clone(),
+            graph_revision: session.graph_revision,
+            source_anchor: ConnectionAnchor {
+                node_id: "llm".to_string(),
+                port_id: "stream".to_string(),
+            },
+            target_anchor: ConnectionAnchor {
+                node_id: "output".to_string(),
+                port_id: "stream".to_string(),
+            },
+        })
+        .await
+        .expect("connect stream edge");
+
+    assert!(response.accepted);
+    let graph = response.graph.expect("updated graph");
+    assert_eq!(graph.edges.len(), 1);
+    let edge = &graph.edges[0];
+    assert_eq!(edge.id, "llm-response-output-text");
+    assert_eq!(edge.source, "llm");
+    assert_eq!(edge.source_handle, "response");
+    assert_eq!(edge.target, "output");
+    assert_eq!(edge.target_handle, "text");
+    assert!(!graph.edges.iter().any(|edge| {
+        edge.source == "llm"
+            && edge.source_handle == "stream"
+            && edge.target == "output"
+            && edge.target_handle == "stream"
+    }));
 }
