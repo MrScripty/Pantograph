@@ -210,6 +210,7 @@ async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
         .artifact_store_stats()
         .expect("artifact store stats");
     assert_eq!(stats.retained_body_count, 2);
+    assert_eq!(stats.retained_body_bytes, 26);
 }
 
 #[tokio::test]

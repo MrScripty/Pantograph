@@ -470,13 +470,13 @@ inspection labels.
 for large payloads.
 
 **Tasks:**
-- [ ] Update retention cleanup so retained bodies are deleted only when no live
+- [x] Update retention cleanup so retained bodies are deleted only when no live
   retained canonical artifact facts or explicit resolved-input facts require
   them, or when an expired run is deleted as a unit.
-- [ ] Add storage/stat assertions that derived inputs and workflow boundary
+- [x] Add storage/stat assertions that derived inputs and workflow boundary
   aliases do not multiply retained body bytes.
-- [ ] Verify binary/large media flows remain descriptor-first and lazy-read.
-- [ ] Record any remaining file-size or responsibility-boundary cleanup items
+- [x] Verify binary/large media flows remain descriptor-first and lazy-read.
+- [x] Record any remaining file-size or responsibility-boundary cleanup items
   in this plan before implementation continues.
 
 **Verification:**
@@ -485,7 +485,12 @@ for large payloads.
 - Manual storage audit on a generated text workflow and one descriptor-backed
   media workflow.
 
-**Status:** Not started
+**Status:** Complete for the current payload-alias model. Retention cleanup now
+selects one representative row per run-scoped payload identity and applies the
+retention state to every fact sharing that payload, avoiding duplicate retention
+events and avoiding the projection `event_seq` uniqueness failure found during
+implementation. ArtifactStore retention tests continue to verify descriptor
+retention with lazy body reads.
 
 ### Milestone 8: Documentation And Release Validation
 
@@ -563,6 +568,13 @@ for large payloads.
   selected-node cards. Normal selected-node artifact lists now hide `_data`
   port diagnostics by default; richer cache/coercion/redaction/dynamic-route
   labels remain blocked on backend DTO fields.
+- 2026-05-09: Retention/storage slice fixed cleanup of shared payload aliases.
+  The diagnostics projection now selects one expirable row per
+  `workflow_run_id` plus payload identity, emits one retention event, and
+  updates all artifact facts sharing that payload without assigning the same
+  projection `event_seq` to multiple rows. Workflow-service storage assertions
+  now check retained body bytes so workflow output aliases cannot silently
+  multiply retained payload storage.
 
 ## Commit Cadence Notes
 
@@ -657,6 +669,9 @@ types must be edited serially or by one explicit owner.
 - I/O Inspector provenance slice: selected-node artifact cards show resolved
   direction, port, and available provenance while filtering `_data` diagnostic
   ports from normal inspection.
+- Retention/storage slice: diagnostics cleanup expires shared payload aliases
+  once per payload identity, and workflow-service retained-I/O tests assert
+  retained body byte counts in addition to body counts.
 
 ### Deviations
 
@@ -696,6 +711,15 @@ types must be edited serially or by one explicit owner.
 - 2026-05-09:
   - `npm run typecheck`
   - `npm run test:frontend`
+  - `git diff --check`
+- 2026-05-09:
+  - `cargo test -p pantograph-diagnostics-ledger apply_artifact_retention_policy_expires_shared_payload_aliases_once`
+  - `cargo test -p pantograph-diagnostics-ledger apply_artifact_retention_policy_expires_projected_payload_references`
+  - `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
+  - `cargo test -p pantograph-workflow-service artifact_store_retention_deletion_preserves_audit_descriptor_and_fails_body_reads`
+  - `cargo test -p pantograph-workflow-service workflow_service_retention_cleanup_keeps_descriptor_queryable_while_body_is_unavailable`
+  - `cargo test -p pantograph-diagnostics-ledger io_artifact`
+  - `cargo test -p pantograph-workflow-service workflow_retention_cleanup_expires_artifacts_through_projection`
   - `git diff --check`
 - 2026-05-09:
   - `cargo test -p pantograph-workflow-service diagnostics`

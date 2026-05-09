@@ -930,22 +930,40 @@ pub(super) fn query_expirable_io_artifact_projection(
         });
     }
     let mut stmt = ledger.conn.prepare(
-        "SELECT event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
-                workflow_id, workflow_version_id, workflow_semantic_version, node_id,
-                node_type, node_version, runtime_id, runtime_version,
-                selected_backend_key, model_id, model_version,
-                COALESCE(artifact_fact_id, artifact_id),
-                COALESCE(payload_artifact_id, artifact_id),
-                artifact_id, artifact_role, logical_payload_lineage_id, producer_node_id,
-                producer_port_id, consumer_node_id, consumer_port_id, media_type,
-                size_bytes, content_hash, payload_ref, retention_state,
-                retention_reason, retention_policy_id, payload_kind, lifecycle_state,
-                access_modes_json, read_handle, stream_handle, format_json
-         FROM io_artifact_projection
-         WHERE retention_state = ?1
-           AND occurred_at_ms < ?2
-         ORDER BY occurred_at_ms, event_seq
-         LIMIT ?3",
+        "WITH selected_payloads AS (
+             SELECT workflow_run_id,
+                    COALESCE(payload_artifact_id, artifact_id) AS payload_identity,
+                    MIN(event_seq) AS event_seq,
+                    MIN(occurred_at_ms) AS occurred_at_ms
+             FROM io_artifact_projection
+             WHERE retention_state = ?1
+               AND occurred_at_ms < ?2
+             GROUP BY workflow_run_id, payload_identity
+             ORDER BY occurred_at_ms, event_seq
+             LIMIT ?3
+         )
+         SELECT artifact.event_seq, artifact.event_id, artifact.occurred_at_ms,
+                artifact.recorded_at_ms, artifact.workflow_run_id,
+                artifact.workflow_id, artifact.workflow_version_id,
+                artifact.workflow_semantic_version, artifact.node_id,
+                artifact.node_type, artifact.node_version, artifact.runtime_id,
+                artifact.runtime_version, artifact.selected_backend_key, artifact.model_id,
+                artifact.model_version, COALESCE(artifact.artifact_fact_id, artifact.artifact_id),
+                COALESCE(artifact.payload_artifact_id, artifact.artifact_id),
+                artifact.artifact_id, artifact.artifact_role,
+                artifact.logical_payload_lineage_id, artifact.producer_node_id,
+                artifact.producer_port_id, artifact.consumer_node_id,
+                artifact.consumer_port_id, artifact.media_type, artifact.size_bytes,
+                artifact.content_hash, artifact.payload_ref, artifact.retention_state,
+                artifact.retention_reason, artifact.retention_policy_id, artifact.payload_kind,
+                artifact.lifecycle_state, artifact.access_modes_json, artifact.read_handle,
+                artifact.stream_handle, artifact.format_json
+         FROM io_artifact_projection artifact
+         INNER JOIN selected_payloads selected
+            ON selected.workflow_run_id = artifact.workflow_run_id
+           AND selected.payload_identity = COALESCE(artifact.payload_artifact_id, artifact.artifact_id)
+           AND selected.event_seq = artifact.event_seq
+         ORDER BY artifact.occurred_at_ms, artifact.event_seq",
     )?;
     let rows = stmt.query_map(
         params![
@@ -2093,29 +2111,33 @@ fn apply_io_artifact_retention_state_change(
             | IoArtifactRetentionState::Deleted
     );
     let lifecycle_state = io_artifact_lifecycle_state_from_retention(payload.retention_state);
+    let representative_artifact_fact_id = tx
+        .query_row(
+            "SELECT COALESCE(artifact_fact_id, artifact_id)
+             FROM io_artifact_projection
+             WHERE workflow_run_id = ?1
+               AND (artifact_id = ?2 OR COALESCE(payload_artifact_id, artifact_id) = ?2)
+             ORDER BY event_seq
+             LIMIT 1",
+            params![workflow_run_id.as_str(), payload.artifact_id.as_str()],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
 
     tx.execute(
         "UPDATE io_artifact_projection
-         SET event_seq = ?1,
-             event_id = ?2,
-             occurred_at_ms = ?3,
-             recorded_at_ms = ?4,
-             payload_ref = CASE
-                WHEN ?5 IS NOT NULL THEN ?5
-                WHEN ?6 THEN NULL
+         SET payload_ref = CASE
+                WHEN ?1 IS NOT NULL THEN ?1
+                WHEN ?2 THEN NULL
                 ELSE payload_ref
              END,
-             retention_state = ?7,
-             retention_reason = ?8,
-             retention_policy_id = COALESCE(?9, retention_policy_id),
-             lifecycle_state = COALESCE(?10, lifecycle_state)
-         WHERE workflow_run_id = ?11
-           AND (artifact_id = ?12 OR COALESCE(payload_artifact_id, artifact_id) = ?12)",
+             retention_state = ?3,
+             retention_reason = ?4,
+             retention_policy_id = COALESCE(?5, retention_policy_id),
+             lifecycle_state = COALESCE(?6, lifecycle_state)
+         WHERE workflow_run_id = ?7
+           AND (artifact_id = ?8 OR COALESCE(payload_artifact_id, artifact_id) = ?8)",
         params![
-            event.event_seq,
-            event.event_id.as_str(),
-            event.occurred_at_ms,
-            event.recorded_at_ms,
             event.payload_ref.as_deref(),
             clear_payload_ref,
             payload.retention_state.as_db(),
@@ -2126,6 +2148,26 @@ fn apply_io_artifact_retention_state_change(
             payload.artifact_id.as_str(),
         ],
     )?;
+
+    if let Some(artifact_fact_id) = representative_artifact_fact_id {
+        tx.execute(
+            "UPDATE io_artifact_projection
+             SET event_seq = ?1,
+                 event_id = ?2,
+                 occurred_at_ms = ?3,
+                 recorded_at_ms = ?4
+             WHERE workflow_run_id = ?5
+               AND COALESCE(artifact_fact_id, artifact_id) = ?6",
+            params![
+                event.event_seq,
+                event.event_id.as_str(),
+                event.occurred_at_ms,
+                event.recorded_at_ms,
+                workflow_run_id.as_str(),
+                artifact_fact_id.as_str(),
+            ],
+        )?;
+    }
     Ok(())
 }
 

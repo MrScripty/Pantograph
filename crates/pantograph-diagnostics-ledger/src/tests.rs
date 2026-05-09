@@ -4221,6 +4221,91 @@ fn apply_artifact_retention_policy_expires_projected_payload_references() {
 }
 
 #[test]
+fn apply_artifact_retention_policy_expires_shared_payload_aliases_once() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut workflow_output = sample_io_artifact_event(
+        "workflow_run_alpha",
+        "output_node",
+        "workflow_output",
+        "shared_payload",
+    );
+    let mut node_output = sample_io_artifact_event(
+        "workflow_run_alpha",
+        "output_node",
+        "node_output",
+        "shared_payload",
+    );
+    for (event, artifact_fact_id) in [
+        (&mut workflow_output, "fact_workflow_output"),
+        (&mut node_output, "fact_node_output"),
+    ] {
+        let DiagnosticEventPayload::IoArtifactObserved(payload) = &mut event.payload else {
+            panic!("sample io artifact payload");
+        };
+        payload.artifact_fact_id = Some(artifact_fact_id.to_string());
+        payload.payload_artifact_id = Some("shared_payload".to_string());
+        payload.logical_payload_lineage_id = Some("shared_lineage".to_string());
+    }
+    ledger
+        .append_diagnostic_event(workflow_output)
+        .expect("workflow output appends");
+    ledger
+        .append_diagnostic_event(node_output)
+        .expect("node output appends");
+    ledger
+        .drain_io_artifact_projection(10)
+        .expect("artifact projection drains before cleanup");
+
+    let now_ms = 1_200 + (i64::from(DEFAULT_STANDARD_RETENTION_DAYS) + 1) * MILLIS_PER_DAY;
+    let result = ledger
+        .apply_artifact_retention_policy(ApplyArtifactRetentionPolicyCommand {
+            retention_class: RetentionClass::Standard,
+            now_ms,
+            limit: 10,
+            actor_scope: RetentionPolicyActorScope::Maintenance,
+            reason: "standard retention window elapsed".to_string(),
+        })
+        .expect("artifact retention policy applies");
+
+    assert_eq!(result.expired_artifact_count, 1);
+
+    let expired_records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Expired),
+            retention_policy_id: Some("standard-local-v1".to_string()),
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("expired artifact projection loads");
+    assert_eq!(expired_records.len(), 2);
+    assert!(expired_records
+        .iter()
+        .all(|record| record.payload_artifact_id == "shared_payload"));
+
+    let retention_events = ledger
+        .diagnostic_events_after(0, 10)
+        .expect("diagnostic events load")
+        .into_iter()
+        .filter(|event| event.event_kind == DiagnosticEventKind::RetentionArtifactStateChanged)
+        .collect::<Vec<_>>();
+    assert_eq!(retention_events.len(), 1);
+    assert!(retention_events[0]
+        .payload_json
+        .contains("\"artifact_id\":\"shared_payload\""));
+}
+
+#[test]
 fn timing_expectation_reports_insufficient_history_until_minimum_samples_exist() {
     let query = sample_timing_query(Some(150));
 
