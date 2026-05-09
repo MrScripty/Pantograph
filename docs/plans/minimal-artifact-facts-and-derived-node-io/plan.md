@@ -433,19 +433,19 @@ cutover remains.
 read model instead of from redundant input artifact rows.
 
 **Tasks:**
-- [ ] Update frontend service types to include artifact fact id, payload id,
+- [x] Update frontend service types to include artifact fact id, payload id,
   source kind, and input-resolution metadata.
-- [ ] Stop double-fetching raw artifact projection data for normal I/O
+- [x] Stop double-fetching raw artifact projection data for normal I/O
   inspection; use `workflow_run_inspection_query` as the primary source for
   graph, node status, and resolved node I/O.
-- [ ] Render selected-node outputs from canonical produced-output facts.
-- [ ] Render selected-node inputs from backend resolved-input rows, showing
+- [x] Render selected-node outputs from canonical produced-output facts.
+- [x] Render selected-node inputs from backend resolved-input rows, showing
   `derived_from_edge` or the explicit exception reason.
 - [ ] Show upstream node/port, workflow boundary, cache, coercion, redaction, or
   dynamic-route provenance as metadata from the backend read model.
 - [ ] Hide metadata-only `_data` diagnostics from normal artifact lists by
   default.
-- [ ] Route preview/download/read actions to the canonical payload body id.
+- [x] Route preview/download/read actions to the canonical payload body id.
 - [ ] Keep layout and selection state frontend-owned; do not move presentation
   decisions into backend DTOs.
 
@@ -456,7 +456,12 @@ read model instead of from redundant input artifact rows.
   output node, and verify one readable input derived from the inference node
   output plus one canonical output/boundary view without duplicate artifacts.
 
-**Status:** Not started
+**Status:** In progress. I/O Inspector selection now consumes backend
+`resolved_node_io` rows for selected-node inputs and outputs. The current
+rendering maps those logical rows back to readable artifact cards and dedupes
+workflow-boundary aliases in favor of canonical produced-output rows; the next
+UI slice should expose the resolved provenance fields directly in the card
+metadata.
 
 ### Milestone 7: Retention Cleanup, Storage Audit, And Performance
 
@@ -547,6 +552,11 @@ for large payloads.
   as the source for graph, node statuses, artifact facts, retention summary,
   and I/O projection state. Backend filtering is temporarily applied locally
   until the resolved-node-I/O rendering cutover lands.
+- 2026-05-09: I/O Inspector resolved rendering slice added a tested presenter
+  adapter from backend `resolved_node_io` rows to readable artifact cards.
+  Selected-node inputs now resolve graph-derived rows to upstream retained
+  payloads, and selected outputs collapse workflow-boundary aliases onto the
+  canonical produced-output fact for the same payload.
 
 ## Commit Cadence Notes
 
@@ -635,6 +645,9 @@ types must be edited serially or by one explicit owner.
 - I/O Inspector query slice: normal inspector refresh no longer calls the raw
   `workflow_io_artifact_query`; it consumes run-inspection artifacts and
   projection state from the backend run inspection response.
+- I/O Inspector resolved rendering slice: selected-node input and output lists
+  are now driven by backend `resolved_node_io` rows, with presenter-level
+  dedupe for canonical output/boundary aliases.
 
 ### Deviations
 
@@ -668,6 +681,9 @@ types must be edited serially or by one explicit owner.
 - 2026-05-09:
   - `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
   - `cargo check -p pantograph-workflow-service`
+- 2026-05-09:
+  - `npm run typecheck`
+  - `npm run test:frontend`
 - 2026-05-09:
   - `cargo test -p pantograph-workflow-service diagnostics`
   - `cargo test -p pantograph-workflow-service --test contract workflow_run_inspection_query_contract_snapshot`

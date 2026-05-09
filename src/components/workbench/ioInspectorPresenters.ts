@@ -7,6 +7,7 @@ import type {
   IoArtifactProjectionRecord,
   IoArtifactRetentionState,
   ProjectionStateRecord,
+  ResolvedNodeIoRecord,
   WorkflowRetentionCleanupResult,
 } from '../../services/diagnostics/types';
 
@@ -46,6 +47,16 @@ export interface IoArtifactDescriptorMetadataRow {
   mono: boolean;
 }
 
+type ResolvedNodeIoArtifactIdentity = Pick<
+  IoArtifactProjectionRecord,
+  'artifact_id' | 'artifact_fact_id' | 'payload_artifact_id'
+>;
+
+export interface ResolvedNodeIoDisplayRow<Artifact extends ResolvedNodeIoArtifactIdentity = IoArtifactProjectionRecord> {
+  nodeIo: ResolvedNodeIoRecord;
+  artifact: Artifact | null;
+}
+
 export interface IoRetentionDetailRow {
   label: string;
   value: string;
@@ -76,6 +87,100 @@ export function ioArtifactPayloadTargetId(
 ): string {
   const payloadArtifactId = artifact.payload_artifact_id?.trim();
   return payloadArtifactId && payloadArtifactId.length > 0 ? payloadArtifactId : artifact.artifact_id;
+}
+
+export function buildResolvedNodeIoDisplayRows<Artifact extends ResolvedNodeIoArtifactIdentity>(
+  records: ResolvedNodeIoRecord[],
+  artifacts: Artifact[],
+): ResolvedNodeIoDisplayRow<Artifact>[] {
+  const artifactsByFactId = buildArtifactIdentityIndex(artifacts, 'artifact_fact_id');
+  const artifactsByPayloadId = buildArtifactIdentityIndex(artifacts, 'payload_artifact_id');
+  const artifactsByArtifactId = buildArtifactIdentityIndex(artifacts, 'artifact_id');
+
+  return dedupeResolvedNodeIo(records).map((nodeIo) => ({
+    nodeIo,
+    artifact:
+      findArtifactByIdentity(nodeIo.artifact_fact_id, artifactsByFactId) ??
+      findArtifactByIdentity(nodeIo.payload_artifact_id, artifactsByPayloadId) ??
+      findArtifactByIdentity(nodeIo.artifact_id, artifactsByArtifactId) ??
+      null,
+  }));
+}
+
+function dedupeResolvedNodeIo(records: ResolvedNodeIoRecord[]): ResolvedNodeIoRecord[] {
+  const recordsByLogicalPayload = new Map<string, ResolvedNodeIoRecord>();
+
+  for (const record of records) {
+    const key = resolvedNodeIoLogicalKey(record);
+    const existing = recordsByLogicalPayload.get(key);
+    if (!existing || resolvedNodeIoResolutionRank(record) < resolvedNodeIoResolutionRank(existing)) {
+      recordsByLogicalPayload.set(key, record);
+    }
+  }
+
+  return [...recordsByLogicalPayload.values()];
+}
+
+function resolvedNodeIoLogicalKey(record: ResolvedNodeIoRecord): string {
+  const payloadIdentity =
+    normalizeArtifactIdentity(record.payload_artifact_id) ??
+    normalizeArtifactIdentity(record.artifact_id) ??
+    normalizeArtifactIdentity(record.artifact_fact_id) ??
+    record.resolution;
+  return [record.direction, record.node_id, record.port_id, payloadIdentity].join('\u001f');
+}
+
+function resolvedNodeIoResolutionRank(record: ResolvedNodeIoRecord): number {
+  if (record.direction === 'output') {
+    switch (record.resolution) {
+      case 'produced_output':
+        return 0;
+      case 'workflow_boundary':
+        return 1;
+      case 'explicit_input':
+        return 2;
+      case 'derived_from_edge':
+        return 3;
+    }
+  }
+
+  switch (record.resolution) {
+    case 'derived_from_edge':
+      return 0;
+    case 'explicit_input':
+      return 1;
+    case 'workflow_boundary':
+      return 2;
+    case 'produced_output':
+      return 3;
+  }
+}
+
+function buildArtifactIdentityIndex<Artifact extends ResolvedNodeIoArtifactIdentity>(
+  artifacts: Artifact[],
+  identityField: 'artifact_fact_id' | 'payload_artifact_id' | 'artifact_id',
+): Map<string, Artifact> {
+  const index = new Map<string, Artifact>();
+  for (const artifact of artifacts) {
+    const identity = normalizeArtifactIdentity(artifact[identityField]);
+    if (identity && !index.has(identity)) {
+      index.set(identity, artifact);
+    }
+  }
+  return index;
+}
+
+function findArtifactByIdentity<Artifact extends ResolvedNodeIoArtifactIdentity>(
+  identity: string | null | undefined,
+  index: Map<string, Artifact>,
+): Artifact | null {
+  const normalized = normalizeArtifactIdentity(identity);
+  return normalized ? index.get(normalized) ?? null : null;
+}
+
+function normalizeArtifactIdentity(identity: string | null | undefined): string | null {
+  const trimmed = identity?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
 }
 
 type IoArtifactNodeGroupSource = Pick<

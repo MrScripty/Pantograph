@@ -20,6 +20,7 @@
     IoArtifactRetentionSummaryRecord,
     NodeStatusProjectionRecord,
     ProjectionStateRecord,
+    ResolvedNodeIoRecord,
   } from '../../services/diagnostics/types';
   import type {
     WorkflowArtifactBodyRead,
@@ -36,6 +37,7 @@
     buildIoArtifactDownloadFilename,
     buildIoArtifactPreviewReadRequest,
     buildIoArtifactRendererSummary,
+    buildResolvedNodeIoDisplayRows,
     canRenderIoArtifactTextPreview,
     canAcknowledgeIoArtifactConsumed,
     canReadIoArtifactBody,
@@ -73,6 +75,7 @@
   let runGraph = $state<WorkflowRunGraphProjection | null>(null);
   let runNodeStatuses = $state<NodeStatusProjectionRecord[]>([]);
   let artifacts = $state<IoArtifactProjectionRecord[]>([]);
+  let resolvedNodeIo = $state<ResolvedNodeIoRecord[]>([]);
   let retentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
   let projectionState = $state<ProjectionStateRecord | null>(null);
   let selectedNodeId = $state<string | null>(null);
@@ -88,11 +91,27 @@
 
   let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(artifacts));
   let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
+  let selectedInputRows = $derived(
+    selectedNodeId
+      ? buildResolvedNodeIoDisplayRows(
+          resolvedNodeIo.filter((record) => record.node_id === selectedNodeId && record.direction === 'input'),
+          artifacts,
+        )
+      : [],
+  );
+  let selectedOutputRows = $derived(
+    selectedNodeId
+      ? buildResolvedNodeIoDisplayRows(
+          resolvedNodeIo.filter((record) => record.node_id === selectedNodeId && record.direction === 'output'),
+          artifacts,
+        )
+      : [],
+  );
   let selectedInputArtifacts = $derived(
-    selectedNodeId ? artifacts.filter((artifact) => isNodeInputArtifact(artifact, selectedNodeId)) : [],
+    selectedInputRows.map((row) => row.artifact).filter(isPresentArtifact),
   );
   let selectedOutputArtifacts = $derived(
-    selectedNodeId ? artifacts.filter((artifact) => isNodeOutputArtifact(artifact, selectedNodeId)) : [],
+    selectedOutputRows.map((row) => row.artifact).filter(isPresentArtifact),
   );
   let selectedArtifacts = $derived([...selectedOutputArtifacts, ...selectedInputArtifacts]);
   let summarizedArtifactCount = $derived(
@@ -119,6 +138,7 @@
       runGraph = null;
       runNodeStatuses = [];
       artifacts = [];
+      resolvedNodeIo = [];
       retentionSummary = [];
       projectionState = null;
       selectedNodeId = null;
@@ -140,10 +160,16 @@
         selectedBackendKey.length > 0
           ? inspectionResponse.io_artifacts.filter((artifact) => artifact.selected_backend_key === selectedBackendKey)
           : inspectionResponse.io_artifacts;
+      const nextResolvedNodeIo = filterResolvedNodeIoByArtifacts(
+        inspectionResponse.resolved_node_io ?? [],
+        nextArtifacts,
+        selectedBackendKey,
+      );
       revokeMissingArtifactObjectUrls(nextArtifacts);
       runGraph = inspectionResponse.run_graph ?? null;
       runNodeStatuses = inspectionResponse.node_statuses;
       artifacts = nextArtifacts;
+      resolvedNodeIo = nextResolvedNodeIo;
       retentionSummary = inspectionResponse.retention_summary;
       projectionState = inspectionResponse.io_projection_state;
       selectedNodeId = resolveSelectedNodeId(
@@ -159,6 +185,7 @@
       runGraph = null;
       runNodeStatuses = [];
       artifacts = [];
+      resolvedNodeIo = [];
       retentionSummary = [];
       projectionState = null;
       selectedNodeId = null;
@@ -185,18 +212,33 @@
     return artifactNodeId ?? nodeIds[0] ?? null;
   }
 
-  function isNodeInputArtifact(artifact: IoArtifactProjectionRecord, nodeId: string): boolean {
-    return (
-      artifact.consumer_node_id === nodeId ||
-      (!artifact.consumer_node_id && artifact.node_id === nodeId && artifact.artifact_role === 'node_input')
+  function isPresentArtifact(
+    artifact: IoArtifactProjectionRecord | null,
+  ): artifact is IoArtifactProjectionRecord {
+    return artifact !== null;
+  }
+
+  function filterResolvedNodeIoByArtifacts(
+    records: ResolvedNodeIoRecord[],
+    nextArtifacts: IoArtifactProjectionRecord[],
+    selectedBackendKey: string,
+  ): ResolvedNodeIoRecord[] {
+    if (selectedBackendKey.length === 0) {
+      return records;
+    }
+
+    const artifactFactIds = new Set(nextArtifacts.map((artifact) => artifact.artifact_fact_id).filter(isNonEmptyString));
+    const payloadArtifactIds = new Set(nextArtifacts.map((artifact) => artifact.payload_artifact_id).filter(isNonEmptyString));
+    const artifactIds = new Set(nextArtifacts.map((artifact) => artifact.artifact_id).filter(isNonEmptyString));
+    return records.filter((record) =>
+      (record.artifact_fact_id && artifactFactIds.has(record.artifact_fact_id)) ||
+      (record.payload_artifact_id && payloadArtifactIds.has(record.payload_artifact_id)) ||
+      (record.artifact_id && artifactIds.has(record.artifact_id)),
     );
   }
 
-  function isNodeOutputArtifact(artifact: IoArtifactProjectionRecord, nodeId: string): boolean {
-    return (
-      artifact.producer_node_id === nodeId ||
-      (!artifact.producer_node_id && artifact.node_id === nodeId && artifact.artifact_role === 'node_output')
-    );
+  function isNonEmptyString(value: string | null | undefined): value is string {
+    return Boolean(value && value.trim().length > 0);
   }
 
   async function readArtifactPreview(artifact: IoArtifactProjectionRecord): Promise<void> {

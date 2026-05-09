@@ -7,6 +7,7 @@ import {
   buildIoArtifactNodeGroups,
   buildIoArtifactPreviewReadRequest,
   buildIoArtifactRendererSummary,
+  buildResolvedNodeIoDisplayRows,
   buildRetentionCleanupDetailRows,
   buildRetentionPolicyDetailRows,
   buildRetentionPolicySettingRows,
@@ -104,6 +105,86 @@ test('ioArtifactPayloadTargetId prefers retained payload identity over fact iden
     }),
     'legacy-artifact',
   );
+});
+
+test('resolved node io rows prefer canonical outputs over workflow boundary aliases', () => {
+  const artifacts = [
+    {
+      artifact_id: 'fact-output',
+      artifact_fact_id: 'fact-output',
+      payload_artifact_id: 'payload-output',
+      artifact_role: 'node_output',
+      event_id: 'event-output',
+    },
+    {
+      artifact_id: 'fact-boundary',
+      artifact_fact_id: 'fact-boundary',
+      payload_artifact_id: 'payload-output',
+      artifact_role: 'workflow_output',
+      event_id: 'event-boundary',
+    },
+  ];
+
+  const rows = buildResolvedNodeIoDisplayRows(
+    [
+      {
+        node_id: 'text-output',
+        port_id: 'text',
+        direction: 'output',
+        resolution: 'workflow_boundary',
+        artifact_fact_id: 'fact-boundary',
+        payload_artifact_id: 'payload-output',
+        artifact_id: 'fact-boundary',
+      },
+      {
+        node_id: 'text-output',
+        port_id: 'text',
+        direction: 'output',
+        resolution: 'produced_output',
+        artifact_fact_id: 'fact-output',
+        payload_artifact_id: 'payload-output',
+        artifact_id: 'fact-output',
+      },
+    ],
+    artifacts,
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].nodeIo.resolution, 'produced_output');
+  assert.equal(rows[0].artifact?.artifact_id, 'fact-output');
+});
+
+test('resolved node io rows resolve derived inputs to the upstream retained payload', () => {
+  const artifacts = [
+    {
+      artifact_id: 'fact-inference-output',
+      artifact_fact_id: 'fact-inference-output',
+      payload_artifact_id: 'payload-text',
+      artifact_role: 'node_output',
+      event_id: 'event-inference-output',
+    },
+  ];
+
+  const rows = buildResolvedNodeIoDisplayRows(
+    [
+      {
+        node_id: 'text-output',
+        port_id: 'text',
+        direction: 'input',
+        resolution: 'derived_from_edge',
+        artifact_fact_id: 'fact-inference-output',
+        payload_artifact_id: 'payload-text',
+        artifact_id: 'fact-inference-output',
+        upstream_node_id: 'inference',
+        upstream_port_id: 'text',
+      },
+    ],
+    artifacts,
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].nodeIo.upstream_node_id, 'inference');
+  assert.equal(rows[0].artifact?.artifact_id, 'fact-inference-output');
 });
 
 test('artifact text previews decode readable artifact families inline', () => {
