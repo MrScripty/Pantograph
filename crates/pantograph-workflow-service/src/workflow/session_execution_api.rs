@@ -1426,12 +1426,7 @@ impl WorkflowService {
 
         for (role, role_label, binding) in inputs
             .iter()
-            .flat_map(|binding| {
-                [
-                    (IoArtifactRole::WorkflowInput, "workflow_input", binding),
-                    (IoArtifactRole::NodeInput, "node_input", binding),
-                ]
-            })
+            .map(|binding| (IoArtifactRole::WorkflowInput, "workflow_input", binding))
             .chain(outputs.iter().flat_map(|binding| {
                 [
                     (IoArtifactRole::WorkflowOutput, "workflow_output", binding),

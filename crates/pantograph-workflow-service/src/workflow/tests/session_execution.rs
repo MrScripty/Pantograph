@@ -138,6 +138,12 @@ async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
                     .contains("\"artifact_role\":\"node_output\"")
         })
         .expect("node output artifact event");
+    assert!(!diagnostic_events.iter().any(|event| {
+        event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::IoArtifactObserved
+            && event
+                .payload_json
+                .contains("\"artifact_role\":\"node_input\"")
+    }));
     assert_eq!(
         node_output_event
             .workflow_run_id
