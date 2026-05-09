@@ -582,7 +582,7 @@ retention and projection systems.
 - [ ] Apply named preview limits and truncation metadata for inline text/JSON
   previews. Do not inline unbounded values into diagnostics events or run
   inspection DTOs.
-- [ ] Project node IO through the existing `workflow_io_artifact_query` and
+- [x] Project node IO through the existing `workflow_io_artifact_query` and
   run graph artifact-summary path before extending run-detail DTOs.
 - [ ] Do not add node IO fields to `RunDetailProjectionRecord` unless the
   implementation proves a composite DTO is needed for read performance or API
@@ -603,8 +603,9 @@ node-engine `TaskCompleted` events through embedded-runtime ledger projection
 as `node_output` I/O artifacts, including retained small text/JSON ArtifactStore
 bodies when available. Resolved node inputs now flow from node-engine
 `TaskInputsResolved` events through the same ledger projection as `node_input`
-I/O artifacts. Preview/truncation policy, graph-page query integration, and
-large/binary descriptor coverage remain open.
+I/O artifacts. Existing GraphPage read-side code already queries
+`workflow_io_artifact_query` and summarizes node artifacts for the run snapshot.
+Preview/truncation policy and large/binary descriptor coverage remain open.
 
 ### Milestone 4: Cached Execution IO And Artifact Retention
 
@@ -911,6 +912,11 @@ coverage.
   `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests::node_execution_workflow_sink_records_resolved_inputs_as_retained_node_artifacts --features backend-llamacpp`,
   `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests::node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts --features backend-llamacpp`,
   and `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests:: --features backend-llamacpp`.
+- 2026-05-08: Read-side audit found the run graph page already uses
+  `WorkflowProjectionService.queryIoArtifacts`, `buildRunGraphNodeArtifactSummaries`,
+  and `RunGraphSnapshot` to show node I/O artifact summaries from the backend
+  projection. No `RunDetailProjectionRecord` expansion is needed for the
+  current node I/O summary path.
 
 ## Follow-Up Findings
 
