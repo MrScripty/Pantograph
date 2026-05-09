@@ -249,14 +249,17 @@ fn llama_cpp_backend_config(
     inputs: &HashMap<String, serde_json::Value>,
     extra_settings: &HashMap<String, serde_json::Value>,
 ) -> inference::BackendConfig {
-    let device = runtime_setting_string(extra_settings, inputs, "device")
+    let device = runtime_setting_string(inputs, extra_settings, "device")
         .unwrap_or_else(|| "auto".to_string());
-    let gpu_layers = runtime_setting_i64(extra_settings, inputs, &["gpu_layers"])
+    let gpu_layers = runtime_setting_i64(inputs, extra_settings, &["gpu_layers"])
         .and_then(|value| i32::try_from(value).ok())
         .unwrap_or(-1);
     let context_size =
-        runtime_setting_i64(extra_settings, inputs, &["context_size", "context_length"])
-            .and_then(|value| u32::try_from(value).ok());
+        runtime_setting_u32(inputs, extra_settings, &["context_size", "context_length"]);
+    let cpu_threads = runtime_setting_u32(inputs, extra_settings, &["cpu_threads", "threads"]);
+    let batch_size = runtime_setting_u32(inputs, extra_settings, &["batch_size"]);
+    let ubatch_size =
+        runtime_setting_u32(inputs, extra_settings, &["ubatch_size", "micro_batch_size"]);
 
     inference::BackendConfig {
         model_path: Some(PathBuf::from(model_path)),
@@ -264,6 +267,9 @@ fn llama_cpp_backend_config(
         device: Some(device),
         gpu_layers: Some(gpu_layers),
         context_size,
+        cpu_threads,
+        batch_size,
+        ubatch_size,
         embedding_mode: false,
         reranking_mode: false,
         ..Default::default()
@@ -271,40 +277,48 @@ fn llama_cpp_backend_config(
 }
 
 fn runtime_setting_string(
-    extra_settings: &HashMap<String, serde_json::Value>,
     inputs: &HashMap<String, serde_json::Value>,
+    extra_settings: &HashMap<String, serde_json::Value>,
     key: &str,
 ) -> Option<String> {
-    extra_settings
-        .get(key)
-        .and_then(|value| value.as_str())
-        .map(str::trim)
+    read_optional_input_string(inputs, key)
+        .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
         .or_else(|| {
-            read_optional_input_string(inputs, key)
-                .map(|value| value.trim().to_string())
+            extra_settings
+                .get(key)
+                .and_then(|value| value.as_str())
+                .map(str::trim)
                 .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
         })
 }
 
 fn runtime_setting_i64(
-    extra_settings: &HashMap<String, serde_json::Value>,
     inputs: &HashMap<String, serde_json::Value>,
+    extra_settings: &HashMap<String, serde_json::Value>,
     keys: &[&str],
 ) -> Option<i64> {
     keys.iter().find_map(|key| {
-        extra_settings
+        inputs
             .get(*key)
             .and_then(|value| value.as_i64())
-            .or_else(|| inputs.get(*key).and_then(|value| value.as_i64()))
             .or_else(|| {
                 inputs
                     .get("_data")
                     .and_then(|data| data.get(*key))
                     .and_then(|value| value.as_i64())
             })
+            .or_else(|| extra_settings.get(*key).and_then(|value| value.as_i64()))
     })
+}
+
+fn runtime_setting_u32(
+    inputs: &HashMap<String, serde_json::Value>,
+    extra_settings: &HashMap<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<u32> {
+    runtime_setting_i64(inputs, extra_settings, keys).and_then(|value| u32::try_from(value).ok())
 }
 
 #[derive(Debug, PartialEq)]
@@ -625,10 +639,21 @@ mod tests {
             serde_json::json!([
                 {"key": "device", "default": "Vulkan0"},
                 {"key": "gpu_layers", "default": 24},
-                {"key": "context_length", "default": 16384}
+                {"key": "context_length", "default": 16384},
+                {"key": "cpu_threads", "default": 6},
+                {"key": "batch_size", "default": 256},
+                {"key": "ubatch_size", "default": 64}
             ]),
         );
         inputs.insert("gpu_layers".to_string(), serde_json::json!(12));
+        inputs.insert(
+            "_data".to_string(),
+            serde_json::json!({
+                "device": "Metal0",
+                "context_size": 32768,
+                "batch_size": 512
+            }),
+        );
 
         let extra_settings = build_extra_settings(&inputs);
         let config = llama_cpp_backend_config(
@@ -646,9 +671,12 @@ mod tests {
             config.mmproj_path.as_deref(),
             Some(Path::new("/models/mmproj.gguf"))
         );
-        assert_eq!(config.device.as_deref(), Some("Vulkan0"));
+        assert_eq!(config.device.as_deref(), Some("Metal0"));
         assert_eq!(config.gpu_layers, Some(12));
-        assert_eq!(config.context_size, Some(16384));
+        assert_eq!(config.context_size, Some(32768));
+        assert_eq!(config.cpu_threads, Some(6));
+        assert_eq!(config.batch_size, Some(512));
+        assert_eq!(config.ubatch_size, Some(64));
         assert!(!config.embedding_mode);
         assert!(!config.reranking_mode);
     }

@@ -749,7 +749,7 @@ runtime policy into Pumas or the frontend.
   no-op with a diagnostic when the installed binary does not support it.
 - [x] Define next-slice backend-owned settings: CPU threads, batch size, ubatch
   size, and any llama.cpp-specific validation required before exposing them.
-- [ ] Define precedence: Pumas model defaults, workflow node defaults, run
+- [x] Define precedence: Pumas model defaults, workflow node defaults, run
   overrides, backend validation/defaults.
 - [ ] Add settings to the canonical inference/runtime settings contract with
   backend-specific validation and bounded diagnostics.
@@ -1109,6 +1109,14 @@ coverage.
 - 2026-05-09: Verification passed:
   `cargo test -p inference llamacpp_runtime_settings --features backend-llamacpp`,
   `cargo check -p inference --features backend-llamacpp`, and `cargo fmt`.
+- 2026-05-09: Llama.cpp runtime-setting precedence slice fixed node execution
+  config resolution so connected/run inputs override workflow node data, which
+  overrides Pumas `inference_settings` defaults, which then falls through to
+  backend defaults/validation. The same resolver now projects `cpu_threads`,
+  `batch_size`, and `ubatch_size` into `BackendConfig`.
+- 2026-05-09: Verification passed:
+  `cargo test -p node-engine backend_config_applies_llamacpp_runtime_settings --features inference-nodes`,
+  `cargo check -p node-engine --features inference-nodes`, and `cargo fmt`.
 
 ## Follow-Up Findings
 
