@@ -897,6 +897,62 @@ fn workflow_io_artifact_query_exposes_expired_retention_state() {
 }
 
 #[test]
+fn workflow_io_artifact_query_exposes_deleted_retention_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "node-a",
+            "node_output",
+            "artifact-deleted",
+        ))
+        .expect("io artifact event");
+    ledger
+        .append_diagnostic_event(sample_retention_artifact_state_changed_event(
+            "artifact-deleted",
+            IoArtifactRetentionState::Deleted,
+        ))
+        .expect("retention state change event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: Some("node_output".to_string()),
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Deleted),
+            retention_policy_id: Some("ephemeral".to_string()),
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("deleted io artifact query");
+
+    assert_eq!(response.artifacts.len(), 1);
+    assert_eq!(response.artifacts[0].artifact_id, "artifact-deleted");
+    assert_eq!(
+        response.artifacts[0].retention_state,
+        IoArtifactRetentionState::Deleted
+    );
+    assert_eq!(response.artifacts[0].payload_ref, None);
+    assert_eq!(
+        response.artifacts[0].retention_reason.as_deref(),
+        Some("retention policy expired payload")
+    );
+    assert_eq!(response.retention_summary.len(), 1);
+    assert_eq!(
+        response.retention_summary[0].retention_state,
+        IoArtifactRetentionState::Deleted
+    );
+    assert_eq!(response.retention_summary[0].artifact_count, 1);
+}
+
+#[test]
 fn workflow_io_artifact_query_supports_no_active_run_browsing() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger

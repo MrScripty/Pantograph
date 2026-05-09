@@ -633,7 +633,7 @@ executed run detail.
   and that run detail exposes lifecycle and retention state.
 - [x] Verify retained artifact bodies are readable through existing artifact
   read/stream APIs when retention policy allows.
-- [ ] Ensure expired/deleted artifact bodies leave useful descriptor metadata in
+- [x] Ensure expired/deleted artifact bodies leave useful descriptor metadata in
   run detail.
 
 **Verification:**
@@ -654,7 +654,10 @@ the cache status when present. Descriptor-first large/binary node outputs are
 covered by embedded-runtime tests that preserve ArtifactStore descriptor
 metadata and read retained bodies through the existing artifact API. Oversized
 inline node output values are covered as metadata-only records with size, hash,
-retention reason, and no payload/read handle.
+retention reason, and no payload/read handle. Expired and deleted artifact
+retention states are covered by workflow-service projection tests that preserve
+artifact id, role/node filters, retention state, summary counts, and retention
+reason after payload references are removed.
 
 ### Milestone 5: Text Generation Streaming Contract
 
@@ -998,6 +1001,13 @@ coverage.
   filtering or unbounded diagnostics payloads.
 - 2026-05-09: Verification passed:
   `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_records_oversized_inline_outputs_as_metadata_only`.
+- 2026-05-09: Deleted-retention projection slice added workflow-service
+  coverage alongside the existing expired-retention test so artifact records
+  remain queryable by run, node, role, and retention state after payload
+  references are removed. The projection preserves artifact id, retention
+  reason, and retention summary counts for run inspection.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_io_artifact_query_exposes`.
 
 ## Follow-Up Findings
 
