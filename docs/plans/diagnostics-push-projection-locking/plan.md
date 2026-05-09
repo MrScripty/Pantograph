@@ -578,7 +578,7 @@ event-driven refreshes on affected pages.
 - [x] Update `DiagnosticsPage.svelte` to load initial data once on mount or
       active-run change, then subscribe to projection invalidations for the
       active run and affected comparison scopes.
-- [ ] Update `SchedulerPage.svelte` run list/timeline refresh behavior to
+- [x] Update `SchedulerPage.svelte` run list/timeline refresh behavior to
       respond to run-list and scheduler-timeline invalidations.
 - [ ] Update `NetworkPage.svelte` selected-run timeline/node-status refreshes
       and library-usage refreshes to respond to invalidations.
@@ -604,7 +604,10 @@ event-driven refreshes on affected pages.
 **Status:** In progress. `DiagnosticsPage.svelte` now keeps its active-run
 initial fetch/manual refresh behavior and subscribes to backend diagnostics
 projection invalidations for run detail, run list, node status, I/O artifact,
-and scheduler timeline scopes.
+and scheduler timeline scopes. `SchedulerPage.svelte` now subscribes to run
+list, scheduler timeline, run-detail, and I/O artifact invalidations while
+preserving its active-run refreshes, manual refreshes, and existing workflow
+event compatibility path.
 
 ### Milestone 9: Cross-Layer Acceptance And Release Verification
 

@@ -8,6 +8,7 @@
     SchedulerTimelineProjectionRecord,
     WorkflowSchedulerEstimateRecord,
   } from '../../services/diagnostics/types';
+  import { subscribeDiagnosticsProjectionInvalidations } from '../../services/workflow/WorkflowProjectionSubscriptionService';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import {
     activeWorkflowRun,
@@ -92,6 +93,7 @@
   let refreshInFlight = false;
   let refreshAgain = false;
   let eventUnsubscribe: (() => void) | null = null;
+  let projectionUnsubscribe: (() => void) | null = null;
   let activeRunFilterKey = '';
   let displayedRuns = $derived(filterAndSortSchedulerRuns(runs, $schedulerRunFilters));
   let displayedTimelineEvents = $derived(
@@ -125,6 +127,28 @@
 
   function eventValue(event: Event): string {
     return (event.currentTarget as HTMLInputElement | HTMLSelectElement).value;
+  }
+
+  function recordSubscriptionError(subscriptionError: unknown): void {
+    error = formatWorkflowCommandError(subscriptionError);
+  }
+
+  async function refreshFromProjectionInvalidation(projectionKind: string): Promise<void> {
+    if (projectionKind === 'run_list') {
+      await refreshRuns();
+      return;
+    }
+    if (projectionKind === 'scheduler_timeline') {
+      await refreshTimeline();
+      return;
+    }
+    if (projectionKind === 'run_detail') {
+      await refreshEstimate();
+      return;
+    }
+    if (projectionKind === 'io_artifact') {
+      await refreshRetentionSummary();
+    }
   }
 
   async function refreshRuns(): Promise<void> {
@@ -437,16 +461,34 @@
   }
 
   onMount(() => {
+    let disposed = false;
     eventUnsubscribe = workflowService.subscribeEvents(() => {
       void refreshRuns();
       void refreshTimeline();
       void refreshEstimate();
       void refreshRetentionSummary();
     });
+    void subscribeDiagnosticsProjectionInvalidations({
+      projections: ['run_list', 'scheduler_timeline', 'run_detail', 'io_artifact'],
+      getActiveRunId: activeRunId,
+      refresh: (event) => refreshFromProjectionInvalidation(event.projection_kind),
+      onRefreshError: recordSubscriptionError,
+    })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        projectionUnsubscribe = nextUnlisten;
+      })
+      .catch(recordSubscriptionError);
 
     return () => {
+      disposed = true;
       eventUnsubscribe?.();
       eventUnsubscribe = null;
+      projectionUnsubscribe?.();
+      projectionUnsubscribe = null;
     };
   });
 
