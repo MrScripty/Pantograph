@@ -1484,11 +1484,11 @@ impl WorkflowService {
                     payload_ref: metadata.payload_ref.clone(),
                     payload: DiagnosticEventPayload::IoArtifactObserved(
                         IoArtifactObservedPayload {
-                            artifact_fact_id: None,
-                            payload_artifact_id: None,
+                            artifact_fact_id: Some(metadata.artifact_fact_id),
+                            payload_artifact_id: Some(metadata.payload_artifact_id),
                             artifact_id: metadata.artifact_id,
                             artifact_role: role.clone(),
-                            logical_payload_lineage_id: None,
+                            logical_payload_lineage_id: Some(metadata.logical_payload_lineage_id),
                             producer_node_id: matches!(
                                 role,
                                 IoArtifactRole::NodeOutput | IoArtifactRole::WorkflowOutput

@@ -306,8 +306,9 @@ before changing storage behavior.
 **Status:** In progress. Diagnostics-ledger projection now carries separate
 `artifact_fact_id`, `payload_artifact_id`, and `logical_payload_lineage_id`
 fields and can retain multiple projected facts for one payload id. Workflow
-service, ArtifactStore read APIs, Tauri command payloads, and frontend read
-actions still need the full payload-id cutover.
+service and embedded-runtime artifact emissions now populate those fields.
+ArtifactStore read APIs, Tauri command payloads, and frontend read actions
+still need the full payload-id cutover.
 
 ### Milestone 3: Lineage-Scoped ArtifactStore Reuse
 
@@ -497,6 +498,11 @@ for large payloads.
   Projection upsert identity now uses `artifact_fact_id`, allowing multiple
   durable facts to reference one retained `payload_artifact_id` without row
   overwrite.
+- 2026-05-09: Producer identifier slice updated workflow-service and
+  embedded-runtime I/O artifact emission so new artifact events populate
+  `artifact_fact_id`, `payload_artifact_id`, and
+  `logical_payload_lineage_id`. Existing `artifact_id` remains the read-target
+  compatibility field until the ArtifactStore/API cutover lands.
 
 ## Commit Cadence Notes
 
@@ -567,6 +573,10 @@ types must be edited serially or by one explicit owner.
   `artifact_fact_id`, `payload_artifact_id`, and
   `logical_payload_lineage_id`; the SQLite projection stores those fields and
   upserts by artifact fact identity.
+- Producer identifier slice: workflow-service session I/O and embedded-runtime
+  node I/O artifact events populate artifact fact, payload artifact, and
+  logical lineage identifiers while preserving the existing `artifact_id` read
+  target for current callers.
 
 ### Deviations
 
@@ -589,6 +599,10 @@ types must be edited serially or by one explicit owner.
     text and failed because this repository has no `frontend` workspace; the
     plan now uses the root `npm run typecheck` and `npm run test:frontend`
     scripts.
+- 2026-05-09:
+  - `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
+  - `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts`
+  - `cargo check -p pantograph-workflow-service -p pantograph-embedded-runtime`
 
 ### Traceability Links
 

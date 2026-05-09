@@ -1596,6 +1596,12 @@ fn node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_
         .expect("io artifact query");
     assert_eq!(artifacts.artifacts.len(), 1);
     let artifact = &artifacts.artifacts[0];
+    assert!(artifact.artifact_fact_id.starts_with("workflow-io-fact-"));
+    assert_eq!(artifact.payload_artifact_id, artifact.artifact_id);
+    assert!(artifact
+        .logical_payload_lineage_id
+        .as_deref()
+        .is_some_and(|lineage_id| lineage_id.starts_with("workflow-io-lineage-")));
     assert_eq!(artifact.producer_node_id.as_deref(), Some("node-a"));
     assert_eq!(artifact.producer_port_id.as_deref(), Some("response"));
     assert!(artifact

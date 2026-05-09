@@ -13,7 +13,10 @@ use super::{
 const RETAINED_WORKFLOW_IO_VALUE_MAX_BYTES: usize = 64 * 1024;
 
 pub(super) struct WorkflowIoArtifactMetadata {
+    pub(super) artifact_fact_id: String,
+    pub(super) payload_artifact_id: String,
     pub(super) artifact_id: String,
+    pub(super) logical_payload_lineage_id: String,
     pub(super) media_type: Option<String>,
     pub(super) size_bytes: Option<u64>,
     pub(super) content_hash: Option<String>,
@@ -38,8 +41,20 @@ pub(super) fn workflow_io_artifact_metadata(
     role_label: &str,
     binding: &WorkflowPortBinding,
 ) -> Result<WorkflowIoArtifactMetadata, WorkflowServiceError> {
+    let artifact_fact_id = workflow_io_artifact_fact_id(
+        workflow_run_id,
+        role_label,
+        &binding.node_id,
+        &binding.port_id,
+    );
+    let logical_payload_lineage_id =
+        workflow_io_logical_payload_lineage_id(workflow_run_id, &binding.node_id, &binding.port_id);
     if let Ok(descriptor) = serde_json::from_value::<ArtifactDescriptor>(binding.value.clone()) {
-        return Ok(workflow_io_artifact_metadata_from_descriptor(descriptor));
+        return Ok(workflow_io_artifact_metadata_from_descriptor(
+            descriptor,
+            artifact_fact_id,
+            logical_payload_lineage_id,
+        ));
     }
 
     let materialized = workflow_io_artifact_body(&binding.value)?;
@@ -76,7 +91,11 @@ pub(super) fn workflow_io_artifact_metadata(
                 body: materialized.body.clone(),
             });
             if let Ok(descriptor) = write_result {
-                return Ok(workflow_io_artifact_metadata_from_descriptor(descriptor));
+                return Ok(workflow_io_artifact_metadata_from_descriptor(
+                    descriptor,
+                    artifact_fact_id,
+                    logical_payload_lineage_id,
+                ));
             }
         }
     }
@@ -85,9 +104,32 @@ pub(super) fn workflow_io_artifact_metadata(
         workflow_run_id,
         role_label,
         binding,
+        artifact_fact_id,
+        logical_payload_lineage_id,
         &materialized.body,
         &materialized.media_type,
     ))
+}
+
+fn workflow_io_artifact_fact_id(
+    workflow_run_id: &str,
+    artifact_role: &str,
+    node_id: &str,
+    port_id: &str,
+) -> String {
+    let hash = blake3::hash(
+        format!("{workflow_run_id}:fact:{artifact_role}:{node_id}:{port_id}").as_bytes(),
+    );
+    format!("workflow-io-fact-{hash}")
+}
+
+fn workflow_io_logical_payload_lineage_id(
+    workflow_run_id: &str,
+    node_id: &str,
+    port_id: &str,
+) -> String {
+    let hash = blake3::hash(format!("{workflow_run_id}:lineage:{node_id}:{port_id}").as_bytes());
+    format!("workflow-io-lineage-{hash}")
 }
 
 fn workflow_io_artifact_id(
@@ -131,9 +173,15 @@ fn workflow_io_artifact_body(
 
 fn workflow_io_artifact_metadata_from_descriptor(
     descriptor: ArtifactDescriptor,
+    artifact_fact_id: String,
+    logical_payload_lineage_id: String,
 ) -> WorkflowIoArtifactMetadata {
+    let payload_artifact_id = descriptor.artifact_id.clone();
     WorkflowIoArtifactMetadata {
+        artifact_fact_id,
+        payload_artifact_id,
         artifact_id: descriptor.artifact_id.clone(),
+        logical_payload_lineage_id,
         media_type: descriptor
             .format
             .as_ref()
@@ -162,16 +210,22 @@ fn workflow_io_artifact_metadata_only(
     workflow_run_id: &str,
     role_label: &str,
     binding: &WorkflowPortBinding,
+    artifact_fact_id: String,
+    logical_payload_lineage_id: String,
     body: &[u8],
     media_type: &str,
 ) -> WorkflowIoArtifactMetadata {
+    let payload_artifact_id = workflow_io_artifact_id(
+        workflow_run_id,
+        role_label,
+        &binding.node_id,
+        &binding.port_id,
+    );
     WorkflowIoArtifactMetadata {
-        artifact_id: workflow_io_artifact_id(
-            workflow_run_id,
-            role_label,
-            &binding.node_id,
-            &binding.port_id,
-        ),
+        artifact_fact_id,
+        payload_artifact_id: payload_artifact_id.clone(),
+        artifact_id: payload_artifact_id,
+        logical_payload_lineage_id,
         media_type: Some(media_type.to_string()),
         size_bytes: Some(body.len() as u64),
         content_hash: Some(format!("blake3:{}", blake3::hash(body))),
