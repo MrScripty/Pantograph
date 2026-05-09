@@ -210,4 +210,19 @@ mod tests {
             vec![WorkflowDiagnosticsProjectionKind::RunList]
         );
     }
+
+    #[tokio::test]
+    async fn app_task_registry_shutdown_aborts_bridge_owner_tasks() {
+        let registry = AppTaskRegistry::new();
+        let (started_sender, started_receiver) = tokio::sync::oneshot::channel();
+        let task = tauri::async_runtime::spawn(async move {
+            let _ = started_sender.send(());
+            std::future::pending::<()>().await;
+        });
+        registry.track("workflow-diagnostics-projection-invalidation-bridge", task);
+
+        started_receiver.await.expect("bridge task started");
+        registry.shutdown().await;
+        registry.shutdown().await;
+    }
 }

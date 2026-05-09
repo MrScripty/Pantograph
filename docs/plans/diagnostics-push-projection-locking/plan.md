@@ -491,14 +491,14 @@ the desktop frontend.
 - [x] Ensure event sender lifecycle is started at app setup and stopped on app
       shutdown.
 - [x] Add transport tests for payload shape and coalescing.
-- [ ] Add lifecycle tests for shutdown/cleanup of the bridge owner.
+- [x] Add lifecycle tests for shutdown/cleanup of the bridge owner.
 
 **Verification:**
 
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - Targeted `src-tauri` workflow event adapter tests.
 
-**Status:** In progress. Tauri now registers an explicit
+**Status:** Completed 2026-05-09. Tauri now registers an explicit
 `workflow_diagnostics_projection_refresh` command that calls the
 workflow-service refresh contract and emits
 `workflow://diagnostics/projection-invalidated` only from successful backend
@@ -509,7 +509,8 @@ contract and requests typed projection refreshes after successful diagnostic
 event appends. Tauri starts one app-lifecycle bridge task, registers it as the
 workflow-service sink, coalesces refresh requests, invokes the backend refresh
 contract, and broadcasts successful invalidations through the existing Tauri
-event payload. The remaining work is shutdown/cleanup lifecycle test coverage.
+event payload. Lifecycle coverage verifies the bridge task owner is aborted
+through `AppTaskRegistry` shutdown.
 
 ### Milestone 7: Frontend Subscription Service
 
@@ -565,7 +566,7 @@ type DiagnosticsProjectionSubscriptionOptions = {
 - `npm run test:frontend -- --runInBand` if supported, otherwise targeted
   frontend test command used by this repo.
 
-**Status:** In progress. The frontend workflow service boundary now has typed
+**Status:** Completed 2026-05-09. The frontend workflow service boundary now has typed
 diagnostics projection invalidation DTOs, optional projection health fields, a
 small Tauri-event subscription helper that filters projection/run scope,
 coalesces callbacks, and cleans up listeners, a shared mock projection-state
@@ -792,6 +793,8 @@ parallel by multiple workers.
   through workflow-service, and a Tauri diagnostics timing regression asserts
   default stores do not persist timing observations or expose historical timing
   expectations without an explicitly injected test ledger.
+- 2026-05-09: Milestone 6 completed with lifecycle coverage for the bridge task
+  owner shutdown path used by `AppTaskRegistry`.
 
 ## Commit Cadence Notes
 
@@ -817,6 +820,7 @@ parallel by multiple workers.
 - Milestone 7: frontend projection subscription service, mock/freshness helper
   reuse, and missed-event recovery boundary tests.
 - Milestone 2: live diagnostics and durable ledger ownership split.
+- Milestone 6: backend push invalidation transport and lifecycle ownership.
 
 ### Deviations
 
@@ -841,6 +845,7 @@ parallel by multiple workers.
 - `node --experimental-strip-types --test src/services/workflow/WorkflowProjectionSubscriptionService.test.ts`
 - `npm run typecheck`
 - `cargo test --manifest-path src-tauri/Cargo.toml default_diagnostics_store_keeps_timing_history_memory_only`
+- `cargo test --manifest-path src-tauri/Cargo.toml app_task_registry_shutdown_aborts_bridge_owner_tasks`
 
 ### Traceability Links
 
