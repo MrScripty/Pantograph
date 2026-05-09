@@ -13,7 +13,10 @@ use pantograph_node_contracts::{
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttribution, WorkflowRunId,
 };
-use pantograph_workflow_service::{WorkflowNodeStatusQueryRequest, WorkflowService};
+use pantograph_workflow_service::{
+    ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowIoArtifactQueryRequest,
+    WorkflowNodeStatusQueryRequest, WorkflowService,
+};
 
 use super::{
     build_kv_cache_diagnostic_event_ledger_append_request,
@@ -1458,6 +1461,90 @@ fn kv_cache_workflow_sink_returns_diagnostics_unavailable_and_forwards_event_on_
 }
 
 #[test]
+fn node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts() {
+    let temp = tempfile::tempdir().expect("temp artifact store");
+    let artifact_store =
+        ArtifactStore::open(temp.path(), retained_node_io_test_artifact_policy()).expect("store");
+    let service = std::sync::Arc::new(
+        WorkflowService::with_ephemeral_diagnostics_ledger()
+            .expect("service")
+            .with_artifact_store(artifact_store),
+    );
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![node_engine::GraphNode {
+            id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        }],
+        edges: Vec::new(),
+        groups: Vec::new(),
+    };
+    let sink = NodeExecutionWorkflowLedgerSink::try_new(
+        service.clone(),
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+        None,
+    )
+    .expect("sink");
+
+    node_engine::EventSink::send(
+        &sink,
+        node_engine::WorkflowEvent::TaskCompleted {
+            task_id: "node-a".to_string(),
+            execution_id: "run-a".to_string(),
+            output: Some(serde_json::json!({
+                "response": "retained intermediate text"
+            })),
+            occurred_at_ms: Some(200),
+        },
+    )
+    .expect("node output artifact should record");
+
+    let artifacts = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: Some("node_output".to_string()),
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("io artifact query");
+    assert_eq!(artifacts.artifacts.len(), 1);
+    let artifact = &artifacts.artifacts[0];
+    assert_eq!(artifact.producer_node_id.as_deref(), Some("node-a"));
+    assert_eq!(artifact.producer_port_id.as_deref(), Some("response"));
+    assert!(artifact
+        .payload_ref
+        .as_deref()
+        .is_some_and(|payload_ref| payload_ref.starts_with("artifact://workflow-io-")));
+    assert!(artifact.payload_ref.is_some());
+    assert_eq!(artifact.media_type.as_deref(), Some("text/plain"));
+
+    let body = service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id: artifact.artifact_id.clone(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("artifact body should be readable");
+    assert_eq!(body.body, b"retained intermediate text");
+}
+
+#[test]
 fn inference_lifecycle_recorder_projects_terminal_duration_after_started() {
     let context = context();
     let mut recorder = InferenceLifecycleLedgerRecorder::new();
@@ -1936,4 +2023,17 @@ fn submission() -> ManagedModelUsageSubmission {
         110,
         150,
     )
+}
+
+fn retained_node_io_test_artifact_policy() -> ArtifactPolicy {
+    ArtifactPolicy {
+        policy_id: "retained-node-io-test-policy".to_string(),
+        policy_version: 1,
+        ttl_seconds: None,
+        max_disk_bytes: Some(1024 * 1024),
+        max_memory_bytes: Some(1024 * 1024),
+        max_single_artifact_bytes: Some(1024 * 1024),
+        spill_threshold_bytes: Some(1024),
+        delete_on_consume: false,
+    }
 }

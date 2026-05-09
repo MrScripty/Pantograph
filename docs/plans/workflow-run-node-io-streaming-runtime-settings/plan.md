@@ -571,9 +571,9 @@ retention and projection systems.
   reference.
 - [ ] Ensure retained node inputs are the resolved execution inputs after graph
   dependency resolution and explicit user bindings, not stale graph node data.
-- [ ] Ensure retained node outputs are the actual executor outputs, not only
+- [x] Ensure retained node outputs are the actual executor outputs, not only
   terminal workflow outputs.
-- [ ] Preserve terminal `workflow_output` records as run outputs while adding
+- [x] Preserve terminal `workflow_output` records as run outputs while adding
   distinct per-node `node_output` records for inspection.
 - [x] Store small structured/text node IO through the retained IO value
   materialization rule. Inspectable values should be retrievable through
@@ -598,7 +598,11 @@ retention and projection systems.
 - Relevant Rust package checks pass for touched crates.
 - Any frontend DTO/rendering changes include targeted TypeScript tests.
 
-**Status:** Not started
+**Status:** Partially implemented. Executed node outputs now flow from
+node-engine `TaskCompleted` events through embedded-runtime ledger projection
+as `node_output` I/O artifacts, including retained small text/JSON ArtifactStore
+bodies when available. Resolved node inputs and cache-hit output records remain
+open.
 
 ### Milestone 4: Cached Execution IO And Artifact Retention
 
@@ -864,6 +868,16 @@ coverage.
   `cargo test -p inference server::tests:: --features backend-llamacpp`,
   `cargo test -p inference backend::llamacpp::tests:: --features backend-llamacpp`,
   and `cargo test -p node-engine core_executor::llamacpp_nodes::tests:: --features inference-nodes`.
+- 2026-05-08: Durable intermediate node-output slice now records node-engine
+  `TaskCompleted` output port values through
+  `NodeExecutionWorkflowLedgerSink` as `IoArtifactObserved(node_output)` events.
+  Small text/JSON values are materialized into ArtifactStore bodies when a
+  store is configured; otherwise the ledger receives metadata-only rows with
+  retention reasons. The slice kept materialization helpers in
+  `node_io_artifacts.rs` so `node_execution_ledger.rs` remains focused on
+  event-to-ledger adaptation.
+- 2026-05-08: Verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests:: --features backend-llamacpp`.
 
 ## Follow-Up Findings
 
@@ -872,9 +886,9 @@ coverage.
   Submitted workflow inputs are now retained as `node_input`, but dependency
   resolved inputs for intermediate nodes are not yet durable facts.
 - Full per-node output inspection for every executed intermediate node should
-  use the existing node execution event/ledger path. The first slice covers
-  terminal node outputs returned to workflow-service; non-terminal node outputs
-  still need a node-engine event sink or host response extension.
+  now use the existing node execution event/ledger path. Cached-output branches
+  can still bypass fresh `TaskCompleted` execution and need a cache-specific
+  node-output artifact record in Milestone 4.
 - Effective llama.cpp settings are applied but not yet emitted as a structured
   runtime settings snapshot with source attribution in run diagnostics. That is
   still needed before frontend controls can show whether values came from

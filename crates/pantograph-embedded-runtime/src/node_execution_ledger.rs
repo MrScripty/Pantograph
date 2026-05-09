@@ -9,10 +9,11 @@ use pantograph_diagnostics_ledger::{
     InferenceCompatibilityIssueDiagnosticSummary, InferenceCompatibilityReportDiagnosticSummary,
     InferenceExecutionDiagnosticObservedPayload, InferenceKvCacheDiagnosticSummary,
     InferenceOptionDiagnosticSummary, InferenceOptionSupportCounts,
-    InferenceUsageDiagnosticSummary, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
-    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
-    RetentionClass, UsageEventStatus, UsageLineage, MAX_DIAGNOSTIC_ERROR_TEXT_LEN,
-    MAX_INFERENCE_COMPATIBILITY_ISSUES, MAX_INFERENCE_OPTION_DIAGNOSTICS,
+    InferenceUsageDiagnosticSummary, IoArtifactObservedPayload, IoArtifactRole, LicenseSnapshot,
+    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
+    NodeExecutionStatusPayload, RetentionClass, UsageEventStatus, UsageLineage,
+    MAX_DIAGNOSTIC_ERROR_TEXT_LEN, MAX_INFERENCE_COMPATIBILITY_ISSUES,
+    MAX_INFERENCE_OPTION_DIAGNOSTICS,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
@@ -254,6 +255,105 @@ impl NodeExecutionWorkflowLedgerSink {
             .map(|_| ())
             .map_err(|error| diagnostics_unavailable_event_error("KV cache diagnostic", &error))
     }
+
+    fn record_node_output_artifacts(
+        &self,
+        event: &node_engine::WorkflowEvent,
+    ) -> Result<(), node_engine::EventError> {
+        let node_engine::WorkflowEvent::TaskCompleted {
+            task_id,
+            execution_id,
+            output: Some(output),
+            occurred_at_ms,
+        } = event
+        else {
+            return Ok(());
+        };
+        if execution_id != &self.execution_id {
+            return Ok(());
+        }
+        let Some(context) = self.contexts_by_node_id.get(task_id) else {
+            return Ok(());
+        };
+        let Some(outputs) = output.as_object() else {
+            return self.record_node_output_artifact(context, "output", output, occurred_at_ms);
+        };
+
+        for (port_id, value) in outputs {
+            self.record_node_output_artifact(context, port_id, value, occurred_at_ms)?;
+        }
+
+        Ok(())
+    }
+
+    fn record_node_output_artifact(
+        &self,
+        context: &NodeExecutionWorkflowLedgerNodeContext,
+        port_id: &str,
+        value: &serde_json::Value,
+        occurred_at_ms: &Option<u64>,
+    ) -> Result<(), node_engine::EventError> {
+        let artifact = crate::node_io_artifacts::node_output_artifact_metadata(
+            &self.workflow_service,
+            &self.workflow_run_id,
+            &self.workflow_id,
+            &context.node_id,
+            port_id,
+            value,
+        );
+        let request = DiagnosticEventAppendRequest {
+            source_component: DiagnosticEventSourceComponent::NodeExecution,
+            source_instance_id: Some(self.execution_id.clone()),
+            occurred_at_ms: occurred_at_ms
+                .and_then(|value| i64::try_from(value).ok())
+                .unwrap_or_else(|| {
+                    i64::try_from(crate::workflow_runtime::unix_timestamp_ms()).unwrap_or(i64::MAX)
+                }),
+            workflow_run_id: Some(self.workflow_run_id.clone()),
+            workflow_id: Some(self.workflow_id.clone()),
+            workflow_version_id: None,
+            workflow_semantic_version: None,
+            node_id: Some(context.node_id.clone()),
+            node_type: Some(context.node_type.clone()),
+            node_version: None,
+            runtime_id: None,
+            runtime_version: None,
+            model_id: None,
+            model_version: None,
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
+            scheduler_policy_id: None,
+            retention_policy_id: None,
+            privacy_class: artifact.privacy_class,
+            retention_class: artifact.retention_class,
+            payload_ref: artifact.payload_ref,
+            payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+                artifact_id: artifact.artifact_id,
+                artifact_role: IoArtifactRole::NodeOutput,
+                producer_node_id: Some(context.node_id.clone()),
+                producer_port_id: Some(port_id.to_string()),
+                consumer_node_id: None,
+                consumer_port_id: None,
+                media_type: artifact.media_type,
+                size_bytes: artifact.size_bytes,
+                content_hash: artifact.content_hash,
+                retention_state: Some(artifact.retention_state),
+                retention_reason: artifact.retention_reason,
+                payload_kind: artifact.payload_kind,
+                lifecycle_state: artifact.lifecycle_state,
+                access_modes: artifact.access_modes,
+                read_handle: artifact.read_handle,
+                stream_handle: None,
+                format: artifact.format,
+            }),
+        };
+
+        self.workflow_service
+            .workflow_diagnostic_event_record(request)
+            .map(|_| ())
+            .map_err(|error| diagnostics_unavailable_event_error("node output artifact", &error))
+    }
 }
 
 impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflowLedgerSink {
@@ -306,12 +406,14 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
 impl node_engine::EventSink for NodeExecutionWorkflowLedgerSink {
     fn send(&self, event: node_engine::WorkflowEvent) -> Result<(), node_engine::EventError> {
         let diagnostic_result = self.record_kv_cache_diagnostic(&event);
+        let io_result = self.record_node_output_artifacts(&event);
 
         if let Some(inner) = &self.inner {
             inner.send(event)?;
         }
 
-        diagnostic_result
+        diagnostic_result?;
+        io_result
     }
 }
 

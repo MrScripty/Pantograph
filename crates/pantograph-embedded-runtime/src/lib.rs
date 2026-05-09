@@ -23,6 +23,7 @@ pub mod model_dependencies;
 mod node_execution;
 mod node_execution_diagnostics;
 mod node_execution_ledger;
+mod node_io_artifacts;
 pub mod python_runtime;
 mod python_runtime_execution;
 pub mod rag;
