@@ -594,7 +594,7 @@ retention and projection systems.
   stability.
 - [ ] Ensure retention policy gates node IO consistently and exposes the reason
   when IO is not retained.
-- [ ] Add bounded redaction/descriptor behavior for values too large or unsafe
+- [x] Add bounded redaction/descriptor behavior for values too large or unsafe
   to retain inline.
 
 **Verification:**
@@ -652,7 +652,9 @@ completions emit `fresh_execution`. Durable node-status projection now carries
 events into run detail and node-status queries, and the run graph page displays
 the cache status when present. Descriptor-first large/binary node outputs are
 covered by embedded-runtime tests that preserve ArtifactStore descriptor
-metadata and read retained bodies through the existing artifact API.
+metadata and read retained bodies through the existing artifact API. Oversized
+inline node output values are covered as metadata-only records with size, hash,
+retention reason, and no payload/read handle.
 
 ### Milestone 5: Text Generation Streaming Contract
 
@@ -988,6 +990,14 @@ coverage.
   inline large/binary bodies.
 - 2026-05-09: Verification passed:
   `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_projects_descriptor_node_outputs_without_body_inline`.
+- 2026-05-09: Oversized inline node-output slice added an embedded-runtime
+  regression test proving a value above the retained inline threshold is
+  projected as `metadata_only` with media type, size, content hash, retention
+  reason, and producer port metadata while omitting payload and read handles.
+  This locks the backend-owned large-value behavior without adding frontend
+  filtering or unbounded diagnostics payloads.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_records_oversized_inline_outputs_as_metadata_only`.
 
 ## Follow-Up Findings
 

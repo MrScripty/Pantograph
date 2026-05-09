@@ -1681,6 +1681,89 @@ fn node_execution_workflow_sink_projects_descriptor_node_outputs_without_body_in
 }
 
 #[test]
+fn node_execution_workflow_sink_records_oversized_inline_outputs_as_metadata_only() {
+    let temp = tempfile::tempdir().expect("temp artifact store");
+    let artifact_store =
+        ArtifactStore::open(temp.path(), retained_node_io_test_artifact_policy()).expect("store");
+    let service = std::sync::Arc::new(
+        WorkflowService::with_ephemeral_diagnostics_ledger()
+            .expect("service")
+            .with_artifact_store(artifact_store),
+    );
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![node_engine::GraphNode {
+            id: "node-a".to_string(),
+            node_type: "text-output".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        }],
+        edges: Vec::new(),
+        groups: Vec::new(),
+    };
+    let sink = NodeExecutionWorkflowLedgerSink::try_new(
+        service.clone(),
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+        None,
+    )
+    .expect("sink");
+
+    node_engine::EventSink::send(
+        &sink,
+        node_engine::WorkflowEvent::TaskCompleted {
+            task_id: "node-a".to_string(),
+            execution_id: "run-a".to_string(),
+            output: Some(serde_json::json!({
+                "response": "x".repeat(70 * 1024)
+            })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
+            occurred_at_ms: Some(200),
+        },
+    )
+    .expect("oversized node output should record metadata");
+
+    let artifacts = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: Some("node_output".to_string()),
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::MetadataOnly),
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("io artifact query");
+
+    assert_eq!(artifacts.artifacts.len(), 1);
+    let artifact = &artifacts.artifacts[0];
+    assert_eq!(artifact.producer_node_id.as_deref(), Some("node-a"));
+    assert_eq!(artifact.producer_port_id.as_deref(), Some("response"));
+    assert_eq!(artifact.media_type.as_deref(), Some("text/plain"));
+    assert_eq!(artifact.size_bytes, Some(70 * 1024));
+    assert!(artifact
+        .content_hash
+        .as_deref()
+        .is_some_and(|hash| hash.starts_with("blake3:")));
+    assert!(artifact.payload_ref.is_none());
+    assert!(artifact.read_handle.is_none());
+    assert_eq!(
+        artifact.retention_reason.as_deref(),
+        Some("workflow value body is not retained in the I/O artifact ledger")
+    );
+}
+
+#[test]
 fn node_execution_workflow_sink_records_resolved_inputs_as_retained_node_artifacts() {
     let temp = tempfile::tempdir().expect("temp artifact store");
     let artifact_store =
