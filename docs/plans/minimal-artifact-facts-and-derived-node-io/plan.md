@@ -277,7 +277,11 @@ facts.
 - The new tests should fail for the expected duplicate-body and duplicate-input
   row reasons before the implementation changes land.
 
-**Status:** Not started
+**Status:** In progress. Workflow-service and embedded-runtime now create
+family-scoped payload ids (`input` or `output`) separately from exact artifact
+fact ids, so paired workflow/node boundary facts for the same node port can
+share one retained body. Broader ArtifactStore alias/reference support and
+large descriptor-backed media checks still remain.
 
 ### Milestone 2: Payload Identity And Read Target Contract
 
@@ -508,6 +512,11 @@ for large payloads.
   descriptor, preview, stream, download, and consume requests through
   `payload_artifact_id` when present, falling back to `artifact_id` for older
   records.
+- 2026-05-09: Lineage-scoped payload id slice changed workflow-service and
+  embedded-runtime small-value materialization to use family-scoped retained
+  payload ids (`input` vs `output`) while keeping fact ids role-specific. This
+  lets `node_output` and `workflow_output` facts for the same node/port share
+  a body without risking input/output port name collisions.
 
 ## Commit Cadence Notes
 
@@ -584,6 +593,9 @@ types must be edited serially or by one explicit owner.
   target for current callers.
 - Frontend read-target slice: I/O Inspector now uses `payload_artifact_id` as
   the retained body target when artifact records expose it.
+- Lineage-scoped payload id slice: paired workflow/node boundary artifact facts
+  now share retained payload ids by input/output family while preserving
+  distinct fact ids.
 
 ### Deviations
 
@@ -613,6 +625,10 @@ types must be edited serially or by one explicit owner.
 - 2026-05-09:
   - `npm run typecheck`
   - `npm run test:frontend`
+- 2026-05-09:
+  - `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
+  - `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts`
+  - `cargo check -p pantograph-workflow-service -p pantograph-embedded-runtime`
 
 ### Traceability Links
 

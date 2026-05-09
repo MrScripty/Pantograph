@@ -162,6 +162,30 @@ async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
     assert_eq!(payload["producer_port_id"], "text");
     assert!(payload["consumer_node_id"].is_null());
     assert!(payload["consumer_port_id"].is_null());
+    let workflow_output_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::IoArtifactObserved
+                && event
+                    .payload_json
+                    .contains("\"artifact_role\":\"workflow_output\"")
+        })
+        .expect("workflow output artifact event");
+    let workflow_output_payload: serde_json::Value =
+        serde_json::from_str(&workflow_output_event.payload_json).expect("workflow output payload");
+    assert_eq!(
+        workflow_output_payload["payload_artifact_id"],
+        payload["payload_artifact_id"]
+    );
+    assert_eq!(
+        workflow_output_payload["logical_payload_lineage_id"],
+        payload["logical_payload_lineage_id"]
+    );
+    assert_ne!(
+        workflow_output_payload["artifact_fact_id"],
+        payload["artifact_fact_id"]
+    );
     let artifact_id = payload["artifact_id"]
         .as_str()
         .expect("artifact id")
@@ -176,6 +200,10 @@ async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
         })
         .expect("read retained node output artifact");
     assert_eq!(retained.body, b"retained text");
+    let stats = service
+        .artifact_store_stats()
+        .expect("artifact store stats");
+    assert_eq!(stats.retained_body_count, 2);
 }
 
 #[tokio::test]

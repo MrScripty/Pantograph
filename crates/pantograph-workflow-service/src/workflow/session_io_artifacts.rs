@@ -47,8 +47,19 @@ pub(super) fn workflow_io_artifact_metadata(
         &binding.node_id,
         &binding.port_id,
     );
-    let logical_payload_lineage_id =
-        workflow_io_logical_payload_lineage_id(workflow_run_id, &binding.node_id, &binding.port_id);
+    let payload_family = workflow_io_payload_family(role_label);
+    let payload_artifact_id = workflow_io_payload_artifact_id(
+        workflow_run_id,
+        payload_family,
+        &binding.node_id,
+        &binding.port_id,
+    );
+    let logical_payload_lineage_id = workflow_io_logical_payload_lineage_id(
+        workflow_run_id,
+        payload_family,
+        &binding.node_id,
+        &binding.port_id,
+    );
     if let Ok(descriptor) = serde_json::from_value::<ArtifactDescriptor>(binding.value.clone()) {
         return Ok(workflow_io_artifact_metadata_from_descriptor(
             descriptor,
@@ -58,12 +69,7 @@ pub(super) fn workflow_io_artifact_metadata(
     }
 
     let materialized = workflow_io_artifact_body(&binding.value)?;
-    let artifact_id = workflow_io_artifact_id(
-        workflow_run_id,
-        role_label,
-        &binding.node_id,
-        &binding.port_id,
-    );
+    let artifact_id = payload_artifact_id.clone();
     if materialized.body.len() <= RETAINED_WORKFLOW_IO_VALUE_MAX_BYTES {
         if let Some(store) = service.artifact_store.as_ref() {
             let mut store = store.lock().map_err(|_| {
@@ -101,10 +107,8 @@ pub(super) fn workflow_io_artifact_metadata(
     }
 
     Ok(workflow_io_artifact_metadata_only(
-        workflow_run_id,
-        role_label,
-        binding,
         artifact_fact_id,
+        payload_artifact_id,
         logical_payload_lineage_id,
         &materialized.body,
         &materialized.media_type,
@@ -125,22 +129,34 @@ fn workflow_io_artifact_fact_id(
 
 fn workflow_io_logical_payload_lineage_id(
     workflow_run_id: &str,
+    payload_family: &str,
     node_id: &str,
     port_id: &str,
 ) -> String {
-    let hash = blake3::hash(format!("{workflow_run_id}:lineage:{node_id}:{port_id}").as_bytes());
+    let hash = blake3::hash(
+        format!("{workflow_run_id}:lineage:{payload_family}:{node_id}:{port_id}").as_bytes(),
+    );
     format!("workflow-io-lineage-{hash}")
 }
 
-fn workflow_io_artifact_id(
+fn workflow_io_payload_artifact_id(
     workflow_run_id: &str,
-    artifact_role: &str,
+    payload_family: &str,
     node_id: &str,
     port_id: &str,
 ) -> String {
-    let hash =
-        blake3::hash(format!("{workflow_run_id}:{artifact_role}:{node_id}:{port_id}").as_bytes());
+    let hash = blake3::hash(
+        format!("{workflow_run_id}:payload:{payload_family}:{node_id}:{port_id}").as_bytes(),
+    );
     format!("workflow-io-{hash}")
+}
+
+fn workflow_io_payload_family(role_label: &str) -> &'static str {
+    match role_label {
+        "node_output" | "workflow_output" => "output",
+        "node_input" | "workflow_input" => "input",
+        _ => "unknown",
+    }
 }
 
 struct WorkflowIoArtifactBody {
@@ -207,20 +223,12 @@ fn workflow_io_artifact_metadata_from_descriptor(
 }
 
 fn workflow_io_artifact_metadata_only(
-    workflow_run_id: &str,
-    role_label: &str,
-    binding: &WorkflowPortBinding,
     artifact_fact_id: String,
+    payload_artifact_id: String,
     logical_payload_lineage_id: String,
     body: &[u8],
     media_type: &str,
 ) -> WorkflowIoArtifactMetadata {
-    let payload_artifact_id = workflow_io_artifact_id(
-        workflow_run_id,
-        role_label,
-        &binding.node_id,
-        &binding.port_id,
-    );
     WorkflowIoArtifactMetadata {
         artifact_fact_id,
         payload_artifact_id: payload_artifact_id.clone(),
