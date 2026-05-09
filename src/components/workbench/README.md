@@ -12,8 +12,8 @@ later plan stages fill in richer page bodies.
 | `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/placement/date filters, scope and placement columns, typed queue/estimate/cache columns, selected-run estimate and retention projection panels, backend-gated queue actions including session priority controls, and selected-run scheduler timeline projection with typed kind/source filters. |
 | `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/placement/date, queue-control gating, selected-run estimate/cache and retention rows, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
-| `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
-| `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
+| `GraphPage.svelte` | Workbench page that switches between the active run's backend-owned run-inspection snapshot and the current editable workflow graph. |
+| `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunInspection`; it does not load historic graphs into the editor store. |
 | `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range/placement filtered comparison facets, typed model-cache posture, mixed-version warnings, and scheduler timeline records. |
 | `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority/placement/model-cache facts, workflow-version/date-range/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
@@ -68,6 +68,9 @@ grow separate navigation and selection models.
   command responses as the source of truth.
 - Historic run graph rendering must use immutable run graph projections and
   must not mutate the current editor store.
+- Historic run graph rendering must request backend-owned run-inspection facts
+  as one read model for a selected run instead of composing graph, node status,
+  and I/O artifact pages in frontend state.
 - Network pages must distinguish unavailable platform metrics from zero values.
 - Existing graph editing surfaces must remain usable while ownership moves into
   the workbench shell.
@@ -155,6 +158,10 @@ transient UI state without becoming backend scheduler policy.
 - Run graph snapshots are read-only projection views. Switching to the current
   editor keeps the selected run context for other pages but does not imply the
   editor graph matches that run.
+- Run graph snapshots consume `workflowService.queryRunInspection` for graph,
+  node-status, and I/O artifact facts. Presenter code may group, label, and
+  visually order those facts, but it must not invent persisted run data or
+  projection freshness state.
 - Diagnostics timeline rows render typed scheduler projection summaries and
   payload availability only; detailed payload parsing belongs in backend
   projections or future typed presenters.

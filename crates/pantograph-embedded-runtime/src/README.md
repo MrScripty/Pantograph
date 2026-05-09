@@ -42,8 +42,8 @@ packages.
 | `node_execution_capabilities.rs` | Defines managed capability route contracts and typed capability wrappers for model, resource, cache, progress, diagnostics, and external-tool access. |
 | `node_execution_diagnostics.rs` | Adapts node-engine workflow events into enriched transient runtime-owned node diagnostics with attribution, contract, lineage, and guarantee context, plus an event-sink recorder for collecting adapted diagnostics along execution paths. |
 | `node_execution_diagnostics_tests.rs` | Focused diagnostics adapter tests for lifecycle, output summary, progress, stream, failure, cancellation, and filtering behavior. |
-| `node_execution_ledger.rs` | Owns runtime submission of managed model usage facts, inference lifecycle facts, canonical task/backend/model/device projection context, bounded inference option-support summaries, usage summaries, cache-handle ids, KV-cache diagnostic references, diagnostics-unavailable projection for workflow-event append failures, and sanitized failed-detail copies into the durable diagnostics ledger through workflow-service/node-execution boundaries. It defensively drops path-shaped runtime, source, backend, model, device, network-node, KV-cache, option, and compatibility metadata before durable persistence. |
-| `node_io_artifacts.rs` | Materializes small node execution outputs into workflow ArtifactStore bodies when available and returns diagnostics-ledger I/O artifact metadata for retained or metadata-only node output projection. |
+| `node_execution_ledger.rs` | Owns runtime submission of managed model usage facts, inference lifecycle facts, canonical task/backend/model/device projection context, bounded inference option-support summaries, usage summaries, cache-handle ids, KV-cache diagnostic references, node input/output artifact facts, diagnostics-unavailable projection for workflow-event append failures, and sanitized failed-detail copies into the durable diagnostics ledger through workflow-service/node-execution boundaries. It defensively drops path-shaped runtime, source, backend, model, device, network-node, KV-cache, option, and compatibility metadata before durable persistence. |
+| `node_io_artifacts.rs` | Materializes small resolved node inputs and completed node outputs into workflow ArtifactStore bodies when available and returns diagnostics-ledger I/O artifact metadata for retained or metadata-only node input/output projection. Artifact ids are stable per run, role, node, and port. |
 | `node_execution_ledger_tests.rs` | Focused runtime ledger submission tests for context matching, unavailable capability rejection, output-measurement guarantee downgrades, inference lifecycle projection, option-support summary projection, usage/cache summary hygiene, diagnostics-unavailable append-failure behavior, bounded failed-detail projection, path-shaped runtime metadata filtering, and persisted usage submission. |
 | `node_execution_tests.rs` | Focused runtime-created node execution context, managed capability routing, cancellation, progress, output summary, and guarantee classification tests. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
@@ -150,6 +150,10 @@ Workflow-service facade methods exposed by this crate, including
 execution-session queue cancel, reprioritize, and push-front, must remain
 delegating methods; scheduler authority and diagnostics events stay in
 `pantograph-workflow-service`.
+Node execution ledger adaptation emits retained node input/output evidence
+through diagnostics-ledger `IoArtifactObserved` events. Small text/JSON values
+may be materialized into ArtifactStore bodies; large, binary, unavailable, or
+policy-limited values remain descriptor metadata with retention reasons.
 
 ## Alternatives Rejected
 - Resolve executable paths directly from `ModelRecord.metadata`.
@@ -162,6 +166,10 @@ delegating methods; scheduler authority and diagnostics events stay in
 ## Invariants
 - Pantograph-specific runtime orchestration stays in this crate, not in generic
   node packages.
+- Resolved node input and completed node output retention uses one final
+  artifact fact per run, role, node, and port. Attempts, cache hits, and
+  repeated executions require a new workflow run before they can produce a new
+  final retained fact for the same node port.
 - Embedded-runtime construction, host projection, registry injection, and
   shutdown sequencing stay in `embedded_runtime_lifecycle.rs` so the root
   facade keeps only type definitions, exports, and remaining workflow API

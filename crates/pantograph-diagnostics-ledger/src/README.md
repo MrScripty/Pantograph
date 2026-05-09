@@ -71,6 +71,9 @@ Node-status projection rows include selected runtime id, canonical inference
 task id, selected backend key, and model id when producers provide them, so UI
 and API consumers do not need to parse raw diagnostic payload JSON for common
 inference execution context.
+Node-status projection rows also preserve the latest bounded effective runtime
+settings summary when producers emit one. Those summaries are backend
+execution diagnostics, not frontend configuration state.
 Run-list and run-detail projections also roll up node- and
 inference-diagnostic-derived selected runtime id, selected backend key,
 selected model id, and selected task id where scheduler/run payloads do not
@@ -246,6 +249,10 @@ with a ledger/storage failure.
 - `io_artifact_projection.artifact_role` stores canonical labels derived from
   `IoArtifactRole`, keeping workflow/node artifact roles typed at write time
   while preserving simple string filters for query contracts.
+- Node-status projection runtime-settings summaries are copied from bounded
+  `inference.execution_diagnostic_observed` payloads. The projection must not
+  parse backend process logs or frontend setting controls to infer effective
+  execution settings.
 - I/O retention completeness queries group the materialized artifact projection
   by typed retention state. They must not scan raw ledger events during normal
   page reads.

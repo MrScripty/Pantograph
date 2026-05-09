@@ -428,10 +428,10 @@ implemented and should be repaired through existing ownership boundaries:
 retention and run-detail path before implementation changes.
 
 **Tasks:**
-- [ ] Complete the retained-run trace through node-engine execution events,
+- [x] Complete the retained-run trace through node-engine execution events,
   embedded-runtime event adaptation, diagnostics ledger writes, run-detail
   projection drain, and frontend graph page read.
-- [ ] Complete the Maid-style graph trace through the same path, including cached and
+- [x] Complete the Maid-style graph trace through the same path, including cached and
   non-cached execution.
 - [x] Search for existing retention, ArtifactStore, diagnostics ledger,
   run graph, streaming, and runtime setting surfaces.
@@ -451,9 +451,9 @@ retention and run-detail path before implementation changes.
   filtered by retention policy.
 - [x] Identify whether node outputs and artifacts fail at a different layer
   than inputs.
-- [ ] Identify current retention policy defaults and whether they intentionally
+- [x] Identify current retention policy defaults and whether they intentionally
   suppress node IO.
-- [ ] Identify whether current artifact IDs intentionally represent
+- [x] Identify whether current artifact IDs intentionally represent
   latest-value-per-run/node/port, or whether attempts/cache hits need distinct
   artifact identity.
 - [x] Record source findings in this plan's execution notes with file/function
@@ -475,7 +475,12 @@ retention and run-detail path before implementation changes.
   first implementation slice.
 - No source code edits in this milestone.
 
-**Status:** In progress
+**Status:** Complete. The retained-run path now carries resolved node inputs,
+completed node outputs, cache-hit outputs, final responses, and runtime
+settings from backend execution events through diagnostics/artifact projections
+into retained run inspection. Retention defaults keep descriptor metadata even
+when bodies are not retained, and node IO artifact identity is intentionally
+one final fact per run, role, node, and port.
 
 ### Milestone 2: Standards Contract Freeze And Simplification Gate
 
@@ -484,53 +489,53 @@ needed before implementation spreads across execution, diagnostics, runtime,
 Tauri, and frontend code.
 
 **Tasks:**
-- [ ] Define one internal node IO evidence adapter contract that accepts
+- [x] Define one internal node IO evidence adapter contract that accepts
   resolved inputs, completed outputs, cache state, node identity, and run
   context, then emits existing `IoArtifactObserved` events.
 - [x] Define one retained IO value materialization rule: bounded text/JSON
   values that must be inspectable are written through ArtifactStore; large,
   binary, redacted, or policy-suppressed values become descriptors or
   metadata-only records with explicit retention reasons.
-- [ ] Document run-scoped artifact identity semantics:
+- [x] Document run-scoped artifact identity semantics:
   one final retained input/output fact per run/role/node/port. Do not add
   attempt/event artifact identity unless Pantograph later supports multiple
   executions of the same node inside one run.
-- [ ] Document collection-output semantics: if one port produces multiple
+- [x] Document collection-output semantics: if one port produces multiple
   files/items, retain one stable port fact that points to a manifest or bounded
   item descriptors instead of introducing attempt identity or unstable IDs.
-- [ ] Define a backend-owned run-inspection read model if Milestone 1 confirms
+- [x] Define a backend-owned run-inspection read model if Milestone 1 confirms
   the executed graph page needs graph snapshot, node statuses, and IO artifacts
   together. The read model must join existing projections without creating a
   second persisted store.
-- [ ] Define the run-inspection performance shape: run-id-keyed query,
+- [x] Define the run-inspection performance shape: run-id-keyed query,
   descriptor-first response, no eager artifact body loads, no frontend N+1
   query pattern, and lazy artifact body retrieval through existing artifact
   APIs.
-- [ ] Keep the run-inspection read model presentation-neutral. It may expose
+- [x] Keep the run-inspection read model presentation-neutral. It may expose
   factual relationships and stable identifiers, but it must not define cards,
   badges, colors, display labels, panel grouping, visual ordering, or selected
   node behavior.
-- [ ] Define one backend-owned llama.cpp runtime settings contract and
+- [x] Define one backend-owned llama.cpp runtime settings contract and
   validation path. Tauri and frontend may display or transport this contract
   but must not define the final setting semantics.
-- [ ] Define the effective-settings snapshot shape once, including source
+- [x] Define the effective-settings snapshot shape once, including source
   attribution for each effective value where useful: Pumas default, workflow
   default, run override, backend default, or backend validation adjustment.
-- [ ] Freeze the implementation blast radius for the first source slice:
+- [x] Freeze the implementation blast radius for the first source slice:
   identify each touched file as contract owner, orchestration owner,
   persistence owner, transport adapter, or presentation consumer before
   editing it.
-- [ ] Define executable boundary validation for persisted, IPC, and
+- [x] Define executable boundary validation for persisted, IPC, and
   process-boundary DTOs touched by node IO, run inspection, streaming, or
   runtime settings.
 - [x] Record decomposition choices for touched oversized files. Split by
   logical ownership, such as IO event building, retained value materialization,
   llama.cpp config building, or run-inspection read-model assembly. Do not
   split files just to satisfy a numeric line count.
-- [ ] Update this plan with any explicit standards exceptions where a touched
+- [x] Update this plan with any explicit standards exceptions where a touched
   file stays over 500 lines because a split would reduce clarity or create
   unstable boundaries.
-- [ ] Record any planned parallel-worker write sets before spawning workers;
+- [x] Record any planned parallel-worker write sets before spawning workers;
   shared contracts, persisted schemas, lockfiles, generated files, and DTO
   fixtures must have one explicit owner or be handled serially.
 
@@ -546,7 +551,12 @@ Tauri, and frontend code.
 - Decomposition review records either a split target or a reason to defer for
   every touched oversized file.
 
-**Status:** Not started
+**Status:** Complete. The active slices kept backend execution facts in
+node-engine, embedded-runtime, diagnostics-ledger, workflow-service, and
+inference contracts; Tauri remains a transport adapter, and frontend code
+remains a presentation consumer. Oversized-file decomposition was reviewed and
+deferred where splitting would cut across unstable ownership during this
+repair.
 
 ### Milestone 3: First Vertical Slice For Retained Node IO
 
@@ -560,7 +570,7 @@ retention and projection systems.
 - [x] Add or update a workflow-service projection test proving
   `IoArtifactObserved` records with `node_input` and `node_output` roles are
   queryable by run id and grouped by node for the run graph page.
-- [ ] Route retained node IO through the Milestone 2 evidence adapter rather
+- [x] Route retained node IO through the Milestone 2 evidence adapter rather
   than adding ad hoc event construction at each execution or UI boundary.
 - [x] Repair the existing execution-event, ledger, projection, or frontend read
   path identified by Milestone 1.
@@ -589,10 +599,10 @@ retention and projection systems.
   and consumer event stores stay exhaustive without redefining retained IO.
 - [x] Ensure scheduler-session node IO and live node events are attributed to
   the backend workflow run id, not the transient workflow execution session id.
-- [ ] Do not add node IO fields to `RunDetailProjectionRecord` unless the
+- [x] Do not add node IO fields to `RunDetailProjectionRecord` unless the
   implementation proves a composite DTO is needed for read performance or API
   stability.
-- [ ] Ensure retention policy gates node IO consistently and exposes the reason
+- [x] Ensure retention policy gates node IO consistently and exposes the reason
   when IO is not retained.
 - [x] Add bounded redaction/descriptor behavior for values too large or unsafe
   to retain inline.
@@ -603,14 +613,16 @@ retention and projection systems.
 - Relevant Rust package checks pass for touched crates.
 - Any frontend DTO/rendering changes include targeted TypeScript tests.
 
-**Status:** Partially implemented. Executed node outputs now flow from
+**Status:** Implemented. Executed node outputs now flow from
 node-engine `TaskCompleted` events through embedded-runtime ledger projection
 as `node_output` I/O artifacts, including retained small text/JSON ArtifactStore
 bodies when available. Resolved node inputs now flow from node-engine
 `TaskInputsResolved` events through the same ledger projection as `node_input`
 I/O artifacts. Existing GraphPage read-side code already queries
 `workflow_io_artifact_query` and summarizes node artifacts for the run snapshot.
-Workflow-service projection coverage now proves `node_input` and `node_output`
+The backend run-inspection DTO composes those projections without adding node
+IO fields to `RunDetailProjectionRecord`. Workflow-service projection coverage
+now proves `node_input` and `node_output`
 records can be fetched together by run id and grouped by node for the run graph
 page. An embedded-runtime vertical slice now runs the `text-input ->
 text-output` fixture through scheduler execution and asserts run detail, node
@@ -704,7 +716,7 @@ reason after payload references are removed.
   retain the final response and optional bounded stream summary.
 - [x] Add stream sequence/run/node/port reconciliation checks so stale stream
   events cannot update the wrong active run or node.
-- [ ] Add frontend coalescing or throttling if direct token-rate updates create
+- [x] Add frontend coalescing or throttling if direct token-rate updates create
   excessive renders; keep final `TaskCompleted.response` as the authoritative
   retained value.
 
@@ -719,12 +731,13 @@ reason after payload references are removed.
 - Vertical slice proves live text appears during execution and final run detail
   includes `response`.
 
-**Status:** Partially implemented. Llama.cpp and frontend routing now treat
+**Status:** Implemented. Llama.cpp and frontend routing now treat
 `response` as the canonical text stream/final output path, and
 `TaskCompleted.response` reconciles the connected text output. Stream events
 now pass through the same active-run ownership gate as other execution events
-so stale chunks cannot update another active run. Remaining work is explicit
-coverage for render coalescing if token-rate updates prove noisy.
+so stale chunks cannot update another active run. No separate coalescing layer
+was added because current validation did not show excessive render pressure;
+the final retained `TaskCompleted.response` remains authoritative.
 
 ### Milestone 6: Llama.cpp Runtime Device Settings Slice
 
@@ -831,26 +844,26 @@ graph, node status, and IO artifact queries in frontend state.
 coverage.
 
 **Tasks:**
-- [ ] Review touched Rust files against file-size and responsibility thresholds.
-- [ ] Split oversized modules only when there is a stable logical ownership
+- [x] Review touched Rust files against file-size and responsibility thresholds.
+- [x] Split oversized modules only when there is a stable logical ownership
   boundary; otherwise record the explicit decomposition decision and revisit
   trigger.
-- [ ] Review the final diff against the blast radius controls: no
+- [x] Review the final diff against the blast radius controls: no
   Tauri-owned backend semantics, no frontend-fabricated persisted facts, no
   scheduler ownership of backend runtime settings, no Pumas implementation
   changes, and no new node IO persistence subsystem.
-- [ ] Confirm every cross-boundary DTO touched by this work is produced,
+- [x] Confirm every cross-boundary DTO touched by this work is produced,
   validated, normalized, and consumed from the documented owner rather than
   copied as an independent contract.
-- [ ] Confirm backend run-inspection output remains presentation-neutral and
+- [x] Confirm backend run-inspection output remains presentation-neutral and
   frontend presenters/components own labels, grouping, visual order, selected
   node behavior, and empty states.
-- [ ] Update module READMEs for host-facing APIs, structured producer
+- [x] Update module READMEs for host-facing APIs, structured producer
   contracts, and persisted DTOs touched by this work.
-- [ ] Add or update ADR only if implementation changes ownership of retention,
+- [x] Add or update ADR only if implementation changes ownership of retention,
   ArtifactStore, diagnostics ledger, scheduler, or runtime settings.
-- [ ] Run focused backend and frontend suites plus release smoke where affected.
-- [ ] Update this plan's execution notes, deviations, and verification summary.
+- [x] Run focused backend and frontend suites plus release smoke where affected.
+- [x] Update this plan's execution notes, deviations, and verification summary.
 
 **Verification:**
 - `cargo fmt --all`
@@ -862,7 +875,12 @@ coverage.
   `PLAN-STANDARDS.md`, `CODING-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`, and
   `FRONTEND-STANDARDS.md`.
 
-**Status:** Not started
+**Status:** Complete. Standards review found no ownership move requiring an
+ADR. Oversized Rust files remain above the soft threshold, but this plan
+touched cohesive existing modules and recorded the deferred decomposition
+decision instead of splitting unstable cross-cutting boundaries during the
+repair. Focused backend, Tauri, TypeScript, and frontend build gates passed for
+the affected slices.
 
 ## Execution Notes
 
@@ -1190,6 +1208,24 @@ coverage.
   `node --experimental-strip-types --test src/services/workflow/WorkflowService.projections.test.ts`,
   `cargo check --manifest-path src-tauri/Cargo.toml`, `npm run typecheck`,
   `npm run build`, `cargo fmt`, and `git diff --check`.
+- 2026-05-09: Standards closure pass updated module READMEs for
+  workflow-service run inspection, embedded-runtime node input/output artifact
+  evidence, diagnostics-ledger runtime-settings projection ownership,
+  TypeScript workflow projection service boundaries, and workbench GraphPage
+  run-inspection consumption. The review confirmed Tauri remains transport,
+  frontend owns presentation only, Pumas was not changed, scheduler ownership
+  did not expand, and no new node IO persistence subsystem was introduced.
+- 2026-05-09: Decomposition review found touched files still over the soft
+  line threshold: `workflow/diagnostics_api.rs`, `node_execution_ledger.rs`,
+  and `llamacpp_nodes.rs`. The split decision is deferred because the slices
+  added cohesive read-model, ledger-adapter, and llama.cpp config behavior to
+  already-established owners; extracting during this repair would create
+  unstable boundaries. Revisit after the next nearby feature adds a second
+  independent responsibility to any of those modules.
+- 2026-05-09: Final regression verification passed:
+  `npm run test:frontend` and `bash launcher.sh --release-smoke`. The release
+  smoke reported existing unused-code warnings in Tauri test builds but passed
+  the managed runtime contract smoke.
 
 ## Follow-Up Findings
 

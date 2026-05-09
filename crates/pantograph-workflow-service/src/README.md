@@ -99,6 +99,12 @@ Scheduler estimate query methods also live in the diagnostics API helper and
 read the hot run-detail projection so clients can request estimate facts
 without parsing raw event payloads. Those estimate DTOs preserve typed
 scheduler model-cache posture from the run-detail projection.
+Run-inspection query methods live in the diagnostics API helper and compose
+the immutable run graph, run detail, node-status projection, I/O artifact
+descriptors, retention summary, and per-source projection states from existing
+persisted sources. The query is a presentation-neutral read model; it must not
+create a second persistence subsystem or define frontend grouping, labels,
+visual order, or selected-node behavior.
 Retention cleanup now lives behind the same diagnostics API helper and is
 re-exported by the crate facade so Tauri and frontend command adapters can
 trigger backend-owned artifact expiration without touching ledger internals.
@@ -171,6 +177,9 @@ executor, the service fails closed.
 - Diagnostics projection re-exports include typed I/O artifact retention state
   and retention summary records so adapter callers can preserve serialized
   service contracts without depending on private ledger modules.
+- Run-inspection DTOs expose backend-owned graph/status/artifact facts and
+  projection cursors only. Artifact bodies stay behind ArtifactStore read or
+  stream APIs, and display composition stays in frontend presenters.
 - Diagnostics projection re-exports include run-list facet records so adapter
   callers can consume backend-owned comparison counts without depending on
   private ledger modules or sampled frontend pages.

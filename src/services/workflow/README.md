@@ -12,8 +12,8 @@ on raw invoke payloads.
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
 | `WorkflowCommandService.ts` | Focused backend-owned scheduler execution-session, queue, and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
 | `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving scheduler execution-session, queue, and retention commands return backend-owned results without optimistic client replacement. |
-| `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, scheduler estimate, run-list, selected-run, local Network, I/O artifact, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
-| `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, local Network scheduler-load/placement facts, and warm projection freshness state survive the service boundary. |
+| `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, scheduler estimate, run-list, selected-run, run-inspection, local Network, I/O artifact, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
+| `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, run-inspection request/response shape, local Network scheduler-load/placement facts, and warm projection freshness state survive the service boundary. |
 | `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
 | `workflowServiceErrors.test.ts` | Unit coverage for backend error-envelope parsing and transport-error fallback behavior. |
 | `workflowConnectionActions.ts` | Focused Tauri invoke helpers for connection-intent candidate, commit, and edge-insert commands. |
@@ -63,11 +63,17 @@ Connection-intent invoke wiring now lives in
 `workflowConnectionActions.ts` so `WorkflowService.ts` stays focused on
 session ownership, mock branching, and legacy app-facing method shapes.
 Projection invoke wiring now lives in `WorkflowProjectionService.ts` so the
-scheduler timeline, run-list, selected-run, I/O artifact, and warm Library
-usage read paths can be tested without loading the graph package runtime.
+scheduler timeline, run-list, selected-run, run-inspection, I/O artifact, and
+warm Library usage read paths can be tested without loading the graph package
+runtime.
 `WorkflowService` inherits that boundary so existing GUI callers keep the same
 method names while projection DTO tests stay focused on Tauri request/response
 contracts.
+Run inspection uses the backend-owned `workflow_run_inspection_query` command
+to fetch the immutable run graph, node statuses, I/O artifact descriptors,
+retention summary, and projection states together. Frontend services forward
+the request exactly and do not reconstruct those persisted facts from multiple
+run-specific queries.
 Run-list and run-detail projection service tests consume the shared
 `pantograph-workflow-service` contract fixture so frontend request/response
 coverage stays aligned with Rust public DTO deserialization.
@@ -154,6 +160,10 @@ missing `events` array as empty rather than a transport failure.
   Library usage projection invoke helpers stay in
   `WorkflowProjectionService.ts`; `WorkflowService` must not reimplement those
   methods separately.
+- Run-inspection projection invoke helpers stay in
+  `WorkflowProjectionService.ts`. GraphPage may choose how to render the
+  returned facts, but it must not fabricate retained node IO, projection
+  freshness, or graph snapshot state client-side.
 - Run-list request coverage includes scope and accepted-at range filters so
   frontend services preserve the backend projection contract.
 - Run-list request coverage includes selected runtime, selected device, and
