@@ -37,6 +37,7 @@ mod managed_redistributables;
 pub mod managed_runtime;
 pub mod model_contracts;
 pub mod process;
+pub mod runtime_load;
 pub mod server;
 pub mod types;
 
@@ -136,6 +137,11 @@ pub use pantograph_managed_dependencies::{
     NativeArtifactDependencyId, ResolvedManagedDependencyCommand, RuntimeSidecarDependencyId,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+pub use runtime_load::{
+    managed_runtime_load_facts_from_snapshot, LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode,
+    ManagedRuntimeLoadFacts, RuntimeLoadCommandFacts, RuntimeLoadPhase, RuntimeLoadPhaseRecord,
+    RuntimeLoadReadinessError,
+};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
 pub use types::{
     bounded_inference_artifact_ref, looks_like_local_artifact_ref, AudioTranscriptionRequest,

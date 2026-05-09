@@ -32,9 +32,14 @@ device, model path, and optional multimodal projection are proven active.
 
 ### 1. Runtime Phase Contract
 
-- [ ] Add typed load phase DTOs and errors in the owning backend/runtime crate.
-- [ ] Project resolved managed-binary command facts into the phase contract.
-- [ ] Add tests for missing binary, partial install, and active mutating job.
+- [x] Add typed load phase DTOs and errors in the owning backend/runtime crate.
+- [x] Project resolved managed-binary command facts into the phase contract.
+- [x] Add tests for missing binary, partial install, and active mutating job.
+
+Status: Complete. The `inference::runtime_load` module now owns pure
+runtime-load phase DTOs, bounded command facts, active llama.cpp runtime
+descriptor shape, and managed-runtime readiness errors without expanding
+`server.rs` or managed-runtime operation files.
 
 ### 2. llama.cpp Active Model Proof
 
@@ -51,11 +56,47 @@ device, model path, and optional multimodal projection are proven active.
 
 ### 4. Verification
 
-- [ ] `cargo test -p inference llamacpp`
+- [x] Runtime phase contract slice:
+      `cargo test -p inference runtime_load`
+- [x] Runtime phase contract slice:
+      `cargo check -p inference`
+- [ ] Full llama.cpp/runtime verification:
+      `cargo test -p inference llamacpp`
 - [ ] `cargo test -p pantograph-workflow-service session_execution`
 - [ ] `cargo test -p pantograph-embedded-runtime session_runtime`
 - [ ] `cargo check --manifest-path src-tauri/Cargo.toml`
 - [ ] `bash launcher.sh --build-release`
+
+## Execution Notes
+
+- 2026-05-09: Runtime phase contract slice added
+  `crates/inference/src/runtime_load.rs` with `RuntimeLoadPhase`,
+  `ManagedRuntimeLoadFacts`, `RuntimeLoadCommandFacts`,
+  `RuntimeLoadPhaseRecord`, `LlamaCppActiveRuntimeDescriptor`, and
+  `RuntimeLoadReadinessError`. The slice projects backend `ResolvedCommand`
+  facts into the phase contract and rejects missing runtimes, partial installs,
+  and active mutating managed-runtime jobs before process readiness can be
+  claimed. This is intentionally pure contract/projection code; process spawn,
+  HTTP probing, scheduler emission, and runtime registry policy remain in
+  their current owner modules for later milestones.
+- 2026-05-09: Verification passed:
+  `cargo test -p inference runtime_load`, `cargo check -p inference`, and
+  `cargo fmt --all -- --check`.
+
+## Completion Summary
+
+### Completed
+
+- Milestone 1 runtime phase contract.
+
+### Remaining
+
+- Milestone 2: wire structured active llama.cpp runtime descriptors into
+  `LlamaServer`/gateway state and harden reuse checks.
+- Milestone 3: move scheduler lifecycle emission behind the runtime-load owner
+  and emit `load_completed` only after requested-model-active proof.
+- Milestone 4: run full cross-crate and release verification after behavior is
+  wired through.
 
 ## Re-Plan Triggers
 

@@ -22,6 +22,7 @@ details.
 | `managed_redistributables/` | Compatibility re-exports for media redistributable APIs now owned by `pantograph-managed-dependencies`, plus neutral status projection helpers for inference callers. |
 | `model_contracts.rs` | Transformers-aligned model/package/task facts, generation defaults, Pumas package-facts summary snapshots, and model-library update feeds consumed by inference without taking runtime-selection policy. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes, including the managed-binary launch error tag consumed before backend startup errors are classified. |
+| `runtime_load.rs` | Pure runtime-load phase DTOs, command-fact projection, active-runtime descriptors, and managed-runtime readiness errors shared by llama.cpp startup owners. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
 | `server.rs` | Legacy sidecar/server lifecycle helpers for llama.cpp-style backends. |
 | `server_tests.rs` | Crate-local llama.cpp sidecar regression coverage for PID parsing, path scoping, and runtime matching. |
