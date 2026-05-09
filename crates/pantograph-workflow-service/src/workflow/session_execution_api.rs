@@ -2,11 +2,10 @@ use std::{collections::HashMap, time::Duration};
 
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
-    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    IoArtifactObservedPayload, IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetOperation,
-    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
-    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
-    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, IoArtifactObservedPayload,
+    IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetOperation, RunSnapshotAcceptedPayload,
+    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
     SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
@@ -846,7 +845,7 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        DiagnosticsLedgerRepository::append_diagnostic_event(
+        self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::WorkflowService,
@@ -905,7 +904,7 @@ impl WorkflowService {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
         for model in models {
-            DiagnosticsLedgerRepository::append_diagnostic_event(
+            self.append_diagnostic_event_and_request_projection_refresh(
                 &mut *ledger,
                 DiagnosticEventAppendRequest {
                     source_component: DiagnosticEventSourceComponent::Library,
@@ -963,7 +962,7 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        DiagnosticsLedgerRepository::append_diagnostic_event(
+        self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::Scheduler,
@@ -1032,7 +1031,7 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        DiagnosticsLedgerRepository::append_diagnostic_event(
+        self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::Scheduler,
@@ -1097,7 +1096,7 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        DiagnosticsLedgerRepository::append_diagnostic_event(
+        self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::Scheduler,
@@ -1156,7 +1155,7 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        DiagnosticsLedgerRepository::append_diagnostic_event(
+        self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::Scheduler,
@@ -1219,7 +1218,7 @@ impl WorkflowService {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
         for model_id in request.required_models {
-            DiagnosticsLedgerRepository::append_diagnostic_event(
+            self.append_diagnostic_event_and_request_projection_refresh(
                 &mut *ledger,
                 DiagnosticEventAppendRequest {
                     source_component: DiagnosticEventSourceComponent::Scheduler,
@@ -1298,7 +1297,7 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        DiagnosticsLedgerRepository::append_diagnostic_event(
+        self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::Scheduler,
@@ -1363,7 +1362,7 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        DiagnosticsLedgerRepository::append_diagnostic_event(
+        self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::Scheduler,
@@ -1450,7 +1449,7 @@ impl WorkflowService {
             let mut ledger = diagnostics_ledger.lock().map_err(|_| {
                 WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
             })?;
-            DiagnosticsLedgerRepository::append_diagnostic_event(
+            self.append_diagnostic_event_and_request_projection_refresh(
                 &mut *ledger,
                 DiagnosticEventAppendRequest {
                     source_component: DiagnosticEventSourceComponent::WorkflowService,
@@ -1567,7 +1566,7 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        DiagnosticsLedgerRepository::append_diagnostic_event(
+        self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::WorkflowService,

@@ -4,7 +4,7 @@ use pantograph_diagnostics_ledger::{
     sanitize_diagnostic_error_text, DiagnosticErrorLocation, DiagnosticErrorOccurredPayload,
     DiagnosticErrorRecoverability, DiagnosticErrorScopeKind, DiagnosticErrorSeverity,
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
-    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
     MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT, MAX_DIAGNOSTIC_ERROR_CAUSE_LEN,
     MAX_DIAGNOSTIC_ERROR_TEXT_LEN,
 };
@@ -717,7 +717,9 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        match DiagnosticsLedgerRepository::append_diagnostic_event(&mut *ledger, append_request) {
+        match self
+            .append_diagnostic_event_and_request_projection_refresh(&mut *ledger, append_request)
+        {
             Ok(record) => Ok(WorkflowDiagnosticErrorRecordOutcome::recorded(
                 record.event_id,
             )),

@@ -1,8 +1,7 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
-    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    SchedulerModelCacheState, SchedulerModelLifecycleChangedPayload,
-    SchedulerModelLifecycleTransition,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, SchedulerModelCacheState,
+    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord,
@@ -252,7 +251,7 @@ impl WorkflowService {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
         for model_id in &request.candidate.required_models {
-            DiagnosticsLedgerRepository::append_diagnostic_event(
+            self.append_diagnostic_event_and_request_projection_refresh(
                 &mut *ledger,
                 DiagnosticEventAppendRequest {
                     source_component: DiagnosticEventSourceComponent::Scheduler,

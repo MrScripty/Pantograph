@@ -2,9 +2,8 @@ use crate::scheduler::scheduler_snapshot_workflow_run_id;
 
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
-    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
-    SchedulerQueueControlPayload,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, SchedulerQueueControlAction,
+    SchedulerQueueControlActorScope, SchedulerQueueControlOutcome, SchedulerQueueControlPayload,
 };
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord};
 
@@ -571,7 +570,7 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        DiagnosticsLedgerRepository::append_diagnostic_event(
+        self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
                 source_component: DiagnosticEventSourceComponent::Scheduler,

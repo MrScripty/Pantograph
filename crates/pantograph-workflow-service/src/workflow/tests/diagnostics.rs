@@ -1,4 +1,7 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
@@ -26,6 +29,29 @@ use super::super::diagnostic_errors::{
 };
 use super::super::diagnostics_api::{ResolvedNodeIoDirection, ResolvedNodeIoProvenanceKind};
 use super::*;
+
+#[derive(Default)]
+struct RecordingProjectionRefreshSink {
+    requests: Mutex<Vec<WorkflowDiagnosticsProjectionRefreshRequest>>,
+}
+
+impl WorkflowDiagnosticsProjectionRefreshSink for RecordingProjectionRefreshSink {
+    fn request_projection_refresh(&self, request: WorkflowDiagnosticsProjectionRefreshRequest) {
+        self.requests
+            .lock()
+            .expect("projection refresh sink lock")
+            .push(request);
+    }
+}
+
+impl RecordingProjectionRefreshSink {
+    fn requests(&self) -> Vec<WorkflowDiagnosticsProjectionRefreshRequest> {
+        self.requests
+            .lock()
+            .expect("projection refresh sink lock")
+            .clone()
+    }
+}
 
 #[test]
 fn workflow_diagnostics_usage_query_delegates_to_ledger_and_summarizes_events() {
@@ -1767,6 +1793,64 @@ fn workflow_projection_rebuild_validates_bounds() {
     assert_eq!(
         unknown.expect_err("unknown projection should fail").code(),
         WorkflowErrorCode::InvalidRequest
+    );
+}
+
+#[test]
+fn workflow_diagnostic_event_record_requests_projection_refresh() {
+    let sink = Arc::new(RecordingProjectionRefreshSink::default());
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+    service
+        .set_diagnostics_projection_refresh_sink(Some(sink.clone()))
+        .expect("projection refresh sink is configured");
+
+    service
+        .workflow_diagnostic_event_record(sample_run_snapshot_event())
+        .expect("diagnostic event records");
+
+    let requests = sink.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].reason,
+        WorkflowDiagnosticsProjectionRefreshReason::DiagnosticEventAppended
+    );
+    assert_eq!(requests[0].workflow_run_id.as_deref(), Some("run-a"));
+    assert_eq!(requests[0].workflow_id.as_deref(), Some("workflow-a"));
+    assert!(requests[0]
+        .projections
+        .contains(&WorkflowDiagnosticsProjectionKind::RunList));
+    assert!(requests[0]
+        .projections
+        .contains(&WorkflowDiagnosticsProjectionKind::RunDetail));
+    assert!(requests[0]
+        .projections
+        .contains(&WorkflowDiagnosticsProjectionKind::SchedulerTimeline));
+}
+
+#[test]
+fn workflow_diagnostic_io_event_requests_io_projection_refresh() {
+    let sink = Arc::new(RecordingProjectionRefreshSink::default());
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+    service
+        .set_diagnostics_projection_refresh_sink(Some(sink.clone()))
+        .expect("projection refresh sink is configured");
+
+    service
+        .workflow_diagnostic_event_record(sample_io_artifact_event(
+            "node-a",
+            "node_output",
+            "artifact-a",
+        ))
+        .expect("diagnostic event records");
+
+    let requests = sink.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].projections,
+        vec![
+            WorkflowDiagnosticsProjectionKind::RunDetail,
+            WorkflowDiagnosticsProjectionKind::IoArtifact,
+        ]
     );
 }
 

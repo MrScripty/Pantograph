@@ -6,8 +6,8 @@ use crate::scheduler::WorkflowExecutionSessionStore;
 
 use super::{
     ArtifactFormatDependencyVersions, ArtifactFormatSettings, ArtifactStore,
-    SqliteAttributionStore, SqliteDiagnosticsLedger, WorkflowSchedulerDiagnosticsProvider,
-    WorkflowService, WorkflowServiceError,
+    SqliteAttributionStore, SqliteDiagnosticsLedger, WorkflowDiagnosticsProjectionRefreshSink,
+    WorkflowSchedulerDiagnosticsProvider, WorkflowService, WorkflowServiceError,
 };
 
 const DEFAULT_MAX_SESSIONS: usize = 8;
@@ -42,6 +42,7 @@ impl WorkflowService {
             )),
             attribution_store: None,
             diagnostics_ledger: None,
+            diagnostics_projection_refresh_sink: Arc::new(Mutex::new(None)),
             media_conversion_executor: Arc::new(Mutex::new(None)),
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
         }
@@ -79,6 +80,22 @@ impl WorkflowService {
     pub fn with_diagnostics_ledger(mut self, ledger: SqliteDiagnosticsLedger) -> Self {
         self.diagnostics_ledger = Some(Arc::new(Mutex::new(ledger)));
         self
+    }
+
+    pub fn set_diagnostics_projection_refresh_sink(
+        &self,
+        sink: Option<Arc<dyn WorkflowDiagnosticsProjectionRefreshSink>>,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut guard = self
+            .diagnostics_projection_refresh_sink
+            .lock()
+            .map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "diagnostics projection refresh sink lock poisoned".to_string(),
+                )
+            })?;
+        *guard = sink;
+        Ok(())
     }
 
     pub fn with_media_conversion_executor(

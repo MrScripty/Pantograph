@@ -3,22 +3,23 @@ use std::collections::{BTreeMap, BTreeSet};
 use pantograph_diagnostics_ledger::{
     ApplyArtifactRetentionPolicyCommand, ApplyArtifactRetentionPolicyResult,
     DiagnosticErrorSeverity, DiagnosticEventAppendRequest, DiagnosticEventPayload,
-    DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
-    DiagnosticsLedgerRepository, DiagnosticsQuery, DiagnosticsRetentionPolicy,
-    ExecutionGuaranteeLevel, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
-    IoArtifactRetentionState, IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord,
-    LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation,
-    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, ModelLicenseUsageEvent,
-    NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
-    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus, RetentionClass,
-    RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
-    RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
-    RunListProjectionStatus, RunTerminalPayload, RunTerminalStatus, SchedulerModelCacheState,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    UpdateRetentionPolicyCommand, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
-    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION, NODE_STATUS_PROJECTION_NAME,
-    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
-    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
+    DiagnosticEventSourceComponent, DiagnosticsLedgerRepository, DiagnosticsQuery,
+    DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel, IoArtifactProjectionQuery,
+    IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryQuery,
+    IoArtifactRetentionSummaryRecord, LibraryAssetAccessedPayload, LibraryAssetCacheStatus,
+    LibraryAssetOperation, LibraryUsageProjectionQuery, LibraryUsageProjectionRecord,
+    ModelLicenseUsageEvent, NodeExecutionProjectionStatus, NodeStatusProjectionQuery,
+    NodeStatusProjectionRecord, ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus,
+    RetentionClass, RetentionPolicyActorScope, RetentionPolicyChangedPayload,
+    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetRecord,
+    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus, RunTerminalPayload,
+    RunTerminalStatus, SchedulerModelCacheState, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord, UpdateRetentionPolicyCommand, IO_ARTIFACT_PROJECTION_NAME,
+    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
+    LIBRARY_USAGE_PROJECTION_VERSION, NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION,
+    RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME,
+    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
@@ -37,6 +38,7 @@ use super::{
 const STARTUP_REPAIR_RUN_QUERY_LIMIT: u32 = 500;
 const STARTUP_REPAIR_DRAIN_BATCH_SIZE: u32 = 500;
 const STARTUP_REPAIR_MAX_DRAIN_PASSES: usize = 100;
+const DEFAULT_PROJECTION_REFRESH_BATCH_SIZE: u32 = 500;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -508,6 +510,10 @@ pub struct WorkflowDiagnosticsProjectionRefreshResponse {
     pub invalidations: Vec<WorkflowDiagnosticsProjectionInvalidation>,
 }
 
+pub trait WorkflowDiagnosticsProjectionRefreshSink: Send + Sync {
+    fn request_projection_refresh(&self, request: WorkflowDiagnosticsProjectionRefreshRequest);
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowProjectionRebuildRequest {
@@ -610,7 +616,7 @@ impl WorkflowService {
                     .started_at_ms
                     .map(|started_at_ms| now_ms.saturating_sub(started_at_ms))
                     .and_then(|duration| u64::try_from(duration).ok());
-                DiagnosticsLedgerRepository::append_diagnostic_event(
+                self.append_diagnostic_event_and_request_projection_refresh(
                     &mut *ledger,
                     DiagnosticEventAppendRequest {
                         source_component: DiagnosticEventSourceComponent::WorkflowService,
@@ -1066,12 +1072,40 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
-        let event = DiagnosticsLedgerRepository::append_diagnostic_event(&mut *ledger, request)
-            .map_err(WorkflowServiceError::from)?;
+        let event =
+            self.append_diagnostic_event_and_request_projection_refresh(&mut *ledger, request)?;
 
         Ok(WorkflowDiagnosticEventRecordResponse {
             event_seq: Some(event.event_seq),
         })
+    }
+
+    pub(crate) fn append_diagnostic_event_and_request_projection_refresh(
+        &self,
+        ledger: &mut impl DiagnosticsLedgerRepository,
+        request: DiagnosticEventAppendRequest,
+    ) -> Result<DiagnosticEventRecord, WorkflowServiceError> {
+        let refresh_request = diagnostics_projection_refresh_request_for_event(&request);
+        let event = DiagnosticsLedgerRepository::append_diagnostic_event(ledger, request)
+            .map_err(WorkflowServiceError::from)?;
+        if let Some(refresh_request) = refresh_request {
+            self.request_diagnostics_projection_refresh(refresh_request);
+        }
+        Ok(event)
+    }
+
+    fn request_diagnostics_projection_refresh(
+        &self,
+        request: WorkflowDiagnosticsProjectionRefreshRequest,
+    ) {
+        let sink = self
+            .diagnostics_projection_refresh_sink
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone());
+        if let Some(sink) = sink {
+            sink.request_projection_refresh(request);
+        }
     }
 
     pub fn workflow_diagnostics_projection_refresh(
@@ -1411,6 +1445,75 @@ fn mark_projection_refresh_failed(
             last_failed_event_seq: Some(last_applied_event_seq),
         })
         .map_err(WorkflowServiceError::from)
+}
+
+fn diagnostics_projection_refresh_request_for_event(
+    request: &DiagnosticEventAppendRequest,
+) -> Option<WorkflowDiagnosticsProjectionRefreshRequest> {
+    let projections = diagnostics_projection_kinds_for_payload(&request.payload);
+    if projections.is_empty() {
+        return None;
+    }
+
+    Some(WorkflowDiagnosticsProjectionRefreshRequest {
+        projections,
+        workflow_run_id: request
+            .workflow_run_id
+            .as_ref()
+            .map(|workflow_run_id| workflow_run_id.as_str().to_string()),
+        workflow_id: request
+            .workflow_id
+            .as_ref()
+            .map(|workflow_id| workflow_id.as_str().to_string()),
+        reason: WorkflowDiagnosticsProjectionRefreshReason::DiagnosticEventAppended,
+        batch_size: DEFAULT_PROJECTION_REFRESH_BATCH_SIZE,
+    })
+}
+
+fn diagnostics_projection_kinds_for_payload(
+    payload: &DiagnosticEventPayload,
+) -> Vec<WorkflowDiagnosticsProjectionKind> {
+    let mut projections = BTreeSet::new();
+    match payload {
+        DiagnosticEventPayload::SchedulerEstimateProduced(_)
+        | DiagnosticEventPayload::SchedulerQueuePlacement(_)
+        | DiagnosticEventPayload::SchedulerQueueControl(_)
+        | DiagnosticEventPayload::SchedulerRunDelayed(_)
+        | DiagnosticEventPayload::SchedulerModelLifecycleChanged(_)
+        | DiagnosticEventPayload::SchedulerRunAdmitted(_)
+        | DiagnosticEventPayload::SchedulerReservationChanged(_)
+        | DiagnosticEventPayload::RunStarted(_)
+        | DiagnosticEventPayload::RunTerminal(_)
+        | DiagnosticEventPayload::RunSnapshotAccepted(_) => {
+            projections.insert(WorkflowDiagnosticsProjectionKind::SchedulerTimeline);
+            projections.insert(WorkflowDiagnosticsProjectionKind::RunList);
+            projections.insert(WorkflowDiagnosticsProjectionKind::RunDetail);
+        }
+        DiagnosticEventPayload::IoArtifactObserved(_)
+        | DiagnosticEventPayload::RetentionArtifactStateChanged(_) => {
+            projections.insert(WorkflowDiagnosticsProjectionKind::IoArtifact);
+            projections.insert(WorkflowDiagnosticsProjectionKind::RunDetail);
+        }
+        DiagnosticEventPayload::LibraryAssetAccessed(_) => {
+            projections.insert(WorkflowDiagnosticsProjectionKind::LibraryUsage);
+        }
+        DiagnosticEventPayload::RetentionPolicyChanged(_) => {
+            projections.insert(WorkflowDiagnosticsProjectionKind::IoArtifact);
+            projections.insert(WorkflowDiagnosticsProjectionKind::RunList);
+        }
+        DiagnosticEventPayload::RuntimeCapabilityObserved(_)
+        | DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(_)
+        | DiagnosticEventPayload::DiagnosticErrorOccurred(_) => {
+            projections.insert(WorkflowDiagnosticsProjectionKind::SchedulerTimeline);
+            projections.insert(WorkflowDiagnosticsProjectionKind::RunList);
+            projections.insert(WorkflowDiagnosticsProjectionKind::RunDetail);
+        }
+        DiagnosticEventPayload::NodeExecutionStatus(_) => {
+            projections.insert(WorkflowDiagnosticsProjectionKind::NodeStatus);
+            projections.insert(WorkflowDiagnosticsProjectionKind::RunDetail);
+        }
+    }
+    projections.into_iter().collect()
 }
 
 impl WorkflowDiagnosticsUsageQueryRequest {

@@ -503,8 +503,12 @@ workflow-service refresh contract and emits
 `workflow://diagnostics/projection-invalidated` only from successful backend
 invalidations. The transport payload is a compact batch of backend invalidation
 DTOs, and Tauri coalesces duplicate projection/run/workflow scopes before
-emitting. The remaining work is the long-lived backend refresh/event owner,
-multi-window broadcast lifecycle, and shutdown coverage.
+emitting. Workflow-service now exposes a backend-owned projection refresh sink
+contract and requests typed projection refreshes after successful diagnostic
+event appends, so the next slice can attach the long-lived Tauri bridge without
+moving projection semantics into Tauri. The remaining work is the long-lived
+backend refresh/event owner, multi-window broadcast lifecycle, and shutdown
+coverage.
 
 ### Milestone 7: Frontend Subscription Service
 
@@ -766,6 +770,11 @@ parallel by multiple workers.
   columns, centralized projection-state success writes, schema migration and
   current-version repair coverage, and tests proving failure metadata persists
   and successful state writes clear stale error metadata.
+- 2026-05-09: Milestone 6 backend producer contract started. Workflow-service
+  maps diagnostic event payloads to typed projection refresh requests and calls
+  an optional non-blocking refresh sink after successful durable event appends.
+  The mapping stays in workflow-service; Tauri remains responsible only for the
+  bridge lifecycle, coalescing, refresh invocation, and event transport.
 
 ## Commit Cadence Notes
 
@@ -784,6 +793,8 @@ parallel by multiple workers.
   projection-state helper foundation.
 - Milestone 3: workflow-service projection refresh contract and failure
   handling.
+- Milestone 6 partial: workflow-service projection refresh sink contract and
+  diagnostic-event-to-projection mapping.
 
 ### Deviations
 
@@ -800,6 +811,9 @@ parallel by multiple workers.
 - `cargo test -p pantograph-diagnostics-ledger projection_state`
 - `cargo test -p pantograph-diagnostics-ledger`
 - `cargo test -p pantograph-workflow-service workflow_diagnostics_projection_refresh_failure_updates_health_without_events`
+- `cargo test -p pantograph-workflow-service workflow_diagnostic_event_record_requests_projection_refresh`
+- `cargo test -p pantograph-workflow-service workflow_diagnostic_io_event_requests_io_projection_refresh`
+- `cargo check -p pantograph-workflow-service`
 
 ### Traceability Links
 
