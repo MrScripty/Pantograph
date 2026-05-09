@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use pantograph_diagnostics_ledger::{
     ApplyArtifactRetentionPolicyCommand, ApplyArtifactRetentionPolicyResult,
     DiagnosticErrorSeverity, DiagnosticEventAppendRequest, DiagnosticEventPayload,
@@ -208,10 +210,53 @@ pub struct WorkflowRunInspectionQueryResponse {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub io_artifacts: Vec<IoArtifactProjectionRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resolved_node_io: Vec<ResolvedNodeIoRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub retention_summary: Vec<IoArtifactRetentionSummaryRecord>,
     pub run_projection_state: ProjectionStateRecord,
     pub node_projection_state: ProjectionStateRecord,
     pub io_projection_state: ProjectionStateRecord,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResolvedNodeIoDirection {
+    Input,
+    Output,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResolvedNodeIoResolution {
+    ProducedOutput,
+    DerivedFromEdge,
+    ExplicitInput,
+    WorkflowBoundary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ResolvedNodeIoRecord {
+    pub node_id: String,
+    pub port_id: String,
+    pub direction: ResolvedNodeIoDirection,
+    pub resolution: ResolvedNodeIoResolution,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_fact_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload_artifact_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_port_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention_state: Option<IoArtifactRetentionState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -761,11 +806,14 @@ impl WorkflowService {
             projection_batch_size: request.projection_batch_size,
         })?;
 
+        let resolved_node_io = resolve_workflow_run_node_io(&run_graph, &io_artifacts.artifacts);
+
         Ok(WorkflowRunInspectionQueryResponse {
             run_graph,
             run: run_detail.run,
             node_statuses: run_detail.node_statuses,
             io_artifacts: io_artifacts.artifacts,
+            resolved_node_io,
             retention_summary: io_artifacts.retention_summary,
             run_projection_state: run_detail.projection_state,
             node_projection_state: run_detail.node_projection_state,
@@ -1395,6 +1443,107 @@ where
             })
         })
         .transpose()
+}
+
+fn resolve_workflow_run_node_io(
+    run_graph: &Option<WorkflowRunGraphProjection>,
+    artifacts: &[IoArtifactProjectionRecord],
+) -> Vec<ResolvedNodeIoRecord> {
+    let mut output_by_node_port: BTreeMap<(String, String), &IoArtifactProjectionRecord> =
+        BTreeMap::new();
+    for artifact in artifacts {
+        if let (Some(node_id), Some(port_id)) = (
+            artifact.producer_node_id.as_ref(),
+            artifact.producer_port_id.as_ref(),
+        ) {
+            output_by_node_port
+                .entry((node_id.clone(), port_id.clone()))
+                .or_insert(artifact);
+        }
+    }
+
+    let mut derived_input_ports = BTreeSet::new();
+    let mut resolved = Vec::new();
+    if let Some(run_graph) = run_graph {
+        for edge in &run_graph.graph.edges {
+            if let Some(upstream) =
+                output_by_node_port.get(&(edge.source.clone(), edge.source_handle.clone()))
+            {
+                derived_input_ports.insert((edge.target.clone(), edge.target_handle.clone()));
+                resolved.push(ResolvedNodeIoRecord {
+                    node_id: edge.target.clone(),
+                    port_id: edge.target_handle.clone(),
+                    direction: ResolvedNodeIoDirection::Input,
+                    resolution: ResolvedNodeIoResolution::DerivedFromEdge,
+                    artifact_fact_id: Some(upstream.artifact_fact_id.clone()),
+                    payload_artifact_id: Some(upstream.payload_artifact_id.clone()),
+                    artifact_id: Some(upstream.artifact_id.clone()),
+                    artifact_role: Some(upstream.artifact_role.clone()),
+                    upstream_node_id: Some(edge.source.clone()),
+                    upstream_port_id: Some(edge.source_handle.clone()),
+                    media_type: upstream.media_type.clone(),
+                    retention_state: Some(upstream.retention_state),
+                });
+            }
+        }
+    }
+
+    for artifact in artifacts {
+        if let (Some(node_id), Some(port_id)) = (
+            artifact.producer_node_id.as_ref(),
+            artifact.producer_port_id.as_ref(),
+        ) {
+            resolved.push(ResolvedNodeIoRecord {
+                node_id: node_id.clone(),
+                port_id: port_id.clone(),
+                direction: ResolvedNodeIoDirection::Output,
+                resolution: if artifact.artifact_role == "workflow_output" {
+                    ResolvedNodeIoResolution::WorkflowBoundary
+                } else {
+                    ResolvedNodeIoResolution::ProducedOutput
+                },
+                artifact_fact_id: Some(artifact.artifact_fact_id.clone()),
+                payload_artifact_id: Some(artifact.payload_artifact_id.clone()),
+                artifact_id: Some(artifact.artifact_id.clone()),
+                artifact_role: Some(artifact.artifact_role.clone()),
+                upstream_node_id: None,
+                upstream_port_id: None,
+                media_type: artifact.media_type.clone(),
+                retention_state: Some(artifact.retention_state),
+            });
+        }
+
+        if let (Some(node_id), Some(port_id)) = (
+            artifact.consumer_node_id.as_ref(),
+            artifact.consumer_port_id.as_ref(),
+        ) {
+            if artifact.artifact_role == "node_input"
+                && derived_input_ports.contains(&(node_id.clone(), port_id.clone()))
+            {
+                continue;
+            }
+            resolved.push(ResolvedNodeIoRecord {
+                node_id: node_id.clone(),
+                port_id: port_id.clone(),
+                direction: ResolvedNodeIoDirection::Input,
+                resolution: if artifact.artifact_role == "workflow_input" {
+                    ResolvedNodeIoResolution::WorkflowBoundary
+                } else {
+                    ResolvedNodeIoResolution::ExplicitInput
+                },
+                artifact_fact_id: Some(artifact.artifact_fact_id.clone()),
+                payload_artifact_id: Some(artifact.payload_artifact_id.clone()),
+                artifact_id: Some(artifact.artifact_id.clone()),
+                artifact_role: Some(artifact.artifact_role.clone()),
+                upstream_node_id: None,
+                upstream_port_id: None,
+                media_type: artifact.media_type.clone(),
+                retention_state: Some(artifact.retention_state),
+            });
+        }
+    }
+
+    resolved
 }
 
 fn projection_error_scope(

@@ -339,10 +339,34 @@ export interface WorkflowRunInspectionQueryResponse {
   run?: RunDetailProjectionRecord | null;
   node_statuses: NodeStatusProjectionRecord[];
   io_artifacts: IoArtifactProjectionRecord[];
+  resolved_node_io?: ResolvedNodeIoRecord[] | null;
   retention_summary: IoArtifactRetentionSummaryRecord[];
   run_projection_state: ProjectionStateRecord;
   node_projection_state: ProjectionStateRecord;
   io_projection_state: ProjectionStateRecord;
+}
+
+export type ResolvedNodeIoDirection = 'input' | 'output';
+
+export type ResolvedNodeIoResolution =
+  | 'produced_output'
+  | 'derived_from_edge'
+  | 'explicit_input'
+  | 'workflow_boundary';
+
+export interface ResolvedNodeIoRecord {
+  node_id: string;
+  port_id: string;
+  direction: ResolvedNodeIoDirection;
+  resolution: ResolvedNodeIoResolution;
+  artifact_fact_id?: string | null;
+  payload_artifact_id?: string | null;
+  artifact_id?: string | null;
+  artifact_role?: string | null;
+  upstream_node_id?: string | null;
+  upstream_port_id?: string | null;
+  media_type?: string | null;
+  retention_state?: IoArtifactRetentionState | null;
 }
 
 export interface WorkflowSchedulerEstimateQueryRequest {

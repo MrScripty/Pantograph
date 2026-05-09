@@ -376,7 +376,11 @@ exceptions, not duplicate ordinary input rows.
 - `cargo test -p pantograph-embedded-runtime node_io_artifacts`
 - `cargo test -p pantograph-workflow-service workflow_io_artifact_query`
 
-**Status:** Not started
+**Status:** In progress. `workflow_run_inspection_query` now returns a
+backend-owned `resolved_node_io` read model built from projected artifact facts
+and graph edges when a run graph snapshot is available. Frontend still needs to
+consume `resolved_node_io` as the primary I/O Inspector source instead of raw
+artifact rows.
 
 ### Milestone 5: Diagnostics Projection And Resolved IO Query Shape
 
@@ -530,6 +534,10 @@ for large payloads.
   duplicate `node_input` event for workflow input bindings. Workflow inputs are
   now boundary facts only; node output and workflow output facts still both
   exist for session execution output targets and share the output payload id.
+- 2026-05-09: Resolved-node-I/O query slice added
+  `WorkflowRunInspectionQueryResponse.resolved_node_io`, with backend assembly
+  for produced outputs, explicit input facts, workflow boundary facts, and
+  graph-derived connected inputs when upstream output facts are available.
 
 ## Commit Cadence Notes
 
@@ -613,6 +621,8 @@ types must be edited serially or by one explicit owner.
   ordinary graph-connected resolved input ports as durable input artifacts.
 - Workflow boundary emission slice: workflow-service no longer duplicates
   workflow input bindings as `node_input` artifacts.
+- Resolved-node-I/O query slice: run inspection responses now expose
+  backend-owned logical node I/O records alongside raw artifact facts.
 
 ### Deviations
 
@@ -646,6 +656,10 @@ types must be edited serially or by one explicit owner.
 - 2026-05-09:
   - `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
   - `cargo check -p pantograph-workflow-service`
+- 2026-05-09:
+  - `cargo test -p pantograph-workflow-service diagnostics`
+  - `cargo test -p pantograph-workflow-service --test contract workflow_run_inspection_query_contract_snapshot`
+  - `npm run typecheck`
 - 2026-05-09:
   - `npm run typecheck`
   - `npm run test:frontend`

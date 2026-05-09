@@ -1181,6 +1181,7 @@ fn workflow_run_inspection_query_contract_snapshot() {
         run: None,
         node_statuses: Vec::new(),
         io_artifacts: Vec::new(),
+        resolved_node_io: Vec::new(),
         retention_summary: Vec::new(),
         run_projection_state: ProjectionStateRecord {
             projection_name: "run_detail".to_string(),
