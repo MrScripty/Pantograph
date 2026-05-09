@@ -536,18 +536,18 @@ type DiagnosticsProjectionSubscriptionOptions = {
 
 **Tasks:**
 
-- [ ] Add a diagnostics projection subscription helper in the frontend workflow
+- [x] Add a diagnostics projection subscription helper in the frontend workflow
       service boundary.
-- [ ] Normalize Tauri event payloads into typed diagnostics invalidation DTOs.
-- [ ] Extend frontend diagnostics types with optional projection health fields.
+- [x] Normalize Tauri event payloads into typed diagnostics invalidation DTOs.
+- [x] Extend frontend diagnostics types with optional projection health fields.
 - [ ] Add `mockProjectionState` or equivalent helper for mock projection
       responses and affected tests.
 - [ ] Add or extend shared projection health/freshness presentation helpers.
-- [ ] Provide unsubscribe cleanup and stale-response guards.
+- [x] Provide unsubscribe cleanup and stale-response guards.
 - [ ] Preserve initial snapshot fetches on page mount and active-run changes.
-- [ ] Debounce/coalesce refresh requests per active run and projection kind.
-- [ ] Ignore invalidations that do not affect the active page/run/filter scope.
-- [ ] Add unit tests proving subscriptions call listeners, coalesce refreshes
+- [x] Debounce/coalesce refresh requests per active run and projection kind.
+- [x] Ignore invalidations that do not affect the active page/run/filter scope.
+- [x] Add unit tests proving subscriptions call listeners, coalesce refreshes
       where owned by the service, and unsubscribe cleanly.
 - [ ] Add unit tests proving missed events are recovered by initial snapshot and
       manual refresh paths.
@@ -560,7 +560,12 @@ type DiagnosticsProjectionSubscriptionOptions = {
 - `npm run test:frontend -- --runInBand` if supported, otherwise targeted
   frontend test command used by this repo.
 
-**Status:** Not started.
+**Status:** In progress. The frontend workflow service boundary now has typed
+diagnostics projection invalidation DTOs, optional projection health fields, and
+a small Tauri-event subscription helper that filters projection/run scope,
+coalesces callbacks, and cleans up listeners. Remaining work is mock projection
+state consolidation, shared health/freshness presentation, missed-event
+recovery tests, and page integration.
 
 ### Milestone 8: Workbench Page Conversion
 

@@ -13,6 +13,7 @@ on raw invoke payloads.
 | `WorkflowCommandService.ts` | Focused backend-owned scheduler execution-session, queue, and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
 | `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving scheduler execution-session, queue, and retention commands return backend-owned results without optimistic client replacement. |
 | `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, scheduler estimate, run-list, selected-run, run-inspection, local Network, I/O artifact, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
+| `WorkflowProjectionSubscriptionService.ts` | Typed diagnostics projection invalidation subscription helper over the Tauri event bridge. |
 | `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, run-inspection request/response shape, local Network scheduler-load/placement facts, and warm projection freshness state survive the service boundary. |
 | `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
 | `workflowServiceErrors.test.ts` | Unit coverage for backend error-envelope parsing and transport-error fallback behavior. |
@@ -66,6 +67,11 @@ Projection invoke wiring now lives in `WorkflowProjectionService.ts` so the
 scheduler timeline, run-list, selected-run, run-inspection, I/O artifact, and
 warm Library usage read paths can be tested without loading the graph package
 runtime.
+Projection invalidation subscription wiring lives in
+`WorkflowProjectionSubscriptionService.ts`. It normalizes backend invalidation
+events, filters by projection kind and active run, coalesces refresh callbacks,
+and owns unsubscribe cleanup without caching diagnostics facts or becoming a
+frontend diagnostics store.
 `WorkflowService` inherits that boundary so existing GUI callers keep the same
 method names while projection DTO tests stay focused on Tauri request/response
 contracts.
@@ -160,6 +166,10 @@ missing `events` array as empty rather than a transport failure.
   Library usage projection invoke helpers stay in
   `WorkflowProjectionService.ts`; `WorkflowService` must not reimplement those
   methods separately.
+- Diagnostics projection invalidation subscriptions stay in
+  `WorkflowProjectionSubscriptionService.ts`. The helper may coalesce
+  callbacks and filter scopes, but it must always treat backend query responses
+  as the source of diagnostics facts.
 - Run-inspection projection invoke helpers stay in
   `WorkflowProjectionService.ts`. GraphPage may choose how to render the
   returned facts, but it must not fabricate retained node IO, projection

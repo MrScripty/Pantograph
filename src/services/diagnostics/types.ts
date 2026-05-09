@@ -9,6 +9,37 @@ export interface ProjectionStateRecord {
   status: ProjectionStatus;
   rebuilt_at_ms?: number | null;
   updated_at_ms: number;
+  last_error?: string | null;
+  last_error_at_ms?: number | null;
+  last_failed_event_seq?: number | null;
+}
+
+export type DiagnosticsProjectionKind =
+  | 'scheduler_timeline'
+  | 'run_list'
+  | 'run_detail'
+  | 'io_artifact'
+  | 'node_status'
+  | 'library_usage';
+
+export type DiagnosticsProjectionRefreshReason =
+  | 'diagnostic_event_appended'
+  | 'explicit_refresh'
+  | 'projection_rebuild'
+  | 'startup_catch_up'
+  | 'retention_cleanup';
+
+export interface DiagnosticsProjectionInvalidation {
+  projection_kind: DiagnosticsProjectionKind;
+  workflow_run_id?: string | null;
+  workflow_id?: string | null;
+  last_event_seq: number;
+  reason: DiagnosticsProjectionRefreshReason;
+  updated_at_ms: number;
+}
+
+export interface DiagnosticsProjectionInvalidationEvent {
+  invalidations: DiagnosticsProjectionInvalidation[];
 }
 
 export type DiagnosticEventKind =
