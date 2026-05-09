@@ -501,7 +501,7 @@ retention with lazy body reads.
   fact, derived input, and explicit resolved-input exception model.
 - [x] Update this plan with implementation notes, deviations, and any unresolved
   follow-ups discovered during execution.
-- [ ] Build release binaries and frontend after all slices pass.
+- [x] Build release binaries and frontend after all slices pass.
 
 **Verification:**
 - `cargo fmt --all -- --check`
@@ -509,9 +509,10 @@ retention with lazy body reads.
 - `npm run build`
 - `bash launcher.sh --build-release`
 
-**Status:** In progress. Source README notes now document artifact fact versus
+**Status:** Complete. Source README notes now document artifact fact versus
 payload identity, resolved node I/O as the I/O Inspector contract, and
-payload-identity retention cleanup behavior.
+payload-identity retention cleanup behavior. Release validation built the
+frontend and `target/release/pantograph`.
 
 ## Execution Notes
 
@@ -591,6 +592,9 @@ payload-identity retention cleanup behavior.
   Added the event label and a bridge test case so future node-engine event
   additions fail at the bridge boundary instead of being hidden by wildcard
   handling.
+- 2026-05-09: Release build completed through `bash launcher.sh --build-release`
+  and produced `target/release/pantograph`. The build still emits existing
+  Tauri dead-code warnings and the existing Tauri bundle identifier warning.
 
 ## Commit Cadence Notes
 
@@ -697,6 +701,8 @@ types must be edited serially or by one explicit owner.
 - Release-validation cleanup slice: UniFFI buffered workflow-event bridge now
   handles `TaskInputsResolved` explicitly and preserves the workflow-run id
   rename behavior for that event.
+- Release build slice: `bash launcher.sh --build-release` completed and
+  produced the release binary at `target/release/pantograph`.
 
 ### Deviations
 
@@ -752,6 +758,8 @@ types must be edited serially or by one explicit owner.
   - `cargo test -p pantograph-uniffi test_buffered_event_sink_uses_canonical_event_type_names`
   - `cargo check --workspace`
   - `git diff --check`
+- 2026-05-09:
+  - `bash launcher.sh --build-release`
 - 2026-05-09:
   - `cargo test -p pantograph-workflow-service diagnostics`
   - `cargo test -p pantograph-workflow-service --test contract workflow_run_inspection_query_contract_snapshot`
