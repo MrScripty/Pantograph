@@ -1,4 +1,7 @@
-import type { DiagnosticsRetentionPolicy } from '../../services/diagnostics/types';
+import type {
+  DiagnosticsRetentionPolicy,
+  WorkflowRetentionCleanupResult,
+} from '../../services/diagnostics/types';
 import type {
   WorkflowManagedMediaDependencyStatus,
   WorkflowManagedMediaDependencyVersionStatus,
@@ -213,6 +216,23 @@ export function buildDiagnosticsRetentionSettingRows(
   ];
 }
 
+export function buildDiagnosticsRetentionCleanupRows(
+  cleanup: WorkflowRetentionCleanupResult | null,
+): SettingsPolicyRow[] {
+  if (!cleanup) {
+    return [];
+  }
+
+  return [
+    { label: 'Policy', value: cleanup.policy_id, mono: true },
+    { label: 'Version', value: String(cleanup.policy_version), mono: true },
+    { label: 'Class', value: cleanup.retention_class, mono: true },
+    { label: 'Cutoff', value: formatSettingsTimestamp(cleanup.cutoff_occurred_before_ms) },
+    { label: 'Expired', value: String(cleanup.expired_artifact_count) },
+    { label: 'Last Event Seq', value: String(cleanup.last_event_seq ?? 'Unavailable'), mono: true },
+  ];
+}
+
 export function formatOptionItems(
   options: WorkflowMediaFormatOption[],
   currentValue?: string | null,
@@ -319,4 +339,8 @@ function formatRetentionPolicyMode(
   policy: DiagnosticsRetentionPolicy['settings']['final_outputs'],
 ): string {
   return `${policy.retention_days} days, ${titleCaseSnakeLabel(policy.payload_mode)}`;
+}
+
+function formatSettingsTimestamp(value: number): string {
+  return new Date(value).toLocaleString();
 }

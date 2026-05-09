@@ -6,6 +6,7 @@ import {
   WORKBENCH_PAGE_IDS,
   normalizeWorkbenchPageId,
   withDiagnosticsFocus,
+  withSettingsFocus,
   withActiveWorkflowRun,
   withSelectedWorkbenchPage,
 } from './workbenchStore.ts';
@@ -127,6 +128,22 @@ test('withDiagnosticsFocus selects diagnostics and stores focused event context'
     node_id: 'node-d',
     requested_at_ms: 700,
   });
+});
+
+test('withSettingsFocus selects settings and stores requested section context', () => {
+  const selected = withSelectedWorkbenchPage(DEFAULT_WORKBENCH_STATE, 'io_inspector');
+
+  const focused = withSettingsFocus(selected, 'diagnostics_retention', 750);
+
+  assert.equal(focused.selected_page_id, 'settings');
+  assert.deepEqual(focused.settings_focus, {
+    target_id: 'diagnostics_retention',
+    requested_at_ms: 750,
+  });
+
+  const cleared = withSettingsFocus(focused, null, 800);
+  assert.equal(cleared.selected_page_id, 'settings');
+  assert.equal(cleared.settings_focus, null);
 });
 
 test('changing active run clears stale diagnostics focus', () => {

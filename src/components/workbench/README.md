@@ -12,12 +12,12 @@ later plan stages fill in richer page bodies.
 | `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/placement/date filters, scope and placement columns, typed queue/estimate/cache columns, selected-run estimate and retention projection panels, backend-gated queue actions including session priority controls, and selected-run scheduler timeline projection with typed kind/source filters. |
 | `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/placement/date, queue-control gating, selected-run estimate/cache and retention rows, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
-| `GraphPage.svelte` | Workbench page that switches between the active run's backend-owned run-inspection snapshot and the current editable workflow graph. |
+| `GraphPage.svelte` | Workbench page for the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunInspection`; it does not load historic graphs into the editor store. |
 | `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range/placement filtered comparison facets, typed model-cache posture, mixed-version warnings, and scheduler timeline records. |
 | `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority/placement/model-cache facts, workflow-version/date-range/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
-| `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, read-only retention detail surface, and cleanup status surface. |
+| `IoInspectorPage.svelte` | Selected-run I/O artifact inspector with a compact run-snapshot graph above node-scoped input/output artifact details. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention policy/cleanup detail, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
 | `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy, diagnostics retention policy, artifact format defaults/capabilities, managed inference runtime controls, managed media dependency controls, server connection, model paths, device policy, RAG, and sandbox configuration. |
@@ -76,10 +76,11 @@ grow separate navigation and selection models.
   the workbench shell.
 - The workbench Diagnostics page owns the active diagnostics surface. Graph page
   toolbars must keep diagnostics navigation inside the workbench page model.
-- The workbench Settings page owns persistent app settings. I/O Inspector may
-  show retention status and cleanup controls, but persistent ArtifactStore,
-  media format defaults, runtime/server, model, device, RAG, and sandbox
-  settings must not be duplicated in feature-local panels.
+- The workbench Settings page owns persistent app settings and retention
+  cleanup controls. I/O Inspector may show projected retention summary counts
+  and navigate to Settings, but persistent ArtifactStore, diagnostics
+  retention, media format defaults, runtime/server, model, device, RAG, and
+  sandbox settings must not be duplicated in feature-local panels.
 - Toolbar navigation must use semantic buttons with accessible names.
 
 ## Decision
@@ -155,13 +156,14 @@ transient UI state without becoming backend scheduler policy.
   the backend projection query instead of filtering client-side artifact rows.
 - Library active-run highlighting must use explicit projection facts, not
   inferred workflow or asset name matches.
-- Run graph snapshots are read-only projection views. Switching to the current
-  editor keeps the selected run context for other pages but does not imply the
-  editor graph matches that run.
-- Run graph snapshots consume `workflowService.queryRunInspection` for graph,
-  node-status, and I/O artifact facts. Presenter code may group, label, and
-  visually order those facts, but it must not invent persisted run data or
-  projection freshness state.
+- I/O Inspector run graph snapshots are read-only projection views. The
+  selected snapshot node is transient UI state used only to filter projected
+  artifact rows.
+- I/O Inspector run graph snapshots consume `workflowService.queryRunInspection`
+  for graph and node-status facts and `workflowService.queryIoArtifacts` for
+  artifact facts. Presenter code may group, label, and visually order those
+  facts, but it must not invent persisted run data or projection freshness
+  state.
 - Diagnostics timeline rows render typed scheduler projection summaries and
   payload availability only; detailed payload parsing belongs in backend
   projections or future typed presenters.
@@ -234,14 +236,8 @@ transient UI state without becoming backend scheduler policy.
   independent polling loops around it.
 - Active-run selection contains identity and summary fields only. Consumers must
   query detail, timeline, graph, I/O, or Library projections for durable data.
-- `GraphPage.svelte` reads historic workflow versions through
-  `workflowService.queryRunGraph` and renders them through
-  `RunGraphSnapshot.svelte`. It reads selected-run artifact metadata through
-  `workflowService.queryIoArtifacts` for node output-availability overlays and
-  selected-run node status through `workflowService.queryNodeStatus` for
-  runtime-status overlays. It never applies that graph to the editor store, and
-  its editor toolbar stays focused on workflow persistence/execution rather
-  than reopening separate diagnostics controls.
+- `GraphPage.svelte` renders only the editable workflow graph and never loads
+  selected-run snapshots into the editor store.
 - `DiagnosticsPage.svelte` reads selected-run facts through
   `workflowService.queryRunDetail`, scheduler history through
   `workflowService.querySchedulerTimeline`, and comparison peers through
@@ -252,14 +248,13 @@ transient UI state without becoming backend scheduler policy.
   I/O projection freshness, not raw ledger events. Selected-run execution
   facets use `workflowService.queryNodeStatus` node status projection rows for
   node, runtime, and model version labels and filters.
-- `IoInspectorPage.svelte` reads artifact metadata through
-  `workflowService.queryIoArtifacts` and global retention state through
-  `workflowService.queryRetentionPolicy`. Artifact retention labels come from
+- `IoInspectorPage.svelte` reads selected-run graph and node-status facts
+  through `workflowService.queryRunInspection` and artifact metadata through
+  `workflowService.queryIoArtifacts`. Artifact retention labels come from
   `IoArtifactProjectionRecord.retention_state`, not from `payload_ref`
   inference. Retention completeness counts come from the response
-  `retention_summary`, not from raw ledger events. Retention policy setting
-  rows render backend-provided policy settings rather than hardcoded page
-  categories.
+  `retention_summary`, not from raw ledger events. Node selection filters
+  artifacts by producer and consumer projection fields.
 - `SettingsPage.svelte` reads and saves global ArtifactStore policy through
   `workflowService.artifactPolicy` and
   `workflowService.updateArtifactPolicy`. It also reads and saves global
@@ -274,11 +269,12 @@ transient UI state without becoming backend scheduler policy.
   activate/remove commands.
 - Retention policy saves on Settings call
   `workflowService.updateRetentionPolicy` and update displayed state only from
-  the backend response. I/O Inspector may display the active policy and cleanup
-  results, but it must not own persistent retention policy edits.
+  the backend response. I/O Inspector may navigate to the Settings retention
+  section, but it must not own persistent retention policy edits or cleanup
+  controls.
 - Retention cleanup actions call `workflowService.applyRetentionCleanup`, show
-  the backend cleanup count and detail rows, and refresh artifact metadata from
-  projections instead of removing artifact cards locally.
+  the backend cleanup count and detail rows in Settings instead of removing
+  artifact cards locally.
 - `LibraryPage.svelte` reads usage and audit summaries through
   `workflowService.queryLibraryUsage`. Audited HuggingFace search results use
   the typed diagnostics service result shape and render model ids without

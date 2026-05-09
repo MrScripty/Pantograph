@@ -18,11 +18,17 @@
     artifactSummaries = {},
     nodeStatuses = {},
     focusedDiagnosticEventId = null,
+    compact = false,
+    selectedNodeId = null,
+    onSelectNode = undefined,
   }: {
     runGraph: WorkflowRunGraphProjection;
     artifactSummaries?: RunGraphNodeArtifactSummaryByNodeId;
     nodeStatuses?: RunGraphNodeStatusByNodeId;
     focusedDiagnosticEventId?: string | null;
+    compact?: boolean;
+    selectedNodeId?: string | null;
+    onSelectNode?: (nodeId: string) => void;
   } = $props();
 
   let canvas = $derived(buildRunGraphCanvasModel(runGraph.graph, artifactSummaries, nodeStatuses));
@@ -37,9 +43,40 @@
     }
     return `${value.slice(0, maxLength - 3)}...`;
   }
+
+  function selectNode(nodeId: string): void {
+    onSelectNode?.(nodeId);
+  }
+
+  function nodeStroke(node: (typeof canvas.nodes)[number]): string {
+    if (node.id === selectedNodeId) {
+      return '#f59e0b';
+    }
+    if (node.errorEventId === focusedDiagnosticEventId) {
+      return '#22d3ee';
+    }
+    if (node.errorSeverity === 'fatal' || node.statusClass === 'failed') {
+      return '#ef4444';
+    }
+    if (node.hasOutputArtifacts) {
+      return '#22c55e';
+    }
+    return '#404040';
+  }
+
+  function nodeStrokeWidth(node: (typeof canvas.nodes)[number]): string {
+    if (node.id === selectedNodeId || node.errorEventId === focusedDiagnosticEventId) {
+      return '3';
+    }
+    return node.statusClass === 'unknown' && !node.hasOutputArtifacts ? '1' : '2';
+  }
 </script>
 
-<div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_28rem]">
+<div
+  class={compact
+    ? 'grid h-full min-h-0 grid-cols-1 overflow-hidden'
+    : 'grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_28rem]'}
+>
   <div class="min-h-0 overflow-auto">
     <div class="border-b border-neutral-900 px-4 py-3">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-neutral-500">
@@ -49,8 +86,8 @@
       </div>
     </div>
 
-    <div class="p-4">
-      <div class="h-[30rem] overflow-hidden rounded border border-neutral-800 bg-neutral-950">
+    <div class={compact ? 'h-[calc(100%-2.75rem)] min-h-0 p-3' : 'p-4'}>
+      <div class={compact ? 'h-full min-h-[14rem] overflow-hidden rounded border border-neutral-800 bg-neutral-950' : 'h-[30rem] overflow-hidden rounded border border-neutral-800 bg-neutral-950'}>
         {#if canvas.nodes.length === 0}
           <div class="flex h-full items-center justify-center text-sm text-neutral-500">No graph nodes captured</div>
         {:else}
@@ -85,14 +122,27 @@
               />
             {/each}
             {#each canvas.nodes as node (node.id)}
-              <g transform={`translate(${node.x}, ${node.y})`}>
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+              <g
+                transform={`translate(${node.x}, ${node.y})`}
+                role={onSelectNode ? 'button' : undefined}
+                tabindex={onSelectNode ? 0 : undefined}
+                class={onSelectNode ? 'cursor-pointer outline-none' : ''}
+                onclick={() => selectNode(node.id)}
+                onkeydown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectNode(node.id);
+                  }
+                }}
+              >
                 <rect
                   width={node.width}
                   height={node.height}
                   rx="6"
                   fill="#171717"
-                  stroke={node.errorEventId === focusedDiagnosticEventId ? '#22d3ee' : node.errorSeverity === 'fatal' || node.statusClass === 'failed' ? '#ef4444' : node.hasOutputArtifacts ? '#22c55e' : '#404040'}
-                  stroke-width={node.errorEventId === focusedDiagnosticEventId ? '3' : node.statusClass === 'unknown' && !node.hasOutputArtifacts ? '1' : '2'}
+                  stroke={nodeStroke(node)}
+                  stroke-width={nodeStrokeWidth(node)}
                 />
                 <text x="14" y="26" fill="#f5f5f5" font-size="13" font-family="ui-monospace, monospace">
                   {compactValue(node.id)}
@@ -146,6 +196,7 @@
     </div>
   </div>
 
+  {#if !compact}
   <aside class="min-h-0 overflow-auto border-l border-neutral-800 bg-neutral-950/80">
     <div class="border-b border-neutral-900 p-4">
       <h2 class="text-sm font-semibold text-neutral-100">Version</h2>
@@ -265,4 +316,5 @@
       {/if}
     </div>
   </aside>
+  {/if}
 </div>

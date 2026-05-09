@@ -8,7 +8,10 @@
   import ManagedRuntimePanel from '../runtime-manager/ManagedRuntimePanel.svelte';
   import SandboxSettings from '../SandboxSettings.svelte';
   import ServerStatus from '../ServerStatus.svelte';
-  import type { DiagnosticsRetentionPolicy } from '../../services/diagnostics/types';
+  import type {
+    DiagnosticsRetentionPolicy,
+    WorkflowRetentionCleanupResult,
+  } from '../../services/diagnostics/types';
   import type {
     WorkflowArtifactFormatCapabilities,
     WorkflowArtifactFormatSettings,
@@ -19,7 +22,12 @@
   } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import {
+    clearSettingsFocus,
+    settingsFocus,
+  } from '../../stores/workbenchStore';
+  import {
     buildArtifactPolicyRows,
+    buildDiagnosticsRetentionCleanupRows,
     buildDiagnosticsRetentionPolicyRows,
     buildDiagnosticsRetentionSettingRows,
     buildManagedMediaDependencyRows,
@@ -73,6 +81,7 @@
 
   let policy = $state<WorkflowArtifactPolicy | null>(null);
   let diagnosticsRetentionPolicy = $state<DiagnosticsRetentionPolicy | null>(null);
+  let diagnosticsRetentionCleanup = $state<WorkflowRetentionCleanupResult | null>(null);
   let capabilities = $state<WorkflowArtifactFormatCapabilities | null>(null);
   let managedMediaDependencies = $state<WorkflowManagedMediaDependencyStatus[]>([]);
   let managedMediaDrafts = $state<Record<string, ManagedMediaDependencyDraft>>({});
@@ -83,6 +92,7 @@
   let loading = $state(false);
   let savingPolicy = $state(false);
   let savingDiagnosticsRetention = $state(false);
+  let applyingDiagnosticsRetentionCleanup = $state(false);
   let savingFormats = $state(false);
   let managedMediaActionKey = $state<string | null>(null);
   let pageError = $state<string | null>(null);
@@ -101,6 +111,9 @@
   );
   let diagnosticsRetentionSettingRows = $derived(
     buildDiagnosticsRetentionSettingRows(diagnosticsRetentionPolicy),
+  );
+  let diagnosticsRetentionCleanupRows = $derived(
+    buildDiagnosticsRetentionCleanupRows(diagnosticsRetentionCleanup),
   );
   let imageFormatOptions = $derived(
     formatOptionItems(capabilities?.image_formats ?? [], formatDraft.image.format_id),
@@ -138,6 +151,20 @@
 
   onMount(() => {
     void refreshSettingsPage();
+  });
+
+  $effect(() => {
+    const focus = $settingsFocus;
+    if (focus?.target_id !== 'diagnostics_retention') {
+      return;
+    }
+
+    setTimeout(() => {
+      document
+        .getElementById('settings-diagnostics-retention-policy')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      clearSettingsFocus();
+    }, 0);
   });
 
   async function refreshSettingsPage(): Promise<void> {
@@ -239,6 +266,24 @@
       diagnosticsRetentionError = formatWorkflowCommandError(error);
     } finally {
       savingDiagnosticsRetention = false;
+    }
+  }
+
+  async function applyDiagnosticsRetentionCleanup(): Promise<void> {
+    diagnosticsRetentionError = null;
+    diagnosticsRetentionMessage = null;
+    applyingDiagnosticsRetentionCleanup = true;
+    try {
+      const response = await workflowService.applyRetentionCleanup({
+        limit: 250,
+        reason: 'gui_workbench_settings_retention_cleanup',
+      });
+      diagnosticsRetentionCleanup = response.cleanup;
+      diagnosticsRetentionMessage = `${response.cleanup.expired_artifact_count} artifacts expired`;
+    } catch (error) {
+      diagnosticsRetentionError = formatWorkflowCommandError(error);
+    } finally {
+      applyingDiagnosticsRetentionCleanup = false;
     }
   }
 
@@ -731,6 +776,7 @@
       </section>
 
       <form
+        id="settings-diagnostics-retention-policy"
         class="border-b border-neutral-900 px-4 py-4"
         onsubmit={(event) => {
           event.preventDefault();
@@ -919,6 +965,41 @@
             {/each}
           </dl>
         {/if}
+
+        <section class="mt-4 rounded border border-neutral-800 bg-neutral-900/40 p-3">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-medium text-neutral-100">Retention Cleanup</h3>
+              <div class="mt-1 text-xs text-neutral-500">
+                Apply backend retention cleanup using the current diagnostics retention policy.
+              </div>
+            </div>
+            <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+              onclick={() => {
+                void applyDiagnosticsRetentionCleanup();
+              }}
+              disabled={loading || applyingDiagnosticsRetentionCleanup || !diagnosticsRetentionPolicy}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+              {applyingDiagnosticsRetentionCleanup ? 'Applying Cleanup' : 'Apply Cleanup'}
+            </button>
+          </div>
+
+          {#if diagnosticsRetentionCleanupRows.length > 0}
+            <dl class="mt-3 grid gap-2 text-xs md:grid-cols-2">
+              {#each diagnosticsRetentionCleanupRows as row (row.label)}
+                <div>
+                  <dt class="text-neutral-500">{row.label}</dt>
+                  <dd class={`mt-1 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
+                    {row.value}
+                  </dd>
+                </div>
+              {/each}
+            </dl>
+          {/if}
+        </section>
       </form>
 
       <form

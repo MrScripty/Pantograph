@@ -34,10 +34,18 @@ export interface DiagnosticsFocusTarget {
   requested_at_ms: number;
 }
 
+export type SettingsFocusTargetId = 'diagnostics_retention';
+
+export interface SettingsFocusTarget {
+  target_id: SettingsFocusTargetId;
+  requested_at_ms: number;
+}
+
 export interface WorkbenchState {
   selected_page_id: WorkbenchPageId;
   active_run: ActiveWorkflowRunContext | null;
   diagnostics_focus: DiagnosticsFocusTarget | null;
+  settings_focus: SettingsFocusTarget | null;
 }
 
 export const WORKBENCH_PAGES: WorkbenchPageDefinition[] = [
@@ -55,6 +63,7 @@ export const DEFAULT_WORKBENCH_STATE: WorkbenchState = {
   selected_page_id: 'scheduler',
   active_run: null,
   diagnostics_focus: null,
+  settings_focus: null,
 };
 
 export function isWorkbenchPageId(value: string): value is WorkbenchPageId {
@@ -88,6 +97,23 @@ export function withDiagnosticsFocus(
           workflow_run_id: focus.workflow_run_id,
           diagnostic_event_id: focus.diagnostic_event_id ?? null,
           node_id: focus.node_id ?? null,
+          requested_at_ms: requestedAtMs,
+        }
+      : null,
+  };
+}
+
+export function withSettingsFocus(
+  state: WorkbenchState,
+  targetId: SettingsFocusTargetId | null,
+  requestedAtMs: number,
+): WorkbenchState {
+  return {
+    ...state,
+    selected_page_id: targetId ? 'settings' : state.selected_page_id,
+    settings_focus: targetId
+      ? {
+          target_id: targetId,
           requested_at_ms: requestedAtMs,
         }
       : null,
@@ -139,6 +165,11 @@ export const diagnosticsFocus: Readable<DiagnosticsFocusTarget | null> = derived
   ($state) => $state.diagnostics_focus,
 );
 
+export const settingsFocus: Readable<SettingsFocusTarget | null> = derived(
+  workbenchStateStore,
+  ($state) => $state.settings_focus,
+);
+
 export function setWorkbenchPage(pageId: string): void {
   workbenchStateStore.update((state) => withSelectedWorkbenchPage(state, pageId));
 }
@@ -174,6 +205,17 @@ export function focusWorkflowDiagnostics(
 
 export function clearDiagnosticsFocus(): void {
   workbenchStateStore.update((state) => withDiagnosticsFocus(state, null, Date.now()));
+}
+
+export function focusSettingsSection(
+  targetId: SettingsFocusTargetId,
+  requestedAtMs = Date.now(),
+): void {
+  workbenchStateStore.update((state) => withSettingsFocus(state, targetId, requestedAtMs));
+}
+
+export function clearSettingsFocus(): void {
+  workbenchStateStore.update((state) => withSettingsFocus(state, null, Date.now()));
 }
 
 export function resetWorkbenchState(): void {

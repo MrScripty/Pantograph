@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy } from 'svelte';
   import {
     Braces,
     Check,
@@ -11,33 +11,32 @@
     Image as ImageIcon,
     Music,
     RefreshCw,
+    Settings,
     Table2,
-    Trash2,
     Video,
   } from 'lucide-svelte';
   import type {
-    DiagnosticsRetentionPolicy,
     IoArtifactProjectionRecord,
     IoArtifactRetentionSummaryRecord,
+    NodeStatusProjectionRecord,
     ProjectionStateRecord,
-    WorkflowRetentionCleanupResult,
     WorkflowIoArtifactQueryRequest,
   } from '../../services/diagnostics/types';
   import type {
     WorkflowArtifactBodyRead,
     WorkflowArtifactStreamBodyRead,
+    WorkflowRunGraphProjection,
   } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
-  import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
+    activeWorkflowRun,
+    focusSettingsSection,
+  } from '../../stores/workbenchStore';
+  import {
+    buildIoArtifactDescriptorMetadataRows,
     buildIoArtifactDownloadFilename,
     buildIoArtifactPreviewReadRequest,
-    buildIoArtifactNodeGroups,
-    buildIoArtifactDescriptorMetadataRows,
     buildIoArtifactRendererSummary,
-    buildRetentionCleanupDetailRows,
-    buildRetentionPolicyDetailRows,
-    buildRetentionPolicySettingRows,
     canRenderIoArtifactTextPreview,
     canAcknowledgeIoArtifactConsumed,
     canReadIoArtifactBody,
@@ -51,9 +50,12 @@
     formatIoArtifactRetentionStateLabel,
     formatIoArtifactRoleLabel,
     formatProjectionFreshness,
-    isWorkflowInputArtifact,
-    isWorkflowOutputArtifact,
   } from './ioInspectorPresenters';
+  import {
+    buildRunGraphNodeArtifactSummaries,
+    buildRunGraphNodeStatusMap,
+  } from './runGraphPresenters';
+  import RunGraphSnapshot from './RunGraphSnapshot.svelte';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   interface ArtifactBodyPreview {
@@ -68,32 +70,31 @@
 
   const DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS = 30_000;
 
+  let runGraph = $state<WorkflowRunGraphProjection | null>(null);
+  let runNodeStatuses = $state<NodeStatusProjectionRecord[]>([]);
   let artifacts = $state<IoArtifactProjectionRecord[]>([]);
   let retentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
   let projectionState = $state<ProjectionStateRecord | null>(null);
-  let retentionPolicy = $state<DiagnosticsRetentionPolicy | null>(null);
-  let retentionCleanup = $state<WorkflowRetentionCleanupResult | null>(null);
-  let loadingArtifacts = $state(false);
-  let loadingRetention = $state(false);
-  let applyingRetentionCleanup = $state(false);
-  let artifactError = $state<string | null>(null);
-  let retentionError = $state<string | null>(null);
-  let retentionCleanupMessage = $state<string | null>(null);
+  let selectedNodeId = $state<string | null>(null);
+  let selectedBackendFilter = $state('');
+  let loadingInspector = $state(false);
+  let inspectorError = $state<string | null>(null);
   let artifactBodyPreviews = $state<Record<string, ArtifactBodyPreview>>({});
   let artifactAccessLoading = $state<Record<string, boolean>>({});
   let artifactConsumeLoading = $state<Record<string, boolean>>({});
   let artifactAccessErrors = $state<Record<string, string>>({});
   let artifactConsumeMessages = $state<Record<string, string>>({});
-  let endpointFilterMode = $state<'all' | 'producer' | 'consumer'>('all');
-  let endpointNodeFilter = $state('');
-  let selectedBackendFilter = $state('');
-  let artifactRequestSerial = 0;
-  let workflowInputArtifacts = $derived(artifacts.filter(isWorkflowInputArtifact));
-  let workflowOutputArtifacts = $derived(artifacts.filter(isWorkflowOutputArtifact));
-  let nodeGroups = $derived(buildIoArtifactNodeGroups(artifacts));
-  let retentionPolicyRows = $derived(buildRetentionPolicyDetailRows(retentionPolicy));
-  let retentionPolicySettingRows = $derived(buildRetentionPolicySettingRows(retentionPolicy));
-  let retentionCleanupRows = $derived(buildRetentionCleanupDetailRows(retentionCleanup));
+  let inspectorRequestSerial = 0;
+
+  let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(artifacts));
+  let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
+  let selectedInputArtifacts = $derived(
+    selectedNodeId ? artifacts.filter((artifact) => isNodeInputArtifact(artifact, selectedNodeId)) : [],
+  );
+  let selectedOutputArtifacts = $derived(
+    selectedNodeId ? artifacts.filter((artifact) => isNodeOutputArtifact(artifact, selectedNodeId)) : [],
+  );
+  let selectedArtifacts = $derived([...selectedOutputArtifacts, ...selectedInputArtifacts]);
   let summarizedArtifactCount = $derived(
     retentionSummary.reduce((total, item) => total + item.artifact_count, 0),
   );
@@ -106,55 +107,103 @@
     return new Date(value).toLocaleString();
   }
 
-  function applyRetentionPolicy(policy: DiagnosticsRetentionPolicy): void {
-    retentionPolicy = policy;
-  }
-
-  async function refreshArtifacts(
+  async function refreshInspector(
     runId = activeRunId(),
-    filterMode = endpointFilterMode,
-    filterNodeValue = endpointNodeFilter.trim(),
     backendFilterValue = selectedBackendFilter.trim(),
   ): Promise<void> {
-    const requestSerial = ++artifactRequestSerial;
-    artifactError = null;
+    const requestSerial = ++inspectorRequestSerial;
+    inspectorError = null;
+    loadingInspector = true;
 
-    loadingArtifacts = true;
+    if (!runId) {
+      runGraph = null;
+      runNodeStatuses = [];
+      artifacts = [];
+      retentionSummary = [];
+      projectionState = null;
+      selectedNodeId = null;
+      loadingInspector = false;
+      return;
+    }
+
     try {
-      const request: WorkflowIoArtifactQueryRequest = {
-        workflow_run_id: runId ?? null,
+      const artifactRequest: WorkflowIoArtifactQueryRequest = {
+        workflow_run_id: runId,
         limit: 250,
       };
-      const filterNodeId = filterNodeValue.trim();
-      if (filterNodeId.length > 0 && filterMode === 'producer') {
-        request.producer_node_id = filterNodeId;
-      }
-      if (filterNodeId.length > 0 && filterMode === 'consumer') {
-        request.consumer_node_id = filterNodeId;
-      }
       const selectedBackendKey = backendFilterValue.trim();
       if (selectedBackendKey.length > 0) {
-        request.selected_backend_key = selectedBackendKey;
+        artifactRequest.selected_backend_key = selectedBackendKey;
       }
 
-      const response = await workflowService.queryIoArtifacts(request);
-      if (requestSerial !== artifactRequestSerial) {
+      const [inspectionResponse, artifactResponse] = await Promise.all([
+        workflowService.queryRunInspection({
+          workflow_run_id: runId,
+          artifact_limit: 250,
+        }),
+        workflowService.queryIoArtifacts(artifactRequest),
+      ]);
+      if (requestSerial !== inspectorRequestSerial) {
         return;
       }
-      revokeMissingArtifactObjectUrls(response.artifacts);
-      artifacts = response.artifacts;
-      retentionSummary = response.retention_summary;
-      projectionState = response.projection_state;
+
+      revokeMissingArtifactObjectUrls(artifactResponse.artifacts);
+      runGraph = inspectionResponse.run_graph ?? null;
+      runNodeStatuses = inspectionResponse.node_statuses;
+      artifacts = artifactResponse.artifacts;
+      retentionSummary = artifactResponse.retention_summary;
+      projectionState = artifactResponse.projection_state;
+      selectedNodeId = resolveSelectedNodeId(
+        selectedNodeId,
+        inspectionResponse.run_graph,
+        artifactResponse.artifacts,
+      );
     } catch (error) {
-      if (requestSerial !== artifactRequestSerial) {
+      if (requestSerial !== inspectorRequestSerial) {
         return;
       }
-      artifactError = formatWorkflowCommandError(error);
+      inspectorError = formatWorkflowCommandError(error);
+      runGraph = null;
+      runNodeStatuses = [];
+      artifacts = [];
+      retentionSummary = [];
+      projectionState = null;
+      selectedNodeId = null;
     } finally {
-      if (requestSerial === artifactRequestSerial) {
-        loadingArtifacts = false;
+      if (requestSerial === inspectorRequestSerial) {
+        loadingInspector = false;
       }
     }
+  }
+
+  function resolveSelectedNodeId(
+    currentNodeId: string | null,
+    nextRunGraph: WorkflowRunGraphProjection | null | undefined,
+    nextArtifacts: IoArtifactProjectionRecord[],
+  ): string | null {
+    const nodeIds = nextRunGraph?.graph.nodes.map((node) => node.id) ?? [];
+    if (currentNodeId && nodeIds.includes(currentNodeId)) {
+      return currentNodeId;
+    }
+
+    const artifactNodeId = nextArtifacts
+      .map((artifact) => artifact.producer_node_id ?? artifact.consumer_node_id ?? artifact.node_id)
+      .find((nodeId): nodeId is string => Boolean(nodeId && nodeIds.includes(nodeId)));
+    return artifactNodeId ?? nodeIds[0] ?? null;
+  }
+
+  function isNodeInputArtifact(artifact: IoArtifactProjectionRecord, nodeId: string): boolean {
+    return (
+      artifact.consumer_node_id === nodeId ||
+      (!artifact.consumer_node_id && artifact.node_id === nodeId && artifact.artifact_role === 'node_input')
+    );
+  }
+
+  function isNodeOutputArtifact(artifact: IoArtifactProjectionRecord, nodeId: string): boolean {
+    return (
+      artifact.producer_node_id === nodeId ||
+      (!artifact.producer_node_id && artifact.node_id === nodeId && artifact.artifact_role === 'node_output')
+    );
   }
 
   async function readArtifactPreview(artifact: IoArtifactProjectionRecord): Promise<void> {
@@ -237,7 +286,7 @@
           ? 'Consume acknowledged; payload retained'
           : 'Consume acknowledged; payload released',
       };
-      await refreshArtifacts();
+      await refreshInspector();
     } catch (error) {
       setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
     } finally {
@@ -376,48 +425,10 @@
     return next;
   }
 
-  async function refreshRetentionPolicy(): Promise<void> {
-    loadingRetention = true;
-    retentionError = null;
-    try {
-      const response = await workflowService.queryRetentionPolicy();
-      applyRetentionPolicy(response.retention_policy);
-    } catch (error) {
-      retentionError = formatWorkflowCommandError(error);
-    } finally {
-      loadingRetention = false;
-    }
-  }
-
-  async function applyRetentionCleanup(): Promise<void> {
-    applyingRetentionCleanup = true;
-    retentionError = null;
-    retentionCleanupMessage = null;
-    try {
-      const response = await workflowService.applyRetentionCleanup({
-        limit: 250,
-        reason: 'gui_io_inspector_cleanup_apply',
-      });
-      retentionCleanup = response.cleanup;
-      retentionCleanupMessage = `${response.cleanup.expired_artifact_count} artifacts expired`;
-      await refreshArtifacts();
-    } catch (error) {
-      retentionError = formatWorkflowCommandError(error);
-    } finally {
-      applyingRetentionCleanup = false;
-    }
-  }
-
   $effect(() => {
     const runId = activeRunId();
-    const filterMode = endpointFilterMode;
-    const filterNodeValue = endpointNodeFilter.trim();
     const backendFilterValue = selectedBackendFilter.trim();
-    void refreshArtifacts(runId, filterMode, filterNodeValue, backendFilterValue);
-  });
-
-  onMount(() => {
-    void refreshRetentionPolicy();
+    void refreshInspector(runId, backendFilterValue);
   });
 
   onDestroy(() => {
@@ -426,592 +437,352 @@
 </script>
 
 <section class="flex h-full min-h-0 flex-col bg-neutral-950">
-  <div class="flex shrink-0 items-center justify-between border-b border-neutral-800 px-4 py-3">
+  <div class="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-800 px-4 py-3">
     <div class="min-w-0">
       <h1 class="text-base font-semibold text-neutral-100">I/O Inspector</h1>
       <div class="mt-1 truncate text-xs text-neutral-500">
         {#if $activeWorkflowRun}
           {$activeWorkflowRun.workflow_run_id}
         {:else}
-          Browsing retained artifacts across runs
+          Select a workflow run in Scheduler to inspect node I/O
         {/if}
       </div>
     </div>
-    <button
-      type="button"
-      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-      onclick={() => refreshArtifacts()}
-      disabled={loadingArtifacts}
-    >
-      <RefreshCw size={14} aria-hidden="true" class={loadingArtifacts ? 'animate-spin' : ''} />
-      Refresh
-    </button>
+    <div class="flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+        onclick={() => focusSettingsSection('diagnostics_retention')}
+      >
+        <Settings size={14} aria-hidden="true" />
+        Retention Settings
+      </button>
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+        onclick={() => refreshInspector()}
+        disabled={loadingInspector}
+      >
+        <RefreshCw size={14} aria-hidden="true" class={loadingInspector ? 'animate-spin' : ''} />
+        Refresh
+      </button>
+    </div>
   </div>
 
-  <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_22rem]">
-    <div class="min-h-0 overflow-auto">
-      <div class="border-b border-neutral-900 px-4 py-3 text-xs text-neutral-500">
-        {formatProjectionFreshness(projectionState)}
-      </div>
-      <div class="flex flex-wrap items-end gap-3 border-b border-neutral-900 px-4 py-3">
-        <div>
-          <div class="mb-2 text-xs uppercase tracking-[0.18em] text-neutral-500">Endpoint</div>
-          <div class="inline-flex overflow-hidden rounded border border-neutral-800">
-            <button
-              type="button"
-              aria-pressed={endpointFilterMode === 'all'}
-              class="px-3 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-neutral-900 hover:text-neutral-100"
-              class:bg-cyan-950={endpointFilterMode === 'all'}
-              class:text-cyan-100={endpointFilterMode === 'all'}
-              onclick={() => {
-                endpointFilterMode = 'all';
-              }}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              aria-pressed={endpointFilterMode === 'producer'}
-              class="border-l border-neutral-800 px-3 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-neutral-900 hover:text-neutral-100"
-              class:bg-cyan-950={endpointFilterMode === 'producer'}
-              class:text-cyan-100={endpointFilterMode === 'producer'}
-              onclick={() => {
-                endpointFilterMode = 'producer';
-              }}
-            >
-              Produced
-            </button>
-            <button
-              type="button"
-              aria-pressed={endpointFilterMode === 'consumer'}
-              class="border-l border-neutral-800 px-3 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-neutral-900 hover:text-neutral-100"
-              class:bg-cyan-950={endpointFilterMode === 'consumer'}
-              class:text-cyan-100={endpointFilterMode === 'consumer'}
-              onclick={() => {
-                endpointFilterMode = 'consumer';
-              }}
-            >
-              Consumed
-            </button>
+  {#if inspectorError}
+    <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{inspectorError}</div>
+  {/if}
+
+  {#if !$activeWorkflowRun}
+    <div class="flex min-h-0 flex-1 items-center justify-center text-sm text-neutral-500">
+      No active run selected
+    </div>
+  {:else}
+    <div class="grid min-h-0 flex-1 grid-rows-[minmax(18rem,42%)_minmax(0,1fr)] overflow-hidden">
+      <section class="min-h-0 border-b border-neutral-800">
+        {#if loadingInspector && !runGraph}
+          <div class="flex h-full items-center justify-center text-sm text-neutral-500">Loading run snapshot</div>
+        {:else if !runGraph}
+          <div class="flex h-full items-center justify-center text-sm text-neutral-500">
+            No versioned graph captured for this run
           </div>
-        </div>
-        <div class="min-w-[14rem] flex-1">
-          <label for="io-endpoint-node-filter" class="mb-2 block text-xs uppercase tracking-[0.18em] text-neutral-500">
-            Node id
-          </label>
-          <input
-            id="io-endpoint-node-filter"
-            type="text"
-            bind:value={endpointNodeFilter}
-            disabled={endpointFilterMode === 'all'}
-            placeholder="node-id"
-            class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+        {:else}
+          <RunGraphSnapshot
+            {runGraph}
+            {artifactSummaries}
+            {nodeStatuses}
+            compact
+            {selectedNodeId}
+            onSelectNode={(nodeId) => {
+              selectedNodeId = nodeId;
+            }}
           />
-        </div>
-        <div class="min-w-[12rem] flex-1">
-          <label for="io-selected-backend-filter" class="mb-2 block text-xs uppercase tracking-[0.18em] text-neutral-500">
-            Backend
-          </label>
-          <input
-            id="io-selected-backend-filter"
-            type="text"
-            bind:value={selectedBackendFilter}
-            placeholder="vllm"
-            class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
-          />
-        </div>
-      </div>
-      {#if retentionSummary.length > 0}
-        <div class="flex flex-wrap items-center gap-2 border-b border-neutral-900 px-4 py-3 text-xs">
-          <span class="text-neutral-500">{summarizedArtifactCount} artifacts</span>
-          {#each retentionSummary as item (item.retention_state)}
-            <span class="inline-flex items-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-neutral-300">
-              <span>{formatIoArtifactRetentionStateLabel(item.retention_state)}</span>
-              <span class="font-mono text-neutral-500">{item.artifact_count}</span>
-            </span>
-          {/each}
-        </div>
-      {/if}
+        {/if}
+      </section>
 
-      {#if artifactError}
-        <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{artifactError}</div>
-      {/if}
-
-      {#if loadingArtifacts && artifacts.length === 0}
-        <div class="px-4 py-8 text-sm text-neutral-500">Loading artifacts</div>
-      {:else if artifacts.length === 0}
-        <div class="px-4 py-8 text-sm text-neutral-500">
-          {#if $activeWorkflowRun}
-            No retained artifact metadata for this run
-          {:else}
-            No retained artifact metadata available
-          {/if}
-        </div>
-      {:else}
-        <div class="grid gap-3 border-b border-neutral-900 p-4 lg:grid-cols-2">
-          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
-            <div class="flex items-center justify-between gap-3">
-              <h2 class="text-sm font-semibold text-neutral-100">Workflow Inputs</h2>
-              <span class="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
-                {workflowInputArtifacts.length}
-              </span>
-            </div>
-
-            {#if workflowInputArtifacts.length === 0}
-              <div class="mt-3 text-sm text-neutral-500">No retained workflow input metadata</div>
-            {:else}
-              <div class="mt-3 space-y-2">
-                {#each workflowInputArtifacts.slice(0, 5) as artifact (artifact.event_id)}
-                  <div class="min-w-0 rounded border border-neutral-800 bg-neutral-950/60 px-3 py-2">
-                    <div class="truncate font-mono text-xs text-neutral-100" title={artifact.artifact_id}>
-                      {artifact.artifact_id}
-                    </div>
-                    <div class="mt-1 text-xs text-neutral-500">
-                      {formatIoArtifactMediaLabel(
-                        artifact.media_type ?? artifact.format?.media_type,
-                        artifact.payload_kind,
-                      )} · {formatIoArtifactBytes(artifact.size_bytes)}
-                    </div>
-                  </div>
-                {/each}
-                {#if workflowInputArtifacts.length > 5}
-                  <div class="text-xs text-neutral-500">+{workflowInputArtifacts.length - 5} more</div>
+      <section class="flex min-h-0 flex-col overflow-hidden">
+        <div class="shrink-0 border-b border-neutral-900 px-4 py-3">
+          <div class="flex flex-wrap items-end justify-between gap-3">
+            <div class="min-w-0">
+              <h2 class="text-sm font-semibold text-neutral-100">
+                {selectedNodeId ? `Node I/O: ${selectedNodeId}` : 'Node I/O'}
+              </h2>
+              <div class="mt-1 text-xs text-neutral-500">
+                {formatProjectionFreshness(projectionState)}
+                {#if summarizedArtifactCount > 0}
+                  · {summarizedArtifactCount} retained artifacts in run
                 {/if}
               </div>
-            {/if}
-          </section>
-
-          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
-            <div class="flex items-center justify-between gap-3">
-              <h2 class="text-sm font-semibold text-neutral-100">Workflow Outputs</h2>
-              <span class="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
-                {workflowOutputArtifacts.length}
-              </span>
             </div>
-
-            {#if workflowOutputArtifacts.length === 0}
-              <div class="mt-3 text-sm text-neutral-500">No retained workflow output metadata</div>
-            {:else}
-              <div class="mt-3 space-y-2">
-                {#each workflowOutputArtifacts.slice(0, 5) as artifact (artifact.event_id)}
-                  <div class="min-w-0 rounded border border-neutral-800 bg-neutral-950/60 px-3 py-2">
-                    <div class="truncate font-mono text-xs text-neutral-100" title={artifact.artifact_id}>
-                      {artifact.artifact_id}
-                    </div>
-                    <div class="mt-1 text-xs text-neutral-500">
-                      {formatIoArtifactMediaLabel(
-                        artifact.media_type ?? artifact.format?.media_type,
-                        artifact.payload_kind,
-                      )} · {formatIoArtifactBytes(artifact.size_bytes)}
-                    </div>
-                  </div>
-                {/each}
-                {#if workflowOutputArtifacts.length > 5}
-                  <div class="text-xs text-neutral-500">+{workflowOutputArtifacts.length - 5} more</div>
-                {/if}
-              </div>
-            {/if}
-          </section>
-        </div>
-
-        <section class="border-b border-neutral-900 px-4 py-4">
-          <div class="flex items-center justify-between gap-3">
-            <h2 class="text-sm font-semibold text-neutral-100">Node I/O</h2>
-            <span class="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
-              {nodeGroups.length}
-            </span>
+            <div class="flex min-w-[14rem] items-end gap-2">
+              <label class="min-w-0 flex-1">
+                <span class="mb-2 block text-xs uppercase tracking-[0.18em] text-neutral-500">Backend</span>
+                <input
+                  type="text"
+                  bind:value={selectedBackendFilter}
+                  placeholder="all"
+                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+                />
+              </label>
+            </div>
           </div>
-
-          {#if nodeGroups.length === 0}
-            <div class="mt-3 text-sm text-neutral-500">No retained node-level artifact metadata</div>
-          {:else}
-            <div class="mt-3 grid gap-2 xl:grid-cols-2 2xl:grid-cols-3">
-              {#each nodeGroups.slice(0, 9) as group (group.node_id)}
-                <article class="rounded border border-neutral-800 bg-neutral-900/50 px-3 py-2">
-                  <div class="truncate font-mono text-xs text-neutral-100" title={group.node_id}>
-                    {group.node_id}
-                  </div>
-                  <div class="mt-1 truncate text-xs text-neutral-500" title={group.node_type ?? ''}>
-                    {group.node_type ?? 'Unknown node type'}
-                  </div>
-                  <dl class="mt-3 grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <dt class="text-neutral-500">Inputs</dt>
-                      <dd class="mt-0.5 text-neutral-200">{group.input_count}</dd>
-                    </div>
-                    <div>
-                      <dt class="text-neutral-500">Outputs</dt>
-                      <dd class="mt-0.5 text-neutral-200">{group.output_count}</dd>
-                    </div>
-                    <div>
-                      <dt class="text-neutral-500">Total</dt>
-                      <dd class="mt-0.5 text-neutral-200">{group.artifact_count}</dd>
-                    </div>
-                  </dl>
-                </article>
+          {#if retentionSummary.length > 0}
+            <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              {#each retentionSummary as item (item.retention_state)}
+                <span class="inline-flex items-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-neutral-300">
+                  <span>{formatIoArtifactRetentionStateLabel(item.retention_state)}</span>
+                  <span class="font-mono text-neutral-500">{item.artifact_count}</span>
+                </span>
               {/each}
             </div>
-            {#if nodeGroups.length > 9}
-              <div class="mt-3 text-xs text-neutral-500">+{nodeGroups.length - 9} more nodes</div>
-            {/if}
           {/if}
-        </section>
+          {#if selectedNodeId}
+            <div class="mt-3 flex flex-wrap gap-2 text-xs">
+              <span class="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-neutral-300">
+                Outputs {selectedOutputArtifacts.length}
+              </span>
+              <span class="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-neutral-300">
+                Inputs {selectedInputArtifacts.length}
+              </span>
+            </div>
+          {/if}
+        </div>
 
-        <div class="grid gap-3 p-4 xl:grid-cols-2 2xl:grid-cols-3">
-          {#each artifacts as artifact (artifact.event_id)}
-            {@const renderer = buildIoArtifactRendererSummary(artifact)}
-            {@const descriptorRows = buildIoArtifactDescriptorMetadataRows(artifact)}
-            {@const bodyPreview = artifactBodyPreviews[artifact.artifact_id]}
-            <article class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <div class="truncate font-mono text-xs text-neutral-100" title={artifact.artifact_id}>
-                    {artifact.artifact_id}
+        <div class="min-h-0 overflow-auto p-4">
+          {#if !selectedNodeId}
+            <div class="text-sm text-neutral-500">Select a node in the run snapshot to inspect retained I/O.</div>
+          {:else if selectedArtifacts.length === 0}
+            <div class="text-sm text-neutral-500">No retained artifact metadata for the selected node.</div>
+          {:else}
+            <div class="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
+              {#each selectedArtifacts as artifact (artifact.event_id)}
+                {@const renderer = buildIoArtifactRendererSummary(artifact)}
+                {@const descriptorRows = buildIoArtifactDescriptorMetadataRows(artifact)}
+                {@const bodyPreview = artifactBodyPreviews[artifact.artifact_id]}
+                <article class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="truncate font-mono text-xs text-neutral-100" title={artifact.artifact_id}>
+                        {artifact.artifact_id}
+                      </div>
+                      <div class="mt-1 text-xs text-neutral-500">
+                        {formatIoArtifactRoleLabel(artifact.artifact_role)} · {formatIoArtifactMediaLabel(
+                          artifact.media_type ?? artifact.format?.media_type,
+                          artifact.payload_kind,
+                        )}
+                      </div>
+                    </div>
+                    <span class="shrink-0 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
+                      {formatIoArtifactAvailabilityLabel(artifact)}
+                    </span>
                   </div>
-                  <div class="mt-1 text-xs text-neutral-500">
-                    {formatIoArtifactRoleLabel(artifact.artifact_role)} · {formatIoArtifactMediaLabel(
-                      artifact.media_type ?? artifact.format?.media_type,
-                      artifact.payload_kind,
-                    )}
-                  </div>
-                </div>
-                <span class="shrink-0 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
-                  {formatIoArtifactAvailabilityLabel(artifact)}
-                </span>
-              </div>
 
-              <div class="mt-4 rounded border border-neutral-800 bg-neutral-950/70 px-3 py-3">
-                <div class="flex items-center gap-2 text-sm text-neutral-100">
-                  {#if renderer.family === 'text'}
-                    <FileText size={16} aria-hidden="true" class="text-cyan-300" />
-                  {:else if renderer.family === 'image'}
-                    <ImageIcon size={16} aria-hidden="true" class="text-emerald-300" />
-                  {:else if renderer.family === 'audio'}
-                    <Music size={16} aria-hidden="true" class="text-amber-300" />
-                  {:else if renderer.family === 'video'}
-                    <Video size={16} aria-hidden="true" class="text-rose-300" />
-                  {:else if renderer.family === '3d'}
-                    <File size={16} aria-hidden="true" class="text-indigo-300" />
-                  {:else if renderer.family === 'table'}
-                    <Table2 size={16} aria-hidden="true" class="text-sky-300" />
-                  {:else if renderer.family === 'json'}
-                    <Braces size={16} aria-hidden="true" class="text-violet-300" />
-                  {:else if renderer.family === 'file'}
-                    <File size={16} aria-hidden="true" class="text-neutral-300" />
-                  {:else}
-                    <CircleHelp size={16} aria-hidden="true" class="text-neutral-400" />
-                  {/if}
-                  <span>{renderer.title}</span>
-                </div>
-                <div class="mt-2 text-xs text-neutral-500">{renderer.detail}</div>
+                  <div class="mt-4 rounded border border-neutral-800 bg-neutral-950/70 px-3 py-3">
+                    <div class="flex items-center gap-2 text-sm text-neutral-100">
+                      {#if renderer.family === 'text'}
+                        <FileText size={16} aria-hidden="true" class="text-cyan-300" />
+                      {:else if renderer.family === 'image'}
+                        <ImageIcon size={16} aria-hidden="true" class="text-emerald-300" />
+                      {:else if renderer.family === 'audio'}
+                        <Music size={16} aria-hidden="true" class="text-amber-300" />
+                      {:else if renderer.family === 'video'}
+                        <Video size={16} aria-hidden="true" class="text-rose-300" />
+                      {:else if renderer.family === '3d'}
+                        <File size={16} aria-hidden="true" class="text-indigo-300" />
+                      {:else if renderer.family === 'table'}
+                        <Table2 size={16} aria-hidden="true" class="text-sky-300" />
+                      {:else if renderer.family === 'json'}
+                        <Braces size={16} aria-hidden="true" class="text-violet-300" />
+                      {:else if renderer.family === 'file'}
+                        <File size={16} aria-hidden="true" class="text-neutral-300" />
+                      {:else}
+                        <CircleHelp size={16} aria-hidden="true" class="text-neutral-400" />
+                      {/if}
+                      <span>{renderer.title}</span>
+                    </div>
+                    <div class="mt-2 text-xs text-neutral-500">{renderer.detail}</div>
 
-                {#if bodyPreview}
-                  <div class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-900/80">
-                    {#if renderer.family === 'image'}
-                      <img
-                        src={bodyPreview.objectUrl}
-                        alt={`Preview of ${artifact.artifact_id}`}
-                        class="max-h-64 w-full object-contain"
-                      />
-                    {:else if renderer.family === 'audio'}
-                      <audio
-                        src={bodyPreview.objectUrl}
-                        controls
-                        class="w-full"
-                        aria-label={`Audio preview of ${artifact.artifact_id}`}
-                      ></audio>
-                    {:else if renderer.family === 'video'}
-                      <!-- svelte-ignore a11y_media_has_caption -->
-                      <video
-                        src={bodyPreview.objectUrl}
-                        controls
-                        class="max-h-64 w-full bg-black"
-                        aria-label={`Video preview of ${artifact.artifact_id}`}
-                      ></video>
-                    {:else if bodyPreview.text !== null && bodyPreview.text !== undefined}
-                      <pre
-                        class="max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed text-neutral-100"
-                      >{bodyPreview.text}</pre>
-                    {:else}
-                      <div class="px-3 py-2 text-xs text-neutral-400">
-                        Binary preview loaded. Use Download to inspect the retained body outside Pantograph.
+                    {#if bodyPreview}
+                      <div class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-900/80">
+                        {#if renderer.family === 'image'}
+                          <img
+                            src={bodyPreview.objectUrl}
+                            alt={`Preview of ${artifact.artifact_id}`}
+                            class="max-h-64 w-full object-contain"
+                          />
+                        {:else if renderer.family === 'audio'}
+                          <audio
+                            src={bodyPreview.objectUrl}
+                            controls
+                            class="w-full"
+                            aria-label={`Audio preview of ${artifact.artifact_id}`}
+                          ></audio>
+                        {:else if renderer.family === 'video'}
+                          <!-- svelte-ignore a11y_media_has_caption -->
+                          <video
+                            src={bodyPreview.objectUrl}
+                            controls
+                            class="max-h-64 w-full bg-black"
+                            aria-label={`Video preview of ${artifact.artifact_id}`}
+                          ></video>
+                        {:else if bodyPreview.text !== null && bodyPreview.text !== undefined}
+                          <pre
+                            class="max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed text-neutral-100"
+                          >{bodyPreview.text}</pre>
+                        {:else}
+                          <div class="px-3 py-2 text-xs text-neutral-400">
+                            Binary preview loaded. Use Download to inspect the retained body outside Pantograph.
+                          </div>
+                        {/if}
+                      </div>
+                      <div class="mt-2 text-xs text-neutral-500">
+                        {formatIoArtifactPreviewExtent(bodyPreview)}
+                        {#if bodyPreview.textTruncated}
+                          · text truncated
+                        {/if}
                       </div>
                     {/if}
                   </div>
-                  <div class="mt-2 text-xs text-neutral-500">
-                    {formatIoArtifactPreviewExtent(bodyPreview)}
-                    {#if bodyPreview.textTruncated}
-                      · text truncated
-                    {/if}
-                  </div>
-                {/if}
-              </div>
 
-              <div class="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-                  onclick={() => {
-                    void readArtifactPreview(artifact);
-                  }}
-                  aria-label={`Read retained artifact ${artifact.artifact_id}`}
-                  disabled={!canReadIoArtifactBody(artifact) || artifactAccessLoading[artifact.artifact_id]}
-                >
-                  <Eye size={14} aria-hidden="true" />
-                  {bodyPreview ? 'Refresh Read' : 'Read'}
-                </button>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-                  onclick={() => {
-                    void readArtifactStreamPreview(artifact);
-                  }}
-                  aria-label={`Read artifact stream ${artifact.artifact_id}`}
-                  disabled={!artifact.stream_handle || artifactAccessLoading[artifact.artifact_id]}
-                >
-                  <RefreshCw size={14} aria-hidden="true" />
-                  {bodyPreview ? 'Refresh Stream' : 'Read Stream'}
-                </button>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-                  onclick={() => {
-                    void downloadArtifactBody(artifact);
-                  }}
-                  aria-label={`Download retained artifact ${artifact.artifact_id}`}
-                  disabled={!canReadIoArtifactBody(artifact) || artifactAccessLoading[artifact.artifact_id]}
-                >
-                  <Download size={14} aria-hidden="true" />
-                  Download
-                </button>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-                  onclick={() => {
-                    void acknowledgeArtifactConsumed(artifact);
-                  }}
-                  aria-label={`Acknowledge consume for artifact ${artifact.artifact_id}`}
-                  disabled={!canAcknowledgeIoArtifactConsumed(artifact) || artifactConsumeLoading[artifact.artifact_id]}
-                >
-                  <Check size={14} aria-hidden="true" />
-                  {artifactConsumeLoading[artifact.artifact_id] ? 'Acknowledging' : 'Acknowledge'}
-                </button>
-              </div>
-
-              {#if artifactAccessErrors[artifact.artifact_id]}
-                <div class="mt-3 rounded border border-red-900 bg-red-950/50 px-3 py-2 text-xs text-red-200">
-                  {artifactAccessErrors[artifact.artifact_id]}
-                </div>
-              {/if}
-
-              {#if artifactConsumeMessages[artifact.artifact_id]}
-                <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
-                  {artifactConsumeMessages[artifact.artifact_id]}
-                </div>
-              {/if}
-
-              <dl class="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                <div>
-                  <dt class="text-neutral-500">Size</dt>
-                  <dd class="mt-0.5 text-neutral-200">{formatIoArtifactBytes(artifact.size_bytes)}</dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Producer</dt>
-                  <dd
-                    class="mt-0.5 truncate text-neutral-200"
-                    title={formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}
-                  >
-                    {formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Consumer</dt>
-                  <dd
-                    class="mt-0.5 truncate text-neutral-200"
-                    title={formatIoArtifactEndpointValue(artifact.consumer_node_id, artifact.consumer_port_id)}
-                  >
-                    {formatIoArtifactEndpointValue(artifact.consumer_node_id, artifact.consumer_port_id)}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Event Node</dt>
-                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.node_id ?? ''}>
-                    {formatIoArtifactDetailValue(artifact.node_id)}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Run</dt>
-                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.workflow_run_id}>
-                    {artifact.workflow_run_id}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Retention</dt>
-                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.retention_reason ?? ''}>
-                    {formatIoArtifactRetentionStateLabel(artifact.retention_state)}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Policy</dt>
-                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.retention_policy_id ?? ''}>
-                    {formatIoArtifactDetailValue(artifact.retention_policy_id)}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Observed</dt>
-                  <dd class="mt-0.5 text-neutral-200">{formatTimestamp(artifact.occurred_at_ms)}</dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Runtime</dt>
-                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.runtime_id ?? ''}>
-                    {formatIoArtifactDetailValue(artifact.runtime_id)}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Backend</dt>
-                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.selected_backend_key ?? ''}>
-                    {formatIoArtifactDetailValue(artifact.selected_backend_key)}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-neutral-500">Model</dt>
-                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.model_id ?? ''}>
-                    {formatIoArtifactDetailValue(artifact.model_id)}
-                  </dd>
-                </div>
-                <div class="col-span-2">
-                  <dt class="text-neutral-500">Retention Reason</dt>
-                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.retention_reason ?? ''}>
-                    {formatIoArtifactDetailValue(artifact.retention_reason)}
-                  </dd>
-                </div>
-                <div class="col-span-2">
-                  <dt class="text-neutral-500">Payload Ref</dt>
-                  <dd class="mt-0.5 truncate font-mono text-neutral-200" title={artifact.payload_ref ?? ''}>
-                    {formatIoArtifactDetailValue(artifact.payload_ref)}
-                  </dd>
-                </div>
-              </dl>
-
-              <section class="mt-4 rounded border border-neutral-800 bg-neutral-950/50 p-3">
-                <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
-                  Artifact Descriptor
-                </h3>
-                <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                  {#each descriptorRows as row (row.label)}
-                    <div
-                      class={row.label.includes('Handle') ||
-                      row.label.includes('Version') ||
-                      row.label.includes('Command') ||
-                      row.label.includes('Dependency') ||
-                      row.label.includes('Lease')
-                        ? 'col-span-2'
-                        : ''}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                      onclick={() => {
+                        void readArtifactPreview(artifact);
+                      }}
+                      aria-label={`Read retained artifact ${artifact.artifact_id}`}
+                      disabled={!canReadIoArtifactBody(artifact) || artifactAccessLoading[artifact.artifact_id]}
                     >
-                      <dt class="text-neutral-500">{row.label}</dt>
-                      <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
-                        {row.value}
+                      <Eye size={14} aria-hidden="true" />
+                      {bodyPreview ? 'Refresh Read' : 'Read'}
+                    </button>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                      onclick={() => {
+                        void readArtifactStreamPreview(artifact);
+                      }}
+                      aria-label={`Read artifact stream ${artifact.artifact_id}`}
+                      disabled={!artifact.stream_handle || artifactAccessLoading[artifact.artifact_id]}
+                    >
+                      <RefreshCw size={14} aria-hidden="true" />
+                      {bodyPreview ? 'Refresh Stream' : 'Read Stream'}
+                    </button>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                      onclick={() => {
+                        void downloadArtifactBody(artifact);
+                      }}
+                      aria-label={`Download retained artifact ${artifact.artifact_id}`}
+                      disabled={!canReadIoArtifactBody(artifact) || artifactAccessLoading[artifact.artifact_id]}
+                    >
+                      <Download size={14} aria-hidden="true" />
+                      Download
+                    </button>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                      onclick={() => {
+                        void acknowledgeArtifactConsumed(artifact);
+                      }}
+                      aria-label={`Acknowledge consume for artifact ${artifact.artifact_id}`}
+                      disabled={!canAcknowledgeIoArtifactConsumed(artifact) || artifactConsumeLoading[artifact.artifact_id]}
+                    >
+                      <Check size={14} aria-hidden="true" />
+                      {artifactConsumeLoading[artifact.artifact_id] ? 'Acknowledging' : 'Acknowledge'}
+                    </button>
+                  </div>
+
+                  {#if artifactAccessErrors[artifact.artifact_id]}
+                    <div class="mt-3 rounded border border-red-900 bg-red-950/50 px-3 py-2 text-xs text-red-200">
+                      {artifactAccessErrors[artifact.artifact_id]}
+                    </div>
+                  {/if}
+
+                  {#if artifactConsumeMessages[artifact.artifact_id]}
+                    <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
+                      {artifactConsumeMessages[artifact.artifact_id]}
+                    </div>
+                  {/if}
+
+                  <dl class="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    <div>
+                      <dt class="text-neutral-500">Size</dt>
+                      <dd class="mt-0.5 text-neutral-200">{formatIoArtifactBytes(artifact.size_bytes)}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-neutral-500">Producer</dt>
+                      <dd class="mt-0.5 truncate text-neutral-200" title={formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}>
+                        {formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}
                       </dd>
                     </div>
-                  {/each}
-                </dl>
-              </section>
+                    <div>
+                      <dt class="text-neutral-500">Consumer</dt>
+                      <dd class="mt-0.5 truncate text-neutral-200" title={formatIoArtifactEndpointValue(artifact.consumer_node_id, artifact.consumer_port_id)}>
+                        {formatIoArtifactEndpointValue(artifact.consumer_node_id, artifact.consumer_port_id)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-neutral-500">Observed</dt>
+                      <dd class="mt-0.5 text-neutral-200">{formatTimestamp(artifact.occurred_at_ms)}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-neutral-500">Backend</dt>
+                      <dd class="mt-0.5 truncate text-neutral-200" title={artifact.selected_backend_key ?? ''}>
+                        {formatIoArtifactDetailValue(artifact.selected_backend_key)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-neutral-500">Model</dt>
+                      <dd class="mt-0.5 truncate text-neutral-200" title={artifact.model_id ?? ''}>
+                        {formatIoArtifactDetailValue(artifact.model_id)}
+                      </dd>
+                    </div>
+                    <div class="col-span-2">
+                      <dt class="text-neutral-500">Payload Ref</dt>
+                      <dd class="mt-0.5 truncate font-mono text-neutral-200" title={artifact.payload_ref ?? ''}>
+                        {formatIoArtifactDetailValue(artifact.payload_ref)}
+                      </dd>
+                    </div>
+                  </dl>
 
-              {#if artifact.content_hash}
-                <div class="mt-3 truncate font-mono text-[11px] text-neutral-500" title={artifact.content_hash}>
-                  {artifact.content_hash}
-                </div>
-              {/if}
-            </article>
-          {/each}
+                  <section class="mt-4 rounded border border-neutral-800 bg-neutral-950/50 p-3">
+                    <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+                      Artifact Descriptor
+                    </h3>
+                    <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                      {#each descriptorRows as row (row.label)}
+                        <div
+                          class={row.label.includes('Handle') ||
+                          row.label.includes('Version') ||
+                          row.label.includes('Command') ||
+                          row.label.includes('Dependency') ||
+                          row.label.includes('Lease')
+                            ? 'col-span-2'
+                            : ''}
+                        >
+                          <dt class="text-neutral-500">{row.label}</dt>
+                          <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
+                            {row.value}
+                          </dd>
+                        </div>
+                      {/each}
+                    </dl>
+                  </section>
+
+                  {#if artifact.content_hash}
+                    <div class="mt-3 truncate font-mono text-[11px] text-neutral-500" title={artifact.content_hash}>
+                      {artifact.content_hash}
+                    </div>
+                  {/if}
+                </article>
+              {/each}
+            </div>
+          {/if}
         </div>
-      {/if}
+      </section>
     </div>
-
-    <aside class="min-h-0 overflow-auto border-l border-neutral-800 bg-neutral-950/80">
-      <div class="space-y-4 p-4">
-        <div>
-          <h2 class="text-sm font-semibold text-neutral-100">Retention Policy</h2>
-          <div class="mt-1 text-xs text-neutral-500">
-            {#if retentionPolicy}
-              {retentionPolicy.policy_id} · applied {formatTimestamp(retentionPolicy.applied_at_ms)}
-            {:else if loadingRetention}
-              Loading policy
-            {:else}
-              Policy unavailable
-            {/if}
-          </div>
-        </div>
-
-        {#if retentionError}
-          <div class="rounded border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-200">{retentionError}</div>
-        {/if}
-        {#if retentionCleanupMessage}
-          <div class="rounded border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">
-            {retentionCleanupMessage}
-          </div>
-        {/if}
-
-        {#if retentionPolicyRows.length > 0}
-          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-3">
-            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Current Policy</h3>
-            <dl class="mt-3 space-y-2 text-xs">
-              {#each retentionPolicyRows as row (row.label)}
-                <div>
-                  <dt class="text-neutral-500">{row.label}</dt>
-                  <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
-                    {row.value}
-                  </dd>
-                </div>
-              {/each}
-            </dl>
-          </section>
-        {/if}
-
-        {#if retentionPolicySettingRows.length > 0}
-          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-3">
-            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Retention Settings</h3>
-            <dl class="mt-3 space-y-2 text-xs">
-              {#each retentionPolicySettingRows as row (row.label)}
-                <div>
-                  <dt class="text-neutral-500">{row.label}</dt>
-                  <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
-                    {row.value}
-                  </dd>
-                </div>
-              {/each}
-            </dl>
-          </section>
-        {/if}
-
-        <button
-          type="button"
-          class="inline-flex w-full items-center justify-center gap-2 rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-          onclick={() => {
-            void applyRetentionCleanup();
-          }}
-          disabled={applyingRetentionCleanup || loadingRetention}
-        >
-          <Trash2 size={14} aria-hidden="true" />
-          {applyingRetentionCleanup ? 'Applying Cleanup' : 'Apply Cleanup'}
-        </button>
-
-        {#if retentionCleanupRows.length > 0}
-          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-3">
-            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Last Cleanup</h3>
-            <dl class="mt-3 space-y-2 text-xs">
-              {#each retentionCleanupRows as row (row.label)}
-                <div>
-                  <dt class="text-neutral-500">{row.label}</dt>
-                  <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
-                    {row.value}
-                  </dd>
-                </div>
-              {/each}
-            </dl>
-          </section>
-        {/if}
-      </div>
-    </aside>
-  </div>
+  {/if}
 </section>
