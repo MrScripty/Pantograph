@@ -199,6 +199,7 @@ test('resolved node io presenters expose provenance and hide diagnostic data por
       port_id: 'text',
       direction: 'input',
       resolution: 'derived_from_edge',
+      provenance_kind: 'graph_edge',
       upstream_node_id: 'inference',
       upstream_port_id: 'response',
     }),
@@ -209,10 +210,22 @@ test('resolved node io presenters expose provenance and hide diagnostic data por
       port_id: 'text',
       direction: 'output',
       resolution: 'workflow_boundary',
+      provenance_kind: 'workflow_output_boundary',
       upstream_node_id: null,
       upstream_port_id: null,
     }),
     'To workflow output boundary',
+  );
+  assert.equal(
+    formatResolvedNodeIoProvenance({
+      port_id: 'prompt',
+      direction: 'input',
+      resolution: 'explicit_input',
+      provenance_kind: 'cache_replay',
+      upstream_node_id: null,
+      upstream_port_id: null,
+    }),
+    'Cache replay on prompt',
   );
   assert.equal(
     isNormalResolvedNodeIoDisplayRow({

@@ -24,7 +24,7 @@ use super::super::diagnostic_errors::{
     WorkflowDiagnosticRunContext, WorkflowDiagnosticRuntimeModelScope,
     WorkflowDiagnosticTransportScope,
 };
-use super::super::diagnostics_api::ResolvedNodeIoDirection;
+use super::super::diagnostics_api::{ResolvedNodeIoDirection, ResolvedNodeIoProvenanceKind};
 use super::*;
 
 #[test]
@@ -718,6 +718,10 @@ fn workflow_run_inspection_query_returns_factual_run_snapshot_parts() {
     assert_eq!(
         response.resolved_node_io[0].direction,
         ResolvedNodeIoDirection::Output
+    );
+    assert_eq!(
+        response.resolved_node_io[0].provenance_kind,
+        ResolvedNodeIoProvenanceKind::ProducedOutput
     );
     assert_eq!(response.retention_summary.len(), 1);
     assert_eq!(response.run_projection_state.projection_name, "run_detail");

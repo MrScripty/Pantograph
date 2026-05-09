@@ -14,7 +14,8 @@ use pantograph_diagnostics_ledger::{
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
     ArtifactFormatCapabilities, ArtifactFormatSettingsQueryResponse, ArtifactPolicy,
-    WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
+    ResolvedNodeIoDirection, ResolvedNodeIoProvenanceKind, ResolvedNodeIoRecord,
+    ResolvedNodeIoResolution, WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
     WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
     WorkflowBackendCapabilityFacts, WorkflowBackendComponentCapability,
@@ -1181,7 +1182,21 @@ fn workflow_run_inspection_query_contract_snapshot() {
         run: None,
         node_statuses: Vec::new(),
         io_artifacts: Vec::new(),
-        resolved_node_io: Vec::new(),
+        resolved_node_io: vec![ResolvedNodeIoRecord {
+            node_id: "text-output".to_string(),
+            port_id: "text".to_string(),
+            direction: ResolvedNodeIoDirection::Input,
+            resolution: ResolvedNodeIoResolution::DerivedFromEdge,
+            provenance_kind: ResolvedNodeIoProvenanceKind::GraphEdge,
+            artifact_fact_id: Some("fact-inference-response".to_string()),
+            payload_artifact_id: Some("payload-inference-response".to_string()),
+            artifact_id: Some("payload-inference-response".to_string()),
+            artifact_role: Some("node_output".to_string()),
+            upstream_node_id: Some("inference".to_string()),
+            upstream_port_id: Some("response".to_string()),
+            media_type: Some("text/plain".to_string()),
+            retention_state: Some(IoArtifactRetentionState::Retained),
+        }],
         retention_summary: Vec::new(),
         run_projection_state: ProjectionStateRecord {
             projection_name: "run_detail".to_string(),
@@ -1242,7 +1257,22 @@ fn workflow_run_inspection_query_contract_snapshot() {
             "status": "current",
             "rebuilt_at_ms": null,
             "updated_at_ms": 1110
-        }
+        },
+        "resolved_node_io": [{
+            "node_id": "text-output",
+            "port_id": "text",
+            "direction": "input",
+            "resolution": "derived_from_edge",
+            "provenance_kind": "graph_edge",
+            "artifact_fact_id": "fact-inference-response",
+            "payload_artifact_id": "payload-inference-response",
+            "artifact_id": "payload-inference-response",
+            "artifact_role": "node_output",
+            "upstream_node_id": "inference",
+            "upstream_port_id": "response",
+            "media_type": "text/plain",
+            "retention_state": "retained"
+        }]
     });
     assert_eq!(response_value, expected_response);
 }

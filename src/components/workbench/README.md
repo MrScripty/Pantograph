@@ -257,7 +257,9 @@ transient UI state without becoming backend scheduler policy.
   inference. Retention completeness counts come from the response
   `retention_summary`, not from raw ledger events. Node selection displays
   backend `resolved_node_io` rows and maps them back to readable payload
-  artifact ids for preview/download/read actions.
+  artifact ids for preview/download/read actions. Provenance labels come from
+  backend `provenance_kind` values, with frontend fallback only for older
+  missing fields.
 - `SettingsPage.svelte` reads and saves global ArtifactStore policy through
   `workflowService.artifactPolicy` and
   `workflowService.updateArtifactPolicy`. It also reads and saves global

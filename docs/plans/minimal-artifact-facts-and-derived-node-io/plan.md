@@ -120,7 +120,9 @@ output edge.
 - `IoArtifactObservedPayload` or its replacement canonical artifact fact DTO
 - `IoArtifactProjectionRecord`
 - A resolved-node-I/O read DTO that can distinguish `derived_from_edge` from
-  explicit resolved-input facts.
+  explicit resolved-input facts and carries backend-authored
+  `provenance_kind` metadata for graph edges, workflow boundaries, explicit
+  inputs, and future exception classes.
 - Canonical identifier semantics:
   - `artifact_fact_id`: durable diagnostics/projection fact identity.
   - `payload_artifact_id`: ArtifactStore body/read identity.
@@ -245,26 +247,26 @@ inputs are derived from graph edges while non-derivable inputs are explicit
 facts.
 
 **Tasks:**
-- [ ] Add a vertical-slice regression test that reproduces the text-output
+- [x] Add a vertical-slice regression test that reproduces the text-output
   duplicate case from a workflow execution path, not only a unit helper.
-- [ ] Assert that the inference node `response` output is a canonical produced
+- [x] Assert that the inference node `response` output is a canonical produced
   output fact with a retained payload body.
-- [ ] Assert that the text-output node input is reconstructed as
+- [x] Assert that the text-output node input is reconstructed as
   `derived_from_edge` from the immutable run graph and upstream output fact,
   with no duplicate retained input artifact row.
-- [ ] Assert that workflow terminal output is represented as a boundary fact or
+- [x] Assert that workflow terminal output is represented as a boundary fact or
   alias to the produced output body without a duplicate body.
-- [ ] Assert that two unrelated nodes producing identical text bytes remain
+- [x] Assert that two unrelated nodes producing identical text bytes remain
   separate produced-output facts and do not collapse into one logical payload
   lineage.
-- [ ] Assert that workflow input bindings and unconnected/default inputs remain
+- [x] Assert that workflow input bindings and unconnected/default inputs remain
   inspectable as explicit resolved-input or boundary facts.
-- [ ] Assert that multi-input/fan-in cases either produce an explicit
+- [x] Assert that multi-input/fan-in cases either produce an explicit
   resolved-input fact with a reason or return a clear unsupported derivation
   signal in the read model.
-- [ ] Assert that `_data` snapshots are metadata-only and excluded from normal
+- [x] Assert that `_data` snapshots are metadata-only and excluded from normal
   user-facing artifact groups.
-- [ ] Name and document the new contract fields before implementation. Preferred
+- [x] Name and document the new contract fields before implementation. Preferred
   terminology is `artifact_fact_id` for canonical produced/boundary facts,
   `payload_artifact_id` for retained body/read targets, and
   `logical_payload_lineage_id` for backend-proven aliases. Use
@@ -277,11 +279,11 @@ facts.
 - The new tests should fail for the expected duplicate-body and duplicate-input
   row reasons before the implementation changes land.
 
-**Status:** In progress. Workflow-service and embedded-runtime now create
+**Status:** Complete. Workflow-service and embedded-runtime now create
 family-scoped payload ids (`input` or `output`) separately from exact artifact
-fact ids, so paired workflow/node boundary facts for the same node port can
-share one retained body. Broader ArtifactStore alias/reference support and
-large descriptor-backed media checks still remain.
+fact ids, ordinary connected inputs are derived through the run graph read
+model, and retained body byte tests prevent workflow/node boundary aliases from
+silently duplicating storage.
 
 ### Milestone 2: Payload Identity And Read Target Contract
 
@@ -289,17 +291,17 @@ large descriptor-backed media checks still remain.
 before changing storage behavior.
 
 **Tasks:**
-- [ ] Add or rename DTO fields so canonical artifact facts carry
+- [x] Add or rename DTO fields so canonical artifact facts carry
   `artifact_fact_id`, `payload_artifact_id`, and source/lineage metadata.
-- [ ] Route `artifact_descriptor`, `read_artifact_body`, stream reads, download,
+- [x] Route `artifact_descriptor`, `read_artifact_body`, stream reads, download,
   and consume acknowledgement through `payload_artifact_id`.
-- [ ] Keep `artifact_id` only as a deliberate compatibility alias or remove it
+- [x] Keep `artifact_id` only as a deliberate compatibility alias or remove it
   from new DTOs in the same breaking contract slice.
-- [ ] Preserve existing descriptor-backed media values without copying their
+- [x] Preserve existing descriptor-backed media values without copying their
   bodies.
-- [ ] Keep body storage backend-owned; do not expose body-path decisions through
+- [x] Keep body storage backend-owned; do not expose body-path decisions through
   Tauri or frontend types.
-- [ ] Update contract snapshot tests for Rust, Tauri command payloads, UniFFI if
+- [x] Update contract snapshot tests for Rust, Tauri command payloads, UniFFI if
   affected, and TypeScript service types.
 
 **Verification:**
@@ -307,13 +309,14 @@ before changing storage behavior.
 - `npm run typecheck`
 - `cargo test -p pantograph-uniffi workflow_artifact`
 
-**Status:** In progress. Diagnostics-ledger projection now carries separate
+**Status:** Complete. Diagnostics-ledger projection now carries separate
 `artifact_fact_id`, `payload_artifact_id`, and `logical_payload_lineage_id`
 fields and can retain multiple projected facts for one payload id. Workflow
 service and embedded-runtime artifact emissions now populate those fields.
 I/O Inspector read, preview, stream, download, and consume actions now prefer
-`payload_artifact_id` when present. ArtifactStore read APIs and Tauri command
-payload field names still need the full payload-id cutover.
+`payload_artifact_id` when present. `artifact_id` remains a deliberate read
+target alias in the current DTO surface while new callers use
+`payload_artifact_id`.
 
 ### Milestone 3: Lineage-Scoped ArtifactStore Reuse
 
@@ -321,14 +324,14 @@ payload field names still need the full payload-id cutover.
 same logical payload lineage while preserving descriptor metadata.
 
 **Tasks:**
-- [ ] Add the minimal ArtifactStore or workflow-service API needed to retain or
+- [x] Add the minimal ArtifactStore or workflow-service API needed to retain or
   resolve a body by lineage-scoped payload identity.
-- [ ] Do not dedupe unrelated artifacts by content hash alone.
-- [ ] Preserve existing descriptor-backed media values without copying their
+- [x] Do not dedupe unrelated artifacts by content hash alone.
+- [x] Preserve existing descriptor-backed media values without copying their
   bodies.
-- [ ] Ensure same-body writes are idempotent and safe under concurrent execution
+- [x] Ensure same-body writes are idempotent and safe under concurrent execution
   attempts.
-- [ ] Update ArtifactStore README or an ADR if the descriptor/body relationship
+- [x] Update ArtifactStore README or an ADR if the descriptor/body relationship
   changes.
 
 **Verification:**
@@ -337,12 +340,13 @@ same logical payload lineage while preserving descriptor metadata.
   content does not alias, and different content does not alias.
 - Add a descriptor-backed media test proving no duplicate body is written.
 
-**Status:** In progress. Embedded-runtime now suppresses durable `node_input`
+**Status:** Complete. Embedded-runtime now suppresses durable `node_input`
 facts for resolved input ports that are connected in the immutable execution
 graph, while still recording unconnected literal/default input ports.
 Workflow-service session execution now records workflow inputs as boundary
 facts without duplicating them as `node_input` facts. Resolved-node-I/O query
-assembly remains.
+assembly now derives connected inputs from graph edges and upstream output
+facts.
 
 ### Milestone 4: Artifact Fact Materialization Cutover
 
@@ -351,36 +355,36 @@ ledger records canonical produced/boundary facts plus explicit resolved-input
 exceptions, not duplicate ordinary input rows.
 
 **Tasks:**
-- [ ] Refactor `session_io_artifacts.rs` and `node_io_artifacts.rs` to share the
+- [x] Refactor `session_io_artifacts.rs` and `node_io_artifacts.rs` to share the
   same retained-body materialization rule instead of duplicating role-specific
   body writes.
-- [ ] Stop using role labels as part of retained body identity. Keep producer,
+- [x] Stop using role labels as part of retained body identity. Keep producer,
   boundary, and explicit input-resolution metadata in artifact facts.
-- [ ] Remove workflow-service's current paired emission of workflow/node roles
+- [x] Remove workflow-service's current paired emission of workflow/node roles
   for each binding and replace it with canonical boundary facts plus aliases to
   existing produced-output payloads when lineage proves they match.
-- [ ] Stop emitting durable `node_input` artifact facts for ordinary connected
+- [x] Stop emitting durable `node_input` artifact facts for ordinary connected
   inputs that can be derived from run graph edges and upstream output facts.
-- [ ] Emit explicit resolved-input facts only for unconnected literals/defaults,
+- [x] Emit explicit resolved-input facts only for unconnected literals/defaults,
   workflow/external inputs, adapter coercion/normalization, cache replay,
   dynamic route selection, fan-in aggregation, redacted secrets, or
   runtime-injected values.
-- [ ] Make terminal workflow outputs reference the completed node output body
+- [x] Make terminal workflow outputs reference the completed node output body
   when they represent the same logical payload.
-- [ ] Treat `_data` and full node-state snapshots as metadata-only diagnostics
+- [x] Treat `_data` and full node-state snapshots as metadata-only diagnostics
   unless they are explicit user output ports.
-- [ ] Keep stream finalization aligned with the final response body identity.
+- [x] Keep stream finalization aligned with the final response body identity.
 
 **Verification:**
 - `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
 - `cargo test -p pantograph-embedded-runtime node_io_artifacts`
 - `cargo test -p pantograph-workflow-service workflow_io_artifact_query`
 
-**Status:** In progress. `workflow_run_inspection_query` now returns a
+**Status:** Complete. `workflow_run_inspection_query` now returns a
 backend-owned `resolved_node_io` read model built from projected artifact facts
-and graph edges when a run graph snapshot is available. Frontend still needs to
-consume `resolved_node_io` as the primary I/O Inspector source instead of raw
-artifact rows.
+and graph edges when a run graph snapshot is available. Frontend consumes
+`resolved_node_io` as the primary I/O Inspector source instead of raw artifact
+rows.
 
 ### Milestone 5: Diagnostics Projection And Resolved IO Query Shape
 
@@ -388,29 +392,29 @@ artifact rows.
 resolves node inputs from graph edges or explicit input facts.
 
 **Tasks:**
-- [ ] Replace or narrow `IoArtifactObservedPayload` semantics so the ledger
+- [x] Replace or narrow `IoArtifactObservedPayload` semantics so the ledger
   stores canonical produced-output, workflow-boundary, and explicit
   resolved-input facts.
-- [ ] Extend `IoArtifactProjectionRecord` or add a companion read DTO with
+- [x] Extend `IoArtifactProjectionRecord` or add a companion read DTO with
   explicit `artifact_fact_id`, `payload_artifact_id`, source kind, node, port,
   producer, boundary, and input-resolution fields.
-- [ ] Update the projection primary key/upsert behavior so multiple facts can
+- [x] Update the projection primary key/upsert behavior so multiple facts can
   reference one `payload_artifact_id` without overwriting each other.
-- [ ] Update SQLite schema, projection draining, query mapping, and retention
+- [x] Update SQLite schema, projection draining, query mapping, and retention
   summary behavior for the new identity model.
-- [ ] Decide whether `artifact_id` remains the canonical artifact fact id or
+- [x] Decide whether `artifact_id` remains the canonical artifact fact id or
   becomes a compatibility alias for `payload_artifact_id`; because legacy
   compatibility is not required, use the clearer model and update all consumers
   in the same slice.
-- [ ] Add a workflow-service resolved-node-I/O query that joins run graph edges,
+- [x] Add a workflow-service resolved-node-I/O query that joins run graph edges,
   canonical artifact facts, workflow boundary facts, and explicit
   resolved-input exceptions.
-- [ ] Make `workflow_run_inspection_query` return resolved node I/O as the
+- [x] Make `workflow_run_inspection_query` return resolved node I/O as the
   primary I/O Inspector contract. Keep raw artifact projection queries only for
   diagnostics/browsing use cases where raw facts are needed.
-- [ ] Ensure artifact read requests use the retained body identity/read handle,
+- [x] Ensure artifact read requests use the retained body identity/read handle,
   not a graph-derived or fact-only id.
-- [ ] Update diagnostics-ledger and workflow-service READMEs for the new
+- [x] Update diagnostics-ledger and workflow-service READMEs for the new
   projection/read-model invariant.
 
 **Verification:**
@@ -421,11 +425,10 @@ resolves node inputs from graph edges or explicit input facts.
 - Query a completed run with two unrelated identical outputs and confirm they
   remain separate produced-output facts.
 
-**Status:** In progress. I/O Inspector now uses
+**Status:** Complete. I/O Inspector now uses
 `workflow_run_inspection_query` as the single backend query for run graph, node
-status, raw artifact facts, retention summary, and projection state. It still
-renders the existing raw artifact cards; the final resolved-node-I/O rendering
-cutover remains.
+status, raw artifact facts, retention summary, projection state, and
+resolved-node-I/O rendering.
 
 ### Milestone 6: I/O Inspector Resolved IO View
 
@@ -441,7 +444,7 @@ read model instead of from redundant input artifact rows.
 - [x] Render selected-node outputs from canonical produced-output facts.
 - [x] Render selected-node inputs from backend resolved-input rows, showing
   `derived_from_edge` or the explicit exception reason.
-- [ ] Show upstream node/port, workflow boundary, cache, coercion, redaction, or
+- [x] Show upstream node/port, workflow boundary, cache, coercion, redaction, or
   dynamic-route provenance as metadata from the backend read model.
 - [x] Hide metadata-only `_data` diagnostics from normal artifact lists by
   default.
@@ -456,13 +459,13 @@ read model instead of from redundant input artifact rows.
   output node, and verify one readable input derived from the inference node
   output plus one canonical output/boundary view without duplicate artifacts.
 
-**Status:** In progress. I/O Inspector selection now consumes backend
-`resolved_node_io` rows for selected-node inputs and outputs. The current
-rendering maps those logical rows back to readable artifact cards and dedupes
-workflow-boundary aliases in favor of canonical produced-output rows; the next
-backend contract slice should add explicit cache, coercion, redaction, and
-dynamic-route provenance fields if those exception paths need first-class
-inspection labels.
+**Status:** Complete. I/O Inspector selection now consumes backend
+`resolved_node_io` rows for selected-node inputs and outputs. The read model
+carries `provenance_kind` metadata for graph edges, workflow input/output
+boundaries, explicit inputs, and future cache/coercion/redaction/dynamic-route
+exception labels. The frontend maps those logical rows back to readable
+artifact cards and dedupes workflow-boundary aliases in favor of canonical
+produced-output rows.
 
 ### Milestone 7: Retention Cleanup, Storage Audit, And Performance
 
@@ -533,8 +536,9 @@ frontend and `target/release/pantograph`.
 - 2026-05-09: Producer identifier slice updated workflow-service and
   embedded-runtime I/O artifact emission so new artifact events populate
   `artifact_fact_id`, `payload_artifact_id`, and
-  `logical_payload_lineage_id`. Existing `artifact_id` remains the read-target
-  compatibility field until the ArtifactStore/API cutover lands.
+  `logical_payload_lineage_id`. New callers use `payload_artifact_id` as the
+  read-target identity; `artifact_id` remains a deliberate alias in the current
+  DTO surface.
 - 2026-05-09: Frontend read-target slice updated I/O Inspector actions to route
   descriptor, preview, stream, download, and consume requests through
   `payload_artifact_id` when present, falling back to `artifact_id` for older
@@ -569,8 +573,12 @@ frontend and `target/release/pantograph`.
 - 2026-05-09: I/O Inspector provenance slice renders backend resolution labels,
   port direction, port id, and available upstream/boundary provenance on
   selected-node cards. Normal selected-node artifact lists now hide `_data`
-  port diagnostics by default; richer cache/coercion/redaction/dynamic-route
-  labels remain blocked on backend DTO fields.
+  port diagnostics by default.
+- 2026-05-09: Resolved-node-I/O provenance contract slice added backend
+  `provenance_kind` metadata for graph edges, workflow boundaries, explicit
+  inputs, and future cache/coercion/redaction/dynamic-route exception classes.
+  The I/O Inspector now labels provenance from that backend field, with a
+  resolution-based fallback only for older missing records.
 - 2026-05-09: Retention/storage slice fixed cleanup of shared payload aliases.
   The diagnostics projection now selects one expirable row per
   `workflow_run_id` plus payload identity, emits one retention event, and
@@ -689,6 +697,9 @@ types must be edited serially or by one explicit owner.
 - I/O Inspector provenance slice: selected-node artifact cards show resolved
   direction, port, and available provenance while filtering `_data` diagnostic
   ports from normal inspection.
+- Resolved-node-I/O provenance contract slice: backend read-model rows expose
+  typed `provenance_kind` values, and the I/O Inspector consumes that field for
+  graph-edge, workflow-boundary, explicit-input, and future exception labels.
 - Retention/storage slice: diagnostics cleanup expires shared payload aliases
   once per payload identity, and workflow-service retained-I/O tests assert
   retained body byte counts in addition to body counts.

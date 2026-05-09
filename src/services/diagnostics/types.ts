@@ -354,11 +354,25 @@ export type ResolvedNodeIoResolution =
   | 'explicit_input'
   | 'workflow_boundary';
 
+export type ResolvedNodeIoProvenanceKind =
+  | 'produced_output'
+  | 'graph_edge'
+  | 'explicit_input'
+  | 'workflow_input_boundary'
+  | 'workflow_output_boundary'
+  | 'cache_replay'
+  | 'coercion'
+  | 'redaction'
+  | 'dynamic_route'
+  | 'fan_in_aggregation'
+  | 'runtime_injected';
+
 export interface ResolvedNodeIoRecord {
   node_id: string;
   port_id: string;
   direction: ResolvedNodeIoDirection;
   resolution: ResolvedNodeIoResolution;
+  provenance_kind?: ResolvedNodeIoProvenanceKind | null;
   artifact_fact_id?: string | null;
   payload_artifact_id?: string | null;
   artifact_id?: string | null;

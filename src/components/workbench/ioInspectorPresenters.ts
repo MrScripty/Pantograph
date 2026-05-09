@@ -146,25 +146,55 @@ export function formatResolvedNodeIoResolutionLabel(
 export function formatResolvedNodeIoProvenance(
   record: Pick<
     ResolvedNodeIoRecord,
-    'direction' | 'resolution' | 'port_id' | 'upstream_node_id' | 'upstream_port_id'
+    'direction' | 'resolution' | 'provenance_kind' | 'port_id' | 'upstream_node_id' | 'upstream_port_id'
   >,
 ): string {
-  if (record.resolution === 'derived_from_edge') {
-    return record.upstream_node_id && record.upstream_port_id
-      ? `From ${formatIoArtifactEndpointValue(record.upstream_node_id, record.upstream_port_id)}`
-      : 'From graph edge';
+  switch (record.provenance_kind ?? provenanceKindFromResolution(record.direction, record.resolution)) {
+    case 'graph_edge':
+      return record.upstream_node_id && record.upstream_port_id
+        ? `From ${formatIoArtifactEndpointValue(record.upstream_node_id, record.upstream_port_id)}`
+        : 'From graph edge';
+    case 'workflow_input_boundary':
+      return 'From workflow input boundary';
+    case 'workflow_output_boundary':
+      return 'To workflow output boundary';
+    case 'cache_replay':
+      return `Cache replay on ${record.port_id}`;
+    case 'coercion':
+      return `Coerced input on ${record.port_id}`;
+    case 'redaction':
+      return `Redacted input on ${record.port_id}`;
+    case 'dynamic_route':
+      return `Dynamic route on ${record.port_id}`;
+    case 'fan_in_aggregation':
+      return `Fan-in aggregation on ${record.port_id}`;
+    case 'runtime_injected':
+      return `Runtime injected on ${record.port_id}`;
+    case 'explicit_input':
+      return `Resolved input on ${record.port_id}`;
+    case 'produced_output':
+      return `Produced on ${record.port_id}`;
   }
-  if (record.resolution === 'workflow_boundary') {
-    return record.direction === 'input' ? 'From workflow input boundary' : 'To workflow output boundary';
-  }
-  if (record.resolution === 'explicit_input') {
-    return `Resolved input on ${record.port_id}`;
-  }
-  return `Produced on ${record.port_id}`;
 }
 
 function isDiagnosticDataPort(portId: string | null | undefined): boolean {
   return portId?.trim() === '_data';
+}
+
+function provenanceKindFromResolution(
+  direction: ResolvedNodeIoRecord['direction'],
+  resolution: ResolvedNodeIoRecord['resolution'],
+): NonNullable<ResolvedNodeIoRecord['provenance_kind']> {
+  switch (resolution) {
+    case 'derived_from_edge':
+      return 'graph_edge';
+    case 'workflow_boundary':
+      return direction === 'input' ? 'workflow_input_boundary' : 'workflow_output_boundary';
+    case 'explicit_input':
+      return 'explicit_input';
+    case 'produced_output':
+      return 'produced_output';
+  }
 }
 
 function dedupeResolvedNodeIo(records: ResolvedNodeIoRecord[]): ResolvedNodeIoRecord[] {

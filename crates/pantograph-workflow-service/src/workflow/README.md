@@ -307,7 +307,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   distinguish produced outputs, graph-derived inputs, explicit input facts, and
   workflow-boundary facts. UI callers may decide layout and grouping, but they
   must not reconstruct durable node I/O semantics from graph edges and raw
-  artifact rows when the resolved read model is available.
+  artifact rows when the resolved read model is available. Each row carries a
+  `provenance_kind` so callers can label graph edges, workflow boundaries,
+  explicit inputs, and future exception classes without parsing role strings.
 - Workflow-session output aliases share payload identity across `node_output`
   and `workflow_output` facts. Artifact body storage is keyed by the payload
   artifact id; fact ids remain ledger/projection identities and must not be

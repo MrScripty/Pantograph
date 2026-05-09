@@ -234,6 +234,22 @@ pub enum ResolvedNodeIoResolution {
     WorkflowBoundary,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResolvedNodeIoProvenanceKind {
+    ProducedOutput,
+    GraphEdge,
+    ExplicitInput,
+    WorkflowInputBoundary,
+    WorkflowOutputBoundary,
+    CacheReplay,
+    Coercion,
+    Redaction,
+    DynamicRoute,
+    FanInAggregation,
+    RuntimeInjected,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct ResolvedNodeIoRecord {
@@ -241,6 +257,7 @@ pub struct ResolvedNodeIoRecord {
     pub port_id: String,
     pub direction: ResolvedNodeIoDirection,
     pub resolution: ResolvedNodeIoResolution,
+    pub provenance_kind: ResolvedNodeIoProvenanceKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact_fact_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1475,6 +1492,7 @@ fn resolve_workflow_run_node_io(
                     port_id: edge.target_handle.clone(),
                     direction: ResolvedNodeIoDirection::Input,
                     resolution: ResolvedNodeIoResolution::DerivedFromEdge,
+                    provenance_kind: ResolvedNodeIoProvenanceKind::GraphEdge,
                     artifact_fact_id: Some(upstream.artifact_fact_id.clone()),
                     payload_artifact_id: Some(upstream.payload_artifact_id.clone()),
                     artifact_id: Some(upstream.artifact_id.clone()),
@@ -1493,14 +1511,20 @@ fn resolve_workflow_run_node_io(
             artifact.producer_node_id.as_ref(),
             artifact.producer_port_id.as_ref(),
         ) {
+            let is_workflow_boundary = artifact.artifact_role == "workflow_output";
             resolved.push(ResolvedNodeIoRecord {
                 node_id: node_id.clone(),
                 port_id: port_id.clone(),
                 direction: ResolvedNodeIoDirection::Output,
-                resolution: if artifact.artifact_role == "workflow_output" {
+                resolution: if is_workflow_boundary {
                     ResolvedNodeIoResolution::WorkflowBoundary
                 } else {
                     ResolvedNodeIoResolution::ProducedOutput
+                },
+                provenance_kind: if is_workflow_boundary {
+                    ResolvedNodeIoProvenanceKind::WorkflowOutputBoundary
+                } else {
+                    ResolvedNodeIoProvenanceKind::ProducedOutput
                 },
                 artifact_fact_id: Some(artifact.artifact_fact_id.clone()),
                 payload_artifact_id: Some(artifact.payload_artifact_id.clone()),
@@ -1522,14 +1546,20 @@ fn resolve_workflow_run_node_io(
             {
                 continue;
             }
+            let is_workflow_boundary = artifact.artifact_role == "workflow_input";
             resolved.push(ResolvedNodeIoRecord {
                 node_id: node_id.clone(),
                 port_id: port_id.clone(),
                 direction: ResolvedNodeIoDirection::Input,
-                resolution: if artifact.artifact_role == "workflow_input" {
+                resolution: if is_workflow_boundary {
                     ResolvedNodeIoResolution::WorkflowBoundary
                 } else {
                     ResolvedNodeIoResolution::ExplicitInput
+                },
+                provenance_kind: if is_workflow_boundary {
+                    ResolvedNodeIoProvenanceKind::WorkflowInputBoundary
+                } else {
+                    ResolvedNodeIoProvenanceKind::ExplicitInput
                 },
                 artifact_fact_id: Some(artifact.artifact_fact_id.clone()),
                 payload_artifact_id: Some(artifact.payload_artifact_id.clone()),
