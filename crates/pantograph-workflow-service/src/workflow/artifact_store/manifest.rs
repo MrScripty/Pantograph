@@ -157,9 +157,10 @@ pub(super) fn apply_byte_range(
     let len = body.len() as u64;
     let start = start.unwrap_or(0);
     let end = end_exclusive.unwrap_or(len);
-    if start > end || end > len {
+    if start > end || start > len {
         return Err(ArtifactStoreError::InvalidByteRange);
     }
+    let end = end.min(len);
     let start = usize::try_from(start).map_err(|_| ArtifactStoreError::InvalidByteRange)?;
     let end = usize::try_from(end).map_err(|_| ArtifactStoreError::InvalidByteRange)?;
     Ok(body[start..end].to_vec())

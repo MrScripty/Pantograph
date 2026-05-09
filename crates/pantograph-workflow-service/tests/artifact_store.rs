@@ -103,6 +103,47 @@ fn artifact_store_writes_descriptor_and_reads_body_without_path_leak() {
 }
 
 #[test]
+fn artifact_store_clamps_preview_range_to_available_body() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let mut store = ArtifactStore::open(temp.path(), policy(false)).expect("open store");
+
+    store
+        .write_artifact(ArtifactWriteRequest {
+            artifact_id: Some("artifact_preview".to_string()),
+            payload_kind: ArtifactPayloadKind::Text,
+            media_type: "text/plain".to_string(),
+            format: None,
+            attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
+            body: b"short preview".to_vec(),
+        })
+        .expect("write artifact");
+
+    let read = store
+        .read_body(ArtifactReadRequest {
+            artifact_id: "artifact_preview".to_string(),
+            byte_range_start: Some(0),
+            byte_range_end_exclusive: Some(64 * 1024),
+        })
+        .expect("read clamped preview range");
+
+    assert_eq!(read.body, b"short preview".to_vec());
+    assert_eq!(read.response.byte_length, 13);
+    assert!(read.response.complete);
+
+    assert!(matches!(
+        store.read_body(ArtifactReadRequest {
+            artifact_id: "artifact_preview".to_string(),
+            byte_range_start: Some(64 * 1024),
+            byte_range_end_exclusive: Some(64 * 1024 + 1),
+        }),
+        Err(ArtifactStoreError::InvalidByteRange)
+    ));
+}
+
+#[test]
 fn artifact_store_recovers_manifest_and_missing_bodies_as_metadata_only() {
     let temp = tempfile::tempdir().expect("temp dir");
     {

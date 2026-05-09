@@ -235,6 +235,9 @@ impl ArtifactStore {
             .cloned()
             .map(Ok)
             .unwrap_or_else(|| fs::read(self.root_dir.join(BODIES_DIR).join(body_file)))?;
+        let full_byte_length = body.len() as u64;
+        let requested_start = request.byte_range_start.unwrap_or(0);
+        let requested_end = request.byte_range_end_exclusive.unwrap_or(full_byte_length);
         let body = apply_byte_range(
             body,
             request.byte_range_start,
@@ -256,8 +259,7 @@ impl ArtifactStore {
                 .unwrap_or_else(|| read_handle(&entry.descriptor.artifact_id)),
             byte_length: body.len() as u64,
             content_hash: entry.descriptor.content_hash.clone(),
-            complete: request.byte_range_start.is_none()
-                && request.byte_range_end_exclusive.is_none(),
+            complete: requested_start == 0 && requested_end >= full_byte_length,
         };
         Ok(ArtifactBodyRead { response, body })
     }
