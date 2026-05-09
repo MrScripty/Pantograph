@@ -86,8 +86,8 @@ pub use error::{NodeEngineError, Result};
 pub use events::{
     BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventError, EventSink,
     KvCacheEventAction, KvCacheEventOutcome, KvCacheExecutionDiagnostics, KvCacheOptionDiagnostic,
-    KvCacheOptionSupportState, NullEventSink, TaskExecutionCacheStatus, TaskProgressDetail,
-    VecEventSink, WorkflowEvent,
+    KvCacheOptionSupportState, NullEventSink, RuntimeSettingDiagnostic, RuntimeSettingsDiagnostics,
+    TaskExecutionCacheStatus, TaskProgressDetail, VecEventSink, WorkflowEvent,
 };
 pub use extensions::{extension_keys, ExecutorExtensions};
 pub use types::{

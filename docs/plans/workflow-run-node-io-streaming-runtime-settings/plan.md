@@ -751,11 +751,12 @@ runtime policy into Pumas or the frontend.
   size, and any llama.cpp-specific validation required before exposing them.
 - [x] Define precedence: Pumas model defaults, workflow node defaults, run
   overrides, backend validation/defaults.
-- [ ] Add settings to the canonical inference/runtime settings contract with
+- [x] Add settings to the canonical inference/runtime settings contract with
   backend-specific validation and bounded diagnostics.
-- [ ] Capture effective runtime settings in run snapshots and diagnostics
-  events.
-- [ ] Capture effective settings with source attribution when available so
+- [x] Capture effective runtime settings in bounded diagnostics events.
+- [ ] Surface the latest effective runtime settings in the run-detail
+  run-inspection read model after the backend projection shape is stable.
+- [x] Capture effective settings with source attribution when available so
   operators can tell whether a value came from Pumas, workflow defaults, run
   overrides, backend defaults, or validation adjustment.
 - [x] Ensure changing settings that require reload makes runtime readiness
@@ -772,9 +773,10 @@ runtime policy into Pumas or the frontend.
   in diagnostics and runtime startup metadata.
 
 **Status:** Partially implemented. Existing llama.cpp `device`, `gpu_layers`,
-and `context_size` settings are wired through workflow execution and sidecar
-startup. Effective-settings diagnostics, source attribution, additional
-settings, and frontend controls remain open.
+`context_size`, `cpu_threads`, `batch_size`, and `ubatch_size` settings are
+wired through workflow execution, sidecar startup, runtime-reuse matching, and
+bounded diagnostics with source attribution. Run-detail read-model surfacing and
+frontend controls remain open.
 
 ### Milestone 7: Backend Run-Inspection Read Model
 
@@ -1126,6 +1128,22 @@ coverage.
   `cargo test -p inference start_sidecar_inference_applies_runtime_settings_to_llama_server_args --features backend-llamacpp`,
   `cargo test -p inference inference_runtime_matcher_requires_matching_port --features backend-llamacpp`,
   `cargo check -p inference --features backend-llamacpp`, and `cargo fmt`.
+- 2026-05-09: Effective runtime-settings diagnostics slice added a
+  node-engine `RuntimeSettings` progress detail for llama.cpp execution and an
+  embedded-runtime adapter that records bounded diagnostics-ledger
+  `runtime_settings` summaries. The diagnostics capture `device`,
+  `gpu_layers`, `context_size`, `cpu_threads`, `batch_size`, and
+  `ubatch_size` with source attribution (`run_override`, `workflow_default`,
+  `pumas_default`, or `backend_default`) and selected backend/device facts.
+  Node-engine runtime matching now also compares CPU threads, batch size, and
+  ubatch size so changing those settings restarts through the existing runtime
+  lifecycle owner instead of reusing an incompatible llama.cpp process.
+- 2026-05-09: Verification passed:
+  `cargo test -p node-engine backend_config_applies_llamacpp_runtime_settings --features inference-nodes`,
+  `cargo test -p node-engine runtime_settings_match_compares_reload_required_performance_settings --features inference-nodes`,
+  `cargo test -p pantograph-embedded-runtime runtime_settings_progress_detail_maps_to_bounded_inference_diagnostic_summary`,
+  `cargo check -p pantograph-embedded-runtime`, `cargo fmt`, and
+  `git diff --check`.
 
 ## Follow-Up Findings
 

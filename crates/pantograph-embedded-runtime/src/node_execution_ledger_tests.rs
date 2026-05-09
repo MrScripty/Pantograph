@@ -22,6 +22,7 @@ use pantograph_workflow_service::{
 
 use super::{
     build_kv_cache_diagnostic_event_ledger_append_request,
+    build_runtime_settings_diagnostic_event_ledger_append_request,
     inference_diagnostic_event_ledger_append_request_with_duration,
     NodeExecutionWorkflowLedgerNodeContext, NodeExecutionWorkflowLedgerSink,
 };
@@ -1339,6 +1340,73 @@ fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
             );
             assert_eq!(payload.option_diagnostics[0].state, "honored");
             assert!(payload.option_diagnostics[0].message.is_none());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn runtime_settings_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
+    let workflow_id = WorkflowId::try_from("workflow-a".to_string()).expect("workflow id");
+    let workflow_run_id = WorkflowRunId::try_from("run-a".to_string()).expect("run id");
+    let contexts_by_node_id = BTreeMap::from([(
+        "node-a".to_string(),
+        NodeExecutionWorkflowLedgerNodeContext {
+            node_id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+        },
+    )]);
+
+    let request = build_runtime_settings_diagnostic_event_ledger_append_request(
+        &workflow_id,
+        &workflow_run_id,
+        "run-a",
+        &contexts_by_node_id,
+        &node_engine::WorkflowEvent::TaskProgress {
+            task_id: "node-a".to_string(),
+            execution_id: "run-a".to_string(),
+            progress: 0.05,
+            message: Some("settings resolved".to_string()),
+            detail: Some(node_engine::TaskProgressDetail::RuntimeSettings(
+                node_engine::RuntimeSettingsDiagnostics {
+                    backend_key: "llama_cpp".to_string(),
+                    settings: vec![
+                        node_engine::RuntimeSettingDiagnostic {
+                            name: "device".to_string(),
+                            value: "CUDA0".to_string(),
+                            source: "workflow_default".to_string(),
+                        },
+                        node_engine::RuntimeSettingDiagnostic {
+                            name: "gpu_layers".to_string(),
+                            value: "42".to_string(),
+                            source: "run_override".to_string(),
+                        },
+                    ],
+                },
+            )),
+            occurred_at_ms: Some(175),
+        },
+    )
+    .expect("runtime settings progress should map");
+
+    assert_eq!(request.node_id.as_deref(), Some("node-a"));
+    assert_eq!(request.runtime_id.as_deref(), Some("llama_cpp"));
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.request_id, "node-a:runtime_settings");
+            assert_eq!(payload.task_id, "runtime_settings");
+            assert_eq!(payload.lifecycle_phase.as_deref(), Some("runtime_settings"));
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("resolved"));
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("llama_cpp"));
+            assert_eq!(payload.selected_device_id.as_deref(), Some("CUDA0"));
+            let runtime_settings = payload.runtime_settings.expect("runtime settings");
+            assert_eq!(runtime_settings.backend_key, "llama_cpp");
+            assert_eq!(runtime_settings.settings.len(), 2);
+            assert!(runtime_settings.settings.iter().any(|setting| {
+                setting.name == "gpu_layers"
+                    && setting.value == "42"
+                    && setting.source == "run_override"
+            }));
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }

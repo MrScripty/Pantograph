@@ -9,11 +9,12 @@ use pantograph_diagnostics_ledger::{
     InferenceCompatibilityIssueDiagnosticSummary, InferenceCompatibilityReportDiagnosticSummary,
     InferenceExecutionDiagnosticObservedPayload, InferenceKvCacheDiagnosticSummary,
     InferenceOptionDiagnosticSummary, InferenceOptionSupportCounts,
+    InferenceRuntimeSettingDiagnosticSummary, InferenceRuntimeSettingsDiagnosticSummary,
     InferenceUsageDiagnosticSummary, IoArtifactObservedPayload, IoArtifactRole, LicenseSnapshot,
     ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionCacheStatus,
     NodeExecutionProjectionStatus, NodeExecutionStatusPayload, RetentionClass, UsageEventStatus,
     UsageLineage, MAX_DIAGNOSTIC_ERROR_TEXT_LEN, MAX_INFERENCE_COMPATIBILITY_ISSUES,
-    MAX_INFERENCE_OPTION_DIAGNOSTICS,
+    MAX_INFERENCE_OPTION_DIAGNOSTICS, MAX_INFERENCE_RUNTIME_SETTINGS,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
@@ -254,6 +255,28 @@ impl NodeExecutionWorkflowLedgerSink {
             .workflow_diagnostic_event_record(request)
             .map(|_| ())
             .map_err(|error| diagnostics_unavailable_event_error("KV cache diagnostic", &error))
+    }
+
+    fn record_runtime_settings_diagnostic(
+        &self,
+        event: &node_engine::WorkflowEvent,
+    ) -> Result<(), node_engine::EventError> {
+        let Some(request) = build_runtime_settings_diagnostic_event_ledger_append_request(
+            &self.workflow_id,
+            &self.workflow_run_id,
+            &self.execution_id,
+            &self.contexts_by_node_id,
+            event,
+        ) else {
+            return Ok(());
+        };
+
+        self.workflow_service
+            .workflow_diagnostic_event_record(request)
+            .map(|_| ())
+            .map_err(|error| {
+                diagnostics_unavailable_event_error("runtime settings diagnostic", &error)
+            })
     }
 
     fn record_node_output_artifacts(
@@ -566,6 +589,7 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
 impl node_engine::EventSink for NodeExecutionWorkflowLedgerSink {
     fn send(&self, event: node_engine::WorkflowEvent) -> Result<(), node_engine::EventError> {
         let diagnostic_result = self.record_kv_cache_diagnostic(&event);
+        let runtime_settings_result = self.record_runtime_settings_diagnostic(&event);
         let status_result = self.record_node_completion_status(&event);
         let input_io_result = self.record_node_input_artifacts(&event);
         let output_io_result = self.record_node_output_artifacts(&event);
@@ -575,6 +599,7 @@ impl node_engine::EventSink for NodeExecutionWorkflowLedgerSink {
         }
 
         diagnostic_result?;
+        runtime_settings_result?;
         status_result?;
         input_io_result?;
         output_io_result
@@ -918,6 +943,7 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
                 cache_handle_id: None,
                 artifact_refs: Vec::new(),
                 kv_cache: Some(kv_cache_diagnostic_summary(detail)),
+                runtime_settings: None,
                 compatibility_report: None,
                 compatibility_issue_count: 0,
                 compatibility_issues: Vec::new(),
@@ -928,6 +954,97 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
                     .take(MAX_INFERENCE_OPTION_DIAGNOSTICS)
                     .map(kv_cache_option_diagnostic_summary)
                     .collect(),
+            },
+        ),
+    })
+}
+
+fn build_runtime_settings_diagnostic_event_ledger_append_request(
+    workflow_id: &WorkflowId,
+    workflow_run_id: &WorkflowRunId,
+    execution_id: &str,
+    contexts_by_node_id: &BTreeMap<String, NodeExecutionWorkflowLedgerNodeContext>,
+    event: &node_engine::WorkflowEvent,
+) -> Option<DiagnosticEventAppendRequest> {
+    let node_engine::WorkflowEvent::TaskProgress {
+        task_id,
+        execution_id: event_execution_id,
+        detail: Some(node_engine::TaskProgressDetail::RuntimeSettings(detail)),
+        occurred_at_ms,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    if event_execution_id != execution_id {
+        return None;
+    }
+    let context = contexts_by_node_id.get(task_id)?;
+    let occurred_at_ms = occurred_at_ms
+        .and_then(|value| i64::try_from(value).ok())
+        .unwrap_or_else(|| {
+            i64::try_from(crate::workflow_runtime::unix_timestamp_ms()).unwrap_or(i64::MAX)
+        });
+    let backend_key = bounded_diagnostic_metadata(Some(&detail.backend_key));
+    let selected_backend_family = selected_backend_family(backend_key.as_deref(), None);
+    let settings: Vec<_> = detail
+        .settings
+        .iter()
+        .take(MAX_INFERENCE_RUNTIME_SETTINGS)
+        .filter_map(runtime_setting_diagnostic_summary)
+        .collect();
+    if backend_key.is_none() || settings.is_empty() {
+        return None;
+    }
+
+    Some(DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: None,
+        occurred_at_ms,
+        workflow_run_id: Some(workflow_run_id.clone()),
+        workflow_id: Some(workflow_id.clone()),
+        workflow_version_id: None,
+        workflow_semantic_version: None,
+        node_id: Some(context.node_id.clone()),
+        node_type: Some(context.node_type.clone()),
+        node_version: None,
+        runtime_id: backend_key.clone(),
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: None,
+        client_session_id: None,
+        bucket_id: None,
+        scheduler_policy_id: None,
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
+            InferenceExecutionDiagnosticObservedPayload {
+                request_id: format!("{task_id}:runtime_settings"),
+                task_id: "runtime_settings".to_string(),
+                lifecycle_phase: Some("runtime_settings".to_string()),
+                lifecycle_event_kind: Some("resolved".to_string()),
+                duration_ms: None,
+                selected_backend_key: backend_key.clone(),
+                selected_backend_family,
+                selected_device_id: runtime_setting_value(&settings, "device"),
+                selected_network_node_id: None,
+                resolved_artifact_kind: None,
+                usage: None,
+                cache_handle_id: None,
+                artifact_refs: Vec::new(),
+                kv_cache: None,
+                runtime_settings: Some(InferenceRuntimeSettingsDiagnosticSummary {
+                    backend_key: backend_key?,
+                    settings,
+                }),
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
+                option_support_counts: InferenceOptionSupportCounts::default(),
+                option_diagnostics: Vec::new(),
             },
         ),
     })
@@ -1016,6 +1133,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 cache_handle_id,
                 artifact_refs,
                 kv_cache: None,
+                runtime_settings: None,
                 compatibility_report: event
                     .compatibility_report
                     .as_ref()
@@ -1260,6 +1378,26 @@ fn bounded_compatibility_issue_path(
             Some(path.clone())
         }
     })
+}
+
+fn runtime_setting_diagnostic_summary(
+    setting: &node_engine::RuntimeSettingDiagnostic,
+) -> Option<InferenceRuntimeSettingDiagnosticSummary> {
+    Some(InferenceRuntimeSettingDiagnosticSummary {
+        name: bounded_diagnostic_metadata(Some(&setting.name))?,
+        value: bounded_diagnostic_metadata(Some(&setting.value))?,
+        source: bounded_diagnostic_metadata(Some(&setting.source))?,
+    })
+}
+
+fn runtime_setting_value(
+    settings: &[InferenceRuntimeSettingDiagnosticSummary],
+    name: &str,
+) -> Option<String> {
+    settings
+        .iter()
+        .find(|setting| setting.name == name)
+        .map(|setting| setting.value.clone())
 }
 
 fn option_support_counts(

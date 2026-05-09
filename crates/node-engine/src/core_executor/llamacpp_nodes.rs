@@ -11,8 +11,7 @@ use crate::model_dependencies::ModelRefV2;
 
 use super::{
     build_extra_settings, build_model_ref_v2, infer_task_type_primary, kv_cache,
-    normalize_generation_options_value, read_optional_input_string, require_gateway,
-    resolve_gguf_path,
+    normalize_generation_options_value, require_gateway, resolve_gguf_path,
 };
 
 pub(crate) async fn execute_llamacpp_inference(
@@ -54,8 +53,21 @@ pub(crate) async fn execute_llamacpp_inference(
 
     // Read model-specific inference settings
     let extra_settings = build_extra_settings(inputs);
-    let config =
-        llama_cpp_backend_config(&model_path, mmproj_path.as_deref(), inputs, &extra_settings);
+    let (config, runtime_settings) = llama_cpp_backend_config_with_diagnostics(
+        &model_path,
+        mmproj_path.as_deref(),
+        inputs,
+        &extra_settings,
+    );
+    if let Some(sink) = event_sink {
+        let _ = sink.send(crate::WorkflowEvent::task_progress_with_detail(
+            task_id,
+            execution_id,
+            0.05,
+            Some("llama.cpp runtime settings resolved".to_string()),
+            crate::events::TaskProgressDetail::RuntimeSettings(runtime_settings),
+        ));
+    }
 
     // Ensure the gateway is running the model requested by this node. A ready
     // llama.cpp gateway may still be serving a previous workflow's model.
@@ -243,82 +255,176 @@ pub(crate) async fn execute_llamacpp_inference(
     Ok(outputs)
 }
 
+#[cfg(test)]
 fn llama_cpp_backend_config(
     model_path: &str,
     mmproj_path: Option<&str>,
     inputs: &HashMap<String, serde_json::Value>,
     extra_settings: &HashMap<String, serde_json::Value>,
 ) -> inference::BackendConfig {
-    let device = runtime_setting_string(inputs, extra_settings, "device")
-        .unwrap_or_else(|| "auto".to_string());
-    let gpu_layers = runtime_setting_i64(inputs, extra_settings, &["gpu_layers"])
+    llama_cpp_backend_config_with_diagnostics(model_path, mmproj_path, inputs, extra_settings).0
+}
+
+fn llama_cpp_backend_config_with_diagnostics(
+    model_path: &str,
+    mmproj_path: Option<&str>,
+    inputs: &HashMap<String, serde_json::Value>,
+    extra_settings: &HashMap<String, serde_json::Value>,
+) -> (
+    inference::BackendConfig,
+    crate::events::RuntimeSettingsDiagnostics,
+) {
+    let device_setting =
+        runtime_setting_string_with_source(inputs, extra_settings, &["device"], "auto");
+    let gpu_layers_setting =
+        runtime_setting_i64_with_source(inputs, extra_settings, &["gpu_layers"], "-1");
+    let context_size_setting = runtime_setting_i64_with_source(
+        inputs,
+        extra_settings,
+        &["context_size", "context_length"],
+        &inference::constants::defaults::CONTEXT_SIZE.to_string(),
+    );
+    let cpu_threads_setting = runtime_setting_i64_with_source(
+        inputs,
+        extra_settings,
+        &["cpu_threads", "threads"],
+        "auto",
+    );
+    let batch_size_setting =
+        runtime_setting_i64_with_source(inputs, extra_settings, &["batch_size"], "auto");
+    let ubatch_size_setting = runtime_setting_i64_with_source(
+        inputs,
+        extra_settings,
+        &["ubatch_size", "micro_batch_size"],
+        "auto",
+    );
+
+    let device = device_setting.value.clone();
+    let gpu_layers = gpu_layers_setting
+        .value
+        .parse::<i64>()
+        .ok()
         .and_then(|value| i32::try_from(value).ok())
         .unwrap_or(-1);
-    let context_size =
-        runtime_setting_u32(inputs, extra_settings, &["context_size", "context_length"]);
-    let cpu_threads = runtime_setting_u32(inputs, extra_settings, &["cpu_threads", "threads"]);
-    let batch_size = runtime_setting_u32(inputs, extra_settings, &["batch_size"]);
-    let ubatch_size =
-        runtime_setting_u32(inputs, extra_settings, &["ubatch_size", "micro_batch_size"]);
+    let context_size = context_size_setting
+        .value
+        .parse::<i64>()
+        .ok()
+        .and_then(|value| u32::try_from(value).ok());
+    let cpu_threads = cpu_threads_setting
+        .value
+        .parse::<i64>()
+        .ok()
+        .and_then(|value| u32::try_from(value).ok());
+    let batch_size = batch_size_setting
+        .value
+        .parse::<i64>()
+        .ok()
+        .and_then(|value| u32::try_from(value).ok());
+    let ubatch_size = ubatch_size_setting
+        .value
+        .parse::<i64>()
+        .ok()
+        .and_then(|value| u32::try_from(value).ok());
 
-    inference::BackendConfig {
-        model_path: Some(PathBuf::from(model_path)),
-        mmproj_path: mmproj_path.map(PathBuf::from),
-        device: Some(device),
-        gpu_layers: Some(gpu_layers),
-        context_size,
-        cpu_threads,
-        batch_size,
-        ubatch_size,
-        embedding_mode: false,
-        reranking_mode: false,
-        ..Default::default()
-    }
+    (
+        inference::BackendConfig {
+            model_path: Some(PathBuf::from(model_path)),
+            mmproj_path: mmproj_path.map(PathBuf::from),
+            device: Some(device),
+            gpu_layers: Some(gpu_layers),
+            context_size,
+            cpu_threads,
+            batch_size,
+            ubatch_size,
+            embedding_mode: false,
+            reranking_mode: false,
+            ..Default::default()
+        },
+        crate::events::RuntimeSettingsDiagnostics {
+            backend_key: "llama_cpp".to_string(),
+            settings: vec![
+                device_setting,
+                gpu_layers_setting,
+                context_size_setting,
+                cpu_threads_setting,
+                batch_size_setting,
+                ubatch_size_setting,
+            ],
+        },
+    )
 }
 
-fn runtime_setting_string(
-    inputs: &HashMap<String, serde_json::Value>,
-    extra_settings: &HashMap<String, serde_json::Value>,
-    key: &str,
-) -> Option<String> {
-    read_optional_input_string(inputs, key)
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .or_else(|| {
-            extra_settings
-                .get(key)
-                .and_then(|value| value.as_str())
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned)
-        })
-}
-
-fn runtime_setting_i64(
+fn runtime_setting_string_with_source(
     inputs: &HashMap<String, serde_json::Value>,
     extra_settings: &HashMap<String, serde_json::Value>,
     keys: &[&str],
-) -> Option<i64> {
-    keys.iter().find_map(|key| {
-        inputs
+    default_value: &str,
+) -> crate::events::RuntimeSettingDiagnostic {
+    for key in keys {
+        if let Some(value) = inputs
             .get(*key)
-            .and_then(|value| value.as_i64())
-            .or_else(|| {
-                inputs
-                    .get("_data")
-                    .and_then(|data| data.get(*key))
-                    .and_then(|value| value.as_i64())
-            })
-            .or_else(|| extra_settings.get(*key).and_then(|value| value.as_i64()))
-    })
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return runtime_setting_diagnostic(keys[0], value, "run_override");
+        }
+        if let Some(value) = inputs
+            .get("_data")
+            .and_then(|data| data.get(*key))
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return runtime_setting_diagnostic(keys[0], value, "workflow_default");
+        }
+        if let Some(value) = extra_settings
+            .get(*key)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return runtime_setting_diagnostic(keys[0], value, "pumas_default");
+        }
+    }
+    runtime_setting_diagnostic(keys[0], default_value, "backend_default")
 }
 
-fn runtime_setting_u32(
+fn runtime_setting_i64_with_source(
     inputs: &HashMap<String, serde_json::Value>,
     extra_settings: &HashMap<String, serde_json::Value>,
     keys: &[&str],
-) -> Option<u32> {
-    runtime_setting_i64(inputs, extra_settings, keys).and_then(|value| u32::try_from(value).ok())
+    default_value: &str,
+) -> crate::events::RuntimeSettingDiagnostic {
+    for key in keys {
+        if let Some(value) = inputs.get(*key).and_then(|value| value.as_i64()) {
+            return runtime_setting_diagnostic(keys[0], &value.to_string(), "run_override");
+        }
+        if let Some(value) = inputs
+            .get("_data")
+            .and_then(|data| data.get(*key))
+            .and_then(|value| value.as_i64())
+        {
+            return runtime_setting_diagnostic(keys[0], &value.to_string(), "workflow_default");
+        }
+        if let Some(value) = extra_settings.get(*key).and_then(|value| value.as_i64()) {
+            return runtime_setting_diagnostic(keys[0], &value.to_string(), "pumas_default");
+        }
+    }
+    runtime_setting_diagnostic(keys[0], default_value, "backend_default")
+}
+
+fn runtime_setting_diagnostic(
+    name: &str,
+    value: &str,
+    source: &str,
+) -> crate::events::RuntimeSettingDiagnostic {
+    crate::events::RuntimeSettingDiagnostic {
+        name: name.to_string(),
+        value: value.to_string(),
+        source: source.to_string(),
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -413,6 +519,9 @@ fn llamacpp_runtime_settings_match(
     active_device == requested_device
         && active_gpu_layers == requested_gpu_layers
         && active_context_size == requested_context_size
+        && active.cpu_threads == requested.cpu_threads
+        && active.batch_size == requested.batch_size
+        && active.ubatch_size == requested.ubatch_size
 }
 
 fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
@@ -656,7 +765,7 @@ mod tests {
         );
 
         let extra_settings = build_extra_settings(&inputs);
-        let config = llama_cpp_backend_config(
+        let (config, diagnostics) = llama_cpp_backend_config_with_diagnostics(
             "/models/main.gguf",
             Some("/models/mmproj.gguf"),
             &inputs,
@@ -679,6 +788,41 @@ mod tests {
         assert_eq!(config.ubatch_size, Some(64));
         assert!(!config.embedding_mode);
         assert!(!config.reranking_mode);
+        assert_eq!(diagnostics.backend_key, "llama_cpp");
+        assert!(diagnostics.settings.iter().any(|setting| {
+            setting.name == "gpu_layers"
+                && setting.value == "12"
+                && setting.source == "run_override"
+        }));
+        assert!(diagnostics.settings.iter().any(|setting| {
+            setting.name == "device"
+                && setting.value == "Metal0"
+                && setting.source == "workflow_default"
+        }));
+        assert!(diagnostics.settings.iter().any(|setting| {
+            setting.name == "cpu_threads"
+                && setting.value == "6"
+                && setting.source == "pumas_default"
+        }));
+    }
+
+    #[test]
+    fn runtime_settings_match_compares_reload_required_performance_settings() {
+        let active = BackendConfig {
+            device: Some("auto".to_string()),
+            gpu_layers: Some(-1),
+            context_size: Some(4096),
+            cpu_threads: Some(8),
+            batch_size: Some(512),
+            ubatch_size: Some(128),
+            ..BackendConfig::default()
+        };
+        let mut requested = active.clone();
+
+        assert!(llamacpp_runtime_settings_match(&active, &requested));
+
+        requested.batch_size = Some(256);
+        assert!(!llamacpp_runtime_settings_match(&active, &requested));
     }
 
     #[tokio::test]

@@ -24,6 +24,7 @@ pub const MAX_DIAGNOSTIC_ERROR_TEXT_LEN: usize = 4_096;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT: usize = 8;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
 pub const MAX_INFERENCE_OPTION_DIAGNOSTICS: usize = 64;
+pub const MAX_INFERENCE_RUNTIME_SETTINGS: usize = 32;
 pub const MAX_INFERENCE_COMPATIBILITY_ISSUES: usize = 32;
 pub const MAX_INFERENCE_KV_CACHE_REASON_LEN: usize = 1_024;
 pub const MAX_INFERENCE_ARTIFACT_REFS: usize = 16;
@@ -1374,6 +1375,8 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kv_cache: Option<InferenceKvCacheDiagnosticSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_settings: Option<InferenceRuntimeSettingsDiagnosticSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility_report: Option<InferenceCompatibilityReportDiagnosticSummary>,
     #[serde(default)]
     pub compatibility_issue_count: u32,
@@ -1463,6 +1466,9 @@ impl InferenceExecutionDiagnosticObservedPayload {
         if let Some(kv_cache) = self.kv_cache.as_ref() {
             kv_cache.validate()?;
         }
+        if let Some(runtime_settings) = self.runtime_settings.as_ref() {
+            runtime_settings.validate()?;
+        }
         for issue in &self.compatibility_issues {
             issue.validate()?;
         }
@@ -1470,6 +1476,55 @@ impl InferenceExecutionDiagnosticObservedPayload {
             diagnostic.validate()?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceRuntimeSettingsDiagnosticSummary {
+    pub backend_key: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub settings: Vec<InferenceRuntimeSettingDiagnosticSummary>,
+}
+
+impl InferenceRuntimeSettingsDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text(
+            "runtime_settings.backend_key",
+            &self.backend_key,
+            MAX_ID_LEN,
+        )?;
+        if self.settings.is_empty() {
+            return Err(DiagnosticsLedgerError::MissingField {
+                field: "runtime_settings.settings",
+            });
+        }
+        if self.settings.len() > MAX_INFERENCE_RUNTIME_SETTINGS {
+            return Err(DiagnosticsLedgerError::FieldTooLong {
+                field: "runtime_settings.settings",
+                max_len: MAX_INFERENCE_RUNTIME_SETTINGS,
+            });
+        }
+        for setting in &self.settings {
+            setting.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceRuntimeSettingDiagnosticSummary {
+    pub name: String,
+    pub value: String,
+    pub source: String,
+}
+
+impl InferenceRuntimeSettingDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("runtime_settings.name", &self.name, MAX_ID_LEN)?;
+        validate_required_text("runtime_settings.value", &self.value, MAX_ID_LEN)?;
+        validate_required_text("runtime_settings.source", &self.source, MAX_ID_LEN)
     }
 }
 

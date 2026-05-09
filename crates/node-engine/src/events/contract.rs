@@ -63,9 +63,26 @@ pub struct KvCacheExecutionDiagnostics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSettingDiagnostic {
+    pub name: String,
+    pub value: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSettingsDiagnostics {
+    pub backend_key: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub settings: Vec<RuntimeSettingDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TaskProgressDetail {
     KvCache(KvCacheExecutionDiagnostics),
+    RuntimeSettings(RuntimeSettingsDiagnostics),
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

@@ -4844,6 +4844,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                     token_count: Some(64),
                     reason: Some("restored input handle".to_string()),
                 }),
+                runtime_settings: None,
                 compatibility_report: Some(InferenceCompatibilityReportDiagnosticSummary {
                     status: "rejected".to_string(),
                     compatible: false,

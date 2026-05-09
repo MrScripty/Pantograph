@@ -1741,6 +1741,13 @@ fn scheduler_timeline_record_from_event(
             if let Some(kv_cache) = payload.kv_cache.as_ref() {
                 details.push(format!("kv cache {} {}", kv_cache.action, kv_cache.outcome));
             }
+            if let Some(runtime_settings) = payload.runtime_settings.as_ref() {
+                details.push(format!(
+                    "runtime settings {} values for {}",
+                    runtime_settings.settings.len(),
+                    runtime_settings.backend_key
+                ));
+            }
             (
                 format!("inference {phase} {event_kind}"),
                 Some(details.join("; ")),
