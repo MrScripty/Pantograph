@@ -2022,6 +2022,12 @@ pub struct ProjectionStateRecord {
     pub status: ProjectionStatus,
     pub rebuilt_at_ms: Option<i64>,
     pub updated_at_ms: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error_at_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_failed_event_seq: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2031,12 +2037,38 @@ pub struct ProjectionStateUpdate {
     pub last_applied_event_seq: i64,
     pub status: ProjectionStatus,
     pub rebuilt_at_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error_at_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_failed_event_seq: Option<i64>,
 }
 
 impl ProjectionStateUpdate {
     pub fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("projection_name", &self.projection_name, MAX_ID_LEN)?;
         if self.projection_version <= 0 || self.last_applied_event_seq < 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "projection_state",
+            });
+        }
+        if self.status == ProjectionStatus::Failed
+            && (self.last_error.is_none()
+                || self.last_error_at_ms.is_none()
+                || self.last_failed_event_seq.is_none())
+        {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "projection_state",
+            });
+        }
+        if self
+            .last_error
+            .as_ref()
+            .is_some_and(|value| value.is_empty())
+            || self.last_error_at_ms.is_some_and(|value| value < 0)
+            || self.last_failed_event_seq.is_some_and(|value| value < 0)
+        {
             return Err(DiagnosticsLedgerError::InvalidField {
                 field: "projection_state",
             });

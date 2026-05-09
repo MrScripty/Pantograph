@@ -1559,6 +1559,9 @@ fn projection_state_tracks_incremental_event_cursors() {
             last_applied_event_seq: event.event_seq,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: Some(20),
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         })
         .expect("projection state stores");
     assert_eq!(current.projection_name, "scheduler_timeline");
@@ -1578,11 +1581,58 @@ fn projection_state_tracks_incremental_event_cursors() {
             last_applied_event_seq: 0,
             status: ProjectionStatus::NeedsRebuild,
             rebuilt_at_ms: None,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         })
         .expect("projection state updates");
     assert_eq!(needs_rebuild.projection_version, 2);
     assert_eq!(needs_rebuild.last_applied_event_seq, 0);
     assert_eq!(needs_rebuild.status, ProjectionStatus::NeedsRebuild);
+}
+
+#[test]
+fn projection_state_persists_failure_health_and_success_clears_it() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let failed = ledger
+        .upsert_projection_state(ProjectionStateUpdate {
+            projection_name: "scheduler_timeline".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: 10,
+            status: ProjectionStatus::Failed,
+            rebuilt_at_ms: None,
+            last_error: Some("projection refresh failed".to_string()),
+            last_error_at_ms: Some(20),
+            last_failed_event_seq: Some(11),
+        })
+        .expect("failed projection state stores");
+
+    assert_eq!(failed.status, ProjectionStatus::Failed);
+    assert_eq!(
+        failed.last_error.as_deref(),
+        Some("projection refresh failed")
+    );
+    assert_eq!(failed.last_error_at_ms, Some(20));
+    assert_eq!(failed.last_failed_event_seq, Some(11));
+
+    let recovered = ledger
+        .upsert_projection_state(ProjectionStateUpdate {
+            projection_name: "scheduler_timeline".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: 11,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
+        })
+        .expect("recovered projection state stores");
+
+    assert_eq!(recovered.status, ProjectionStatus::Current);
+    assert_eq!(recovered.last_applied_event_seq, 11);
+    assert_eq!(recovered.last_error, None);
+    assert_eq!(recovered.last_error_at_ms, None);
+    assert_eq!(recovered.last_failed_event_seq, None);
 }
 
 #[test]
@@ -2932,6 +2982,9 @@ fn projection_rebuild_resets_projection_rows_and_cursor() {
             last_applied_event_seq: 0,
             status: ProjectionStatus::NeedsRebuild,
             rebuilt_at_ms: None,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         })
         .expect("stale projection state stores");
     assert_eq!(stale_state.last_applied_event_seq, 0);
@@ -3176,6 +3229,9 @@ fn existing_v6_schema_adds_diagnostic_event_ledger_tables() {
             last_applied_event_seq: event.event_seq,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
         })
         .expect("projection state stores after migration");
 }
@@ -3556,6 +3612,58 @@ fn current_schema_repairs_missing_run_error_projection_columns() {
             assert!(sqlite_column_exists(&conn, table, column));
         }
     }
+}
+
+#[test]
+fn v22_schema_migrates_projection_state_health_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (22, 0, 'pantograph-diagnostics-ledger-v22');
+            CREATE TABLE projection_state (
+                projection_name TEXT PRIMARY KEY,
+                projection_version INTEGER NOT NULL,
+                last_applied_event_seq INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                rebuilt_at_ms INTEGER,
+                updated_at_ms INTEGER NOT NULL
+            );",
+        )
+        .expect("v22 schema marker and projection state table are installed");
+    }
+
+    let mut ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    let failed = ledger
+        .upsert_projection_state(ProjectionStateUpdate {
+            projection_name: "scheduler_timeline".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: 10,
+            status: ProjectionStatus::Failed,
+            rebuilt_at_ms: None,
+            last_error: Some("projection refresh failed".to_string()),
+            last_error_at_ms: Some(20),
+            last_failed_event_seq: Some(11),
+        })
+        .expect("projection health writes after migration");
+
+    assert_eq!(
+        failed.last_error.as_deref(),
+        Some("projection refresh failed")
+    );
+    let conn = Connection::open(&path).expect("connection reopens");
+    assert_columns_exist(
+        &conn,
+        "projection_state",
+        &["last_error", "last_error_at_ms", "last_failed_event_seq"],
+    );
 }
 
 #[test]

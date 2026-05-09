@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 22;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v22";
+pub(crate) const SCHEMA_VERSION: i64 = 23;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v23";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -238,6 +238,9 @@ pub(crate) fn migrate_schema(
     if found < 21 {
         apply_scheduler_model_cache_projection_migration(&tx)?;
     }
+    if found < 23 {
+        ensure_projection_state_health_columns(&tx)?;
+    }
     apply_latest_idempotent_schema_repairs(&tx)?;
     if found < SCHEMA_VERSION {
         tx.execute(
@@ -259,7 +262,25 @@ fn apply_latest_idempotent_schema_repairs(
     apply_io_artifact_projection_schema(tx)?;
     apply_node_status_projection_schema(tx)?;
     apply_library_usage_projection_schema(tx)?;
+    ensure_projection_state_health_columns(tx)?;
     apply_run_error_projection_migration(tx)?;
+    Ok(())
+}
+
+fn ensure_projection_state_health_columns(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    if table_exists(tx, "projection_state")? {
+        ensure_columns(
+            tx,
+            "projection_state",
+            &[
+                ("last_error", "TEXT"),
+                ("last_error_at_ms", "INTEGER"),
+                ("last_failed_event_seq", "INTEGER"),
+            ],
+        )?;
+    }
     Ok(())
 }
 
@@ -374,7 +395,10 @@ fn apply_event_ledger_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedg
             last_applied_event_seq INTEGER NOT NULL,
             status TEXT NOT NULL,
             rebuilt_at_ms INTEGER,
-            updated_at_ms INTEGER NOT NULL
+            updated_at_ms INTEGER NOT NULL,
+            last_error TEXT,
+            last_error_at_ms INTEGER,
+            last_failed_event_seq INTEGER
         );
         "#,
     )?;

@@ -356,15 +356,15 @@ pub struct DiagnosticsProjectionRefreshResult {
 
 **Tasks:**
 
-- [ ] Add a diagnostics-ledger schema migration that extends
+- [x] Add a diagnostics-ledger schema migration that extends
       `projection_state` with durable operational health fields:
       `last_error`, `last_error_at_ms`, and `last_failed_event_seq`.
-- [ ] Add migration tests from a pre-health `projection_state` schema fixture.
-- [ ] Add centralized projection-state read/write helpers and route projection
+- [x] Add migration tests from a pre-health `projection_state` schema fixture.
+- [x] Add centralized projection-state read/write helpers and route projection
       drains, rebuilds, and refresh failures through them.
-- [ ] Update `ProjectionStateRecord` and `ProjectionStateUpdate` so health
+- [x] Update `ProjectionStateRecord` and `ProjectionStateUpdate` so health
       fields can be recorded, cleared, serialized, and queried consistently.
-- [ ] Ensure successful projection refreshes and rebuilds clear stale projection
+- [x] Ensure successful projection refreshes and rebuilds clear stale projection
       error metadata.
 - [ ] Ensure failed projection refreshes mark the affected projection as
       `failed` and persist the error metadata without appending a diagnostic
@@ -398,7 +398,7 @@ pub struct DiagnosticsProjectionRefreshResult {
 - `cargo check -p pantograph-diagnostics-ledger`
 - `cargo check -p pantograph-workflow-service`
 
-**Status:** Not started.
+**Status:** In progress.
 
 ### Milestone 4: Read-Only Projection Query Slice
 
@@ -721,6 +721,10 @@ parallel by multiple workers.
   file-backed `busy_timeout`, WAL journal mode, and NORMAL synchronous mode.
   Focused contention coverage proves a second writer waits for a held write
   lock instead of immediately returning `database is locked`.
+- 2026-05-09: Milestone 3 ledger foundation added additive projection health
+  columns, centralized projection-state success writes, schema migration and
+  current-version repair coverage, and tests proving failure metadata persists
+  and successful state writes clear stale error metadata.
 
 ## Commit Cadence Notes
 
@@ -735,6 +739,8 @@ parallel by multiple workers.
 ### Completed
 
 - Milestone 1: SQLite lock hardening.
+- Milestone 3 partial: diagnostics-ledger projection health schema and
+  projection-state helper foundation.
 
 ### Deviations
 
@@ -748,6 +754,8 @@ parallel by multiple workers.
 
 - `cargo test -p pantograph-diagnostics-ledger file_backed_connection_waits_for_busy_writer`
 - `cargo check -p pantograph-diagnostics-ledger`
+- `cargo test -p pantograph-diagnostics-ledger projection_state`
+- `cargo test -p pantograph-diagnostics-ledger`
 
 ### Traceability Links
 

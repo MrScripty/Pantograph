@@ -1,7 +1,7 @@
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId, WorkflowVersionId,
 };
-use rusqlite::{params, types::Type, OptionalExtension, Row};
+use rusqlite::{params, types::Type, OptionalExtension, Row, Transaction};
 use uuid::Uuid;
 
 use crate::event::{
@@ -168,12 +168,7 @@ pub(super) fn projection_state(
     ledger: &SqliteDiagnosticsLedger,
     projection_name: &str,
 ) -> Result<Option<ProjectionStateRecord>, DiagnosticsLedgerError> {
-    let mut stmt = ledger.conn.prepare(
-        "SELECT projection_name, projection_version, last_applied_event_seq, status,
-                rebuilt_at_ms, updated_at_ms
-         FROM projection_state
-         WHERE projection_name = ?1",
-    )?;
+    let mut stmt = ledger.conn.prepare(PROJECTION_STATE_SELECT_SQL)?;
     stmt.query_row(params![projection_name], projection_state_from_row)
         .optional()
         .map_err(DiagnosticsLedgerError::from)
@@ -184,34 +179,161 @@ pub(super) fn upsert_projection_state(
     update: ProjectionStateUpdate,
 ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
     update.validate()?;
+    let tx = ledger.conn.transaction()?;
+    let record = if update.status == ProjectionStatus::Failed {
+        write_projection_failure_state(
+            &tx,
+            update.projection_name.as_str(),
+            update.projection_version,
+            update.last_applied_event_seq,
+            update.rebuilt_at_ms,
+            update
+                .last_error
+                .as_deref()
+                .expect("failed projection state has an error"),
+            update
+                .last_error_at_ms
+                .expect("failed projection state has an error timestamp"),
+            update
+                .last_failed_event_seq
+                .expect("failed projection state has a failed event cursor"),
+        )?
+    } else {
+        write_projection_state(
+            &tx,
+            ProjectionStateWrite {
+                projection_name: update.projection_name.as_str(),
+                projection_version: update.projection_version,
+                last_applied_event_seq: update.last_applied_event_seq,
+                status: update.status,
+                rebuilt_at_ms: update.rebuilt_at_ms,
+                last_error: update.last_error.as_deref(),
+                last_error_at_ms: update.last_error_at_ms,
+                last_failed_event_seq: update.last_failed_event_seq,
+            },
+        )?
+    };
+    tx.commit()?;
+    Ok(record)
+}
+
+const PROJECTION_STATE_SELECT_SQL: &str = "SELECT projection_name, projection_version,
+        last_applied_event_seq, status, rebuilt_at_ms, updated_at_ms, last_error,
+        last_error_at_ms, last_failed_event_seq
+     FROM projection_state
+     WHERE projection_name = ?1";
+
+struct ProjectionStateWrite<'a> {
+    projection_name: &'a str,
+    projection_version: i64,
+    last_applied_event_seq: i64,
+    status: ProjectionStatus,
+    rebuilt_at_ms: Option<i64>,
+    last_error: Option<&'a str>,
+    last_error_at_ms: Option<i64>,
+    last_failed_event_seq: Option<i64>,
+}
+
+fn query_projection_state(
+    tx: &Transaction<'_>,
+    projection_name: &str,
+) -> Result<Option<ProjectionStateRecord>, DiagnosticsLedgerError> {
+    let mut stmt = tx.prepare(PROJECTION_STATE_SELECT_SQL)?;
+    stmt.query_row(params![projection_name], projection_state_from_row)
+        .optional()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
+fn write_projection_success_state(
+    tx: &Transaction<'_>,
+    projection_name: &'static str,
+    projection_version: i64,
+    last_applied_event_seq: i64,
+    status: ProjectionStatus,
+    rebuilt_at_ms: Option<i64>,
+) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+    write_projection_state(
+        tx,
+        ProjectionStateWrite {
+            projection_name,
+            projection_version,
+            last_applied_event_seq,
+            status,
+            rebuilt_at_ms,
+            last_error: None,
+            last_error_at_ms: None,
+            last_failed_event_seq: None,
+        },
+    )
+}
+
+fn write_projection_failure_state(
+    tx: &Transaction<'_>,
+    projection_name: &str,
+    projection_version: i64,
+    last_applied_event_seq: i64,
+    rebuilt_at_ms: Option<i64>,
+    last_error: &str,
+    last_error_at_ms: i64,
+    last_failed_event_seq: i64,
+) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+    write_projection_state(
+        tx,
+        ProjectionStateWrite {
+            projection_name,
+            projection_version,
+            last_applied_event_seq,
+            status: ProjectionStatus::Failed,
+            rebuilt_at_ms,
+            last_error: Some(last_error),
+            last_error_at_ms: Some(last_error_at_ms),
+            last_failed_event_seq: Some(last_failed_event_seq),
+        },
+    )
+}
+
+fn write_projection_state(
+    tx: &Transaction<'_>,
+    update: ProjectionStateWrite<'_>,
+) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
     let updated_at_ms = now_ms();
-    ledger.conn.execute(
+    tx.execute(
         "INSERT INTO projection_state
             (projection_name, projection_version, last_applied_event_seq, status,
-             rebuilt_at_ms, updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             rebuilt_at_ms, updated_at_ms, last_error, last_error_at_ms,
+             last_failed_event_seq)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT(projection_name) DO UPDATE SET
             projection_version = excluded.projection_version,
             last_applied_event_seq = excluded.last_applied_event_seq,
             status = excluded.status,
             rebuilt_at_ms = excluded.rebuilt_at_ms,
-            updated_at_ms = excluded.updated_at_ms",
+            updated_at_ms = excluded.updated_at_ms,
+            last_error = excluded.last_error,
+            last_error_at_ms = excluded.last_error_at_ms,
+            last_failed_event_seq = excluded.last_failed_event_seq",
         params![
-            update.projection_name.as_str(),
+            update.projection_name,
             update.projection_version,
             update.last_applied_event_seq,
             update.status.as_db(),
             update.rebuilt_at_ms,
             updated_at_ms,
+            update.last_error,
+            update.last_error_at_ms,
+            update.last_failed_event_seq,
         ],
     )?;
     Ok(ProjectionStateRecord {
-        projection_name: update.projection_name,
+        projection_name: update.projection_name.to_string(),
         projection_version: update.projection_version,
         last_applied_event_seq: update.last_applied_event_seq,
         status: update.status,
         rebuilt_at_ms: update.rebuilt_at_ms,
         updated_at_ms,
+        last_error: update.last_error.map(ToOwned::to_owned),
+        last_error_at_ms: update.last_error_at_ms,
+        last_failed_event_seq: update.last_failed_event_seq,
     })
 }
 
@@ -226,19 +348,7 @@ pub(super) fn drain_scheduler_timeline_projection(
         });
     }
     let tx = ledger.conn.transaction()?;
-    let mut state = {
-        let mut stmt = tx.prepare(
-            "SELECT projection_name, projection_version, last_applied_event_seq, status,
-                    rebuilt_at_ms, updated_at_ms
-             FROM projection_state
-             WHERE projection_name = ?1",
-        )?;
-        stmt.query_row(
-            params![SCHEDULER_TIMELINE_PROJECTION_NAME],
-            projection_state_from_row,
-        )
-        .optional()?
-    };
+    let mut state = query_projection_state(&tx, SCHEDULER_TIMELINE_PROJECTION_NAME)?;
 
     let mut last_applied_event_seq = state
         .as_ref()
@@ -299,40 +409,20 @@ pub(super) fn drain_scheduler_timeline_projection(
         last_applied_event_seq = event.event_seq;
     }
 
-    let updated_at_ms = now_ms();
-    tx.execute(
-        "INSERT INTO projection_state
-            (projection_name, projection_version, last_applied_event_seq, status,
-             rebuilt_at_ms, updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(projection_name) DO UPDATE SET
-            projection_version = excluded.projection_version,
-            last_applied_event_seq = excluded.last_applied_event_seq,
-            status = excluded.status,
-            rebuilt_at_ms = excluded.rebuilt_at_ms,
-            updated_at_ms = excluded.updated_at_ms",
-        params![
-            SCHEDULER_TIMELINE_PROJECTION_NAME,
-            SCHEDULER_TIMELINE_PROJECTION_VERSION,
-            last_applied_event_seq,
-            ProjectionStatus::Current.as_db(),
-            rebuilt_at_ms,
-            updated_at_ms,
-        ],
-    )?;
-    tx.commit()?;
-
-    Ok(ProjectionStateRecord {
-        projection_name: SCHEDULER_TIMELINE_PROJECTION_NAME.to_string(),
-        projection_version: SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    let projection_state = write_projection_success_state(
+        &tx,
+        SCHEDULER_TIMELINE_PROJECTION_NAME,
+        SCHEDULER_TIMELINE_PROJECTION_VERSION,
         last_applied_event_seq,
-        status: ProjectionStatus::Current,
-        rebuilt_at_ms: state
+        ProjectionStatus::Current,
+        state
             .as_ref()
             .and_then(|state| state.rebuilt_at_ms)
             .or(rebuilt_at_ms),
-        updated_at_ms,
-    })
+    )?;
+    tx.commit()?;
+
+    Ok(projection_state)
 }
 
 pub(super) fn query_scheduler_timeline_projection(
@@ -379,16 +469,7 @@ pub(super) fn drain_run_list_projection(
         });
     }
     let tx = ledger.conn.transaction()?;
-    let state = {
-        let mut stmt = tx.prepare(
-            "SELECT projection_name, projection_version, last_applied_event_seq, status,
-                    rebuilt_at_ms, updated_at_ms
-             FROM projection_state
-             WHERE projection_name = ?1",
-        )?;
-        stmt.query_row(params![RUN_LIST_PROJECTION_NAME], projection_state_from_row)
-            .optional()?
-    };
+    let state = query_projection_state(&tx, RUN_LIST_PROJECTION_NAME)?;
 
     let mut last_applied_event_seq = state
         .as_ref()
@@ -411,37 +492,17 @@ pub(super) fn drain_run_list_projection(
         last_applied_event_seq = event.event_seq;
     }
 
-    let updated_at_ms = now_ms();
-    tx.execute(
-        "INSERT INTO projection_state
-            (projection_name, projection_version, last_applied_event_seq, status,
-             rebuilt_at_ms, updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(projection_name) DO UPDATE SET
-            projection_version = excluded.projection_version,
-            last_applied_event_seq = excluded.last_applied_event_seq,
-            status = excluded.status,
-            rebuilt_at_ms = excluded.rebuilt_at_ms,
-            updated_at_ms = excluded.updated_at_ms",
-        params![
-            RUN_LIST_PROJECTION_NAME,
-            RUN_LIST_PROJECTION_VERSION,
-            last_applied_event_seq,
-            ProjectionStatus::Current.as_db(),
-            rebuilt_at_ms,
-            updated_at_ms,
-        ],
+    let projection_state = write_projection_success_state(
+        &tx,
+        RUN_LIST_PROJECTION_NAME,
+        RUN_LIST_PROJECTION_VERSION,
+        last_applied_event_seq,
+        ProjectionStatus::Current,
+        rebuilt_at_ms,
     )?;
     tx.commit()?;
 
-    Ok(ProjectionStateRecord {
-        projection_name: RUN_LIST_PROJECTION_NAME.to_string(),
-        projection_version: RUN_LIST_PROJECTION_VERSION,
-        last_applied_event_seq,
-        status: ProjectionStatus::Current,
-        rebuilt_at_ms,
-        updated_at_ms,
-    })
+    Ok(projection_state)
 }
 
 pub(super) fn query_run_list_projection(
@@ -645,19 +706,7 @@ pub(super) fn drain_run_detail_projection(
         });
     }
     let tx = ledger.conn.transaction()?;
-    let state = {
-        let mut stmt = tx.prepare(
-            "SELECT projection_name, projection_version, last_applied_event_seq, status,
-                    rebuilt_at_ms, updated_at_ms
-             FROM projection_state
-             WHERE projection_name = ?1",
-        )?;
-        stmt.query_row(
-            params![RUN_DETAIL_PROJECTION_NAME],
-            projection_state_from_row,
-        )
-        .optional()?
-    };
+    let state = query_projection_state(&tx, RUN_DETAIL_PROJECTION_NAME)?;
 
     let mut last_applied_event_seq = state
         .as_ref()
@@ -680,37 +729,17 @@ pub(super) fn drain_run_detail_projection(
         last_applied_event_seq = event.event_seq;
     }
 
-    let updated_at_ms = now_ms();
-    tx.execute(
-        "INSERT INTO projection_state
-            (projection_name, projection_version, last_applied_event_seq, status,
-             rebuilt_at_ms, updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(projection_name) DO UPDATE SET
-            projection_version = excluded.projection_version,
-            last_applied_event_seq = excluded.last_applied_event_seq,
-            status = excluded.status,
-            rebuilt_at_ms = excluded.rebuilt_at_ms,
-            updated_at_ms = excluded.updated_at_ms",
-        params![
-            RUN_DETAIL_PROJECTION_NAME,
-            RUN_DETAIL_PROJECTION_VERSION,
-            last_applied_event_seq,
-            ProjectionStatus::Current.as_db(),
-            rebuilt_at_ms,
-            updated_at_ms,
-        ],
+    let projection_state = write_projection_success_state(
+        &tx,
+        RUN_DETAIL_PROJECTION_NAME,
+        RUN_DETAIL_PROJECTION_VERSION,
+        last_applied_event_seq,
+        ProjectionStatus::Current,
+        rebuilt_at_ms,
     )?;
     tx.commit()?;
 
-    Ok(ProjectionStateRecord {
-        projection_name: RUN_DETAIL_PROJECTION_NAME.to_string(),
-        projection_version: RUN_DETAIL_PROJECTION_VERSION,
-        last_applied_event_seq,
-        status: ProjectionStatus::Current,
-        rebuilt_at_ms,
-        updated_at_ms,
-    })
+    Ok(projection_state)
 }
 
 pub(super) fn query_run_detail_projection(
@@ -755,19 +784,7 @@ pub(super) fn drain_io_artifact_projection(
         });
     }
     let tx = ledger.conn.transaction()?;
-    let state = {
-        let mut stmt = tx.prepare(
-            "SELECT projection_name, projection_version, last_applied_event_seq, status,
-                    rebuilt_at_ms, updated_at_ms
-             FROM projection_state
-             WHERE projection_name = ?1",
-        )?;
-        stmt.query_row(
-            params![IO_ARTIFACT_PROJECTION_NAME],
-            projection_state_from_row,
-        )
-        .optional()?
-    };
+    let state = query_projection_state(&tx, IO_ARTIFACT_PROJECTION_NAME)?;
 
     let mut last_applied_event_seq = state
         .as_ref()
@@ -790,37 +807,17 @@ pub(super) fn drain_io_artifact_projection(
         last_applied_event_seq = event.event_seq;
     }
 
-    let updated_at_ms = now_ms();
-    tx.execute(
-        "INSERT INTO projection_state
-            (projection_name, projection_version, last_applied_event_seq, status,
-             rebuilt_at_ms, updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(projection_name) DO UPDATE SET
-            projection_version = excluded.projection_version,
-            last_applied_event_seq = excluded.last_applied_event_seq,
-            status = excluded.status,
-            rebuilt_at_ms = excluded.rebuilt_at_ms,
-            updated_at_ms = excluded.updated_at_ms",
-        params![
-            IO_ARTIFACT_PROJECTION_NAME,
-            IO_ARTIFACT_PROJECTION_VERSION,
-            last_applied_event_seq,
-            ProjectionStatus::Current.as_db(),
-            rebuilt_at_ms,
-            updated_at_ms,
-        ],
+    let projection_state = write_projection_success_state(
+        &tx,
+        IO_ARTIFACT_PROJECTION_NAME,
+        IO_ARTIFACT_PROJECTION_VERSION,
+        last_applied_event_seq,
+        ProjectionStatus::Current,
+        rebuilt_at_ms,
     )?;
     tx.commit()?;
 
-    Ok(ProjectionStateRecord {
-        projection_name: IO_ARTIFACT_PROJECTION_NAME.to_string(),
-        projection_version: IO_ARTIFACT_PROJECTION_VERSION,
-        last_applied_event_seq,
-        status: ProjectionStatus::Current,
-        rebuilt_at_ms,
-        updated_at_ms,
-    })
+    Ok(projection_state)
 }
 
 pub(super) fn query_io_artifact_projection(
@@ -988,19 +985,7 @@ pub(super) fn drain_node_status_projection(
         });
     }
     let tx = ledger.conn.transaction()?;
-    let state = {
-        let mut stmt = tx.prepare(
-            "SELECT projection_name, projection_version, last_applied_event_seq, status,
-                    rebuilt_at_ms, updated_at_ms
-             FROM projection_state
-             WHERE projection_name = ?1",
-        )?;
-        stmt.query_row(
-            params![NODE_STATUS_PROJECTION_NAME],
-            projection_state_from_row,
-        )
-        .optional()?
-    };
+    let state = query_projection_state(&tx, NODE_STATUS_PROJECTION_NAME)?;
 
     let mut last_applied_event_seq = state
         .as_ref()
@@ -1023,37 +1008,17 @@ pub(super) fn drain_node_status_projection(
         last_applied_event_seq = event.event_seq;
     }
 
-    let updated_at_ms = now_ms();
-    tx.execute(
-        "INSERT INTO projection_state
-            (projection_name, projection_version, last_applied_event_seq, status,
-             rebuilt_at_ms, updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(projection_name) DO UPDATE SET
-            projection_version = excluded.projection_version,
-            last_applied_event_seq = excluded.last_applied_event_seq,
-            status = excluded.status,
-            rebuilt_at_ms = excluded.rebuilt_at_ms,
-            updated_at_ms = excluded.updated_at_ms",
-        params![
-            NODE_STATUS_PROJECTION_NAME,
-            NODE_STATUS_PROJECTION_VERSION,
-            last_applied_event_seq,
-            ProjectionStatus::Current.as_db(),
-            rebuilt_at_ms,
-            updated_at_ms,
-        ],
+    let projection_state = write_projection_success_state(
+        &tx,
+        NODE_STATUS_PROJECTION_NAME,
+        NODE_STATUS_PROJECTION_VERSION,
+        last_applied_event_seq,
+        ProjectionStatus::Current,
+        rebuilt_at_ms,
     )?;
     tx.commit()?;
 
-    Ok(ProjectionStateRecord {
-        projection_name: NODE_STATUS_PROJECTION_NAME.to_string(),
-        projection_version: NODE_STATUS_PROJECTION_VERSION,
-        last_applied_event_seq,
-        status: ProjectionStatus::Current,
-        rebuilt_at_ms,
-        updated_at_ms,
-    })
+    Ok(projection_state)
 }
 
 pub(super) fn query_node_status_projection(
@@ -1101,19 +1066,7 @@ pub(super) fn drain_library_usage_projection(
         });
     }
     let tx = ledger.conn.transaction()?;
-    let state = {
-        let mut stmt = tx.prepare(
-            "SELECT projection_name, projection_version, last_applied_event_seq, status,
-                    rebuilt_at_ms, updated_at_ms
-             FROM projection_state
-             WHERE projection_name = ?1",
-        )?;
-        stmt.query_row(
-            params![LIBRARY_USAGE_PROJECTION_NAME],
-            projection_state_from_row,
-        )
-        .optional()?
-    };
+    let state = query_projection_state(&tx, LIBRARY_USAGE_PROJECTION_NAME)?;
 
     let mut last_applied_event_seq = state
         .as_ref()
@@ -1142,42 +1095,22 @@ pub(super) fn drain_library_usage_projection(
         last_applied_event_seq = event.event_seq;
     }
 
-    let updated_at_ms = now_ms();
     let projection_status = if has_more_events {
         ProjectionStatus::Rebuilding
     } else {
         ProjectionStatus::Current
     };
-    tx.execute(
-        "INSERT INTO projection_state
-            (projection_name, projection_version, last_applied_event_seq, status,
-             rebuilt_at_ms, updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(projection_name) DO UPDATE SET
-            projection_version = excluded.projection_version,
-            last_applied_event_seq = excluded.last_applied_event_seq,
-            status = excluded.status,
-            rebuilt_at_ms = excluded.rebuilt_at_ms,
-            updated_at_ms = excluded.updated_at_ms",
-        params![
-            LIBRARY_USAGE_PROJECTION_NAME,
-            LIBRARY_USAGE_PROJECTION_VERSION,
-            last_applied_event_seq,
-            projection_status.as_db(),
-            rebuilt_at_ms,
-            updated_at_ms,
-        ],
+    let projection_state = write_projection_success_state(
+        &tx,
+        LIBRARY_USAGE_PROJECTION_NAME,
+        LIBRARY_USAGE_PROJECTION_VERSION,
+        last_applied_event_seq,
+        projection_status,
+        rebuilt_at_ms,
     )?;
     tx.commit()?;
 
-    Ok(ProjectionStateRecord {
-        projection_name: LIBRARY_USAGE_PROJECTION_NAME.to_string(),
-        projection_version: LIBRARY_USAGE_PROJECTION_VERSION,
-        last_applied_event_seq,
-        status: projection_status,
-        rebuilt_at_ms,
-        updated_at_ms,
-    })
+    Ok(projection_state)
 }
 
 pub(super) fn query_library_usage_projection(
@@ -3840,6 +3773,9 @@ fn projection_state_from_row(row: &Row<'_>) -> rusqlite::Result<ProjectionStateR
         status: row.get::<_, String>(3).and_then(parse_projection_status)?,
         rebuilt_at_ms: row.get(4)?,
         updated_at_ms: row.get(5)?,
+        last_error: row.get(6)?,
+        last_error_at_ms: row.get(7)?,
+        last_failed_event_seq: row.get(8)?,
     })
 }
 
