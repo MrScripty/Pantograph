@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
@@ -838,6 +840,67 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
         .expect("global io artifact query");
     assert_eq!(global_response.artifacts.len(), 3);
     assert_eq!(global_response.retention_summary[0].artifact_count, 3);
+}
+
+#[test]
+fn workflow_io_artifact_query_groups_node_input_and_output_records_by_run_node() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    for (node_id, artifact_role, artifact_id) in [
+        ("node-a", "node_input", "artifact-a-in"),
+        ("node-a", "node_output", "artifact-a-out"),
+        ("node-b", "node_output", "artifact-b-out"),
+    ] {
+        ledger
+            .append_diagnostic_event(sample_io_artifact_event(
+                node_id,
+                artifact_role,
+                artifact_id,
+            ))
+            .expect("io artifact event");
+    }
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Retained),
+            retention_policy_id: Some("ephemeral".to_string()),
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("io artifact query");
+
+    let mut roles_by_node: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for artifact in &response.artifacts {
+        roles_by_node
+            .entry(artifact.node_id.clone().expect("node id"))
+            .or_default()
+            .push(artifact.artifact_role.clone());
+    }
+
+    assert_eq!(response.artifacts.len(), 3);
+    assert_eq!(
+        roles_by_node.get("node-a").cloned(),
+        Some(vec!["node_input".to_string(), "node_output".to_string()])
+    );
+    assert_eq!(
+        roles_by_node.get("node-b").cloned(),
+        Some(vec!["node_output".to_string()])
+    );
+    assert_eq!(
+        response.retention_summary[0].retention_state,
+        IoArtifactRetentionState::Retained
+    );
+    assert_eq!(response.retention_summary[0].artifact_count, 3);
 }
 
 #[test]

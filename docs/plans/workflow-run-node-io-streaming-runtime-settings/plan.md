@@ -557,7 +557,7 @@ retention and projection systems.
 - [ ] Add a failing vertical-slice test for
   `text-input -> pass-through/mock-processing -> text-output` that asserts
   run-detail node status, inputs, outputs, and terminal workflow output.
-- [ ] Add or update a workflow-service projection test proving
+- [x] Add or update a workflow-service projection test proving
   `IoArtifactObserved` records with `node_input` and `node_output` roles are
   queryable by run id and grouped by node for the run graph page.
 - [ ] Route retained node IO through the Milestone 2 evidence adapter rather
@@ -610,7 +610,9 @@ bodies when available. Resolved node inputs now flow from node-engine
 `TaskInputsResolved` events through the same ledger projection as `node_input`
 I/O artifacts. Existing GraphPage read-side code already queries
 `workflow_io_artifact_query` and summarizes node artifacts for the run snapshot.
-Preview/truncation policy and large/binary descriptor coverage remain open.
+Workflow-service projection coverage now proves `node_input` and `node_output`
+records can be fetched together by run id and grouped by node for the run graph
+page. Preview/truncation policy remains open.
 
 ### Milestone 4: Cached Execution IO And Artifact Retention
 
@@ -1008,6 +1010,12 @@ coverage.
   reason, and retention summary counts for run inspection.
 - 2026-05-09: Verification passed:
   `cargo test -p pantograph-workflow-service workflow_io_artifact_query_exposes`.
+- 2026-05-09: Run-graph node I/O projection slice added workflow-service
+  coverage proving retained `node_input` and `node_output` records can be
+  queried together by workflow run id, then grouped by backend node id for the
+  run graph page without a per-node query loop.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_io_artifact_query_groups_node_input_and_output_records_by_run_node`.
 
 ## Follow-Up Findings
 
