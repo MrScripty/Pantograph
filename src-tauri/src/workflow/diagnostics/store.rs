@@ -111,6 +111,7 @@ impl WorkflowDiagnosticsStore {
         }
     }
 
+    #[cfg(test)]
     pub fn with_timing_ledger(
         retained_event_limit: usize,
         timing_ledger: pantograph_workflow_service::SqliteDiagnosticsLedger,
@@ -124,6 +125,7 @@ impl WorkflowDiagnosticsStore {
         }
     }
 
+    #[cfg(test)]
     pub fn with_default_timing_ledger(
         timing_ledger: pantograph_workflow_service::SqliteDiagnosticsLedger,
     ) -> Self {

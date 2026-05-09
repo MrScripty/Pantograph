@@ -249,16 +249,16 @@ uncoordinated durable diagnostics ledger owner.
 
 **Tasks:**
 
-- [ ] Audit `WorkflowDiagnosticsStore` and Tauri workflow diagnostics modules
+- [x] Audit `WorkflowDiagnosticsStore` and Tauri workflow diagnostics modules
       for durable ledger reads/writes still needed by active UI paths.
-- [ ] Keep `WorkflowDiagnosticsStore` as the live in-memory runtime,
+- [x] Keep `WorkflowDiagnosticsStore` as the live in-memory runtime,
       scheduler, trace, and debug-overlay projection boundary where those paths
       are still needed.
 - [ ] Add or reuse a narrow workflow-service diagnostics persistence facade for
       durable timing, run-summary, and node-status event writes.
 - [ ] Route `WorkflowDiagnosticsStore` durable write needs through that facade
       instead of giving it its own `SqliteDiagnosticsLedger`.
-- [ ] Update `src-tauri/src/app_setup.rs` so app startup does not open two
+- [x] Update `src-tauri/src/app_setup.rs` so app startup does not open two
       independent durable diagnostics ledger connections for the same file
       unless they are explicitly configured and owned.
 - [ ] Add tests or startup assertions covering single-owner setup.
@@ -270,7 +270,12 @@ uncoordinated durable diagnostics ledger owner.
 - Targeted Tauri workflow diagnostics tests.
 - `cargo test -p pantograph-workflow-service diagnostics`
 
-**Status:** Not started.
+**Status:** In progress. App startup no longer opens a second
+`workflow-diagnostics.sqlite` connection for `WorkflowDiagnosticsStore`; the
+store now keeps live runtime, scheduler, trace, and debug overlays in memory.
+Durable trace timing persistence remains disabled in the Tauri live diagnostics
+store until a narrow workflow-service persistence facade is added, so that
+facade remains the next ownership-split task.
 
 ### Milestone 3: Backend Projection Refresh Owner And Durable Health Contract
 

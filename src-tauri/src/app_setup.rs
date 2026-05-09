@@ -123,17 +123,8 @@ pub fn run_app() -> AppStartupResult<()> {
             log::warn!("failed to repair abandoned workflow run diagnostics: {error}");
         }
     }
-    let workflow_timing_ledger =
-        pantograph_workflow_service::SqliteDiagnosticsLedger::open(&workflow_timing_ledger_path)
-            .map_err(|error| {
-                startup_error(format!(
-                    "failed to open workflow diagnostics ledger {:?}: {error}",
-                    workflow_timing_ledger_path
-                ))
-            })?;
-    let workflow_diagnostics_store: workflow::commands::SharedWorkflowDiagnosticsStore = Arc::new(
-        workflow::WorkflowDiagnosticsStore::with_default_timing_ledger(workflow_timing_ledger),
-    );
+    let workflow_diagnostics_store: workflow::commands::SharedWorkflowDiagnosticsStore =
+        Arc::new(workflow::WorkflowDiagnosticsStore::default());
     let orchestrations_path = project_root.join(".pantograph/orchestrations");
     let workflow_graph_store: workflow::commands::SharedWorkflowGraphStore = Arc::new(
         pantograph_workflow_service::FileSystemWorkflowGraphStore::new(project_root.clone()),
