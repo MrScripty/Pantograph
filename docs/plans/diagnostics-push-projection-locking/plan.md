@@ -411,18 +411,18 @@ hidden writes, while a refresh owner updates those projections.
 
 **Tasks:**
 
-- [ ] Convert one vertical slice first, preferably selected-run detail:
+- [x] Convert one vertical slice first, preferably selected-run detail:
       refresh owner drains run detail and node status; `workflow_run_detail_query`
       only reads.
-- [ ] Add a test that fails if `workflow_run_detail_query` mutates projection
+- [x] Add a test that fails if `workflow_run_detail_query` mutates projection
       state.
-- [ ] Add a full-path test: append diagnostics event, run refresh owner, query
+- [x] Add a full-path test: append diagnostics event, run refresh owner, query
       run detail, observe updated projection.
-- [ ] Add a stale-start test where a page/query can detect projection lag from
+- [x] Add a stale-start test where a page/query can detect projection lag from
       projection state before the refresh owner catches up.
-- [ ] Keep current command response DTO shape stable.
-- [ ] Record any projection freshness behavior in response metadata.
-- [ ] Update tests that currently encode "query drains projection" behavior so
+- [x] Keep current command response DTO shape stable.
+- [x] Record any projection freshness behavior in response metadata.
+- [x] Update tests that currently encode "query drains projection" behavior so
       they explicitly refresh first and then assert read-only query behavior.
 
 **Verification:**
@@ -431,7 +431,11 @@ hidden writes, while a refresh owner updates those projections.
 - Targeted mutation/freshness tests.
 - `cargo check -p pantograph-workflow-service`
 
-**Status:** Not started.
+**Status:** Completed 2026-05-09. `workflow_run_detail_query` now reads
+materialized `RunDetail` and `NodeStatus` projections without draining them,
+returns non-persisted `NeedsRebuild` projection state when no materialized
+state exists, and direct tests explicitly refresh through the projection
+refresh owner before reading.
 
 ### Milestone 5: Expand Read-Only Queries Horizontally
 

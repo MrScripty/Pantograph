@@ -783,29 +783,14 @@ impl WorkflowService {
         &self,
         request: WorkflowRunDetailQueryRequest,
     ) -> Result<WorkflowRunDetailQueryResponse, WorkflowServiceError> {
-        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
-        if projection_batch_size > 500 {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "projection_batch_size exceeds maximum 500".to_string(),
-            ));
-        }
+        validate_optional_projection_batch_size(
+            "projection_batch_size",
+            request.projection_batch_size,
+        )?;
         let query = request.into_run_detail_query()?;
-        let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = match ledger.drain_run_detail_projection(projection_batch_size) {
-            Ok(projection_state) => projection_state,
-            Err(error) => {
-                drop(ledger);
-                return Err(self.projection_error(
-                    projection_error_scope(
-                        "run_detail",
-                        "drain",
-                        Some(query.workflow_run_id.clone()),
-                        None,
-                    ),
-                    WorkflowServiceError::from(error),
-                ));
-            }
-        };
+        let ledger = self.diagnostics_ledger_guard()?;
+        let projection_state =
+            read_projection_state_or_empty(&*ledger, WorkflowDiagnosticsProjectionKind::RunDetail)?;
         let run = match ledger.query_run_detail_projection(query.clone()) {
             Ok(run) => run,
             Err(error) => {
@@ -821,22 +806,10 @@ impl WorkflowService {
                 ));
             }
         };
-        let node_projection_state = match ledger.drain_node_status_projection(projection_batch_size)
-        {
-            Ok(projection_state) => projection_state,
-            Err(error) => {
-                drop(ledger);
-                return Err(self.projection_error(
-                    projection_error_scope(
-                        "run_detail_node_status",
-                        "drain",
-                        Some(query.workflow_run_id.clone()),
-                        None,
-                    ),
-                    WorkflowServiceError::from(error),
-                ));
-            }
-        };
+        let node_projection_state = read_projection_state_or_empty(
+            &*ledger,
+            WorkflowDiagnosticsProjectionKind::NodeStatus,
+        )?;
         let node_query = NodeStatusProjectionQuery {
             workflow_run_id: Some(query.workflow_run_id.clone()),
             limit: 500,
@@ -1425,6 +1398,44 @@ fn validate_projection_batch_size(
         )));
     }
     Ok(())
+}
+
+fn validate_optional_projection_batch_size(
+    field: &'static str,
+    batch_size: Option<u32>,
+) -> Result<(), WorkflowServiceError> {
+    if let Some(batch_size) = batch_size {
+        validate_projection_batch_size(field, batch_size)?;
+    }
+    Ok(())
+}
+
+fn read_projection_state_or_empty(
+    ledger: &impl DiagnosticsLedgerRepository,
+    projection_kind: WorkflowDiagnosticsProjectionKind,
+) -> Result<ProjectionStateRecord, WorkflowServiceError> {
+    ledger
+        .projection_state(projection_kind.projection_name())
+        .map_err(WorkflowServiceError::from)
+        .map(|projection_state| {
+            projection_state.unwrap_or_else(|| empty_projection_state(projection_kind))
+        })
+}
+
+fn empty_projection_state(
+    projection_kind: WorkflowDiagnosticsProjectionKind,
+) -> ProjectionStateRecord {
+    ProjectionStateRecord {
+        projection_name: projection_kind.projection_name().to_string(),
+        projection_version: projection_kind.projection_version(),
+        last_applied_event_seq: 0,
+        status: ProjectionStatus::NeedsRebuild,
+        rebuilt_at_ms: None,
+        updated_at_ms: 0,
+        last_error: None,
+        last_error_at_ms: None,
+        last_failed_event_seq: None,
+    }
 }
 
 fn drain_projection_kind(

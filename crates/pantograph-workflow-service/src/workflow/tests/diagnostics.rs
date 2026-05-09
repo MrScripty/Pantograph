@@ -568,7 +568,7 @@ fn workflow_marks_abandoned_nonterminal_runs_failed() {
 }
 
 #[test]
-fn workflow_run_detail_query_drains_and_reads_projection() {
+fn workflow_run_detail_query_reads_refreshed_projection() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
         .append_diagnostic_event(sample_run_snapshot_event())
@@ -600,6 +600,7 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
         .append_diagnostic_event(node_event)
         .expect("node status event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_run_detail_and_node_status(&service, 10);
 
     let response = service
         .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
@@ -660,6 +661,44 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
 }
 
 #[test]
+fn workflow_run_detail_query_does_not_mutate_projection_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            projection_batch_size: Some(10),
+        })
+        .expect("run detail query");
+
+    assert!(response.run.is_none());
+    assert!(response.node_statuses.is_empty());
+    assert_eq!(
+        response.projection_state.status,
+        ProjectionStatus::NeedsRebuild
+    );
+    assert_eq!(response.projection_state.last_applied_event_seq, 0);
+    assert_eq!(
+        response.node_projection_state.status,
+        ProjectionStatus::NeedsRebuild
+    );
+
+    let ledger = service.diagnostics_ledger_guard().expect("ledger guard");
+    assert!(ledger
+        .projection_state("run_detail")
+        .expect("run detail state query")
+        .is_none());
+    assert!(ledger
+        .projection_state("node_status")
+        .expect("node status state query")
+        .is_none());
+}
+
+#[test]
 fn workflow_run_inspection_query_returns_factual_run_snapshot_parts() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
@@ -691,6 +730,7 @@ fn workflow_run_inspection_query_returns_factual_run_snapshot_parts() {
     let service = WorkflowService::with_ephemeral_attribution_store()
         .expect("service")
         .with_diagnostics_ledger(ledger);
+    refresh_run_detail_and_node_status(&service, 10);
 
     let response = service
         .workflow_run_inspection_query(WorkflowRunInspectionQueryRequest {
@@ -796,6 +836,21 @@ fn workflow_scheduler_estimate_query_returns_estimate_projection() {
         Some(SchedulerModelCacheState::Unknown)
     );
     assert_eq!(response.projection_state.last_applied_event_seq, 2);
+}
+
+fn refresh_run_detail_and_node_status(service: &WorkflowService, batch_size: u32) {
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![
+                WorkflowDiagnosticsProjectionKind::RunDetail,
+                WorkflowDiagnosticsProjectionKind::NodeStatus,
+            ],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size,
+        })
+        .expect("projection refresh");
 }
 
 #[test]

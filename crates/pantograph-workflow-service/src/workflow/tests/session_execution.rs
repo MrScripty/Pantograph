@@ -1245,14 +1245,30 @@ async fn workflow_execution_session_run_records_failed_terminal_event_with_sanit
     assert!(error_event.payload_json.contains("backend not ready"));
     assert!(!error_event.payload_json.contains("\\n"));
 
+    let terminal_workflow_run_id = terminal_event
+        .workflow_run_id
+        .as_ref()
+        .expect("terminal event workflow run id")
+        .as_str()
+        .to_string();
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![
+                WorkflowDiagnosticsProjectionKind::RunDetail,
+                WorkflowDiagnosticsProjectionKind::NodeStatus,
+            ],
+            workflow_run_id: Some(terminal_workflow_run_id.clone()),
+            workflow_id: terminal_event
+                .workflow_id
+                .as_ref()
+                .map(|workflow_id| workflow_id.as_str().to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 20,
+        })
+        .expect("projection refresh");
     let detail = service
         .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
-            workflow_run_id: terminal_event
-                .workflow_run_id
-                .as_ref()
-                .expect("terminal event workflow run id")
-                .as_str()
-                .to_string(),
+            workflow_run_id: terminal_workflow_run_id,
             projection_batch_size: Some(20),
         })
         .expect("run detail query")
@@ -1434,14 +1450,30 @@ async fn workflow_execution_session_runtime_load_failure_records_canonical_error
         "\"canonical_error_event_id\":\"{}\"",
         error_event.event_id
     )));
+    let terminal_workflow_run_id = terminal_event
+        .workflow_run_id
+        .as_ref()
+        .expect("terminal event workflow run id")
+        .as_str()
+        .to_string();
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![
+                WorkflowDiagnosticsProjectionKind::RunDetail,
+                WorkflowDiagnosticsProjectionKind::NodeStatus,
+            ],
+            workflow_run_id: Some(terminal_workflow_run_id.clone()),
+            workflow_id: terminal_event
+                .workflow_id
+                .as_ref()
+                .map(|workflow_id| workflow_id.as_str().to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 30,
+        })
+        .expect("projection refresh");
     let detail = service
         .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
-            workflow_run_id: terminal_event
-                .workflow_run_id
-                .as_ref()
-                .expect("terminal event workflow run id")
-                .as_str()
-                .to_string(),
+            workflow_run_id: terminal_workflow_run_id,
             projection_batch_size: Some(30),
         })
         .expect("run detail query")
