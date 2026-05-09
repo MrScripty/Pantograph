@@ -1027,6 +1027,7 @@ fn workflow_run_detail_query_contract_snapshot() {
             runtime_version: Some("0.4.0".to_string()),
             task_id: Some("text_generation".to_string()),
             selected_backend_key: Some("llama_cpp".to_string()),
+            runtime_settings: None,
             model_id: Some("pumas://models/tiny-gguf".to_string()),
             model_version: Some("rev-1".to_string()),
             execution_cache_status: Some(NodeExecutionCacheStatus::FreshExecution),
@@ -1053,7 +1054,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         },
         node_projection_state: ProjectionStateRecord {
             projection_name: "node_status".to_string(),
-            projection_version: 5,
+            projection_version: 6,
             last_applied_event_seq: 16,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -1157,7 +1158,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         },
         "node_projection_state": {
             "projection_name": "node_status",
-            "projection_version": 5,
+            "projection_version": 6,
             "last_applied_event_seq": 16,
             "status": "current",
             "rebuilt_at_ms": null,
@@ -1394,6 +1395,7 @@ fn workflow_node_status_query_contract_snapshot() {
             runtime_version: Some("0.4.0".to_string()),
             task_id: Some("image_generation".to_string()),
             selected_backend_key: Some("mock".to_string()),
+            runtime_settings: None,
             model_id: Some("model-1".to_string()),
             model_version: Some("rev-1".to_string()),
             execution_cache_status: Some(NodeExecutionCacheStatus::CacheHit),
@@ -1412,7 +1414,7 @@ fn workflow_node_status_query_contract_snapshot() {
         }],
         projection_state: ProjectionStateRecord {
             projection_name: "node_status".to_string(),
-            projection_version: 5,
+            projection_version: 6,
             last_applied_event_seq: 31,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -1463,7 +1465,7 @@ fn workflow_node_status_query_contract_snapshot() {
         }],
         "projection_state": {
             "projection_name": "node_status",
-            "projection_version": 5,
+            "projection_version": 6,
             "last_applied_event_seq": 31,
             "status": "current",
             "rebuilt_at_ms": null,

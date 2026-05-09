@@ -1040,8 +1040,8 @@ pub(super) fn query_node_status_projection(
     let mut stmt = ledger.conn.prepare(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, node_id, node_type, node_version, runtime_id,
-                runtime_version, task_id, selected_backend_key, model_id, model_version,
-                execution_cache_status, status, started_at_ms,
+                runtime_version, task_id, selected_backend_key, runtime_settings_json,
+                model_id, model_version, execution_cache_status, status, started_at_ms,
                 completed_at_ms, duration_ms, error, error_event_id, canonical_error_event_id,
                 error_severity, error_phase, error_code, last_event_seq, last_updated_at_ms
          FROM node_status_projection
@@ -1426,7 +1426,11 @@ fn node_status_events_after(
                 payload_size_bytes, payload_ref, payload_json
          FROM diagnostic_events
          WHERE event_seq > ?1
-           AND event_kind IN ('node.execution_status', 'diagnostic.error_occurred')
+           AND event_kind IN (
+               'node.execution_status',
+               'diagnostic.error_occurred',
+               'inference.execution_diagnostic_observed'
+           )
          ORDER BY event_seq
          LIMIT ?2",
     )?;
@@ -2150,6 +2154,7 @@ fn apply_node_status_projection_event(
         error_code,
         task_id,
         selected_backend_key,
+        runtime_settings_json,
         execution_cache_status,
     ) = match &payload {
         DiagnosticEventPayload::NodeExecutionStatus(payload) => (
@@ -2165,8 +2170,33 @@ fn apply_node_status_projection_event(
             None,
             payload.task_id.clone(),
             payload.selected_backend_key.clone(),
+            None,
             payload.execution_cache_status,
         ),
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload)
+            if payload.runtime_settings.is_some() =>
+        {
+            (
+                NodeExecutionProjectionStatus::Running,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(payload.task_id.clone()),
+                payload.selected_backend_key.clone(),
+                payload
+                    .runtime_settings
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
+                None,
+            )
+        }
         DiagnosticEventPayload::DiagnosticErrorOccurred(payload)
             if payload.scope == crate::event::DiagnosticErrorScopeKind::Node
                 && payload.severity == DiagnosticErrorSeverity::Fatal =>
@@ -2182,6 +2212,7 @@ fn apply_node_status_projection_event(
                 Some(payload.severity),
                 Some(payload.phase.clone()),
                 Some(payload.code.clone()),
+                None,
                 None,
                 None,
                 None,
@@ -2211,12 +2242,13 @@ fn apply_node_status_projection_event(
         "INSERT INTO node_status_projection
             (workflow_run_id, workflow_id, workflow_version_id,
              workflow_semantic_version, node_id, node_type, node_version, runtime_id,
-             runtime_version, task_id, selected_backend_key, model_id, model_version,
+             runtime_version, task_id, selected_backend_key, runtime_settings_json,
+             model_id, model_version,
              execution_cache_status, status, started_at_ms,
              completed_at_ms, duration_ms, error, error_event_id, canonical_error_event_id,
              error_severity, error_phase, error_code, last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
+                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)
          ON CONFLICT(workflow_run_id, node_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = excluded.workflow_version_id,
@@ -2227,6 +2259,7 @@ fn apply_node_status_projection_event(
             runtime_version = COALESCE(excluded.runtime_version, node_status_projection.runtime_version),
             task_id = COALESCE(excluded.task_id, node_status_projection.task_id),
             selected_backend_key = COALESCE(excluded.selected_backend_key, node_status_projection.selected_backend_key),
+            runtime_settings_json = COALESCE(excluded.runtime_settings_json, node_status_projection.runtime_settings_json),
             model_id = COALESCE(excluded.model_id, node_status_projection.model_id),
             model_version = COALESCE(excluded.model_version, node_status_projection.model_version),
             execution_cache_status = COALESCE(excluded.execution_cache_status, node_status_projection.execution_cache_status),
@@ -2257,6 +2290,7 @@ fn apply_node_status_projection_event(
             event.runtime_version.as_deref(),
             task_id.as_deref(),
             selected_backend_key.as_deref(),
+            runtime_settings_json.as_deref(),
             event.model_id.as_deref(),
             event.model_version.as_deref(),
             execution_cache_status.map(NodeExecutionCacheStatus::as_db),
@@ -3643,30 +3677,35 @@ fn node_status_projection_from_row(row: &Row<'_>) -> rusqlite::Result<NodeStatus
         runtime_version: row.get(8)?,
         task_id: row.get(9)?,
         selected_backend_key: row.get(10)?,
-        model_id: row.get(11)?,
-        model_version: row.get(12)?,
+        runtime_settings: row
+            .get::<_, Option<String>>(11)?
+            .map(|value| serde_json::from_str(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        model_id: row.get(12)?,
+        model_version: row.get(13)?,
         execution_cache_status: row
-            .get::<_, Option<String>>(13)?
+            .get::<_, Option<String>>(14)?
             .map(|value| NodeExecutionCacheStatus::from_db(&value))
             .transpose()
             .map_err(sqlite_conversion_error)?,
         status: row
-            .get::<_, String>(14)
+            .get::<_, String>(15)
             .and_then(parse_node_execution_projection_status)?,
-        started_at_ms: row.get(15)?,
-        completed_at_ms: row.get(16)?,
-        duration_ms: row.get::<_, Option<i64>>(17)?.map(i64_to_u64_saturating),
-        error: row.get(18)?,
-        error_event_id: row.get(19)?,
-        canonical_error_event_id: row.get(20)?,
+        started_at_ms: row.get(16)?,
+        completed_at_ms: row.get(17)?,
+        duration_ms: row.get::<_, Option<i64>>(18)?.map(i64_to_u64_saturating),
+        error: row.get(19)?,
+        error_event_id: row.get(20)?,
+        canonical_error_event_id: row.get(21)?,
         error_severity: row
-            .get::<_, Option<String>>(21)?
+            .get::<_, Option<String>>(22)?
             .map(parse_diagnostic_error_severity)
             .transpose()?,
-        error_phase: row.get(22)?,
-        error_code: row.get(23)?,
-        last_event_seq: row.get(24)?,
-        last_updated_at_ms: row.get(25)?,
+        error_phase: row.get(23)?,
+        error_code: row.get(24)?,
+        last_event_seq: row.get(25)?,
+        last_updated_at_ms: row.get(26)?,
     })
 }
 

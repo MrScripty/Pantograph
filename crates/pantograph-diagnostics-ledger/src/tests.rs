@@ -12,20 +12,21 @@ use crate::{
     DiagnosticsQuery, ExecutionGuaranteeLevel, InferenceCompatibilityIssueDiagnosticSummary,
     InferenceCompatibilityReportDiagnosticSummary, InferenceExecutionDiagnosticObservedPayload,
     InferenceKvCacheDiagnosticSummary, InferenceOptionDiagnosticSummary,
-    InferenceOptionSupportCounts, InferenceUsageDiagnosticSummary, IoArtifactAccessMode,
-    IoArtifactFormatMetadata, IoArtifactLifecycleState, IoArtifactObservedPayload,
-    IoArtifactPayloadKind, IoArtifactProjectionQuery, IoArtifactRetentionState,
-    IoArtifactRetentionSummaryQuery, IoArtifactRole, LibraryAssetAccessedPayload,
-    LibraryAssetCacheStatus, LibraryAssetOperation, LibraryUsageProjectionQuery, LicenseSnapshot,
-    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionCacheStatus,
-    NodeExecutionProjectionStatus, NodeExecutionStatusPayload, NodeStatusProjectionQuery,
-    OutputMeasurementUnavailableReason, OutputModality, ProjectionStateUpdate, ProjectionStatus,
-    PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionArtifactStateChangedPayload,
-    RetentionClass, RetentionPolicyActorScope, RetentionPolicyChangedPayload,
-    RunDetailProjectionQuery, RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus,
-    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
-    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
-    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    InferenceOptionSupportCounts, InferenceRuntimeSettingDiagnosticSummary,
+    InferenceRuntimeSettingsDiagnosticSummary, InferenceUsageDiagnosticSummary,
+    IoArtifactAccessMode, IoArtifactFormatMetadata, IoArtifactLifecycleState,
+    IoArtifactObservedPayload, IoArtifactPayloadKind, IoArtifactProjectionQuery,
+    IoArtifactRetentionState, IoArtifactRetentionSummaryQuery, IoArtifactRole,
+    LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation,
+    LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
+    ModelOutputMeasurement, NodeExecutionCacheStatus, NodeExecutionProjectionStatus,
+    NodeExecutionStatusPayload, NodeStatusProjectionQuery, OutputMeasurementUnavailableReason,
+    OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
+    PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
+    RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
+    RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
+    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
     SchedulerQueueControlPayload, SchedulerQueuePlacementPayload,
@@ -2724,6 +2725,73 @@ fn node_status_projection_preserves_execution_cache_status() {
 }
 
 #[test]
+fn node_status_projection_preserves_latest_runtime_settings() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut settings_event = sample_inference_execution_diagnostic_event();
+    settings_event.node_id = Some("node_text".to_string());
+    settings_event.runtime_id = Some("llama_cpp".to_string());
+    if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) =
+        &mut settings_event.payload
+    {
+        payload.task_id = "runtime_settings".to_string();
+        payload.selected_backend_key = Some("llama_cpp".to_string());
+        payload.selected_device_id = Some("CUDA0".to_string());
+        payload.runtime_settings = Some(InferenceRuntimeSettingsDiagnosticSummary {
+            backend_key: "llama_cpp".to_string(),
+            settings: vec![
+                InferenceRuntimeSettingDiagnosticSummary {
+                    name: "device".to_string(),
+                    value: "CUDA0".to_string(),
+                    source: "workflow_default".to_string(),
+                },
+                InferenceRuntimeSettingDiagnosticSummary {
+                    name: "gpu_layers".to_string(),
+                    value: "42".to_string(),
+                    source: "run_override".to_string(),
+                },
+            ],
+        });
+    }
+    ledger
+        .append_diagnostic_event(settings_event)
+        .expect("settings diagnostic appends");
+    ledger
+        .append_diagnostic_event(sample_node_status_event(
+            "workflow_run_alpha",
+            "node_text",
+            NodeExecutionProjectionStatus::Completed,
+            20,
+        ))
+        .expect("completed status appends");
+
+    ledger
+        .drain_node_status_projection(10)
+        .expect("node status projection drains");
+    let records = ledger
+        .query_node_status_projection(NodeStatusProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: Some("node_text".to_string()),
+            status: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("node status projection loads");
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].status, NodeExecutionProjectionStatus::Completed);
+    let runtime_settings = records[0]
+        .runtime_settings
+        .as_ref()
+        .expect("runtime settings projection");
+    assert_eq!(runtime_settings.backend_key, "llama_cpp");
+    assert!(runtime_settings.settings.iter().any(|setting| {
+        setting.name == "gpu_layers" && setting.value == "42" && setting.source == "run_override"
+    }));
+}
+
+#[test]
 fn projection_rebuild_resets_projection_rows_and_cursor() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
@@ -3541,6 +3609,7 @@ fn current_schema_repairs_all_drifted_projection_tables() {
             "runtime_version",
             "task_id",
             "selected_backend_key",
+            "runtime_settings_json",
             "model_id",
             "model_version",
             "execution_cache_status",

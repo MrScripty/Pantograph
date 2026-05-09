@@ -19,7 +19,7 @@ pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 6;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
-pub const NODE_STATUS_PROJECTION_VERSION: i64 = 5;
+pub const NODE_STATUS_PROJECTION_VERSION: i64 = 6;
 pub const MAX_DIAGNOSTIC_ERROR_TEXT_LEN: usize = 4_096;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT: usize = 8;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
@@ -2562,6 +2562,8 @@ pub struct NodeStatusProjectionRecord {
     pub runtime_version: Option<String>,
     pub task_id: Option<String>,
     pub selected_backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_settings: Option<InferenceRuntimeSettingsDiagnosticSummary>,
     pub model_id: Option<String>,
     pub model_version: Option<String>,
     pub execution_cache_status: Option<NodeExecutionCacheStatus>,

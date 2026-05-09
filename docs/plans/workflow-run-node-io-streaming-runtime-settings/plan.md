@@ -754,7 +754,7 @@ runtime policy into Pumas or the frontend.
 - [x] Add settings to the canonical inference/runtime settings contract with
   backend-specific validation and bounded diagnostics.
 - [x] Capture effective runtime settings in bounded diagnostics events.
-- [ ] Surface the latest effective runtime settings in the run-detail
+- [x] Surface the latest effective runtime settings in the run-detail
   run-inspection read model after the backend projection shape is stable.
 - [x] Capture effective settings with source attribution when available so
   operators can tell whether a value came from Pumas, workflow defaults, run
@@ -1144,6 +1144,16 @@ coverage.
   `cargo test -p pantograph-embedded-runtime runtime_settings_progress_detail_maps_to_bounded_inference_diagnostic_summary`,
   `cargo check -p pantograph-embedded-runtime`, `cargo fmt`, and
   `git diff --check`.
+- 2026-05-09: Runtime-settings run-inspection slice added
+  `runtime_settings` to the diagnostics-ledger node-status projection and
+  bumped the node-status projection version so the backend run-detail and
+  node-status query responses expose the latest bounded effective llama.cpp
+  settings without making Tauri or frontend state authoritative.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger node_status_projection`,
+  `cargo test -p pantograph-workflow-service --test contract workflow_node_status_query_contract_snapshot`,
+  and
+  `cargo test -p pantograph-workflow-service --test contract workflow_run_detail_query_contract_snapshot`.
 
 ## Follow-Up Findings
 
