@@ -458,11 +458,11 @@ retention and run-detail path before implementation changes.
   artifact identity.
 - [x] Record source findings in this plan's execution notes with file/function
   references.
-- [ ] Confirm whether the retained-run graph should consume node IO through an
+- [x] Confirm whether the retained-run graph should consume node IO through an
   existing composite run-detail DTO, direct artifact query calls, or a small
   backend read-model that joins run detail and IO artifact projections without
   duplicating persisted facts.
-- [ ] Identify whether GraphPage currently composes graph, node status, and IO
+- [x] Identify whether GraphPage currently composes graph, node status, and IO
   artifact projections in frontend state in a way that should move behind a
   backend run-inspection read model.
 - [x] Record any discovered standards violations, stubs, or dead projection
@@ -786,24 +786,24 @@ factual read model for a single run inspection view from existing persisted
 projections while leaving display decisions in the frontend.
 
 **Tasks:**
-- [ ] Add a backend query shape only if Milestone 1 confirms GraphPage needs
+- [x] Add a backend query shape only if Milestone 1 confirms GraphPage needs
   graph snapshot, node statuses, and IO artifacts together for one coherent
   executed-run view.
-- [ ] Keep diagnostics ledger projections and ArtifactStore as the persisted
+- [x] Keep diagnostics ledger projections and ArtifactStore as the persisted
   sources. The new query must be a read composition, not a new persistence
   subsystem.
-- [ ] Return factual data only: graph snapshot, node statuses, IO artifact
+- [x] Return factual data only: graph snapshot, node statuses, IO artifact
   records or summaries, retention state, handles, stable IDs, errors, and
   projection freshness.
-- [ ] Return artifact descriptors, previews, and handles by default. Do not
+- [x] Return artifact descriptors, previews, and handles by default. Do not
   include full artifact bodies in the run-inspection read model unless a
   bounded inline preview limit explicitly allows it.
-- [ ] Ensure the read model query is keyed by run id and performs bounded
+- [x] Ensure the read model query is keyed by run id and performs bounded
   joins/queries rather than forcing the frontend to issue one query per node or
   one artifact-body read per port.
-- [ ] Do not return presentation data such as cards, badges, colors, display
+- [x] Do not return presentation data such as cards, badges, colors, display
   labels, panel grouping, selected-node state, or frontend visual ordering.
-- [ ] Include projection state/cursor information for each joined source so the
+- [x] Include projection state/cursor information for each joined source so the
   frontend can tell whether the view is current or partially stale.
 - [ ] Replace frontend-side multi-query composition in GraphPage only after the
   backend read model is covered by contract and frontend DTO tests.
@@ -818,7 +818,10 @@ projections while leaving display decisions in the frontend.
 - Frontend tests prove display grouping/labels/empty states remain owned by
   frontend presenters/components rather than backend DTOs.
 
-**Status:** Not started
+**Status:** Partially implemented. Backend `WorkflowRunInspectionQuery` now
+composes the immutable run graph, run detail, node-status projection, IO
+artifact descriptors, retention summary, and per-source projection states from
+existing persisted sources. Frontend GraphPage adoption remains.
 
 ### Milestone 8: Standards, Boundaries, And Regression Gate
 
@@ -1164,6 +1167,17 @@ coverage.
 - 2026-05-09: Verification passed:
   `node --experimental-strip-types --test src/components/nodes/workflow/expandSettingsDisplay.test.ts`,
   `npm run typecheck`, `npm run build`, and `git diff --check`.
+- 2026-05-09: Backend run-inspection read-model slice added
+  `WorkflowRunInspectionQuery` to `pantograph-workflow-service`. The query is
+  run-id keyed and composes the existing immutable run graph, run detail,
+  node-status projection, IO artifact descriptor projection, retention summary,
+  and projection states without adding new persisted facts or frontend
+  presentation fields.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_run_inspection_query`,
+  `cargo test -p pantograph-workflow-service --test contract workflow_run_inspection_query_contract_snapshot`,
+  `cargo check -p pantograph-workflow-service`, `cargo fmt`, and
+  `git diff --check`.
 
 ## Follow-Up Findings
 
@@ -1180,10 +1194,10 @@ coverage.
   existing frontend stream handler. Remaining streaming work is persistence-rule
   documentation/tests for `stream` versus `response` connections and any
   user-facing run view refresh needed after the terminal command response.
-- Effective llama.cpp settings are applied but not yet emitted as a structured
-  runtime settings snapshot with source attribution in run diagnostics. That is
-  still needed before frontend controls can show whether values came from
-  Pumas defaults, workflow defaults, run overrides, or backend defaults.
+- Effective llama.cpp settings are now applied and emitted as a structured
+  runtime-settings snapshot with source attribution in run diagnostics.
+  Remaining work is frontend display polish for those diagnostics in retained
+  run inspection.
 
 ## Commit Cadence Notes
 

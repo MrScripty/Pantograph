@@ -37,9 +37,10 @@ use pantograph_workflow_service::{
     WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
     WorkflowRetentionCleanupRequest, WorkflowRetentionCleanupResponse,
     WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
-    WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRunListQueryResponse,
-    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeRequirements,
-    WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotResponse,
+    WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse,
+    WorkflowRunInspectionQueryRequest, WorkflowRunInspectionQueryResponse,
+    WorkflowRunListQueryResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
+    WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
     WorkflowServiceError, WorkflowSupportTier, WorkflowTaskModalitySignature,
     WorkflowTaskRequestContract, WorkflowTaskStreamingSupport, WorkflowTraceNodeRecord,
@@ -1160,6 +1161,83 @@ fn workflow_run_detail_query_contract_snapshot() {
             "projection_name": "node_status",
             "projection_version": 6,
             "last_applied_event_seq": 16,
+            "status": "current",
+            "rebuilt_at_ms": null,
+            "updated_at_ms": 1110
+        }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_run_inspection_query_contract_snapshot() {
+    let request = WorkflowRunInspectionQueryRequest {
+        workflow_run_id: "run-1".to_string(),
+        artifact_limit: Some(250),
+        projection_batch_size: Some(100),
+    };
+    let response = WorkflowRunInspectionQueryResponse {
+        run_graph: None,
+        run: None,
+        node_statuses: Vec::new(),
+        io_artifacts: Vec::new(),
+        retention_summary: Vec::new(),
+        run_projection_state: ProjectionStateRecord {
+            projection_name: "run_detail".to_string(),
+            projection_version: 6,
+            last_applied_event_seq: 15,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            updated_at_ms: 1110,
+        },
+        node_projection_state: ProjectionStateRecord {
+            projection_name: "node_status".to_string(),
+            projection_version: 6,
+            last_applied_event_seq: 16,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            updated_at_ms: 1110,
+        },
+        io_projection_state: ProjectionStateRecord {
+            projection_name: "io_artifact".to_string(),
+            projection_version: 6,
+            last_applied_event_seq: 17,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            updated_at_ms: 1110,
+        },
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize run inspection request");
+    let expected_request = serde_json::json!({
+        "workflow_run_id": "run-1",
+        "artifact_limit": 250,
+        "projection_batch_size": 100
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize run inspection response");
+    let expected_response = serde_json::json!({
+        "run_projection_state": {
+            "projection_name": "run_detail",
+            "projection_version": 6,
+            "last_applied_event_seq": 15,
+            "status": "current",
+            "rebuilt_at_ms": null,
+            "updated_at_ms": 1110
+        },
+        "node_projection_state": {
+            "projection_name": "node_status",
+            "projection_version": 6,
+            "last_applied_event_seq": 16,
+            "status": "current",
+            "rebuilt_at_ms": null,
+            "updated_at_ms": 1110
+        },
+        "io_projection_state": {
+            "projection_name": "io_artifact",
+            "projection_version": 6,
+            "last_applied_event_seq": 17,
             "status": "current",
             "rebuilt_at_ms": null,
             "updated_at_ms": 1110

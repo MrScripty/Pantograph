@@ -659,6 +659,97 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
 }
 
 #[test]
+fn workflow_run_inspection_query_returns_factual_run_snapshot_parts() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    ledger
+        .append_diagnostic_event(sample_scheduler_queue_event())
+        .expect("scheduler queue event");
+    ledger
+        .append_diagnostic_event(sample_run_started_event())
+        .expect("run started event");
+    ledger
+        .append_diagnostic_event(sample_run_terminal_event())
+        .expect("run terminal event");
+    ledger
+        .append_diagnostic_event(sample_node_status_event(
+            "node-inference",
+            NodeExecutionProjectionStatus::Completed,
+            1_760_000_000_010,
+        ))
+        .expect("node status event");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "node-inference",
+            "node_output",
+            "artifact-a",
+        ))
+        .expect("io artifact event");
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_run_inspection_query(WorkflowRunInspectionQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            artifact_limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("run inspection query");
+
+    assert!(response.run_graph.is_none());
+    assert_eq!(
+        response
+            .run
+            .as_ref()
+            .map(|run| run.workflow_run_id.as_str()),
+        Some("run-a")
+    );
+    assert_eq!(response.node_statuses.len(), 1);
+    assert_eq!(response.node_statuses[0].node_id, "node-inference");
+    assert_eq!(response.io_artifacts.len(), 1);
+    assert_eq!(response.io_artifacts[0].artifact_id, "artifact-a");
+    assert_eq!(response.retention_summary.len(), 1);
+    assert_eq!(response.run_projection_state.projection_name, "run_detail");
+    assert_eq!(
+        response.node_projection_state.projection_name,
+        "node_status"
+    );
+    assert_eq!(response.io_projection_state.projection_name, "io_artifact");
+}
+
+#[test]
+fn workflow_run_inspection_query_validates_bounds() {
+    let service = WorkflowService::with_ephemeral_attribution_store()
+        .expect("service")
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+
+    let oversized_projection_batch =
+        service.workflow_run_inspection_query(WorkflowRunInspectionQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            artifact_limit: Some(10),
+            projection_batch_size: Some(501),
+        });
+    assert!(matches!(
+        oversized_projection_batch,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let oversized_artifact_limit =
+        service.workflow_run_inspection_query(WorkflowRunInspectionQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            artifact_limit: Some(501),
+            projection_batch_size: Some(10),
+        });
+    assert!(matches!(
+        oversized_artifact_limit,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+}
+
+#[test]
 fn workflow_scheduler_estimate_query_returns_estimate_projection() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger

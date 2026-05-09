@@ -23,7 +23,10 @@ use crate::scheduler::unix_timestamp_ms;
 use super::diagnostic_errors::{
     WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticProjectionScope,
 };
-use super::{WorkflowErrorDiagnosticsLink, WorkflowService, WorkflowServiceError};
+use super::{
+    WorkflowErrorDiagnosticsLink, WorkflowRunGraphProjection, WorkflowRunGraphQueryRequest,
+    WorkflowService, WorkflowServiceError,
+};
 
 const STARTUP_REPAIR_RUN_QUERY_LIMIT: u32 = 500;
 const STARTUP_REPAIR_DRAIN_BATCH_SIZE: u32 = 500;
@@ -181,6 +184,34 @@ pub struct WorkflowRunDetailQueryResponse {
     pub node_statuses: Vec<NodeStatusProjectionRecord>,
     pub projection_state: ProjectionStateRecord,
     pub node_projection_state: ProjectionStateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRunInspectionQueryRequest {
+    pub workflow_run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_batch_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRunInspectionQueryResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_graph: Option<WorkflowRunGraphProjection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunDetailProjectionRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub node_statuses: Vec<NodeStatusProjectionRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub io_artifacts: Vec<IoArtifactProjectionRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retention_summary: Vec<IoArtifactRetentionSummaryRecord>,
+    pub run_projection_state: ProjectionStateRecord,
+    pub node_projection_state: ProjectionStateRecord,
+    pub io_projection_state: ProjectionStateRecord,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -697,6 +728,48 @@ impl WorkflowService {
             node_statuses,
             projection_state,
             node_projection_state,
+        })
+    }
+
+    pub fn workflow_run_inspection_query(
+        &self,
+        request: WorkflowRunInspectionQueryRequest,
+    ) -> Result<WorkflowRunInspectionQueryResponse, WorkflowServiceError> {
+        let run_graph = self
+            .workflow_run_graph_query(WorkflowRunGraphQueryRequest {
+                workflow_run_id: request.workflow_run_id.clone(),
+            })?
+            .run_graph;
+        let run_detail = self.workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: request.workflow_run_id.clone(),
+            projection_batch_size: request.projection_batch_size,
+        })?;
+        let io_artifacts = self.workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some(request.workflow_run_id),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(request.artifact_limit.unwrap_or(250)),
+            projection_batch_size: request.projection_batch_size,
+        })?;
+
+        Ok(WorkflowRunInspectionQueryResponse {
+            run_graph,
+            run: run_detail.run,
+            node_statuses: run_detail.node_statuses,
+            io_artifacts: io_artifacts.artifacts,
+            retention_summary: io_artifacts.retention_summary,
+            run_projection_state: run_detail.projection_state,
+            node_projection_state: run_detail.node_projection_state,
+            io_projection_state: io_artifacts.projection_state,
         })
     }
 
