@@ -18,6 +18,7 @@ import type {
   WorkflowLocalNetworkStatusQueryRequest,
   WorkflowLocalNetworkStatusQueryResponse,
 } from './types.ts';
+import { mockProjectionState } from '../diagnostics/projectionState.ts';
 import { WorkflowGraphMutationService } from './WorkflowGraphMutationService.ts';
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 import { invokeWorkflowCommand } from './workflowServiceErrors.ts';
@@ -29,14 +30,10 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
     if (USE_WORKFLOW_MOCKS) {
       return {
         events: [],
-        projection_state: {
+        projection_state: mockProjectionState({
           projection_name: 'scheduler_timeline',
           projection_version: 1,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
+        }),
       };
     }
 
@@ -52,14 +49,10 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
       return {
         runs: [],
         facets: [],
-        projection_state: {
+        projection_state: mockProjectionState({
           projection_name: 'run_list',
           projection_version: 7,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
+        }),
       };
     }
 
@@ -75,22 +68,14 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
       return {
         run: null,
         node_statuses: [],
-        projection_state: {
+        projection_state: mockProjectionState({
           projection_name: 'run_detail',
           projection_version: 6,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
-        node_projection_state: {
+        }),
+        node_projection_state: mockProjectionState({
           projection_name: 'node_status',
           projection_version: 5,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
+        }),
       };
     }
 
@@ -109,30 +94,18 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
         node_statuses: [],
         io_artifacts: [],
         retention_summary: [],
-        run_projection_state: {
+        run_projection_state: mockProjectionState({
           projection_name: 'run_detail',
           projection_version: 6,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
-        node_projection_state: {
+        }),
+        node_projection_state: mockProjectionState({
           projection_name: 'node_status',
           projection_version: 6,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
-        io_projection_state: {
+        }),
+        io_projection_state: mockProjectionState({
           projection_name: 'io_artifact',
           projection_version: 6,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
+        }),
       };
     }
 
@@ -147,14 +120,10 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
     if (USE_WORKFLOW_MOCKS) {
       return {
         estimate: null,
-        projection_state: {
+        projection_state: mockProjectionState({
           projection_name: 'run_detail',
           projection_version: 6,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
+        }),
       };
     }
 
@@ -169,14 +138,10 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
     if (USE_WORKFLOW_MOCKS) {
       return {
         assets: [],
-        projection_state: {
+        projection_state: mockProjectionState({
           projection_name: 'library_usage',
           projection_version: 1,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
+        }),
       };
     }
 
@@ -192,14 +157,10 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
       return {
         artifacts: [],
         retention_summary: [],
-        projection_state: {
+        projection_state: mockProjectionState({
           projection_name: 'io_artifact',
           projection_version: 4,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
+        }),
       };
     }
 

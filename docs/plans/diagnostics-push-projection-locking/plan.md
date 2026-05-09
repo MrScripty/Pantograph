@@ -540,7 +540,7 @@ type DiagnosticsProjectionSubscriptionOptions = {
       service boundary.
 - [x] Normalize Tauri event payloads into typed diagnostics invalidation DTOs.
 - [x] Extend frontend diagnostics types with optional projection health fields.
-- [ ] Add `mockProjectionState` or equivalent helper for mock projection
+- [x] Add `mockProjectionState` or equivalent helper for mock projection
       responses and affected tests.
 - [ ] Add or extend shared projection health/freshness presentation helpers.
 - [x] Provide unsubscribe cleanup and stale-response guards.
@@ -561,11 +561,12 @@ type DiagnosticsProjectionSubscriptionOptions = {
   frontend test command used by this repo.
 
 **Status:** In progress. The frontend workflow service boundary now has typed
-diagnostics projection invalidation DTOs, optional projection health fields, and
-a small Tauri-event subscription helper that filters projection/run scope,
-coalesces callbacks, and cleans up listeners. Remaining work is mock projection
-state consolidation, shared health/freshness presentation, missed-event
-recovery tests, and page integration.
+diagnostics projection invalidation DTOs, optional projection health fields, a
+small Tauri-event subscription helper that filters projection/run scope,
+coalesces callbacks, and cleans up listeners, and a shared mock projection-state
+helper used by projection service mocks. Remaining work is shared
+health/freshness presentation, missed-event recovery tests, and page
+integration.
 
 ### Milestone 8: Workbench Page Conversion
 

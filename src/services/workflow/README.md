@@ -72,6 +72,9 @@ Projection invalidation subscription wiring lives in
 events, filters by projection kind and active run, coalesces refresh callbacks,
 and owns unsubscribe cleanup without caching diagnostics facts or becoming a
 frontend diagnostics store.
+Mock projection responses use the shared `mockProjectionState` helper from
+`src/services/diagnostics/projectionState.ts` so additive projection metadata,
+including health fields, stays consistent across frontend service fixtures.
 `WorkflowService` inherits that boundary so existing GUI callers keep the same
 method names while projection DTO tests stay focused on Tauri request/response
 contracts.
@@ -193,6 +196,8 @@ missing `events` array as empty rather than a transport failure.
   preserve the backend cleanup result exactly.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
+- Mock projection states should use the shared `mockProjectionState` helper so
+  additive backend projection metadata does not drift across service mocks.
 - Built-in template tests must scan every registered starter template for
   retired direct inference node types so new examples stay on canonical
   `llm-inference` task shapes.
