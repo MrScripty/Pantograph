@@ -5,6 +5,8 @@ import type {
   WorkflowIoArtifactQueryResponse,
   WorkflowRunDetailQueryRequest,
   WorkflowRunDetailQueryResponse,
+  WorkflowRunInspectionQueryRequest,
+  WorkflowRunInspectionQueryResponse,
   WorkflowRunListQueryRequest,
   WorkflowRunListQueryResponse,
   WorkflowSchedulerEstimateQueryRequest,
@@ -93,6 +95,48 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
     }
 
     return invokeWorkflowCommand<WorkflowRunDetailQueryResponse>('workflow_run_detail_query', {
+      request,
+    });
+  }
+
+  async queryRunInspection(
+    request: WorkflowRunInspectionQueryRequest,
+  ): Promise<WorkflowRunInspectionQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        run_graph: null,
+        run: null,
+        node_statuses: [],
+        io_artifacts: [],
+        retention_summary: [],
+        run_projection_state: {
+          projection_name: 'run_detail',
+          projection_version: 6,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+        node_projection_state: {
+          projection_name: 'node_status',
+          projection_version: 6,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+        io_projection_state: {
+          projection_name: 'io_artifact',
+          projection_version: 6,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowRunInspectionQueryResponse>('workflow_run_inspection_query', {
       request,
     });
   }

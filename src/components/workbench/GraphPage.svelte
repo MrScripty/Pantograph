@@ -24,16 +24,10 @@
   let runGraph = $state<WorkflowRunGraphProjection | null>(null);
   let runArtifacts = $state<IoArtifactProjectionRecord[]>([]);
   let runNodeStatuses = $state<NodeStatusProjectionRecord[]>([]);
-  let loadingRunGraph = $state(false);
-  let loadingRunArtifacts = $state(false);
-  let loadingRunNodeStatuses = $state(false);
-  let runGraphError = $state<string | null>(null);
-  let runArtifactError = $state<string | null>(null);
-  let runNodeStatusError = $state<string | null>(null);
+  let loadingRunInspection = $state(false);
+  let runInspectionError = $state<string | null>(null);
   let lastRunId = $state<string | null>(null);
-  let runGraphRequestSerial = 0;
-  let runArtifactRequestSerial = 0;
-  let runNodeStatusRequestSerial = 0;
+  let runInspectionRequestSerial = 0;
   let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(runArtifacts));
   let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
   let focusedDiagnosticEventId = $derived(
@@ -46,110 +40,47 @@
     return $activeWorkflowRun?.workflow_run_id ?? null;
   }
 
-  async function refreshRunGraph(runId = activeRunId()): Promise<void> {
-    const requestSerial = ++runGraphRequestSerial;
-    runGraphError = null;
+  async function refreshRunInspection(runId = activeRunId()): Promise<void> {
+    const requestSerial = ++runInspectionRequestSerial;
+    runInspectionError = null;
 
     if (!runId) {
       runGraph = null;
       runArtifacts = [];
       runNodeStatuses = [];
-      loadingRunGraph = false;
+      loadingRunInspection = false;
       return;
     }
 
-    loadingRunGraph = true;
+    loadingRunInspection = true;
     try {
-      const response = await workflowService.queryRunGraph({
+      const response = await workflowService.queryRunInspection({
         workflow_run_id: runId,
+        artifact_limit: 250,
       });
-      if (requestSerial !== runGraphRequestSerial) {
+      if (requestSerial !== runInspectionRequestSerial) {
         return;
       }
       runGraph = response.run_graph ?? null;
+      runArtifacts = response.io_artifacts;
+      runNodeStatuses = response.node_statuses;
     } catch (error) {
-      if (requestSerial !== runGraphRequestSerial) {
+      if (requestSerial !== runInspectionRequestSerial) {
         return;
       }
-      runGraphError = formatWorkflowCommandError(error);
+      runInspectionError = formatWorkflowCommandError(error);
       runGraph = null;
-    } finally {
-      if (requestSerial === runGraphRequestSerial) {
-        loadingRunGraph = false;
-      }
-    }
-  }
-
-  async function refreshRunArtifacts(runId = activeRunId()): Promise<void> {
-    const requestSerial = ++runArtifactRequestSerial;
-    runArtifactError = null;
-
-    if (!runId) {
       runArtifacts = [];
-      loadingRunArtifacts = false;
-      return;
-    }
-
-    loadingRunArtifacts = true;
-    try {
-      const response = await workflowService.queryIoArtifacts({
-        workflow_run_id: runId,
-        limit: 250,
-      });
-      if (requestSerial !== runArtifactRequestSerial) {
-        return;
-      }
-      runArtifacts = response.artifacts;
-    } catch (error) {
-      if (requestSerial !== runArtifactRequestSerial) {
-        return;
-      }
-      runArtifactError = formatWorkflowCommandError(error);
-      runArtifacts = [];
-    } finally {
-      if (requestSerial === runArtifactRequestSerial) {
-        loadingRunArtifacts = false;
-      }
-    }
-  }
-
-  async function refreshRunNodeStatuses(runId = activeRunId()): Promise<void> {
-    const requestSerial = ++runNodeStatusRequestSerial;
-    runNodeStatusError = null;
-
-    if (!runId) {
-      runNodeStatuses = [];
-      loadingRunNodeStatuses = false;
-      return;
-    }
-
-    loadingRunNodeStatuses = true;
-    try {
-      const response = await workflowService.queryNodeStatus({
-        workflow_run_id: runId,
-        limit: 250,
-      });
-      if (requestSerial !== runNodeStatusRequestSerial) {
-        return;
-      }
-      runNodeStatuses = response.nodes;
-    } catch (error) {
-      if (requestSerial !== runNodeStatusRequestSerial) {
-        return;
-      }
-      runNodeStatusError = formatWorkflowCommandError(error);
       runNodeStatuses = [];
     } finally {
-      if (requestSerial === runNodeStatusRequestSerial) {
-        loadingRunNodeStatuses = false;
+      if (requestSerial === runInspectionRequestSerial) {
+        loadingRunInspection = false;
       }
     }
   }
 
   function refreshRunSnapshot(): void {
-    void refreshRunGraph();
-    void refreshRunArtifacts();
-    void refreshRunNodeStatuses();
+    void refreshRunInspection();
   }
 
   $effect(() => {
@@ -160,9 +91,7 @@
 
     lastRunId = runId;
     mode = runId ? 'run_snapshot' : 'editor';
-    void refreshRunGraph(runId);
-    void refreshRunArtifacts(runId);
-    void refreshRunNodeStatuses(runId);
+    void refreshRunInspection(runId);
   });
 </script>
 
@@ -201,12 +130,12 @@
             type="button"
             class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
             onclick={refreshRunSnapshot}
-            disabled={loadingRunGraph || loadingRunArtifacts || loadingRunNodeStatuses}
+            disabled={loadingRunInspection}
           >
             <RefreshCw
               size={14}
               aria-hidden="true"
-              class={loadingRunGraph || loadingRunArtifacts || loadingRunNodeStatuses ? 'animate-spin' : ''}
+              class={loadingRunInspection ? 'animate-spin' : ''}
             />
             Refresh
           </button>
@@ -237,12 +166,12 @@
         <WorkflowGraph />
       </div>
     </div>
-  {:else if loadingRunGraph && !runGraph}
+  {:else if loadingRunInspection && !runGraph}
     <div class="flex min-h-0 flex-1 items-center justify-center text-sm text-neutral-500">
       Loading run graph
     </div>
-  {:else if runGraphError}
-    <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{runGraphError}</div>
+  {:else if runInspectionError}
+    <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{runInspectionError}</div>
     <div class="flex min-h-0 flex-1 items-center justify-center text-sm text-neutral-500">
       Run graph unavailable
     </div>
@@ -251,16 +180,6 @@
       No versioned graph captured for this run
     </div>
   {:else}
-    {#if runArtifactError}
-      <div class="border-b border-amber-900 bg-amber-950/50 px-4 py-2 text-sm text-amber-100">
-        I/O artifact overlays unavailable: {runArtifactError}
-      </div>
-    {/if}
-    {#if runNodeStatusError}
-      <div class="border-b border-amber-900 bg-amber-950/50 px-4 py-2 text-sm text-amber-100">
-        Node status overlays unavailable: {runNodeStatusError}
-      </div>
-    {/if}
     <RunGraphSnapshot {runGraph} {artifactSummaries} {nodeStatuses} {focusedDiagnosticEventId} />
   {/if}
 </section>

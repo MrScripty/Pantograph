@@ -805,9 +805,9 @@ projections while leaving display decisions in the frontend.
   labels, panel grouping, selected-node state, or frontend visual ordering.
 - [x] Include projection state/cursor information for each joined source so the
   frontend can tell whether the view is current or partially stale.
-- [ ] Replace frontend-side multi-query composition in GraphPage only after the
+- [x] Replace frontend-side multi-query composition in GraphPage only after the
   backend read model is covered by contract and frontend DTO tests.
-- [ ] Preserve existing lower-level projection queries for diagnostics pages,
+- [x] Preserve existing lower-level projection queries for diagnostics pages,
   filtering, and advanced inspection use cases.
 
 **Verification:**
@@ -818,10 +818,12 @@ projections while leaving display decisions in the frontend.
 - Frontend tests prove display grouping/labels/empty states remain owned by
   frontend presenters/components rather than backend DTOs.
 
-**Status:** Partially implemented. Backend `WorkflowRunInspectionQuery` now
-composes the immutable run graph, run detail, node-status projection, IO
-artifact descriptors, retention summary, and per-source projection states from
-existing persisted sources. Frontend GraphPage adoption remains.
+**Status:** Implemented. Backend `WorkflowRunInspectionQuery` composes the
+immutable run graph, run detail, node-status projection, IO artifact
+descriptors, retention summary, and per-source projection states from existing
+persisted sources. Tauri and TypeScript service DTOs expose the query, and
+GraphPage now consumes that single backend read model instead of composing run
+graph, node status, and IO artifact queries in frontend state.
 
 ### Milestone 8: Standards, Boundaries, And Regression Gate
 
@@ -1178,6 +1180,16 @@ coverage.
   `cargo test -p pantograph-workflow-service --test contract workflow_run_inspection_query_contract_snapshot`,
   `cargo check -p pantograph-workflow-service`, `cargo fmt`, and
   `git diff --check`.
+- 2026-05-09: GraphPage run-inspection adoption slice added the Tauri
+  `workflow_run_inspection_query` command, TypeScript DTOs/service method, and
+  switched `GraphPage` from three independent run-specific queries to the
+  backend-owned inspection response. Lower-level run graph, node status, and IO
+  artifact queries remain available for diagnostics, filtering, and advanced
+  inspection pages.
+- 2026-05-09: Verification passed:
+  `node --experimental-strip-types --test src/services/workflow/WorkflowService.projections.test.ts`,
+  `cargo check --manifest-path src-tauri/Cargo.toml`, `npm run typecheck`,
+  `npm run build`, `cargo fmt`, and `git diff --check`.
 
 ## Follow-Up Findings
 

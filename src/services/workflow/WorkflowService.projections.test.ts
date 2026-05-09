@@ -9,6 +9,7 @@ import type {
   WorkflowLibraryUsageQueryResponse,
   WorkflowIoArtifactQueryResponse,
   WorkflowRunDetailQueryResponse,
+  WorkflowRunInspectionQueryResponse,
   WorkflowRunListQueryResponse,
   WorkflowSchedulerEstimateQueryResponse,
   WorkflowSchedulerTimelineQueryResponse,
@@ -254,6 +255,71 @@ test('queryRunDetail normalizes backend error envelopes', async () => {
         error.code === 'invalid_request' &&
         error.message === 'workflow_run_id must be non-empty',
     );
+  } finally {
+    clearMocks();
+  }
+});
+
+test('queryRunInspection requests backend-owned run inspection read model', async () => {
+  installWindowMock();
+  const response: WorkflowRunInspectionQueryResponse = {
+    run_graph: null,
+    run: null,
+    node_statuses: [],
+    io_artifacts: [],
+    retention_summary: [],
+    run_projection_state: {
+      projection_name: 'run_detail',
+      projection_version: 6,
+      last_applied_event_seq: 10,
+      status: 'current',
+      rebuilt_at_ms: null,
+      updated_at_ms: 1000,
+    },
+    node_projection_state: {
+      projection_name: 'node_status',
+      projection_version: 6,
+      last_applied_event_seq: 11,
+      status: 'current',
+      rebuilt_at_ms: null,
+      updated_at_ms: 1000,
+    },
+    io_projection_state: {
+      projection_name: 'io_artifact',
+      projection_version: 6,
+      last_applied_event_seq: 12,
+      status: 'current',
+      rebuilt_at_ms: null,
+      updated_at_ms: 1000,
+    },
+  };
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowProjectionService();
+    const result = await service.queryRunInspection({
+      workflow_run_id: 'run-a',
+      artifact_limit: 250,
+      projection_batch_size: 100,
+    });
+
+    assert.deepEqual(result, response);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_run_inspection_query',
+        args: {
+          request: {
+            workflow_run_id: 'run-a',
+            artifact_limit: 250,
+            projection_batch_size: 100,
+          },
+        },
+      },
+    ]);
   } finally {
     clearMocks();
   }

@@ -464,6 +464,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_scheduler_timeline_query,
             crate::workflow::commands::workflow_run_list_query,
             crate::workflow::commands::workflow_run_detail_query,
+            crate::workflow::commands::workflow_run_inspection_query,
             crate::workflow::commands::workflow_scheduler_estimate_query,
             crate::workflow::commands::workflow_run_graph_query,
             crate::workflow::commands::workflow_io_artifact_query,

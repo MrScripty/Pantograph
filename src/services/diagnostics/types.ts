@@ -1,3 +1,5 @@
+import type { WorkflowRunGraphProjection } from '../workflow/types.ts';
+
 export type ProjectionStatus = 'current' | 'rebuilding' | 'needs_rebuild' | 'failed';
 
 export interface ProjectionStateRecord {
@@ -321,6 +323,23 @@ export interface WorkflowRunDetailQueryResponse {
   node_statuses: NodeStatusProjectionRecord[];
   projection_state: ProjectionStateRecord;
   node_projection_state: ProjectionStateRecord;
+}
+
+export interface WorkflowRunInspectionQueryRequest {
+  workflow_run_id: string;
+  artifact_limit?: number | null;
+  projection_batch_size?: number | null;
+}
+
+export interface WorkflowRunInspectionQueryResponse {
+  run_graph?: WorkflowRunGraphProjection | null;
+  run?: RunDetailProjectionRecord | null;
+  node_statuses: NodeStatusProjectionRecord[];
+  io_artifacts: IoArtifactProjectionRecord[];
+  retention_summary: IoArtifactRetentionSummaryRecord[];
+  run_projection_state: ProjectionStateRecord;
+  node_projection_state: ProjectionStateRecord;
+  io_projection_state: ProjectionStateRecord;
 }
 
 export interface WorkflowSchedulerEstimateQueryRequest {

@@ -45,7 +45,8 @@ use pantograph_workflow_service::{
     WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
     WorkflowRetentionPolicyUpdateRequest, WorkflowRetentionPolicyUpdateResponse,
     WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRunGraphQueryRequest,
-    WorkflowRunGraphQueryResponse, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
+    WorkflowRunGraphQueryResponse, WorkflowRunInspectionQueryRequest,
+    WorkflowRunInspectionQueryResponse, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
     WorkflowRunResponse, WorkflowSchedulerEstimateQueryRequest,
     WorkflowSchedulerEstimateQueryResponse, WorkflowSchedulerSnapshotRequest,
     WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
@@ -307,6 +308,15 @@ pub async fn workflow_run_detail_query(
 ) -> Result<WorkflowRunDetailQueryResponse, String> {
     workflow_service
         .workflow_run_detail_query(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_run_inspection_query(
+    request: WorkflowRunInspectionQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowRunInspectionQueryResponse, String> {
+    workflow_service
+        .workflow_run_inspection_query(request)
         .map_err(workflow_error_json)
 }
 
