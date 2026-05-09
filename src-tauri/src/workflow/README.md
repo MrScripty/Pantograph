@@ -32,6 +32,7 @@ owner of that policy itself.
 | `headless_runtime.rs` | Shared host-resource composition for backend-owned embedded workflow runtime construction. |
 | `headless_workflow_commands_tests.rs` | Shared fixtures and module index for headless workflow command diagnostics, trace, scheduler, runtime metadata, and transport tests. |
 | `headless_workflow_commands_tests/` | Focused headless workflow command tests split by diagnostics helper recording, transport responses/errors, and diagnostics projection/storage behavior. |
+| `projection_invalidation_bridge.rs` | Tauri lifecycle owner for the diagnostics projection refresh sink; coalesces backend refresh requests, invokes workflow-service refresh, and emits successful invalidations. |
 | `projection_invalidation_transport.rs` | Compact diagnostics projection invalidation event payload and coalescing transport helper. |
 | `managed_media_conversion.rs` | Desktop host adapter that leases managed FFmpeg/OpenImageIO/OpenColorIO tools, runs bounded stdin/stdout conversion pipelines, and returns typed conversion attribution to `pantograph-workflow-service`. |
 
@@ -230,6 +231,10 @@ owned by `pantograph-workflow-service`.
 - Diagnostics projection invalidation events must be emitted only from
   successful workflow-service refresh invalidations; Tauri may coalesce payloads
   but must not invent projection freshness, scope, or health facts.
+- The diagnostics projection invalidation bridge is a lifecycle adapter: it
+  owns task startup/shutdown and multi-window event broadcast, while
+  workflow-service owns diagnostic-event-to-projection mapping and refresh
+  semantics.
 - Workflow run commands must submit through the scheduler and return the
   scheduler-generated `workflow_run_id`; Tauri command payloads must not accept
   caller-authored run ids or workflow-name diagnostics side channels.

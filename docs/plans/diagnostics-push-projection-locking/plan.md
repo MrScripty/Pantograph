@@ -479,15 +479,15 @@ the desktop frontend.
 
 **Tasks:**
 
-- [ ] Add a Tauri event bridge that subscribes to workflow-service projection
+- [x] Add a Tauri event bridge that subscribes to workflow-service projection
       update events.
 - [x] Ensure Tauri payloads mirror backend DTOs and do not create new
       diagnostics semantics.
 - [x] Coalesce bursts by projection kind and workflow run id.
-- [ ] Broadcast one backend invalidation to all open windows while keeping one
+- [x] Broadcast one backend invalidation to all open windows while keeping one
       backend refresh owner.
 - [x] Ensure invalidations are emitted only after projection state advances.
-- [ ] Ensure event sender lifecycle is started at app setup and stopped on app
+- [x] Ensure event sender lifecycle is started at app setup and stopped on app
       shutdown.
 - [x] Add transport tests for payload shape and coalescing.
 - [ ] Add lifecycle tests for shutdown/cleanup of the bridge owner.
@@ -505,10 +505,10 @@ invalidations. The transport payload is a compact batch of backend invalidation
 DTOs, and Tauri coalesces duplicate projection/run/workflow scopes before
 emitting. Workflow-service now exposes a backend-owned projection refresh sink
 contract and requests typed projection refreshes after successful diagnostic
-event appends, so the next slice can attach the long-lived Tauri bridge without
-moving projection semantics into Tauri. The remaining work is the long-lived
-backend refresh/event owner, multi-window broadcast lifecycle, and shutdown
-coverage.
+event appends. Tauri starts one app-lifecycle bridge task, registers it as the
+workflow-service sink, coalesces refresh requests, invokes the backend refresh
+contract, and broadcasts successful invalidations through the existing Tauri
+event payload. The remaining work is shutdown/cleanup lifecycle test coverage.
 
 ### Milestone 7: Frontend Subscription Service
 
@@ -775,6 +775,12 @@ parallel by multiple workers.
   an optional non-blocking refresh sink after successful durable event appends.
   The mapping stays in workflow-service; Tauri remains responsible only for the
   bridge lifecycle, coalescing, refresh invocation, and event transport.
+- 2026-05-09: Milestone 6 Tauri bridge wired. App setup now registers one
+  diagnostics projection invalidation bridge task, attaches it as the
+  workflow-service refresh sink, queues startup catch-up, and tracks the task in
+  `AppTaskRegistry` for shutdown. The bridge coalesces requests before
+  refreshing projections and emits only backend invalidation DTOs returned by
+  successful refreshes.
 
 ## Commit Cadence Notes
 
@@ -795,6 +801,8 @@ parallel by multiple workers.
   handling.
 - Milestone 6 partial: workflow-service projection refresh sink contract and
   diagnostic-event-to-projection mapping.
+- Milestone 6 partial: Tauri projection invalidation bridge startup,
+  coalescing, refresh invocation, and app-wide invalidation broadcast.
 
 ### Deviations
 
@@ -814,6 +822,8 @@ parallel by multiple workers.
 - `cargo test -p pantograph-workflow-service workflow_diagnostic_event_record_requests_projection_refresh`
 - `cargo test -p pantograph-workflow-service workflow_diagnostic_io_event_requests_io_projection_refresh`
 - `cargo check -p pantograph-workflow-service`
+- `cargo test --manifest-path src-tauri/Cargo.toml projection_invalidation_bridge`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
 
 ### Traceability Links
 

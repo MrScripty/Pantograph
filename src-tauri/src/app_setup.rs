@@ -216,6 +216,41 @@ pub fn run_app() -> AppStartupResult<()> {
                     startup_error(format!("failed to resolve app data dir: {error}"))
                 })?;
 
+                let projection_invalidation_bridge =
+                    workflow::projection_invalidation_bridge::WorkflowDiagnosticsProjectionInvalidationBridge::start(
+                        app.handle().clone(),
+                        workflow_service.clone(),
+                        app_task_registry.as_ref(),
+                    );
+                let projection_refresh_sink: Arc<
+                    dyn pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshSink,
+                > = projection_invalidation_bridge.clone();
+                workflow_service
+                    .set_diagnostics_projection_refresh_sink(Some(projection_refresh_sink))
+                    .map_err(|error| {
+                        startup_error(format!(
+                            "failed to configure diagnostics projection invalidation bridge: {error}"
+                        ))
+                    })?;
+                pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshSink::request_projection_refresh(
+                    projection_invalidation_bridge.as_ref(),
+                    pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshRequest {
+                        projections: vec![
+                            pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::SchedulerTimeline,
+                            pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::RunList,
+                            pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::RunDetail,
+                            pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::IoArtifact,
+                            pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::NodeStatus,
+                            pantograph_workflow_service::WorkflowDiagnosticsProjectionKind::LibraryUsage,
+                        ],
+                        workflow_run_id: None,
+                        workflow_id: None,
+                        reason: pantograph_workflow_service::WorkflowDiagnosticsProjectionRefreshReason::StartupCatchUp,
+                        batch_size: 500,
+                    },
+                );
+                app.manage(projection_invalidation_bridge);
+
                 if let Err(err) =
                     inference::reconcile_interrupted_managed_runtime_jobs(&app_data_dir)
                 {

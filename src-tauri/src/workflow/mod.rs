@@ -35,6 +35,7 @@ pub mod managed_media_conversion;
 pub mod model_dependencies;
 pub mod model_dependency_commands;
 pub mod orchestration;
+pub mod projection_invalidation_bridge;
 mod projection_invalidation_transport;
 pub mod puma_lib_commands;
 pub mod python_runtime;
