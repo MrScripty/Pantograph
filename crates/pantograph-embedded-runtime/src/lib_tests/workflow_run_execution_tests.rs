@@ -122,6 +122,162 @@ async fn test_runtime_run_and_session_execution() {
 }
 
 #[tokio::test]
+async fn scheduler_run_retains_node_io_status_and_terminal_output_projection() {
+    let temp = TempDir::new().expect("temp dir");
+    write_test_workflow(temp.path(), "runtime-text");
+
+    let app_data_dir = temp.path().join("app-data");
+    std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+    install_fake_default_runtime(&app_data_dir);
+
+    let workflow_service = workflow_service_with_artifact_store_and_ledger(&temp);
+    let runtime = EmbeddedRuntime::with_default_python_runtime(
+        EmbeddedRuntimeConfig {
+            app_data_dir,
+            project_root: temp.path().to_path_buf(),
+            workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            max_loaded_sessions: None,
+        },
+        Arc::new(inference::InferenceGateway::new()),
+        Arc::new(RwLock::new(ExecutorExtensions::new())),
+        workflow_service.clone(),
+        None,
+    )
+    .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
+
+    let response = run_workflow_through_scheduler(
+        &runtime,
+        "runtime-text",
+        vec![WorkflowPortBinding {
+            node_id: "text-input-1".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("retained vertical text"),
+        }],
+        Some(vec![WorkflowOutputTarget {
+            node_id: "text-output-1".to_string(),
+            port_id: "text".to_string(),
+        }]),
+    )
+    .await
+    .expect("workflow run through scheduler");
+    assert_eq!(response.outputs.len(), 1);
+    assert_eq!(
+        response.outputs[0].value,
+        serde_json::json!("retained vertical text")
+    );
+
+    let detail = workflow_service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: response.workflow_run_id.clone(),
+            projection_batch_size: Some(50),
+        })
+        .expect("run detail query");
+    let run = detail.run.expect("run detail");
+    assert_eq!(
+        run.status,
+        pantograph_workflow_service::RunListProjectionStatus::Completed
+    );
+    let output_status = detail
+        .node_statuses
+        .iter()
+        .find(|status| status.node_id == "text-output-1")
+        .expect("text output node status");
+    assert_eq!(
+        output_status.status,
+        pantograph_diagnostics_ledger::NodeExecutionProjectionStatus::Completed
+    );
+
+    let artifacts = workflow_service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some(response.workflow_run_id.clone()),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            selected_backend_key: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(50),
+            projection_batch_size: Some(50),
+        })
+        .expect("io artifact query")
+        .artifacts;
+
+    let text_output_input = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.artifact_role == "node_input"
+                && artifact.consumer_node_id.as_deref() == Some("text-output-1")
+                && artifact.consumer_port_id.as_deref() == Some("text")
+        })
+        .expect("retained text output node input");
+    assert_eq!(
+        text_output_input.retention_state,
+        pantograph_workflow_service::IoArtifactRetentionState::Retained
+    );
+    assert_eq!(
+        workflow_service
+            .read_artifact_body(pantograph_workflow_service::ArtifactReadRequest {
+                artifact_id: text_output_input.artifact_id.clone(),
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("read retained text output input")
+            .body,
+        b"retained vertical text"
+    );
+
+    let text_output_output = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.artifact_role == "node_output"
+                && artifact.producer_node_id.as_deref() == Some("text-output-1")
+                && artifact.producer_port_id.as_deref() == Some("text")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "retained text output node output; artifacts: {}",
+                serde_json::to_string_pretty(&artifacts).expect("serialize artifacts")
+            )
+        });
+    assert_eq!(
+        workflow_service
+            .read_artifact_body(pantograph_workflow_service::ArtifactReadRequest {
+                artifact_id: text_output_output.artifact_id.clone(),
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("read retained text output output")
+            .body,
+        b"retained vertical text"
+    );
+
+    let workflow_output = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.artifact_role == "workflow_output"
+                && artifact.producer_node_id.as_deref() == Some("text-output-1")
+                && artifact.producer_port_id.as_deref() == Some("text")
+        })
+        .expect("retained terminal workflow output");
+    assert_eq!(
+        workflow_service
+            .read_artifact_body(pantograph_workflow_service::ArtifactReadRequest {
+                artifact_id: workflow_output.artifact_id.clone(),
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("read retained workflow output")
+            .body,
+        b"retained vertical text"
+    );
+}
+
+#[tokio::test]
 async fn scheduler_session_live_events_use_backend_workflow_run_id() {
     let temp = TempDir::new().expect("temp dir");
     write_test_workflow(temp.path(), "runtime-text");

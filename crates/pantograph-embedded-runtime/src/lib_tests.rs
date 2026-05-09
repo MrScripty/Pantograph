@@ -18,9 +18,10 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionRuntimeSelectionTarget,
     WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionState,
     WorkflowExecutionSessionStatusRequest, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
-    WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowPreflightRequest,
-    WorkflowRunOptions, WorkflowRunResponse, WorkflowRuntimeInstallState,
-    WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
+    WorkflowHost, WorkflowIoArtifactQueryRequest, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowPreflightRequest, WorkflowRunDetailQueryRequest, WorkflowRunOptions,
+    WorkflowRunResponse, WorkflowRuntimeInstallState, WorkflowRuntimeRequirements,
+    WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
     WorkflowSchedulerRuntimeWarmupReason, WorkflowService, WorkflowServiceError,
     WorkflowTechnicalFitOverride,
 };
@@ -76,6 +77,19 @@ fn workflow_service_with_artifact_store(temp: &TempDir) -> Arc<WorkflowService> 
     let artifact_store = ArtifactStore::open(temp.path().join("artifacts"), test_artifact_policy())
         .expect("open test artifact store");
     Arc::new(WorkflowService::new().with_artifact_store(artifact_store))
+}
+
+fn workflow_service_with_artifact_store_and_ledger(temp: &TempDir) -> Arc<WorkflowService> {
+    let artifact_store = ArtifactStore::open(temp.path().join("artifacts"), test_artifact_policy())
+        .expect("open test artifact store");
+    Arc::new(
+        WorkflowService::new()
+            .with_artifact_store(artifact_store)
+            .with_diagnostics_ledger(
+                pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory()
+                    .expect("open test diagnostics ledger"),
+            ),
+    )
 }
 
 #[tokio::test]

@@ -149,6 +149,10 @@ async fn workflow_execution_session_records_retained_node_io_artifact_bodies() {
         serde_json::from_str(&node_output_event.payload_json).expect("payload json");
     assert_eq!(payload["retention_state"], "retained");
     assert_eq!(payload["payload_kind"], "text");
+    assert_eq!(payload["producer_node_id"], "text-output-1");
+    assert_eq!(payload["producer_port_id"], "text");
+    assert!(payload["consumer_node_id"].is_null());
+    assert!(payload["consumer_port_id"].is_null());
     let artifact_id = payload["artifact_id"]
         .as_str()
         .expect("artifact id")

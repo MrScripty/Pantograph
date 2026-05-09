@@ -554,7 +554,7 @@ Tauri, and frontend code.
 retention and projection systems.
 
 **Tasks:**
-- [ ] Add a failing vertical-slice test for
+- [x] Add a failing vertical-slice test for
   `text-input -> pass-through/mock-processing -> text-output` that asserts
   run-detail node status, inputs, outputs, and terminal workflow output.
 - [x] Add or update a workflow-service projection test proving
@@ -562,7 +562,7 @@ retention and projection systems.
   queryable by run id and grouped by node for the run graph page.
 - [ ] Route retained node IO through the Milestone 2 evidence adapter rather
   than adding ad hoc event construction at each execution or UI boundary.
-- [ ] Repair the existing execution-event, ledger, projection, or frontend read
+- [x] Repair the existing execution-event, ledger, projection, or frontend read
   path identified by Milestone 1.
 - [x] Emit or project existing
   `DiagnosticEventPayload::IoArtifactObserved` records with
@@ -612,9 +612,15 @@ I/O artifacts. Existing GraphPage read-side code already queries
 `workflow_io_artifact_query` and summarizes node artifacts for the run snapshot.
 Workflow-service projection coverage now proves `node_input` and `node_output`
 records can be fetched together by run id and grouped by node for the run graph
-page. IO inspector previews now use a named 64 KiB byte-range request and
-surface the backend `complete=false` response as a partial preview instead of
-loading full retained bodies for inspection.
+page. An embedded-runtime vertical slice now runs the `text-input ->
+text-output` fixture through scheduler execution and asserts run detail, node
+status, retained node input, retained node output, and terminal workflow output
+through backend projections and ArtifactStore reads. The slice also fixed
+session-level duplicate node IO events so they preserve producer/consumer
+metadata instead of overwriting node-engine artifact projection rows with null
+producer/consumer fields. IO inspector previews now use a named 64 KiB
+byte-range request and surface the backend `complete=false` response as a
+partial preview instead of loading full retained bodies for inspection.
 
 ### Milestone 4: Cached Execution IO And Artifact Retention
 
@@ -1027,6 +1033,17 @@ coverage.
 - 2026-05-09: Verification passed:
   `node --experimental-strip-types --test src/components/workbench/ioInspectorPresenters.test.ts`
   and `npm run typecheck`.
+- 2026-05-09: Retained node IO vertical-slice test found that session-level
+  terminal `node_output` events reused the same run/role/node/port artifact id
+  as node-engine output events, then overwrote the projected producer metadata
+  with null fields. `session_execution_api.rs` now emits producer metadata for
+  `node_output`/`workflow_output` roles and consumer metadata for
+  `node_input`/`workflow_input` roles, preserving the existing projection
+  semantics for run graph inspection.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
+  and
+  `cargo test -p pantograph-embedded-runtime scheduler_run_retains_node_io_status_and_terminal_output_projection --features backend-llamacpp`.
 
 ## Follow-Up Findings
 

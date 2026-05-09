@@ -1486,14 +1486,26 @@ impl WorkflowService {
                         IoArtifactObservedPayload {
                             artifact_id: metadata.artifact_id,
                             artifact_role: role.clone(),
-                            producer_node_id: (role == IoArtifactRole::WorkflowOutput)
-                                .then(|| binding.node_id.clone()),
-                            producer_port_id: (role == IoArtifactRole::WorkflowOutput)
-                                .then(|| binding.port_id.clone()),
-                            consumer_node_id: (role == IoArtifactRole::WorkflowInput)
-                                .then(|| binding.node_id.clone()),
-                            consumer_port_id: (role == IoArtifactRole::WorkflowInput)
-                                .then(|| binding.port_id.clone()),
+                            producer_node_id: matches!(
+                                role,
+                                IoArtifactRole::NodeOutput | IoArtifactRole::WorkflowOutput
+                            )
+                            .then(|| binding.node_id.clone()),
+                            producer_port_id: matches!(
+                                role,
+                                IoArtifactRole::NodeOutput | IoArtifactRole::WorkflowOutput
+                            )
+                            .then(|| binding.port_id.clone()),
+                            consumer_node_id: matches!(
+                                role,
+                                IoArtifactRole::NodeInput | IoArtifactRole::WorkflowInput
+                            )
+                            .then(|| binding.node_id.clone()),
+                            consumer_port_id: matches!(
+                                role,
+                                IoArtifactRole::NodeInput | IoArtifactRole::WorkflowInput
+                            )
+                            .then(|| binding.port_id.clone()),
                             media_type: metadata.media_type,
                             size_bytes: metadata.size_bytes,
                             content_hash: metadata.content_hash,
