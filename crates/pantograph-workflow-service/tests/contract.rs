@@ -5,10 +5,11 @@ use pantograph_diagnostics_ledger::{
     ApplyArtifactRetentionPolicyResult, DiagnosticErrorSeverity, DiagnosticEventKind,
     DiagnosticEventSourceComponent, DiagnosticsRetentionPolicy, IoArtifactProjectionRecord,
     IoArtifactRetentionState, IoArtifactRetentionSummaryRecord, LibraryAssetCacheStatus,
-    LibraryAssetOperation, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
-    NodeStatusProjectionRecord, ProjectionStateRecord, ProjectionStatus, RetentionClass,
-    RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerModelCacheState, SchedulerTimelineProjectionRecord,
+    LibraryAssetOperation, LibraryUsageProjectionRecord, NodeExecutionCacheStatus,
+    NodeExecutionProjectionStatus, NodeStatusProjectionRecord, ProjectionStateRecord,
+    ProjectionStatus, RetentionClass, RunDetailProjectionRecord, RunListFacetKind,
+    RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus, SchedulerModelCacheState,
+    SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -1028,6 +1029,7 @@ fn workflow_run_detail_query_contract_snapshot() {
             selected_backend_key: Some("llama_cpp".to_string()),
             model_id: Some("pumas://models/tiny-gguf".to_string()),
             model_version: Some("rev-1".to_string()),
+            execution_cache_status: Some(NodeExecutionCacheStatus::FreshExecution),
             status: NodeExecutionProjectionStatus::Completed,
             started_at_ms: Some(1020),
             completed_at_ms: Some(1100),
@@ -1051,7 +1053,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         },
         node_projection_state: ProjectionStateRecord {
             projection_name: "node_status".to_string(),
-            projection_version: 4,
+            projection_version: 5,
             last_applied_event_seq: 16,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -1131,6 +1133,7 @@ fn workflow_run_detail_query_contract_snapshot() {
             "selected_backend_key": "llama_cpp",
             "model_id": "pumas://models/tiny-gguf",
             "model_version": "rev-1",
+            "execution_cache_status": "fresh_execution",
             "status": "completed",
             "started_at_ms": 1020,
             "completed_at_ms": 1100,
@@ -1154,7 +1157,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         },
         "node_projection_state": {
             "projection_name": "node_status",
-            "projection_version": 4,
+            "projection_version": 5,
             "last_applied_event_seq": 16,
             "status": "current",
             "rebuilt_at_ms": null,
@@ -1393,6 +1396,7 @@ fn workflow_node_status_query_contract_snapshot() {
             selected_backend_key: Some("mock".to_string()),
             model_id: Some("model-1".to_string()),
             model_version: Some("rev-1".to_string()),
+            execution_cache_status: Some(NodeExecutionCacheStatus::CacheHit),
             status: NodeExecutionProjectionStatus::Completed,
             started_at_ms: Some(1200),
             completed_at_ms: Some(1500),
@@ -1408,7 +1412,7 @@ fn workflow_node_status_query_contract_snapshot() {
         }],
         projection_state: ProjectionStateRecord {
             projection_name: "node_status".to_string(),
-            projection_version: 4,
+            projection_version: 5,
             last_applied_event_seq: 31,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -1443,6 +1447,7 @@ fn workflow_node_status_query_contract_snapshot() {
             "selected_backend_key": "mock",
             "model_id": "model-1",
             "model_version": "rev-1",
+            "execution_cache_status": "cache_hit",
             "status": "completed",
             "started_at_ms": 1200,
             "completed_at_ms": 1500,
@@ -1458,7 +1463,7 @@ fn workflow_node_status_query_contract_snapshot() {
         }],
         "projection_state": {
             "projection_name": "node_status",
-            "projection_version": 4,
+            "projection_version": 5,
             "last_applied_event_seq": 31,
             "status": "current",
             "rebuilt_at_ms": null,

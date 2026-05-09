@@ -10,9 +10,9 @@ use pantograph_diagnostics_ledger::{
     InferenceExecutionDiagnosticObservedPayload, InferenceKvCacheDiagnosticSummary,
     InferenceOptionDiagnosticSummary, InferenceOptionSupportCounts,
     InferenceUsageDiagnosticSummary, IoArtifactObservedPayload, IoArtifactRole, LicenseSnapshot,
-    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
-    NodeExecutionStatusPayload, RetentionClass, UsageEventStatus, UsageLineage,
-    MAX_DIAGNOSTIC_ERROR_TEXT_LEN, MAX_INFERENCE_COMPATIBILITY_ISSUES,
+    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionCacheStatus,
+    NodeExecutionProjectionStatus, NodeExecutionStatusPayload, RetentionClass, UsageEventStatus,
+    UsageLineage, MAX_DIAGNOSTIC_ERROR_TEXT_LEN, MAX_INFERENCE_COMPATIBILITY_ISSUES,
     MAX_INFERENCE_OPTION_DIAGNOSTICS,
 };
 use pantograph_runtime_attribution::{
@@ -287,6 +287,73 @@ impl NodeExecutionWorkflowLedgerSink {
         Ok(())
     }
 
+    fn record_node_completion_status(
+        &self,
+        event: &node_engine::WorkflowEvent,
+    ) -> Result<(), node_engine::EventError> {
+        let node_engine::WorkflowEvent::TaskCompleted {
+            task_id,
+            execution_id,
+            cache_status,
+            occurred_at_ms,
+            ..
+        } = event
+        else {
+            return Ok(());
+        };
+        if execution_id != &self.execution_id {
+            return Ok(());
+        }
+        let Some(context) = self.contexts_by_node_id.get(task_id) else {
+            return Ok(());
+        };
+
+        let request = DiagnosticEventAppendRequest {
+            source_component: DiagnosticEventSourceComponent::NodeExecution,
+            source_instance_id: Some(self.execution_id.clone()),
+            occurred_at_ms: occurred_at_ms
+                .and_then(|value| i64::try_from(value).ok())
+                .unwrap_or_else(|| {
+                    i64::try_from(crate::workflow_runtime::unix_timestamp_ms()).unwrap_or(i64::MAX)
+                }),
+            workflow_run_id: Some(self.workflow_run_id.clone()),
+            workflow_id: Some(self.workflow_id.clone()),
+            workflow_version_id: None,
+            workflow_semantic_version: None,
+            node_id: Some(context.node_id.clone()),
+            node_type: Some(context.node_type.clone()),
+            node_version: None,
+            runtime_id: None,
+            runtime_version: None,
+            model_id: None,
+            model_version: None,
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
+            scheduler_policy_id: None,
+            retention_policy_id: None,
+            privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+            retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+            payload_ref: None,
+            payload: DiagnosticEventPayload::NodeExecutionStatus(NodeExecutionStatusPayload {
+                status: NodeExecutionProjectionStatus::Completed,
+                started_at_ms: None,
+                completed_at_ms: occurred_at_ms.and_then(|value| i64::try_from(value).ok()),
+                duration_ms: None,
+                error: None,
+                canonical_error_event_id: None,
+                task_id: Some(task_id.clone()),
+                selected_backend_key: None,
+                execution_cache_status: cache_status.map(node_execution_cache_status),
+            }),
+        };
+
+        self.workflow_service
+            .workflow_diagnostic_event_record(request)
+            .map(|_| ())
+            .map_err(|error| diagnostics_unavailable_event_error("node completion status", &error))
+    }
+
     fn record_node_input_artifacts(
         &self,
         event: &node_engine::WorkflowEvent,
@@ -499,6 +566,7 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
 impl node_engine::EventSink for NodeExecutionWorkflowLedgerSink {
     fn send(&self, event: node_engine::WorkflowEvent) -> Result<(), node_engine::EventError> {
         let diagnostic_result = self.record_kv_cache_diagnostic(&event);
+        let status_result = self.record_node_completion_status(&event);
         let input_io_result = self.record_node_input_artifacts(&event);
         let output_io_result = self.record_node_output_artifacts(&event);
 
@@ -507,8 +575,23 @@ impl node_engine::EventSink for NodeExecutionWorkflowLedgerSink {
         }
 
         diagnostic_result?;
+        status_result?;
         input_io_result?;
         output_io_result
+    }
+}
+
+fn node_execution_cache_status(
+    status: node_engine::TaskExecutionCacheStatus,
+) -> NodeExecutionCacheStatus {
+    match status {
+        node_engine::TaskExecutionCacheStatus::FreshExecution => {
+            NodeExecutionCacheStatus::FreshExecution
+        }
+        node_engine::TaskExecutionCacheStatus::CacheHit => NodeExecutionCacheStatus::CacheHit,
+        node_engine::TaskExecutionCacheStatus::CacheInvalidated => {
+            NodeExecutionCacheStatus::CacheInvalidated
+        }
     }
 }
 
@@ -749,6 +832,7 @@ fn build_inference_lifecycle_event_ledger_append_request(
             canonical_error_event_id: event.canonical_error_event_id.clone(),
             task_id: event.task_id.clone(),
             selected_backend_key: backend_key,
+            execution_cache_status: None,
         }),
     })
 }

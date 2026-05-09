@@ -627,7 +627,7 @@ executed run detail.
   cache evidence, not fresh execution evidence.
 - [x] Add or update cache status metadata: `fresh_execution`, `cache_hit`,
   `cache_invalidated`, or equivalent existing enum.
-- [ ] Project cache status from node completion events into durable run detail
+- [x] Project cache status from node completion events into durable run detail
   or artifact evidence where the run graph page needs it.
 - [ ] Verify ArtifactStore descriptors are retained for large/binary node IO
   and that run detail exposes lifecycle and retention state.
@@ -647,8 +647,10 @@ executed run detail.
 **Status:** Partially implemented. Demand-engine cache hits now emit
 `TaskCompleted` events with retained outputs and `cache_hit` status instead of
 returning silently before node-output artifact retention. Fresh executor
-completions emit `fresh_execution`. Durable graph-page cache-status projection
-remains open.
+completions emit `fresh_execution`. Durable node-status projection now carries
+`fresh_execution`, `cache_hit`, and `cache_invalidated` from node completion
+events into run detail and node-status queries, and the run graph page displays
+the cache status when present.
 
 ### Milestone 5: Text Generation Streaming Contract
 
@@ -961,6 +963,20 @@ coverage.
   proving `NodeStream(port="response")` appends live text to a connected
   text-output node while `NodeCompleted.outputs.response` still reconciles the
   final retained `text` runtime value through the same `response -> text` edge.
+- 2026-05-09: Durable cache-status slice added
+  `NodeExecutionCacheStatus` to diagnostics-ledger node execution status
+  payloads and projections, bumps the node-status projection version, records
+  node-engine `TaskCompleted.cache_status` through embedded runtime, and
+  exposes the resulting cache status on the run graph page without making the
+  frontend authoritative for cache semantics.
+- 2026-05-09: Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger node_status_projection_preserves_execution_cache_status`,
+  `cargo test -p pantograph-diagnostics-ledger node_status_projection_keeps_latest_status_per_node`,
+  `cargo test -p pantograph-workflow-service workflow::tests::diagnostics::workflow_run_detail_query_drains_and_reads_projection`,
+  `cargo test -p pantograph-workflow-service --test contract contract_snapshot`,
+  `cargo test -p pantograph-embedded-runtime node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts`,
+  and
+  `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts src/services/workflow/WorkflowService.projections.test.ts src/components/workbench/networkPagePresenters.test.ts`.
 
 ## Follow-Up Findings
 
@@ -970,9 +986,9 @@ coverage.
   availability or graph-page summary query integration.
 - Full per-node output inspection for every executed or cached intermediate
   node should now use the existing node execution event/ledger path. Durable
-  artifact/run-detail projections still need an explicit cache-status surface
-  where graph-page inspection needs to distinguish cache-hit evidence from
-  fresh-execution evidence.
+  run-detail and graph-page node-status projections now carry cache-hit versus
+  fresh-execution evidence; remaining artifact work is descriptor lifecycle
+  coverage for large, deleted, or expired bodies.
 - Scheduler live streaming now has a channel from backend node events to the
   existing frontend stream handler. Remaining streaming work is persistence-rule
   documentation/tests for `stream` versus `response` connections and any

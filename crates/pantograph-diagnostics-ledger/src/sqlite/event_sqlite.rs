@@ -10,19 +10,20 @@ use crate::event::{
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, IoArtifactLifecycleState,
     IoArtifactPayloadKind, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
     IoArtifactRetentionState, IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord,
-    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
-    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
-    ProjectionStateUpdate, ProjectionStatus, RetentionArtifactStateChangedPayload,
-    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord,
-    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerModelCacheState, SchedulerQueueControlAction, SchedulerQueueControlActorScope,
-    SchedulerQueueControlOutcome, SchedulerQueueControlPayload, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
-    IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
-    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
-    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeExecutionCacheStatus,
+    NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
+    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus,
+    RetentionArtifactStateChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    RunListFacetKind, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerModelCacheState, SchedulerQueueControlAction,
+    SchedulerQueueControlActorScope, SchedulerQueueControlOutcome, SchedulerQueueControlPayload,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use crate::records::MAX_PAGE_SIZE;
 use crate::util::now_ms;
@@ -1039,7 +1040,8 @@ pub(super) fn query_node_status_projection(
     let mut stmt = ledger.conn.prepare(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, node_id, node_type, node_version, runtime_id,
-                runtime_version, task_id, selected_backend_key, model_id, model_version, status, started_at_ms,
+                runtime_version, task_id, selected_backend_key, model_id, model_version,
+                execution_cache_status, status, started_at_ms,
                 completed_at_ms, duration_ms, error, error_event_id, canonical_error_event_id,
                 error_severity, error_phase, error_code, last_event_seq, last_updated_at_ms
          FROM node_status_projection
@@ -2141,6 +2143,7 @@ fn apply_node_status_projection_event(
         error_code,
         task_id,
         selected_backend_key,
+        execution_cache_status,
     ) = match &payload {
         DiagnosticEventPayload::NodeExecutionStatus(payload) => (
             payload.status,
@@ -2155,6 +2158,7 @@ fn apply_node_status_projection_event(
             None,
             payload.task_id.clone(),
             payload.selected_backend_key.clone(),
+            payload.execution_cache_status,
         ),
         DiagnosticEventPayload::DiagnosticErrorOccurred(payload)
             if payload.scope == crate::event::DiagnosticErrorScopeKind::Node
@@ -2171,6 +2175,7 @@ fn apply_node_status_projection_event(
                 Some(payload.severity),
                 Some(payload.phase.clone()),
                 Some(payload.code.clone()),
+                None,
                 None,
                 None,
             )
@@ -2199,11 +2204,12 @@ fn apply_node_status_projection_event(
         "INSERT INTO node_status_projection
             (workflow_run_id, workflow_id, workflow_version_id,
              workflow_semantic_version, node_id, node_type, node_version, runtime_id,
-             runtime_version, task_id, selected_backend_key, model_id, model_version, status, started_at_ms,
+             runtime_version, task_id, selected_backend_key, model_id, model_version,
+             execution_cache_status, status, started_at_ms,
              completed_at_ms, duration_ms, error, error_event_id, canonical_error_event_id,
              error_severity, error_phase, error_code, last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
+                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
          ON CONFLICT(workflow_run_id, node_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = excluded.workflow_version_id,
@@ -2216,6 +2222,7 @@ fn apply_node_status_projection_event(
             selected_backend_key = COALESCE(excluded.selected_backend_key, node_status_projection.selected_backend_key),
             model_id = COALESCE(excluded.model_id, node_status_projection.model_id),
             model_version = COALESCE(excluded.model_version, node_status_projection.model_version),
+            execution_cache_status = COALESCE(excluded.execution_cache_status, node_status_projection.execution_cache_status),
             status = excluded.status,
             started_at_ms = COALESCE(excluded.started_at_ms, node_status_projection.started_at_ms),
             completed_at_ms = excluded.completed_at_ms,
@@ -2245,6 +2252,7 @@ fn apply_node_status_projection_event(
             selected_backend_key.as_deref(),
             event.model_id.as_deref(),
             event.model_version.as_deref(),
+            execution_cache_status.map(NodeExecutionCacheStatus::as_db),
             status.as_db(),
             started_at_ms,
             completed_at_ms,
@@ -3630,23 +3638,28 @@ fn node_status_projection_from_row(row: &Row<'_>) -> rusqlite::Result<NodeStatus
         selected_backend_key: row.get(10)?,
         model_id: row.get(11)?,
         model_version: row.get(12)?,
+        execution_cache_status: row
+            .get::<_, Option<String>>(13)?
+            .map(|value| NodeExecutionCacheStatus::from_db(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
         status: row
-            .get::<_, String>(13)
+            .get::<_, String>(14)
             .and_then(parse_node_execution_projection_status)?,
-        started_at_ms: row.get(14)?,
-        completed_at_ms: row.get(15)?,
-        duration_ms: row.get::<_, Option<i64>>(16)?.map(i64_to_u64_saturating),
-        error: row.get(17)?,
-        error_event_id: row.get(18)?,
-        canonical_error_event_id: row.get(19)?,
+        started_at_ms: row.get(15)?,
+        completed_at_ms: row.get(16)?,
+        duration_ms: row.get::<_, Option<i64>>(17)?.map(i64_to_u64_saturating),
+        error: row.get(18)?,
+        error_event_id: row.get(19)?,
+        canonical_error_event_id: row.get(20)?,
         error_severity: row
-            .get::<_, Option<String>>(20)?
+            .get::<_, Option<String>>(21)?
             .map(parse_diagnostic_error_severity)
             .transpose()?,
-        error_phase: row.get(21)?,
-        error_code: row.get(22)?,
-        last_event_seq: row.get(23)?,
-        last_updated_at_ms: row.get(24)?,
+        error_phase: row.get(22)?,
+        error_code: row.get(23)?,
+        last_event_seq: row.get(24)?,
+        last_updated_at_ms: row.get(25)?,
     })
 }
 

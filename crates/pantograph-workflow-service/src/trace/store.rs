@@ -554,6 +554,7 @@ fn node_status_event_from_trace_node(
             canonical_error_event_id: None,
             task_id: None,
             selected_backend_key: None,
+            execution_cache_status: None,
         }),
     })
 }

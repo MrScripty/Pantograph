@@ -208,6 +208,11 @@
                   >
                     {node.statusLabel}
                   </span>
+                  {#if node.cacheStatusLabel}
+                    <div class="mt-1 truncate text-[11px] text-neutral-500" title={node.cacheStatusLabel}>
+                      {node.cacheStatusLabel}
+                    </div>
+                  {/if}
                   {#if node.errorBadgeLabel}
                     <div
                       class={`mt-1 truncate rounded border px-2 py-0.5 text-[11px] ${runGraphNodeErrorClass(node.errorSeverity) === 'warning' ? 'border-amber-800 bg-amber-950 text-amber-100' : 'border-red-800 bg-red-950 text-red-100'}`}

@@ -10,6 +10,7 @@ import {
   buildRunGraphNodeStatusMap,
   formatRunGraphArtifactDetail,
   formatRunGraphArtifactSummary,
+  formatRunGraphNodeCacheStatusLabel,
   formatRunGraphNodeStatusLabel,
   formatRunGraphCountLabel,
   runGraphNodeStatusClass,
@@ -263,6 +264,7 @@ test('buildRunGraphNodeStatusMap keeps the latest node status by event sequence'
       runtime_version: null,
       model_id: null,
       model_version: null,
+      execution_cache_status: null,
       status: 'running',
       started_at_ms: 1_000,
       completed_at_ms: null,
@@ -283,6 +285,7 @@ test('buildRunGraphNodeStatusMap keeps the latest node status by event sequence'
       runtime_version: null,
       model_id: null,
       model_version: null,
+      execution_cache_status: 'cache_hit',
       status: 'completed',
       started_at_ms: 1_000,
       completed_at_ms: 1_500,
@@ -294,16 +297,19 @@ test('buildRunGraphNodeStatusMap keeps the latest node status by event sequence'
   ]);
 
   assert.equal(statuses['output-1'].status, 'completed');
+  assert.equal(formatRunGraphNodeCacheStatusLabel(statuses['output-1'].execution_cache_status), 'Cache hit');
   assert.equal(formatRunGraphNodeStatusLabel(statuses['output-1'].status), 'Completed');
   assert.equal(runGraphNodeStatusClass(statuses['output-1'].status), 'completed');
 
   const rows = buildRunGraphNodeRows(createRunGraph(), {}, statuses);
   const outputRow = rows.find((row) => row.nodeId === 'output-1');
   assert.equal(outputRow?.statusLabel, 'Completed');
+  assert.equal(outputRow?.cacheStatusLabel, 'Cache hit');
 
   const canvas = buildRunGraphCanvasModel(createRunGraph().graph, {}, statuses);
   const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
   assert.equal(outputNode?.statusClass, 'completed');
+  assert.equal(outputNode?.cacheStatusLabel, 'Cache hit');
 });
 
 test('run graph presenters expose node diagnostic error badges', () => {

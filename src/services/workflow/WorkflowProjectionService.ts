@@ -83,7 +83,7 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
         },
         node_projection_state: {
           projection_name: 'node_status',
-          projection_version: 1,
+          projection_version: 5,
           last_applied_event_seq: 0,
           status: 'current',
           rebuilt_at_ms: null,

@@ -19,7 +19,7 @@ pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 6;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
-pub const NODE_STATUS_PROJECTION_VERSION: i64 = 4;
+pub const NODE_STATUS_PROJECTION_VERSION: i64 = 5;
 pub const MAX_DIAGNOSTIC_ERROR_TEXT_LEN: usize = 4_096;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT: usize = 8;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
@@ -1284,6 +1284,8 @@ pub struct NodeExecutionStatusPayload {
     pub task_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_cache_status: Option<NodeExecutionCacheStatus>,
 }
 
 impl NodeExecutionStatusPayload {
@@ -1310,6 +1312,35 @@ impl NodeExecutionStatusPayload {
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeExecutionCacheStatus {
+    FreshExecution,
+    CacheHit,
+    CacheInvalidated,
+}
+
+impl NodeExecutionCacheStatus {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::FreshExecution => "fresh_execution",
+            Self::CacheHit => "cache_hit",
+            Self::CacheInvalidated => "cache_invalidated",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "fresh_execution" => Ok(Self::FreshExecution),
+            "cache_hit" => Ok(Self::CacheHit),
+            "cache_invalidated" => Ok(Self::CacheInvalidated),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "execution_cache_status",
+            }),
+        }
     }
 }
 
@@ -2478,6 +2509,7 @@ pub struct NodeStatusProjectionRecord {
     pub selected_backend_key: Option<String>,
     pub model_id: Option<String>,
     pub model_version: Option<String>,
+    pub execution_cache_status: Option<NodeExecutionCacheStatus>,
     pub status: NodeExecutionProjectionStatus,
     pub started_at_ms: Option<i64>,
     pub completed_at_ms: Option<i64>,

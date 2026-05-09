@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 
 use pantograph_diagnostics_ledger::{
     DiagnosticEventPayload, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
-    LicenseSnapshot, ModelIdentity, ModelOutputMeasurement, NodeExecutionProjectionStatus,
-    OutputMeasurementUnavailableReason, OutputModality, SqliteDiagnosticsLedger,
+    LicenseSnapshot, ModelIdentity, ModelOutputMeasurement, NodeExecutionCacheStatus,
+    NodeExecutionProjectionStatus, OutputMeasurementUnavailableReason, OutputModality,
+    SqliteDiagnosticsLedger,
 };
 use pantograph_node_contracts::{
     EffectiveNodeContract, NodeAuthoringMetadata, NodeCapabilityRequirement, NodeCategory,
@@ -1543,6 +1544,22 @@ fn node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_
         })
         .expect("artifact body should be readable");
     assert_eq!(body.body, b"retained intermediate text");
+
+    let statuses = service
+        .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            status: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("node status query");
+    assert_eq!(statuses.nodes.len(), 1);
+    assert_eq!(
+        statuses.nodes[0].execution_cache_status,
+        Some(NodeExecutionCacheStatus::FreshExecution)
+    );
 }
 
 #[test]

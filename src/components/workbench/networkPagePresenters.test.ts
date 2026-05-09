@@ -177,7 +177,7 @@ test('formatNetworkProjectionFreshness keeps selected-run projection cursor visi
   assert.equal(
     formatNetworkProjectionFreshness({
       projection_name: 'node_status',
-      projection_version: 1,
+      projection_version: 5,
       last_applied_event_seq: 42,
       status: 'rebuilding',
       rebuilt_at_ms: null,

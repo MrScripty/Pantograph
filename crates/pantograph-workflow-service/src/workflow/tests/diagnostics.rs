@@ -3,8 +3,8 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     ExecutionGuaranteeLevel, IoArtifactObservedPayload, IoArtifactRetentionState, IoArtifactRole,
     LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation, LicenseSnapshot,
-    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
-    NodeExecutionStatusPayload, OutputModality, ProjectionStatus,
+    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionCacheStatus,
+    NodeExecutionProjectionStatus, NodeExecutionStatusPayload, OutputModality, ProjectionStatus,
     RetentionArtifactStateChangedPayload, RetentionClass, RetentionPolicyActorScope,
     RunListFacetKind, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
     RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
@@ -591,6 +591,7 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
     if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut node_event.payload {
         payload.task_id = Some("text_generation".to_string());
         payload.selected_backend_key = Some("llama_cpp".to_string());
+        payload.execution_cache_status = Some(NodeExecutionCacheStatus::FreshExecution);
     }
     ledger
         .append_diagnostic_event(node_event)
@@ -647,6 +648,10 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
     assert_eq!(
         response.node_statuses[0].model_id.as_deref(),
         Some("pumas://models/tiny-gguf")
+    );
+    assert_eq!(
+        response.node_statuses[0].execution_cache_status,
+        Some(NodeExecutionCacheStatus::FreshExecution)
     );
     assert_eq!(response.node_projection_state.last_applied_event_seq, 6);
 }
@@ -1751,6 +1756,7 @@ fn sample_node_status_event(
             canonical_error_event_id: None,
             task_id: None,
             selected_backend_key: None,
+            execution_cache_status: None,
         }),
     }
 }

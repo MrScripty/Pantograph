@@ -333,6 +333,7 @@ test('queryRunDetail preserves selected-run workflow version and estimate fields
         selected_backend_key: 'llama_cpp',
         model_id: 'pumas://models/tiny-gguf',
         model_version: null,
+        execution_cache_status: 'fresh_execution',
         status: 'completed',
         started_at_ms: 40,
         completed_at_ms: 90,
@@ -348,7 +349,7 @@ test('queryRunDetail preserves selected-run workflow version and estimate fields
     ],
     node_projection_state: {
       projection_name: 'node_status',
-      projection_version: 1,
+      projection_version: 5,
       last_applied_event_seq: 6,
       status: 'current',
       rebuilt_at_ms: null,

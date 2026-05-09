@@ -252,6 +252,8 @@ export type NodeExecutionProjectionStatus =
   | 'failed'
   | 'cancelled';
 
+export type NodeExecutionCacheStatus = 'fresh_execution' | 'cache_hit' | 'cache_invalidated';
+
 export interface NodeStatusProjectionRecord {
   workflow_run_id: string;
   workflow_id: string;
@@ -266,6 +268,7 @@ export interface NodeStatusProjectionRecord {
   selected_backend_key?: string | null;
   model_id?: string | null;
   model_version?: string | null;
+  execution_cache_status?: NodeExecutionCacheStatus | null;
   status: NodeExecutionProjectionStatus;
   started_at_ms?: number | null;
   completed_at_ms?: number | null;

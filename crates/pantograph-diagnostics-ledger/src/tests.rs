@@ -17,14 +17,15 @@ use crate::{
     IoArtifactPayloadKind, IoArtifactProjectionQuery, IoArtifactRetentionState,
     IoArtifactRetentionSummaryQuery, IoArtifactRole, LibraryAssetAccessedPayload,
     LibraryAssetCacheStatus, LibraryAssetOperation, LibraryUsageProjectionQuery, LicenseSnapshot,
-    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
-    NodeExecutionStatusPayload, NodeStatusProjectionQuery, OutputMeasurementUnavailableReason,
-    OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
-    PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
-    RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
-    RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
-    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionCacheStatus,
+    NodeExecutionProjectionStatus, NodeExecutionStatusPayload, NodeStatusProjectionQuery,
+    OutputMeasurementUnavailableReason, OutputModality, ProjectionStateUpdate, ProjectionStatus,
+    PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionArtifactStateChangedPayload,
+    RetentionClass, RetentionPolicyActorScope, RetentionPolicyChangedPayload,
+    RunDetailProjectionQuery, RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus,
+    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
+    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
+    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
     SchedulerQueueControlPayload, SchedulerQueuePlacementPayload,
@@ -2685,6 +2686,44 @@ fn node_status_projection_keeps_latest_status_per_node() {
 }
 
 #[test]
+fn node_status_projection_preserves_execution_cache_status() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut completed = sample_node_status_event(
+        "workflow_run_alpha",
+        "node_text",
+        NodeExecutionProjectionStatus::Completed,
+        20,
+    );
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut completed.payload {
+        payload.execution_cache_status = Some(NodeExecutionCacheStatus::CacheHit);
+    }
+    ledger
+        .append_diagnostic_event(completed)
+        .expect("completed status appends");
+
+    ledger
+        .drain_node_status_projection(10)
+        .expect("node status projection drains");
+    let records = ledger
+        .query_node_status_projection(NodeStatusProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: Some("node_text".to_string()),
+            status: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("node status projection loads");
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        records[0].execution_cache_status,
+        Some(NodeExecutionCacheStatus::CacheHit)
+    );
+}
+
+#[test]
 fn projection_rebuild_resets_projection_rows_and_cursor() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
@@ -3500,13 +3539,17 @@ fn current_schema_repairs_all_drifted_projection_tables() {
             "node_version",
             "runtime_id",
             "runtime_version",
+            "task_id",
+            "selected_backend_key",
             "model_id",
             "model_version",
+            "execution_cache_status",
             "started_at_ms",
             "completed_at_ms",
             "duration_ms",
             "error",
             "error_event_id",
+            "canonical_error_event_id",
             "error_severity",
             "error_phase",
             "error_code",
@@ -4724,6 +4767,7 @@ fn sample_node_status_event(
             canonical_error_event_id: None,
             task_id: None,
             selected_backend_key: None,
+            execution_cache_status: None,
         }),
     }
 }

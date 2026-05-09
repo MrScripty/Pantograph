@@ -28,6 +28,7 @@ export interface RunGraphNodeRow {
   hasOutputArtifacts: boolean;
   statusLabel: string;
   statusClass: string;
+  cacheStatusLabel: string | null;
   errorEventId: string | null;
   errorSeverity: DiagnosticErrorSeverity | null;
   errorPhase: string | null;
@@ -55,6 +56,7 @@ export interface RunGraphCanvasNode {
   hasOutputArtifacts: boolean;
   statusLabel: string;
   statusClass: string;
+  cacheStatusLabel: string | null;
   errorEventId: string | null;
   errorSeverity: DiagnosticErrorSeverity | null;
   errorPhase: string | null;
@@ -150,6 +152,7 @@ export function buildRunGraphNodeRows(
       hasOutputArtifacts: (artifactSummary?.outputCount ?? 0) > 0,
       statusLabel: formatRunGraphNodeStatusLabel(nodeStatus?.status),
       statusClass: runGraphNodeStatusClass(nodeStatus?.status),
+      cacheStatusLabel: formatRunGraphNodeCacheStatusLabel(nodeStatus?.execution_cache_status),
       errorEventId: nodeStatus?.canonical_error_event_id ?? nodeStatus?.error_event_id ?? null,
       errorSeverity: nodeStatus?.error_severity ?? null,
       errorPhase: nodeStatus?.error_phase ?? null,
@@ -202,6 +205,9 @@ export function buildRunGraphCanvasModel(
     hasOutputArtifacts: (artifactSummaries[node.id]?.outputCount ?? 0) > 0,
     statusLabel: formatRunGraphNodeStatusLabel(nodeStatuses[node.id]?.status),
     statusClass: runGraphNodeStatusClass(nodeStatuses[node.id]?.status),
+    cacheStatusLabel: formatRunGraphNodeCacheStatusLabel(
+      nodeStatuses[node.id]?.execution_cache_status,
+    ),
     errorEventId:
       nodeStatuses[node.id]?.canonical_error_event_id ?? nodeStatuses[node.id]?.error_event_id ?? null,
     errorSeverity: nodeStatuses[node.id]?.error_severity ?? null,
@@ -321,6 +327,21 @@ export function runGraphNodeStatusClass(
       return 'queued';
     default:
       return 'unknown';
+  }
+}
+
+export function formatRunGraphNodeCacheStatusLabel(
+  status: NodeStatusProjectionRecord['execution_cache_status'] | null | undefined,
+): string | null {
+  switch (status) {
+    case 'fresh_execution':
+      return 'Fresh execution';
+    case 'cache_hit':
+      return 'Cache hit';
+    case 'cache_invalidated':
+      return 'Cache invalidated';
+    default:
+      return null;
   }
 }
 
