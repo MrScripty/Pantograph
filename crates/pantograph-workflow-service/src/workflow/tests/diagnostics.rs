@@ -942,6 +942,18 @@ fn refresh_run_list(service: &WorkflowService, batch_size: u32) {
         .expect("projection refresh");
 }
 
+fn refresh_node_status(service: &WorkflowService, batch_size: u32) {
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::NodeStatus],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size,
+        })
+        .expect("projection refresh");
+}
+
 #[test]
 fn workflow_run_detail_query_validates_bounds() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
@@ -1377,6 +1389,7 @@ fn workflow_node_status_query_projects_latest_node_states() {
         ))
         .expect("completed node status");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+    refresh_node_status(&service, 10);
 
     let response = service
         .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
@@ -1397,6 +1410,43 @@ fn workflow_node_status_query_projects_latest_node_states() {
     );
     assert_eq!(response.nodes[0].duration_ms, Some(120));
     assert_eq!(response.projection_state.projection_name, "node_status");
+}
+
+#[test]
+fn workflow_node_status_query_does_not_mutate_projection_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_node_status_event(
+            "node-a",
+            NodeExecutionProjectionStatus::Running,
+            40,
+        ))
+        .expect("running node status");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            status: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("node status query");
+
+    assert!(response.nodes.is_empty());
+    assert_eq!(
+        response.projection_state.status,
+        ProjectionStatus::NeedsRebuild
+    );
+    assert_eq!(response.projection_state.last_applied_event_seq, 0);
+
+    let ledger = service.diagnostics_ledger_guard().expect("ledger guard");
+    assert!(ledger
+        .projection_state("node_status")
+        .expect("node status state query")
+        .is_none());
 }
 
 #[test]
