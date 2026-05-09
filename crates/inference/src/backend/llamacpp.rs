@@ -232,6 +232,9 @@ impl InferenceBackend for LlamaCppBackend {
                 mmproj_path.as_deref(),
                 &device_config,
                 context_size,
+                runtime_settings.cpu_threads,
+                runtime_settings.batch_size,
+                runtime_settings.ubatch_size,
                 config.port_override,
             ) {
                 return Ok(BackendStartOutcome {
@@ -247,6 +250,9 @@ impl InferenceBackend for LlamaCppBackend {
                     mmproj_path.as_deref(),
                     &device_config,
                     context_size,
+                    runtime_settings.cpu_threads,
+                    runtime_settings.batch_size,
+                    runtime_settings.ubatch_size,
                     config.port_override,
                 )
                 .await
@@ -571,6 +577,9 @@ mod tests {
                 gpu_layers: 40,
             },
             context_size: 8192,
+            cpu_threads: None,
+            batch_size: None,
+            ubatch_size: None,
         };
         let config = BackendConfig {
             context_size: Some(8192),
@@ -607,6 +616,9 @@ mod tests {
                 gpu_layers: -1,
             },
             context_size: defaults::CONTEXT_SIZE,
+            cpu_threads: None,
+            batch_size: None,
+            ubatch_size: None,
         };
 
         let fingerprint = llamacpp_support::kv_cache_model_fingerprint_for_mode(&mode, None)
@@ -633,6 +645,9 @@ mod tests {
                     gpu_layers: 40,
                 },
                 context_size: 16384,
+                cpu_threads: Some(8),
+                batch_size: Some(512),
+                ubatch_size: Some(128),
             },
             true,
         );
@@ -645,6 +660,9 @@ mod tests {
                     device: Some("Vulkan0".to_string()),
                     gpu_layers: Some(40),
                     context_size: Some(16384),
+                    cpu_threads: Some(8),
+                    batch_size: Some(512),
+                    ubatch_size: Some(128),
                     port_override: Some(11434),
                     ..BackendConfig::default()
                 },
@@ -673,6 +691,9 @@ mod tests {
                     gpu_layers: 40,
                 },
                 context_size: defaults::CONTEXT_SIZE,
+                cpu_threads: None,
+                batch_size: None,
+                ubatch_size: None,
             },
             true,
         );
@@ -709,6 +730,9 @@ mod tests {
                     gpu_layers: 40,
                 },
                 context_size: defaults::CONTEXT_SIZE,
+                cpu_threads: None,
+                batch_size: None,
+                ubatch_size: None,
             },
             true,
         );
@@ -746,6 +770,9 @@ mod tests {
                     gpu_layers: 40,
                 },
                 context_size: 4096,
+                cpu_threads: None,
+                batch_size: None,
+                ubatch_size: None,
             },
             true,
         );

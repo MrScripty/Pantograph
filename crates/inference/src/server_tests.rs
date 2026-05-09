@@ -42,6 +42,9 @@ fn base_url_reflects_sidecar_port_override() {
                 gpu_layers: -1,
             },
             context_size: crate::constants::defaults::CONTEXT_SIZE,
+            cpu_threads: None,
+            batch_size: None,
+            ubatch_size: None,
         },
         true,
     );
@@ -72,6 +75,9 @@ fn inference_runtime_matcher_requires_matching_port() {
             mmproj_path: Some("/models/vision.mmproj".to_string()),
             device: device.clone(),
             context_size: 4096,
+            cpu_threads: Some(8),
+            batch_size: Some(512),
+            ubatch_size: Some(128),
         },
         true,
     );
@@ -81,6 +87,9 @@ fn inference_runtime_matcher_requires_matching_port() {
         Some("/models/vision.mmproj"),
         &device,
         4096,
+        Some(8),
+        Some(512),
+        Some(128),
         Some(11434),
     ));
     assert!(!server.matches_inference_runtime(
@@ -88,6 +97,9 @@ fn inference_runtime_matcher_requires_matching_port() {
         Some("/models/vision.mmproj"),
         &device,
         4096,
+        Some(8),
+        Some(512),
+        Some(128),
         Some(18080),
     ));
     assert!(!server.matches_inference_runtime(
@@ -95,6 +107,19 @@ fn inference_runtime_matcher_requires_matching_port() {
         Some("/models/vision.mmproj"),
         &device,
         8192,
+        Some(8),
+        Some(512),
+        Some(128),
+        Some(11434),
+    ));
+    assert!(!server.matches_inference_runtime(
+        "/models/main.gguf",
+        Some("/models/vision.mmproj"),
+        &device,
+        4096,
+        Some(16),
+        Some(512),
+        Some(128),
         Some(11434),
     ));
 }
@@ -185,6 +210,9 @@ async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
                 gpu_layers: -1,
             },
             4096,
+            None,
+            None,
+            None,
             Some(18080),
         )
         .await;
@@ -223,6 +251,9 @@ async fn start_sidecar_inference_applies_runtime_settings_to_llama_server_args()
                 gpu_layers: 12,
             },
             16384,
+            Some(8),
+            Some(512),
+            Some(128),
             Some(18080),
         )
         .await;
@@ -231,6 +262,9 @@ async fn start_sidecar_inference_applies_runtime_settings_to_llama_server_args()
     let args = captured_args.lock().expect("captured args lock").clone();
     assert_arg_pair(&args, "-c", "16384");
     assert_arg_pair(&args, "-ngl", "12");
+    assert_arg_pair(&args, "-t", "8");
+    assert_arg_pair(&args, "-b", "512");
+    assert_arg_pair(&args, "-ub", "128");
     assert_arg_pair(&args, "--device", "Vulkan0");
     assert_arg_pair(&args, "--mmproj", "/models/mmproj.gguf");
 }

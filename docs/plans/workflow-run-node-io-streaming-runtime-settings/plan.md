@@ -1117,6 +1117,15 @@ coverage.
 - 2026-05-09: Verification passed:
   `cargo test -p node-engine backend_config_applies_llamacpp_runtime_settings --features inference-nodes`,
   `cargo check -p node-engine --features inference-nodes`, and `cargo fmt`.
+- 2026-05-09: Llama.cpp runtime-application slice now passes
+  `cpu_threads`, `batch_size`, and `ubatch_size` through llama-server startup
+  arguments and records them in sidecar runtime state. Runtime reuse matching
+  now compares these settings so changing them triggers the lifecycle owner
+  instead of silently reusing an incompatible server.
+- 2026-05-09: Verification passed:
+  `cargo test -p inference start_sidecar_inference_applies_runtime_settings_to_llama_server_args --features backend-llamacpp`,
+  `cargo test -p inference inference_runtime_matcher_requires_matching_port --features backend-llamacpp`,
+  `cargo check -p inference --features backend-llamacpp`, and `cargo fmt`.
 
 ## Follow-Up Findings
 

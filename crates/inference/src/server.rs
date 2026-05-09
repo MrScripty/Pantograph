@@ -130,6 +130,9 @@ pub enum ServerMode {
         mmproj_path: Option<String>,
         device: DeviceConfig,
         context_size: u32,
+        cpu_threads: Option<u32>,
+        batch_size: Option<u32>,
+        ubatch_size: Option<u32>,
     },
     /// Sidecar running in embedding mode (for RAG indexing)
     SidecarEmbedding {
@@ -237,6 +240,9 @@ impl LlamaServer {
         mmproj_path: Option<&str>,
         device: &DeviceConfig,
         context_size: u32,
+        cpu_threads: Option<u32>,
+        batch_size: Option<u32>,
+        ubatch_size: Option<u32>,
         port_override: Option<u16>,
     ) -> Result<(), String> {
         // Stop any existing connection
@@ -289,11 +295,27 @@ impl LlamaServer {
             args.push(device.device.clone());
         }
 
+        if let Some(cpu_threads) = cpu_threads {
+            args.push("-t".to_string());
+            args.push(cpu_threads.to_string());
+        }
+        if let Some(batch_size) = batch_size {
+            args.push("-b".to_string());
+            args.push(batch_size.to_string());
+        }
+        if let Some(ubatch_size) = ubatch_size {
+            args.push("-ub".to_string());
+            args.push(ubatch_size.to_string());
+        }
+
         log::info!(
-            "Starting llama-server with device config: device={}, gpu_layers={}, context_size={}",
+            "Starting llama-server with device config: device={}, gpu_layers={}, context_size={}, cpu_threads={:?}, batch_size={:?}, ubatch_size={:?}",
             device.device,
             device.gpu_layers,
-            context_size
+            context_size,
+            cpu_threads,
+            batch_size,
+            ubatch_size
         );
 
         // Convert to &str for spawner
@@ -311,6 +333,9 @@ impl LlamaServer {
             mmproj_path: mmproj_path.map(|s| s.to_string()),
             device: device.clone(),
             context_size,
+            cpu_threads,
+            batch_size,
+            ubatch_size,
         };
 
         self.wait_for_ready(rx).await
@@ -629,6 +654,9 @@ impl LlamaServer {
         mmproj_path: Option<&str>,
         device: &DeviceConfig,
         context_size: u32,
+        cpu_threads: Option<u32>,
+        batch_size: Option<u32>,
+        ubatch_size: Option<u32>,
         port_override: Option<u16>,
     ) -> bool {
         let expected_port = port_override.unwrap_or(ports::SERVER);
@@ -641,11 +669,17 @@ impl LlamaServer {
                     mmproj_path: active_mmproj_path,
                     device: active_device,
                     context_size: active_context_size,
+                    cpu_threads: active_cpu_threads,
+                    batch_size: active_batch_size,
+                    ubatch_size: active_ubatch_size,
                     ..
                 } if active_model_path == model_path
                     && active_mmproj_path.as_deref() == mmproj_path
                     && active_device == device
                     && *active_context_size == context_size
+                    && *active_cpu_threads == cpu_threads
+                    && *active_batch_size == batch_size
+                    && *active_ubatch_size == ubatch_size
                     && *active_port == expected_port
             )
     }
