@@ -1230,22 +1230,21 @@ the affected slices.
 ## Follow-Up Findings
 
 - Full per-node input inspection now has a node-engine/embedded-runtime event
-  boundary for resolved node inputs and a Tauri/frontend transport path.
-  Remaining work is preview limits and descriptor behavior rather than event
-  availability or graph-page summary query integration.
+  boundary for resolved node inputs, diagnostics-ledger projection, artifact
+  descriptor/body behavior, and GraphPage run-inspection integration.
 - Full per-node output inspection for every executed or cached intermediate
-  node should now use the existing node execution event/ledger path. Durable
-  run-detail and graph-page node-status projections now carry cache-hit versus
-  fresh-execution evidence; remaining artifact work is descriptor lifecycle
-  coverage for deleted or expired bodies.
+  node uses the existing node execution event/ledger path. Durable run-detail
+  and graph-page node-status projections carry cache-hit versus
+  fresh-execution evidence, and descriptor lifecycle coverage exists for
+  retained, metadata-only, expired, and deleted payload states.
 - Scheduler live streaming now has a channel from backend node events to the
-  existing frontend stream handler. Remaining streaming work is persistence-rule
-  documentation/tests for `stream` versus `response` connections and any
-  user-facing run view refresh needed after the terminal command response.
+  existing frontend stream handler. The canonical rule is documented and
+  tested: text-generation chunks and the final retained text use `response`;
+  `stream` is not the retained text-output contract.
 - Effective llama.cpp settings are now applied and emitted as a structured
   runtime-settings snapshot with source attribution in run diagnostics.
-  Remaining work is frontend display polish for those diagnostics in retained
-  run inspection.
+  Future polish can expose those effective settings more prominently in
+  retained run inspection, but the backend source of truth exists.
 
 ## Commit Cadence Notes
 
@@ -1303,36 +1302,67 @@ Worker reports should be written under this plan directory using names such as
 
 ## Recommendations
 
-- Treat Milestone 1 as a blocker before more symptom fixes. The current bug
-  looks like a projection/retention pipeline break, and local edge repairs will
-  not fix missing run-detail IO if the persistence path is not populated.
-- Keep live streaming and retained final output separate. Live chunks should
-  improve user experience during execution; final `response` remains the
-  retained inspectable output.
-- Implement runtime settings for llama.cpp first. It is the shortest useful
-  slice for the current GGUF workflow and creates the extension shape for later
-  vLLM, MLX, and PyTorch settings.
+- Keep future backend additions on the same source-of-truth boundaries:
+  diagnostics-ledger owns persisted projections, workflow-service owns
+  run-inspection read models, embedded-runtime owns node execution ledger
+  adaptation, inference owns backend runtime setting application, and frontend
+  presenters own display only.
+- Revisit oversized module decomposition only when the next feature creates a
+  stable split point. The current large files were reviewed and left intact
+  because the touched behavior stayed within existing owners.
+- Add frontend display polish for effective runtime settings in retained run
+  inspection as a separate UI slice, using the existing node-status
+  `runtime_settings` projection rather than re-querying runtime internals.
 
 ## Completion Summary
 
 ### Completed
 
-- Not started.
+- Restored retained per-node input/output inspection through existing
+  node-engine, embedded-runtime, diagnostics-ledger, ArtifactStore, and
+  workflow-service projection boundaries.
+- Preserved cached execution output evidence and cache-status projection for
+  retained run inspection.
+- Repaired text-generation streaming so live chunks and final retained output
+  use the canonical `response` path.
+- Added llama.cpp runtime settings application and effective-settings
+  diagnostics with source attribution.
+- Added backend-owned `WorkflowRunInspectionQuery` and switched GraphPage to
+  consume it instead of composing run graph, node-status, and I/O artifact
+  queries in frontend state.
+- Updated module READMEs and plan status for the implemented ownership
+  boundaries.
 
 ### Deviations
 
-- None.
+- No ADR was added because the implementation preserved existing ownership of
+  retention, ArtifactStore, diagnostics ledger, scheduler, and runtime
+  settings.
+- Oversized touched modules were not split during this repair. The
+  decomposition review is recorded in execution notes and should be revisited
+  when a stable boundary appears.
 
 ### Follow-Ups
 
-- None recorded yet.
+- Optional UI polish: show effective runtime settings more directly in
+  retained run inspection.
+- Optional architecture cleanup: revisit `workflow/diagnostics_api.rs`,
+  `node_execution_ledger.rs`, and `llamacpp_nodes.rs` decomposition when the
+  next adjacent feature provides a stable split point.
 
 ### Verification Summary
 
-- Plan and design review only; source verification not run.
+- Focused Rust, Tauri, TypeScript, frontend, and release-smoke verification
+  passed. See execution notes for exact commands, including
+  `npm run test:frontend` and `bash launcher.sh --release-smoke`.
 
 ### Traceability Links
 
-- Module README updated: N/A for plan creation.
-- ADR added/updated: N/A for plan creation.
+- Module READMEs updated:
+  `crates/pantograph-workflow-service/src/README.md`,
+  `crates/pantograph-embedded-runtime/src/README.md`,
+  `crates/pantograph-diagnostics-ledger/src/README.md`,
+  `src/services/workflow/README.md`, and
+  `src/components/workbench/README.md`.
+- ADR added/updated: not required; no ownership boundary moved.
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A.
