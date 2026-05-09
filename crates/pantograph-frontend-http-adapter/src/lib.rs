@@ -170,6 +170,7 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             selected_version: None,
             supports_external_connection: true,
             backend_keys: self.backend_keys.clone(),
+            backend_capability_facts: None,
             missing_files: Vec::new(),
             unavailable_reason: None,
         }])

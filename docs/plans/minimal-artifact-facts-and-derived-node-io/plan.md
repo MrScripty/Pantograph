@@ -581,6 +581,16 @@ payload-identity retention cleanup behavior.
   and workbench README notes so future changes preserve fact identity,
   payload/read-target identity, resolved-node-I/O ownership, and frontend
   presentation boundaries.
+- 2026-05-09: Release validation found a workspace compile break in
+  `pantograph-frontend-http-adapter`: its `WorkflowRuntimeCapability`
+  initializer had not been updated for the newer `backend_capability_facts`
+  field. Fixed locally with `None` because the HTTP adapter advertises only a
+  coarse host runtime capability in that path.
+- 2026-05-09: Release validation then found UniFFI workflow-event bridge drift:
+  `TaskInputsResolved` was not explicitly projected to an FFI event type.
+  Added the event label and a bridge test case so future node-engine event
+  additions fail at the bridge boundary instead of being hidden by wildcard
+  handling.
 
 ## Commit Cadence Notes
 
@@ -681,6 +691,12 @@ types must be edited serially or by one explicit owner.
 - Documentation slice: source README notes describe the canonical artifact
   fact/payload identity model, backend resolved-node-I/O contract, and
   frontend display boundary.
+- Release-validation cleanup slice: `pantograph-frontend-http-adapter` now
+  initializes `WorkflowRuntimeCapability.backend_capability_facts`, restoring
+  workspace compilation for the current contract.
+- Release-validation cleanup slice: UniFFI buffered workflow-event bridge now
+  handles `TaskInputsResolved` explicitly and preserves the workflow-run id
+  rename behavior for that event.
 
 ### Deviations
 
@@ -729,6 +745,12 @@ types must be edited serially or by one explicit owner.
   - `cargo test -p pantograph-workflow-service workflow_service_retention_cleanup_keeps_descriptor_queryable_while_body_is_unavailable`
   - `cargo test -p pantograph-diagnostics-ledger io_artifact`
   - `cargo test -p pantograph-workflow-service workflow_retention_cleanup_expires_artifacts_through_projection`
+  - `git diff --check`
+- 2026-05-09:
+  - `cargo fmt --all -- --check`
+  - `npm run build`
+  - `cargo test -p pantograph-uniffi test_buffered_event_sink_uses_canonical_event_type_names`
+  - `cargo check --workspace`
   - `git diff --check`
 - 2026-05-09:
   - `cargo test -p pantograph-workflow-service diagnostics`

@@ -141,6 +141,14 @@ async fn test_buffered_event_sink_uses_canonical_event_type_names() {
         occurred_at_ms: None,
     })
     .expect("send graph modified event");
+    sink.send(WorkflowEvent::TaskInputsResolved {
+        task_id: "node-a".to_string(),
+        execution_id: "exec-1".to_string(),
+        input: Some(serde_json::json!({ "prompt": "hello" })),
+        cache_status: None,
+        occurred_at_ms: None,
+    })
+    .expect("send task inputs resolved event");
     sink.send(WorkflowEvent::WorkflowCancelled {
         workflow_id: "wf-1".to_string(),
         execution_id: "exec-1".to_string(),
@@ -160,19 +168,22 @@ async fn test_buffered_event_sink_uses_canonical_event_type_names() {
         let guard = buffer.read().await;
         guard.clone()
     };
-    assert_eq!(events.len(), 4);
+    assert_eq!(events.len(), 5);
     assert_eq!(events[0].event_type, "WaitingForInput");
     assert_eq!(events[1].event_type, "GraphModified");
-    assert_eq!(events[2].event_type, "WorkflowCancelled");
-    assert_eq!(events[3].event_type, "IncrementalExecutionStarted");
+    assert_eq!(events[2].event_type, "TaskInputsResolved");
+    assert_eq!(events[3].event_type, "WorkflowCancelled");
+    assert_eq!(events[4].event_type, "IncrementalExecutionStarted");
     let waiting_json: serde_json::Value =
         serde_json::from_str(&events[0].event_json).expect("parse waiting json");
     let graph_modified_json: serde_json::Value =
         serde_json::from_str(&events[1].event_json).expect("parse graph modified json");
+    let inputs_resolved_json: serde_json::Value =
+        serde_json::from_str(&events[2].event_json).expect("parse inputs resolved json");
     let cancelled_json: serde_json::Value =
-        serde_json::from_str(&events[2].event_json).expect("parse cancelled json");
+        serde_json::from_str(&events[3].event_json).expect("parse cancelled json");
     let incremental_json: serde_json::Value =
-        serde_json::from_str(&events[3].event_json).expect("parse incremental json");
+        serde_json::from_str(&events[4].event_json).expect("parse incremental json");
 
     assert_eq!(waiting_json["type"], "waitingForInput");
     assert_eq!(waiting_json["taskId"], "human-input-1");
@@ -186,6 +197,11 @@ async fn test_buffered_event_sink_uses_canonical_event_type_names() {
         graph_modified_json["dirtyTasks"],
         serde_json::json!(["node-a", "node-b"])
     );
+
+    assert_eq!(inputs_resolved_json["type"], "taskInputsResolved");
+    assert_eq!(inputs_resolved_json["taskId"], "node-a");
+    assert_eq!(inputs_resolved_json["workflowRunId"], "exec-1");
+    assert!(inputs_resolved_json.get("executionId").is_none());
 
     assert_eq!(cancelled_json["type"], "workflowCancelled");
     assert_eq!(

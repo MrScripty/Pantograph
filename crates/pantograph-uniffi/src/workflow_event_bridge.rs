@@ -56,6 +56,7 @@ fn ffi_workflow_event_type(event: &WorkflowEvent) -> &'static str {
         WorkflowEvent::WorkflowCancelled { .. } => "WorkflowCancelled",
         WorkflowEvent::WaitingForInput { .. } => "WaitingForInput",
         WorkflowEvent::TaskStarted { .. } => "TaskStarted",
+        WorkflowEvent::TaskInputsResolved { .. } => "TaskInputsResolved",
         WorkflowEvent::TaskCompleted { .. } => "TaskCompleted",
         WorkflowEvent::TaskFailed { .. } => "TaskFailed",
         WorkflowEvent::TaskProgress { .. } => "TaskProgress",
