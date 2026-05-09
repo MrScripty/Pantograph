@@ -694,11 +694,11 @@ reason after payload references are removed.
   retained node output artifacts.
 - [ ] Update backend stream emission only if a text backend other than
   llama.cpp emits on a noncanonical port.
-- [ ] Update frontend event routing so a `response -> text` graph connection
+- [x] Update frontend event routing so a `response -> text` graph connection
   streams into a connected text output during execution.
 - [ ] Verify dropping a stream-capable connection onto text output does not
   hide or discard the canonical final `response` path.
-- [ ] Ensure final `TaskCompleted.response` reconciles the text output after
+- [x] Ensure final `TaskCompleted.response` reconciles the text output after
   streaming completes.
 - [ ] Do not store raw token-by-token stream chunks as the only retained output;
   retain the final response and optional bounded stream summary.
@@ -716,7 +716,14 @@ reason after payload references are removed.
 - Vertical slice proves live text appears during execution and final run detail
   includes `response`.
 
-**Status:** Not started
+**Status:** Partially implemented. Llama.cpp and frontend routing now treat
+`response` as the canonical text stream/final output path, and
+`TaskCompleted.response` reconciles the connected text output. Stream events
+now pass through the same active-run ownership gate as other execution events
+so stale chunks cannot update another active run. Remaining work is explicit
+coverage for stream-capable connection normalization, raw-token retention
+summary rules, optional sequence ordering, and render coalescing if token-rate
+updates prove noisy.
 
 ### Milestone 6: Llama.cpp Runtime Device Settings Slice
 
@@ -1044,6 +1051,16 @@ coverage.
   `cargo test -p pantograph-workflow-service workflow_execution_session_records_retained_node_io_artifact_bodies`
   and
   `cargo test -p pantograph-embedded-runtime scheduler_run_retains_node_io_status_and_terminal_output_projection --features backend-llamacpp`.
+- 2026-05-09: Stream ownership slice found that `NodeStream` bypassed the
+  active workflow-run relevance gate in `workflowToolbarEvents.ts`; stale
+  chunks from another run could still append to connected frontend nodes even
+  though other execution events were rejected. `workflowExecutionEvents.ts` now
+  claims current stream events as handled no-op base events and rejects stale
+  stream events before toolbar-specific stream routing applies chunks.
+- 2026-05-09: Verification passed:
+  `node --experimental-strip-types --test packages/svelte-graph/src/stores/workflowExecutionEvents.test.ts`
+  and
+  `node --experimental-strip-types --test src/components/workflowToolbarEvents.test.ts`.
 
 ## Follow-Up Findings
 

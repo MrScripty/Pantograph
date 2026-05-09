@@ -147,6 +147,48 @@ test('applyWorkflowExecutionEvent accepts resolved input events without mutating
   assert.equal(result.shouldCleanup, false);
 });
 
+test('applyWorkflowExecutionEvent claims current stream events without mutating live node state', () => {
+  const { result, stateCalls, updateCalls } = applyEvent({
+    type: 'NodeStream',
+    data: {
+      node_id: 'producer',
+      port: 'response',
+      chunk: 'partial',
+      workflow_run_id: 'run-1',
+    },
+  });
+
+  assert.deepEqual(stateCalls, []);
+  assert.deepEqual(updateCalls, []);
+  assert.equal(result.activeWorkflowRunId, 'run-1');
+  assert.equal(result.waitingForInput, false);
+  assert.equal(result.handled, true);
+  assert.equal(result.shouldCleanup, false);
+});
+
+test('applyWorkflowExecutionEvent rejects stale stream events for another active run', () => {
+  const { result, stateCalls, updateCalls } = applyEvent(
+    {
+      type: 'NodeStream',
+      data: {
+        node_id: 'producer',
+        port: 'response',
+        chunk: 'stale',
+        workflow_run_id: 'run-2',
+      },
+    },
+    {
+      activeWorkflowRunId: 'run-1',
+    },
+  );
+
+  assert.deepEqual(stateCalls, []);
+  assert.deepEqual(updateCalls, []);
+  assert.equal(result.activeWorkflowRunId, 'run-1');
+  assert.equal(result.handled, false);
+  assert.equal(result.shouldCleanup, false);
+});
+
 test('applyWorkflowExecutionEvent marks waiting nodes and keeps waiting state true', () => {
   const { result, stateCalls } = applyEvent({
     type: 'WaitingForInput',

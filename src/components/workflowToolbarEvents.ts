@@ -130,7 +130,7 @@ export function applyWorkflowToolbarEvent({
     },
   });
 
-  if (!result.handled && event.type !== 'NodeStream') {
+  if (!result.handled) {
     return result;
   }
 

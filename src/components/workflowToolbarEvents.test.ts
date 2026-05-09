@@ -401,6 +401,38 @@ test('applyWorkflowToolbarEvent treats response as the canonical text generation
   ]);
 });
 
+test('applyWorkflowToolbarEvent ignores stale text stream chunks from another active run', () => {
+  const stream = applyEvent(
+    {
+      type: 'NodeStream',
+      data: {
+        node_id: 'llm',
+        port: 'response',
+        chunk: 'stale text',
+        workflow_run_id: 'run-2',
+      },
+    },
+    {
+      activeWorkflowRunId: 'run-1',
+      edges: [
+        {
+          id: 'edge-response',
+          source: 'llm',
+          sourceHandle: 'response',
+          target: 'text-output',
+          targetHandle: 'text',
+        } as Edge,
+      ],
+    },
+  );
+
+  assert.deepEqual(stream.appendCalls, []);
+  assert.deepEqual(stream.replaceCalls, []);
+  assert.deepEqual(stream.runtimeDataCalls, []);
+  assert.equal(stream.result.activeWorkflowRunId, 'run-1');
+  assert.equal(stream.result.handled, false);
+});
+
 test('applyWorkflowToolbarEvent forwards audio stream references without inline base64', () => {
   const descriptor = {
     artifact_id: 'artifact-audio',

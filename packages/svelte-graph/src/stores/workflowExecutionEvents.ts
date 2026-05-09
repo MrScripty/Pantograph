@@ -50,6 +50,8 @@ export function applyWorkflowExecutionEvent({
     }
     case 'NodeInputsResolved':
       return executionEventResult(ownership.activeWorkflowRunId, waitingForInput, true, false);
+    case 'NodeStream':
+      return executionEventResult(ownership.activeWorkflowRunId, waitingForInput, true, false);
     case 'IncrementalExecutionStarted': {
       const data = event.data as WorkflowEventData['IncrementalExecutionStarted'];
       for (const taskId of data.task_ids) {
