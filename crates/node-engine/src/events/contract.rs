@@ -68,6 +68,14 @@ pub enum TaskProgressDetail {
     KvCache(KvCacheExecutionDiagnostics),
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskExecutionCacheStatus {
+    FreshExecution,
+    CacheHit,
+    CacheInvalidated,
+}
+
 /// Events emitted during workflow execution.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -136,6 +144,8 @@ pub enum WorkflowEvent {
         task_id: String,
         execution_id: String,
         output: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache_status: Option<TaskExecutionCacheStatus>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         occurred_at_ms: Option<u64>,
     },

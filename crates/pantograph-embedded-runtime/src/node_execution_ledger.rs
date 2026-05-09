@@ -265,6 +265,7 @@ impl NodeExecutionWorkflowLedgerSink {
             execution_id,
             output: Some(output),
             occurred_at_ms,
+            ..
         } = event
         else {
             return Ok(());

@@ -13,7 +13,7 @@ mod tests;
 pub(crate) use contract::unix_timestamp_ms;
 pub use contract::{
     KvCacheEventAction, KvCacheEventOutcome, KvCacheExecutionDiagnostics, KvCacheOptionDiagnostic,
-    KvCacheOptionSupportState, TaskProgressDetail, WorkflowEvent,
+    KvCacheOptionSupportState, TaskExecutionCacheStatus, TaskProgressDetail, WorkflowEvent,
 };
 pub use sinks::{
     BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventError, EventSink,

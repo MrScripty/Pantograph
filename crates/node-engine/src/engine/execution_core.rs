@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::NodeEngineError;
+use crate::events::TaskExecutionCacheStatus;
 use crate::types::NodeId;
 
 pub(super) struct DemandExecutionCore<'a> {
@@ -44,6 +45,13 @@ impl<'a> DemandExecutionCore<'a> {
                     node_id,
                     input_version,
                 )? {
+                    super::execution_events::emit_task_completed(
+                        self.runtime.event_sink,
+                        node_id.clone(),
+                        self.engine.execution_id.clone(),
+                        &outputs,
+                        TaskExecutionCacheStatus::CacheHit,
+                    )?;
                     return Ok(outputs);
                 }
 
@@ -115,6 +123,7 @@ impl<'a> DemandExecutionCore<'a> {
                     node_id.clone(),
                     self.engine.execution_id.clone(),
                     &outputs,
+                    TaskExecutionCacheStatus::FreshExecution,
                 )?;
 
                 super::output_cache::store_completed_output(

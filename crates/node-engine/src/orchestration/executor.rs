@@ -393,6 +393,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             task_id: task_id.to_string(),
             execution_id: self.execution_id.clone(),
             output: output.map(Value::String),
+            cache_status: Some(crate::events::TaskExecutionCacheStatus::FreshExecution),
             occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }

@@ -610,15 +610,17 @@ open.
 executed run detail.
 
 **Tasks:**
-- [ ] Add a new-run cache-hit test proving cached output use still produces
+- [x] Add a new-run cache-hit test proving cached output use still produces
   inspectable node IO in run detail. The original run remains immutable and is
   not executed again.
-- [ ] Move or duplicate the necessary node IO event/projection work so cache
+- [x] Move or duplicate the necessary node IO event/projection work so cache
   hits cannot return before retained node output records are produced.
-- [ ] Ensure cache-hit records are explicitly marked as cache evidence, not
-  fresh execution evidence.
-- [ ] Add or update cache status metadata: `fresh_execution`, `cache_hit`,
+- [x] Ensure node-engine cache-hit completion events are explicitly marked as
+  cache evidence, not fresh execution evidence.
+- [x] Add or update cache status metadata: `fresh_execution`, `cache_hit`,
   `cache_invalidated`, or equivalent existing enum.
+- [ ] Project cache status from node completion events into durable run detail
+  or artifact evidence where the run graph page needs it.
 - [ ] Verify ArtifactStore descriptors are retained for large/binary node IO
   and that run detail exposes lifecycle and retention state.
 - [ ] Verify retained artifact bodies are readable through existing artifact
@@ -627,13 +629,18 @@ executed run detail.
   run detail.
 
 **Verification:**
-- Node-engine cache tests cover emitted/projected cache status.
+- Node-engine cache tests cover emitted cache status; workflow-service tests
+  cover any later durable projection of that status.
 - Workflow-service artifact retention tests cover node IO descriptors in run
   detail.
 - Frontend IO inspector or graph run page tests cover descriptor display and
   missing-body states.
 
-**Status:** Not started
+**Status:** Partially implemented. Demand-engine cache hits now emit
+`TaskCompleted` events with retained outputs and `cache_hit` status instead of
+returning silently before node-output artifact retention. Fresh executor
+completions emit `fresh_execution`. Durable graph-page cache-status projection
+remains open.
 
 ### Milestone 5: Text Generation Streaming Contract
 
@@ -878,6 +885,16 @@ coverage.
   event-to-ledger adaptation.
 - 2026-05-08: Verification passed:
   `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests:: --features backend-llamacpp`.
+- 2026-05-08: Demand-engine cache-hit slice now emits `TaskCompleted` events
+  with actual cached outputs and `TaskExecutionCacheStatus::CacheHit` before
+  returning from cache. Fresh executor completions emit
+  `TaskExecutionCacheStatus::FreshExecution`, and runtime transient node
+  diagnostics preserve the completion cache status for graph/run consumers.
+- 2026-05-08: Verification passed:
+  `cargo test -p node-engine engine::tests::demand::`,
+  `cargo test -p node-engine events::tests::`,
+  `cargo test -p pantograph-embedded-runtime node_execution_diagnostics::tests:: --features backend-llamacpp`,
+  and `cargo test -p pantograph-embedded-runtime node_execution_ledger::tests::node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_artifacts --features backend-llamacpp`.
 
 ## Follow-Up Findings
 
@@ -885,10 +902,11 @@ coverage.
   contract addition or equivalent event boundary for resolved node inputs.
   Submitted workflow inputs are now retained as `node_input`, but dependency
   resolved inputs for intermediate nodes are not yet durable facts.
-- Full per-node output inspection for every executed intermediate node should
-  now use the existing node execution event/ledger path. Cached-output branches
-  can still bypass fresh `TaskCompleted` execution and need a cache-specific
-  node-output artifact record in Milestone 4.
+- Full per-node output inspection for every executed or cached intermediate
+  node should now use the existing node execution event/ledger path. Durable
+  artifact/run-detail projections still need an explicit cache-status surface
+  where graph-page inspection needs to distinguish cache-hit evidence from
+  fresh-execution evidence.
 - Effective llama.cpp settings are applied but not yet emitted as a structured
   runtime settings snapshot with source attribution in run diagnostics. That is
   still needed before frontend controls can show whether values came from

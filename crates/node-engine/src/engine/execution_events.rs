@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::error::Result;
-use crate::events::{unix_timestamp_ms, EventSink, WorkflowEvent};
+use crate::events::{unix_timestamp_ms, EventSink, TaskExecutionCacheStatus, WorkflowEvent};
 use crate::types::NodeId;
 
 pub(super) fn emit_task_started(event_sink: &dyn EventSink, task_id: NodeId, execution_id: String) {
@@ -33,11 +33,13 @@ pub(super) fn emit_task_completed(
     task_id: NodeId,
     execution_id: String,
     outputs: &HashMap<String, serde_json::Value>,
+    cache_status: TaskExecutionCacheStatus,
 ) -> Result<()> {
     let _ = event_sink.send(WorkflowEvent::TaskCompleted {
         task_id,
         execution_id,
         output: Some(serde_json::to_value(outputs)?),
+        cache_status: Some(cache_status),
         occurred_at_ms: Some(unix_timestamp_ms()),
     });
     Ok(())
@@ -81,8 +83,14 @@ mod tests {
         let sink = VecEventSink::new();
         let outputs = HashMap::from([("out".to_string(), serde_json::json!("value"))]);
 
-        emit_task_completed(&sink, "node-a".to_string(), "exec-1".to_string(), &outputs)
-            .expect("emit completed");
+        emit_task_completed(
+            &sink,
+            "node-a".to_string(),
+            "exec-1".to_string(),
+            &outputs,
+            TaskExecutionCacheStatus::FreshExecution,
+        )
+        .expect("emit completed");
 
         let events = sink.events();
         assert!(matches!(
@@ -91,6 +99,7 @@ mod tests {
                 task_id,
                 execution_id,
                 output: Some(output),
+                cache_status: Some(TaskExecutionCacheStatus::FreshExecution),
                 ..
             }] if task_id == "node-a"
                 && execution_id == "exec-1"

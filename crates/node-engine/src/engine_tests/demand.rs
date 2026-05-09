@@ -1,4 +1,5 @@
 use super::*;
+use crate::TaskExecutionCacheStatus;
 
 #[tokio::test]
 async fn test_demand_linear_graph() {
@@ -59,6 +60,77 @@ async fn test_demand_caching() {
         )
         .await;
     assert_eq!(executor.count(), 3); // No additional executions
+}
+
+#[tokio::test]
+async fn test_demand_cache_hit_emits_completed_outputs_with_cache_status() {
+    let graph = make_linear_graph();
+    let mut engine = DemandEngine::new("test_exec");
+    let executor = CountingExecutor::new();
+    let context = Context::new();
+    let event_sink = VecEventSink::new();
+    let extensions = ExecutorExtensions::new();
+
+    engine
+        .demand(
+            &"c".to_string(),
+            &graph,
+            &executor,
+            &context,
+            &event_sink,
+            &extensions,
+        )
+        .await
+        .expect("first demand should execute");
+    assert_eq!(executor.count(), 3);
+
+    event_sink.clear();
+
+    engine
+        .demand(
+            &"c".to_string(),
+            &graph,
+            &executor,
+            &context,
+            &event_sink,
+            &extensions,
+        )
+        .await
+        .expect("second demand should use cache");
+    assert_eq!(executor.count(), 3);
+
+    let events = event_sink.events();
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event, WorkflowEvent::TaskStarted { .. })),
+        "cache hits should not emit fresh execution starts"
+    );
+
+    let completed = events
+        .iter()
+        .filter_map(|event| match event {
+            WorkflowEvent::TaskCompleted {
+                task_id,
+                output,
+                cache_status,
+                ..
+            } => Some((task_id.as_str(), output, cache_status)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(completed.len(), 3);
+    assert_eq!(
+        completed
+            .iter()
+            .map(|(task_id, _, _)| *task_id)
+            .collect::<Vec<_>>(),
+        vec!["a", "b", "c"]
+    );
+    assert!(completed.iter().all(|(_, output, cache_status)| {
+        output.is_some() && **cache_status == Some(TaskExecutionCacheStatus::CacheHit)
+    }));
 }
 
 #[tokio::test]

@@ -60,6 +60,8 @@ pub struct NodeExecutionDiagnosticEvent {
     pub output_summaries: Vec<NodeOutputSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress_detail: Option<node_engine::TaskProgressDetail>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_cache_status: Option<node_engine::TaskExecutionCacheStatus>,
 }
 
 #[derive(Default)]
@@ -141,6 +143,7 @@ pub fn adapt_node_engine_diagnostic_event(
             task_id,
             execution_id,
             output,
+            cache_status,
             occurred_at_ms,
         } if matches_context(context, execution_id, task_id) => {
             let mut event = base_event(
@@ -149,6 +152,7 @@ pub fn adapt_node_engine_diagnostic_event(
                 *occurred_at_ms,
             );
             event.output_summaries = output_summaries(context, output.as_ref());
+            event.execution_cache_status = *cache_status;
             Some(event)
         }
         node_engine::WorkflowEvent::TaskFailed {
@@ -307,6 +311,7 @@ fn base_event(
         error: None,
         output_summaries: Vec::new(),
         progress_detail: None,
+        execution_cache_status: None,
     }
 }
 

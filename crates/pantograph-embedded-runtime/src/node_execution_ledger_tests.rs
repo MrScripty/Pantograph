@@ -1500,6 +1500,7 @@ fn node_execution_workflow_sink_records_task_completed_outputs_as_retained_node_
             output: Some(serde_json::json!({
                 "response": "retained intermediate text"
             })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
             occurred_at_ms: Some(200),
         },
     )

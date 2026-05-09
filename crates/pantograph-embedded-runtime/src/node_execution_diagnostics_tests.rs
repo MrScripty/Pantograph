@@ -145,6 +145,7 @@ fn adapter_captures_completed_output_summaries_from_contract_ports() {
             task_id: "node-a".to_string(),
             execution_id: "run-a".to_string(),
             output: Some(serde_json::json!({ "text": "hello" })),
+            cache_status: Some(node_engine::TaskExecutionCacheStatus::FreshExecution),
             occurred_at_ms: Some(140),
         },
     )
@@ -158,6 +159,10 @@ fn adapter_captures_completed_output_summaries_from_contract_ports() {
         Some(PortValueType::String)
     );
     assert_eq!(event.output_summaries[0].byte_count, Some(5));
+    assert_eq!(
+        event.execution_cache_status,
+        Some(node_engine::TaskExecutionCacheStatus::FreshExecution)
+    );
 }
 
 #[test]
