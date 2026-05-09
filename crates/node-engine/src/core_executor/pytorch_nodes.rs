@@ -14,6 +14,8 @@ use super::{build_extra_settings, build_model_ref_v2, infer_task_type_primary, k
 // PyTorch handlers (behind pytorch-nodes feature)
 // ---------------------------------------------------------------------------
 
+const TEXT_GENERATION_STREAM_PORT: &str = "response";
+
 async fn pytorch_model_needs_load(model_path: &str) -> Result<bool> {
     match inference::backend::pytorch::active_loaded_model_info().await {
         Ok(info) => Ok(info.model_path != model_path),
@@ -224,7 +226,7 @@ pub(crate) async fn execute_pytorch_inference(
                 let _ = sink.send(crate::WorkflowEvent::task_stream(
                     task_id,
                     execution_id,
-                    "stream",
+                    TEXT_GENERATION_STREAM_PORT,
                     serde_json::json!({"mode": "append", "text": text}),
                 ));
             }
@@ -290,4 +292,14 @@ pub(crate) async fn execute_pytorch_inference(
     };
     outputs.insert("kv_cache_out".to_string(), kv_cache_output);
     Ok(outputs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pytorch_text_generation_stream_port_uses_canonical_response_output() {
+        assert_eq!(TEXT_GENERATION_STREAM_PORT, "response");
+    }
 }

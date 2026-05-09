@@ -692,7 +692,7 @@ reason after payload references are removed.
 - [x] Define the persistence rule: choosing a live `stream` connection versus
   a `response` connection affects live delivery/display only, not final
   retained node output artifacts.
-- [ ] Update backend stream emission only if a text backend other than
+- [x] Update backend stream emission only if a text backend other than
   llama.cpp emits on a noncanonical port.
 - [x] Update frontend event routing so a `response -> text` graph connection
   streams into a connected text output during execution.
@@ -1084,6 +1084,13 @@ coverage.
   `node --experimental-strip-types --test packages/svelte-graph/src/stores/runtimeData.test.ts`,
   `node --experimental-strip-types --test src/components/workflowToolbarEvents.test.ts`,
   and `npm run typecheck`.
+- 2026-05-09: Backend stream-port audit found PyTorch text generation was the
+  remaining text backend emitting live chunks on `stream` while final retained
+  output used `response`. The PyTorch node handler now emits text generation
+  chunks on the canonical `response` port.
+- 2026-05-09: Verification passed:
+  `cargo test -p node-engine pytorch_text_generation_stream_port_uses_canonical_response_output --features pytorch-nodes`
+  and `cargo check -p node-engine --features pytorch-nodes`.
 
 ## Follow-Up Findings
 
