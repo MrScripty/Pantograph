@@ -8,6 +8,7 @@ import type {
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types';
 import type { SchedulerRunFilters, SchedulerSortKey } from '../../stores/schedulerRunListStore';
+import { formatProjectionFreshnessState } from './projectionFreshness.ts';
 
 export function formatSchedulerTimestamp(value: number | null | undefined): string {
   if (!value) {
@@ -221,20 +222,7 @@ export function schedulerStatusClass(status: RunListProjectionRecord['status']):
 }
 
 export function formatSchedulerProjectionFreshness(state: ProjectionStateRecord | null): string {
-  if (!state) {
-    return 'Projection unavailable';
-  }
-  const cursor = `seq ${state.last_applied_event_seq}`;
-  switch (state.status) {
-    case 'current':
-      return `Current at ${cursor}`;
-    case 'rebuilding':
-      return `Rebuilding at ${cursor}`;
-    case 'needs_rebuild':
-      return `Needs rebuild at ${cursor}`;
-    case 'failed':
-      return `Failed at ${cursor}`;
-  }
+  return formatProjectionFreshnessState(state);
 }
 
 export function formatSchedulerPolicyLabel(value: string | null | undefined): string {

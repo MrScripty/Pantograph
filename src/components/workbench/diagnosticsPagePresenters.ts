@@ -12,6 +12,7 @@ import type {
   RunListProjectionRecord,
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types';
+import { formatProjectionFreshnessState } from './projectionFreshness.ts';
 
 export interface DiagnosticsFactRow {
   label: string;
@@ -184,20 +185,7 @@ export function formatDiagnosticsDuration(
 }
 
 export function formatDiagnosticsProjectionFreshness(state: ProjectionStateRecord | null): string {
-  if (!state) {
-    return 'Projection unavailable';
-  }
-  const cursor = `seq ${state.last_applied_event_seq}`;
-  switch (state.status) {
-    case 'current':
-      return `Current at ${cursor}`;
-    case 'rebuilding':
-      return `Rebuilding at ${cursor}`;
-    case 'needs_rebuild':
-      return `Needs rebuild at ${cursor}`;
-    case 'failed':
-      return `Failed at ${cursor}`;
-  }
+  return formatProjectionFreshnessState(state);
 }
 
 export function diagnosticsStatusClass(status: RunDetailProjectionRecord['status']): string {

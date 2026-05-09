@@ -542,7 +542,7 @@ type DiagnosticsProjectionSubscriptionOptions = {
 - [x] Extend frontend diagnostics types with optional projection health fields.
 - [x] Add `mockProjectionState` or equivalent helper for mock projection
       responses and affected tests.
-- [ ] Add or extend shared projection health/freshness presentation helpers.
+- [x] Add or extend shared projection health/freshness presentation helpers.
 - [x] Provide unsubscribe cleanup and stale-response guards.
 - [ ] Preserve initial snapshot fetches on page mount and active-run changes.
 - [x] Debounce/coalesce refresh requests per active run and projection kind.
@@ -563,10 +563,10 @@ type DiagnosticsProjectionSubscriptionOptions = {
 **Status:** In progress. The frontend workflow service boundary now has typed
 diagnostics projection invalidation DTOs, optional projection health fields, a
 small Tauri-event subscription helper that filters projection/run scope,
-coalesces callbacks, and cleans up listeners, and a shared mock projection-state
-helper used by projection service mocks. Remaining work is shared
-health/freshness presentation, missed-event recovery tests, and page
-integration.
+coalesces callbacks, and cleans up listeners, a shared mock projection-state
+helper used by projection service mocks, and a shared freshness presenter that
+surfaces backend projection failure details consistently. Remaining work is
+missed-event recovery tests and page integration.
 
 ### Milestone 8: Workbench Page Conversion
 
