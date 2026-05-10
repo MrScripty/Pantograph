@@ -64,6 +64,7 @@
   import {
     buildRunGraphNodeArtifactSummaries,
     buildRunGraphNodeStatusMap,
+    runGraphStaleDiagnosticClass,
   } from './runGraphPresenters';
   import {
     buildSavedGraphInspectionDisplayModel,
@@ -134,6 +135,11 @@
       : [],
   );
   let selectedRows = $derived([...selectedOutputRows, ...selectedInputRows]);
+  let selectedRunGraphDiagnostics = $derived(
+    selectedNodeId
+      ? (runGraph?.graph_diagnostics ?? []).filter((diagnostic) => diagnostic.node_id === selectedNodeId)
+      : [],
+  );
   let summarizedArtifactCount = $derived(
     retentionSummary.reduce((total, item) => total + item.artifact_count, 0),
   );
@@ -782,9 +788,27 @@
         <div class="min-h-0 overflow-auto p-4">
           {#if !selectedNodeId}
             <div class="text-sm text-neutral-500">Select a node in the run snapshot to inspect retained I/O.</div>
-          {:else if selectedRows.length === 0}
-            <div class="text-sm text-neutral-500">No retained artifact metadata for the selected node.</div>
           {:else}
+            {#if selectedRunGraphDiagnostics.length > 0}
+              <section class="mb-4 rounded border border-orange-900/70 bg-orange-950/20 p-4">
+                <h3 class="text-sm font-semibold text-orange-100">Stale Graph Facts</h3>
+                <div class="mt-3 space-y-2">
+                  {#each selectedRunGraphDiagnostics as diagnostic (`${diagnostic.code}:${diagnostic.message}`)}
+                    <div class="rounded border border-neutral-800 bg-neutral-950 p-3 text-xs">
+                      <span
+                        class={`inline-flex rounded border px-2 py-0.5 text-[11px] ${runGraphStaleDiagnosticClass(diagnostic.severity) === 'error' ? 'border-orange-800 bg-orange-950 text-orange-100' : runGraphStaleDiagnosticClass(diagnostic.severity) === 'warning' ? 'border-yellow-800 bg-yellow-950 text-yellow-100' : 'border-cyan-800 bg-cyan-950 text-cyan-100'}`}
+                      >
+                        {diagnostic.code}
+                      </span>
+                      <div class="mt-2 text-neutral-300">{diagnostic.message}</div>
+                    </div>
+                  {/each}
+                </div>
+              </section>
+            {/if}
+            {#if selectedRows.length === 0}
+              <div class="text-sm text-neutral-500">No retained artifact metadata for the selected node.</div>
+            {:else}
             <div class="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
               {#each selectedRows as row (`${row.nodeIo.direction}:${row.nodeIo.node_id}:${row.nodeIo.port_id}:${row.artifact.event_id}`)}
                 {@const artifact = row.artifact}
@@ -1031,6 +1055,7 @@
                 </article>
               {/each}
             </div>
+            {/if}
           {/if}
         </div>
       </section>

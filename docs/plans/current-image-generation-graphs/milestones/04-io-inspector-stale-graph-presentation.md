@@ -17,7 +17,7 @@ which nodes or edges are stale.
 - [x] Mark stale nodes and stale edge issues in the graph view.
 - [ ] Keep selected-node state, panel sizing, layout, and visual grouping in
   frontend state only.
-- [ ] Show stale node details in the lower artifact/details panel when a stale
+- [x] Show stale node details in the lower artifact/details panel when a stale
   node is selected.
 - [ ] Make stale-node selection, artifact read actions, graph navigation, and
   settings navigation reachable by keyboard and exposed with accessible names.
@@ -78,6 +78,10 @@ which nodes or edges are stale.
   `npm run typecheck`, and `git diff --check` passed after wiring IO Inspector
   no-run mode to backend saved workflow listing plus `workflow_graph_inspect`
   and rendering the read-only saved graph snapshot without artifact controls.
+- `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after rendering selected
+  run-node stale diagnostics in the lower I/O details panel from backend
+  `graph_diagnostics`.
 
 **Remaining Follow-Up:**
 

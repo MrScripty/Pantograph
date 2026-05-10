@@ -143,6 +143,10 @@ Update during implementation:
   inspects the selected saved workflow through `workflow_graph_inspect`, and
   renders `WorkflowGraphInspectionProjection` diagnostics in a read-only saved
   graph component without artifact controls or fabricated run metadata.
+- 2026-05-10: Continued Milestone 4 by surfacing backend stale diagnostics for
+  selected run graph nodes in the existing I/O details panel. Artifact metadata
+  and reads remain projection-owned; the new stale section only renders
+  `runGraph.graph_diagnostics` filtered by selected node id.
 
 ## Commit Cadence Notes
 
@@ -272,6 +276,8 @@ Worker rules:
   context.
 - Milestone 4 saved-graph inspection mode now renders in IO Inspector when no
   active run is selected.
+- Milestone 4 selected run nodes now show backend stale-node diagnostic details
+  in the I/O details panel.
 
 ### Deviations
 
@@ -337,8 +343,7 @@ Worker rules:
 - Continue Milestone 4 by rendering the saved-graph presenter model in
   `IoInspectorPage.svelte` and then adding selected stale-node details.
 - Continue Milestone 4 by adding component-level accessibility coverage for
-  saved graph selection/focus and by surfacing stale diagnostics in the run
-  details panel for selected stale run nodes.
+  saved graph selection/focus and selected stale run-node details.
 
 ### Verification Summary
 
@@ -400,6 +405,10 @@ Worker rules:
 - `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts src/components/workbench/runGraphPresenters.test.ts`,
   `npm run typecheck`, and `git diff --check` passed for IO Inspector saved
   graph mode and the read-only saved graph snapshot component.
+- `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after rendering selected
+  run-node stale diagnostics in the I/O details panel from backend
+  `graph_diagnostics`.
 
 ### Traceability Links
 
