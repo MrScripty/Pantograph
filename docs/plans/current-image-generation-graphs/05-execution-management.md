@@ -88,6 +88,14 @@ Update during implementation:
   executable `llm-inference`; compatibility migration helpers were deleted and
   graph persistence tests now prove retired shapes remain available for stale
   diagnostics without migration records.
+- 2026-05-10: Completed the remaining Milestone 2 Pumas selector/probe slice.
+  Diffusion task labels from execution descriptors, package summaries, and
+  selector rows now project to graph-facing `image_generation`, while factual
+  package metadata such as `pipeline_tag: text-to-image`,
+  `recommended_backend: diffusers`, and runtime engine hints remain available
+  for downstream diagnostics and planning. This preserves the no-fallback rule:
+  the change is deterministic task normalization for current graph intent, not
+  a legacy direct-diffusion compatibility route.
 
 ## Commit Cadence Notes
 
@@ -201,34 +209,33 @@ Worker rules:
   slice freezes contracts and identifies the implementation/test fixtures for
   later vertical slices.
 - Milestone 1 completed.
-- Milestone 2 partially completed for tracked workflow/template cleanup,
-  canonicalization split, no-rewrite persistence behavior, and documentation.
+- Milestone 2 completed for tracked workflow/template cleanup, canonicalization
+  split, no-rewrite persistence behavior, Pumas diffusion selector/probe task
+  projection, and documentation.
 
 ### Deviations
 
 - Milestone 0 did not add executable tests because it is a pre-implementation
   contract-freeze slice. It names the first failing acceptance test or fixture
   for every implementation milestone before source changes begin.
-- Milestone 2 remains partial because the Pumas dependency/runtime probe needs
-  a separate focused slice. The completed slice deliberately stopped before
-  changing Pumas selector/probe behavior so the graph canonicalization and
-  tracked workflow cleanup could be verified atomically.
+- Milestone 2 landed in two commits: the first handled graph-shape cleanup and
+  no-rewrite canonicalization, and the second handled Pumas selector/probe
+  diffusion task projection.
+- `crates/workflow-nodes/src/input/puma_lib.rs` remains above the standards
+  decomposition-review threshold at 1885 lines. Extraction is deferred because
+  this slice needed a narrow graph-task projection change and a module split
+  would have expanded the write set beyond the current milestone.
 
 ### Follow-Ups
 
-- Milestone 1 and Milestone 2 should be implemented as the first code slice,
-  constrained to the current Juggernaut saved workflow, built-in workflow
-  template/test paths, and retired `diffusion-inference` producer/removal
-  tests unless code search finds a narrower blocking path.
 - Pumas P0-P1 should start after Milestone 0 because the Pantograph expected
   package-facts contract is now frozen.
-- Implement the remaining Milestone 2 Pumas dependency/runtime probe slice:
-  prove diffusion model selector/probe output creates canonical
-  image-generation graph recommendations without retired direct-diffusion
-  routing.
 - Investigate and either keep or clean the unrelated dirty plan edit in
   `07-pumas-library-image-generation-facts.md`; it was present during this
   slice and was not staged for the graph-shape commit.
+- Plan the next vertical slice for Milestone 3 backend stale graph diagnostics,
+  unless the unrelated dirty Pumas plan edit requires integration or cleanup
+  first.
 
 ### Verification Summary
 
@@ -249,6 +256,12 @@ Worker rules:
   fixtures.
 - `rg -n "diffusion-inference" crates src packages .pantograph/workflows -g '!target'`
   reports guardrail/test/doc references only after tracked workflow cleanup.
+- `cargo test -p workflow-nodes --features model-library puma_lib` passed for
+  Pumas selector/probe diffusion task projection, including a live selector
+  options path for an imported diffusers bundle.
+- A follow-up `rg -n "diffusion-inference" crates src packages .pantograph/workflows -g '!target'`
+  reports only `.pantograph/workflows/README.md`; no tracked saved workflow,
+  bundled template, or executable producer emits the retired node.
 
 ### Traceability Links
 

@@ -5,7 +5,7 @@ graphs that use retired direct diffusion nodes.
 
 **Tasks:**
 
-- [ ] Update `pumas_dependency_runtime_probe` so diffusion models map to
+- [x] Update `pumas_dependency_runtime_probe` so diffusion models map to
   canonical `llm-inference` with image-generation task semantics.
 - [x] Audit built-in templates, fixtures, and tests for direct
   `diffusion-inference` usage.
@@ -35,7 +35,7 @@ graphs that use retired direct diffusion nodes.
 
 - [x] `rg "diffusion-inference"` only finds retired-node guardrails, stale
   diagnostic fixtures, or historical docs.
-- [ ] Tests prove diffusion model probes produce canonical image-generation graph
+- [x] Tests prove diffusion model probes produce canonical image-generation graph
   recommendations.
 - [x] Tests prove the repaired tracked workflows and the probe/template producers
   agree on the same canonical `puma-lib -> llm-inference -> image-output`
@@ -53,19 +53,25 @@ graphs that use retired direct diffusion nodes.
 
 **Verification Results:**
 
+- `cargo test -p workflow-nodes --features model-library puma_lib` passed after
+  projecting Pumas selector/probe diffusion task labels to graph-facing
+  `image_generation` while leaving factual `pipeline_tag: text-to-image`,
+  `recommended_backend: diffusers`, and runtime engine hints intact.
 - `cargo test -p pantograph-workflow-service graph::` passed after deleting
   compatibility migration helpers and rewriting persistence/canonicalization
   tests around no-rewrite stale graph behavior.
 - `node --experimental-strip-types --test src/services/workflow/templateService.test.ts`
   passed after adding tracked saved workflow graph-shape assertions.
 - `rg -n "diffusion-inference" crates src packages .pantograph/workflows -g '!target'`
-  now reports guardrail/test/doc references only, not tracked saved workflow
-  bodies or bundled template bodies.
+  now reports only `.pantograph/workflows/README.md`, not tracked saved workflow
+  bodies, bundled template bodies, or executable producers.
 
-**Remaining Follow-Up:**
+**Discovered Issues:**
 
-- The Pumas dependency/runtime probe still needs its own focused slice to prove
-  diffusion models produce canonical image-generation graph recommendations
-  without relying on legacy direct-diffusion routing.
+- `crates/workflow-nodes/src/input/puma_lib.rs` is 1885 lines after this slice,
+  above the standards decomposition-review threshold. This slice kept the file
+  intact because the planned vertical change was narrow and a module split would
+  have broadened the write set. Defer extraction until a dedicated
+  workflow-nodes/Pumas maintenance slice can preserve the public facade.
 
-**Status:** Partially completed on 2026-05-10
+**Status:** Completed on 2026-05-10

@@ -135,6 +135,23 @@ mod options_provider {
     use std::collections::HashMap;
     use std::sync::Arc;
 
+    fn canonical_graph_task_type_primary(task: &str) -> String {
+        match task.trim().to_ascii_lowercase().as_str() {
+            "text-to-image" | "image-to-image" | "image_generation" => {
+                "image_generation".to_string()
+            }
+            _ => task.trim().to_string(),
+        }
+    }
+
+    fn canonical_graph_task_type_primary_value(value: &Option<String>) -> Option<String> {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|task| !task.is_empty())
+            .map(canonical_graph_task_type_primary)
+    }
+
     /// Provides available models from pumas-library for the `model_path` port.
     pub struct PumaLibOptionsProvider;
 
@@ -238,7 +255,7 @@ mod options_provider {
             .and_then(|summary| summary.task.task_type_primary.as_deref())
             .map(str::trim)
             .filter(|task| !task.is_empty() && !task.eq_ignore_ascii_case("unknown"))
-            .map(ToOwned::to_owned)
+            .map(canonical_graph_task_type_primary)
             .or_else(|| {
                 pipeline_tag_from_summary(summary_result)
                     .as_deref()
@@ -251,7 +268,7 @@ mod options_provider {
         if record.model_type.eq_ignore_ascii_case("audio") {
             "text-to-audio".to_string()
         } else if record.model_type.eq_ignore_ascii_case("diffusion") {
-            "text-to-image".to_string()
+            "image_generation".to_string()
         } else {
             "text-generation".to_string()
         }
@@ -266,7 +283,7 @@ mod options_provider {
         execution_descriptor
             .map(|descriptor| descriptor.task_type_primary.trim())
             .filter(|task| !task.is_empty() && !task.eq_ignore_ascii_case("unknown"))
-            .map(ToOwned::to_owned)
+            .map(canonical_graph_task_type_primary)
             .or_else(|| task_type_primary_from_summary(summary_result))
             .unwrap_or_else(|| default_task_type_primary_from_record(record))
     }
@@ -400,10 +417,12 @@ mod options_provider {
 
     #[cfg(test)]
     fn pipeline_tag_to_task(pipeline_tag: &str) -> String {
-        match pipeline_tag.to_lowercase().as_str() {
+        match pipeline_tag.trim().to_ascii_lowercase().as_str() {
             "text-to-audio" | "text-to-speech" => "text-to-audio".to_string(),
             "automatic-speech-recognition" => "audio-to-text".to_string(),
-            "text-to-image" | "image-to-image" => "text-to-image".to_string(),
+            "text-to-image" | "image-to-image" | "image_generation" => {
+                "image_generation".to_string()
+            }
             "image-classification" | "object-detection" | "image-to-text" => {
                 "image-to-text".to_string()
             }
@@ -455,6 +474,7 @@ mod options_provider {
         let runtime_engine_hints = serde_json::to_value(&row.runtime_engine_hints)
             .unwrap_or(serde_json::Value::Array(Vec::new()));
         let model_ref = serde_json::to_value(&row.model_ref).unwrap_or(serde_json::Value::Null);
+        let task_type_primary = canonical_graph_task_type_primary_value(&row.task_type_primary);
 
         serde_json::json!({
             "id": row.model_ref.model_id,
@@ -464,7 +484,7 @@ mod options_provider {
             "model_type": row.model_type,
             "cleaned_name": row.display_name,
             "pipeline_tag": row.pipeline_tag,
-            "task_type_primary": row.task_type_primary,
+            "task_type_primary": task_type_primary,
             "recommended_backend": row.recommended_backend,
             "runtime_engine_hints": runtime_engine_hints,
             "entry_path": row.executable_entry_path(),
@@ -720,6 +740,46 @@ mod model_library_tests {
         .expect("summary fixture should decode")
     }
 
+    fn diffusion_package_summary_result(
+        model_id: &str,
+        status: &str,
+    ) -> ModelPackageFactsSummaryResult {
+        serde_json::from_value(serde_json::json!({
+            "model_id": model_id,
+            "status": status,
+            "summary": {
+                "package_facts_contract_version": 1,
+                "model_ref": {
+                    "model_id": model_id,
+                    "revision": null,
+                    "selected_artifact_id": "main",
+                    "selected_artifact_path": model_id
+                },
+                "artifact_kind": "diffusers_bundle",
+                "entry_path": model_id,
+                "storage_kind": "library_owned",
+                "validation_state": "valid",
+                "task": {
+                    "pipeline_tag": "text-to-image",
+                    "task_type_primary": "text-to-image",
+                    "input_modalities": ["text"],
+                    "output_modalities": ["image"]
+                },
+                "backend_hints": {
+                    "accepted": ["diffusers"],
+                    "raw": ["diffusers"]
+                },
+                "requires_custom_code": false,
+                "config_status": "present",
+                "tokenizer_status": "present",
+                "processor_status": "missing",
+                "generation_config_status": "missing",
+                "generation_defaults_status": "missing"
+            }
+        }))
+        .expect("diffusion summary fixture should decode")
+    }
+
     fn sparse_package_summary_result(
         model_id: &str,
         status: ModelPackageFactsSummaryStatus,
@@ -738,6 +798,20 @@ mod model_library_tests {
             cleaned_name: "test-model".to_string(),
             official_name: "test-model".to_string(),
             model_type: "llm".to_string(),
+            tags: Vec::new(),
+            hashes: HashMap::new(),
+            metadata,
+            updated_at: "2026-05-04T00:00:00Z".to_string(),
+        }
+    }
+
+    fn diffusion_model_record_with_metadata(metadata: serde_json::Value) -> ModelRecord {
+        ModelRecord {
+            id: "diffusion/imported/test-bundle".to_string(),
+            path: "/models/test-bundle".to_string(),
+            cleaned_name: "test-bundle".to_string(),
+            official_name: "test-bundle".to_string(),
+            model_type: "diffusion".to_string(),
             tags: Vec::new(),
             hashes: HashMap::new(),
             metadata,
@@ -820,6 +894,64 @@ mod model_library_tests {
             "detail_state": "needs_package_facts"
         }))
         .expect("selector row fixture should decode")
+    }
+
+    fn diffusion_selector_snapshot_row() -> ModelLibrarySelectorSnapshotRow {
+        serde_json::from_value(serde_json::json!({
+            "model_id": "diffusion/imported/test-bundle",
+            "model_ref": {
+                "model_ref_contract_version": 1,
+                "model_id": "diffusion/imported/test-bundle",
+                "selected_artifact_id": "main",
+                "selected_artifact_path": "diffusion/imported/test-bundle"
+            },
+            "selected_artifact_id": "main",
+            "selected_artifact_path": "diffusion/imported/test-bundle",
+            "entry_path": "/models/diffusion/imported/test-bundle",
+            "entry_path_state": "ready",
+            "artifact_state": "ready",
+            "display_name": "Tiny SD Turbo",
+            "model_type": "diffusion",
+            "tags": ["diffusers"],
+            "indexed_path": "indexed/diffusion/imported/test-bundle",
+            "task_type_primary": "text-to-image",
+            "pipeline_tag": "text-to-image",
+            "recommended_backend": "diffusers",
+            "runtime_engine_hints": ["diffusers", "pytorch"],
+            "package_facts_summary_status": "cached",
+            "detail_state": "complete",
+            "package_facts_summary": {
+                "package_facts_contract_version": 1,
+                "model_ref": {
+                    "model_id": "diffusion/imported/test-bundle",
+                    "revision": null,
+                    "selected_artifact_id": "main",
+                    "selected_artifact_path": "diffusion/imported/test-bundle"
+                },
+                "artifact_kind": "diffusers_bundle",
+                "entry_path": "diffusion/imported/test-bundle",
+                "storage_kind": "library_owned",
+                "validation_state": "valid",
+                "task": {
+                    "pipeline_tag": "text-to-image",
+                    "task_type_primary": "text-to-image",
+                    "input_modalities": ["text"],
+                    "output_modalities": ["image"]
+                },
+                "backend_hints": {
+                    "accepted": ["diffusers"],
+                    "raw": ["diffusers"]
+                },
+                "requires_custom_code": false,
+                "config_status": "present",
+                "tokenizer_status": "present",
+                "processor_status": "missing",
+                "generation_config_status": "missing",
+                "generation_defaults_status": "missing",
+                "diagnostic_codes": []
+            }
+        }))
+        .expect("diffusion selector row fixture should decode")
     }
 
     fn write_test_diffusers_bundle(root: &std::path::Path) {
@@ -1008,6 +1140,27 @@ mod model_library_tests {
     }
 
     #[test]
+    fn test_task_type_primary_projects_diffusion_tasks_to_image_generation() {
+        let record = diffusion_model_record_with_metadata(serde_json::json!({
+            "task_type_primary": "stale-metadata-task",
+            "pipeline_tag": "text-to-image"
+        }));
+
+        let descriptor = model_execution_descriptor_with_task("text-to-image");
+        let task_type =
+            task_type_primary_from_descriptor_or_record(Some(&descriptor), None, &record);
+        assert_eq!(task_type, "image_generation");
+
+        let summary = diffusion_package_summary_result("diffusion/imported/test-bundle", "cached");
+        let summary_task_type =
+            task_type_primary_from_descriptor_or_record(None, Some(&summary), &record);
+        assert_eq!(summary_task_type, "image_generation");
+
+        let default_task_type = task_type_primary_from_descriptor_or_record(None, None, &record);
+        assert_eq!(default_task_type, "image_generation");
+    }
+
+    #[test]
     fn test_option_metadata_uses_package_summary_backend_hints() {
         let summary = package_summary_result("llm/imported/test-model", "cached");
 
@@ -1161,6 +1314,99 @@ mod model_library_tests {
             partial_metadata["selector_row_executable"],
             serde_json::json!(false)
         );
+    }
+
+    #[test]
+    fn test_selector_row_option_projects_diffusion_task_without_rewriting_facts() {
+        let row = diffusion_selector_snapshot_row();
+
+        let option = port_option_from_selector_row(&row, "model-library-updates:1");
+        let metadata = option
+            .metadata
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .expect("selector option metadata should be an object");
+
+        assert_eq!(
+            metadata["task_type_primary"],
+            serde_json::json!("image_generation")
+        );
+        assert_eq!(metadata["pipeline_tag"], serde_json::json!("text-to-image"));
+        assert_eq!(
+            metadata["package_facts_summary"]["task"]["task_type_primary"],
+            serde_json::json!("text-to-image")
+        );
+        assert_eq!(
+            metadata["recommended_backend"],
+            serde_json::json!("diffusers")
+        );
+        assert_eq!(
+            metadata["runtime_engine_hints"],
+            serde_json::json!(["diffusers", "pytorch"])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_model_options_project_diffusion_selector_task_to_image_generation() {
+        let temp_dir = create_test_env();
+        let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");
+        write_test_diffusers_bundle(&bundle_root);
+
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models/diffusion/imported/test-bundle");
+        write_imported_diffusion_metadata(&model_dir, &bundle_root);
+
+        let api = Arc::new(PumasApi::builder(temp_dir.path()).build().await.unwrap());
+        api.rebuild_model_index().await.unwrap();
+
+        let mut extensions = ExecutorExtensions::new();
+        extensions.set(
+            PUMAS_SELECTOR_ACCESS,
+            Arc::new(PumasSelectorAccess::Owner(api)),
+        );
+
+        let provider = PumaLibOptionsProvider;
+        let result = provider
+            .query_options(
+                &PortOptionsQuery {
+                    limit: Some(25),
+                    ..PortOptionsQuery::default()
+                },
+                &extensions,
+            )
+            .await
+            .expect("selector options should load");
+
+        assert_eq!(result.options.len(), 1);
+        let option = &result.options[0];
+        assert_eq!(
+            option.value,
+            serde_json::json!(bundle_root.display().to_string())
+        );
+        let metadata = option
+            .metadata
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .expect("selector option metadata should be an object");
+        assert_eq!(
+            metadata["id"],
+            serde_json::json!("diffusion/imported/test-bundle")
+        );
+        assert_eq!(
+            metadata["task_type_primary"],
+            serde_json::json!("image_generation")
+        );
+        assert_eq!(metadata["pipeline_tag"], serde_json::json!("text-to-image"));
+        assert_eq!(
+            metadata["recommended_backend"],
+            serde_json::json!("diffusers")
+        );
+        assert_eq!(
+            metadata["runtime_engine_hints"],
+            serde_json::json!(["diffusers", "pytorch"])
+        );
+        assert_eq!(metadata["selector_row_executable"], serde_json::json!(true));
     }
 
     #[tokio::test]
