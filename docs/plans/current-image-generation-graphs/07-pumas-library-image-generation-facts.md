@@ -843,6 +843,7 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P5 fingerprint-resume coverage finding: Pumas commit `ffab283a` adds an execution fixture that resumes from a persisted package-facts checkpoint, mutates a manifest-listed source file before execution, and verifies the migrated cache row records a recomputed source fingerprint instead of the planned stale fingerprint.
 - 2026-05-10 P5 stale-repair coverage finding: Pumas commit `c1405a6a` adds an execution fixture that starts from invalid detail JSON and stale-contract summary rows, then verifies checkpointed backfill repairs both through the canonical package-facts resolver.
 - 2026-05-10 P5 validation finding: Pumas commit `9d25beea` adds a package-facts migration validation report that reuses dry-run cache classification counts for missing, stale-contract, stale-fingerprint, invalid-json, wrong-selected-artifact, blocked partial, and error states.
+- 2026-05-10 P5 update-feed coverage finding: Pumas commit `83c10980` adds an execution fixture proving regenerated selected-artifact detail and summary cache rows emit `PackageFactsModified` update-feed events with the selected artifact id after durable writes.
 
 ## Implementation Sequencing
 
@@ -1126,7 +1127,7 @@ contract without serving stale facts to Pantograph or other clients.
       have no selected artifact.
 - [x] Recompute source fingerprints before durable writes so interrupted
       migrations do not publish stale rows after package files change.
-- [ ] Emit `PackageFactsModified` update events after durable cache writes,
+- [x] Emit `PackageFactsModified` update events after durable cache writes,
       including selected artifact id when present.
 - [ ] Add a bounded batch cache upsert/delete path for backfill work where
       practical. It writes rows, deletes obsolete rows, collects event ids,
