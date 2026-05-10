@@ -431,14 +431,21 @@ fn promoted_inference_setting_port_ids(node_type: &str) -> HashSet<&'static str>
         "audio-generation" => ["duration", "num_inference_steps", "guidance_scale", "seed"]
             .into_iter()
             .collect(),
-        "diffusion-inference" => ["steps", "cfg_scale", "seed", "width", "height"]
-            .into_iter()
-            .collect(),
-        "llamacpp-inference" => ["temperature", "max_tokens"].into_iter().collect(),
-        "pytorch-inference" => ["temperature", "max_tokens", "device", "model_type"]
-            .into_iter()
-            .collect(),
-        "reranker" => ["top_k", "return_documents"].into_iter().collect(),
+        "llm-inference" => [
+            "temperature",
+            "max_tokens",
+            "num_inference_steps",
+            "guidance_scale",
+            "steps",
+            "cfg_scale",
+            "seed",
+            "width",
+            "height",
+            "top_k",
+            "return_documents",
+        ]
+        .into_iter()
+        .collect(),
         _ => HashSet::new(),
     }
 }

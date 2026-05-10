@@ -141,5 +141,8 @@ assert_eq!(metadata.node_type, "model-provider");
 - Metadata fields such as `bundle_format`, `storage_kind`, and `entry_path` are
   compatibility fallbacks only. They are not the authoritative runtime contract
   for executable model selection.
-- Diffusion models should resolve to `text-to-image` when explicit metadata is
-  missing but `model_type == diffusion`.
+- Diffusion models should resolve to canonical image-generation graph intent
+  when explicit metadata is missing but `model_type == diffusion`. External
+  package facts may still preserve ecosystem labels such as `text-to-image`,
+  but starter graphs and saved workflows must route through
+  `llm-inference` with `task_kind = image_generation`.

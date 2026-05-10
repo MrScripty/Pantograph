@@ -2,9 +2,9 @@
   "version": "1.0",
   "metadata": {
     "name": "Juggernaut X v10 SDXL",
-    "description": "Starter text-to-image workflow for Juggernaut-X-v10. Import the model into Pumas and reselect it in Puma-Lib before running.",
+    "description": "Current text-to-image workflow for the Pumas Juggernaut X v10 model.",
     "created": "2026-03-08T00:00:00Z",
-    "modified": "2026-03-08T00:00:00Z",
+    "modified": "2026-05-10T00:00:00Z",
     "orchestrationId": "juggernaut-x-v10-sdxl-orch"
   },
   "graph": {
@@ -17,78 +17,10 @@
           "y": 120.0
         },
         "data": {
-          "label": "Puma-Lib",
+          "label": "Juggernaut X v10 Model",
           "selectionMode": "library",
-          "modelName": "Juggernaut-X-v10",
-          "modelPath": "",
-          "model_type": "diffusion",
-          "task_type_primary": "text-to-image",
-          "recommended_backend": "diffusers",
-          "runtime_engine_hints": [
-            "diffusers",
-            "pytorch"
-          ],
-          "dependency_bindings": [],
-          "inference_settings": [
-            {
-              "key": "num_inference_steps",
-              "label": "Inference Steps",
-              "param_type": "Integer",
-              "default": 20,
-              "description": "Number of diffusion steps",
-              "constraints": {
-                "min": 1,
-                "max": 150
-              }
-            },
-            {
-              "key": "guidance_scale",
-              "label": "Guidance Scale",
-              "param_type": "Number",
-              "default": 5.5,
-              "description": "Classifier-free guidance scale",
-              "constraints": {
-                "min": 1,
-                "max": 30
-              }
-            },
-            {
-              "key": "width",
-              "label": "Width",
-              "param_type": "Integer",
-              "default": 768,
-              "description": "Output image width in pixels",
-              "constraints": {
-                "min": 64,
-                "max": 4096
-              }
-            },
-            {
-              "key": "height",
-              "label": "Height",
-              "param_type": "Integer",
-              "default": 768,
-              "description": "Output image height in pixels",
-              "constraints": {
-                "min": 64,
-                "max": 4096
-              }
-            },
-            {
-              "key": "seed",
-              "label": "Seed",
-              "param_type": "Integer",
-              "default": -1,
-              "description": "Random seed (-1 = random)",
-              "constraints": {
-                "min": -1
-              }
-            }
-          ],
-          "platform_context": {
-            "arch": "x86_64",
-            "os": "linux"
-          }
+          "modelName": "Juggernaut X v10",
+          "model_id": "diffusion/rundiffusion/juggernaut-x-v10"
         }
       },
       {
@@ -176,14 +108,16 @@
         }
       },
       {
-        "id": "diffusion-inference",
-        "node_type": "diffusion-inference",
+        "id": "image-generation",
+        "node_type": "llm-inference",
         "position": {
           "x": 120.0,
           "y": 120.0
         },
         "data": {
-          "label": "Juggernaut X v10 Diffusion"
+          "label": "Juggernaut X v10 Image Generation",
+          "task_kind": "image_generation",
+          "runtime_hint": "pytorch"
         }
       },
       {
@@ -200,71 +134,78 @@
     ],
     "edges": [
       {
-        "id": "prompt-to-diffusion",
+        "id": "prompt-to-image-generation",
         "source": "prompt-input",
         "source_handle": "text",
-        "target": "diffusion-inference",
+        "target": "image-generation",
         "target_handle": "prompt"
       },
       {
-        "id": "negative-prompt-to-diffusion",
+        "id": "negative-prompt-to-image-generation",
         "source": "negative-prompt-input",
         "source_handle": "text",
-        "target": "diffusion-inference",
+        "target": "image-generation",
         "target_handle": "negative_prompt"
       },
       {
-        "id": "model-path-to-diffusion",
+        "id": "model-ref-to-image-generation",
         "source": "puma-lib-juggernaut-x-v10",
-        "source_handle": "model_path",
-        "target": "diffusion-inference",
-        "target_handle": "model_path"
+        "source_handle": "pumas_model_ref",
+        "target": "image-generation",
+        "target_handle": "pumas_model_ref"
       },
       {
-        "id": "settings-to-diffusion",
+        "id": "package-facts-to-image-generation",
+        "source": "puma-lib-juggernaut-x-v10",
+        "source_handle": "resolved_model_package_facts",
+        "target": "image-generation",
+        "target_handle": "resolved_model_package_facts"
+      },
+      {
+        "id": "settings-to-image-generation",
         "source": "puma-lib-juggernaut-x-v10",
         "source_handle": "inference_settings",
-        "target": "diffusion-inference",
+        "target": "image-generation",
         "target_handle": "inference_settings"
       },
       {
-        "id": "steps-to-diffusion",
+        "id": "steps-to-image-generation",
         "source": "steps-input",
         "source_handle": "value",
-        "target": "diffusion-inference",
+        "target": "image-generation",
         "target_handle": "steps"
       },
       {
-        "id": "cfg-to-diffusion",
+        "id": "cfg-to-image-generation",
         "source": "cfg-scale-input",
         "source_handle": "value",
-        "target": "diffusion-inference",
+        "target": "image-generation",
         "target_handle": "cfg_scale"
       },
       {
-        "id": "seed-to-diffusion",
+        "id": "seed-to-image-generation",
         "source": "seed-input",
         "source_handle": "value",
-        "target": "diffusion-inference",
+        "target": "image-generation",
         "target_handle": "seed"
       },
       {
-        "id": "width-to-diffusion",
+        "id": "width-to-image-generation",
         "source": "width-input",
         "source_handle": "value",
-        "target": "diffusion-inference",
+        "target": "image-generation",
         "target_handle": "width"
       },
       {
-        "id": "height-to-diffusion",
+        "id": "height-to-image-generation",
         "source": "height-input",
         "source_handle": "value",
-        "target": "diffusion-inference",
+        "target": "image-generation",
         "target_handle": "height"
       },
       {
-        "id": "image-to-output",
-        "source": "diffusion-inference",
+        "id": "image-generation-to-output",
+        "source": "image-generation",
         "source_handle": "image",
         "target": "image-output",
         "target_handle": "image"

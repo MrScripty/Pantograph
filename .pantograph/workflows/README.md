@@ -11,8 +11,8 @@ ignored by default.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `coding-agent.json` | Tracked default coding-agent workflow example. |
-| `juggernaut-x-v10-sdxl.json` | Tracked default diffusion workflow example. |
-| `tiny-sd-turbo-diffusion.json` | Tracked default tiny-sd-turbo diffusion workflow example. |
+| `juggernaut-x-v10-sdxl.json` | Tracked current image-generation workflow example using `puma-lib -> llm-inference -> image-output`. |
+| `tiny-sd-turbo-diffusion.json` | Tracked current tiny-sd-turbo image-generation workflow example using `puma-lib -> llm-inference -> image-output`. |
 | `*.json` | Ignored local user workflow data unless explicitly promoted as a default. |
 
 ## Problem
@@ -44,6 +44,12 @@ are small enough to review and represent supported runtime behavior.
 - Node ids, edge ids, type ids, and port ids remain semantically meaningful.
 - Examples must reflect supported execution paths rather than aspirational
   graph shapes.
+- Image-generation examples must use canonical `llm-inference` with
+  `task_kind = image_generation` and must not use retired direct
+  `diffusion-inference` nodes.
+- Puma-Lib nodes in tracked examples retain stable model identity and graph
+  intent only. They must not persist raw local model paths, generated media
+  bodies, previous run outputs, or derived Pumas dependency/runtime snapshots.
 
 ## Revisit Triggers
 - Workflow JSON receives a formal schema.

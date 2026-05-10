@@ -12,10 +12,9 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `mod.rs` | Public exports for graph-edit contracts and helper modules. |
 | `types.rs` | Graph DTOs, edit-session request/response types, and persisted workflow file shapes. |
 | `registry.rs` | Built-in node-definition discovery and canonical node-contract projection. |
-| `canonicalization.rs` | Saved graph canonicalization orchestration and migration-record response assembly. |
+| `canonicalization.rs` | Current saved graph canonicalization orchestration and current-schema response assembly. |
 | `canonicalization_inference.rs` | Dynamic inference-setting schema expansion, per-node definition overlay rebuilds, and passthrough port helpers. |
-| `canonicalization_legacy_migration.rs` | Legacy saved-node rewrites and typed contract-upgrade record production. |
-| `canonicalization_tests.rs` | Canonicalization migration and inference-overlay regression tests. |
+| `canonicalization_tests.rs` | Current canonicalization, no-legacy, and inference-overlay regression tests. |
 | `effective_definition.rs` | Resolves backend-owned effective node contracts and projects them into graph DTOs before validation or candidate lookup. |
 | `executable_topology.rs` | Canonical executable-topology projection and BLAKE3 workflow execution fingerprint calculation for workflow versioning. |
 | `presentation_revision.rs` | Canonical display-metadata projection and BLAKE3 presentation fingerprint calculation for historic graph presentation revisions. |
@@ -135,9 +134,11 @@ for existing graph-edit callers.
   versions can use the same stable id.
 - Filesystem workflow load path validation is tested at `FileSystemWorkflowGraphStore`;
   transport adapters must not keep parallel path-boundary implementations.
-- Persisted workflow files carry append-only `contract_upgrades` records for
-  canonicalization migrations. Save/load may add newly observed migration
-  records, but must not drop existing records when the graph is rewritten.
+- Persisted workflow files may carry historical append-only `contract_upgrades`
+  records from earlier releases. Current save/load paths do not add
+  compatibility migration records for retired graph shapes; stale graph
+  diagnostics classify retired nodes without rewriting them into executable
+  current graphs.
 - Dynamic `node.data.definition` overlays may add or override ports for a
   specific node instance through backend-owned effective contracts, but they
   must not invalidate the registry node type or silently remove unrelated

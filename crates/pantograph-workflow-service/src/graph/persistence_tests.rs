@@ -1,8 +1,6 @@
 use std::fs;
 use std::path::Path;
 
-use pantograph_node_contracts::ContractUpgradeOutcome;
-
 use crate::workflow::WorkflowServiceError;
 
 use super::persistence::{FileSystemWorkflowGraphStore, WorkflowGraphStore};
@@ -43,7 +41,7 @@ fn puma_lib_graph(data: serde_json::Value) -> WorkflowGraph {
     }
 }
 
-fn legacy_llamacpp_graph() -> WorkflowGraph {
+fn retired_direct_diffusion_graph() -> WorkflowGraph {
     WorkflowGraph {
         nodes: vec![
             GraphNode {
@@ -53,12 +51,57 @@ fn legacy_llamacpp_graph() -> WorkflowGraph {
                 data: serde_json::json!({"text": "hello"}),
             },
             GraphNode {
+                id: "diffusion".to_string(),
+                node_type: "diffusion-inference".to_string(),
+                position: Position { x: 42.0, y: 24.0 },
+                data: serde_json::json!({
+                    "model_path": "/models/juggernaut",
+                    "prompt": "hello",
+                    "steps": 16
+                }),
+            },
+            GraphNode {
+                id: "output".to_string(),
+                node_type: "image-output".to_string(),
+                position: Position { x: 200.0, y: 5.0 },
+                data: serde_json::json!({}),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "prompt-diffusion-prompt".to_string(),
+                source: "prompt".to_string(),
+                source_handle: "text".to_string(),
+                target: "diffusion".to_string(),
+                target_handle: "prompt".to_string(),
+            },
+            GraphEdge {
+                id: "diffusion-output-image".to_string(),
+                source: "diffusion".to_string(),
+                source_handle: "image".to_string(),
+                target: "output".to_string(),
+                target_handle: "image".to_string(),
+            },
+        ],
+        derived_graph: None,
+    }
+}
+
+fn retired_llamacpp_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({"text": "hello"}),
+            },
+            GraphNode {
                 id: "llama".to_string(),
                 node_type: "llamacpp-inference".to_string(),
                 position: Position { x: 42.0, y: 24.0 },
                 data: serde_json::json!({
                     "model_path": "/models/chat.gguf",
-                    "mmproj_path": "/models/mmproj.gguf",
                     "prompt": "hello"
                 }),
             },
@@ -82,78 +125,6 @@ fn legacy_llamacpp_graph() -> WorkflowGraph {
                 source: "llama".to_string(),
                 source_handle: "response".to_string(),
                 target: "output".to_string(),
-                target_handle: "text".to_string(),
-            },
-        ],
-        derived_graph: None,
-    }
-}
-
-fn mixed_legacy_inference_graph() -> WorkflowGraph {
-    WorkflowGraph {
-        nodes: vec![
-            GraphNode {
-                id: "prompt".to_string(),
-                node_type: "text-input".to_string(),
-                position: Position { x: 0.0, y: 0.0 },
-                data: serde_json::json!({"text": "rank these"}),
-            },
-            GraphNode {
-                id: "embedding".to_string(),
-                node_type: "embedding".to_string(),
-                position: Position { x: 100.0, y: 120.0 },
-                data: serde_json::json!({"model": "bge-small"}),
-            },
-            GraphNode {
-                id: "rerank".to_string(),
-                node_type: "reranker".to_string(),
-                position: Position { x: 220.0, y: 0.0 },
-                data: serde_json::json!({
-                    "model_path": "/models/rerank.gguf",
-                    "top_k": 1,
-                    "return_documents": true
-                }),
-            },
-            GraphNode {
-                id: "vector-output".to_string(),
-                node_type: "vector-output".to_string(),
-                position: Position { x: 340.0, y: 120.0 },
-                data: serde_json::json!({}),
-            },
-            GraphNode {
-                id: "text-output".to_string(),
-                node_type: "text-output".to_string(),
-                position: Position { x: 340.0, y: 0.0 },
-                data: serde_json::json!({}),
-            },
-        ],
-        edges: vec![
-            GraphEdge {
-                id: "prompt-embedding-text".to_string(),
-                source: "prompt".to_string(),
-                source_handle: "text".to_string(),
-                target: "embedding".to_string(),
-                target_handle: "text".to_string(),
-            },
-            GraphEdge {
-                id: "embedding-vector-output-vector".to_string(),
-                source: "embedding".to_string(),
-                source_handle: "embedding".to_string(),
-                target: "vector-output".to_string(),
-                target_handle: "vector".to_string(),
-            },
-            GraphEdge {
-                id: "prompt-rerank-documents-json".to_string(),
-                source: "prompt".to_string(),
-                source_handle: "text".to_string(),
-                target: "rerank".to_string(),
-                target_handle: "documents_json".to_string(),
-            },
-            GraphEdge {
-                id: "rerank-results-output-text".to_string(),
-                source: "rerank".to_string(),
-                source_handle: "results".to_string(),
-                target: "text-output".to_string(),
                 target_handle: "text".to_string(),
             },
         ],
@@ -339,12 +310,15 @@ fn save_workflow_strips_puma_lib_derived_data_with_model_identity() {
 }
 
 #[test]
-fn save_workflow_canonicalizes_retired_inference_nodes_before_serializing() {
+fn save_workflow_preserves_retired_direct_diffusion_for_stale_diagnostics() {
     let temp = tempfile::tempdir().expect("tempdir");
     let store = FileSystemWorkflowGraphStore::new(temp.path());
 
     let path = store
-        .save_workflow("legacy-llama".to_string(), legacy_llamacpp_graph())
+        .save_workflow(
+            "retired-direct-diffusion".to_string(),
+            retired_direct_diffusion_graph(),
+        )
         .expect("save workflow");
     let saved = fs::read_to_string(path).expect("read saved workflow");
     let workflow: WorkflowFile = serde_json::from_str(&saved).expect("parse saved workflow");
@@ -352,121 +326,32 @@ fn save_workflow_canonicalizes_retired_inference_nodes_before_serializing() {
         .graph
         .nodes
         .iter()
-        .find(|node| node.id == "llama")
-        .expect("migrated node");
+        .find(|node| node.id == "diffusion")
+        .expect("retired diffusion node");
 
-    assert_eq!(node.node_type, "llm-inference");
+    assert_eq!(node.node_type, "diffusion-inference");
     assert_eq!(node.position, Position { x: 42.0, y: 24.0 });
-    assert_eq!(node.data["task_kind"], serde_json::json!("text_generation"));
-    assert_eq!(node.data["runtime_hint"], serde_json::json!("llamacpp"));
     assert_eq!(
-        node.data["pumas_model_ref"]["legacy_model_path"],
-        serde_json::json!("/models/chat.gguf")
+        node.data["model_path"],
+        serde_json::json!("/models/juggernaut")
     );
-    assert_eq!(
-        node.data["pumas_model_ref"]["legacy_mmproj_path"],
-        serde_json::json!("/models/mmproj.gguf")
-    );
-    assert_eq!(
-        node.data["migration_diagnostics"][0]["code"],
-        serde_json::json!("legacy_llamacpp_inference_node")
-    );
-    assert!(workflow
-        .graph
-        .edges
-        .iter()
-        .any(|edge| edge.id == "prompt-llama-prompt"
-            && edge.target == "llama"
-            && edge.target_handle == "prompt"));
+    assert_eq!(node.data["steps"], serde_json::json!(16));
     assert!(workflow
         .graph
         .derived_graph
         .as_ref()
         .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
-    assert_eq!(workflow.contract_upgrades.len(), 1);
-    assert_eq!(
-        workflow.contract_upgrades[0].node_type.as_str(),
-        "llamacpp-inference"
-    );
-    assert_eq!(
-        workflow.contract_upgrades[0].outcome,
-        ContractUpgradeOutcome::Upgraded
+    assert!(
+        workflow.contract_upgrades.is_empty(),
+        "current save must not append compatibility migration records"
     );
 }
 
 #[test]
-fn save_workflow_canonicalizes_mixed_embedding_and_rerank_nodes_before_serializing() {
+fn load_workflow_preserves_retired_inference_nodes_without_migration_records() {
     let temp = tempfile::tempdir().expect("tempdir");
     let store = FileSystemWorkflowGraphStore::new(temp.path());
-
-    let path = store
-        .save_workflow(
-            "mixed-legacy-inference".to_string(),
-            mixed_legacy_inference_graph(),
-        )
-        .expect("save workflow");
-    let saved = fs::read_to_string(path).expect("read saved workflow");
-    let workflow: WorkflowFile = serde_json::from_str(&saved).expect("parse saved workflow");
-
-    let embedding = workflow
-        .graph
-        .nodes
-        .iter()
-        .find(|node| node.id == "embedding")
-        .expect("migrated embedding node");
-    let rerank = workflow
-        .graph
-        .nodes
-        .iter()
-        .find(|node| node.id == "rerank")
-        .expect("migrated rerank node");
-
-    assert_eq!(embedding.node_type, "llm-inference");
-    assert_eq!(embedding.data["task_kind"], serde_json::json!("embedding"));
-    assert_eq!(
-        embedding.data["runtime_hint"],
-        serde_json::json!("llamacpp")
-    );
-    assert_eq!(
-        embedding.data["migration_diagnostics"][0]["code"],
-        serde_json::json!("legacy_embedding_node")
-    );
-    assert_eq!(rerank.node_type, "llm-inference");
-    assert_eq!(rerank.data["task_kind"], serde_json::json!("rerank"));
-    assert_eq!(rerank.data["task_options"]["top_k"], serde_json::json!(1));
-    assert_eq!(
-        rerank.data["task_options"]["return_documents"],
-        serde_json::json!(true)
-    );
-    assert_eq!(
-        rerank.data["migration_diagnostics"][0]["code"],
-        serde_json::json!("legacy_reranker_node")
-    );
-    assert!(workflow.graph.edges.iter().any(|edge| {
-        edge.id == "embedding-vector-output-vector"
-            && edge.source == "embedding"
-            && edge.source_handle == "embedding"
-    }));
-    assert!(workflow.graph.edges.iter().any(|edge| {
-        edge.id == "rerank-results-output-text"
-            && edge.source == "rerank"
-            && edge.source_handle == "results"
-    }));
-    assert_eq!(workflow.contract_upgrades.len(), 2);
-    let upgraded_node_types = workflow
-        .contract_upgrades
-        .iter()
-        .map(|record| record.node_type.as_str())
-        .collect::<Vec<_>>();
-    assert!(upgraded_node_types.contains(&"embedding"));
-    assert!(upgraded_node_types.contains(&"reranker"));
-}
-
-#[test]
-fn load_workflow_canonicalizes_retired_inference_nodes_before_returning() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let store = FileSystemWorkflowGraphStore::new(temp.path());
-    let workflow = WorkflowFile::new("legacy-llama".to_string(), legacy_llamacpp_graph());
+    let workflow = WorkflowFile::new("legacy-llama".to_string(), retired_llamacpp_graph());
     write_workflow(temp.path(), "legacy-llama.json", &workflow);
 
     let loaded = store
@@ -477,64 +362,22 @@ fn load_workflow_canonicalizes_retired_inference_nodes_before_returning() {
         .nodes
         .iter()
         .find(|node| node.id == "llama")
-        .expect("migrated node");
+        .expect("retired llama node");
 
     assert_eq!(loaded.metadata.id.as_deref(), Some("legacy-llama"));
-    assert_eq!(node.node_type, "llm-inference");
-    assert_eq!(node.data["task_kind"], serde_json::json!("text_generation"));
-    assert_eq!(node.data["runtime_hint"], serde_json::json!("llamacpp"));
+    assert_eq!(node.node_type, "llamacpp-inference");
     assert_eq!(
-        node.data["pumas_model_ref"]["legacy_model_path"],
+        node.data["model_path"],
         serde_json::json!("/models/chat.gguf")
     );
-    assert_eq!(
-        node.data["migration_diagnostics"][0]["code"],
-        serde_json::json!("legacy_llamacpp_inference_node")
-    );
-    assert!(loaded
-        .graph
-        .edges
-        .iter()
-        .any(|edge| edge.id == "llama-output-response"
-            && edge.source == "llama"
-            && edge.source_handle == "response"));
     assert!(loaded
         .graph
         .derived_graph
         .as_ref()
         .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
-    assert_eq!(loaded.contract_upgrades.len(), 1);
-    assert_eq!(
-        loaded.contract_upgrades[0].node_type.as_str(),
-        "llamacpp-inference"
-    );
-}
-
-#[test]
-fn save_workflow_appends_migration_records_without_duplicating_existing_records() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let store = FileSystemWorkflowGraphStore::new(temp.path());
-
-    let path = store
-        .save_workflow("legacy-llama".to_string(), legacy_llamacpp_graph())
-        .expect("save workflow");
-    let first_saved = fs::read_to_string(&path).expect("read first workflow");
-    let first_workflow: WorkflowFile =
-        serde_json::from_str(&first_saved).expect("parse first workflow");
-    assert_eq!(first_workflow.contract_upgrades.len(), 1);
-
-    let second_path = store
-        .save_workflow("legacy-llama".to_string(), legacy_llamacpp_graph())
-        .expect("save workflow again");
-    assert_eq!(second_path, path);
-    let second_saved = fs::read_to_string(second_path).expect("read second workflow");
-    let second_workflow: WorkflowFile =
-        serde_json::from_str(&second_saved).expect("parse second workflow");
-
-    assert_eq!(second_workflow.contract_upgrades.len(), 1);
-    assert_eq!(
-        second_workflow.contract_upgrades[0].node_type.as_str(),
-        "llamacpp-inference"
+    assert!(
+        loaded.contract_upgrades.is_empty(),
+        "current load must not append compatibility migration records"
     );
 }
 

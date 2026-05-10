@@ -7,14 +7,11 @@ use self::inference::{
     has_edge, parse_inference_settings, reconcile_inference_node, resolved_definition_json,
     set_node_definition, set_node_inference_settings,
 };
-use self::legacy_migration::{canonicalize_legacy_node_types, legacy_node_type_migration_records};
 use super::registry::NodeRegistry;
 use super::types::{GraphEdge, GraphNode, WorkflowGraph};
 
 #[path = "canonicalization_inference.rs"]
 mod inference;
-#[path = "canonicalization_legacy_migration.rs"]
-mod legacy_migration;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkflowGraphCanonicalizationResult {
@@ -30,8 +27,7 @@ pub fn canonicalize_workflow_graph_with_migrations(
     graph: WorkflowGraph,
     registry: &NodeRegistry,
 ) -> WorkflowGraphCanonicalizationResult {
-    let (graph, migrated_legacy_nodes) = canonicalize_legacy_node_types(graph);
-    let mut migration_records = legacy_node_type_migration_records(&migrated_legacy_nodes);
+    let mut migration_records: Vec<ContractUpgradeRecord> = Vec::new();
     let mut nodes = graph.nodes;
     let mut edges = graph.edges;
     canonicalize_inference_text_output_edges(&nodes, &mut edges);

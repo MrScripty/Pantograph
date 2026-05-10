@@ -77,6 +77,17 @@ Update during implementation:
   diagnostic fields, wire-format rules, fixture names, isolated test roots,
   decomposition decisions, and concrete fallback/legacy paths found by code
   search.
+- 2026-05-10: Completed Milestone 1 and the current graph-shape parts of
+  Milestone 2 as one vertical slice. The canonical tracked Juggernaut workflow
+  is `.pantograph/workflows/juggernaut-x-v10-sdxl.json`; duplicate ignored
+  local Juggernaut/Tiny SD workflow files were removed from the workspace.
+  Tracked image-generation saved workflows now use
+  `puma-lib -> llm-inference -> image-output`, retain stable model ids only,
+  and do not persist local Pumas paths or derived dependency snapshots. Current
+  graph canonicalization no longer rewrites retired inference nodes into
+  executable `llm-inference`; compatibility migration helpers were deleted and
+  graph persistence tests now prove retired shapes remain available for stale
+  diagnostics without migration records.
 
 ## Commit Cadence Notes
 
@@ -189,12 +200,19 @@ Worker rules:
 - Milestone 0 contract gate completed. Production behavior is unchanged; the
   slice freezes contracts and identifies the implementation/test fixtures for
   later vertical slices.
+- Milestone 1 completed.
+- Milestone 2 partially completed for tracked workflow/template cleanup,
+  canonicalization split, no-rewrite persistence behavior, and documentation.
 
 ### Deviations
 
 - Milestone 0 did not add executable tests because it is a pre-implementation
   contract-freeze slice. It names the first failing acceptance test or fixture
   for every implementation milestone before source changes begin.
+- Milestone 2 remains partial because the Pumas dependency/runtime probe needs
+  a separate focused slice. The completed slice deliberately stopped before
+  changing Pumas selector/probe behavior so the graph canonicalization and
+  tracked workflow cleanup could be verified atomically.
 
 ### Follow-Ups
 
@@ -204,6 +222,13 @@ Worker rules:
   tests unless code search finds a narrower blocking path.
 - Pumas P0-P1 should start after Milestone 0 because the Pantograph expected
   package-facts contract is now frozen.
+- Implement the remaining Milestone 2 Pumas dependency/runtime probe slice:
+  prove diffusion model selector/probe output creates canonical
+  image-generation graph recommendations without retired direct-diffusion
+  routing.
+- Investigate and either keep or clean the unrelated dirty plan edit in
+  `07-pumas-library-image-generation-facts.md`; it was present during this
+  slice and was not staged for the graph-shape commit.
 
 ### Verification Summary
 
@@ -216,6 +241,14 @@ Worker rules:
   retention paths.
 - No build or unit tests were run for Milestone 0 because the slice changed
   only plan documentation and recorded future acceptance tests.
+- `cargo test -p pantograph-workflow-service graph::` passed for the graph
+  canonicalization, persistence, registry, and session graph surface touched by
+  the slice.
+- `node --experimental-strip-types --test src/services/workflow/templateService.test.ts`
+  passed for bundled templates and tracked saved image-generation workflow
+  fixtures.
+- `rg -n "diffusion-inference" crates src packages .pantograph/workflows -g '!target'`
+  reports guardrail/test/doc references only after tracked workflow cleanup.
 
 ### Traceability Links
 
