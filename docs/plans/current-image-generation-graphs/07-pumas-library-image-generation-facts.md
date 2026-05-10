@@ -844,6 +844,7 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P5 stale-repair coverage finding: Pumas commit `c1405a6a` adds an execution fixture that starts from invalid detail JSON and stale-contract summary rows, then verifies checkpointed backfill repairs both through the canonical package-facts resolver.
 - 2026-05-10 P5 validation finding: Pumas commit `9d25beea` adds a package-facts migration validation report that reuses dry-run cache classification counts for missing, stale-contract, stale-fingerprint, invalid-json, wrong-selected-artifact, blocked partial, and error states.
 - 2026-05-10 P5 update-feed coverage finding: Pumas commit `83c10980` adds an execution fixture proving regenerated selected-artifact detail and summary cache rows emit `PackageFactsModified` update-feed events with the selected artifact id after durable writes.
+- 2026-05-10 P5 execution artifact finding: Pumas commit `4be8c416` persists package-facts cache migration execution reports as package-facts-specific JSON and Markdown artifacts and registers them in the existing migration report index.
 
 ## Implementation Sequencing
 
@@ -1136,7 +1137,7 @@ contract without serving stale facts to Pantograph or other clients.
       stale-fingerprint, invalid-json, and wrong-selected-artifact rows.
 - [ ] Keep selector snapshots and summary snapshots non-hydrating during and
       after migration.
-- [ ] Add human-readable and machine-readable report fields for regenerated
+- [x] Add human-readable and machine-readable report fields for regenerated
       detail rows, regenerated summary rows, deleted obsolete rows, skipped
       partial downloads, and per-model errors.
 
