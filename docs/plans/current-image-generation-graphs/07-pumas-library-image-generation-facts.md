@@ -827,7 +827,7 @@ used by Pumas for the selector snapshot path.
 
 ## Implementation Findings
 
-- 2026-05-10 P0 module split finding: existing package-facts detail and summary cache paths still rely on the legacy empty selected-artifact key (None / empty string) even when resolver internals have an entry path. P1 selected-artifact-aware cache work must replace this with a PackageInspectionContext-owned selected artifact identity before multi-artifact image/GGUF facts are treated as stable.
+- 2026-05-10 P0 module split finding: fixed in P1/P3 follow-up. Package-facts detail and summary cache paths now use `PackageInspectionContext` selected-artifact identity when `metadata.selected_artifact_id` is present, and manifests prefer `selected_artifact_files` over all indexed sibling files.
 - 2026-05-10 P1 DTO finding: current fixtures and PACKAGE_FACTS_CONTRACT_VERSION = 1 are sensitive to wire-shape changes. Image-generation facts require an explicit contract-version bump and fixture updates when diffusers/GGUF DTOs are added.
 - 2026-05-10 large-file rationale: library.rs remains over the decomposition threshold at 11637 lines after package-facts extraction. The remaining size is legacy ModelLibrary facade, migration, import, projection, and test ownership outside this image-generation facts slice; further reductions should proceed through separate facade/migration/import decomposition rather than blocking the DTO and extractor work.
 - 2026-05-10 P2 extractor finding: the initial Diffusers extractor now reads `model_index.json` and known nested component configs through an explicit bounded UTF-8 JSON reader, and it now emits component missing/invalid and ambiguous-family diagnostics. Remaining P2 fixture breadth still needs family-specific fixtures and malformed large JSON coverage beyond the unit-level oversized file case.
@@ -933,7 +933,7 @@ and GGUF facts.
 - [x] Add or extend package-facts DTOs for diffusers bundle evidence.
 - [x] Add or extend package-facts DTOs for GGUF metadata evidence.
 - [x] Add explicit source fields for derived facts.
-- [ ] Add selected-artifact-aware detail and summary cache semantics to the DTO
+- [x] Add selected-artifact-aware detail and summary cache semantics to the DTO
       contract, including populated `PumasModelRef.selected_artifact_id` and
       `selected_artifact_path` when available.
 - [x] Add or extend public summary/selector status DTOs so clients can
@@ -941,7 +941,7 @@ and GGUF facts.
       invalid-json, wrong-selected-artifact, and error states.
 - [x] Add `PackageInspectionManifest` DTOs or internal structs with documented
       semantics when manifests are not public.
-- [ ] Add a selected-artifact contract fixture before family-specific fixtures,
+- [x] Add a selected-artifact contract fixture before family-specific fixtures,
       covering a multi-artifact package with distinct selected artifact ids,
       paths, source fingerprints, detail rows, and summary rows.
 - [ ] Replace machine use of `ProcessorComponentFacts.message` with typed fields
@@ -1025,7 +1025,7 @@ and GGUF facts.
 - [x] Preserve weaker filename-derived quantization only as source-tagged
       diagnostic evidence.
 - [x] Preserve mmproj companion facts.
-- [ ] Scope GGUF evidence to the selected GGUF artifact and selected companion
+- [x] Scope GGUF evidence to the selected GGUF artifact and selected companion
       artifacts instead of model-level filename aggregation.
 - [x] Keep GGUF parsing in a small bounded module; if a parser dependency is
       added, record dependency cost, license, feature flags, and why in-house
@@ -1061,7 +1061,7 @@ and GGUF facts.
 - [x] Keep selector snapshot behavior SQLite-backed and non-hydrating.
 - [ ] Advance update cursors when package facts or summaries change.
 - [x] Preserve explicit missing/stale/invalid summary states.
-- [ ] Use the package inspection manifest to compute source fingerprints for
+- [x] Use the package inspection manifest to compute source fingerprints for
       detail and summary cache rows.
 - [x] Keep selector snapshots from constructing package inspection manifests or
       parsing nested package files.
