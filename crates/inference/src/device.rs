@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+use thiserror::Error;
 use tokio::process::Command;
 
 use crate::config::DeviceInfo;
@@ -26,36 +27,61 @@ pub enum DeviceBackend {
     Auto,
 }
 
+/// Error produced while parsing a backend-local llama.cpp device selector.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeviceBackendParseError {
+    /// The selector was empty after trimming.
+    #[error("llama.cpp device selector must not be empty")]
+    Empty,
+    /// The selector does not match a known llama.cpp device family.
+    #[error("unknown llama.cpp device selector '{0}'")]
+    Unknown(String),
+    /// A prefixed device selector was missing its numeric ordinal.
+    #[error("llama.cpp device selector '{0}' is missing a device ordinal")]
+    MissingOrdinal(String),
+    /// A prefixed device selector carried an invalid numeric ordinal.
+    #[error("llama.cpp device selector '{selector}' has invalid ordinal '{ordinal}'")]
+    InvalidOrdinal {
+        /// Original selector.
+        selector: String,
+        /// Invalid ordinal fragment.
+        ordinal: String,
+    },
+}
+
 impl DeviceBackend {
-    /// Parse a device ID string into a DeviceBackend
+    /// Parse a llama.cpp device ID string into a `DeviceBackend`.
     ///
     /// # Examples
     /// ```
     /// use inference::DeviceBackend;
     ///
-    /// assert_eq!(DeviceBackend::from_id("none"), DeviceBackend::Cpu);
-    /// assert_eq!(DeviceBackend::from_id("auto"), DeviceBackend::Auto);
-    /// assert_eq!(DeviceBackend::from_id("CUDA0"), DeviceBackend::Cuda(0));
-    /// assert_eq!(DeviceBackend::from_id("Vulkan1"), DeviceBackend::Vulkan(1));
+    /// assert_eq!(DeviceBackend::try_from_id("none").unwrap(), DeviceBackend::Cpu);
+    /// assert_eq!(DeviceBackend::try_from_id("auto").unwrap(), DeviceBackend::Auto);
+    /// assert_eq!(DeviceBackend::try_from_id("CUDA0").unwrap(), DeviceBackend::Cuda(0));
+    /// assert_eq!(DeviceBackend::try_from_id("Vulkan1").unwrap(), DeviceBackend::Vulkan(1));
     /// ```
-    pub fn from_id(id: &str) -> Self {
-        match id {
+    pub fn try_from_id(id: &str) -> Result<Self, DeviceBackendParseError> {
+        let id = id.trim();
+        if id.is_empty() {
+            return Err(DeviceBackendParseError::Empty);
+        }
+
+        Ok(match id {
             s if s == device_types::CPU => Self::Cpu,
             s if s == device_types::AUTO => Self::Auto,
             s if s.starts_with(device_types::CUDA_PREFIX) => {
-                let idx = s[device_types::CUDA_PREFIX.len()..].parse().unwrap_or(0);
-                Self::Cuda(idx)
+                parse_backend_ordinal(s, device_types::CUDA_PREFIX, DeviceBackend::Cuda)?
             }
             s if s.starts_with(device_types::VULKAN_PREFIX) => {
-                let idx = s[device_types::VULKAN_PREFIX.len()..].parse().unwrap_or(0);
-                Self::Vulkan(idx)
+                parse_backend_ordinal(s, device_types::VULKAN_PREFIX, DeviceBackend::Vulkan)?
             }
             s if s.starts_with(device_types::METAL_PREFIX) => {
-                let idx = s[device_types::METAL_PREFIX.len()..].parse().unwrap_or(0);
-                Self::Metal(idx)
+                parse_backend_ordinal(s, device_types::METAL_PREFIX, DeviceBackend::Metal)?
             }
-            _ => Self::Auto,
-        }
+            _ => return Err(DeviceBackendParseError::Unknown(id.to_string())),
+        })
     }
 
     /// Check if this device requires the CUDA binary
@@ -98,6 +124,14 @@ impl DeviceBackend {
     }
 }
 
+impl std::str::FromStr for DeviceBackend {
+    type Err = DeviceBackendParseError;
+
+    fn from_str(id: &str) -> Result<Self, Self::Err> {
+        Self::try_from_id(id)
+    }
+}
+
 impl std::fmt::Display for DeviceBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -108,6 +142,28 @@ impl std::fmt::Display for DeviceBackend {
             Self::Auto => write!(f, "Auto"),
         }
     }
+}
+
+fn parse_backend_ordinal(
+    selector: &str,
+    prefix: &str,
+    build: impl FnOnce(u8) -> DeviceBackend,
+) -> Result<DeviceBackend, DeviceBackendParseError> {
+    let Some(ordinal) = selector.strip_prefix(prefix) else {
+        return Err(DeviceBackendParseError::Unknown(selector.to_string()));
+    };
+    if ordinal.is_empty() {
+        return Err(DeviceBackendParseError::MissingOrdinal(
+            selector.to_string(),
+        ));
+    }
+    let parsed = ordinal
+        .parse::<u8>()
+        .map_err(|_| DeviceBackendParseError::InvalidOrdinal {
+            selector: selector.to_string(),
+            ordinal: ordinal.to_string(),
+        })?;
+    Ok(build(parsed))
 }
 
 fn parse_device_vram(vram_info: &str) -> (u64, u64) {
@@ -140,11 +196,10 @@ pub fn parse_llamacpp_device_listing(output: &str) -> Vec<DeviceInfo> {
         };
 
         let id = line[..colon_pos].trim();
-        if id.contains(' ')
-            || !(id.starts_with(device_types::VULKAN_PREFIX)
-                || id.starts_with(device_types::CUDA_PREFIX)
-                || id.starts_with(device_types::METAL_PREFIX))
-        {
+        let Ok(device_backend) = DeviceBackend::try_from_id(id) else {
+            continue;
+        };
+        if matches!(device_backend, DeviceBackend::Auto | DeviceBackend::Cpu) {
             continue;
         }
 
@@ -199,15 +254,59 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_from_id() {
-        assert_eq!(DeviceBackend::from_id("none"), DeviceBackend::Cpu);
-        assert_eq!(DeviceBackend::from_id("auto"), DeviceBackend::Auto);
-        assert_eq!(DeviceBackend::from_id("CUDA0"), DeviceBackend::Cuda(0));
-        assert_eq!(DeviceBackend::from_id("CUDA1"), DeviceBackend::Cuda(1));
-        assert_eq!(DeviceBackend::from_id("Vulkan0"), DeviceBackend::Vulkan(0));
-        assert_eq!(DeviceBackend::from_id("Vulkan1"), DeviceBackend::Vulkan(1));
-        assert_eq!(DeviceBackend::from_id("Metal0"), DeviceBackend::Metal(0));
-        assert_eq!(DeviceBackend::from_id("unknown"), DeviceBackend::Auto);
+    fn try_from_id_parses_known_llamacpp_devices() {
+        assert_eq!(DeviceBackend::try_from_id("none"), Ok(DeviceBackend::Cpu));
+        assert_eq!(DeviceBackend::try_from_id("auto"), Ok(DeviceBackend::Auto));
+        assert_eq!(
+            DeviceBackend::try_from_id("CUDA0"),
+            Ok(DeviceBackend::Cuda(0))
+        );
+        assert_eq!(
+            DeviceBackend::try_from_id("CUDA1"),
+            Ok(DeviceBackend::Cuda(1))
+        );
+        assert_eq!(
+            DeviceBackend::try_from_id("Vulkan0"),
+            Ok(DeviceBackend::Vulkan(0))
+        );
+        assert_eq!(
+            DeviceBackend::try_from_id("Vulkan1"),
+            Ok(DeviceBackend::Vulkan(1))
+        );
+        assert_eq!(
+            DeviceBackend::try_from_id("Metal0"),
+            Ok(DeviceBackend::Metal(0))
+        );
+    }
+
+    #[test]
+    fn try_from_id_rejects_unknown_and_malformed_llamacpp_devices() {
+        assert_eq!(
+            DeviceBackend::try_from_id(""),
+            Err(DeviceBackendParseError::Empty)
+        );
+        assert_eq!(
+            DeviceBackend::try_from_id("unknown"),
+            Err(DeviceBackendParseError::Unknown("unknown".to_string()))
+        );
+        assert_eq!(
+            DeviceBackend::try_from_id("CUDA"),
+            Err(DeviceBackendParseError::MissingOrdinal("CUDA".to_string()))
+        );
+        assert_eq!(
+            DeviceBackend::try_from_id("CUDAx"),
+            Err(DeviceBackendParseError::InvalidOrdinal {
+                selector: "CUDAx".to_string(),
+                ordinal: "x".to_string(),
+            })
+        );
+        assert_eq!(
+            DeviceBackend::try_from_id("CUDA300"),
+            Err(DeviceBackendParseError::InvalidOrdinal {
+                selector: "CUDA300".to_string(),
+                ordinal: "300".to_string(),
+            })
+        );
     }
 
     #[test]
@@ -242,7 +341,7 @@ mod tests {
 
         for device in devices {
             let id = device.to_id();
-            let parsed = DeviceBackend::from_id(&id);
+            let parsed = DeviceBackend::try_from_id(&id).expect("roundtrip device id should parse");
             assert_eq!(device, parsed);
         }
     }
@@ -279,5 +378,21 @@ Metal backend initialized
 
         assert_eq!(devices.len(), 1);
         assert_eq!(devices[0].id, "none");
+    }
+
+    #[test]
+    fn parse_llamacpp_listing_ignores_malformed_device_ids() {
+        let devices = parse_llamacpp_device_listing(
+            "
+Available devices:
+  CUDAx: malformed
+  Metal: missing ordinal
+  CUDA1: NVIDIA GPU (8192 MiB, 4096 MiB free)
+",
+        );
+
+        assert_eq!(devices.len(), 2);
+        assert_eq!(devices[0].id, "none");
+        assert_eq!(devices[1].id, "CUDA1");
     }
 }

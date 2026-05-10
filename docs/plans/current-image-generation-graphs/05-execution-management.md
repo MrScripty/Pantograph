@@ -172,6 +172,11 @@ Update during implementation:
   The slice is additive and does not route legacy `DeviceConfig`,
   `DeviceBackend::from_id`, raw llama.cpp ordinals, or technical-fit fallback
   paths through the new contracts.
+- 2026-05-10: Continued Milestone 5 by replacing the infallible backend-local
+  llama.cpp device parser. `DeviceBackend::try_from_id` now returns typed
+  parse errors for unknown selectors, missing ordinals, and malformed ordinals,
+  and `parse_llamacpp_device_listing` filters malformed rows through the same
+  parser instead of accepting prefix-only device ids.
 
 ## Commit Cadence Notes
 
@@ -314,6 +319,9 @@ Worker rules:
   `crates/inference/src/device_contracts/`, with strict parser rejection for
   invalid identifiers and selected-candidate errors for zero or multiple
   candidates.
+- Milestone 5 no longer has the `DeviceBackend::from_id` unknown-to-auto or
+  malformed-ordinal-to-zero path. Backend-local llama.cpp selector parsing is
+  typed and fallible.
 
 ### Deviations
 
@@ -375,11 +383,11 @@ Worker rules:
 - Remaining focus-preservation coverage is limited by the no-new-harness
   decision. Add more Node-tested state/event helpers only where behavior can be
   verified without pretending to test browser focus.
-- Continue Milestone 5 by replacing legacy raw device-string execution paths
-  with these contracts. The known legacy issue is
-  `DeviceBackend::from_id`: unknown ids still become `Auto` and malformed
-  ordinals still become device zero until a later adapter-boundary slice
-  removes or replaces that path.
+- Continue Milestone 5 by replacing remaining legacy raw device-string
+  execution paths with these contracts. `DeviceConfig`, backend startup
+  settings, managed runtime command selection, frontend device options,
+  technical-fit fallbacks, and node-engine backend routing still need their own
+  thin replacement slices.
 
 ### Verification Summary
 
@@ -462,6 +470,10 @@ Worker rules:
 - `cargo fmt --all -- --check`, `cargo test -p inference device_contracts`,
   and `git diff --check` passed for the Milestone 5 device/runtime contract
   gate.
+- `cargo fmt --all -- --check`, `cargo test -p inference device::tests`,
+  `cargo test -p inference device_contracts`, and `git diff --check` passed
+  after replacing the legacy llama.cpp `DeviceBackend::from_id` fallback parser
+  with typed errors.
 
 ### Traceability Links
 

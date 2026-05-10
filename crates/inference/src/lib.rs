@@ -64,7 +64,9 @@ pub use backend::CandleBackend;
 pub use backend::PyTorchBackend;
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
-pub use device::{list_llamacpp_devices, parse_llamacpp_device_listing, DeviceBackend};
+pub use device::{
+    list_llamacpp_devices, parse_llamacpp_device_listing, DeviceBackend, DeviceBackendParseError,
+};
 pub use device_contracts::{
     BackendExecutionCandidate, BackendExecutionDecision, BackendId, BackendObservedThroughputHint,
     BackendResourceEstimate, DeviceContractError, DeviceResolutionDecision,

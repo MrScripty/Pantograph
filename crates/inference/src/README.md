@@ -13,6 +13,7 @@ details.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `backend/` | Backend trait definitions and concrete supported engine adapters such as llama.cpp, Candle, and PyTorch. |
+| `device.rs` | Backend-local llama.cpp device inventory parsing and command-selector formatting. |
 | `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
@@ -124,6 +125,9 @@ normalizing them to executable defaults.
   identifiers, missing candidates, or ambiguous selected candidates must return
   typed diagnostics/errors and must not be converted into `auto`, CPU, or
   device zero.
+- Backend-local llama.cpp device selectors in `device.rs` are fallible. Unknown
+  selectors and malformed ordinals must be rejected with
+  `DeviceBackendParseError` and must not become auto mode or ordinal zero.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,

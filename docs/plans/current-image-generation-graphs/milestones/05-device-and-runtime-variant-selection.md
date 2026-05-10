@@ -200,17 +200,39 @@ typed diagnostic and the canonical design is fixed.
     is introduced; feature/dependency impact is none; frontend accessibility
     impact is none; test isolation uses crate-local unit tests plus stable
     serde JSON assertions with no external services or generated fixtures.
-  - Discovered issue retained for later slices: existing
-    `crates/inference/src/device.rs` still contains legacy
-    `DeviceBackend::from_id` behavior where unknown ids become `Auto` and
-    malformed ordinals become `0`. This first slice intentionally records and
-    isolates the issue instead of preserving it through the new contracts.
+  - Discovered issue for follow-up: existing `crates/inference/src/device.rs`
+    contained legacy `DeviceBackend::from_id` behavior where unknown ids became
+    `Auto` and malformed ordinals became `0`. This first slice recorded and
+    isolated the issue instead of preserving it through the new contracts; the
+    next parser slice removed that specific behavior.
   - Implemented as decomposed modules under
     `crates/inference/src/device_contracts/` after a decomposition review
     showed the first single-file pass would exceed the repository's file-size
     target.
   - Verification passed:
     `cargo fmt --all -- --check`,
+    `cargo test -p inference device_contracts`, and `git diff --check`.
+- 2026-05-10 slice: llama.cpp device parser fallback removal.
+  - Smallest useful vertical slice: replace `DeviceBackend::from_id` with a
+    fallible backend-local parser and reuse that parser while reading
+    `llama.cpp --list-devices` output.
+  - Allowed write set: `crates/inference/src/device.rs`,
+    `crates/inference/src/lib.rs`, `crates/inference/src/README.md`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: unknown llama.cpp selectors now return
+    `DeviceBackendParseError::Unknown`; missing/malformed ordinals return typed
+    parse errors; malformed inventory rows are skipped instead of becoming
+    executable device facts; no compatibility `from_id` shim remains.
+  - Standards/blast-radius gate for `device.rs`: crate role remains
+    backend-local llama.cpp inventory/selector translation; public facade impact
+    is a typed `DeviceBackendParseError` re-export and removal of the
+    infallible parser; runtime lifecycle owner is unchanged; persisted
+    artifacts are not touched; no new filesystem/path/resource access,
+    features, dependencies, frontend behavior, generated bindings, or lockfiles
+    are introduced; test isolation uses existing crate-local unit tests only.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference device::tests`,
     `cargo test -p inference device_contracts`, and `git diff --check`.
 
 **Verification:**
