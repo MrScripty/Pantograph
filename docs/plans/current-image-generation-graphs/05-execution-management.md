@@ -125,6 +125,10 @@ Update during implementation:
   session queue admission. The rejection now uses an invalid-request workflow
   error envelope with structured graph details containing the same bounded
   `WorkflowGraphDiagnostic` records, and the queue remains untouched.
+- 2026-05-10: Started Milestone 4 by extending the IO inspector run graph
+  presenter/component path to consume backend `graph_diagnostics`. Stale node
+  and edge markers now come from backend facts in `WorkflowRunGraphProjection`,
+  not frontend inference over node types or missing canvas edges.
 
 ## Commit Cadence Notes
 
@@ -245,6 +249,8 @@ Worker rules:
   payload contract, structured graph contract-validation classifier, and saved
   graph/edit-session/run inspection projection, plus submit/admission blocking
   details.
+- Milestone 4 started for run-inspection graph stale markers backed by
+  backend `graph_diagnostics`.
 
 ### Deviations
 
@@ -269,6 +275,12 @@ Worker rules:
   remain above the standards decomposition threshold. The submit/admission
   slice kept its edits local to the existing queue-admission boundary; broader
   workflow-session decomposition is deferred.
+- `src/components/workbench/RunGraphSnapshot.svelte` and
+  `src/components/workbench/runGraphPresenters.ts` remain above the frontend
+  and generic decomposition thresholds. This slice only threaded backend stale
+  facts through the existing presenter/component path; saved/run graph
+  presenter extraction is deferred to the next Milestone 4 shared-inspection
+  slice.
 
 ### Follow-Ups
 
@@ -282,6 +294,8 @@ Worker rules:
   first.
 - Continue Milestone 3 by covering remaining Puma/dynamic-port stale diagnostic
   cases and then proceed to Milestone 4 IO inspector presentation.
+- Continue Milestone 4 by adding saved-graph inspection mode and selected
+  stale-node detail rendering in the I/O details panel.
 
 ### Verification Summary
 
@@ -325,6 +339,9 @@ Worker rules:
   `cargo test -p pantograph-workflow-service workflow_execution_session_run_rejects_stale_graph_before_queue_admission`,
   and `cargo test -p pantograph-workflow-service graph::diagnostics` passed for
   structured submit/admission stale graph blocking.
+- `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts`
+  and `npm run typecheck` passed for backend-owned stale graph markers in the
+  IO inspector run graph presenter/component path.
 
 ### Traceability Links
 

@@ -5,7 +5,7 @@ which nodes or edges are stale.
 
 **Tasks:**
 
-- [ ] Extend the IO inspector graph projection consumer to read backend stale
+- [x] Extend the IO inspector graph projection consumer to read backend stale
   graph facts.
 - [ ] Add saved-graph inspection mode so IO inspector can render a stale graph
   with diagnostics even when no workflow run exists.
@@ -14,7 +14,7 @@ which nodes or edges are stale.
 - [ ] Introduce or extract a shared graph inspection projection/presenter
   layer. Saved-graph inspection and run inspection may have different query
   sources, but they must not become separate graph display models.
-- [ ] Mark stale nodes and stale edge issues in the graph view.
+- [x] Mark stale nodes and stale edge issues in the graph view.
 - [ ] Keep selected-node state, panel sizing, layout, and visual grouping in
   frontend state only.
 - [ ] Show stale node details in the lower artifact/details panel when a stale
@@ -56,4 +56,19 @@ which nodes or edges are stale.
   and does not create duplicate listeners.
 - Existing IO artifact read tests continue passing.
 
-**Status:** Not started
+**Verification Results:**
+
+- `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts`
+  and `npm run typecheck` passed after extending the run graph presenter and
+  `RunGraphSnapshot` to consume backend `graph_diagnostics`, mark stale nodes,
+  and mark stale edge rows/canvas edges without fabricating diagnostics.
+
+**Remaining Follow-Up:**
+
+- Add saved-graph inspection mode and a run/saved shared graph inspection
+  presenter shape.
+- Show selected stale-node details in the lower I/O details panel.
+- Add focused component/accessibility tests for keyboard stale-node selection,
+  focus preservation, and saved-graph mode without artifact controls.
+
+**Status:** Partially completed on 2026-05-10

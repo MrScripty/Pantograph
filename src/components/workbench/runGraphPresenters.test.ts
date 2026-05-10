@@ -15,6 +15,7 @@ import {
   formatRunGraphCountLabel,
   runGraphNodeStatusClass,
   runGraphNodeErrorClass,
+  runGraphStaleDiagnosticClass,
   resolveRunGraphCounts,
   resolveRunGraphPresentationLabel,
 } from './runGraphPresenters.ts';
@@ -136,6 +137,9 @@ test('buildRunGraphEdgeRows renders captured graph edges before topology fallbac
       edgeId: 'edge-1',
       source: 'input-1:text',
       target: 'output-1:value',
+      staleDiagnosticCount: 0,
+      staleSeverity: null,
+      staleDiagnosticMessages: [],
     },
   ]);
 });
@@ -163,6 +167,50 @@ test('buildRunGraphCanvasModel derives stable viewbox and skips broken edges', (
   assert.equal(canvas.viewBox, '-86 -76 672 296');
   assert.deepEqual(canvas.nodes.map((node) => node.id), ['input-1', 'output-1']);
   assert.deepEqual(canvas.edges.map((edge) => edge.id), ['edge-1']);
+});
+
+test('run graph presenters expose backend stale graph diagnostics', () => {
+  const runGraph = createRunGraph();
+  runGraph.graph_diagnostics = [
+    {
+      code: 'retired_node_type',
+      severity: 'error',
+      scope: 'node',
+      node_id: 'output-1',
+      node_type: 'diffusion-inference',
+      message: 'node type diffusion-inference is retired',
+      blocking_submission: true,
+    },
+    {
+      code: 'missing_edge_target_node',
+      severity: 'error',
+      scope: 'edge',
+      message: 'edge target node is missing',
+      blocking_submission: true,
+      details: { edge_id: 'edge-1', target_node_id: 'missing' },
+    },
+  ];
+
+  const rows = buildRunGraphNodeRows(runGraph);
+  const outputRow = rows.find((row) => row.nodeId === 'output-1');
+  assert.equal(outputRow?.staleDiagnosticCount, 1);
+  assert.equal(outputRow?.staleSeverity, 'error');
+  assert.equal(outputRow?.staleBadgeLabel, '1 stale graph fact');
+  assert.deepEqual(outputRow?.staleDiagnosticMessages, [
+    'node type diffusion-inference is retired',
+  ]);
+  assert.equal(runGraphStaleDiagnosticClass(outputRow?.staleSeverity), 'error');
+
+  const edgeRows = buildRunGraphEdgeRows(runGraph);
+  assert.equal(edgeRows[0].staleDiagnosticCount, 1);
+  assert.deepEqual(edgeRows[0].staleDiagnosticMessages, ['edge target node is missing']);
+
+  const canvas = buildRunGraphCanvasModel(runGraph.graph, {}, {}, runGraph.graph_diagnostics);
+  const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
+  assert.equal(outputNode?.staleDiagnosticCount, 1);
+  assert.equal(outputNode?.staleBadgeLabel, '1 stale graph fact');
+  assert.equal(canvas.edges[0].staleDiagnosticCount, 1);
+  assert.equal(canvas.edges[0].staleSeverity, 'error');
 });
 
 test('buildRunGraphNodeArtifactSummaries groups retained node io facts', () => {

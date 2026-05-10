@@ -9,6 +9,7 @@
     resolveRunGraphCounts,
     resolveRunGraphPresentationLabel,
     runGraphNodeErrorClass,
+    runGraphStaleDiagnosticClass,
     type RunGraphNodeArtifactSummaryByNodeId,
     type RunGraphNodeStatusByNodeId,
   } from './runGraphPresenters';
@@ -31,7 +32,14 @@
     onSelectNode?: (nodeId: string) => void;
   } = $props();
 
-  let canvas = $derived(buildRunGraphCanvasModel(runGraph.graph, artifactSummaries, nodeStatuses));
+  let canvas = $derived(
+    buildRunGraphCanvasModel(
+      runGraph.graph,
+      artifactSummaries,
+      nodeStatuses,
+      runGraph.graph_diagnostics ?? [],
+    ),
+  );
   let counts = $derived(resolveRunGraphCounts(runGraph.graph));
   let nodeRows = $derived(buildRunGraphNodeRows(runGraph, artifactSummaries, nodeStatuses));
   let edgeRows = $derived(buildRunGraphEdgeRows(runGraph));
@@ -58,6 +66,15 @@
     if (node.errorSeverity === 'fatal' || node.statusClass === 'failed') {
       return '#ef4444';
     }
+    if (node.staleSeverity === 'error') {
+      return '#f97316';
+    }
+    if (node.staleSeverity === 'warning') {
+      return '#eab308';
+    }
+    if (node.staleSeverity === 'info') {
+      return '#38bdf8';
+    }
     if (node.hasOutputArtifacts) {
       return '#22c55e';
     }
@@ -68,7 +85,21 @@
     if (node.id === selectedNodeId || node.errorEventId === focusedDiagnosticEventId) {
       return '3';
     }
+    if (node.staleDiagnosticCount > 0) {
+      return '2.5';
+    }
     return node.statusClass === 'unknown' && !node.hasOutputArtifacts ? '1' : '2';
+  }
+
+  function nodeAccessibleLabel(node: (typeof canvas.nodes)[number]): string {
+    const parts = [`${node.id} ${node.nodeType}`];
+    if (node.staleBadgeLabel) {
+      parts.push(node.staleBadgeLabel);
+    }
+    if (node.errorBadgeLabel) {
+      parts.push(node.errorBadgeLabel);
+    }
+    return parts.join(', ');
   }
 </script>
 
@@ -115,9 +146,9 @@
                 y1={edge.sourceY}
                 x2={edge.targetX}
                 y2={edge.targetY}
-                stroke="#38bdf8"
-                stroke-width="2"
-                stroke-opacity="0.65"
+                stroke={edge.staleSeverity === 'error' ? '#fb923c' : edge.staleSeverity === 'warning' ? '#facc15' : '#38bdf8'}
+                stroke-width={edge.staleDiagnosticCount > 0 ? '3' : '2'}
+                stroke-opacity={edge.staleDiagnosticCount > 0 ? '0.9' : '0.65'}
                 marker-end="url(#run-graph-arrow)"
               />
             {/each}
@@ -126,6 +157,7 @@
               <g
                 transform={`translate(${node.x}, ${node.y})`}
                 role={onSelectNode ? 'button' : undefined}
+                aria-label={onSelectNode ? nodeAccessibleLabel(node) : undefined}
                 tabindex={onSelectNode ? 0 : undefined}
                 class={onSelectNode ? 'cursor-pointer outline-none' : ''}
                 onclick={() => selectNode(node.id)}
@@ -188,6 +220,26 @@
                     fill={node.statusClass === 'completed' ? '#22c55e' : node.statusClass === 'failed' ? '#ef4444' : node.statusClass === 'running' ? '#38bdf8' : '#a3a3a3'}
                   />
                 {/if}
+                {#if node.staleDiagnosticCount > 0}
+                  <circle
+                    cx={node.width - 18}
+                    cy={node.statusClass !== 'unknown' ? 36 : 18}
+                    r="7"
+                    fill={node.staleSeverity === 'error' ? '#7c2d12' : node.staleSeverity === 'warning' ? '#713f12' : '#164e63'}
+                    stroke={node.staleSeverity === 'error' ? '#fb923c' : node.staleSeverity === 'warning' ? '#facc15' : '#67e8f9'}
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x={node.width - 18}
+                    y={node.statusClass !== 'unknown' ? 40 : 22}
+                    text-anchor="middle"
+                    fill="#fff7ed"
+                    font-size="11"
+                    font-family="ui-sans-serif, system-ui"
+                  >
+                    !
+                  </text>
+                {/if}
               </g>
             {/each}
           </svg>
@@ -240,6 +292,7 @@
             <tr>
               <th class="px-3 py-2 font-medium">Node</th>
               <th class="px-3 py-2 font-medium">Status</th>
+              <th class="px-3 py-2 font-medium">Stale</th>
               <th class="px-3 py-2 font-medium">Contract</th>
               <th class="px-3 py-2 font-medium">I/O</th>
             </tr>
@@ -271,6 +324,18 @@
                     >
                       {node.errorBadgeLabel}
                     </div>
+                  {/if}
+                </td>
+                <td class="max-w-[8rem] px-3 py-2">
+                  {#if node.staleBadgeLabel}
+                    <span
+                      class={`inline-flex max-w-full rounded border px-2 py-0.5 text-[11px] ${runGraphStaleDiagnosticClass(node.staleSeverity) === 'error' ? 'border-orange-800 bg-orange-950 text-orange-100' : runGraphStaleDiagnosticClass(node.staleSeverity) === 'warning' ? 'border-yellow-800 bg-yellow-950 text-yellow-100' : 'border-cyan-800 bg-cyan-950 text-cyan-100'}`}
+                      title={node.staleDiagnosticMessages.join('\n')}
+                    >
+                      {node.staleBadgeLabel}
+                    </span>
+                  {:else}
+                    <span class="text-neutral-600">None</span>
                   {/if}
                 </td>
                 <td class="max-w-[10rem] px-3 py-2">
@@ -306,7 +371,17 @@
         <div class="mt-3 space-y-2">
           {#each edgeRows as edge (edge.edgeId)}
             <div class="rounded border border-neutral-800 bg-neutral-900/50 p-3 text-xs">
-              <div class="truncate font-mono text-neutral-300" title={edge.edgeId}>{edge.edgeId}</div>
+              <div class="flex items-center justify-between gap-3">
+                <div class="truncate font-mono text-neutral-300" title={edge.edgeId}>{edge.edgeId}</div>
+                {#if edge.staleDiagnosticCount > 0}
+                  <span
+                    class={`shrink-0 rounded border px-2 py-0.5 text-[11px] ${runGraphStaleDiagnosticClass(edge.staleSeverity) === 'error' ? 'border-orange-800 bg-orange-950 text-orange-100' : runGraphStaleDiagnosticClass(edge.staleSeverity) === 'warning' ? 'border-yellow-800 bg-yellow-950 text-yellow-100' : 'border-cyan-800 bg-cyan-950 text-cyan-100'}`}
+                    title={edge.staleDiagnosticMessages.join('\n')}
+                  >
+                    {edge.staleDiagnosticCount}
+                  </span>
+                {/if}
+              </div>
               <div class="mt-2 truncate text-neutral-500" title={`${edge.source} -> ${edge.target}`}>
                 {edge.source} -> {edge.target}
               </div>

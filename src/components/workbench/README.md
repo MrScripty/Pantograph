@@ -13,7 +13,7 @@ later plan stages fill in richer page bodies.
 | `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/placement/date, queue-control gating, selected-run estimate/cache and retention rows, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page for the current editable workflow graph. |
-| `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunInspection`; it does not load historic graphs into the editor store. |
+| `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunInspection`; it renders backend `graph_diagnostics` and does not load historic graphs into the editor store. |
 | `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range/placement filtered comparison facets, typed model-cache posture, mixed-version warnings, and scheduler timeline records. |
 | `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority/placement/model-cache facts, workflow-version/date-range/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
@@ -315,6 +315,9 @@ transient UI state without becoming backend scheduler policy.
   Node I/O overlays render summarized `IoArtifactProjectionRecord` metadata and
   must not dereference payload bodies or inspect raw ledger rows. Node status
   overlays render `NodeStatusProjectionRecord` rows, not raw diagnostic events.
+- Run graph stale markers and stale edge facts come only from backend
+  `graph_diagnostics`; presenters may index those facts by node or edge, but
+  must not infer stale state from node type strings or missing canvas edges.
 - Diagnostics fact rows render `RunDetailProjectionRecord` fields, and
   comparison filters/facets use `RunListProjectionRecord` fields. Scheduler
   estimate and queue facts are read from typed projection fields. Selected-run
