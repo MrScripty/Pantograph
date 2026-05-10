@@ -147,12 +147,15 @@ Update during implementation:
   selected run graph nodes in the existing I/O details panel. Artifact metadata
   and reads remain projection-owned; the new stale section only renders
   `runGraph.graph_diagnostics` filtered by selected node id.
-- 2026-05-10: Reached a Milestone 4 re-plan point for component/accessibility
-  verification. Code search found only Node presenter/store tests in the
-  frontend test script and no installed Svelte component DOM test harness
-  (`@testing-library/svelte`, Vitest, jsdom, or Playwright component setup).
-  Completing the remaining component/a11y verification requires a test-harness
-  dependency/tooling decision before adding lockfile/config changes.
+- 2026-05-10: Resolved the Milestone 4 component/accessibility test-harness
+  decision by staying with the repository's existing Node test approach. Svelte
+  DOM harness adoption remains out of scope for this plan pass; accessibility
+  coverage is limited to pure presenter/keyboard helper tests and typechecked
+  declarative Svelte wiring.
+- 2026-05-10: Continued Milestone 4 by extracting Node-tested saved graph
+  accessible-label and keyboard-selection helpers. The saved graph snapshot
+  component now uses those helpers for SVG node button labels and Enter/Space
+  activation without introducing a new frontend test platform.
 
 ## Commit Cadence Notes
 
@@ -284,8 +287,9 @@ Worker rules:
   active run is selected.
 - Milestone 4 selected run nodes now show backend stale-node diagnostic details
   in the I/O details panel.
-- Milestone 4 implementation is paused before component/accessibility coverage
-  pending a test-harness/tooling decision.
+- Milestone 4 continues under the existing Node test strategy; no Vitest,
+  Playwright, jsdom, or Svelte Testing Library dependency changes are part of
+  this plan pass.
 
 ### Deviations
 
@@ -337,10 +341,10 @@ Worker rules:
   package-facts contract is now frozen.
 - Continue Milestone 4 by adding component-level accessibility coverage for
   saved graph selection/focus and selected stale run-node details.
-- Re-plan the frontend component/accessibility test strategy before editing
-  package manifests or lockfiles. Options include adopting a Svelte DOM test
-  harness for workbench components or defining an approved non-DOM accessibility
-  presenter/event test pattern for this repository.
+- Continue Milestone 4 by adding any remaining Node-testable accessibility
+  helpers and by deciding whether the run/saved graph display naming cleanup is
+  small enough for this milestone or should be deferred to a dedicated
+  component decomposition slice.
 
 ### Verification Summary
 
@@ -410,6 +414,9 @@ Worker rules:
   found no existing Svelte component DOM test harness. The remaining
   component/accessibility verification was not implemented to avoid introducing
   dependency and lockfile changes without an explicit test-harness plan.
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after extracting
+  Node-tested saved graph accessible-label and keyboard-selection helpers.
 
 ### Traceability Links
 

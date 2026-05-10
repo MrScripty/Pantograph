@@ -24,6 +24,8 @@ export interface SavedGraphInspectionDisplayModel {
   hasRunContext: false;
 }
 
+export type SavedGraphInspectionCanvasNode = RunGraphCanvasModel['nodes'][number];
+
 export function buildSavedGraphInspectionOptions(
   workflows: WorkflowMetadata[],
 ): SavedGraphInspectionOption[] {
@@ -59,6 +61,20 @@ export function buildSavedGraphInspectionDisplayModel(
     artifactControlsEnabled: false,
     hasRunContext: false,
   };
+}
+
+export function formatSavedGraphNodeAccessibleLabel(
+  node: SavedGraphInspectionCanvasNode,
+): string {
+  const parts = [`${node.id} ${node.nodeType}`];
+  if (node.staleBadgeLabel) {
+    parts.push(node.staleBadgeLabel);
+  }
+  return parts.join(', ');
+}
+
+export function isSavedGraphNodeSelectionKey(key: string): boolean {
+  return key === 'Enter' || key === ' ';
 }
 
 function diagnosticsForSelectedNode(

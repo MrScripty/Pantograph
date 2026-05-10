@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { SavedGraphInspectionDisplayModel } from './graphInspectionPresenters';
+  import {
+    formatSavedGraphNodeAccessibleLabel,
+    isSavedGraphNodeSelectionKey,
+    type SavedGraphInspectionDisplayModel,
+  } from './graphInspectionPresenters';
   import { runGraphStaleDiagnosticClass } from './runGraphPresenters';
 
   let {
@@ -17,7 +21,7 @@
   }
 
   function handleNodeKeydown(event: KeyboardEvent, nodeId: string): void {
-    if (event.key !== 'Enter' && event.key !== ' ') {
+    if (!isSavedGraphNodeSelectionKey(event.key)) {
       return;
     }
     event.preventDefault();
@@ -66,7 +70,7 @@
           transform={`translate(${node.x}, ${node.y})`}
           role="button"
           tabindex="0"
-          aria-label={`${node.id} ${node.nodeType}${node.staleBadgeLabel ? `, ${node.staleBadgeLabel}` : ''}`}
+          aria-label={formatSavedGraphNodeAccessibleLabel(node)}
           class="cursor-pointer outline-none"
           onclick={() => selectNode(node.id)}
           onkeydown={(event) => handleNodeKeydown(event, node.id)}

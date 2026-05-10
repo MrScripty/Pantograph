@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   buildSavedGraphInspectionDisplayModel,
   buildSavedGraphInspectionOptions,
+  formatSavedGraphNodeAccessibleLabel,
+  isSavedGraphNodeSelectionKey,
 } from './graphInspectionPresenters.ts';
 import type { WorkflowGraphInspectionProjection } from '../../services/workflow/types.ts';
 
@@ -88,4 +90,11 @@ test('saved graph inspection display model uses backend diagnostics without run 
   );
   assert.equal(model.canvas.nodes[0].staleDiagnosticCount, 1);
   assert.equal(model.canvas.nodes[0].staleSeverity, 'error');
+  assert.equal(
+    formatSavedGraphNodeAccessibleLabel(model.canvas.nodes[0]),
+    'diffusion diffusion-inference, 1 stale graph fact',
+  );
+  assert.equal(isSavedGraphNodeSelectionKey('Enter'), true);
+  assert.equal(isSavedGraphNodeSelectionKey(' '), true);
+  assert.equal(isSavedGraphNodeSelectionKey('Escape'), false);
 });

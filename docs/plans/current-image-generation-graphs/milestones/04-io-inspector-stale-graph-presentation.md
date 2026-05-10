@@ -19,7 +19,7 @@ which nodes or edges are stale.
   frontend state only.
 - [x] Show stale node details in the lower artifact/details panel when a stale
   node is selected.
-- [ ] Make stale-node selection, artifact read actions, graph navigation, and
+- [x] Make stale-node selection, artifact read actions, graph navigation, and
   settings navigation reachable by keyboard and exposed with accessible names.
 - [ ] Preserve focus after selecting nodes or opening stale details so keyboard
   users do not lose their place in the graph/detail split view.
@@ -86,14 +86,18 @@ which nodes or edges are stale.
   found no existing Svelte component DOM test harness. Remaining
   component/accessibility verification needs a test-harness/tooling decision
   before package manifest or lockfile edits.
+- Decision: stay with the repository's existing Node test strategy for this
+  plan pass. `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after extracting
+  Node-tested saved graph accessible-label and keyboard-selection helpers used
+  by the saved graph snapshot component.
 
 **Remaining Follow-Up:**
 
 - Rename or wrap run-specific graph presenters/components so saved and run
   graph inspection share a clearer display boundary.
-- Add component-level accessibility coverage for saved graph selection/focus
-  after the test-harness re-plan.
 - Add focused component/accessibility tests for keyboard stale-node selection,
-  focus preservation, and saved-graph mode without artifact controls.
+  focus preservation, and saved-graph mode without artifact controls using the
+  existing Node test strategy where possible.
 
-**Status:** Paused for re-plan on 2026-05-10
+**Status:** Partially completed on 2026-05-10
