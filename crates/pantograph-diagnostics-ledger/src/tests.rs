@@ -713,6 +713,7 @@ fn diagnostic_event_ledger_projects_fatal_error_as_failed_run() {
             scheduler_policy_id: None,
             retention_policy_id: None,
             selected_runtime_id: None,
+            selected_device_class: None,
             selected_device_id: None,
             selected_network_node_id: None,
             client_id: None,
@@ -1203,10 +1204,22 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
         list_record.selected_task_id.as_deref(),
         Some("text_generation")
     );
+    assert_eq!(list_record.selected_device_class.as_deref(), Some("cuda"));
     assert_eq!(list_record.selected_device_id.as_deref(), Some("cuda:0"));
     assert_eq!(
         list_record.selected_network_node_id.as_deref(),
         Some("local-node-alpha")
+    );
+    let cuda_list_records = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            selected_device_class: Some("cuda".to_string()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list projection filters by selected device class");
+    assert_eq!(cuda_list_records.len(), 1);
+    assert_eq!(
+        cuda_list_records[0].workflow_run_id.as_str(),
+        "workflow_run_alpha"
     );
 
     let detail_state = ledger
@@ -1235,6 +1248,7 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
         detail_record.selected_task_id.as_deref(),
         Some("text_generation")
     );
+    assert_eq!(detail_record.selected_device_class.as_deref(), Some("cuda"));
     assert_eq!(detail_record.selected_device_id.as_deref(), Some("cuda:0"));
     assert_eq!(
         detail_record.selected_network_node_id.as_deref(),
@@ -4123,6 +4137,7 @@ fn existing_v19_schema_adds_scheduler_resource_projection_columns() {
     for table in ["run_list_projection", "run_detail_projection"] {
         for column in [
             "selected_runtime_id",
+            "selected_device_class",
             "selected_device_id",
             "selected_network_node_id",
         ] {
@@ -4136,6 +4151,10 @@ fn existing_v19_schema_adds_scheduler_resource_projection_columns() {
     assert!(sqlite_index_exists(
         &conn,
         "idx_run_list_projection_device_updated"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_device_class_updated"
     ));
     assert!(sqlite_index_exists(
         &conn,

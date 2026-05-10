@@ -218,6 +218,11 @@ Update during implementation:
   the canonical lifecycle event class into
   `InferenceExecutionDiagnosticObservedPayload` without deriving it from raw
   config or runtime setting strings.
+- 2026-05-10: Continued Milestone 5 by projecting selected device class into
+  diagnostics run-list/run-detail read models. The SQLite schema, projection
+  DTOs, workflow diagnostics query request, and contract fixtures now carry
+  `selected_device_class` from typed inference diagnostic payloads without
+  inferring it from raw device ids.
 
 ## Commit Cadence Notes
 
@@ -389,8 +394,12 @@ Worker rules:
   run inspection facts, scheduler admission, and managed runtime variant
   readiness still need follow-up slices.
 - Milestone 5 inference diagnostic ledger payloads now retain selected device
-  class. Projection columns and run-inspection DTOs still need a follow-up
-  slice before UI/API consumers can query the field directly.
+  class.
+- Milestone 5 diagnostics run-list/run-detail projections, workflow
+  diagnostics query DTOs, and run-inspection records now expose selected device
+  class directly. UI presentation still needs to decide where to display the
+  field, and scheduler admission/managed runtime readiness still need
+  end-to-end selected backend/runtime/device replacement.
 
 ### Deviations
 
@@ -457,6 +466,9 @@ Worker rules:
   `DeviceConfig` as the sidecar DTO, managed runtime command variant selection,
   frontend device options, technical-fit fallbacks, and node-engine backend
   routing.
+- Continue Milestone 5 by wiring selected device class into frontend
+  run-inspection presentation only from typed backend projection records, not
+  by parsing raw diagnostic payload JSON.
 
 ### Verification Summary
 
@@ -558,6 +570,14 @@ Worker rules:
   `cargo test -p inference --test device_contracts`, and `git diff --check`
   passed after making runtime-load dependency resolution carry a typed
   `DeviceResolutionDecision`.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_inference_diagnostic_selected_facts`,
+  `cargo test -p pantograph-diagnostics-ledger existing_v19_schema_adds_scheduler_resource_projection_columns`,
+  `cargo test -p pantograph-workflow-service workflow_run_`, and
+  `git diff --check` passed after projecting selected device class into
+  diagnostics run-list/run-detail records and workflow diagnostics contracts.
+  The first workflow-service attempt used two Cargo test filters and failed
+  before tests ran; it was rerun with the single `workflow_run_` filter.
 
 ### Traceability Links
 

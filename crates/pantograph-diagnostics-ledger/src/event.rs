@@ -11,9 +11,9 @@ pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
 pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 4;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
-pub const RUN_LIST_PROJECTION_VERSION: i64 = 7;
+pub const RUN_LIST_PROJECTION_VERSION: i64 = 8;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
-pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 6;
+pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 7;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
 pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 6;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
@@ -2204,6 +2204,7 @@ pub struct RunListProjectionQuery {
     pub scheduler_policy_id: Option<String>,
     pub retention_policy_id: Option<String>,
     pub selected_runtime_id: Option<String>,
+    pub selected_device_class: Option<String>,
     pub selected_device_id: Option<String>,
     pub selected_network_node_id: Option<String>,
     pub client_id: Option<ClientId>,
@@ -2227,6 +2228,7 @@ impl Default for RunListProjectionQuery {
             scheduler_policy_id: None,
             retention_policy_id: None,
             selected_runtime_id: None,
+            selected_device_class: None,
             selected_device_id: None,
             selected_network_node_id: None,
             client_id: None,
@@ -2293,6 +2295,11 @@ impl RunListProjectionQuery {
             MAX_ID_LEN,
         )?;
         validate_optional_text(
+            "selected_device_class",
+            self.selected_device_class.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
             "selected_device_id",
             self.selected_device_id.as_deref(),
             MAX_ID_LEN,
@@ -2324,6 +2331,7 @@ pub struct RunListProjectionRecord {
     pub selected_backend_key: Option<String>,
     pub selected_model_id: Option<String>,
     pub selected_task_id: Option<String>,
+    pub selected_device_class: Option<String>,
     pub selected_device_id: Option<String>,
     pub selected_network_node_id: Option<String>,
     pub client_id: Option<ClientId>,
@@ -2391,6 +2399,7 @@ pub struct RunDetailProjectionRecord {
     pub selected_backend_key: Option<String>,
     pub selected_model_id: Option<String>,
     pub selected_task_id: Option<String>,
+    pub selected_device_class: Option<String>,
     pub selected_device_id: Option<String>,
     pub selected_network_node_id: Option<String>,
     pub client_id: Option<ClientId>,

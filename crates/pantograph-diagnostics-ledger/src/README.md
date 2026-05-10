@@ -76,10 +76,10 @@ settings summary when producers emit one. Those summaries are backend
 execution diagnostics, not frontend configuration state.
 Run-list and run-detail projections also roll up node- and
 inference-diagnostic-derived selected runtime id, selected backend key,
-selected model id, and selected task id where scheduler/run payloads do not
-already provide those facts. Scheduler-owned selected runtime, device, and
-network-node fields keep their native lifecycle semantics and are not
-overwritten by inference payloads.
+selected model id, selected task id, selected device class, and selected device
+id where scheduler/run payloads do not already provide those facts.
+Scheduler-owned selected runtime, device, and network-node fields keep their
+native lifecycle semantics and are not overwritten by inference payloads.
 Inference option-support summaries use
 `inference.execution_diagnostic_observed` events. These rows are bounded
 system metadata for request id, task id, lifecycle phase/kind, selected backend,

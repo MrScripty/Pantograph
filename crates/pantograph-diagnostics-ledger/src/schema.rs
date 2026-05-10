@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 23;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v23";
+pub(crate) const SCHEMA_VERSION: i64 = 24;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v24";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -240,6 +240,9 @@ pub(crate) fn migrate_schema(
     }
     if found < 23 {
         ensure_projection_state_health_columns(&tx)?;
+    }
+    if found < 24 {
+        apply_run_projection_device_class_migration(&tx)?;
     }
     apply_latest_idempotent_schema_repairs(&tx)?;
     if found < SCHEMA_VERSION {
@@ -545,6 +548,7 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             selected_backend_key TEXT,
             selected_model_id TEXT,
             selected_task_id TEXT,
+            selected_device_class TEXT,
             selected_device_id TEXT,
             selected_network_node_id TEXT,
             client_id TEXT,
@@ -584,6 +588,8 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             ON run_list_projection(retention_policy_id, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_runtime_updated
             ON run_list_projection(selected_runtime_id, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_list_projection_device_class_updated
+            ON run_list_projection(selected_device_class, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_device_updated
             ON run_list_projection(selected_device_id, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_network_node_updated
@@ -635,6 +641,7 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             selected_backend_key TEXT,
             selected_model_id TEXT,
             selected_task_id TEXT,
+            selected_device_class TEXT,
             selected_device_id TEXT,
             selected_network_node_id TEXT,
             client_id TEXT,
@@ -703,6 +710,7 @@ fn ensure_run_list_projection_columns(tx: &Transaction<'_>) -> Result<(), Diagno
             ("selected_backend_key", "TEXT"),
             ("selected_model_id", "TEXT"),
             ("selected_task_id", "TEXT"),
+            ("selected_device_class", "TEXT"),
             ("selected_device_id", "TEXT"),
             ("selected_network_node_id", "TEXT"),
             ("client_id", "TEXT"),
@@ -741,6 +749,7 @@ fn ensure_run_detail_projection_columns(
             ("selected_backend_key", "TEXT"),
             ("selected_model_id", "TEXT"),
             ("selected_task_id", "TEXT"),
+            ("selected_device_class", "TEXT"),
             ("selected_device_id", "TEXT"),
             ("selected_network_node_id", "TEXT"),
             ("client_id", "TEXT"),
@@ -899,6 +908,23 @@ fn apply_scheduler_model_cache_projection_migration(
             "ALTER TABLE run_detail_projection ADD COLUMN model_cache_state TEXT",
             [],
         )?;
+    }
+    Ok(())
+}
+
+fn apply_run_projection_device_class_migration(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    if table_exists(tx, "run_list_projection")? {
+        ensure_column(tx, "run_list_projection", "selected_device_class", "TEXT")?;
+        tx.execute(
+            "CREATE INDEX IF NOT EXISTS idx_run_list_projection_device_class_updated
+                ON run_list_projection(selected_device_class, last_updated_at_ms DESC)",
+            [],
+        )?;
+    }
+    if table_exists(tx, "run_detail_projection")? {
+        ensure_column(tx, "run_detail_projection", "selected_device_class", "TEXT")?;
     }
     Ok(())
 }

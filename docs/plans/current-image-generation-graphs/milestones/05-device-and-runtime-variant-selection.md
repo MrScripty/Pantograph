@@ -446,6 +446,46 @@ typed diagnostic and the canonical design is fixed.
     diagnostics DTOs, and run inspection still need selected-device-class
     projection before consumers can query or display the field without reading
     raw payload JSON.
+- 2026-05-10 slice: diagnostics projection selected-device class.
+  - Smallest useful vertical slice: project
+    `InferenceExecutionDiagnosticObservedPayload.selected_device_class` into
+    durable run-list/run-detail SQLite columns, expose it on the public
+    projection records and run-list query filter, and carry it through the
+    existing workflow diagnostics API/contract snapshots.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/schema.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-diagnostics-ledger/src/README.md`,
+    `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+    `crates/pantograph-workflow-service/tests/contract.rs`,
+    `crates/pantograph-workflow-service/tests/fixtures/run_projection_contract.json`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: projection copies only the typed
+    diagnostic payload field. It does not infer device class from
+    `selected_device_id`, raw backend config strings, scheduler device ids, or
+    runtime setting values.
+  - Standards/blast-radius gate: diagnostics-ledger remains the durable schema
+    owner; public facade impact is additive projection DTO/query fields plus a
+    projection-version/schema-version bump; runtime lifecycle owners are
+    unchanged; no path/resource access, feature flags, dependencies,
+    lockfiles, generated files, frontend DOM behavior, or worker execution is
+    touched; SQLite migrations are idempotent and covered by an existing-schema
+    regression test.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_inference_diagnostic_selected_facts`,
+    `cargo test -p pantograph-diagnostics-ledger existing_v19_schema_adds_scheduler_resource_projection_columns`,
+    `cargo test -p pantograph-workflow-service workflow_run_`, and
+    `git diff --check`.
+  - Deviation: the first workflow-service test command attempted to pass two
+    test-name filters to Cargo. Cargo rejected that invocation, and it was
+    rerun with the single broader `workflow_run_` filter.
+  - Remaining follow-up: frontend/run-inspection presentation can now read the
+    field from typed projection records, but scheduler admission, managed
+    runtime variant readiness, and remaining legacy raw-device execution paths
+    still need end-to-end replacement.
 
 **Verification:**
 
