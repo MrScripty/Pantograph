@@ -832,7 +832,7 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 large-file rationale: library.rs remains over the decomposition threshold at 11637 lines after package-facts extraction. The remaining size is legacy ModelLibrary facade, migration, import, projection, and test ownership outside this image-generation facts slice; further reductions should proceed through separate facade/migration/import decomposition rather than blocking the DTO and extractor work.
 - 2026-05-10 P2 extractor finding: the initial Diffusers extractor now reads `model_index.json` and known nested component configs through an explicit bounded UTF-8 JSON reader, and it now emits component missing/invalid and ambiguous-family diagnostics. Remaining P2 fixture breadth still needs family-specific fixtures and malformed large JSON coverage beyond the unit-level oversized file case.
 - 2026-05-10 P3 integration finding: the initial GGUF extractor reads bounded header metadata and preserves corrupt legacy placeholder files as invalid evidence, but resolver wiring still selects the first non-mmproj GGUF from the selected files. Multi-quant selected-artifact-aware cache semantics remain open until `PackageInspectionContext` owns the concrete selected artifact id/path end to end.
-- 2026-05-10 P4 summary owner finding: selector and summary snapshots now share one package-facts summary cache classifier for missing, invalid, stale-contract, and wrong-selected-artifact states. Compact summary projection still delegates through `ResolvedModelPackageFactsSummary::from`; P4 is not complete until `package_facts/summary.rs` owns the projection semantics directly.
+- 2026-05-10 P4 summary owner finding: selector and summary snapshots now share one package-facts summary cache classifier for missing, invalid, stale-contract, and wrong-selected-artifact states. Compact summary projection ownership moved into `package_facts/summary.rs` while preserving the existing public `ResolvedModelPackageFactsSummary::from(&facts)` conversion.
 
 ## Implementation Sequencing
 
@@ -1054,7 +1054,7 @@ and GGUF facts.
       summary rows.
 - [x] Add the shared package-facts cache freshness classifier or query wrapper
       and use it for summary cache reads.
-- [ ] Make `package_facts/summary.rs` the single owner of summary projection
+- [x] Make `package_facts/summary.rs` the single owner of summary projection
       from full package facts. Selector snapshots and package summary snapshots
       may query cached summaries, but must not maintain separate projection
       semantics.
