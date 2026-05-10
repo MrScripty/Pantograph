@@ -128,6 +128,9 @@ normalizing them to executable defaults.
 - Backend-local llama.cpp device selectors in `device.rs` are fallible. Unknown
   selectors and malformed ordinals must be rejected with
   `DeviceBackendParseError` and must not become auto mode or ordinal zero.
+- `BackendConfig::default()` carries explicit `auto` device intent. Blank,
+  missing, unknown, or malformed llama.cpp device selectors fail before sidecar
+  startup instead of being normalized to an executable default.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,

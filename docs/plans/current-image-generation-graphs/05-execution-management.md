@@ -177,6 +177,11 @@ Update during implementation:
   parse errors for unknown selectors, missing ordinals, and malformed ordinals,
   and `parse_llamacpp_device_listing` filters malformed rows through the same
   parser instead of accepting prefix-only device ids.
+- 2026-05-10: Continued Milestone 5 by validating llama.cpp runtime-start
+  device settings. `BackendConfig::default` now carries explicit `auto` device
+  intent, while `LlamaCppRuntimeSettings::try_from_backend_config` rejects
+  missing, blank, unknown, or malformed raw device selectors before any sidecar
+  command is constructed.
 
 ## Commit Cadence Notes
 
@@ -322,6 +327,9 @@ Worker rules:
 - Milestone 5 no longer has the `DeviceBackend::from_id` unknown-to-auto or
   malformed-ordinal-to-zero path. Backend-local llama.cpp selector parsing is
   typed and fallible.
+- Milestone 5 now rejects invalid llama.cpp runtime-start device selectors
+  before sidecar startup. Default backend config represents explicit `auto`
+  intent instead of relying on absent raw device state.
 
 ### Deviations
 
@@ -384,10 +392,10 @@ Worker rules:
   decision. Add more Node-tested state/event helpers only where behavior can be
   verified without pretending to test browser focus.
 - Continue Milestone 5 by replacing remaining legacy raw device-string
-  execution paths with these contracts. `DeviceConfig`, backend startup
-  settings, managed runtime command selection, frontend device options,
-  technical-fit fallbacks, and node-engine backend routing still need their own
-  thin replacement slices.
+  execution paths with these contracts. The remaining work includes replacing
+  `DeviceConfig` as the sidecar DTO, managed runtime command variant selection,
+  frontend device options, technical-fit fallbacks, and node-engine backend
+  routing.
 
 ### Verification Summary
 
@@ -474,6 +482,11 @@ Worker rules:
   `cargo test -p inference device_contracts`, and `git diff --check` passed
   after replacing the legacy llama.cpp `DeviceBackend::from_id` fallback parser
   with typed errors.
+- `cargo fmt --all -- --check`, `cargo test -p inference backend::tests`,
+  `cargo test -p inference device::tests`,
+  `cargo test -p inference lifecycle_events_do_not_report_auto`, and
+  `git diff --check` passed after adding llama.cpp runtime-start device
+  validation.
 
 ### Traceability Links
 

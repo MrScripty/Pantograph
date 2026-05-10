@@ -36,7 +36,7 @@ use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, ImageGenerationRequest,
     ImageGenerationResult, InferenceUsage, RerankRequest, RerankResponse,
 };
-use crate::{config::DeviceConfig, constants::defaults};
+use crate::{config::DeviceConfig, constants::defaults, device::DeviceBackend};
 
 #[cfg(feature = "backend-llamacpp")]
 pub use llamacpp::LlamaCppBackend;
@@ -686,7 +686,7 @@ pub struct BackendInfo {
 }
 
 /// Configuration for starting a backend
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct BackendConfig {
     /// External OpenAI-compatible base URL (for remote or already-running hosts)
     pub external_url: Option<String>,
@@ -726,6 +726,28 @@ pub struct BackendConfig {
     pub model_type: Option<String>,
 }
 
+impl Default for BackendConfig {
+    fn default() -> Self {
+        Self {
+            external_url: None,
+            port_override: None,
+            model_path: None,
+            mmproj_path: None,
+            model_name: None,
+            model_id: None,
+            device: Some(defaults::DEVICE.to_string()),
+            gpu_layers: None,
+            context_size: None,
+            cpu_threads: None,
+            batch_size: None,
+            ubatch_size: None,
+            embedding_mode: false,
+            reranking_mode: false,
+            model_type: None,
+        }
+    }
+}
+
 /// Backend-owned effective llama.cpp runtime settings.
 ///
 /// This is the normalization boundary for settings that affect llama.cpp
@@ -748,25 +770,20 @@ pub struct LlamaCppRuntimeSettings {
 }
 
 impl LlamaCppRuntimeSettings {
-    /// Normalize a backend start config into effective llama.cpp settings.
-    #[must_use]
-    pub fn from_backend_config(config: &BackendConfig) -> Self {
-        Self {
-            device: normalize_llamacpp_device(config.device.as_deref()),
-            gpu_layers: config.gpu_layers.unwrap_or(defaults::GPU_LAYERS),
-            context_size: config.context_size.unwrap_or(defaults::CONTEXT_SIZE),
-            cpu_threads: config.cpu_threads,
-            batch_size: config.batch_size,
-            ubatch_size: config.ubatch_size,
-        }
-    }
-
     /// Normalize and validate a backend start config into effective settings.
     pub fn try_from_backend_config(config: &BackendConfig) -> Result<Self, BackendError> {
         validate_optional_positive_u32(config.cpu_threads, "cpu_threads")?;
         validate_optional_positive_u32(config.batch_size, "batch_size")?;
         validate_optional_positive_u32(config.ubatch_size, "ubatch_size")?;
-        Ok(Self::from_backend_config(config))
+        let device = validate_llamacpp_device(config.device.as_deref())?;
+        Ok(Self {
+            device,
+            gpu_layers: config.gpu_layers.unwrap_or(defaults::GPU_LAYERS),
+            context_size: config.context_size.unwrap_or(defaults::CONTEXT_SIZE),
+            cpu_threads: config.cpu_threads,
+            batch_size: config.batch_size,
+            ubatch_size: config.ubatch_size,
+        })
     }
 
     /// Project effective settings into the existing sidecar device DTO.
@@ -779,11 +796,19 @@ impl LlamaCppRuntimeSettings {
     }
 }
 
-fn normalize_llamacpp_device(device: Option<&str>) -> String {
+fn validate_llamacpp_device(device: Option<&str>) -> Result<String, BackendError> {
     let Some(device) = device.map(str::trim).filter(|value| !value.is_empty()) else {
-        return defaults::DEVICE.to_string();
+        return Err(BackendError::Config(
+            "llama.cpp device setting is required; use explicit auto policy when scheduler-owned selection is intended"
+                .to_string(),
+        ));
     };
-    device.to_string()
+    let backend = DeviceBackend::try_from_id(device).map_err(|error| {
+        BackendError::Config(format!(
+            "invalid llama.cpp device setting '{device}': {error}"
+        ))
+    })?;
+    Ok(backend.to_id())
 }
 
 fn validate_optional_positive_u32(
@@ -1015,13 +1040,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn backend_config_default_uses_explicit_auto_device() {
+        assert_eq!(
+            BackendConfig::default().device.as_deref(),
+            Some(defaults::DEVICE)
+        );
+    }
+
+    #[test]
     fn llamacpp_runtime_settings_normalize_backend_config_defaults() {
-        let settings = LlamaCppRuntimeSettings::from_backend_config(&BackendConfig {
-            device: Some("  ".to_string()),
+        let settings = LlamaCppRuntimeSettings::try_from_backend_config(&BackendConfig {
             gpu_layers: None,
             context_size: None,
             ..BackendConfig::default()
-        });
+        })
+        .expect("default backend config should be valid explicit auto");
 
         assert_eq!(settings.device, defaults::DEVICE);
         assert_eq!(settings.gpu_layers, defaults::GPU_LAYERS);
@@ -1040,7 +1073,7 @@ mod tests {
 
     #[test]
     fn llamacpp_runtime_settings_preserve_explicit_backend_config() {
-        let settings = LlamaCppRuntimeSettings::from_backend_config(&BackendConfig {
+        let settings = LlamaCppRuntimeSettings::try_from_backend_config(&BackendConfig {
             device: Some("Vulkan0".to_string()),
             gpu_layers: Some(42),
             context_size: Some(8192),
@@ -1048,7 +1081,8 @@ mod tests {
             batch_size: Some(512),
             ubatch_size: Some(128),
             ..BackendConfig::default()
-        });
+        })
+        .expect("explicit backend config should be valid");
 
         assert_eq!(
             settings,
@@ -1093,6 +1127,26 @@ mod tests {
             assert!(
                 error.to_string().contains(field_name),
                 "expected {field_name} in {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn llamacpp_runtime_settings_reject_invalid_device_selectors() {
+        for (device, expected) in [
+            (None, "device setting is required"),
+            (Some("  "), "device setting is required"),
+            (Some("unknown"), "unknown llama.cpp device selector"),
+            (Some("CUDAx"), "invalid ordinal"),
+        ] {
+            let error = LlamaCppRuntimeSettings::try_from_backend_config(&BackendConfig {
+                device: device.map(str::to_string),
+                ..BackendConfig::default()
+            })
+            .expect_err("invalid device selector should fail closed");
+            assert!(
+                error.to_string().contains(expected),
+                "expected {expected:?} in {error}"
             );
         }
     }

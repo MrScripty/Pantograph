@@ -234,6 +234,29 @@ typed diagnostic and the canonical design is fixed.
     `cargo fmt --all -- --check`,
     `cargo test -p inference device::tests`,
     `cargo test -p inference device_contracts`, and `git diff --check`.
+- 2026-05-10 slice: llama.cpp runtime-start device validation.
+  - Smallest useful vertical slice: make `BackendConfig::default` carry
+    explicit `auto` device intent and make
+    `LlamaCppRuntimeSettings::try_from_backend_config` reject missing, blank,
+    unknown, or malformed llama.cpp device selectors before sidecar startup.
+  - Allowed write set: `crates/inference/src/backend/mod.rs`,
+    `crates/inference/src/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: blank or absent raw device strings no
+    longer normalize to `auto`; invalid raw selectors fail with typed
+    `BackendError::Config` details from the fallible device parser; no backend
+    startup path was added that infers CPU, auto, or ordinal zero.
+  - Standards/blast-radius gate for `backend/mod.rs`: crate role remains the
+    backend facade/settings boundary; public facade impact is limited to manual
+    `BackendConfig::default` semantics; runtime lifecycle owner is unchanged;
+    persisted artifacts, path validation, frontend controls, generated files,
+    feature flags, dependencies, and lockfiles are untouched; test isolation
+    uses existing crate-local backend/device/gateway unit tests.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference backend::tests`,
+    `cargo test -p inference device::tests`,
+    `cargo test -p inference lifecycle_events_do_not_report_auto`, and
+    `git diff --check`.
 
 **Verification:**
 
