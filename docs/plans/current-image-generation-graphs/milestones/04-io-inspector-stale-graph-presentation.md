@@ -15,7 +15,7 @@ which nodes or edges are stale.
   layer. Saved-graph inspection and run inspection may have different query
   sources, but they must not become separate graph display models.
 - [x] Mark stale nodes and stale edge issues in the graph view.
-- [ ] Keep selected-node state, panel sizing, layout, and visual grouping in
+- [x] Keep selected-node state, panel sizing, layout, and visual grouping in
   frontend state only.
 - [x] Show stale node details in the lower artifact/details panel when a stale
   node is selected.
@@ -23,18 +23,18 @@ which nodes or edges are stale.
   settings navigation reachable by keyboard and exposed with accessible names.
 - [ ] Preserve focus after selecting nodes or opening stale details so keyboard
   users do not lose their place in the graph/detail split view.
-- [ ] Keep graph facts, stale diagnostics, model facts, artifact records, and
+- [x] Keep graph facts, stale diagnostics, model facts, artifact records, and
   retention facts backend-owned. Frontend may own only transient selection,
   filtering, panel sizing, focus, and hover state.
-- [ ] Use declarative Svelte rendering for stale markers and details; do not
+- [x] Use declarative Svelte rendering for stale markers and details; do not
   manually mutate DOM or graph state outside the presenter/store boundary.
-- [ ] Do not add page-local polling. Use the existing query/event pattern or
+- [x] Do not add page-local polling. Use the existing query/event pattern or
   add a backend-owned push/subscription path with explicit lifecycle cleanup.
 - [ ] If a push/subscription path is introduced, define one page-local
   subscription helper that owns subscribe/unsubscribe, duplicate-listener
   prevention, stale-event coalescing, and unmount cleanup.
-- [ ] Preserve artifact reading behavior for valid executed runs.
-- [ ] Use the same graph presenter helpers for run snapshots and saved-graph
+- [x] Preserve artifact reading behavior for valid executed runs.
+- [x] Use the same graph presenter helpers for run snapshots and saved-graph
   diagnostics so missing-edge and stale-port facts are not silently dropped.
 
 **Verification:**
@@ -82,14 +82,18 @@ which nodes or edges are stale.
   `npm run typecheck`, and `git diff --check` passed after rendering selected
   run-node stale diagnostics in the lower I/O details panel from backend
   `graph_diagnostics`.
+- `rg -n "@testing-library/svelte|vitest|jsdom|svelte.*test|playwright" package.json package-lock.json src packages -g '!node_modules'`
+  found no existing Svelte component DOM test harness. Remaining
+  component/accessibility verification needs a test-harness/tooling decision
+  before package manifest or lockfile edits.
 
 **Remaining Follow-Up:**
 
 - Rename or wrap run-specific graph presenters/components so saved and run
   graph inspection share a clearer display boundary.
-- Add component-level accessibility coverage for saved graph selection/focus.
-- Show selected stale-node details in the lower I/O details panel.
+- Add component-level accessibility coverage for saved graph selection/focus
+  after the test-harness re-plan.
 - Add focused component/accessibility tests for keyboard stale-node selection,
   focus preservation, and saved-graph mode without artifact controls.
 
-**Status:** Partially completed on 2026-05-10
+**Status:** Paused for re-plan on 2026-05-10

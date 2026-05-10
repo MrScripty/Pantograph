@@ -147,6 +147,12 @@ Update during implementation:
   selected run graph nodes in the existing I/O details panel. Artifact metadata
   and reads remain projection-owned; the new stale section only renders
   `runGraph.graph_diagnostics` filtered by selected node id.
+- 2026-05-10: Reached a Milestone 4 re-plan point for component/accessibility
+  verification. Code search found only Node presenter/store tests in the
+  frontend test script and no installed Svelte component DOM test harness
+  (`@testing-library/svelte`, Vitest, jsdom, or Playwright component setup).
+  Completing the remaining component/a11y verification requires a test-harness
+  dependency/tooling decision before adding lockfile/config changes.
 
 ## Commit Cadence Notes
 
@@ -278,6 +284,8 @@ Worker rules:
   active run is selected.
 - Milestone 4 selected run nodes now show backend stale-node diagnostic details
   in the I/O details panel.
+- Milestone 4 implementation is paused before component/accessibility coverage
+  pending a test-harness/tooling decision.
 
 ### Deviations
 
@@ -327,23 +335,12 @@ Worker rules:
 
 - Pumas P0-P1 should start after Milestone 0 because the Pantograph expected
   package-facts contract is now frozen.
-- Investigate and either keep or clean the unrelated dirty plan edit in
-  `07-pumas-library-image-generation-facts.md`; it was present during this
-  slice and was not staged for the graph-shape commit.
-- Plan the next vertical slice for Milestone 3 backend stale graph diagnostics,
-  unless the unrelated dirty Pumas plan edit requires integration or cleanup
-  first.
-- Continue Milestone 3 by covering remaining Puma/dynamic-port stale diagnostic
-  cases and then proceed to Milestone 4 IO inspector presentation.
-- Continue Milestone 4 by adding saved-graph inspection mode and selected
-  stale-node detail rendering in the I/O details panel.
-- Continue Milestone 4 by wiring IO inspector saved-graph mode to
-  `WorkflowService.inspectWorkflowGraph` and by reusing the run graph display
-  helpers for saved graph diagnostics.
-- Continue Milestone 4 by rendering the saved-graph presenter model in
-  `IoInspectorPage.svelte` and then adding selected stale-node details.
 - Continue Milestone 4 by adding component-level accessibility coverage for
   saved graph selection/focus and selected stale run-node details.
+- Re-plan the frontend component/accessibility test strategy before editing
+  package manifests or lockfiles. Options include adopting a Svelte DOM test
+  harness for workbench components or defining an approved non-DOM accessibility
+  presenter/event test pattern for this repository.
 
 ### Verification Summary
 
@@ -409,6 +406,10 @@ Worker rules:
   `npm run typecheck`, and `git diff --check` passed after rendering selected
   run-node stale diagnostics in the I/O details panel from backend
   `graph_diagnostics`.
+- `rg -n "@testing-library/svelte|vitest|jsdom|svelte.*test|playwright" package.json package-lock.json src packages -g '!node_modules'`
+  found no existing Svelte component DOM test harness. The remaining
+  component/accessibility verification was not implemented to avoid introducing
+  dependency and lockfile changes without an explicit test-harness plan.
 
 ### Traceability Links
 
