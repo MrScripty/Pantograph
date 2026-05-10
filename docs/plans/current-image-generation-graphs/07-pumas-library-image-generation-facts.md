@@ -845,6 +845,7 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P5 validation finding: Pumas commit `9d25beea` adds a package-facts migration validation report that reuses dry-run cache classification counts for missing, stale-contract, stale-fingerprint, invalid-json, wrong-selected-artifact, blocked partial, and error states.
 - 2026-05-10 P5 update-feed coverage finding: Pumas commit `83c10980` adds an execution fixture proving regenerated selected-artifact detail and summary cache rows emit `PackageFactsModified` update-feed events with the selected artifact id after durable writes.
 - 2026-05-10 P5 execution artifact finding: Pumas commit `4be8c416` persists package-facts cache migration execution reports as package-facts-specific JSON and Markdown artifacts and registers them in the existing migration report index.
+- 2026-05-10 P5 batch-path decision: no separate batch cache upsert/delete API was added because package-facts backfill intentionally reuses `resolve_model_package_facts` as the canonical selected-model hydration path. That resolver owns detail/summary cache writes, source-fingerprint recomputation, and update-feed semantics. Duplicating it in a migration-only batch writer would create a second cache-write policy owner. The backfill runner instead bounds work by checkpointed per-model selected-artifact work items and uses the selected-artifact-safe delete API for obsolete default-artifact rows.
 
 ## Implementation Sequencing
 
@@ -1130,12 +1131,12 @@ contract without serving stale facts to Pantograph or other clients.
       migrations do not publish stale rows after package files change.
 - [x] Emit `PackageFactsModified` update events after durable cache writes,
       including selected artifact id when present.
-- [ ] Add a bounded batch cache upsert/delete path for backfill work where
+- [x] Add a bounded batch cache upsert/delete path for backfill work where
       practical. It writes rows, deletes obsolete rows, collects event ids,
       commits, then publishes update notifications.
-- [ ] Extend post-migration validation to count missing, stale-contract,
+- [x] Extend post-migration validation to count missing, stale-contract,
       stale-fingerprint, invalid-json, and wrong-selected-artifact rows.
-- [ ] Keep selector snapshots and summary snapshots non-hydrating during and
+- [x] Keep selector snapshots and summary snapshots non-hydrating during and
       after migration.
 - [x] Add human-readable and machine-readable report fields for regenerated
       detail rows, regenerated summary rows, deleted obsolete rows, skipped
