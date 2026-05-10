@@ -846,6 +846,7 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P5 update-feed coverage finding: Pumas commit `83c10980` adds an execution fixture proving regenerated selected-artifact detail and summary cache rows emit `PackageFactsModified` update-feed events with the selected artifact id after durable writes.
 - 2026-05-10 P5 execution artifact finding: Pumas commit `4be8c416` persists package-facts cache migration execution reports as package-facts-specific JSON and Markdown artifacts and registers them in the existing migration report index.
 - 2026-05-10 P5 batch-path decision: no separate batch cache upsert/delete API was added because package-facts backfill intentionally reuses `resolve_model_package_facts` as the canonical selected-model hydration path. That resolver owns detail/summary cache writes, source-fingerprint recomputation, and update-feed semantics. Duplicating it in a migration-only batch writer would create a second cache-write policy owner. The backfill runner instead bounds work by checkpointed per-model selected-artifact work items and uses the selected-artifact-safe delete API for obsolete default-artifact rows.
+- 2026-05-10 P6 fixture handoff finding: Pumas commit `281a45a5` documents `diffusers_sd_text_to_image_package_facts.json` as the canonical producer fixture for host-side image-generation planning and extends its contract test to reject consumer/runtime internals such as workflow, runtime-registry, scheduler-policy, diagnostics-ledger, or Pantograph adapter fields.
 
 ## Implementation Sequencing
 
@@ -1169,7 +1170,7 @@ contract without serving stale facts to Pantograph or other clients.
 guesswork.
 
 **Tasks:**
-- [ ] Export or document canonical package-facts fixtures.
+- [x] Export or document canonical package-facts fixtures.
 - [ ] Add Pantograph fixture copies or contract tests that consume Pumas fixture
       JSON.
 - [ ] Verify Pantograph image-family planner can reject missing/ambiguous facts
