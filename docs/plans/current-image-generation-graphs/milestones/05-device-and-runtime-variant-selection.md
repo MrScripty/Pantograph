@@ -217,8 +217,7 @@ typed diagnostic and the canonical design is fixed.
     fallible backend-local parser and reuse that parser while reading
     `llama.cpp --list-devices` output.
   - Allowed write set: `crates/inference/src/device.rs`,
-    `crates/inference/src/lib.rs`, `crates/inference/src/README.md`, and this
-    plan directory.
+    `crates/inference/src/README.md`, and this plan directory.
   - No-fallback/no-legacy confirmation: unknown llama.cpp selectors now return
     `DeviceBackendParseError::Unknown`; missing/malformed ordinals return typed
     parse errors; malformed inventory rows are skipped instead of becoming
@@ -279,6 +278,27 @@ typed diagnostic and the canonical design is fixed.
   - Remaining fixture coverage: Tauri/frontend, diagnostics-ledger, Python
     worker, and persisted-state fixtures are still deferred until those
     boundaries start consuming the device/runtime DTOs.
+- 2026-05-10 slice: llama.cpp selector-to-contract projection.
+  - Smallest useful vertical slice: add a backend-local projection from
+    resolved `DeviceBackend` values into canonical `InferenceDeviceClass` and
+    `InferenceDeviceId` facts.
+  - Allowed write set: `crates/inference/src/device.rs`,
+    `crates/inference/src/lib.rs`, `crates/inference/src/README.md`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: backend-local `auto` returns a typed
+    `DeviceBackendContractError::AutoRequiresResolution`, and unsupported
+    Vulkan selectors return typed rejection instead of being converted into
+    scheduler-selected facts. Raw llama.cpp strings remain adapter-local.
+  - Standards/blast-radius gate for `device.rs`: crate role remains
+    backend-local parsing/projection; public facade impact is additive error
+    re-export and projection method; runtime lifecycle, persisted artifacts,
+    path validation, frontend behavior, generated files, feature flags,
+    dependencies, and lockfiles are untouched; test isolation uses existing
+    crate-local unit tests plus public fixture coverage.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference device::tests`,
+    `cargo test -p inference --test device_contracts`, and `git diff --check`.
 
 **Verification:**
 

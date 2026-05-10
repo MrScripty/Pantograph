@@ -9,6 +9,7 @@ use tokio::process::Command;
 
 use crate::config::DeviceInfo;
 use crate::constants::device_types;
+use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId};
 use crate::managed_runtime::{resolve_binary_command, ManagedBinaryId};
 
 /// Represents a compute backend for inference
@@ -47,6 +48,26 @@ pub enum DeviceBackendParseError {
         selector: String,
         /// Invalid ordinal fragment.
         ordinal: String,
+    },
+}
+
+/// Error produced while projecting backend-local selectors into canonical facts.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeviceBackendContractError {
+    /// Auto mode must be resolved by scheduler policy before a selected fact exists.
+    #[error("auto device policy must be resolved before selected device facts are emitted")]
+    AutoRequiresResolution,
+    /// The backend-local selector has no canonical scheduler device class yet.
+    #[error("llama.cpp device selector '{0}' is not supported by canonical device contracts")]
+    UnsupportedBackendDevice(String),
+    /// The projected canonical device id failed validation.
+    #[error("llama.cpp device selector '{selector}' projected invalid device id: {message}")]
+    InvalidProjectedDeviceId {
+        /// Original backend-local selector.
+        selector: String,
+        /// Validation failure message.
+        message: String,
     },
 }
 
@@ -121,6 +142,31 @@ impl DeviceBackend {
     /// Check if this is GPU-accelerated
     pub fn is_gpu(&self) -> bool {
         !matches!(self, Self::Cpu)
+    }
+
+    /// Project a resolved backend-local selector into canonical scheduler facts.
+    pub fn to_contract_device(
+        &self,
+    ) -> Result<(InferenceDeviceClass, InferenceDeviceId), DeviceBackendContractError> {
+        let (device_class, device_id) = match self {
+            Self::Cpu => (InferenceDeviceClass::Cpu, "cpu".to_string()),
+            Self::Cuda(index) => (InferenceDeviceClass::Cuda, format!("cuda:{index}")),
+            Self::Metal(index) => (InferenceDeviceClass::Metal, format!("metal:{index}")),
+            Self::Vulkan(index) => {
+                return Err(DeviceBackendContractError::UnsupportedBackendDevice(
+                    format!("{}{}", device_types::VULKAN_PREFIX, index),
+                ));
+            }
+            Self::Auto => return Err(DeviceBackendContractError::AutoRequiresResolution),
+        };
+
+        let device_id = InferenceDeviceId::parse(&device_id).map_err(|error| {
+            DeviceBackendContractError::InvalidProjectedDeviceId {
+                selector: self.to_id(),
+                message: error.to_string(),
+            }
+        })?;
+        Ok((device_class, device_id))
     }
 }
 
@@ -394,5 +440,38 @@ Available devices:
         assert_eq!(devices.len(), 2);
         assert_eq!(devices[0].id, "none");
         assert_eq!(devices[1].id, "CUDA1");
+    }
+
+    #[test]
+    fn device_backend_projects_canonical_contract_facts() {
+        for (backend, expected_class, expected_id) in [
+            (DeviceBackend::Cpu, InferenceDeviceClass::Cpu, "cpu"),
+            (DeviceBackend::Cuda(1), InferenceDeviceClass::Cuda, "cuda:1"),
+            (
+                DeviceBackend::Metal(0),
+                InferenceDeviceClass::Metal,
+                "metal:0",
+            ),
+        ] {
+            let (device_class, device_id) = backend
+                .to_contract_device()
+                .expect("resolved backend should project to contract facts");
+            assert_eq!(device_class, expected_class);
+            assert_eq!(device_id.as_str(), expected_id);
+        }
+    }
+
+    #[test]
+    fn device_backend_contract_projection_rejects_unresolved_or_unsupported_devices() {
+        assert_eq!(
+            DeviceBackend::Auto.to_contract_device(),
+            Err(DeviceBackendContractError::AutoRequiresResolution)
+        );
+        assert_eq!(
+            DeviceBackend::Vulkan(0).to_contract_device(),
+            Err(DeviceBackendContractError::UnsupportedBackendDevice(
+                "Vulkan0".to_string()
+            ))
+        );
     }
 }

@@ -188,6 +188,12 @@ Update during implementation:
   execution decisions, and invalid raw device id rejection through the public
   crate API before later Tauri/frontend/worker/persisted projections consume
   the DTOs.
+- 2026-05-10: Continued Milestone 5 by adding backend-local llama.cpp
+  selector projection into canonical device contract facts.
+  `DeviceBackend::to_contract_device` maps resolved CPU, CUDA, and Metal
+  selectors to `InferenceDeviceClass`/`InferenceDeviceId`, while unresolved
+  auto mode and unsupported Vulkan return typed `DeviceBackendContractError`
+  values instead of selected scheduler facts.
 
 ## Commit Cadence Notes
 
@@ -340,6 +346,9 @@ Worker rules:
   and backend execution decision shapes. Cross-boundary fixtures for frontend,
   diagnostics-ledger, Python worker, and persisted state remain pending until
   those boundaries are touched.
+- Milestone 5 has a typed llama.cpp adapter projection for resolved device
+  selectors. It still needs scheduler/runtime consumers to stop passing
+  `DeviceConfig` as raw selected state.
 
 ### Deviations
 
@@ -500,6 +509,9 @@ Worker rules:
 - `cargo fmt --all -- --check`,
   `cargo test -p inference --test device_contracts`, and `git diff --check`
   passed after adding public device/runtime contract fixtures.
+- `cargo fmt --all -- --check`, `cargo test -p inference device::tests`,
+  `cargo test -p inference --test device_contracts`, and `git diff --check`
+  passed after adding llama.cpp selector-to-contract projection.
 
 ### Traceability Links
 

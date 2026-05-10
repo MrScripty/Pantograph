@@ -128,6 +128,10 @@ normalizing them to executable defaults.
 - Backend-local llama.cpp device selectors in `device.rs` are fallible. Unknown
   selectors and malformed ordinals must be rejected with
   `DeviceBackendParseError` and must not become auto mode or ordinal zero.
+- Backend-local selectors project to canonical scheduler facts only after they
+  are resolved. `auto` and unsupported backend-local selectors such as Vulkan
+  return `DeviceBackendContractError` instead of synthesizing selected device
+  facts.
 - `BackendConfig::default()` carries explicit `auto` device intent. Blank,
   missing, unknown, or malformed llama.cpp device selectors fail before sidecar
   startup instead of being normalized to an executable default.
