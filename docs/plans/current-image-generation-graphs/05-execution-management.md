@@ -199,6 +199,12 @@ Update during implementation:
   `DeviceResolutionDecision`, so managed runtime command facts cannot be
   emitted without selected runtime variant, device class, and selected device
   id facts.
+- 2026-05-10: Continued Milestone 5 by projecting selected device facts into
+  active llama.cpp runtime descriptors. Ready sidecars now expose canonical
+  selected device class/id only when the backend-local selector parses and
+  projects successfully; unresolved `auto` and unsupported backend-local
+  selectors omit selected facts, and malformed active device state produces no
+  descriptor.
 
 ## Commit Cadence Notes
 
@@ -357,6 +363,10 @@ Worker rules:
 - Milestone 5 runtime-load dependency resolution now consumes a typed resolved
   device decision. Later slices still need managed runtime variant state and
   active-runtime/lifecycle projection to carry the same selected facts.
+- Milestone 5 active llama.cpp runtime descriptors now carry selected device
+  facts when backend-local state is resolved. Lifecycle events, diagnostics
+  ledger projection, run inspection facts, and scheduler admission still need
+  to consume resolved backend/runtime/device decisions end to end.
 
 ### Deviations
 

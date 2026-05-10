@@ -9,8 +9,9 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    DeviceConfig, DeviceResolutionDecision, ManagedBinaryId, ManagedRuntimeJobState,
-    ManagedRuntimeReadinessState, ManagedRuntimeSnapshot, ResolvedCommand,
+    DeviceConfig, DeviceResolutionDecision, InferenceDeviceClass, InferenceDeviceId,
+    ManagedBinaryId, ManagedRuntimeJobState, ManagedRuntimeReadinessState, ManagedRuntimeSnapshot,
+    ResolvedCommand,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -82,6 +83,10 @@ pub struct LlamaCppActiveRuntimeDescriptor {
     pub model_path: PathBuf,
     pub mmproj_path: Option<PathBuf>,
     pub device: DeviceConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_device_class: Option<InferenceDeviceClass>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_device_id: Option<InferenceDeviceId>,
     pub context_size: Option<u32>,
     pub cpu_threads: Option<u32>,
     pub batch_size: Option<u32>,
@@ -204,9 +209,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, ManagedBinaryInstallState,
-        ManagedRuntimeJobStatus, ManagedRuntimeSelectionState, ManagedRuntimeVersionStatus,
-        RuntimeVariantId,
+        InferenceDevicePolicy, ManagedBinaryInstallState, ManagedRuntimeJobStatus,
+        ManagedRuntimeSelectionState, ManagedRuntimeVersionStatus, RuntimeVariantId,
     };
 
     #[test]

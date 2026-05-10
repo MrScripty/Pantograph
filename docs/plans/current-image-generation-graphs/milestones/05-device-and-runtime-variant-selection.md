@@ -320,6 +320,35 @@ typed diagnostic and the canonical design is fixed.
     `cargo fmt --all -- --check`,
     `cargo test -p inference runtime_load`,
     `cargo test -p inference --test device_contracts`, and `git diff --check`.
+- 2026-05-10 slice: active llama.cpp runtime selected-device facts.
+  - Smallest useful vertical slice: project validated backend-local device
+    state into active llama.cpp runtime descriptors without changing scheduler,
+    managed runtime variant state, lifecycle events, frontend controls, worker
+    execution, generated bindings, or lockfiles.
+  - Allowed write set: `crates/inference/src/runtime_load.rs`,
+    `crates/inference/src/server.rs`, `crates/inference/src/server_tests.rs`,
+    `crates/inference/src/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: active descriptors emit selected
+    device class/id only after `DeviceBackend::try_from_id` and
+    `DeviceBackend::to_contract_device` succeed. Invalid raw active device
+    state fails closed with no descriptor, while unresolved `auto` and
+    unsupported backend-local selectors such as Vulkan omit selected facts
+    instead of synthesizing scheduler decisions.
+  - Standards/blast-radius gate for `runtime_load.rs` and `server.rs`: crate
+    role remains pure runtime-load DTOs plus llama.cpp sidecar lifecycle;
+    public facade impact is additive optional fields on the active runtime
+    descriptor; runtime lifecycle owner is unchanged; persisted artifacts,
+    path validation, frontend behavior, generated files, feature flags,
+    dependencies, and lockfiles are untouched; test isolation uses existing
+    crate-local sidecar/device unit tests.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference active_runtime_descriptor`,
+    `cargo test -p inference device::tests`, and `git diff --check`.
+  - Remaining follow-up: gateway lifecycle events, diagnostics ledger
+    projection, run inspection facts, scheduler admission, and managed runtime
+    variant state still need to consume resolved backend/runtime/device
+    decisions instead of raw active backend config.
 
 **Verification:**
 

@@ -14,9 +14,11 @@ use tokio::sync::RwLock;
 
 use crate::config::DeviceConfig;
 use crate::constants::{device_types, hosts, ports, timeouts};
+use crate::device::DeviceBackend;
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::ServerModeInfo;
+use crate::{InferenceDeviceClass, InferenceDeviceId};
 
 const SIDECAR_PID_FILE: &str = "llama-server.pid";
 const KV_SLOT_SAVE_DIR: &str = "llama-kv-slots";
@@ -78,6 +80,44 @@ fn parse_sidecar_pid(raw: &str) -> Option<i32> {
     serde_json::from_str::<SidecarPidRecord>(value)
         .ok()
         .map(|record| record.pid)
+}
+
+fn active_runtime_descriptor(
+    mode: LlamaCppRuntimeMode,
+    port: u16,
+    model_path: &str,
+    mmproj_path: Option<&str>,
+    device: &DeviceConfig,
+    context_size: Option<u32>,
+    cpu_threads: Option<u32>,
+    batch_size: Option<u32>,
+    ubatch_size: Option<u32>,
+) -> Option<LlamaCppActiveRuntimeDescriptor> {
+    let selected_device = selected_contract_device(device)?;
+    let (selected_device_class, selected_device_id) = selected_device
+        .map(|(device_class, device_id)| (Some(device_class), Some(device_id)))
+        .unwrap_or((None, None));
+
+    Some(LlamaCppActiveRuntimeDescriptor {
+        mode,
+        port,
+        model_path: PathBuf::from(model_path),
+        mmproj_path: mmproj_path.map(PathBuf::from),
+        device: device.clone(),
+        selected_device_class,
+        selected_device_id,
+        context_size,
+        cpu_threads,
+        batch_size,
+        ubatch_size,
+    })
+}
+
+fn selected_contract_device(
+    device: &DeviceConfig,
+) -> Option<Option<(InferenceDeviceClass, InferenceDeviceId)>> {
+    let backend = DeviceBackend::try_from_id(&device.device).ok()?;
+    Some(backend.to_contract_device().ok())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -736,47 +776,47 @@ impl LlamaServer {
                 cpu_threads,
                 batch_size,
                 ubatch_size,
-            } => Some(LlamaCppActiveRuntimeDescriptor {
-                mode: LlamaCppRuntimeMode::Inference,
-                port: *port,
-                model_path: PathBuf::from(model_path),
-                mmproj_path: mmproj_path.as_deref().map(PathBuf::from),
-                device: device.clone(),
-                context_size: Some(*context_size),
-                cpu_threads: *cpu_threads,
-                batch_size: *batch_size,
-                ubatch_size: *ubatch_size,
-            }),
+            } => active_runtime_descriptor(
+                LlamaCppRuntimeMode::Inference,
+                *port,
+                model_path,
+                mmproj_path.as_deref(),
+                device,
+                Some(*context_size),
+                *cpu_threads,
+                *batch_size,
+                *ubatch_size,
+            ),
             ServerMode::SidecarEmbedding {
                 port,
                 model_path,
                 device,
-            } => Some(LlamaCppActiveRuntimeDescriptor {
-                mode: LlamaCppRuntimeMode::Embedding,
-                port: *port,
-                model_path: PathBuf::from(model_path),
-                mmproj_path: None,
-                device: device.clone(),
-                context_size: None,
-                cpu_threads: None,
-                batch_size: None,
-                ubatch_size: None,
-            }),
+            } => active_runtime_descriptor(
+                LlamaCppRuntimeMode::Embedding,
+                *port,
+                model_path,
+                None,
+                device,
+                None,
+                None,
+                None,
+                None,
+            ),
             ServerMode::SidecarReranking {
                 port,
                 model_path,
                 device,
-            } => Some(LlamaCppActiveRuntimeDescriptor {
-                mode: LlamaCppRuntimeMode::Reranking,
-                port: *port,
-                model_path: PathBuf::from(model_path),
-                mmproj_path: None,
-                device: device.clone(),
-                context_size: None,
-                cpu_threads: None,
-                batch_size: None,
-                ubatch_size: None,
-            }),
+            } => active_runtime_descriptor(
+                LlamaCppRuntimeMode::Reranking,
+                *port,
+                model_path,
+                None,
+                device,
+                None,
+                None,
+                None,
+                None,
+            ),
             ServerMode::None | ServerMode::External { .. } => None,
         }
     }

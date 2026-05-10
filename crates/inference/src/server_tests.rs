@@ -2,6 +2,7 @@ use super::{parse_sidecar_pid, LlamaServer, ServerMode};
 use crate::config::DeviceConfig;
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::runtime_load::LlamaCppRuntimeMode;
+use crate::InferenceDeviceClass;
 use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::{
@@ -141,7 +142,7 @@ fn inference_runtime_matcher_requires_matching_port() {
 fn active_runtime_descriptor_reports_ready_sidecar_identity() {
     let mut server = LlamaServer::new();
     let device = DeviceConfig {
-        device: "Vulkan0".to_string(),
+        device: "CUDA0".to_string(),
         gpu_layers: 40,
     };
     server.set_test_runtime_state(
@@ -170,10 +171,60 @@ fn active_runtime_descriptor_reports_ready_sidecar_identity() {
         Some(PathBuf::from("/models/vision.mmproj"))
     );
     assert_eq!(descriptor.device, device);
+    assert_eq!(
+        descriptor.selected_device_class,
+        Some(InferenceDeviceClass::Cuda)
+    );
+    assert_eq!(
+        descriptor.selected_device_id.as_ref().map(|id| id.as_str()),
+        Some("cuda:0")
+    );
     assert_eq!(descriptor.context_size, Some(4096));
     assert_eq!(descriptor.cpu_threads, Some(8));
     assert_eq!(descriptor.batch_size, Some(512));
     assert_eq!(descriptor.ubatch_size, Some(128));
+}
+
+#[test]
+fn active_runtime_descriptor_omits_selected_facts_for_unresolved_auto() {
+    let mut server = LlamaServer::new();
+    server.set_test_runtime_state(
+        ServerMode::SidecarEmbedding {
+            port: 11434,
+            model_path: "/models/embed.gguf".to_string(),
+            device: DeviceConfig {
+                device: "auto".to_string(),
+                gpu_layers: -1,
+            },
+        },
+        true,
+    );
+
+    let descriptor = server
+        .active_runtime_descriptor()
+        .expect("ready sidecar descriptor");
+
+    assert_eq!(descriptor.mode, LlamaCppRuntimeMode::Embedding);
+    assert_eq!(descriptor.selected_device_class, None);
+    assert_eq!(descriptor.selected_device_id, None);
+}
+
+#[test]
+fn active_runtime_descriptor_rejects_invalid_device_state() {
+    let mut server = LlamaServer::new();
+    server.set_test_runtime_state(
+        ServerMode::SidecarReranking {
+            port: 11434,
+            model_path: "/models/rerank.gguf".to_string(),
+            device: DeviceConfig {
+                device: "CUDAx".to_string(),
+                gpu_layers: 40,
+            },
+        },
+        true,
+    );
+
+    assert!(server.active_runtime_descriptor().is_none());
 }
 
 #[test]

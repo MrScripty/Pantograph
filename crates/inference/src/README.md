@@ -138,6 +138,10 @@ normalizing them to executable defaults.
 - Runtime-load phase records require a `DeviceResolutionDecision`, so
   dependency resolution cannot emit command facts without the selected runtime
   variant, device class, and selected device id facts.
+- Active llama.cpp runtime descriptors expose canonical selected device facts
+  only after backend-local selectors parse and project successfully. Unresolved
+  `auto` and unsupported backend-local selectors omit selected facts, while
+  malformed active device state fails closed without producing a descriptor.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,
