@@ -69,6 +69,14 @@ Update during implementation:
   cursors, selected-artifact semantics, and cache migration/backfill must be
   complete and pinned before Pantograph Milestone 6 begins real PyTorch/diffusers
   image execution.
+- 2026-05-10: Committed the plan directory as the initial documentation slice.
+  Milestone 0 then completed as a contract-gate documentation slice with write
+  scope limited to this plan. The frozen decisions name the planned graph
+  diagnostic DTO, shared graph inspection projection, task/artifact-aware
+  `diffusers` to PyTorch execution normalization boundary, missing-facts
+  diagnostic fields, wire-format rules, fixture names, isolated test roots,
+  decomposition decisions, and concrete fallback/legacy paths found by code
+  search.
 
 ## Commit Cadence Notes
 
@@ -177,23 +185,42 @@ Worker rules:
 
 ### Completed
 
-- Not started.
+- Initial plan documentation committed.
+- Milestone 0 contract gate completed. Production behavior is unchanged; the
+  slice freezes contracts and identifies the implementation/test fixtures for
+  later vertical slices.
 
 ### Deviations
 
-- None.
+- Milestone 0 did not add executable tests because it is a pre-implementation
+  contract-freeze slice. It names the first failing acceptance test or fixture
+  for every implementation milestone before source changes begin.
 
 ### Follow-Ups
 
-- None yet.
+- Milestone 1 and Milestone 2 should be implemented as the first code slice,
+  constrained to the current Juggernaut saved workflow, built-in workflow
+  template/test paths, and retired `diffusion-inference` producer/removal
+  tests unless code search finds a narrower blocking path.
+- Pumas P0-P1 should start after Milestone 0 because the Pantograph expected
+  package-facts contract is now frozen.
 
 ### Verification Summary
 
-- Not run.
+- `git status --short` inspected before the slice. The user approved ignoring
+  untracked SQLite WAL/SHM files and the unrelated proposal markdown.
+- Code search verified the relevant existing targets for
+  `ConservativeFallback`, override fallback candidates, raw `runtime_hint`,
+  retired `diffusion-inference` producers/templates/tests, raw device auto
+  behavior, frontend synthetic fallback paths, and artifact single-body
+  retention paths.
+- No build or unit tests were run for Milestone 0 because the slice changed
+  only plan documentation and recorded future acceptance tests.
 
 ### Traceability Links
 
-- Module README updated: pending implementation.
+- Module README updated: N/A for Milestone 0 because no production module
+  ownership changed.
 - ADR added/updated: N/A unless implementation changes runtime backend
   ownership boundaries.
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: pending.
