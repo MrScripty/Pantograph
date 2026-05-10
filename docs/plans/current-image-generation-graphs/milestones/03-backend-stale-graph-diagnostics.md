@@ -20,7 +20,7 @@ inspectable and explain why they cannot be submitted.
 - [ ] Return stale graph diagnostics from graph load/read-model paths used by
   graph editor, the shared graph inspection projection, IO inspector
   saved-graph mode, and run inspection.
-- [ ] Include bounded submit/admission reasons when stale executable graphs are
+- [x] Include bounded submit/admission reasons when stale executable graphs are
   blocked.
 - [ ] Ensure diagnostics are factual and presentation-neutral.
 - [ ] Ensure stale graph diagnostics can represent node-level, edge-level, and
@@ -73,13 +73,17 @@ inspectable and explain why they cannot be submitted.
   and `npm run typecheck` passed after adding `graph_diagnostics` to historic
   `WorkflowRunGraphProjection`, proving run inspection can carry backend-owned
   stale graph facts from the reconstructed run snapshot.
+- `cargo test -p pantograph-workflow-service workflow_service_stale_graph_envelope_includes_structured_details`,
+  `cargo test -p pantograph-workflow-service workflow_execution_session_run_rejects_stale_graph_before_queue_admission`,
+  and `cargo test -p pantograph-workflow-service graph::diagnostics` passed
+  after adding structured graph error details and blocking stale graphs before
+  queue admission.
 
 **Remaining Follow-Up:**
 
 - Extend coverage to unresolved Puma model references and stale dynamic port
   contracts once the graph inspection projection exists.
-- Add cross-layer saved-graph inspection and submit/admission blocking tests in
-  separate slices to avoid mixing editor stale facts with execution admission
-  behavior.
+- Add cross-layer saved-graph inspection tests in a separate slice to avoid
+  mixing editor stale facts with execution admission behavior.
 
 **Status:** Partially completed on 2026-05-10

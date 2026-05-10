@@ -49,6 +49,33 @@ pub enum WorkflowGraphDiagnosticCode {
     CycleDetected,
 }
 
+impl WorkflowGraphDiagnosticCode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorkflowGraphDiagnosticCode::DuplicateNodeId => "duplicate_node_id",
+            WorkflowGraphDiagnosticCode::DuplicateEdgeId => "duplicate_edge_id",
+            WorkflowGraphDiagnosticCode::UnknownNodeType => "unknown_node_type",
+            WorkflowGraphDiagnosticCode::RetiredNodeType => "retired_node_type",
+            WorkflowGraphDiagnosticCode::InvalidNodeId => "invalid_node_id",
+            WorkflowGraphDiagnosticCode::InvalidNodeType => "invalid_node_type",
+            WorkflowGraphDiagnosticCode::InvalidDynamicDefinition => "invalid_dynamic_definition",
+            WorkflowGraphDiagnosticCode::MissingEdgeSourceNode => "missing_edge_source_node",
+            WorkflowGraphDiagnosticCode::MissingEdgeTargetNode => "missing_edge_target_node",
+            WorkflowGraphDiagnosticCode::SelfConnection => "self_connection",
+            WorkflowGraphDiagnosticCode::MissingSourceContract => "missing_source_contract",
+            WorkflowGraphDiagnosticCode::MissingTargetContract => "missing_target_contract",
+            WorkflowGraphDiagnosticCode::MissingSourceOutput => "missing_source_output",
+            WorkflowGraphDiagnosticCode::MissingTargetInput => "missing_target_input",
+            WorkflowGraphDiagnosticCode::TargetInputCapacityReached => {
+                "target_input_capacity_reached"
+            }
+            WorkflowGraphDiagnosticCode::IncompatiblePortTypes => "incompatible_port_types",
+            WorkflowGraphDiagnosticCode::CompatibilityCheckFailed => "compatibility_check_failed",
+            WorkflowGraphDiagnosticCode::CycleDetected => "cycle_detected",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowGraphDiagnostic {

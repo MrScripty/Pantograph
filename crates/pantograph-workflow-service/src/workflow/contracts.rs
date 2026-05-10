@@ -931,6 +931,14 @@ impl WorkflowSchedulerErrorDetails {
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowErrorDetails {
     Scheduler(WorkflowSchedulerErrorDetails),
+    Graph(WorkflowGraphErrorDetails),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphErrorDetails {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graph_diagnostics: Vec<WorkflowGraphDiagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -993,6 +1001,12 @@ pub enum WorkflowServiceError {
     SchedulerBusy {
         message: String,
         details: Option<WorkflowSchedulerErrorDetails>,
+    },
+
+    #[error("invalid_request: {message}")]
+    StaleWorkflowGraph {
+        message: String,
+        diagnostics: Vec<WorkflowGraphDiagnostic>,
     },
 
     #[error("output_not_produced: {0}")]
@@ -1060,6 +1074,7 @@ impl WorkflowServiceError {
             WorkflowServiceError::SessionEvicted(_) => WorkflowErrorCode::SessionEvicted,
             WorkflowServiceError::QueueItemNotFound(_) => WorkflowErrorCode::QueueItemNotFound,
             WorkflowServiceError::SchedulerBusy { .. } => WorkflowErrorCode::SchedulerBusy,
+            WorkflowServiceError::StaleWorkflowGraph { .. } => WorkflowErrorCode::InvalidRequest,
             WorkflowServiceError::OutputNotProduced(_) => WorkflowErrorCode::OutputNotProduced,
             WorkflowServiceError::RuntimeTimeout(_) => WorkflowErrorCode::RuntimeTimeout,
             WorkflowServiceError::Internal(_) => WorkflowErrorCode::InternalError,
@@ -1082,6 +1097,7 @@ impl WorkflowServiceError {
             | WorkflowServiceError::RuntimeTimeout(message)
             | WorkflowServiceError::Internal(message) => message,
             WorkflowServiceError::SchedulerBusy { message, .. } => message,
+            WorkflowServiceError::StaleWorkflowGraph { message, .. } => message,
             WorkflowServiceError::WithDiagnostics { source, .. } => source.message(),
             WorkflowServiceError::WithRuntimeDiagnosticPhase { source, .. } => source.message(),
         }
@@ -1093,6 +1109,11 @@ impl WorkflowServiceError {
                 details: Some(details),
                 ..
             } => Some(WorkflowErrorDetails::Scheduler(details.clone())),
+            WorkflowServiceError::StaleWorkflowGraph { diagnostics, .. } => {
+                Some(WorkflowErrorDetails::Graph(WorkflowGraphErrorDetails {
+                    graph_diagnostics: diagnostics.clone(),
+                }))
+            }
             WorkflowServiceError::WithDiagnostics { source, .. } => source.details(),
             WorkflowServiceError::WithRuntimeDiagnosticPhase { source, .. } => source.details(),
             _ => None,

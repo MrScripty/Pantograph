@@ -277,6 +277,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   files for historic run views. The projection also carries backend-owned
   `graph_diagnostics` derived from the reconstructed snapshot so run inspection
   exposes stale facts without frontend inference.
+- Session run snapshot creation validates the current graph before queue
+  admission. Blocking stale graph diagnostics return an invalid-request error
+  envelope with structured graph details and do not enqueue or execute the run.
 - Local Network status: `workflow_local_network_status_query` reports
   local-only system and scheduler-load facts through a provider abstraction.
   Scheduler-load facts include active and queued workflow run ids for local

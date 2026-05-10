@@ -336,6 +336,57 @@ async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_id
 }
 
 #[tokio::test]
+async fn workflow_execution_session_run_rejects_stale_graph_before_queue_admission() {
+    let host = StaleWorkflowGraphHost::new();
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-stale".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id.clone(),
+                workflow_semantic_version: "1.0.0".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("stale graph should be rejected before queue admission");
+
+    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
+    assert!(error.message().contains("retired_node_type"));
+    let Some(WorkflowErrorDetails::Graph(details)) = error.details() else {
+        panic!("stale graph rejection should expose typed graph details");
+    };
+    assert!(details.graph_diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == crate::WorkflowGraphDiagnosticCode::RetiredNodeType
+            && diagnostic.node_id.as_deref() == Some("diffusion")
+    }));
+    let queue = service
+        .workflow_list_execution_session_queue(WorkflowExecutionSessionQueueListRequest {
+            session_id: created.session_id,
+        })
+        .await
+        .expect("list queue after rejected run");
+    assert!(queue.items.is_empty());
+    assert_eq!(host.run_attempts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn workflow_execution_session_run_records_snapshot_before_execution() {
     let host = MockWorkflowHost::with_technical_fit_decision(
         8,

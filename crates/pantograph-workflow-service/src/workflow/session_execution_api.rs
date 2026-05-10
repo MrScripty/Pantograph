@@ -33,7 +33,8 @@ use super::session_runtime_load_lifecycle::{
     WorkflowRuntimeLoadLifecycleContext, WorkflowRuntimeLoadLifecycleEvent,
 };
 use super::validation::{
-    validate_bindings, validate_output_targets, validate_timeout_ms, validate_workflow_id,
+    validate_bindings, validate_output_targets, validate_timeout_ms,
+    validate_workflow_graph_submit_readiness, validate_workflow_id,
     validate_workflow_semantic_version,
 };
 use super::{
@@ -689,6 +690,7 @@ impl WorkflowService {
         }
 
         let graph = host.workflow_graph(&session.workflow_id).await?;
+        validate_workflow_graph_submit_readiness(&graph)?;
         let capabilities = host.workflow_capabilities(&session.workflow_id).await?;
         let version = self.resolve_workflow_graph_version(
             &session.workflow_id,

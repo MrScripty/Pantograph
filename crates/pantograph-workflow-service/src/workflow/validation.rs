@@ -1,9 +1,16 @@
 use std::collections::HashSet;
 
+use crate::graph::{
+    validate_workflow_graph_contract_diagnostics, NodeRegistry, WorkflowGraph,
+    WorkflowGraphDiagnostic, WorkflowGraphDiagnosticScope,
+};
+
 use super::{
     WorkflowIdentity, WorkflowInputTarget, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowServiceError,
 };
+
+const MAX_STALE_GRAPH_SUBMIT_REASONS: usize = 5;
 
 pub(super) fn validate_timeout_ms(timeout_ms: Option<u64>) -> Result<(), WorkflowServiceError> {
     if matches!(timeout_ms, Some(0)) {
@@ -35,6 +42,69 @@ pub(crate) fn validate_workflow_semantic_version(
         ));
     }
     Ok(())
+}
+
+pub(super) fn validate_workflow_graph_submit_readiness(
+    graph: &WorkflowGraph,
+) -> Result<(), WorkflowServiceError> {
+    let diagnostics = validate_workflow_graph_contract_diagnostics(graph, &NodeRegistry::new());
+    let blocking_diagnostics = diagnostics
+        .into_iter()
+        .filter(|diagnostic| diagnostic.blocking_submission)
+        .collect::<Vec<_>>();
+    if blocking_diagnostics.is_empty() {
+        return Ok(());
+    }
+
+    Err(WorkflowServiceError::StaleWorkflowGraph {
+        message: stale_graph_submission_message(&blocking_diagnostics),
+        diagnostics: blocking_diagnostics,
+    })
+}
+
+fn stale_graph_submission_message(diagnostics: &[WorkflowGraphDiagnostic]) -> String {
+    let reasons = diagnostics
+        .iter()
+        .take(MAX_STALE_GRAPH_SUBMIT_REASONS)
+        .map(stale_graph_submit_reason)
+        .collect::<Vec<_>>();
+    let remaining = diagnostics.len().saturating_sub(reasons.len());
+    let suffix = if remaining == 0 {
+        String::new()
+    } else {
+        format!("; {remaining} more")
+    };
+
+    format!(
+        "workflow graph has {} blocking stale diagnostic(s): {}{}",
+        diagnostics.len(),
+        reasons.join("; "),
+        suffix
+    )
+}
+
+fn stale_graph_submit_reason(diagnostic: &WorkflowGraphDiagnostic) -> String {
+    let target = match diagnostic.scope {
+        WorkflowGraphDiagnosticScope::Graph => "graph".to_string(),
+        WorkflowGraphDiagnosticScope::Node => format!(
+            "node {}",
+            diagnostic.node_id.as_deref().unwrap_or("<unknown>")
+        ),
+        WorkflowGraphDiagnosticScope::Edge => format!(
+            "edge {}",
+            diagnostic
+                .details
+                .get("edge_id")
+                .map(String::as_str)
+                .unwrap_or("<unknown>")
+        ),
+    };
+    format!(
+        "{} {}: {}",
+        diagnostic.code.as_str(),
+        target,
+        diagnostic.message
+    )
 }
 
 fn is_numeric_semver_part(value: &str) -> bool {

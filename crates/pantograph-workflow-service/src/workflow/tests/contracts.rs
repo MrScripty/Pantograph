@@ -419,6 +419,42 @@ fn workflow_service_scheduler_busy_envelope_includes_structured_details() {
 }
 
 #[test]
+fn workflow_service_stale_graph_envelope_includes_structured_details() {
+    let diagnostic = WorkflowGraphDiagnostic::edge(
+        WorkflowGraphDiagnosticCode::MissingEdgeTargetNode,
+        WorkflowGraphDiagnosticSeverity::Error,
+        "edge-1",
+        "edge target node is missing",
+        true,
+    );
+    let err = WorkflowServiceError::StaleWorkflowGraph {
+        message: "workflow graph has 1 blocking stale diagnostic(s)".to_string(),
+        diagnostics: vec![diagnostic.clone()],
+    };
+
+    let envelope = err.to_envelope();
+    assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+    assert_eq!(
+        envelope.details,
+        Some(WorkflowErrorDetails::Graph(WorkflowGraphErrorDetails {
+            graph_diagnostics: vec![diagnostic.clone()],
+        }))
+    );
+
+    let json = err.to_envelope_json();
+    assert!(json.contains("\"graph\""));
+    assert!(json.contains("\"missing_edge_target_node\""));
+    let parsed: WorkflowErrorEnvelope =
+        serde_json::from_str(&json).expect("parse workflow error envelope");
+    assert_eq!(
+        parsed.details,
+        Some(WorkflowErrorDetails::Graph(WorkflowGraphErrorDetails {
+            graph_diagnostics: vec![diagnostic],
+        }))
+    );
+}
+
+#[test]
 fn workflow_service_error_envelope_includes_diagnostics_link() {
     let err = WorkflowServiceError::RuntimeNotReady("llama.cpp failed to load model".to_string())
         .with_diagnostics(WorkflowErrorDiagnosticsLink {

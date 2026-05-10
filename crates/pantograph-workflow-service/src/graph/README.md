@@ -125,6 +125,9 @@ for existing graph-edit callers.
 - Historic run graph projections carry `graph_diagnostics` for the
   reconstructed run snapshot so run inspection can expose stale facts without
   reading current graph files or rewriting retired nodes.
+- Workflow submit/admission rejects graphs with blocking stale diagnostics
+  before queue insertion and includes the same typed diagnostic records in the
+  workflow error envelope's graph details.
 - Edit-session connection and insertion API methods stay in
   `session_connection_api.rs` so revision-aware connection orchestration and
   insertion response projection remain separate from lifecycle and basic graph

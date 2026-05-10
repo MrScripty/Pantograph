@@ -1,4 +1,5 @@
 use super::*;
+use crate::{GraphNode, Position};
 
 pub(in crate::workflow::tests) struct TimeoutAwareHost {
     pub(in crate::workflow::tests) cancelled: Arc<AtomicBool>,
@@ -91,6 +92,11 @@ pub(in crate::workflow::tests) struct FailingUnloadWithPoisonedDiagnosticsHost {
     pub(in crate::workflow::tests) diagnostics_ledger: Arc<Mutex<SqliteDiagnosticsLedger>>,
 }
 
+pub(in crate::workflow::tests) struct StaleWorkflowGraphHost {
+    pub(in crate::workflow::tests) inner: MockWorkflowHost,
+    pub(in crate::workflow::tests) run_attempts: Arc<AtomicUsize>,
+}
+
 fn poison_diagnostics_ledger(diagnostics_ledger: &Arc<Mutex<SqliteDiagnosticsLedger>>) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _guard = diagnostics_ledger
@@ -171,6 +177,15 @@ impl FailingUnloadWithPoisonedDiagnosticsHost {
 
     fn poison_diagnostics_ledger(&self) {
         poison_diagnostics_ledger(&self.diagnostics_ledger);
+    }
+}
+
+impl StaleWorkflowGraphHost {
+    pub(in crate::workflow::tests) fn new() -> Self {
+        Self {
+            inner: MockWorkflowHost::new(8, 1024),
+            run_attempts: Arc::new(AtomicUsize::new(0)),
+        }
     }
 }
 
@@ -588,5 +603,62 @@ impl WorkflowHost for FailingUnloadWithPoisonedDiagnosticsHost {
         Err(WorkflowServiceError::RuntimeNotReady(
             "runtime unload failed".to_string(),
         ))
+    }
+}
+
+#[async_trait]
+impl WorkflowHost for StaleWorkflowGraphHost {
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        self.inner.validate_workflow(workflow_id).await
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        self.inner.workflow_graph_fingerprint(workflow_id).await
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(WorkflowGraph {
+            nodes: vec![GraphNode {
+                id: "diffusion".to_string(),
+                node_type: "diffusion-inference".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            }],
+            edges: Vec::new(),
+            derived_graph: None,
+        })
+    }
+
+    async fn workflow_capabilities(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        self.inner.workflow_capabilities(workflow_id).await
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        self.inner.runtime_capabilities().await
+    }
+
+    async fn run_workflow(
+        &self,
+        workflow_id: &str,
+        inputs: &[WorkflowPortBinding],
+        output_targets: Option<&[WorkflowOutputTarget]>,
+        run_options: WorkflowRunOptions,
+        run_handle: WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        self.run_attempts.fetch_add(1, Ordering::SeqCst);
+        self.inner
+            .run_workflow(workflow_id, inputs, output_targets, run_options, run_handle)
+            .await
     }
 }

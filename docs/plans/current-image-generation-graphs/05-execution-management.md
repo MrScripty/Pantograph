@@ -121,6 +121,10 @@ Update during implementation:
   historic run graph projection. Run inspection already composes that
   projection, so it can now expose stale graph facts from the immutable run
   snapshot without reading current graph files or rewriting retired nodes.
+- 2026-05-10: Continued Milestone 3 by blocking stale executable graphs before
+  session queue admission. The rejection now uses an invalid-request workflow
+  error envelope with structured graph details containing the same bounded
+  `WorkflowGraphDiagnostic` records, and the queue remains untouched.
 
 ## Commit Cadence Notes
 
@@ -239,7 +243,8 @@ Worker rules:
   projection, and documentation.
 - Milestone 3 partially completed for the backend diagnostic DTO, bounded
   payload contract, structured graph contract-validation classifier, and saved
-  graph/edit-session/run inspection projection.
+  graph/edit-session/run inspection projection, plus submit/admission blocking
+  details.
 
 ### Deviations
 
@@ -258,6 +263,12 @@ Worker rules:
   threshold. This slice touched them only for serial DTO alignment; splitting
   shared Rust/TypeScript contract modules is deferred to a dedicated
   contract-decomposition slice.
+- `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/fixtures/execution_hosts.rs`,
+  and `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`
+  remain above the standards decomposition threshold. The submit/admission
+  slice kept its edits local to the existing queue-admission boundary; broader
+  workflow-session decomposition is deferred.
 
 ### Follow-Ups
 
@@ -270,8 +281,7 @@ Worker rules:
   unless the unrelated dirty Pumas plan edit requires integration or cleanup
   first.
 - Continue Milestone 3 by covering remaining Puma/dynamic-port stale diagnostic
-  cases, then add submit/admission blocking reasons in a separate validated
-  slice.
+  cases and then proceed to Milestone 4 IO inspector presentation.
 
 ### Verification Summary
 
@@ -311,6 +321,10 @@ Worker rules:
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and
   run-inspection transport type coverage.
+- `cargo test -p pantograph-workflow-service workflow_service_stale_graph_envelope_includes_structured_details`,
+  `cargo test -p pantograph-workflow-service workflow_execution_session_run_rejects_stale_graph_before_queue_admission`,
+  and `cargo test -p pantograph-workflow-service graph::diagnostics` passed for
+  structured submit/admission stale graph blocking.
 
 ### Traceability Links
 
