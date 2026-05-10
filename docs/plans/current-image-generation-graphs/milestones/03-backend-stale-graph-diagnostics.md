@@ -64,11 +64,15 @@ inspectable and explain why they cannot be submitted.
   after adding a backend service facade test that saves a stale retired
   diffusion graph, loads it through graph inspection, returns backend-owned
   node and edge diagnostics, and repeats the read to prove stable facts.
+- `cargo test -p pantograph-workflow-service graph::session_contract` passed
+  after adding `graph_diagnostics` to edit-session graph snapshot responses and
+  proving stale session snapshots carry backend-owned retired-node and missing
+  edge endpoint diagnostics.
 
 **Remaining Follow-Up:**
 
-- Add read-model/session/load projection APIs that return
-  `WorkflowGraphDiagnostic` with edit-session snapshots and run inspection.
+- Wire `WorkflowGraphInspectionProjection` or the shared graph diagnostics into
+  run inspection.
 - Extend coverage to unresolved Puma model references and stale dynamic port
   contracts once the graph inspection projection exists.
 - Add cross-layer saved-graph inspection and submit/admission blocking tests in

@@ -3,6 +3,10 @@ use node_engine::{
     WorkflowExecutionSessionCheckpointSummary, WorkflowExecutionSessionResidencyState,
 };
 
+use super::contract_validation::validate_workflow_graph_contract_diagnostics;
+use super::diagnostics::WorkflowGraphDiagnostic;
+use super::registry::NodeRegistry;
+
 pub const PHASE6_SESSION_STATE_CONTRACT_VERSION: u32 = 1;
 const PHASE6_FALLBACK_INVALIDATION_REASON: &str =
     "phase_6_graph_reconciliation_not_implemented_yet";
@@ -71,6 +75,8 @@ pub struct WorkflowGraphEditSessionGraphResponse {
     pub workflow_event: Option<WorkflowEvent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_execution_session_state: Option<WorkflowGraphSessionStateView>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graph_diagnostics: Vec<WorkflowGraphDiagnostic>,
 }
 
 #[cfg(test)]
@@ -100,6 +106,10 @@ pub(crate) fn build_graph_session_response_with_state(
             workflow_event.as_ref(),
             projection,
         )),
+        graph_diagnostics: validate_workflow_graph_contract_diagnostics(
+            graph,
+            &NodeRegistry::new(),
+        ),
     }
 }
 
@@ -155,13 +165,14 @@ fn graph_memory_impact_from_event(
 
 #[cfg(test)]
 mod tests {
-    use super::super::types::WorkflowGraph;
+    use super::super::types::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use super::{
         build_graph_session_response, build_graph_session_response_with_state,
         build_workflow_execution_session_state_view, WorkflowGraphSessionStateProjection,
         WorkflowGraphSessionStateView, PHASE6_FALLBACK_INVALIDATION_REASON,
         PHASE6_SESSION_STATE_CONTRACT_VERSION,
     };
+    use crate::graph::WorkflowGraphDiagnosticCode;
     use node_engine::{
         NodeMemoryCompatibility, NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus,
         WorkflowEvent, WorkflowExecutionSessionCheckpointSummary,
@@ -225,6 +236,38 @@ mod tests {
         assert_eq!(response.session_id, "session-1");
         assert_eq!(response.graph, graph);
         assert!(response.workflow_execution_session_state.is_some());
+        assert!(response.graph_diagnostics.is_empty());
+    }
+
+    #[test]
+    fn graph_session_response_projects_stale_graph_diagnostics() {
+        let graph = WorkflowGraph {
+            nodes: vec![GraphNode {
+                id: "diffusion".to_string(),
+                node_type: "diffusion-inference".to_string(),
+                position: Position::default(),
+                data: serde_json::json!({}),
+            }],
+            edges: vec![GraphEdge {
+                id: "missing-source".to_string(),
+                source: "missing".to_string(),
+                source_handle: "text".to_string(),
+                target: "diffusion".to_string(),
+                target_handle: "prompt".to_string(),
+            }],
+            derived_graph: None,
+        };
+
+        let response = build_graph_session_response("session-1", &graph, None);
+
+        assert!(response.graph_diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == WorkflowGraphDiagnosticCode::RetiredNodeType
+                && diagnostic.node_id.as_deref() == Some("diffusion")
+        }));
+        assert!(response.graph_diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == WorkflowGraphDiagnosticCode::MissingEdgeSourceNode
+                && diagnostic.details.get("source_node_id").map(String::as_str) == Some("missing")
+        }));
     }
 
     #[test]

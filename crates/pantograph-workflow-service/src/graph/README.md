@@ -119,6 +119,9 @@ for existing graph-edit callers.
   graph inspection and future run inspection wrappers can carry the same graph
   snapshot, selected-node facts, and stale diagnostics without frontend
   inference.
+- Edit-session graph snapshot responses carry `graph_diagnostics` produced by
+  the same backend contract classifier; transports and frontend callers should
+  render these facts instead of inferring stale state locally.
 - Edit-session connection and insertion API methods stay in
   `session_connection_api.rs` so revision-aware connection orchestration and
   insertion response projection remain separate from lifecycle and basic graph

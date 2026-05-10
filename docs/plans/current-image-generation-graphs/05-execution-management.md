@@ -113,6 +113,10 @@ Update during implementation:
   context. The service facade can inspect a saved workflow through the existing
   filesystem store without mutating the graph, rewriting retired nodes, or
   requiring workflow-run side effects.
+- 2026-05-10: Continued Milestone 3 by attaching backend stale diagnostics to
+  edit-session graph snapshot responses. Session responses now carry
+  `graph_diagnostics` from the same contract classifier, so graph editor
+  transports can forward stale graph facts without frontend inference.
 
 ## Commit Cadence Notes
 
@@ -231,7 +235,7 @@ Worker rules:
   projection, and documentation.
 - Milestone 3 partially completed for the backend diagnostic DTO, bounded
   payload contract, structured graph contract-validation classifier, and saved
-  graph inspection projection.
+  graph/edit-session inspection projection.
 
 ### Deviations
 
@@ -256,9 +260,9 @@ Worker rules:
 - Plan the next vertical slice for Milestone 3 backend stale graph diagnostics,
   unless the unrelated dirty Pumas plan edit requires integration or cleanup
   first.
-- Continue Milestone 3 by wiring `WorkflowGraphInspectionProjection` into edit
-  session snapshots and run inspection, then add submit/admission blocking
-  reasons in a separate validated slice.
+- Continue Milestone 3 by wiring `WorkflowGraphInspectionProjection` into run
+  inspection, then add submit/admission blocking reasons in a separate
+  validated slice.
 
 ### Verification Summary
 
@@ -292,6 +296,8 @@ Worker rules:
 - `cargo test -p pantograph-workflow-service graph::inspection` and
   `cargo test -p pantograph-workflow-service workflow_graph_inspection` passed
   for the saved graph inspection projection and service facade replay path.
+- `cargo test -p pantograph-workflow-service graph::session_contract` passed
+  for edit-session graph snapshot stale diagnostic projection.
 
 ### Traceability Links
 
