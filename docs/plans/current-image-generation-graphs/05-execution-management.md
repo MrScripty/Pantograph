@@ -182,6 +182,12 @@ Update during implementation:
   intent, while `LlamaCppRuntimeSettings::try_from_backend_config` rejects
   missing, blank, unknown, or malformed raw device selectors before any sidecar
   command is constructed.
+- 2026-05-10: Continued Milestone 5 by adding public device/runtime contract
+  fixture tests under `crates/inference/tests/device_contracts.rs`. The
+  fixtures pin runtime variant capability diagnostics, selected backend
+  execution decisions, and invalid raw device id rejection through the public
+  crate API before later Tauri/frontend/worker/persisted projections consume
+  the DTOs.
 
 ## Commit Cadence Notes
 
@@ -330,6 +336,10 @@ Worker rules:
 - Milestone 5 now rejects invalid llama.cpp runtime-start device selectors
   before sidecar startup. Default backend config represents explicit `auto`
   intent instead of relying on absent raw device state.
+- Milestone 5 has Rust public-contract fixtures for runtime variant capability
+  and backend execution decision shapes. Cross-boundary fixtures for frontend,
+  diagnostics-ledger, Python worker, and persisted state remain pending until
+  those boundaries are touched.
 
 ### Deviations
 
@@ -487,6 +497,9 @@ Worker rules:
   `cargo test -p inference lifecycle_events_do_not_report_auto`, and
   `git diff --check` passed after adding llama.cpp runtime-start device
   validation.
+- `cargo fmt --all -- --check`,
+  `cargo test -p inference --test device_contracts`, and `git diff --check`
+  passed after adding public device/runtime contract fixtures.
 
 ### Traceability Links
 

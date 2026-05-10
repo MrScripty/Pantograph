@@ -1,0 +1,16 @@
+{
+  "runtime_variant_id": "llama_cpp.cuda",
+  "device_class": "cuda",
+  "available": false,
+  "diagnostics": [
+    {
+      "code": "missing_runtime_variant",
+      "severity": "error",
+      "message": "CUDA runtime variant is not installed",
+      "device_class": "cuda",
+      "device_id": "cuda:0",
+      "runtime_variant_id": "llama_cpp.cuda",
+      "backend_id": "llama_cpp"
+    }
+  ]
+}

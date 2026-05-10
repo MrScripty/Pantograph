@@ -10,9 +10,11 @@ into neutral managed dependency DTOs.
 
 | File | Description |
 | ---- | ----------- |
+| `device_contracts.rs` | Public device/runtime contract fixture tests for runtime variant capabilities, backend execution decisions, typed diagnostics, and invalid raw identifier rejection. |
 | `managed_media_dependencies.rs` | Transitional conversion dependency lease and media-tool/native-library planning adapter tests over the media-conversion owner. |
 | `managed_redistributables.rs` | Managed redistributable owner contract and inference neutral status projection tests. |
 | `model_contracts.rs` | Public contract fixture tests for Pumas model refs, package facts, task evidence, generation defaults, option diagnostics, lifecycle phases, package-facts summary snapshots, and model-library update feeds. |
+| `fixtures/device_contracts/` | Stable JSON fixtures for device policy, runtime variant, backend candidate/decision, and diagnostics DTOs. |
 | `fixtures/inference_package_facts/` | Named JSON fixtures matching the inference execution boundary plan. |
 
 ## Problem
@@ -21,9 +23,10 @@ Managed runtime and media dependency behavior crosses filesystem state,
 catalog metadata, platform-specific expected files, and durable activation
 records. Unit-only tests would miss the integration behavior that determines
 whether Settings and conversion jobs receive trustworthy readiness facts.
-Model package facts also cross producer/consumer boundaries, so fixture tests
-prove that Pantograph can decode Pumas-style DTOs without depending on Pumas
-storage internals.
+Device/runtime contracts and model package facts also cross producer/consumer
+boundaries, so fixture tests prove that Pantograph can decode Pumas-style and
+scheduler-facing DTOs without depending on Pumas storage internals or raw
+backend device strings.
 
 ## Constraints
 
@@ -35,6 +38,8 @@ storage internals.
   must not require real third-party media binaries.
 - Model package fixtures must be stable JSON DTOs and must not expose Pumas
   SQLite layout, `models.metadata_json`, or search-cache internals.
+- Device contract fixtures must use canonical lowercase ids and reject raw
+  backend-local selectors such as llama.cpp `CUDA0`.
 
 ## Decision
 
@@ -45,6 +50,9 @@ They exercise the public crate contracts with temporary storage so status,
 activation, lease behavior, and neutral DTO projections remain auditable.
 Keep model package fixtures here as public contract tests because later
 workflow, backend, and diagnostics slices will consume the same shapes.
+Keep device/runtime fixtures here for the same reason: later Tauri, frontend,
+diagnostics-ledger, worker, and persisted-state slices must consume these
+canonical shapes rather than inventing raw-device compatibility paths.
 
 ## Alternatives Rejected
 
@@ -100,12 +108,14 @@ Run the focused integration tests from the workspace root:
 cargo test -p inference --test managed_redistributables
 cargo test -p inference --test managed_media_dependencies
 cargo test -p inference --test model_contracts
+cargo test -p inference --test device_contracts
 ```
 
 ## API Consumer Contract
 
-- Inputs: public managed redistributable ids, managed-dependency staging and
-  activation requests, and legacy inference conversion dependency plans.
+- Inputs: public device/runtime DTOs, managed redistributable ids,
+  managed-dependency staging and activation requests, and legacy inference
+  conversion dependency plans.
 - Outputs: managed-dependency owner state transitions, inference neutral status
   projections, and explicit errors for invalid or unsafe operations.
 - Lifecycle: each test creates temporary roots, writes only its own placeholder
@@ -122,5 +132,8 @@ cargo test -p inference --test model_contracts
 - Test fixtures are producer evidence for public status and lease DTOs.
 - Package-fact fixtures are producer evidence for public model/task/generation
   contracts, summary snapshots, and update-feed cache invalidation facts.
+- Device contract fixtures are producer evidence for scheduler-facing runtime
+  variant capability, selected backend execution decision, and typed diagnostic
+  payloads.
 - Any DTO shape changes require updating these integration tests and the
   workflow-service/frontend contract tests that consume the same facts.

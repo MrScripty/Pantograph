@@ -257,6 +257,28 @@ typed diagnostic and the canonical design is fixed.
     `cargo test -p inference device::tests`,
     `cargo test -p inference lifecycle_events_do_not_report_auto`, and
     `git diff --check`.
+- 2026-05-10 slice: public device-contract fixture gate.
+  - Smallest useful vertical slice: add stable JSON fixtures and integration
+    tests for runtime variant capability diagnostics and selected backend
+    execution decisions through the public `inference` crate API.
+  - Allowed write set: `crates/inference/tests/device_contracts.rs`,
+    `crates/inference/tests/fixtures/device_contracts/`,
+    `crates/inference/tests/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: fixtures use canonical lowercase
+    backend/device/runtime ids and include an invalid raw `CUDA0` regression
+    check that must fail deserialization instead of being accepted as legacy
+    llama.cpp state.
+  - Standards/blast-radius gate for integration tests: crate role remains
+    public contract verification; public facade, runtime lifecycle, persisted
+    runtime state, path validation, frontend behavior, generated files,
+    feature flags, dependencies, and lockfiles are untouched; test isolation is
+    deterministic fixture decoding only.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference --test device_contracts`, and `git diff --check`.
+  - Remaining fixture coverage: Tauri/frontend, diagnostics-ledger, Python
+    worker, and persisted-state fixtures are still deferred until those
+    boundaries start consuming the device/runtime DTOs.
 
 **Verification:**
 

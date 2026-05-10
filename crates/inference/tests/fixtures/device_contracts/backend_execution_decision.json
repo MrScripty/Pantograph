@@ -1,0 +1,24 @@
+{
+  "selected_backend_id": "pytorch",
+  "selected_runtime_variant_id": "pytorch.cuda",
+  "selected_device_class": "cuda",
+  "selected_device_id": "cuda:0",
+  "device_decision": {
+    "policy": {
+      "policy": "explicit",
+      "device_class": "cuda",
+      "device_id": "cuda:0"
+    },
+    "runtime_variant_id": "pytorch.cuda",
+    "selected_device_class": "cuda",
+    "selected_device_id": "cuda:0",
+    "diagnostics": []
+  },
+  "selected_task_id": "image_generation",
+  "selected_model_ref": {
+    "model_id": "pumas://model/juggernaut-xl",
+    "revision": "snapshot-2026-05-10",
+    "selected_artifact_id": "diffusers"
+  },
+  "diagnostics": []
+}
