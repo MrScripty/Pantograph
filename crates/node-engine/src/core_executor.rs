@@ -623,6 +623,7 @@ fn record_task_validation_failure_lifecycle(
             backend_key: backend_key.clone(),
             runtime_id: runtime_id.clone(),
             runtime_instance_id: None,
+            selected_device_class: None,
             selected_device_id: None,
             selected_network_node_id: None,
             model_id: model_id.clone(),

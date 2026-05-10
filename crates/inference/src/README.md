@@ -142,6 +142,9 @@ normalizing them to executable defaults.
   only after backend-local selectors parse and project successfully. Unresolved
   `auto` and unsupported backend-local selectors omit selected facts, while
   malformed active device state fails closed without producing a descriptor.
+- Request lifecycle events have an optional typed `selected_device_class`
+  contract field. Producers must populate it only from canonical device facts,
+  not by inferring scheduler decisions from raw backend config strings.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,

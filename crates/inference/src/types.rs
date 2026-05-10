@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::device_contracts::InferenceDeviceClass;
 use crate::model_contracts::{
     resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, GenerationOptions,
     InferenceExecutionInputKind, InferenceExecutionResultKind, InferenceLifecyclePhase,
@@ -885,6 +886,8 @@ pub struct InferenceRequestLifecycleEvent {
     pub runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_instance_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_device_class: Option<InferenceDeviceClass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2550,7 +2553,8 @@ mod tests {
             backend_key: Some("llama_cpp".to_string()),
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-main-1".to_string()),
-            selected_device_id: Some("CUDA0".to_string()),
+            selected_device_class: Some(InferenceDeviceClass::Cuda),
+            selected_device_id: Some("cuda:0".to_string()),
             selected_network_node_id: Some("local-node-alpha".to_string()),
             model_id: Some("pumas://models/tiny-llama".to_string()),
             resolved_artifact_kind: Some("gguf".to_string()),
@@ -2593,7 +2597,8 @@ mod tests {
         );
         assert_eq!(encoded["resolved_artifact_kind"], serde_json::json!("gguf"));
         assert_eq!(encoded["runtime_id"], serde_json::json!("llama.cpp"));
-        assert_eq!(encoded["selected_device_id"], serde_json::json!("CUDA0"));
+        assert_eq!(encoded["selected_device_class"], serde_json::json!("cuda"));
+        assert_eq!(encoded["selected_device_id"], serde_json::json!("cuda:0"));
         assert_eq!(
             encoded["selected_network_node_id"],
             serde_json::json!("local-node-alpha")
@@ -2676,6 +2681,7 @@ mod tests {
         assert_eq!(decoded.backend_key, None);
         assert_eq!(decoded.runtime_id, None);
         assert_eq!(decoded.runtime_instance_id, None);
+        assert_eq!(decoded.selected_device_class, None);
         assert_eq!(decoded.selected_device_id, None);
         assert_eq!(decoded.selected_network_node_id, None);
         assert_eq!(decoded.model_id, None);

@@ -349,6 +349,40 @@ typed diagnostic and the canonical design is fixed.
     projection, run inspection facts, scheduler admission, and managed runtime
     variant state still need to consume resolved backend/runtime/device
     decisions instead of raw active backend config.
+- 2026-05-10 slice: lifecycle event selected-device class contract.
+  - Smallest useful vertical slice: add an optional typed
+    `selected_device_class` field to `InferenceRequestLifecycleEvent` and
+    update direct event constructors without changing gateway selection logic,
+    ledger schema, run inspection, frontend bindings, generated outputs, or
+    lockfiles.
+  - Allowed write set: `crates/inference/src/types.rs`,
+    `crates/inference/src/gateway.rs`, `crates/inference/src/README.md`,
+    `crates/inference/tests/model_contracts.rs`,
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger_tests.rs`,
+    `crates/node-engine/src/core_executor.rs`,
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: the slice adds a canonical typed field
+    and leaves existing producers as `None` unless a test event already
+    carries explicit canonical CUDA facts. It does not infer device class from
+    raw `BackendConfig.device`, backend-local llama.cpp selectors, or legacy
+    event strings.
+  - Standards/blast-radius gate for the public lifecycle DTO: crate role
+    remains request lifecycle fact transport; public facade impact is additive
+    serde-defaulted field only; runtime lifecycle owner is unchanged;
+    persisted ledger schema/projection, frontend behavior, generated files,
+    feature flags, dependencies, and lockfiles are untouched; test isolation
+    uses focused inference contract tests plus the embedded-runtime adapter
+    compile/test path.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference inference_request_lifecycle_event_serde_uses_stable_contract`,
+    `cargo test -p inference --test model_contracts public_inference_contract_json_keys_avoid_scheduler_policy_language`,
+    `cargo test -p pantograph-embedded-runtime inference_lifecycle_event_adapter_builds_node_status_event_with_backend_context`,
+    and `git diff --check`.
+  - Discovered follow-up: diagnostics-ledger persistence and run inspection do
+    not yet store or project `selected_device_class`; this is deferred to a
+    ledger-specific slice after gateway producers emit canonical facts.
 
 **Verification:**
 

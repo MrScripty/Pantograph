@@ -205,6 +205,10 @@ Update during implementation:
   projects successfully; unresolved `auto` and unsupported backend-local
   selectors omit selected facts, and malformed active device state produces no
   descriptor.
+- 2026-05-10: Continued Milestone 5 with the lifecycle event selected-device
+  class contract. `InferenceRequestLifecycleEvent` now has an optional typed
+  `selected_device_class` field, and direct event constructors were updated
+  without deriving class from raw backend config.
 
 ## Commit Cadence Notes
 
@@ -367,6 +371,10 @@ Worker rules:
   facts when backend-local state is resolved. Lifecycle events, diagnostics
   ledger projection, run inspection facts, and scheduler admission still need
   to consume resolved backend/runtime/device decisions end to end.
+- Milestone 5 lifecycle event DTOs now include the selected device class field.
+  Gateway population, diagnostics-ledger persistence/projection, and run
+  inspection still need follow-up slices to consume canonical resolved device
+  facts rather than raw config strings.
 
 ### Deviations
 

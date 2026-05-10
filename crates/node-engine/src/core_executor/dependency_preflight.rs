@@ -941,6 +941,7 @@ fn record_dependency_preflight_lifecycle(
             backend_key: context.backend_key.clone(),
             runtime_id: runtime_id.clone(),
             runtime_instance_id: None,
+            selected_device_class: None,
             selected_device_id: None,
             selected_network_node_id: None,
             model_id: context.model_id.clone(),
