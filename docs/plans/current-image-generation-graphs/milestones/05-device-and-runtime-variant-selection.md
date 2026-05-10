@@ -299,6 +299,27 @@ typed diagnostic and the canonical design is fixed.
     `cargo fmt --all -- --check`,
     `cargo test -p inference device::tests`,
     `cargo test -p inference --test device_contracts`, and `git diff --check`.
+- 2026-05-10 slice: runtime-load resolved-device contract.
+  - Smallest useful vertical slice: make dependency-resolved runtime-load phase
+    records require a `DeviceResolutionDecision` alongside managed runtime and
+    command facts.
+  - Allowed write set: `crates/inference/src/runtime_load.rs`,
+    `crates/inference/src/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: dependency resolution can no longer
+    emit a runtime-load phase record without the selected runtime variant,
+    device class, and selected device id decision. The constructor signature
+    requires the typed decision instead of deriving from raw command arguments
+    or backend device strings.
+  - Standards/blast-radius gate for `runtime_load.rs`: crate role remains pure
+    runtime-load contract/projection code; public facade impact is a stricter
+    constructor/DTO shape; runtime lifecycle owner is unchanged; persisted
+    artifacts, path validation, frontend behavior, generated files, feature
+    flags, dependencies, and lockfiles are untouched; test isolation uses
+    existing crate-local unit tests and public device-contract fixture tests.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference runtime_load`,
+    `cargo test -p inference --test device_contracts`, and `git diff --check`.
 
 **Verification:**
 

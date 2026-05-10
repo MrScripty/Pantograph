@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    DeviceConfig, ManagedBinaryId, ManagedRuntimeJobState, ManagedRuntimeReadinessState,
-    ManagedRuntimeSnapshot, ResolvedCommand,
+    DeviceConfig, DeviceResolutionDecision, ManagedBinaryId, ManagedRuntimeJobState,
+    ManagedRuntimeReadinessState, ManagedRuntimeSnapshot, ResolvedCommand,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -101,6 +101,7 @@ pub enum LlamaCppRuntimeMode {
 pub struct RuntimeLoadPhaseRecord {
     pub phase: RuntimeLoadPhase,
     pub runtime: ManagedRuntimeLoadFacts,
+    pub device_decision: DeviceResolutionDecision,
     pub command: Option<RuntimeLoadCommandFacts>,
     pub active_runtime: Option<LlamaCppActiveRuntimeDescriptor>,
 }
@@ -108,11 +109,13 @@ pub struct RuntimeLoadPhaseRecord {
 impl RuntimeLoadPhaseRecord {
     pub fn dependency_resolved(
         runtime: ManagedRuntimeLoadFacts,
+        device_decision: DeviceResolutionDecision,
         command: RuntimeLoadCommandFacts,
     ) -> Self {
         Self {
             phase: RuntimeLoadPhase::DependencyResolved,
             runtime,
+            device_decision,
             command: Some(command),
             active_runtime: None,
         }
@@ -201,8 +204,9 @@ mod tests {
 
     use super::*;
     use crate::{
-        ManagedBinaryInstallState, ManagedRuntimeJobStatus, ManagedRuntimeSelectionState,
-        ManagedRuntimeVersionStatus,
+        InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, ManagedBinaryInstallState,
+        ManagedRuntimeJobStatus, ManagedRuntimeSelectionState, ManagedRuntimeVersionStatus,
+        RuntimeVariantId,
     };
 
     #[test]
@@ -274,6 +278,7 @@ mod tests {
         let snapshot = snapshot_with_readiness(ManagedRuntimeReadinessState::Ready, true);
         let runtime = managed_runtime_load_facts_from_snapshot(&snapshot)
             .expect("ready runtime should produce load facts");
+        let device_decision = resolved_cpu_device_decision();
         let command = ResolvedCommand {
             executable_path: PathBuf::from("/opt/pantograph/llama-server"),
             working_directory: PathBuf::from("/opt/pantograph"),
@@ -287,10 +292,24 @@ mod tests {
 
         let phase = RuntimeLoadPhaseRecord::dependency_resolved(
             runtime,
+            device_decision.clone(),
             RuntimeLoadCommandFacts::from_resolved_command(&command),
         );
 
         assert_eq!(phase.phase, RuntimeLoadPhase::DependencyResolved);
+        assert_eq!(phase.device_decision, device_decision);
+        assert_eq!(
+            phase.device_decision.runtime_variant_id.as_str(),
+            "llama_cpp.cpu"
+        );
+        assert_eq!(
+            phase
+                .device_decision
+                .selected_device_id
+                .as_ref()
+                .map(|id| id.as_str()),
+            Some("cpu")
+        );
         let command = phase.command.expect("command facts");
         assert_eq!(
             command.executable_path,
@@ -353,6 +372,20 @@ mod tests {
             },
             active_job: None,
             job_artifact: None,
+        }
+    }
+
+    fn resolved_cpu_device_decision() -> DeviceResolutionDecision {
+        DeviceResolutionDecision {
+            policy: InferenceDevicePolicy::Explicit {
+                device_class: InferenceDeviceClass::Cpu,
+                device_id: Some(InferenceDeviceId::parse("cpu").expect("valid cpu id")),
+            },
+            runtime_variant_id: RuntimeVariantId::parse("llama_cpp.cpu")
+                .expect("valid runtime variant"),
+            selected_device_class: InferenceDeviceClass::Cpu,
+            selected_device_id: Some(InferenceDeviceId::parse("cpu").expect("valid cpu id")),
+            diagnostics: Vec::new(),
         }
     }
 }

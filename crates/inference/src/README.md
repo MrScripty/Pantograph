@@ -135,6 +135,9 @@ normalizing them to executable defaults.
 - `BackendConfig::default()` carries explicit `auto` device intent. Blank,
   missing, unknown, or malformed llama.cpp device selectors fail before sidecar
   startup instead of being normalized to an executable default.
+- Runtime-load phase records require a `DeviceResolutionDecision`, so
+  dependency resolution cannot emit command facts without the selected runtime
+  variant, device class, and selected device id facts.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,

@@ -194,6 +194,11 @@ Update during implementation:
   selectors to `InferenceDeviceClass`/`InferenceDeviceId`, while unresolved
   auto mode and unsupported Vulkan return typed `DeviceBackendContractError`
   values instead of selected scheduler facts.
+- 2026-05-10: Continued Milestone 5 by tightening runtime-load phase records.
+  `RuntimeLoadPhaseRecord::dependency_resolved` now requires a
+  `DeviceResolutionDecision`, so managed runtime command facts cannot be
+  emitted without selected runtime variant, device class, and selected device
+  id facts.
 
 ## Commit Cadence Notes
 
@@ -349,6 +354,9 @@ Worker rules:
 - Milestone 5 has a typed llama.cpp adapter projection for resolved device
   selectors. It still needs scheduler/runtime consumers to stop passing
   `DeviceConfig` as raw selected state.
+- Milestone 5 runtime-load dependency resolution now consumes a typed resolved
+  device decision. Later slices still need managed runtime variant state and
+  active-runtime/lifecycle projection to carry the same selected facts.
 
 ### Deviations
 
@@ -512,6 +520,10 @@ Worker rules:
 - `cargo fmt --all -- --check`, `cargo test -p inference device::tests`,
   `cargo test -p inference --test device_contracts`, and `git diff --check`
   passed after adding llama.cpp selector-to-contract projection.
+- `cargo fmt --all -- --check`, `cargo test -p inference runtime_load`,
+  `cargo test -p inference --test device_contracts`, and `git diff --check`
+  passed after making runtime-load dependency resolution carry a typed
+  `DeviceResolutionDecision`.
 
 ### Traceability Links
 
