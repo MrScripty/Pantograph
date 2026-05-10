@@ -10,10 +10,11 @@ use pantograph_runtime_attribution::{
 };
 
 use crate::graph::{
-    workflow_executable_topology, workflow_execution_fingerprint_for_topology,
-    workflow_presentation_fingerprint_for_metadata, workflow_presentation_metadata,
-    workflow_presentation_metadata_json, GraphEdge, GraphNode, WorkflowExecutableTopology,
-    WorkflowGraph, WorkflowGraphRunSettings, WorkflowPresentationMetadata,
+    validate_workflow_graph_contract_diagnostics, workflow_executable_topology,
+    workflow_execution_fingerprint_for_topology, workflow_presentation_fingerprint_for_metadata,
+    workflow_presentation_metadata, workflow_presentation_metadata_json, GraphEdge, GraphNode,
+    NodeRegistry, WorkflowExecutableTopology, WorkflowGraph, WorkflowGraphRunSettings,
+    WorkflowPresentationMetadata,
 };
 
 use super::{
@@ -178,6 +179,8 @@ fn workflow_run_graph_projection_from_version(
         &presentation_metadata,
         &graph_settings,
     )?;
+    let graph_diagnostics =
+        validate_workflow_graph_contract_diagnostics(&graph, &NodeRegistry::new());
 
     Ok(WorkflowRunGraphProjection {
         workflow_run_id: projection.snapshot.workflow_run_id.as_str().to_string(),
@@ -194,6 +197,7 @@ fn workflow_run_graph_projection_from_version(
         workflow_version_created_at_ms: projection.workflow_version.created_at_ms,
         presentation_revision_created_at_ms: projection.presentation_revision.created_at_ms,
         graph,
+        graph_diagnostics,
         executable_topology,
         presentation_metadata,
         graph_settings,
@@ -335,4 +339,110 @@ fn reconstruct_workflow_graph(
         edges,
         derived_graph: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::WorkflowGraphDiagnosticCode;
+    use pantograph_runtime_attribution::{
+        WorkflowPresentationRevisionId, WorkflowRunSnapshotId, WorkflowVersionId,
+    };
+
+    #[test]
+    fn run_graph_projection_includes_stale_graph_diagnostics() {
+        let projection =
+            workflow_run_graph_projection_from_version(stale_diffusion_version_projection())
+                .expect("run graph projection");
+
+        assert!(projection.graph_diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == WorkflowGraphDiagnosticCode::RetiredNodeType
+                && diagnostic.node_id.as_deref() == Some("diffusion")
+        }));
+    }
+
+    fn stale_diffusion_version_projection() -> WorkflowRunVersionProjection {
+        let workflow_run_id = WorkflowRunId::try_from("run-stale".to_string()).unwrap();
+        let workflow_id = WorkflowId::try_from("workflow-stale".to_string()).unwrap();
+        let workflow_version_id = WorkflowVersionId::try_from("wfver-stale".to_string()).unwrap();
+        let workflow_presentation_revision_id =
+            WorkflowPresentationRevisionId::try_from("wfpres-stale".to_string()).unwrap();
+
+        WorkflowRunVersionProjection {
+            snapshot: WorkflowRunSnapshotRecord {
+                workflow_run_snapshot_id: WorkflowRunSnapshotId::try_from(
+                    "runsnap-stale".to_string(),
+                )
+                .unwrap(),
+                workflow_run_id: workflow_run_id.clone(),
+                workflow_id: workflow_id.clone(),
+                workflow_version_id: workflow_version_id.clone(),
+                workflow_presentation_revision_id: workflow_presentation_revision_id.clone(),
+                workflow_semantic_version: "1.0.0".to_string(),
+                workflow_execution_fingerprint: "workflow-exec-blake3:stale".to_string(),
+                client_id: None,
+                client_session_id: None,
+                bucket_id: None,
+                workflow_execution_session_id: "session-stale".to_string(),
+                workflow_execution_session_kind: "local".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+                retention_policy: "standard".to_string(),
+                scheduler_policy: "priority_then_fifo".to_string(),
+                priority: 0,
+                timeout_ms: None,
+                inputs_json: "[]".to_string(),
+                output_targets_json: None,
+                override_selection_json: None,
+                graph_settings_json: serde_json::json!({
+                    "schema_version": 1,
+                    "nodes": [{
+                        "node_id": "diffusion",
+                        "node_type": "diffusion-inference",
+                        "data": {}
+                    }]
+                })
+                .to_string(),
+                runtime_requirements_json: "{}".to_string(),
+                capability_models_json: "[]".to_string(),
+                runtime_capabilities_json: "[]".to_string(),
+                created_at_ms: 1_000,
+            },
+            workflow_version: WorkflowVersionRecord {
+                workflow_version_id,
+                workflow_id: workflow_id.clone(),
+                semantic_version: "1.0.0".to_string(),
+                execution_fingerprint: "workflow-exec-blake3:stale".to_string(),
+                executable_topology_json: serde_json::json!({
+                    "schema_version": 1,
+                    "nodes": [{
+                        "node_id": "diffusion",
+                        "node_type": "diffusion-inference",
+                        "contract_version": "0.1.0",
+                        "behavior_digest": "retired"
+                    }],
+                    "edges": []
+                })
+                .to_string(),
+                created_at_ms: 900,
+            },
+            presentation_revision: WorkflowPresentationRevisionRecord {
+                workflow_presentation_revision_id,
+                workflow_id,
+                workflow_version_id: WorkflowVersionId::try_from("wfver-stale".to_string())
+                    .unwrap(),
+                presentation_fingerprint: "workflow-presentation-blake3:stale".to_string(),
+                presentation_metadata_json: serde_json::json!({
+                    "schema_version": 1,
+                    "nodes": [{
+                        "node_id": "diffusion",
+                        "position": { "x": 0.0, "y": 0.0 }
+                    }],
+                    "edges": []
+                })
+                .to_string(),
+                created_at_ms: 950,
+            },
+        }
+    }
 }

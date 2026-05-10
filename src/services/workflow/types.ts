@@ -236,9 +236,43 @@ export interface WorkflowRunGraphProjection {
   workflow_version_created_at_ms: number;
   presentation_revision_created_at_ms: number;
   graph: WorkflowGraph;
+  graph_diagnostics?: WorkflowGraphDiagnostic[];
   executable_topology: WorkflowExecutableTopology;
   presentation_metadata: WorkflowPresentationMetadata;
   graph_settings: WorkflowGraphRunSettings;
+}
+
+export type WorkflowGraphDiagnosticSeverity = 'error' | 'warning' | 'info';
+export type WorkflowGraphDiagnosticScope = 'graph' | 'node' | 'edge';
+export type WorkflowGraphDiagnosticCode =
+  | 'duplicate_node_id'
+  | 'duplicate_edge_id'
+  | 'unknown_node_type'
+  | 'retired_node_type'
+  | 'invalid_node_id'
+  | 'invalid_node_type'
+  | 'invalid_dynamic_definition'
+  | 'missing_edge_source_node'
+  | 'missing_edge_target_node'
+  | 'self_connection'
+  | 'missing_source_contract'
+  | 'missing_target_contract'
+  | 'missing_source_output'
+  | 'missing_target_input'
+  | 'target_input_capacity_reached'
+  | 'incompatible_port_types'
+  | 'compatibility_check_failed'
+  | 'cycle_detected';
+
+export interface WorkflowGraphDiagnostic {
+  code: WorkflowGraphDiagnosticCode;
+  severity: WorkflowGraphDiagnosticSeverity;
+  scope: WorkflowGraphDiagnosticScope;
+  node_id?: string | null;
+  node_type?: string | null;
+  message: string;
+  blocking_submission: boolean;
+  details?: Record<string, string>;
 }
 
 export interface WorkflowExecutableTopology {

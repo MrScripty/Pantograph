@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
     GraphEdge, GraphNode, Position, WorkflowExecutableTopology, WorkflowExecutableTopologyEdge,
-    WorkflowExecutableTopologyNode, WorkflowGraph, WorkflowGraphRunSettings,
+    WorkflowExecutableTopologyNode, WorkflowGraph, WorkflowGraphDiagnostic,
+    WorkflowGraphDiagnosticCode, WorkflowGraphDiagnosticSeverity, WorkflowGraphRunSettings,
     WorkflowGraphRunSettingsNode, WorkflowPresentationEdge, WorkflowPresentationMetadata,
     WorkflowPresentationNode,
 };
@@ -144,6 +145,13 @@ fn workflow_run_graph_query_roundtrip_uses_snake_case() {
                 }],
                 derived_graph: None,
             },
+            graph_diagnostics: vec![WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::MissingEdgeTargetNode,
+                WorkflowGraphDiagnosticSeverity::Error,
+                "edge-1",
+                "edge target node is missing",
+                true,
+            )],
             executable_topology: WorkflowExecutableTopology {
                 schema_version: 1,
                 nodes: vec![WorkflowExecutableTopologyNode {
@@ -189,6 +197,10 @@ fn workflow_run_graph_query_roundtrip_uses_snake_case() {
     assert_eq!(run_graph["workflow_run_id"], "run-1");
     assert_eq!(run_graph["workflow_version_id"], "wfver-1");
     assert_eq!(run_graph["graph"]["nodes"][0]["node_type"], "text-input");
+    assert_eq!(
+        run_graph["graph_diagnostics"][0]["code"],
+        "missing_edge_target_node"
+    );
     assert_eq!(
         run_graph["executable_topology"]["nodes"][0]["contract_version"],
         "0.1.0"

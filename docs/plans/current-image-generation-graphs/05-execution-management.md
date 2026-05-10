@@ -117,6 +117,10 @@ Update during implementation:
   edit-session graph snapshot responses. Session responses now carry
   `graph_diagnostics` from the same contract classifier, so graph editor
   transports can forward stale graph facts without frontend inference.
+- 2026-05-10: Continued Milestone 3 by adding backend stale diagnostics to the
+  historic run graph projection. Run inspection already composes that
+  projection, so it can now expose stale graph facts from the immutable run
+  snapshot without reading current graph files or rewriting retired nodes.
 
 ## Commit Cadence Notes
 
@@ -235,7 +239,7 @@ Worker rules:
   projection, and documentation.
 - Milestone 3 partially completed for the backend diagnostic DTO, bounded
   payload contract, structured graph contract-validation classifier, and saved
-  graph/edit-session inspection projection.
+  graph/edit-session/run inspection projection.
 
 ### Deviations
 
@@ -249,6 +253,11 @@ Worker rules:
   decomposition-review threshold at 1885 lines. Extraction is deferred because
   this slice needed a narrow graph-task projection change and a module split
   would have expanded the write set beyond the current milestone.
+- `crates/pantograph-workflow-service/src/workflow/contracts.rs` and
+  `src/services/workflow/types.ts` remain above the standards decomposition
+  threshold. This slice touched them only for serial DTO alignment; splitting
+  shared Rust/TypeScript contract modules is deferred to a dedicated
+  contract-decomposition slice.
 
 ### Follow-Ups
 
@@ -260,9 +269,9 @@ Worker rules:
 - Plan the next vertical slice for Milestone 3 backend stale graph diagnostics,
   unless the unrelated dirty Pumas plan edit requires integration or cleanup
   first.
-- Continue Milestone 3 by wiring `WorkflowGraphInspectionProjection` into run
-  inspection, then add submit/admission blocking reasons in a separate
-  validated slice.
+- Continue Milestone 3 by covering remaining Puma/dynamic-port stale diagnostic
+  cases, then add submit/admission blocking reasons in a separate validated
+  slice.
 
 ### Verification Summary
 
@@ -298,6 +307,10 @@ Worker rules:
   for the saved graph inspection projection and service facade replay path.
 - `cargo test -p pantograph-workflow-service graph::session_contract` passed
   for edit-session graph snapshot stale diagnostic projection.
+- `cargo test -p pantograph-workflow-service run_graph`,
+  `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
+  and `npm run typecheck` passed for historic run graph stale diagnostics and
+  run-inspection transport type coverage.
 
 ### Traceability Links
 

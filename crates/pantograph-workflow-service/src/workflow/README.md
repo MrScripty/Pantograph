@@ -274,7 +274,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Historic run graphs: graph lookup by workflow run id reconstructs a
   `WorkflowGraph` from the immutable run snapshot, workflow executable
   topology, and presentation revision records. It must not read current graph
-  files for historic run views.
+  files for historic run views. The projection also carries backend-owned
+  `graph_diagnostics` derived from the reconstructed snapshot so run inspection
+  exposes stale facts without frontend inference.
 - Local Network status: `workflow_local_network_status_query` reports
   local-only system and scheduler-load facts through a provider abstraction.
   Scheduler-load facts include active and queued workflow run ids for local

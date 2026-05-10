@@ -6,7 +6,7 @@ use pantograph_diagnostics_ledger::{DiagnosticsLedgerError, SchedulerModelCacheS
 use pantograph_runtime_attribution::{AttributionError, BucketSelection, CredentialProofRequest};
 
 use crate::graph::{
-    WorkflowExecutableTopology, WorkflowGraph, WorkflowGraphRunSettings,
+    WorkflowExecutableTopology, WorkflowGraph, WorkflowGraphDiagnostic, WorkflowGraphRunSettings,
     WorkflowPresentationMetadata,
 };
 use crate::scheduler::WorkflowExecutionSessionAttributionContext;
@@ -539,6 +539,8 @@ pub struct WorkflowRunGraphProjection {
     pub workflow_version_created_at_ms: i64,
     pub presentation_revision_created_at_ms: i64,
     pub graph: WorkflowGraph,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graph_diagnostics: Vec<WorkflowGraphDiagnostic>,
     pub executable_topology: WorkflowExecutableTopology,
     pub presentation_metadata: WorkflowPresentationMetadata,
     pub graph_settings: WorkflowGraphRunSettings,

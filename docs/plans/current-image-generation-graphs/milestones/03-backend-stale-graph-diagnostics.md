@@ -68,11 +68,14 @@ inspectable and explain why they cannot be submitted.
   after adding `graph_diagnostics` to edit-session graph snapshot responses and
   proving stale session snapshots carry backend-owned retired-node and missing
   edge endpoint diagnostics.
+- `cargo test -p pantograph-workflow-service run_graph`,
+  `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
+  and `npm run typecheck` passed after adding `graph_diagnostics` to historic
+  `WorkflowRunGraphProjection`, proving run inspection can carry backend-owned
+  stale graph facts from the reconstructed run snapshot.
 
 **Remaining Follow-Up:**
 
-- Wire `WorkflowGraphInspectionProjection` or the shared graph diagnostics into
-  run inspection.
 - Extend coverage to unresolved Puma model references and stale dynamic port
   contracts once the graph inspection projection exists.
 - Add cross-layer saved-graph inspection and submit/admission blocking tests in
