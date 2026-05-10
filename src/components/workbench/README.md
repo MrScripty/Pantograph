@@ -18,6 +18,8 @@ later plan stages fill in richer page bodies.
 | `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority/placement/model-cache facts, workflow-version/date-range/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
 | `IoInspectorPage.svelte` | Selected-run I/O artifact inspector with a compact run-snapshot graph above node-scoped input/output artifact details. |
+| `graphInspectionPresenters.ts` | Pure saved-graph inspection option and display presenters that consume backend `WorkflowGraphInspectionProjection` records without run-shaped fallbacks. |
+| `graphInspectionPresenters.test.ts` | Unit coverage for saved-graph inspection paths, stale diagnostics, and no-run-context display flags. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention policy/cleanup detail, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
 | `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy, diagnostics retention policy, artifact format defaults/capabilities, managed inference runtime controls, managed media dependency controls, server connection, model paths, device policy, RAG, and sandbox configuration. |

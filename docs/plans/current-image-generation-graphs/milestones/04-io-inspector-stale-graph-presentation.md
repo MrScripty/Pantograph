@@ -69,11 +69,18 @@ which nodes or edges are stale.
   `workflow_graph_inspect` through the Tauri/frontend workflow service boundary
   as a direct `WorkflowGraphInspectionProjection` read with no fabricated run
   context.
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`
+  and `npm run typecheck` passed after adding saved-graph inspection option and
+  display presenters that require backend-listed workflow ids, disable run-only
+  artifact controls, and reuse the existing graph canvas helper with backend
+  diagnostics.
 
 **Remaining Follow-Up:**
 
 - Add saved-graph inspection mode and a run/saved shared graph inspection
   presenter shape that consumes `WorkflowService.inspectWorkflowGraph`.
+- Render the saved-graph presenter model in `IoInspectorPage.svelte` without
+  requiring an active workflow run.
 - Show selected stale-node details in the lower I/O details panel.
 - Add focused component/accessibility tests for keyboard stale-node selection,
   focus preservation, and saved-graph mode without artifact controls.

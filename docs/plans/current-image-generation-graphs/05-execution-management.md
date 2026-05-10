@@ -134,6 +134,10 @@ Update during implementation:
   returns the backend `WorkflowGraphInspectionProjection` directly, including
   selected-node diagnostics, without fabricating run ids or run-shaped
   compatibility data.
+- 2026-05-10: Continued Milestone 4 by adding focused saved-graph inspection
+  presenters. Saved workflow options require backend-listed workflow ids, and
+  saved-graph display models reuse the existing graph canvas presenter with
+  backend diagnostics while keeping run context and artifact controls disabled.
 
 ## Commit Cadence Notes
 
@@ -258,6 +262,9 @@ Worker rules:
   backend `graph_diagnostics`.
 - Milestone 4 saved-graph inspection transport is available through
   `workflow_graph_inspect`; IO inspector rendering remains a follow-up slice.
+- Milestone 4 saved-graph presenter helpers are available for IO inspector
+  rendering without deriving paths from workflow display names or inventing run
+  context.
 
 ### Deviations
 
@@ -294,6 +301,9 @@ Worker rules:
   threshold. The saved-graph inspection transport slice added only a thin
   command/service boundary and a focused test file; broader command and DTO
   module extraction is deferred.
+- `src/components/workbench/README.md` remains above the decomposition-review
+  threshold. The saved-graph presenter slice added a focused module entry only;
+  broader workbench documentation splitting is deferred.
 
 ### Follow-Ups
 
@@ -312,6 +322,8 @@ Worker rules:
 - Continue Milestone 4 by wiring IO inspector saved-graph mode to
   `WorkflowService.inspectWorkflowGraph` and by reusing the run graph display
   helpers for saved graph diagnostics.
+- Continue Milestone 4 by rendering the saved-graph presenter model in
+  `IoInspectorPage.svelte` and then adding selected stale-node details.
 
 ### Verification Summary
 
@@ -365,6 +377,11 @@ Worker rules:
   inspection Tauri/frontend service boundary. The first attempted Rust command
   used a non-existent package name (`pantograph-tauri`) and was rerun with the
   actual package name (`pantograph`).
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`
+  and `npm run typecheck` passed for saved-graph inspection option/display
+  presenters. The first focused presenter test run failed because the new
+  module used an extensionless ESM import; adding `.ts` to the local presenter
+  import fixed the issue.
 
 ### Traceability Links
 
