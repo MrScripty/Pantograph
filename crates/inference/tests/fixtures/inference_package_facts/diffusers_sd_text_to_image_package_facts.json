@@ -1,0 +1,121 @@
+{
+  "package_facts_contract_version": 2,
+  "model_ref": {
+    "model_id": "image/stable-diffusion/tiny-sd"
+  },
+  "artifact": {
+    "artifact_kind": "diffusers_bundle",
+    "entry_path": "image/stable-diffusion/tiny-sd",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "model_index.json"
+    ]
+  },
+  "components": [
+    {
+      "kind": "model_index",
+      "status": "present",
+      "relative_path": "model_index.json"
+    }
+  ],
+  "diffusers": {
+    "status": "present",
+    "pipeline_class": "StableDiffusionPipeline",
+    "diffusers_version": "0.32.0",
+    "name_or_path": "synthetic/tiny-sd",
+    "task": {
+      "pipeline_tag": "text-to-image",
+      "task_type_primary": "image_generation",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "image"
+      ]
+    },
+    "family_evidence": [
+      {
+        "family": "stable_diffusion",
+        "source": "pipeline_class",
+        "value_source": "config",
+        "source_path": "model_index.json"
+      }
+    ],
+    "components": [
+      {
+        "role": "pipeline_index",
+        "status": "present",
+        "relative_path": "model_index.json",
+        "source_library": "diffusers",
+        "class_name": "StableDiffusionPipeline"
+      },
+      {
+        "role": "scheduler",
+        "status": "present",
+        "relative_path": "scheduler",
+        "source_library": "diffusers",
+        "class_name": "EulerDiscreteScheduler",
+        "config_path": "scheduler/scheduler_config.json"
+      },
+      {
+        "role": "unet",
+        "status": "present",
+        "relative_path": "unet",
+        "source_library": "diffusers",
+        "class_name": "UNet2DConditionModel",
+        "config_path": "unet/config.json",
+        "config_model_type": "unet_2d_condition"
+      },
+      {
+        "role": "vae",
+        "status": "present",
+        "relative_path": "vae",
+        "source_library": "diffusers",
+        "class_name": "AutoencoderKL",
+        "config_path": "vae/config.json"
+      },
+      {
+        "role": "text_encoder",
+        "status": "present",
+        "relative_path": "text_encoder",
+        "source_library": "transformers",
+        "class_name": "CLIPTextModel",
+        "config_path": "text_encoder/config.json",
+        "config_model_type": "clip_text_model"
+      },
+      {
+        "role": "tokenizer",
+        "status": "present",
+        "relative_path": "tokenizer",
+        "source_library": "transformers",
+        "class_name": "CLIPTokenizer",
+        "config_path": "tokenizer/tokenizer_config.json"
+      }
+    ]
+  },
+  "task": {
+    "pipeline_tag": "text-to-image",
+    "task_type_primary": "image_generation",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "image"
+    ]
+  },
+  "generation_defaults": {
+    "status": "missing"
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "diffusers"
+    ],
+    "raw": [
+      "diffusers"
+    ]
+  }
+}

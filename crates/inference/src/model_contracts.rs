@@ -1146,6 +1146,117 @@ pub enum PackageFactStatus {
     Uninspected,
 }
 
+/// Source strength for a package fact value.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageFactValueSource {
+    Header,
+    Config,
+    UpstreamMetadata,
+    ComponentLayout,
+    FilenameWeak,
+    Ambiguous,
+    Unavailable,
+}
+
+/// Image-generation family labels produced only from package evidence.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageGenerationFamilyLabel {
+    StableDiffusion,
+    StableDiffusionXl,
+    Flux,
+    Flux2,
+    QwenImage,
+    LuminaImage,
+    GlmImage,
+    ZImage,
+    Unknown,
+    Ambiguous,
+}
+
+/// Package evidence source used for image-generation family labels.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageGenerationFamilyEvidenceSource {
+    PipelineClass,
+    ModelIndexComponent,
+    ComponentConfig,
+    RepoMetadata,
+    Ambiguous,
+}
+
+/// Source-tagged image-generation family evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ImageGenerationFamilyEvidence {
+    pub family: ImageGenerationFamilyLabel,
+    pub source: ImageGenerationFamilyEvidenceSource,
+    pub value_source: PackageFactValueSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Stable roles for Diffusers-style package components.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DiffusersComponentRole {
+    PipelineIndex,
+    Scheduler,
+    Tokenizer,
+    Tokenizer2,
+    TextEncoder,
+    TextEncoder2,
+    TextEncoder3,
+    ImageProcessor,
+    Processor,
+    Unet,
+    Transformer,
+    Vae,
+    Controlnet,
+    Adapter,
+    Weights,
+    GenerationConfig,
+}
+
+/// Component facts from a Diffusers bundle without importing Python classes.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct DiffusersComponentFacts {
+    pub role: DiffusersComponentRole,
+    pub status: PackageFactStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_library: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_model_type: Option<String>,
+}
+
+/// Diffusers bundle evidence from `model_index.json` and bounded component configs.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct DiffusersPackageEvidence {
+    pub status: PackageFactStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipeline_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diffusers_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name_or_path: Option<String>,
+    pub task: TaskEvidence,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub family_evidence: Vec<ImageGenerationFamilyEvidence>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<DiffusersComponentFacts>,
+}
+
 /// Model-provided generation defaults, separate from user request overrides.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -2155,6 +2266,8 @@ pub struct ResolvedModelPackageFacts {
     pub components: Vec<ProcessorComponentFacts>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transformers: Option<TransformersPackageEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diffusers: Option<DiffusersPackageEvidence>,
     pub task: TaskEvidence,
     pub generation_defaults: GenerationDefaultFacts,
     pub custom_code: CustomCodeFacts,

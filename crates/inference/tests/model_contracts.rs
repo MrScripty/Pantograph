@@ -4,16 +4,16 @@ use inference::{
     default_task_registry_entries, normalize_modality_label, normalize_task_label,
     resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, BackendCapabilityFacts,
     BackendCompatibilityIssue, BackendCompatibilityIssueKind, BackendCompatibilityReport,
-    BackendCompatibilityStatus, BackendHintLabel, BackendTaskCapability, GenerationOptionSource,
-    GenerationOptions, InferenceEmbeddingResult, InferenceExecutionInput,
-    InferenceExecutionInputKind, InferenceExecutionRequest, InferenceExecutionResult,
-    InferenceExecutionResultKind, InferenceLifecyclePhase, InferenceModality,
-    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind, InferenceTaskId,
-    InferenceUsage, ModelArtifactKind, ModelExecutionDescriptor, ModelExecutionStorageKind,
-    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
-    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
-    ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy, ModelPackageDiagnostic,
-    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummarySnapshotItem,
+    BackendCompatibilityStatus, BackendHintLabel, BackendTaskCapability, DiffusersComponentRole,
+    GenerationOptionSource, GenerationOptions, ImageGenerationFamilyLabel,
+    InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionInputKind,
+    InferenceExecutionRequest, InferenceExecutionResult, InferenceExecutionResultKind,
+    InferenceLifecyclePhase, InferenceModality, InferenceRequestLifecycleEvent,
+    InferenceRequestLifecycleEventKind, InferenceTaskId, InferenceUsage, ModelArtifactKind,
+    ModelExecutionDescriptor, ModelExecutionStorageKind, ModelExecutionValidationState,
+    ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+    ModelLibraryUpdateFeed, ModelLoadCachePolicy, ModelLoadNetworkPolicy, ModelLoadSecurityPolicy,
+    ModelPackageDiagnostic, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummarySnapshotItem,
     ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy, ModelStorageKind, ModelValidationState,
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
     PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
@@ -85,6 +85,12 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
     ),
 ];
 
+const PUMAS_IMAGE_PACKAGE_FACT_FIXTURES: &[(&str, &str, &str)] = &[(
+    "diffusers_sd_text_to_image_package_facts.json",
+    "281a45a5",
+    include_str!("fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"),
+)];
+
 fn package_fact_fixture(name: &str) -> &'static str {
     PACKAGE_FACT_FIXTURES
         .iter()
@@ -112,6 +118,69 @@ fn package_fact_fixtures_decode_through_public_contracts() {
             MODEL_PACKAGE_FACTS_CONTRACT_VERSION
         );
         assert_eq!(decoded.model_ref.model_id, facts.model_ref.model_id);
+    }
+}
+
+#[test]
+fn pumas_image_generation_fixture_decodes_with_structured_diffusers_facts() {
+    for (fixture_name, source_commit, raw) in PUMAS_IMAGE_PACKAGE_FACT_FIXTURES {
+        let raw_value: serde_json::Value =
+            serde_json::from_str(raw).expect("Pumas fixture should be valid JSON");
+        let facts: ResolvedModelPackageFacts = serde_json::from_str(raw).unwrap_or_else(|error| {
+            panic!("Pumas fixture {fixture_name} from {source_commit} should decode: {error}");
+        });
+        let diffusers = facts.diffusers.as_ref().unwrap_or_else(|| {
+            panic!("Pumas fixture {fixture_name} should carry structured diffusers facts")
+        });
+        let source = ResolvedModelSource::from_package_facts(&facts);
+        let entry =
+            resolve_task_registry_entry_from_evidence(&facts.task).unwrap_or_else(|error| {
+                panic!("Pumas fixture {fixture_name} should resolve: {error:?}")
+            });
+
+        assert_eq!(facts.package_facts_contract_version, 2);
+        assert_eq!(
+            facts.artifact.artifact_kind,
+            ModelArtifactKind::DiffusersBundle
+        );
+        assert_eq!(
+            facts.task.task_type_primary.as_deref(),
+            Some("image_generation")
+        );
+        assert_eq!(facts.task.pipeline_tag.as_deref(), Some("text-to-image"));
+        assert_eq!(entry.task_id, InferenceTaskId::ImageGeneration);
+        assert_eq!(
+            diffusers.pipeline_class.as_deref(),
+            Some("StableDiffusionPipeline")
+        );
+        assert!(diffusers.family_evidence.iter().any(|evidence| {
+            evidence.family == ImageGenerationFamilyLabel::StableDiffusion
+                && evidence.source_path.as_deref() == Some("model_index.json")
+        }));
+        assert!(diffusers.components.iter().any(|component| {
+            component.role == DiffusersComponentRole::Scheduler
+                && component.config_path.as_deref() == Some("scheduler/scheduler_config.json")
+        }));
+        assert!(facts
+            .backend_hints
+            .accepted
+            .contains(&BackendHintLabel::Diffusers));
+        assert!(
+            source.validate_for_backend_load().is_ok(),
+            "Pumas fixture {fixture_name} should project into a backend-loadable source"
+        );
+        for forbidden in [
+            "pantograph",
+            "workflow",
+            "runtime_registry",
+            "diagnostics_ledger",
+            "scheduler_policy",
+        ] {
+            assert!(
+                raw_value.get(forbidden).is_none(),
+                "Pumas fixture {fixture_name} should not expose consumer field {forbidden}"
+            );
+        }
     }
 }
 
