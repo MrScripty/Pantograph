@@ -840,6 +840,7 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P5 obsolete-row delete prerequisite: Pumas commit `48b37ca2` adds a selected-artifact-safe cache delete path for obsolete empty-selected-artifact package-facts rows. It preserves concrete selected-artifact rows and emits `PackageFactsModified` after the durable delete; migration execution still needs to call it from the backfill runner.
 - 2026-05-10 P5 execution finding: Pumas commit `1992bcfa` adds distinct package-facts planned-work, execution-item, execution-report, and checkpoint DTOs plus a checkpointed runner. The first execution slice materializes work from dry-run inventory, skips partial downloads, regenerates missing/stale rows through canonical selected-model package-facts hydration, deletes planned obsolete rows, records written fingerprints, and clears completed checkpoints. Resume, source-file-change, invalid-json repair, and multi-artifact execution fixtures still need targeted coverage.
 - 2026-05-10 P5 execution coverage finding: Pumas commit `d660dd8e` adds execution fixtures proving partial-download rows are reported as skipped and obsolete empty-selected-artifact rows are deleted while concrete selected-artifact rows remain.
+- 2026-05-10 P5 fingerprint-resume coverage finding: Pumas commit `ffab283a` adds an execution fixture that resumes from a persisted package-facts checkpoint, mutates a manifest-listed source file before execution, and verifies the migrated cache row records a recomputed source fingerprint instead of the planned stale fingerprint.
 
 ## Implementation Sequencing
 
@@ -1121,7 +1122,7 @@ contract without serving stale facts to Pantograph or other clients.
       has concrete selected artifacts.
 - [x] Preserve empty-selected-artifact rows only for packages that genuinely
       have no selected artifact.
-- [ ] Recompute source fingerprints before durable writes so interrupted
+- [x] Recompute source fingerprints before durable writes so interrupted
       migrations do not publish stale rows after package files change.
 - [ ] Emit `PackageFactsModified` update events after durable cache writes,
       including selected artifact id when present.
