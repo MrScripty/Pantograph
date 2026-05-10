@@ -1090,6 +1090,7 @@ fn diagnostic_event_ledger_appends_inference_execution_diagnostic_summary() {
             assert_eq!(payload.request_id, "req-a");
             assert_eq!(payload.task_id, "text_generation");
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(payload.selected_device_class.as_deref(), Some("cuda"));
             assert_eq!(payload.resolved_artifact_kind.as_deref(), Some("gguf"));
             assert_eq!(
                 payload
@@ -5211,6 +5212,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                 duration_ms: Some(75),
                 selected_backend_key: Some("pytorch".to_string()),
                 selected_backend_family: Some("pytorch".to_string()),
+                selected_device_class: Some("cuda".to_string()),
                 selected_device_id: Some("cuda:0".to_string()),
                 selected_network_node_id: Some("local-node-alpha".to_string()),
                 resolved_artifact_kind: Some("gguf".to_string()),

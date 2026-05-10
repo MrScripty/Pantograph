@@ -1382,6 +1382,8 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_backend_family: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_device_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_network_node_id: Option<String>,
@@ -1431,6 +1433,11 @@ impl InferenceExecutionDiagnosticObservedPayload {
         validate_optional_text(
             "selected_backend_family",
             self.selected_backend_family.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_device_class",
+            self.selected_device_class.as_deref(),
             MAX_ID_LEN,
         )?;
         validate_optional_text(

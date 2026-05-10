@@ -83,10 +83,10 @@ overwritten by inference payloads.
 Inference option-support summaries use
 `inference.execution_diagnostic_observed` events. These rows are bounded
 system metadata for request id, task id, lifecycle phase/kind, selected backend,
-resolved artifact kind, support-state counts, backend/model compatibility
-summaries, per-option compatibility summaries, usage-count summaries,
-cache-handle ids, artifact refs, and structured KV-cache action/outcome
-references.
+selected device class/id, resolved artifact kind, support-state counts,
+backend/model compatibility summaries, per-option compatibility summaries,
+usage-count summaries, cache-handle ids, artifact refs, and structured
+KV-cache action/outcome references.
 Inference artifact refs and cache-handle ids are stable metadata only; direct
 ledger appends reject local-path-shaped values so producer-side payload filters
 cannot be bypassed by alternate append paths.

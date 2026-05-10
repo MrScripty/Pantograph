@@ -411,6 +411,41 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: diagnostics-ledger persistence/projection and run
     inspection still do not retain or display selected device class; scheduler
     admission still needs resolved backend/runtime/device decisions end to end.
+- 2026-05-10 slice: inference diagnostic selected-device class payload.
+  - Smallest useful vertical slice: add `selected_device_class` to
+    `InferenceExecutionDiagnosticObservedPayload` and map it from canonical
+    inference lifecycle events in the embedded-runtime ledger adapter, without
+    changing SQLite projection columns, run-inspection DTOs, scheduler
+    admission, frontend bindings, generated outputs, or lockfiles.
+  - Allowed write set: `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-diagnostics-ledger/src/README.md`,
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger.rs`,
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger_tests.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: the adapter copies
+    `InferenceRequestLifecycleEvent.selected_device_class` only when that typed
+    canonical fact exists. KV-cache and runtime-setting diagnostic payloads
+    leave the class unset instead of inferring it from raw backend settings or
+    device strings.
+  - Standards/blast-radius gate for diagnostics payloads: crate role remains
+    durable diagnostics contract/persistence; public facade impact is additive
+    serde-defaulted payload field only; runtime lifecycle owner is unchanged;
+    SQLite projection schema, path validation, frontend behavior, generated
+    files, feature flags, dependencies, and lockfiles are untouched; test
+    isolation uses focused diagnostics-ledger payload tests and embedded
+    adapter tests.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_appends_inference_execution_diagnostic_summary`,
+    `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_inference_diagnostic_selected_facts`,
+    `cargo test -p pantograph-embedded-runtime inference_diagnostic_event_adapter_builds_option_support_summary`,
+    `cargo test -p pantograph-embedded-runtime inference_diagnostic_event_adapter_drops_path_shaped_runtime_metadata`,
+    and `git diff --check`.
+  - Remaining follow-up: run-list/run-detail projection columns, workflow
+    diagnostics DTOs, and run inspection still need selected-device-class
+    projection before consumers can query or display the field without reading
+    raw payload JSON.
 
 **Verification:**
 

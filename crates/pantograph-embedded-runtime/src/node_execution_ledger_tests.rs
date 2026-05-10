@@ -416,6 +416,7 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
     event.cache_handle_id = Some("kv-checkpoint-1".to_string());
     event.artifact_refs = vec!["artifact://audio.wav".to_string()];
     event.resolved_artifact_kind = Some("gguf".to_string());
+    event.selected_device_class = Some(inference::InferenceDeviceClass::Cuda);
     event.selected_device_id = Some("cuda:0".to_string());
     event.selected_network_node_id = Some("local-node-alpha".to_string());
 
@@ -444,6 +445,7 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
             );
             assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(payload.selected_device_class.as_deref(), Some("cuda"));
             assert_eq!(payload.selected_device_id.as_deref(), Some("cuda:0"));
             assert_eq!(
                 payload.selected_network_node_id.as_deref(),
@@ -835,6 +837,7 @@ fn inference_diagnostic_event_adapter_drops_path_shaped_runtime_metadata() {
         DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
             assert!(payload.selected_backend_key.is_none());
             assert!(payload.selected_backend_family.is_none());
+            assert!(payload.selected_device_class.is_none());
             assert!(payload.selected_device_id.is_none());
             assert!(payload.selected_network_node_id.is_none());
             assert!(payload.compatibility_issues[0].model_id.is_none());

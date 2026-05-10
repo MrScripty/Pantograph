@@ -956,6 +956,7 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
                 duration_ms: None,
                 selected_backend_key: backend_key,
                 selected_backend_family,
+                selected_device_class: None,
                 selected_device_id: None,
                 selected_network_node_id: None,
                 resolved_artifact_kind: None,
@@ -1049,6 +1050,7 @@ fn build_runtime_settings_diagnostic_event_ledger_append_request(
                 duration_ms: None,
                 selected_backend_key: backend_key.clone(),
                 selected_backend_family,
+                selected_device_class: None,
                 selected_device_id: runtime_setting_value(&settings, "device"),
                 selected_network_node_id: None,
                 resolved_artifact_kind: None,
@@ -1102,6 +1104,9 @@ fn build_inference_diagnostic_event_ledger_append_request(
     let backend_key = bounded_diagnostic_metadata(event.backend_key.as_deref());
     let selected_backend_family =
         selected_backend_family(backend_key.as_deref(), runtime_id.as_deref());
+    let selected_device_class = event
+        .selected_device_class
+        .and_then(|device_class| bounded_diagnostic_metadata(Some(device_class.canonical_label())));
     let selected_device_id = bounded_diagnostic_metadata(event.selected_device_id.as_deref());
     let selected_network_node_id =
         bounded_diagnostic_metadata(event.selected_network_node_id.as_deref());
@@ -1146,6 +1151,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 duration_ms,
                 selected_backend_key: backend_key,
                 selected_backend_family,
+                selected_device_class,
                 selected_device_id,
                 selected_network_node_id,
                 resolved_artifact_kind,

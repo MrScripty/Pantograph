@@ -213,6 +213,11 @@ Update during implementation:
   canonical active runtime device facts. Request lifecycle events now carry
   selected device class/id from `LlamaCppActiveRuntimeDescriptor` when present
   and do not report config-only raw device strings as selected devices.
+- 2026-05-10: Continued Milestone 5 by extending inference diagnostic ledger
+  payloads with `selected_device_class`. The embedded runtime adapter copies
+  the canonical lifecycle event class into
+  `InferenceExecutionDiagnosticObservedPayload` without deriving it from raw
+  config or runtime setting strings.
 
 ## Commit Cadence Notes
 
@@ -383,6 +388,9 @@ Worker rules:
   canonical active runtime facts. Diagnostics-ledger persistence/projection,
   run inspection facts, scheduler admission, and managed runtime variant
   readiness still need follow-up slices.
+- Milestone 5 inference diagnostic ledger payloads now retain selected device
+  class. Projection columns and run-inspection DTOs still need a follow-up
+  slice before UI/API consumers can query the field directly.
 
 ### Deviations
 
