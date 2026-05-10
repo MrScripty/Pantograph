@@ -155,6 +155,9 @@ executor, the service fails closed.
 - Workflow execution never triggers runtime installation implicitly.
 - Session runtime preflight cache keys include graph fingerprint, runtime
   capability fingerprint, and normalized technical-fit override selection.
+- Technical-fit decisions with fallback selection or missing candidate/runtime
+  state are blocking runtime diagnostics; workflow execution must not proceed
+  from those selected-runtime facts.
 - Host calls that load/unload runtimes occur outside session-store locks.
 - Trace stores own canonical event timestamps, idempotent terminal replay, and
   retry/reset behavior for repeated execution ids.

@@ -223,6 +223,11 @@ Update during implementation:
   DTOs, workflow diagnostics query request, and contract fixtures now carry
   `selected_device_class` from typed inference diagnostic payloads without
   inferring it from raw device ids.
+- 2026-05-10: Continued Milestone 5 by blocking workflow admission on
+  fallback-shaped technical-fit decisions. `ConservativeFallback`,
+  `MissingCandidateData`, and `MissingRuntimeState` decisions now produce
+  blocking `WorkflowRuntimeIssue` diagnostics before run/session admission,
+  even when the decision includes a selected runtime id.
 
 ## Commit Cadence Notes
 
@@ -400,6 +405,10 @@ Worker rules:
   class directly. UI presentation still needs to decide where to display the
   field, and scheduler admission/managed runtime readiness still need
   end-to-end selected backend/runtime/device replacement.
+- Milestone 5 workflow-service admission now blocks fallback-shaped
+  technical-fit decisions instead of treating them as warning-only selected
+  runtime facts. Runtime-registry and embedded-runtime producer-side fallback
+  synthesis still needs replacement.
 
 ### Deviations
 
@@ -469,6 +478,9 @@ Worker rules:
 - Continue Milestone 5 by wiring selected device class into frontend
   run-inspection presentation only from typed backend projection records, not
   by parsing raw diagnostic payload JSON.
+- Continue Milestone 5 by replacing embedded-runtime/runtime-registry
+  fallback-named technical-fit production with typed rejection diagnostics so
+  workflow-service no longer needs to receive fallback-shaped decision DTOs.
 
 ### Verification Summary
 
@@ -578,6 +590,16 @@ Worker rules:
   diagnostics run-list/run-detail records and workflow diagnostics contracts.
   The first workflow-service attempt used two Cargo test filters and failed
   before tests ran; it was rerun with the single `workflow_run_` filter.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-workflow-service technical_fit_preflight_blocks_fallback_selected_backend`,
+  `cargo test -p pantograph-workflow-service workflow_preflight`,
+  `cargo test -p pantograph-workflow-service workflow_run_honors_blocking_backend_technical_fit_decision`,
+  `cargo test -p pantograph-workflow-service session_runtime_preflight`, and
+  `git diff --check` passed after workflow-service admission began blocking
+  fallback-shaped technical-fit decisions. The first two focused tests failed
+  before the early-return gap was fixed; the corrected slice rejects
+  fallback/incomplete-state decisions before readiness enforcement can be
+  skipped.
 
 ### Traceability Links
 

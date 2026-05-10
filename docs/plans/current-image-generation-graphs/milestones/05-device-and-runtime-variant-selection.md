@@ -486,6 +486,42 @@ typed diagnostic and the canonical design is fixed.
     field from typed projection records, but scheduler admission, managed
     runtime variant readiness, and remaining legacy raw-device execution paths
     still need end-to-end replacement.
+- 2026-05-10 slice: workflow technical-fit fallback admission block.
+  - Smallest useful vertical slice: make workflow-service runtime preflight
+    convert `ConservativeFallback`, `MissingCandidateData`, and
+    `MissingRuntimeState` technical-fit decisions into blocking runtime
+    diagnostics before workflow run or keep-alive session admission can
+    proceed.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_preflight.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: this slice does not preserve fallback
+    selection as executable behavior. Even when a technical-fit decision names
+    a selected runtime, fallback or incomplete candidate/runtime-state reasons
+    now produce typed blocking `WorkflowRuntimeIssue` diagnostics instead of
+    warning-only admission.
+  - Standards/blast-radius gate: workflow-service remains the admission and
+    runtime-preflight owner; public DTO shape is unchanged; runtime lifecycle,
+    persisted schema, frontend behavior, generated files, feature flags,
+    dependencies, and lockfiles are untouched; test isolation uses focused
+    workflow-service unit/integration tests with mock hosts.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service technical_fit_preflight_blocks_fallback_selected_backend`,
+    `cargo test -p pantograph-workflow-service workflow_preflight`,
+    `cargo test -p pantograph-workflow-service workflow_run_honors_blocking_backend_technical_fit_decision`,
+    `cargo test -p pantograph-workflow-service session_runtime_preflight`, and
+    `git diff --check`.
+  - Discovered issue fixed in-slice: the first implementation still let
+    ungrounded fallback decisions bypass runtime readiness through the
+    `!enforce_runtime_readiness` early return. The final slice rejects
+    fallback/incomplete-state decisions before that early return.
+  - Remaining follow-up: embedded-runtime/runtime-registry producers still
+    expose fallback-named selection modes and reason codes. A later slice must
+    replace producer-side fallback synthesis with typed rejection diagnostics
+    so the compatibility-shaped DTO values can be retired.
 
 **Verification:**
 

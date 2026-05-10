@@ -135,7 +135,7 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
         .await
         .expect("preflight response");
 
-    assert!(response.can_run);
+    assert!(!response.can_run);
     assert_eq!(
         response.technical_fit_decision,
         Some(WorkflowTechnicalFitDecision {
@@ -160,12 +160,10 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
             compatibility_issues: Vec::new(),
         })
     );
-    assert!(response.blocking_runtime_issues.is_empty());
-    assert!(response.runtime_warnings.iter().any(|issue| {
-        issue
-            .message
-            .contains("selected 'llama_cpp' conservatively")
-    }));
+    assert_eq!(response.blocking_runtime_issues.len(), 1);
+    assert!(response.blocking_runtime_issues[0]
+        .message
+        .contains("candidate state is incomplete"));
 }
 
 #[tokio::test]
@@ -206,13 +204,13 @@ async fn workflow_preflight_blocks_selected_technical_fit_runtime_when_capabilit
             }],
         },
         WorkflowTechnicalFitDecision {
-            selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: Some("llama_cpp".to_string()),
             selected_runtime_id: Some("llama_cpp".to_string()),
             selected_backend_key: Some("llama_cpp".to_string()),
             selected_model_id: None,
             reasons: vec![WorkflowTechnicalFitReason::new(
-                WorkflowTechnicalFitReasonCode::ConservativeFallback,
+                WorkflowTechnicalFitReasonCode::RuntimeRequirements,
                 Some("llama_cpp"),
             )],
             compatibility_report: None,

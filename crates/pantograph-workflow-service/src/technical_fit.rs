@@ -453,6 +453,22 @@ fn workflow_runtime_preflight_from_decision(
     let mut runtime_warnings = Vec::new();
     let mut blocking_runtime_issues = Vec::new();
 
+    if decision_has_incomplete_runtime_state(&decision) {
+        let issue = WorkflowRuntimeIssue {
+            runtime_id,
+            display_name,
+            required_backend_key,
+            message: describe_technical_fit_blocking_issue(&decision),
+        };
+        runtime_warnings.push(issue.clone());
+        blocking_runtime_issues.push(issue);
+        return WorkflowRuntimePreflightAssessment {
+            technical_fit_decision: Some(decision),
+            runtime_warnings,
+            blocking_runtime_issues,
+        };
+    }
+
     if !enforce_runtime_readiness {
         return WorkflowRuntimePreflightAssessment {
             technical_fit_decision: Some(decision),
@@ -474,25 +490,7 @@ fn workflow_runtime_preflight_from_decision(
         }
     }
 
-    if decision.selected_runtime_id.is_some() {
-        if decision.selection_mode == WorkflowTechnicalFitSelectionMode::ConservativeFallback
-            || decision.reasons.iter().any(|reason| {
-                matches!(
-                    reason.code,
-                    WorkflowTechnicalFitReasonCode::MissingCandidateData
-                        | WorkflowTechnicalFitReasonCode::MissingRuntimeState
-                        | WorkflowTechnicalFitReasonCode::ConservativeFallback
-                )
-            })
-        {
-            runtime_warnings.push(WorkflowRuntimeIssue {
-                runtime_id,
-                display_name,
-                required_backend_key,
-                message: describe_technical_fit_warning(&decision),
-            });
-        }
-    } else {
+    if decision.selected_runtime_id.is_none() {
         let issue = WorkflowRuntimeIssue {
             runtime_id,
             display_name,
@@ -508,6 +506,18 @@ fn workflow_runtime_preflight_from_decision(
         runtime_warnings,
         blocking_runtime_issues,
     }
+}
+
+fn decision_has_incomplete_runtime_state(decision: &WorkflowTechnicalFitDecision) -> bool {
+    decision.selection_mode == WorkflowTechnicalFitSelectionMode::ConservativeFallback
+        || decision.reasons.iter().any(|reason| {
+            matches!(
+                reason.code,
+                WorkflowTechnicalFitReasonCode::MissingCandidateData
+                    | WorkflowTechnicalFitReasonCode::MissingRuntimeState
+                    | WorkflowTechnicalFitReasonCode::ConservativeFallback
+            )
+        })
 }
 
 fn decision_conflicts_with_required_backends(
@@ -583,26 +593,6 @@ fn find_runtime_capability_for_decision(
                 })
         })
         .cloned()
-}
-
-fn describe_technical_fit_warning(decision: &WorkflowTechnicalFitDecision) -> String {
-    let target = decision
-        .selected_backend_key
-        .as_deref()
-        .or(decision.selected_runtime_id.as_deref())
-        .or(decision.selected_candidate_id.as_deref())
-        .unwrap_or("runtime");
-    if decision.selection_mode == WorkflowTechnicalFitSelectionMode::ConservativeFallback {
-        format!(
-            "technical-fit selected '{}' conservatively because candidate or runtime state is partial",
-            target
-        )
-    } else {
-        format!(
-            "technical-fit selected '{}' with backend-owned runtime facts",
-            target
-        )
-    }
 }
 
 fn describe_technical_fit_blocking_issue(decision: &WorkflowTechnicalFitDecision) -> String {
@@ -901,7 +891,7 @@ mod tests {
     }
 
     #[test]
-    fn technical_fit_preflight_does_not_block_on_ungrounded_selected_backend() {
+    fn technical_fit_preflight_blocks_fallback_selected_backend() {
         let decision = WorkflowTechnicalFitDecision {
             selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
             selected_candidate_id: Some("candle".to_string()),
@@ -924,8 +914,11 @@ mod tests {
             &[unavailable_candle_runtime()],
         );
 
-        assert!(assessment.runtime_warnings.is_empty());
-        assert!(assessment.blocking_runtime_issues.is_empty());
+        assert_eq!(assessment.runtime_warnings.len(), 1);
+        assert_eq!(assessment.blocking_runtime_issues.len(), 1);
+        assert!(assessment.blocking_runtime_issues[0]
+            .message
+            .contains("candidate state is incomplete"));
     }
 
     #[test]
