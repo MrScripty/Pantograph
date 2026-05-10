@@ -834,6 +834,8 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P3 integration finding: the initial GGUF extractor reads bounded header metadata and preserves corrupt legacy placeholder files as invalid evidence, but resolver wiring still selects the first non-mmproj GGUF from the selected files. Multi-quant selected-artifact-aware cache semantics remain open until `PackageInspectionContext` owns the concrete selected artifact id/path end to end.
 - 2026-05-10 P4 summary owner finding: selector and summary snapshots now share one package-facts summary cache classifier for missing, invalid, stale-contract, and wrong-selected-artifact states. Compact summary projection ownership moved into `package_facts/summary.rs` while preserving the existing public `ResolvedModelPackageFactsSummary::from(&facts)` conversion.
 - 2026-05-10 DTO decomposition review: `rust/crates/pumas-core/src/models/package_facts.rs` is 684 lines after the DTO additions. It remains a single readable wire-contract module because extraction, projection, cache classification, and parsing behavior are owned elsewhere; split it when it crosses roughly 800 lines or when a DTO group needs a separate version/lifecycle boundary.
+- 2026-05-10 P5 dry-run finding: Pumas commit `9da50b8d` adds a non-mutating package-facts cache migration dry-run report and crate-internal row-state classifier shared by summary snapshots and dry-run inventory. The report inventories indexed models by current selected artifact, reports detail/summary row states, flags regenerate decisions, and identifies obsolete empty-selected-artifact rows without writing checkpoints, regenerating facts, deleting rows, or publishing events.
+- 2026-05-10 P5 partial-download follow-up: the dry-run slice computes the partial-download flag from the index row, but metadata-less partial rows still need a dedicated fixture before the skipped/blocked behavior is complete. A later P5 slice must ensure partial downloads report `blocked_partial_download` without attempting missing package-file hydration.
 
 ## Implementation Sequencing
 
@@ -1096,12 +1098,12 @@ and GGUF facts.
 contract without serving stale facts to Pantograph or other clients.
 
 **Tasks:**
-- [ ] Add a package-facts migration dry-run mode that inventories every indexed
+- [x] Add a package-facts migration dry-run mode that inventories every indexed
       model and selected artifact.
 - [ ] Add distinct package-facts migration dry-run, execution, item, and
       checkpoint DTOs, or a typed migration-report envelope with separate
       package-facts payloads.
-- [ ] Report detail and summary cache row state per selected artifact:
+- [x] Report detail and summary cache row state per selected artifact:
       `fresh`, `missing`, `stale_contract`, `stale_fingerprint`,
       `invalid_json`, `wrong_selected_artifact`, `blocked_partial_download`, or
       `error`.
