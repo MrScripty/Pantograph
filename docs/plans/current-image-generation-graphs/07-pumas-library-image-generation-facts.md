@@ -833,6 +833,7 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P2 extractor finding: the initial Diffusers extractor now reads `model_index.json` and known nested component configs through an explicit bounded UTF-8 JSON reader, and it now emits component missing/invalid and ambiguous-family diagnostics. Remaining P2 fixture breadth still needs family-specific fixtures and malformed large JSON coverage beyond the unit-level oversized file case.
 - 2026-05-10 P3 integration finding: the initial GGUF extractor reads bounded header metadata and preserves corrupt legacy placeholder files as invalid evidence, but resolver wiring still selects the first non-mmproj GGUF from the selected files. Multi-quant selected-artifact-aware cache semantics remain open until `PackageInspectionContext` owns the concrete selected artifact id/path end to end.
 - 2026-05-10 P4 summary owner finding: selector and summary snapshots now share one package-facts summary cache classifier for missing, invalid, stale-contract, and wrong-selected-artifact states. Compact summary projection ownership moved into `package_facts/summary.rs` while preserving the existing public `ResolvedModelPackageFactsSummary::from(&facts)` conversion.
+- 2026-05-10 DTO decomposition review: `rust/crates/pumas-core/src/models/package_facts.rs` is 684 lines after the DTO additions. It remains a single readable wire-contract module because extraction, projection, cache classification, and parsing behavior are owned elsewhere; split it when it crosses roughly 800 lines or when a DTO group needs a separate version/lifecycle boundary.
 
 ## Implementation Sequencing
 
@@ -900,7 +901,7 @@ image-generation behavior.
       triggers.
 - [x] Record any remaining large-file rationale if `library.rs` still exceeds the
       standards soft threshold after package-facts extraction.
-- [ ] Record a decomposition review for `models/package_facts.rs` if the DTO
+- [x] Record a decomposition review for `models/package_facts.rs` if the DTO
       additions push it beyond a readable single-contract module.
 - [x] Keep package-facts helpers `pub(crate)` unless they are intentionally part
       of the public crate contract.
