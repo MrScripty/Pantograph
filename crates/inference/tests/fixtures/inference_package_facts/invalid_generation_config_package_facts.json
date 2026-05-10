@@ -1,5 +1,5 @@
 {
-  "package_facts_contract_version": 1,
+  "package_facts_contract_version": 2,
   "model_ref": {
     "model_id": "llm/example/invalid-generation-config",
     "selected_artifact_path": "llm/example/invalid-generation-config"

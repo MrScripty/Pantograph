@@ -1,5 +1,5 @@
 {
-  "package_facts_contract_version": 1,
+  "package_facts_contract_version": 2,
   "model_ref": {
     "model_id": "llm/llama/tiny-gguf",
     "selected_artifact_id": "q4_k_m",

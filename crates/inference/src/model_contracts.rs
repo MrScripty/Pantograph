@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Current inference package-facts contract version.
-pub const MODEL_PACKAGE_FACTS_CONTRACT_VERSION: u32 = 1;
+pub const MODEL_PACKAGE_FACTS_CONTRACT_VERSION: u32 = 2;
 
 /// Compact execution descriptor mirrored from Pumas API output.
 ///

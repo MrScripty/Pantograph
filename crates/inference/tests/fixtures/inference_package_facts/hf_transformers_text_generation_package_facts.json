@@ -1,5 +1,5 @@
 {
-  "package_facts_contract_version": 1,
+  "package_facts_contract_version": 2,
   "model_ref": {
     "model_id": "llm/example/tiny-transformers",
     "revision": "abc123",

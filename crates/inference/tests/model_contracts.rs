@@ -139,6 +139,7 @@ fn pumas_image_generation_fixture_decodes_with_structured_diffusers_facts() {
             });
 
         assert_eq!(facts.package_facts_contract_version, 2);
+        assert!(facts.uses_current_contract());
         assert_eq!(
             facts.artifact.artifact_kind,
             ModelArtifactKind::DiffusersBundle
