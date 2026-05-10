@@ -841,6 +841,8 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P5 execution finding: Pumas commit `1992bcfa` adds distinct package-facts planned-work, execution-item, execution-report, and checkpoint DTOs plus a checkpointed runner. The first execution slice materializes work from dry-run inventory, skips partial downloads, regenerates missing/stale rows through canonical selected-model package-facts hydration, deletes planned obsolete rows, records written fingerprints, and clears completed checkpoints. Resume, source-file-change, invalid-json repair, and multi-artifact execution fixtures still need targeted coverage.
 - 2026-05-10 P5 execution coverage finding: Pumas commit `d660dd8e` adds execution fixtures proving partial-download rows are reported as skipped and obsolete empty-selected-artifact rows are deleted while concrete selected-artifact rows remain.
 - 2026-05-10 P5 fingerprint-resume coverage finding: Pumas commit `ffab283a` adds an execution fixture that resumes from a persisted package-facts checkpoint, mutates a manifest-listed source file before execution, and verifies the migrated cache row records a recomputed source fingerprint instead of the planned stale fingerprint.
+- 2026-05-10 P5 stale-repair coverage finding: Pumas commit `c1405a6a` adds an execution fixture that starts from invalid detail JSON and stale-contract summary rows, then verifies checkpointed backfill repairs both through the canonical package-facts resolver.
+- 2026-05-10 P5 validation finding: Pumas commit `9d25beea` adds a package-facts migration validation report that reuses dry-run cache classification counts for missing, stale-contract, stale-fingerprint, invalid-json, wrong-selected-artifact, blocked partial, and error states.
 
 ## Implementation Sequencing
 
@@ -1116,7 +1118,7 @@ contract without serving stale facts to Pantograph or other clients.
       package-facts contract version, and source fingerprint.
 - [x] Regenerate detail and summary cache rows through the canonical
       selected-model package-facts hydration path.
-- [ ] Use the shared package-facts cache freshness classifier for dry-run
+- [x] Use the shared package-facts cache freshness classifier for dry-run
       inventory, execution decisions, and post-migration validation.
 - [x] Delete or invalidate obsolete empty-selected-artifact rows when the model
       has concrete selected artifacts.
