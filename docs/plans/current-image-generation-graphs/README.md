@@ -1,0 +1,109 @@
+# Current Image Generation Graphs Plan
+
+## Purpose
+This directory contains the active implementation plan for canonical image
+generation graphs, stale graph diagnostics, single-body media retention, and
+backend-owned device/runtime selection.
+
+## Contents
+| File/Folder | Description |
+| ----------- | ----------- |
+| `plan.md` | Entry point that links the split plan sections and states binding standards rules. |
+| `00-objective-scope.md` | Scope, exclusions, and no-fallback/no-legacy boundaries. |
+| `01-inputs-contracts.md` | Codebase findings, constraints, assumptions, and affected contracts. |
+| `02-image-generation-family-planner.md` | Family planner design, reference-repo guidance, and standards matrix. |
+| `03-risks-and-definition-of-done.md` | Risk table and completion criteria. |
+| `04-milestones.md` | Milestone index and ordering rules. |
+| `05-execution-management.md` | Commit cadence, worker coordination, re-plan triggers, and execution notes. |
+| `06-device-runtime-selection.md` | Device policy, runtime variant, adapter boundary, and scheduler decision design. |
+| `07-pumas-library-image-generation-facts.md` | Pumas Library producer-fact plan for image-generation family facts, diffusers component evidence, GGUF metadata, summaries, and update cursors. |
+| `milestones/` | Per-slice implementation checklists and verification gates. |
+
+## Problem
+Pantograph had stale diffusion graph shapes, duplicated media payloads, and
+scattered backend/device selection paths. This plan defines the canonical graph,
+inference, artifact, and runtime-selection work needed to replace those paths.
+
+## Constraints
+- Backend services are the source of truth for graph validity, diagnostics,
+  model facts, runtime readiness, and execution contracts.
+- No fallback or legacy execution behavior is allowed.
+- Pumas remains the canonical model source.
+- Implementation must follow the standards in the developer-tooling
+  `Coding-Standards` repository.
+
+## Decision
+Use split plan files so each high-risk area has focused acceptance criteria
+while `plan.md` and `04-milestones.md` preserve execution order. Contract gates
+come before implementation, then thin vertical slices validate behavior before
+adjacent slices expand shared layers.
+
+Pumas is split across the execution order. Pumas P0-P1 starts after Pantograph
+Milestone 0 so the package-facts contract is available early. Pumas P2-P5 may
+run in parallel with Pantograph Milestones 1-5, but must complete and be pinned
+before Pantograph Milestone 6 consumes real image-generation package facts.
+
+## Alternatives Rejected
+- Single large plan file: rejected because the plan already spans graph,
+  inference, runtime, frontend, persistence, and diagnostics concerns.
+- Compatibility-first migration: rejected because Pantograph does not preserve
+  old graph/runtime/device execution shapes.
+
+## Invariants
+- Old graph, backend, runtime, device, and worker execution methods are removed
+  or replaced, not used as fallbacks.
+- Frontend and Tauri render or transport backend-owned facts; they do not define
+  execution semantics.
+- Shared contracts are frozen before parallel implementation begins.
+
+## Revisit Triggers
+- A canonical contract cannot represent a required backend/device/runtime fact.
+- A standards gate requires changing milestone order or write ownership.
+- A vertical slice cannot be verified without adding fallback behavior.
+
+## Dependencies
+**Internal:** Pantograph workflow service, node engine, inference crate,
+embedded runtime, diagnostics ledger, ArtifactStore, Tauri IPC, frontend
+workbench components, and tracked workflow fixtures.
+
+**External:** Pumas Library package facts, Python/PyTorch diffusers execution,
+llama.cpp managed runtime artifacts, and reference guidance from Transformers,
+ComfyUI, and InvokeAI.
+
+## Related ADRs
+- None identified as of 2026-05-10.
+- Reason: The implementation is still in planning and has not yet introduced a
+  committed architecture change requiring an ADR.
+- Revisit trigger: Implementation changes runtime backend ownership, scheduler
+  ownership, or persisted contract policy beyond this plan.
+
+## Usage Examples
+Start with `plan.md`, then execute milestones in `04-milestones.md` order.
+During implementation, update `05-execution-management.md` after each validated
+slice with verification results, deviations, and discovered issues.
+
+## API Consumer Contract
+- Supported inputs: plan readers should treat `plan.md` and `04-milestones.md`
+  as the execution entry points.
+- Outputs: implementation tasks, verification gates, re-plan triggers, and
+  standards constraints.
+- Lifecycle: update the relevant milestone status and execution notes after
+  each verified slice.
+- Error behavior: if implementation discovers a conflict with standards or the
+  no-fallback rule, stop and re-plan before production edits continue.
+- Compatibility: this plan intentionally allows breaking changes to old
+  Pantograph graph/runtime/device shapes.
+
+## Structured Producer Contract
+- Stable fields: milestone titles, task checkboxes, verification bullets, risk
+  mitigations, re-plan triggers, and execution notes.
+- Volatile fields: status, verification results, worker reports, and follow-up
+  issues.
+- Default semantics: unchecked tasks are not started unless a status note says
+  otherwise.
+- Ordering: milestone order in `04-milestones.md` is binding unless the plan is
+  updated.
+- Compatibility: old plan assumptions are replaced by explicit execution notes
+  rather than kept as parallel interpretations.
+- Regeneration/migration: split files may be reorganized only with this README
+  and `plan.md` updated in the same documentation slice.
