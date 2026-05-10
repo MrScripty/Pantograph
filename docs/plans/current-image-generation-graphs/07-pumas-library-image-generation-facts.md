@@ -825,6 +825,14 @@ Any performance claim, such as selector snapshots staying within the existing
 fast-startup target, must be measured with the same benchmark or timing harness
 used by Pumas for the selector snapshot path.
 
+## Implementation Findings
+
+- 2026-05-10 P0 module split finding: existing package-facts detail and summary cache paths still rely on the legacy empty selected-artifact key (None / empty string) even when resolver internals have an entry path. P1 selected-artifact-aware cache work must replace this with a PackageInspectionContext-owned selected artifact identity before multi-artifact image/GGUF facts are treated as stable.
+- 2026-05-10 P1 DTO finding: current fixtures and PACKAGE_FACTS_CONTRACT_VERSION = 1 are sensitive to wire-shape changes. Image-generation facts require an explicit contract-version bump and fixture updates when diffusers/GGUF DTOs are added.
+- 2026-05-10 large-file rationale: library.rs remains over the decomposition threshold at 11637 lines after package-facts extraction. The remaining size is legacy ModelLibrary facade, migration, import, projection, and test ownership outside this image-generation facts slice; further reductions should proceed through separate facade/migration/import decomposition rather than blocking the DTO and extractor work.
+- 2026-05-10 P2 extractor finding: the initial Diffusers extractor now reads `model_index.json` and known nested component configs, but JSON reads still use full-file reads. P2 is not complete until the extractor uses an explicit bounded JSON reader and covers large/malformed fixture behavior.
+- 2026-05-10 P3 integration finding: the initial GGUF extractor reads bounded header metadata and preserves corrupt legacy placeholder files as invalid evidence, but resolver wiring still selects the first non-mmproj GGUF from the selected files. Multi-quant selected-artifact-aware cache semantics remain open until `PackageInspectionContext` owns the concrete selected artifact id/path end to end.
+
 ## Implementation Sequencing
 
 Execution should proceed in validated thin slices:
@@ -867,33 +875,33 @@ shared DTOs, cache schema, and public API wiring remain serial integration work.
 image-generation behavior.
 
 **Tasks:**
-- [ ] Extract existing package-fact helper logic from `library.rs` into
+- [x] Extract existing package-fact helper logic from `library.rs` into
       `model_library/package_facts/` modules without changing public API
       behavior.
-- [ ] Add `package_facts/manifest.rs` and move existing selected-file and
+- [x] Add `package_facts/manifest.rs` and move existing selected-file and
       fingerprint file-list logic behind a behavior-preserving package
       inspection manifest.
-- [ ] Move selected artifact, component, Transformers config, generation
+- [x] Move selected artifact, component, Transformers config, generation
       defaults, custom-code evidence, and summary projection helpers behind
       focused module functions.
-- [ ] Introduce `PackageInspectionContext` as the single internal source of
+- [x] Introduce `PackageInspectionContext` as the single internal source of
       selected artifact identity for resolver locks, cache reads/writes,
       manifest construction, `PumasModelRef`, update events, and summary
       projection.
-- [ ] Replace package-facts extraction and fingerprinting uses of filename-only
+- [x] Replace package-facts extraction and fingerprinting uses of filename-only
       selected-file fallback with manifest entries that preserve relative paths.
-- [ ] Preserve existing cache behavior while making the refactor boundary ready
+- [x] Preserve existing cache behavior while making the refactor boundary ready
       for selected-artifact-aware cache keys in P1.
-- [ ] Keep `ModelLibrary::resolve_model_package_facts` and selector APIs as thin
+- [x] Keep `ModelLibrary::resolve_model_package_facts` and selector APIs as thin
       orchestration facades.
-- [ ] Add `model_library/package_facts/README.md` with ownership, API consumer
+- [x] Add `model_library/package_facts/README.md` with ownership, API consumer
       contract, structured producer contract, unsupported behavior, and revisit
       triggers.
-- [ ] Record any remaining large-file rationale if `library.rs` still exceeds the
+- [x] Record any remaining large-file rationale if `library.rs` still exceeds the
       standards soft threshold after package-facts extraction.
 - [ ] Record a decomposition review for `models/package_facts.rs` if the DTO
       additions push it beyond a readable single-contract module.
-- [ ] Keep package-facts helpers `pub(crate)` unless they are intentionally part
+- [x] Keep package-facts helpers `pub(crate)` unless they are intentionally part
       of the public crate contract.
 
 **Verification:**
@@ -921,16 +929,16 @@ image-generation behavior.
 and GGUF facts.
 
 **Tasks:**
-- [ ] Add or extend package-facts DTOs for diffusers bundle evidence.
-- [ ] Add or extend package-facts DTOs for GGUF metadata evidence.
-- [ ] Add explicit source fields for derived facts.
+- [x] Add or extend package-facts DTOs for diffusers bundle evidence.
+- [x] Add or extend package-facts DTOs for GGUF metadata evidence.
+- [x] Add explicit source fields for derived facts.
 - [ ] Add selected-artifact-aware detail and summary cache semantics to the DTO
       contract, including populated `PumasModelRef.selected_artifact_id` and
       `selected_artifact_path` when available.
-- [ ] Add or extend public summary/selector status DTOs so clients can
+- [x] Add or extend public summary/selector status DTOs so clients can
       distinguish fresh, missing, stale-contract, stale-fingerprint,
       invalid-json, wrong-selected-artifact, and error states.
-- [ ] Add `PackageInspectionManifest` DTOs or internal structs with documented
+- [x] Add `PackageInspectionManifest` DTOs or internal structs with documented
       semantics when manifests are not public.
 - [ ] Add a selected-artifact contract fixture before family-specific fixtures,
       covering a multi-artifact package with distinct selected artifact ids,
@@ -938,19 +946,19 @@ and GGUF facts.
 - [ ] Replace machine use of `ProcessorComponentFacts.message` with typed fields
       for tokenizer details, shard provenance, quantization, family evidence,
       scheduler facts, and component semantics where those facts are consumed.
-- [ ] Add round-trip fixtures for the new DTO shape.
-- [ ] Document that Pumas facts are advisory/factual and not scheduler policy.
-- [ ] Document that package-family labels are source-tagged evidence, not support
+- [x] Add round-trip fixtures for the new DTO shape.
+- [x] Document that Pumas facts are advisory/factual and not scheduler policy.
+- [x] Document that package-family labels are source-tagged evidence, not support
       verdicts.
-- [ ] Update every exported host-language or frontend contract surface that
+- [x] Update every exported host-language or frontend contract surface that
       consumes the changed DTO shape, or record why the surface is not affected.
 - [ ] Prefer generated schema/type output for host-language mirrors when Pumas
       already has an owned generation path. If a mirror remains handwritten, add
       fixture-driven tests proving Rust serde output and the mirror type stay in
       sync.
-- [ ] Bump the package-facts contract version when persisted or public serde
+- [x] Bump the package-facts contract version when persisted or public serde
       shape changes.
-- [ ] Add explicit serde `rename_all` or field renames for new public DTOs so
+- [x] Add explicit serde `rename_all` or field renames for new public DTOs so
       the wire format does not rely on Rust identifier casing.
 
 **Verification:**
@@ -974,22 +982,22 @@ and GGUF facts.
 **Goal:** Extract nested diffusers package facts from local bundle files.
 
 **Tasks:**
-- [ ] Parse `model_index.json` into pipeline and component facts.
-- [ ] Parse nested component configs for scheduler, transformer, UNet, VAE, text
+- [x] Parse `model_index.json` into pipeline and component facts.
+- [x] Parse nested component configs for scheduler, transformer, UNet, VAE, text
       encoders, tokenizers, processors, and image processors.
 - [ ] Emit missing/invalid/ambiguous component diagnostics.
-- [ ] Preserve component source library and class names.
-- [ ] Keep all reads inside the validated bundle root.
+- [x] Preserve component source library and class names.
+- [x] Keep all reads inside the validated bundle root.
 - [ ] Reuse Pumas path normalization/component path validation helpers, but keep
       import-time support filters out of package-fact extraction.
-- [ ] Split low-level Diffusers evidence parsing from import suitability
+- [x] Split low-level Diffusers evidence parsing from import suitability
       validation so unsupported, unknown, and ambiguous bundles still produce
       source-tagged facts.
-- [ ] Emit `unknown` or `ambiguous` when family evidence cannot be derived from
+- [x] Emit `unknown` or `ambiguous` when family evidence cannot be derived from
       package-standard files, even if names appear suggestive.
 - [ ] Bound every JSON file read by manifest entry type and package-root
       validation before parsing.
-- [ ] Normalize family and component labels through typed enums or validated
+- [x] Normalize family and component labels through typed enums or validated
       string constants, not ad hoc strings scattered across extractors.
 
 **Verification:**
@@ -1008,21 +1016,21 @@ and GGUF facts.
 **Goal:** Expose header-derived GGUF facts for llama.cpp planning.
 
 **Tasks:**
-- [ ] Parse selected GGUF header metadata without loading model tensors.
-- [ ] Extract or add a bounded low-level GGUF metadata reader that is separate
+- [x] Parse selected GGUF header metadata without loading model tensors.
+- [x] Extract or add a bounded low-level GGUF metadata reader that is separate
       from model identification and name/basename classification policy.
-- [ ] Expose architecture, quantization/file type, tokenizer/chat-template,
+- [x] Expose architecture, quantization/file type, tokenizer/chat-template,
       context length, embedding length, layer/attention facts when present.
-- [ ] Preserve weaker filename-derived quantization only as source-tagged
+- [x] Preserve weaker filename-derived quantization only as source-tagged
       diagnostic evidence.
-- [ ] Preserve mmproj companion facts.
+- [x] Preserve mmproj companion facts.
 - [ ] Scope GGUF evidence to the selected GGUF artifact and selected companion
       artifacts instead of model-level filename aggregation.
-- [ ] Keep GGUF parsing in a small bounded module; if a parser dependency is
+- [x] Keep GGUF parsing in a small bounded module; if a parser dependency is
       added, record dependency cost, license, feature flags, and why in-house
       parsing is insufficient.
-- [ ] Use checked arithmetic for header offsets, lengths, and allocation sizes.
-- [ ] Keep raw GGUF header facts source-tagged and separate from any classifier
+- [x] Use checked arithmetic for header offsets, lengths, and allocation sizes.
+- [x] Keep raw GGUF header facts source-tagged and separate from any classifier
       interpretation that currently lives in broad file identification code.
 
 **Verification:**
