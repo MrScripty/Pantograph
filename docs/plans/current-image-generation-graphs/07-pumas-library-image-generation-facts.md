@@ -990,7 +990,7 @@ and GGUF facts.
 - [x] Emit missing/invalid/ambiguous component diagnostics.
 - [x] Preserve component source library and class names.
 - [x] Keep all reads inside the validated bundle root.
-- [ ] Reuse Pumas path normalization/component path validation helpers, but keep
+- [x] Reuse Pumas path normalization/component path validation helpers, but keep
       import-time support filters out of package-fact extraction.
 - [x] Split low-level Diffusers evidence parsing from import suitability
       validation so unsupported, unknown, and ambiguous bundles still produce
@@ -1060,18 +1060,18 @@ and GGUF facts.
       may query cached summaries, but must not maintain separate projection
       semantics.
 - [x] Keep selector snapshot behavior SQLite-backed and non-hydrating.
-- [ ] Advance update cursors when package facts or summaries change.
+- [x] Advance update cursors when package facts or summaries change.
 - [x] Preserve explicit missing/stale/invalid summary states.
 - [x] Use the package inspection manifest to compute source fingerprints for
       detail and summary cache rows.
 - [x] Keep selector snapshots from constructing package inspection manifests or
       parsing nested package files.
-- [ ] Keep summary repair and update-event publication in the package-facts
+- [x] Keep summary repair and update-event publication in the package-facts
       facade or summary module; selector SQL remains a read-only projection.
 - [x] Ensure selector snapshots and summary snapshot APIs use the same
       selected-artifact-aware cached-summary query shape, including explicit
       default-artifact behavior only when no selected artifact exists.
-- [ ] Preserve the existing Pumas package-facts lock/update-feed model unless a
+- [x] Preserve the existing Pumas package-facts lock/update-feed model unless a
       simpler measured alternative is explicitly re-planned.
 
 **Verification:**
