@@ -830,7 +830,7 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P0 module split finding: existing package-facts detail and summary cache paths still rely on the legacy empty selected-artifact key (None / empty string) even when resolver internals have an entry path. P1 selected-artifact-aware cache work must replace this with a PackageInspectionContext-owned selected artifact identity before multi-artifact image/GGUF facts are treated as stable.
 - 2026-05-10 P1 DTO finding: current fixtures and PACKAGE_FACTS_CONTRACT_VERSION = 1 are sensitive to wire-shape changes. Image-generation facts require an explicit contract-version bump and fixture updates when diffusers/GGUF DTOs are added.
 - 2026-05-10 large-file rationale: library.rs remains over the decomposition threshold at 11637 lines after package-facts extraction. The remaining size is legacy ModelLibrary facade, migration, import, projection, and test ownership outside this image-generation facts slice; further reductions should proceed through separate facade/migration/import decomposition rather than blocking the DTO and extractor work.
-- 2026-05-10 P2 extractor finding: the initial Diffusers extractor now reads `model_index.json` and known nested component configs through an explicit bounded UTF-8 JSON reader. Missing/invalid/ambiguous component diagnostics still need to be expanded beyond invalid `model_index.json` diagnostics.
+- 2026-05-10 P2 extractor finding: the initial Diffusers extractor now reads `model_index.json` and known nested component configs through an explicit bounded UTF-8 JSON reader, and it now emits component missing/invalid and ambiguous-family diagnostics. Remaining P2 fixture breadth still needs family-specific fixtures and malformed large JSON coverage beyond the unit-level oversized file case.
 - 2026-05-10 P3 integration finding: the initial GGUF extractor reads bounded header metadata and preserves corrupt legacy placeholder files as invalid evidence, but resolver wiring still selects the first non-mmproj GGUF from the selected files. Multi-quant selected-artifact-aware cache semantics remain open until `PackageInspectionContext` owns the concrete selected artifact id/path end to end.
 
 ## Implementation Sequencing
@@ -985,7 +985,7 @@ and GGUF facts.
 - [x] Parse `model_index.json` into pipeline and component facts.
 - [x] Parse nested component configs for scheduler, transformer, UNet, VAE, text
       encoders, tokenizers, processors, and image processors.
-- [ ] Emit missing/invalid/ambiguous component diagnostics.
+- [x] Emit missing/invalid/ambiguous component diagnostics.
 - [x] Preserve component source library and class names.
 - [x] Keep all reads inside the validated bundle root.
 - [ ] Reuse Pumas path normalization/component path validation helpers, but keep
