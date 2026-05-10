@@ -209,6 +209,10 @@ Update during implementation:
   class contract. `InferenceRequestLifecycleEvent` now has an optional typed
   `selected_device_class` field, and direct event constructors were updated
   without deriving class from raw backend config.
+- 2026-05-10: Continued Milestone 5 by wiring gateway lifecycle producers to
+  canonical active runtime device facts. Request lifecycle events now carry
+  selected device class/id from `LlamaCppActiveRuntimeDescriptor` when present
+  and do not report config-only raw device strings as selected devices.
 
 ## Commit Cadence Notes
 
@@ -375,6 +379,10 @@ Worker rules:
   Gateway population, diagnostics-ledger persistence/projection, and run
   inspection still need follow-up slices to consume canonical resolved device
   facts rather than raw config strings.
+- Milestone 5 gateway lifecycle events now emit selected device class/id from
+  canonical active runtime facts. Diagnostics-ledger persistence/projection,
+  run inspection facts, scheduler admission, and managed runtime variant
+  readiness still need follow-up slices.
 
 ### Deviations
 

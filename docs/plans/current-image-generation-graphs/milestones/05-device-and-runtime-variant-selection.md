@@ -383,6 +383,34 @@ typed diagnostic and the canonical design is fixed.
   - Discovered follow-up: diagnostics-ledger persistence and run inspection do
     not yet store or project `selected_device_class`; this is deferred to a
     ledger-specific slice after gateway producers emit canonical facts.
+- 2026-05-10 slice: gateway lifecycle selected-device producer.
+  - Smallest useful vertical slice: route request lifecycle event selected
+    device class/id through gateway lifecycle context from active llama.cpp
+    runtime descriptors, without changing diagnostics-ledger persistence, run
+    inspection, scheduler admission, managed runtime variant state, frontend
+    bindings, generated outputs, or lockfiles.
+  - Allowed write set: `crates/inference/src/gateway.rs`,
+    `crates/inference/src/gateway_tests.rs`,
+    `crates/inference/src/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: lifecycle events now use
+    `active_llamacpp_runtime_descriptor()` selected facts only. A
+    config-only raw `BackendConfig.device` value, including explicit
+    `"cuda:0"`, is not reported as a selected device unless the active runtime
+    descriptor carries canonical class/id facts.
+  - Standards/blast-radius gate for `gateway.rs`: crate role remains the
+    inference lifecycle facade; public facade shape is unchanged from the prior
+    DTO slice; runtime lifecycle owner is unchanged; persisted ledger schema,
+    path validation, frontend behavior, generated files, feature flags,
+    dependencies, and lockfiles are untouched; test isolation uses crate-local
+    gateway lifecycle tests with a mock active llama.cpp descriptor.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference gateway::tests`,
+    `cargo test -p inference active_runtime_descriptor`, and
+    `git diff --check`.
+  - Remaining follow-up: diagnostics-ledger persistence/projection and run
+    inspection still do not retain or display selected device class; scheduler
+    admission still needs resolved backend/runtime/device decisions end to end.
 
 **Verification:**
 

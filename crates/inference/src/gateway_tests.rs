@@ -8,11 +8,13 @@ use futures_util::{stream, StreamExt};
 use tokio::sync::mpsc;
 
 use crate::backend::BackendStartOutcome;
+use crate::config::DeviceConfig;
 use crate::model_contracts::{
     CacheGenerationOptions, GenerationOptions, InferenceLifecyclePhase, InferenceTaskId,
     LengthGenerationOptions, OptionSupportState, ResolvedModelPackageFacts,
     SamplingGenerationOptions, StoppingGenerationOptions,
 };
+use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, DepthEstimationRequest, EncodedAudio,
     ImageGenerationRequest, ImageUnderstandingRequest, InferenceExecutionInput,
@@ -21,11 +23,13 @@ use crate::types::{
     InferenceRequestLifecycleEventSinkError, InferenceUsage, MultimodalGenerationRequest,
     MultimodalInputPart, RuntimeFactReadiness, VideoUnderstandingRequest,
 };
+use crate::{InferenceDeviceClass, InferenceDeviceId};
 
 #[path = "gateway_tests/start_config.rs"]
 mod start_config;
 
 struct MockImageBackend;
+struct MockActiveLlamaBackend;
 struct MockHttpBackend;
 struct MockReusedBackend;
 struct MockImplicitLifecycleBackend;
@@ -217,6 +221,103 @@ impl InferenceBackend for MockImageBackend {
             language: request.language,
             duration_seconds: Some(1.5),
             segments: Vec::new(),
+            metadata: serde_json::Value::Null,
+        })
+    }
+}
+
+#[async_trait]
+impl InferenceBackend for MockActiveLlamaBackend {
+    fn name(&self) -> &'static str {
+        "Mock llama.cpp"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock llama.cpp backend with active runtime facts"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            embeddings: true,
+            device_selection: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome {
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("started_mock_llama_runtime".to_string()),
+        })
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        Some("http://127.0.0.1:11434".to_string())
+    }
+
+    fn active_llamacpp_runtime_descriptor(&self) -> Option<LlamaCppActiveRuntimeDescriptor> {
+        Some(LlamaCppActiveRuntimeDescriptor {
+            mode: LlamaCppRuntimeMode::Embedding,
+            port: 11434,
+            model_path: PathBuf::from("/models/embed.gguf"),
+            mmproj_path: None,
+            device: DeviceConfig {
+                device: "CUDA0".to_string(),
+                gpu_layers: 40,
+            },
+            selected_device_class: Some(InferenceDeviceClass::Cuda),
+            selected_device_id: Some(InferenceDeviceId::parse("cuda:0").expect("valid cuda id")),
+            context_size: None,
+            cpu_threads: None,
+            batch_size: None,
+            ubatch_size: None,
+        })
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+    {
+        Ok(Box::pin(stream::iter([Ok(ChatChunk {
+            content: None,
+            done: true,
+            usage: None,
+            cache_handle_id: None,
+        })])))
+    }
+
+    async fn embeddings(
+        &self,
+        texts: Vec<String>,
+        _model: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Ok(texts
+            .into_iter()
+            .map(|text| EmbeddingResult {
+                vector: vec![text.len() as f32],
+                token_count: text.split_whitespace().count().max(1),
+            })
+            .collect())
+    }
+
+    async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Ok(RerankResponse {
+            results: Vec::new(),
             metadata: serde_json::Value::Null,
         })
     }
@@ -1699,7 +1800,37 @@ async fn test_execute_typed_validates_before_backend_execution() {
 }
 
 #[tokio::test]
-async fn test_lifecycle_events_carry_explicit_selected_device() {
+async fn test_lifecycle_events_carry_active_runtime_selected_device() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockActiveLlamaBackend), "llama.cpp");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway
+        .start(&BackendConfig::default())
+        .await
+        .expect("gateway should start with active llama runtime");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    gateway
+        .embeddings_with_lifecycle(
+            vec!["alpha".to_string()],
+            "mock-embedding",
+            Some("embedding-device".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("embedding request should execute");
+
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert!(events
+        .iter()
+        .all(|event| event.selected_device_class == Some(InferenceDeviceClass::Cuda)));
+    assert!(events
+        .iter()
+        .all(|event| event.selected_device_id.as_deref() == Some("cuda:0")));
+}
+
+#[tokio::test]
+async fn test_lifecycle_events_do_not_report_config_only_device_as_selected() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
     gateway
@@ -1725,7 +1856,10 @@ async fn test_lifecycle_events_carry_explicit_selected_device() {
     assert_eq!(events.len(), 3);
     assert!(events
         .iter()
-        .all(|event| event.selected_device_id.as_deref() == Some("cuda:0")));
+        .all(|event| event.selected_device_class.is_none()));
+    assert!(events
+        .iter()
+        .all(|event| event.selected_device_id.is_none()));
 }
 
 #[tokio::test]
@@ -1753,6 +1887,9 @@ async fn test_lifecycle_events_do_not_report_auto_as_selected_device() {
 
     let events = sink.events();
     assert_eq!(events.len(), 3);
+    assert!(events
+        .iter()
+        .all(|event| event.selected_device_class.is_none()));
     assert!(events
         .iter()
         .all(|event| event.selected_device_id.is_none()));

@@ -21,6 +21,7 @@ use crate::backend::{
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::constants::device_types;
+use crate::device_contracts::InferenceDeviceClass;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase, ModelArtifactKind,
@@ -840,8 +841,13 @@ impl InferenceGateway {
         emit_typed_boundary_lifecycle: bool,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
     {
-        let (backend_key, runtime_id, runtime_instance_id, selected_device_id) =
-            self.lifecycle_event_context().await;
+        let (
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            selected_device_class,
+            selected_device_id,
+        ) = self.lifecycle_event_context().await;
         let model_id = model_id_override.or_else(|| chat_request_model_id(&request_json));
 
         record_inference_lifecycle_event(
@@ -851,6 +857,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -866,6 +873,7 @@ impl InferenceGateway {
                 backend_key,
                 runtime_id,
                 runtime_instance_id,
+                selected_device_class,
                 selected_device_id,
                 model_id,
                 compatibility_report,
@@ -881,6 +889,7 @@ impl InferenceGateway {
                     backend_key.clone(),
                     runtime_id.clone(),
                     runtime_instance_id.clone(),
+                    selected_device_class,
                     selected_device_id.clone(),
                     model_id.clone(),
                     InferenceRequestLifecycleEventKind::Failed,
@@ -896,6 +905,7 @@ impl InferenceGateway {
                     backend_key,
                     runtime_id,
                     runtime_instance_id,
+                    selected_device_class,
                     selected_device_id,
                     model_id,
                     InferenceRequestLifecycleEventKind::CleanupCompleted,
@@ -927,8 +937,13 @@ impl InferenceGateway {
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
     {
-        let (backend_key, runtime_id, runtime_instance_id, selected_device_id) =
-            self.lifecycle_event_context().await;
+        let (
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            selected_device_class,
+            selected_device_id,
+        ) = self.lifecycle_event_context().await;
         let request_id = request.request_id.clone();
         let model_id = typed_request_lifecycle_model_id(&request);
         let task_id = Some(request.task_id.canonical_label().to_string());
@@ -940,6 +955,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
         );
@@ -951,6 +967,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -968,6 +985,7 @@ impl InferenceGateway {
                 backend_key,
                 runtime_id,
                 runtime_instance_id,
+                selected_device_class,
                 selected_device_id,
                 model_id,
                 &result,
@@ -993,6 +1011,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             &Ok(()),
@@ -1008,6 +1027,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -1022,6 +1042,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             &request_json_result,
@@ -1064,8 +1085,13 @@ impl InferenceGateway {
         request_id: Option<String>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     ) -> Result<Vec<EmbeddingResult>, GatewayError> {
-        let (backend_key, runtime_id, runtime_instance_id, selected_device_id) =
-            self.lifecycle_event_context().await;
+        let (
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            selected_device_class,
+            selected_device_id,
+        ) = self.lifecycle_event_context().await;
         let model_id = non_empty_model_id(model);
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
@@ -1074,6 +1100,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -1090,6 +1117,7 @@ impl InferenceGateway {
             backend_key,
             runtime_id,
             runtime_instance_id,
+            selected_device_class,
             selected_device_id,
             model_id,
             &result,
@@ -1120,8 +1148,13 @@ impl InferenceGateway {
         request_id: Option<String>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     ) -> Result<RerankResponse, GatewayError> {
-        let (backend_key, runtime_id, runtime_instance_id, selected_device_id) =
-            self.lifecycle_event_context().await;
+        let (
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            selected_device_class,
+            selected_device_id,
+        ) = self.lifecycle_event_context().await;
         let model_id = non_empty_model_id(&request.model);
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
@@ -1130,6 +1163,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -1144,6 +1178,7 @@ impl InferenceGateway {
             backend_key,
             runtime_id,
             runtime_instance_id,
+            selected_device_class,
             selected_device_id,
             model_id,
             &result,
@@ -1188,8 +1223,13 @@ impl InferenceGateway {
         request_id: Option<String>,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     ) -> Result<ImageGenerationResult, GatewayError> {
-        let (backend_key, runtime_id, runtime_instance_id, selected_device_id) =
-            self.lifecycle_event_context().await;
+        let (
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            selected_device_class,
+            selected_device_id,
+        ) = self.lifecycle_event_context().await;
         let model_id = non_empty_model_id(&request.model);
         record_inference_lifecycle_event(
             lifecycle_sink.as_ref(),
@@ -1198,6 +1238,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -1212,6 +1253,7 @@ impl InferenceGateway {
             backend_key,
             runtime_id,
             runtime_instance_id,
+            selected_device_class,
             selected_device_id,
             model_id,
             &result,
@@ -1248,8 +1290,13 @@ impl InferenceGateway {
         request: InferenceExecutionRequest,
         lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
     ) -> Result<InferenceExecutionResult, GatewayError> {
-        let (backend_key, runtime_id, runtime_instance_id, selected_device_id) =
-            self.lifecycle_event_context().await;
+        let (
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            selected_device_class,
+            selected_device_id,
+        ) = self.lifecycle_event_context().await;
         let request_id = request.request_id.clone();
         let model_id = typed_request_lifecycle_model_id(&request);
         let task_id = Some(request.task_id.canonical_label().to_string());
@@ -1263,6 +1310,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
         );
@@ -1274,6 +1322,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -1291,6 +1340,7 @@ impl InferenceGateway {
                 backend_key,
                 runtime_id,
                 runtime_instance_id,
+                selected_device_class,
                 selected_device_id,
                 model_id,
                 &result,
@@ -1322,6 +1372,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             &Ok(()),
@@ -1342,6 +1393,7 @@ impl InferenceGateway {
                 backend_key.clone(),
                 runtime_id.clone(),
                 runtime_instance_id.clone(),
+                selected_device_class,
                 selected_device_id.clone(),
                 model_id.clone(),
             );
@@ -1353,6 +1405,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Started,
@@ -1369,6 +1422,7 @@ impl InferenceGateway {
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             &result,
@@ -1386,6 +1440,7 @@ impl InferenceGateway {
                 backend_key.clone(),
                 runtime_id.clone(),
                 runtime_instance_id.clone(),
+                selected_device_class,
                 selected_device_id.clone(),
                 model_id.clone(),
             );
@@ -1397,6 +1452,7 @@ impl InferenceGateway {
                 backend_key,
                 runtime_id,
                 runtime_instance_id,
+                selected_device_class,
                 selected_device_id,
                 model_id,
             );
@@ -1547,18 +1603,26 @@ impl InferenceGateway {
         Option<String>,
         Option<String>,
         Option<String>,
+        Option<InferenceDeviceClass>,
         Option<String>,
     ) {
         let runtime_snapshot = self.runtime_lifecycle_snapshot().await;
         let runtime_id = runtime_snapshot.runtime_id.clone();
         let runtime_instance_id = runtime_snapshot.runtime_instance_id.clone();
         let backend_key = Some(canonical_backend_key(&self.current_backend_name().await));
-        let current_runtime_config = self.current_runtime_config.read().await;
-        let selected_device_id = selected_device_id_from_config(current_runtime_config.as_ref());
+        let active_runtime = self.active_llamacpp_runtime_descriptor().await;
+        let selected_device_class = active_runtime
+            .as_ref()
+            .and_then(|runtime| runtime.selected_device_class);
+        let selected_device_id = active_runtime
+            .as_ref()
+            .and_then(|runtime| runtime.selected_device_id.as_ref())
+            .map(|device_id| device_id.as_str().to_string());
         (
             backend_key,
             runtime_id,
             runtime_instance_id,
+            selected_device_class,
             selected_device_id,
         )
     }
@@ -1633,6 +1697,7 @@ struct LifecycleStream {
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     compatibility_report: Option<InferenceCompatibilityReportSummary>,
@@ -1653,6 +1718,7 @@ impl LifecycleStream {
         backend_key: Option<String>,
         runtime_id: Option<String>,
         runtime_instance_id: Option<String>,
+        selected_device_class: Option<InferenceDeviceClass>,
         selected_device_id: Option<String>,
         model_id: Option<String>,
         compatibility_report: Option<InferenceCompatibilityReportSummary>,
@@ -1667,6 +1733,7 @@ impl LifecycleStream {
             backend_key,
             runtime_id,
             runtime_instance_id,
+            selected_device_class,
             selected_device_id,
             model_id,
             compatibility_report,
@@ -1686,6 +1753,7 @@ impl LifecycleStream {
             self.backend_key.clone(),
             self.runtime_id.clone(),
             self.runtime_instance_id.clone(),
+            self.selected_device_class,
             self.selected_device_id.clone(),
             self.model_id.clone(),
             kind,
@@ -1702,6 +1770,7 @@ impl LifecycleStream {
             self.backend_key.clone(),
             self.runtime_id.clone(),
             self.runtime_instance_id.clone(),
+            self.selected_device_class,
             self.selected_device_id.clone(),
             self.model_id.clone(),
             kind,
@@ -1740,6 +1809,7 @@ impl LifecycleStream {
             self.backend_key.clone(),
             self.runtime_id.clone(),
             self.runtime_instance_id.clone(),
+            self.selected_device_class,
             self.selected_device_id.clone(),
             self.model_id.clone(),
         );
@@ -2356,6 +2426,7 @@ fn record_inference_lifecycle_event(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
@@ -2369,6 +2440,7 @@ fn record_inference_lifecycle_event(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         kind,
@@ -2384,6 +2456,7 @@ fn record_inference_lifecycle_phase_event(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
@@ -2397,6 +2470,7 @@ fn record_inference_lifecycle_phase_event(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         kind,
@@ -2414,6 +2488,7 @@ fn record_model_package_resolution_lifecycle_if_present(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
 ) {
@@ -2431,6 +2506,7 @@ fn record_model_package_resolution_lifecycle_if_present(
         backend_key.clone(),
         runtime_id.clone(),
         runtime_instance_id.clone(),
+        selected_device_class,
         selected_device_id.clone(),
         model_id.clone(),
         InferenceRequestLifecycleEventKind::Started,
@@ -2451,6 +2527,7 @@ fn record_model_package_resolution_lifecycle_if_present(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         &Ok::<(), GatewayError>(()),
@@ -2486,6 +2563,7 @@ fn record_inference_lifecycle_phase_event_with_option_diagnostics(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
@@ -2500,6 +2578,7 @@ fn record_inference_lifecycle_phase_event_with_option_diagnostics(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         kind,
@@ -2519,6 +2598,7 @@ fn record_inference_lifecycle_phase_event_with_diagnostics(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
@@ -2535,6 +2615,7 @@ fn record_inference_lifecycle_phase_event_with_diagnostics(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         kind,
@@ -2558,6 +2639,7 @@ fn record_inference_lifecycle_phase_event_with_references(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
@@ -2579,7 +2661,7 @@ fn record_inference_lifecycle_phase_event_with_references(
         backend_key,
         runtime_id,
         runtime_instance_id,
-        selected_device_class: None,
+        selected_device_class,
         selected_device_id,
         selected_network_node_id: None,
         model_id,
@@ -2605,6 +2687,7 @@ fn record_non_streaming_lifecycle_result<T>(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
@@ -2616,6 +2699,7 @@ fn record_non_streaming_lifecycle_result<T>(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         result,
@@ -2631,6 +2715,7 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     result: &Result<InferenceExecutionResult, GatewayError>,
@@ -2647,6 +2732,7 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         result,
@@ -2668,6 +2754,7 @@ fn record_non_streaming_lifecycle_result_with_option_diagnostics<T>(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
@@ -2681,6 +2768,7 @@ fn record_non_streaming_lifecycle_result_with_option_diagnostics<T>(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         result,
@@ -2697,6 +2785,7 @@ fn record_non_streaming_lifecycle_phase_result<T>(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
@@ -2709,6 +2798,7 @@ fn record_non_streaming_lifecycle_phase_result<T>(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         result,
@@ -2725,6 +2815,7 @@ fn record_successful_non_streaming_lifecycle_phase(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
 ) {
@@ -2736,6 +2827,7 @@ fn record_successful_non_streaming_lifecycle_phase(
         backend_key.clone(),
         runtime_id.clone(),
         runtime_instance_id.clone(),
+        selected_device_class,
         selected_device_id.clone(),
         model_id.clone(),
         InferenceRequestLifecycleEventKind::Started,
@@ -2750,6 +2842,7 @@ fn record_successful_non_streaming_lifecycle_phase(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         &result,
@@ -2765,6 +2858,7 @@ fn record_non_streaming_lifecycle_phase_result_with_option_diagnostics<T>(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
@@ -2778,6 +2872,7 @@ fn record_non_streaming_lifecycle_phase_result_with_option_diagnostics<T>(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         result,
@@ -2796,6 +2891,7 @@ fn record_non_streaming_lifecycle_phase_result_with_diagnostics<T>(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
@@ -2811,6 +2907,7 @@ fn record_non_streaming_lifecycle_phase_result_with_diagnostics<T>(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         result,
@@ -2833,6 +2930,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
     backend_key: Option<String>,
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
     selected_device_id: Option<String>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
@@ -2853,6 +2951,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Completed,
@@ -2873,6 +2972,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
             backend_key.clone(),
             runtime_id.clone(),
             runtime_instance_id.clone(),
+            selected_device_class,
             selected_device_id.clone(),
             model_id.clone(),
             InferenceRequestLifecycleEventKind::Failed,
@@ -2895,6 +2995,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
         backend_key,
         runtime_id,
         runtime_instance_id,
+        selected_device_class,
         selected_device_id,
         model_id,
         InferenceRequestLifecycleEventKind::CleanupCompleted,

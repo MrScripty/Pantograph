@@ -145,6 +145,9 @@ normalizing them to executable defaults.
 - Request lifecycle events have an optional typed `selected_device_class`
   contract field. Producers must populate it only from canonical device facts,
   not by inferring scheduler decisions from raw backend config strings.
+- Gateway request lifecycle events source selected device class/id from the
+  active llama.cpp runtime descriptor when it carries canonical facts. A raw
+  `BackendConfig.device` value by itself is not emitted as a selected device.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,
