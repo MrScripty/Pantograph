@@ -165,6 +165,13 @@ Update during implementation:
   and saved graph selected-node preservation into Node-tested presenter
   helpers. The IO Inspector still owns transient selected-node state, but the
   fallback rules are now covered without a DOM test harness.
+- 2026-05-10: Started Milestone 5 with the device/runtime contract gate.
+  `crates/inference/src/device_contracts/` now owns validated device ids,
+  runtime variant ids, backend ids, canonical device policy DTOs, runtime
+  capability facts, backend candidate facts, and selected execution decisions.
+  The slice is additive and does not route legacy `DeviceConfig`,
+  `DeviceBackend::from_id`, raw llama.cpp ordinals, or technical-fit fallback
+  paths through the new contracts.
 
 ## Commit Cadence Notes
 
@@ -303,6 +310,10 @@ Worker rules:
   graph display; larger run component/module renaming is deferred.
 - Milestone 4 saved-graph path and selected-node fallback rules are covered in
   the presenter layer under the existing Node test strategy.
+- Milestone 5 device/runtime contract gate is in place in
+  `crates/inference/src/device_contracts/`, with strict parser rejection for
+  invalid identifiers and selected-candidate errors for zero or multiple
+  candidates.
 
 ### Deviations
 
@@ -364,6 +375,11 @@ Worker rules:
 - Remaining focus-preservation coverage is limited by the no-new-harness
   decision. Add more Node-tested state/event helpers only where behavior can be
   verified without pretending to test browser focus.
+- Continue Milestone 5 by replacing legacy raw device-string execution paths
+  with these contracts. The known legacy issue is
+  `DeviceBackend::from_id`: unknown ids still become `Auto` and malformed
+  ordinals still become device zero until a later adapter-boundary slice
+  removes or replaces that path.
 
 ### Verification Summary
 
@@ -443,6 +459,9 @@ Worker rules:
   `npm run typecheck`, and `git diff --check` passed after moving saved graph
   path selection and selected-node preservation helpers into the presenter
   layer.
+- `cargo fmt --all -- --check`, `cargo test -p inference device_contracts`,
+  and `git diff --check` passed for the Milestone 5 device/runtime contract
+  gate.
 
 ### Traceability Links
 

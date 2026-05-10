@@ -27,6 +27,7 @@ pub mod backend;
 pub mod config;
 pub mod constants;
 pub mod device;
+pub mod device_contracts;
 pub mod embedding_runtime;
 pub mod gateway;
 pub mod kv_cache;
@@ -64,6 +65,13 @@ pub use backend::PyTorchBackend;
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use device::{list_llamacpp_devices, parse_llamacpp_device_listing, DeviceBackend};
+pub use device_contracts::{
+    BackendExecutionCandidate, BackendExecutionDecision, BackendId, BackendObservedThroughputHint,
+    BackendResourceEstimate, DeviceContractError, DeviceResolutionDecision,
+    DeviceResolutionDiagnostic, DeviceResolutionDiagnosticCode, DeviceResolutionDiagnosticSeverity,
+    DeviceResolutionRequest, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
+    RuntimeVariantCapability, RuntimeVariantId,
+};
 pub use embedding_runtime::{DedicatedEmbeddingRuntimeManager, LlamaCppEmbeddingRuntime};
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,

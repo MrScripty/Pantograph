@@ -13,6 +13,7 @@ details.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `backend/` | Backend trait definitions and concrete supported engine adapters such as llama.cpp, Candle, and PyTorch. |
+| `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
 | `gateway_tests.rs` | Gateway lifecycle, request forwarding, runtime reuse, embedding prepare/restore, and mock-backend tests extracted from the production gateway facade. |
@@ -84,6 +85,10 @@ transitional in this crate because existing activation and lease state still
 live here. Shared managed dependency DTOs now live in
 `pantograph-managed-dependencies`, and real media conversion process execution
 stays in the neutral `pantograph-media-conversion` boundary and host adapters.
+Device and runtime-variant contracts live in `device_contracts/` so
+backend adapters can report facts while scheduler admission owns selection.
+The contracts reject invalid raw identifiers at the boundary instead of
+normalizing them to executable defaults.
 
 ## Alternatives Rejected
 
@@ -110,6 +115,15 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
   change is approved.
 - Application-level runtime policy such as admission, reservation, retention,
   and eviction must not be implemented inside gateway or backend modules.
+- `device_contracts/` owns canonical device policy intent, concrete device
+  ids, runtime variant ids, backend candidate facts, and selected execution
+  decisions. Backend-specific strings such as llama.cpp `CUDA0` values remain
+  adapter-local translation details and must not cross scheduler-facing
+  boundaries as trusted internal state.
+- Auto device policy is a first-class scheduler intent. Invalid explicit
+  identifiers, missing candidates, or ambiguous selected candidates must return
+  typed diagnostics/errors and must not be converted into `auto`, CPU, or
+  device zero.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,
@@ -215,7 +229,7 @@ stays in the neutral `pantograph-media-conversion` boundary and host adapters.
 
 ## Dependencies
 
-**Internal:** `backend`, `embedding_runtime`, `gateway`,
+**Internal:** `backend`, `device_contracts`, `embedding_runtime`, `gateway`,
 `managed_media_dependencies`, `managed_redistributables`, `model_contracts`,
 `process`, `types`, `server`, `kv_cache`.
 **External:** `tokio`, `serde`, `reqwest`, `async-trait`, and feature-gated

@@ -11,26 +11,26 @@ typed diagnostic and the canonical design is fixed.
 
 **Tasks:**
 
-- [ ] Define `InferenceDevicePolicy`, `InferenceDeviceClass`,
+- [x] Define `InferenceDevicePolicy`, `InferenceDeviceClass`,
   `InferenceDeviceId`, `RuntimeVariantId`, `RuntimeVariantCapability`,
   `DeviceResolutionRequest`, `DeviceResolutionDecision`, and
   `DeviceResolutionDiagnostic`.
-- [ ] Define `BackendExecutionCandidate` and `BackendExecutionDecision` as the
+- [x] Define `BackendExecutionCandidate` and `BackendExecutionDecision` as the
   scheduler-facing facts and selected execution choice. Candidate facts must
   include backend id, task/model compatibility, runtime variant, device class,
   concrete device id when known, static resource estimates when available,
   optional observed-throughput hints, and bounded diagnostics.
-- [ ] Land the device contract gate first, with strict parser/unit tests, before
+- [x] Land the device contract gate first, with strict parser/unit tests, before
   modifying managed runtime, registry, backend startup, or frontend behavior.
-- [ ] Record the standards and blast-radius gate before code changes begin for
+- [x] Record the standards and blast-radius gate before code changes begin for
   each touched crate/module: crate role, public facade impact, runtime
   lifecycle owner, persisted artifacts, path/resource validation needs,
   feature/dependency impact, frontend accessibility impact, and test isolation
   strategy.
-- [ ] Add structured error enums and `TryFrom`/`FromStr` parsing for validated
+- [x] Add structured error enums and `TryFrom`/`FromStr` parsing for validated
   device contracts. Public fallible APIs must not expose `Result<T, String>` for
   contract validation.
-- [ ] Ensure new public or cross-crate types derive or implement useful
+- [x] Ensure new public or cross-crate types derive or implement useful
   `Debug`, use explicit serde casing, use `#[non_exhaustive]` where additive
   extension is likely, and use `#[must_use]` for validated decisions/builders
   that should not be ignored.
@@ -177,6 +177,42 @@ typed diagnostic and the canonical design is fixed.
 - [ ] Update relevant module READMEs for runtime variant ownership and device
   policy boundaries.
 
+**Implementation Notes:**
+
+- 2026-05-10 slice: device/runtime contract gate only.
+  - Smallest useful vertical slice: add validated DTOs and parser/serde tests
+    before modifying backend startup, managed runtime state, runtime registry
+    selection, frontend controls, Python workers, saved workflows, generated
+    bindings, or lockfiles.
+  - Allowed write set:
+    `crates/inference/src/device_contracts/`,
+    `crates/inference/src/lib.rs`, `crates/inference/src/README.md`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: the slice introduces typed parser
+    rejection diagnostics for invalid device ids, runtime variant ids, backend
+    ids, and empty scheduler candidate sets. It does not adapt legacy raw
+    `DeviceConfig`, `DeviceBackend::from_id`, malformed llama.cpp ordinals, or
+    old technical-fit fallback paths into the new contracts.
+  - Standards/blast-radius gate for `crates/inference`: crate role remains the
+    inference-facing backend contract/facade; public facade impact is additive
+    re-exports only; runtime lifecycle owner is unchanged; persisted artifacts
+    are not read or written in this slice; no filesystem/path/resource access
+    is introduced; feature/dependency impact is none; frontend accessibility
+    impact is none; test isolation uses crate-local unit tests plus stable
+    serde JSON assertions with no external services or generated fixtures.
+  - Discovered issue retained for later slices: existing
+    `crates/inference/src/device.rs` still contains legacy
+    `DeviceBackend::from_id` behavior where unknown ids become `Auto` and
+    malformed ordinals become `0`. This first slice intentionally records and
+    isolates the issue instead of preserving it through the new contracts.
+  - Implemented as decomposed modules under
+    `crates/inference/src/device_contracts/` after a decomposition review
+    showed the first single-file pass would exceed the repository's file-size
+    target.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference device_contracts`, and `git diff --check`.
+
 **Verification:**
 
 - Unit tests cover parsing and rejection of invalid device policies, device
@@ -243,4 +279,4 @@ typed diagnostic and the canonical design is fixed.
   variant/device facts, and rejects with bounded diagnostics when the CUDA
   variant is missing.
 
-**Status:** Not started
+**Status:** In progress. First slice is the device/runtime contract gate.
