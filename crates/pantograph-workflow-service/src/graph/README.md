@@ -25,6 +25,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
 | `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
 | `diagnostics.rs` | Structured stale graph diagnostic DTOs and bounded diagnostic payload helpers. |
+| `inspection.rs` | Shared graph inspection projection for saved graphs and future run graph wrappers. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |
@@ -114,6 +115,10 @@ for existing graph-edit callers.
   endpoints, missing handles, incompatible ports, capacity errors, and cycles.
   String validation output is a compatibility projection of those structured
   diagnostics, not a separate validator.
+- Shared graph inspection uses `WorkflowGraphInspectionProjection` so saved
+  graph inspection and future run inspection wrappers can carry the same graph
+  snapshot, selected-node facts, and stale diagnostics without frontend
+  inference.
 - Edit-session connection and insertion API methods stay in
   `session_connection_api.rs` so revision-aware connection orchestration and
   insertion response projection remain separate from lifecycle and basic graph

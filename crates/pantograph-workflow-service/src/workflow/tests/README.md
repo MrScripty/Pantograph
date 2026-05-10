@@ -27,6 +27,7 @@ stay reviewable as more tests are split.
 | `session_runtime_state.rs` | Session runtime loaded-state invalidation tests. |
 | `session_stale_cleanup.rs` | Stale session cleanup, session inspection, and stale cleanup worker lifecycle tests. |
 | `workflow_capabilities.rs` | Workflow capability discovery and default capability derivation tests. |
+| `workflow_graph_inspection.rs` | Saved graph inspection facade tests for backend-owned stale graph diagnostics. |
 | `workflow_io.rs` | Workflow I/O discovery and validation tests for bindable input/output nodes and port contracts. |
 | `workflow_preflight.rs` | Workflow preflight facade tests for required inputs, target validation, technical-fit decisions, and override normalization. |
 | `workflow_run.rs` | Private scheduler run implementation tests for host outputs, timeout cancellation, runtime readiness, input validation, and output-target enforcement. |

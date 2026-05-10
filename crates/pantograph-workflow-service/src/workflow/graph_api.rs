@@ -1,14 +1,15 @@
 use crate::graph::{
-    ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
-    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, WorkflowFile, WorkflowGraph,
-    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
-    WorkflowGraphCreateGroupRequest, WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse,
-    WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionCloseRequest,
-    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    inspect_workflow_graph, ConnectionCandidatesResponse, ConnectionCommitResponse,
+    EdgeInsertionPreviewResponse, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
+    NodeRegistry, WorkflowFile, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
+    WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse, WorkflowGraphDeleteSelectionRequest,
+    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphInspectionProjection,
+    WorkflowGraphInspectionRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveEdgesRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
     WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
@@ -205,6 +206,19 @@ impl WorkflowService {
         request: WorkflowGraphLoadRequest,
     ) -> Result<WorkflowFile, WorkflowServiceError> {
         store.load_workflow(request.path)
+    }
+
+    pub fn workflow_graph_inspect<S: WorkflowGraphStore>(
+        &self,
+        store: &S,
+        request: WorkflowGraphInspectionRequest,
+    ) -> Result<WorkflowGraphInspectionProjection, WorkflowServiceError> {
+        let workflow = store.load_workflow(request.path)?;
+        Ok(inspect_workflow_graph(
+            workflow.graph,
+            &NodeRegistry::new(),
+            request.selected_node_id.as_deref(),
+        ))
     }
 
     pub fn workflow_graph_list<S: WorkflowGraphStore>(

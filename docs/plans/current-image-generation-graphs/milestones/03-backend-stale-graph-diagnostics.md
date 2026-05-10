@@ -25,7 +25,7 @@ inspectable and explain why they cannot be submitted.
 - [ ] Ensure diagnostics are factual and presentation-neutral.
 - [ ] Ensure stale graph diagnostics can represent node-level, edge-level, and
   graph-level facts without requiring frontend inference.
-- [ ] Keep stale graph validation as a replayable projection over saved graph
+- [x] Keep stale graph validation as a replayable projection over saved graph
   data. Loading the same saved graph should produce the same stale facts without
   requiring workflow-run side effects.
 - [x] Bound diagnostic reason length and field counts before values cross IPC,
@@ -57,11 +57,18 @@ inspectable and explain why they cannot be submitted.
   graph contract-validation classifier, and tests for retired node types,
   unknown node types, missing edge endpoint nodes, missing source outputs,
   missing target inputs, serde round-trip, and payload bounds.
+- `cargo test -p pantograph-workflow-service graph::inspection` passed after
+  adding `WorkflowGraphInspectionProjection`, selected-node diagnostic
+  projection, optional run context, and replay-stability tests.
+- `cargo test -p pantograph-workflow-service workflow_graph_inspection` passed
+  after adding a backend service facade test that saves a stale retired
+  diffusion graph, loads it through graph inspection, returns backend-owned
+  node and edge diagnostics, and repeats the read to prove stable facts.
 
 **Remaining Follow-Up:**
 
 - Add read-model/session/load projection APIs that return
-  `WorkflowGraphDiagnostic` with saved graph snapshots.
+  `WorkflowGraphDiagnostic` with edit-session snapshots and run inspection.
 - Extend coverage to unresolved Puma model references and stale dynamic port
   contracts once the graph inspection projection exists.
 - Add cross-layer saved-graph inspection and submit/admission blocking tests in

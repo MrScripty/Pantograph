@@ -107,6 +107,12 @@ Update during implementation:
   tests were split into `contract_validation_tests.rs`, keeping the production
   validation module below the standards decomposition threshold after the DTO
   addition.
+- 2026-05-10: Continued Milestone 3 with the shared backend graph inspection
+  projection. `WorkflowGraphInspectionProjection` now returns the graph
+  snapshot, selected-node facts, typed stale diagnostics, and optional run
+  context. The service facade can inspect a saved workflow through the existing
+  filesystem store without mutating the graph, rewriting retired nodes, or
+  requiring workflow-run side effects.
 
 ## Commit Cadence Notes
 
@@ -224,7 +230,8 @@ Worker rules:
   split, no-rewrite persistence behavior, Pumas diffusion selector/probe task
   projection, and documentation.
 - Milestone 3 partially completed for the backend diagnostic DTO, bounded
-  payload contract, and structured graph contract-validation classifier.
+  payload contract, structured graph contract-validation classifier, and saved
+  graph inspection projection.
 
 ### Deviations
 
@@ -249,9 +256,9 @@ Worker rules:
 - Plan the next vertical slice for Milestone 3 backend stale graph diagnostics,
   unless the unrelated dirty Pumas plan edit requires integration or cleanup
   first.
-- Continue Milestone 3 by adding the shared saved-graph/read-model inspection
-  projection that returns `WorkflowGraphDiagnostic` alongside the graph
-  snapshot, then wire session/load consumers in a separate validated slice.
+- Continue Milestone 3 by wiring `WorkflowGraphInspectionProjection` into edit
+  session snapshots and run inspection, then add submit/admission blocking
+  reasons in a separate validated slice.
 
 ### Verification Summary
 
@@ -282,6 +289,9 @@ Worker rules:
   3 DTO/classifier foundation, including serde round-trip, bounded diagnostic
   details, retired and unknown node classification, and missing edge
   endpoint/handle diagnostics.
+- `cargo test -p pantograph-workflow-service graph::inspection` and
+  `cargo test -p pantograph-workflow-service workflow_graph_inspection` passed
+  for the saved graph inspection projection and service facade replay path.
 
 ### Traceability Links
 

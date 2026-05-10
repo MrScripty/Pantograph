@@ -40,6 +40,8 @@ pub use graph::{
     WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
     WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
+    WorkflowGraphInspectionProjection, WorkflowGraphInspectionRequest,
+    WorkflowGraphInspectionRunContext, WorkflowGraphInspectionSelectedNode,
     WorkflowGraphListResponse, WorkflowGraphLoadRequest, WorkflowGraphMetadata,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveEdgesRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphRunSettings,

@@ -5,6 +5,7 @@ mod diagnostics;
 mod effective_definition;
 mod executable_topology;
 mod group_mutation;
+mod inspection;
 mod memory_impact;
 mod persistence;
 #[cfg(test)]
@@ -41,6 +42,11 @@ pub use executable_topology::{
     workflow_executable_topology, workflow_executable_topology_with_node_versions,
     workflow_execution_fingerprint, workflow_execution_fingerprint_for_topology,
     WorkflowExecutableTopology, WorkflowExecutableTopologyEdge, WorkflowExecutableTopologyNode,
+};
+pub use inspection::{
+    inspect_workflow_graph, inspect_workflow_graph_with_run_context,
+    WorkflowGraphInspectionProjection, WorkflowGraphInspectionRequest,
+    WorkflowGraphInspectionRunContext, WorkflowGraphInspectionSelectedNode,
 };
 pub use memory_impact::graph_memory_impact_from_node_engine_graph_change;
 pub use persistence::{
