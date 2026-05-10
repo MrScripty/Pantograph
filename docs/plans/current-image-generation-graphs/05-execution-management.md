@@ -138,6 +138,11 @@ Update during implementation:
   presenters. Saved workflow options require backend-listed workflow ids, and
   saved-graph display models reuse the existing graph canvas presenter with
   backend diagnostics while keeping run context and artifact controls disabled.
+- 2026-05-10: Continued Milestone 4 by wiring IO Inspector no-run mode to
+  saved graph inspection. The page lists saved workflows from the backend,
+  inspects the selected saved workflow through `workflow_graph_inspect`, and
+  renders `WorkflowGraphInspectionProjection` diagnostics in a read-only saved
+  graph component without artifact controls or fabricated run metadata.
 
 ## Commit Cadence Notes
 
@@ -265,6 +270,8 @@ Worker rules:
 - Milestone 4 saved-graph presenter helpers are available for IO inspector
   rendering without deriving paths from workflow display names or inventing run
   context.
+- Milestone 4 saved-graph inspection mode now renders in IO Inspector when no
+  active run is selected.
 
 ### Deviations
 
@@ -304,6 +311,11 @@ Worker rules:
 - `src/components/workbench/README.md` remains above the decomposition-review
   threshold. The saved-graph presenter slice added a focused module entry only;
   broader workbench documentation splitting is deferred.
+- `src/components/workbench/IoInspectorPage.svelte` remains above the frontend
+  decomposition threshold. The saved-graph UI slice kept the existing run
+  inspector behavior intact and introduced a focused
+  `SavedGraphInspectionSnapshot.svelte`; a future split should extract the run
+  artifact-details panel and saved-graph mode orchestration.
 
 ### Follow-Ups
 
@@ -324,6 +336,9 @@ Worker rules:
   helpers for saved graph diagnostics.
 - Continue Milestone 4 by rendering the saved-graph presenter model in
   `IoInspectorPage.svelte` and then adding selected stale-node details.
+- Continue Milestone 4 by adding component-level accessibility coverage for
+  saved graph selection/focus and by surfacing stale diagnostics in the run
+  details panel for selected stale run nodes.
 
 ### Verification Summary
 
@@ -382,6 +397,9 @@ Worker rules:
   presenters. The first focused presenter test run failed because the new
   module used an extensionless ESM import; adding `.ts` to the local presenter
   import fixed the issue.
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts src/components/workbench/runGraphPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed for IO Inspector saved
+  graph mode and the read-only saved graph snapshot component.
 
 ### Traceability Links
 

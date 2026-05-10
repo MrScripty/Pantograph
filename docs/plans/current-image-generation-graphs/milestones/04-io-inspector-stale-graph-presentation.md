@@ -7,7 +7,7 @@ which nodes or edges are stale.
 
 - [x] Extend the IO inspector graph projection consumer to read backend stale
   graph facts.
-- [ ] Add saved-graph inspection mode so IO inspector can render a stale graph
+- [x] Add saved-graph inspection mode so IO inspector can render a stale graph
   with diagnostics even when no workflow run exists.
 - [ ] Rename or wrap run-specific frontend graph presenters/components where
   needed so saved-graph inspection does not depend on run-only concepts.
@@ -74,13 +74,16 @@ which nodes or edges are stale.
   display presenters that require backend-listed workflow ids, disable run-only
   artifact controls, and reuse the existing graph canvas helper with backend
   diagnostics.
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts src/components/workbench/runGraphPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after wiring IO Inspector
+  no-run mode to backend saved workflow listing plus `workflow_graph_inspect`
+  and rendering the read-only saved graph snapshot without artifact controls.
 
 **Remaining Follow-Up:**
 
-- Add saved-graph inspection mode and a run/saved shared graph inspection
-  presenter shape that consumes `WorkflowService.inspectWorkflowGraph`.
-- Render the saved-graph presenter model in `IoInspectorPage.svelte` without
-  requiring an active workflow run.
+- Rename or wrap run-specific graph presenters/components so saved and run
+  graph inspection share a clearer display boundary.
+- Add component-level accessibility coverage for saved graph selection/focus.
 - Show selected stale-node details in the lower I/O details panel.
 - Add focused component/accessibility tests for keyboard stale-node selection,
   focus preservation, and saved-graph mode without artifact controls.

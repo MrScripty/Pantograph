@@ -14,6 +14,7 @@ later plan stages fill in richer page bodies.
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page for the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunInspection`; it renders backend `graph_diagnostics` and does not load historic graphs into the editor store. |
+| `SavedGraphInspectionSnapshot.svelte` | Read-only saved graph inspection renderer backed by `WorkflowGraphInspectionProjection`; it renders stale graph facts without artifact controls or run-shaped metadata. |
 | `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range/placement filtered comparison facets, typed model-cache posture, mixed-version warnings, and scheduler timeline records. |
 | `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority/placement/model-cache facts, workflow-version/date-range/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |

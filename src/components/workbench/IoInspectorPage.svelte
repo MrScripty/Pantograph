@@ -26,6 +26,8 @@
   import type {
     WorkflowArtifactBodyRead,
     WorkflowArtifactStreamBodyRead,
+    WorkflowGraphInspectionProjection,
+    WorkflowMetadata,
     WorkflowRunGraphProjection,
   } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
@@ -63,7 +65,13 @@
     buildRunGraphNodeArtifactSummaries,
     buildRunGraphNodeStatusMap,
   } from './runGraphPresenters';
+  import {
+    buildSavedGraphInspectionDisplayModel,
+    buildSavedGraphInspectionOptions,
+    type SavedGraphInspectionOption,
+  } from './graphInspectionPresenters';
   import RunGraphSnapshot from './RunGraphSnapshot.svelte';
+  import SavedGraphInspectionSnapshot from './SavedGraphInspectionSnapshot.svelte';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   interface ArtifactBodyPreview {
@@ -79,6 +87,10 @@
   const DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS = 30_000;
 
   let runGraph = $state<WorkflowRunGraphProjection | null>(null);
+  let savedWorkflows = $state<WorkflowMetadata[]>([]);
+  let savedWorkflowOptions = $state<SavedGraphInspectionOption[]>([]);
+  let selectedSavedWorkflowPath = $state<string | null>(null);
+  let savedGraphInspection = $state<WorkflowGraphInspectionProjection | null>(null);
   let runNodeStatuses = $state<NodeStatusProjectionRecord[]>([]);
   let artifacts = $state<IoArtifactProjectionRecord[]>([]);
   let resolvedNodeIo = $state<ResolvedNodeIoRecord[]>([]);
@@ -94,10 +106,17 @@
   let artifactAccessErrors = $state<Record<string, string>>({});
   let artifactConsumeMessages = $state<Record<string, string>>({});
   let inspectorRequestSerial = 0;
+  let savedGraphRequestSerial = 0;
+  let inspectingSavedGraphs = false;
   let projectionUnsubscribe: (() => void) | null = null;
 
   let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(artifacts));
   let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
+  let savedGraphModel = $derived(
+    savedGraphInspection
+      ? buildSavedGraphInspectionDisplayModel(savedGraphInspection, selectedNodeId)
+      : null,
+  );
   let selectedInputRows = $derived(
     selectedNodeId
       ? buildResolvedNodeIoDisplayRows(
@@ -199,6 +218,89 @@
         loadingInspector = false;
       }
     }
+  }
+
+  async function refreshSavedGraphInspectionMode(
+    requestedPath = selectedSavedWorkflowPath,
+  ): Promise<void> {
+    const requestSerial = ++savedGraphRequestSerial;
+    inspectorError = null;
+    loadingInspector = true;
+
+    try {
+      const workflows = await workflowService.listWorkflows();
+      if (requestSerial !== savedGraphRequestSerial) {
+        return;
+      }
+
+      const options = buildSavedGraphInspectionOptions(workflows);
+      const nextPath = resolveSavedWorkflowPath(requestedPath, options);
+      savedWorkflows = workflows;
+      savedWorkflowOptions = options;
+      selectedSavedWorkflowPath = nextPath;
+      clearRunInspectionState();
+
+      if (!nextPath) {
+        savedGraphInspection = null;
+        selectedNodeId = null;
+        return;
+      }
+
+      const projection = await workflowService.inspectWorkflowGraph({
+        path: nextPath,
+        selected_node_id: selectedNodeId,
+      });
+      if (requestSerial !== savedGraphRequestSerial) {
+        return;
+      }
+      savedGraphInspection = projection;
+      selectedNodeId = resolveSavedGraphSelectedNodeId(selectedNodeId, projection);
+    } catch (error) {
+      if (requestSerial !== savedGraphRequestSerial) {
+        return;
+      }
+      inspectorError = formatWorkflowCommandError(error);
+      savedGraphInspection = null;
+      selectedNodeId = null;
+    } finally {
+      if (requestSerial === savedGraphRequestSerial) {
+        loadingInspector = false;
+      }
+    }
+  }
+
+  function clearRunInspectionState(): void {
+    runGraph = null;
+    runNodeStatuses = [];
+    artifacts = [];
+    resolvedNodeIo = [];
+    retentionSummary = [];
+    projectionState = null;
+  }
+
+  function resolveSavedWorkflowPath(
+    requestedPath: string | null,
+    options: SavedGraphInspectionOption[],
+  ): string | null {
+    if (requestedPath && options.some((option) => option.inspectionPath === requestedPath)) {
+      return requestedPath;
+    }
+    return options[0]?.inspectionPath ?? null;
+  }
+
+  function resolveSavedGraphSelectedNodeId(
+    currentNodeId: string | null,
+    projection: WorkflowGraphInspectionProjection,
+  ): string | null {
+    const nodeIds = projection.graph.nodes.map((node) => node.id);
+    if (currentNodeId && nodeIds.includes(currentNodeId)) {
+      return currentNodeId;
+    }
+
+    const staleNodeId = projection.diagnostics
+      .map((diagnostic) => diagnostic.node_id)
+      .find((nodeId): nodeId is string => Boolean(nodeId && nodeIds.includes(nodeId)));
+    return staleNodeId ?? nodeIds[0] ?? null;
   }
 
   function resolveSelectedNodeId(
@@ -476,7 +578,14 @@
   $effect(() => {
     const runId = activeRunId();
     const backendFilterValue = selectedBackendFilter.trim();
-    void refreshInspector(runId, backendFilterValue);
+    if (runId) {
+      inspectingSavedGraphs = false;
+      savedGraphInspection = null;
+      void refreshInspector(runId, backendFilterValue);
+    } else if (!inspectingSavedGraphs) {
+      inspectingSavedGraphs = true;
+      void refreshSavedGraphInspectionMode(null);
+    }
   });
 
   onMount(() => {
@@ -532,7 +641,13 @@
       <button
         type="button"
         class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-        onclick={() => refreshInspector()}
+        onclick={() => {
+          if (activeRunId()) {
+            void refreshInspector();
+          } else {
+            void refreshSavedGraphInspectionMode();
+          }
+        }}
         disabled={loadingInspector}
       >
         <RefreshCw size={14} aria-hidden="true" class={loadingInspector ? 'animate-spin' : ''} />
@@ -546,8 +661,52 @@
   {/if}
 
   {#if !$activeWorkflowRun}
-    <div class="flex min-h-0 flex-1 items-center justify-center text-sm text-neutral-500">
-      No active run selected
+    <div class="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+      <div class="flex shrink-0 flex-wrap items-end gap-3 border-b border-neutral-800 px-4 py-3">
+        <label class="min-w-[18rem] max-w-xl flex-1">
+          <span class="mb-2 block text-xs uppercase tracking-[0.18em] text-neutral-500">Saved Workflow</span>
+          <select
+            class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+            value={selectedSavedWorkflowPath ?? ''}
+            disabled={loadingInspector || savedWorkflowOptions.length === 0}
+            onchange={(event) => {
+              const nextPath = (event.currentTarget as HTMLSelectElement).value || null;
+              selectedSavedWorkflowPath = nextPath;
+              selectedNodeId = null;
+              void refreshSavedGraphInspectionMode(nextPath);
+            }}
+          >
+            {#each savedWorkflowOptions as option (option.inspectionPath)}
+              <option value={option.inspectionPath}>{option.label}</option>
+            {/each}
+          </select>
+        </label>
+        <div class="text-xs text-neutral-500">
+          {savedWorkflowOptions.length} saved workflows with stable ids
+        </div>
+      </div>
+
+      {#if loadingInspector && !savedGraphModel}
+        <div class="flex min-h-0 items-center justify-center text-sm text-neutral-500">
+          Loading saved graph inspection
+        </div>
+      {:else if savedGraphModel}
+        <SavedGraphInspectionSnapshot
+          model={savedGraphModel}
+          {selectedNodeId}
+          onSelectNode={(nodeId) => {
+            selectedNodeId = nodeId;
+          }}
+        />
+      {:else if savedWorkflows.length === 0}
+        <div class="flex min-h-0 items-center justify-center text-sm text-neutral-500">
+          No saved workflows are available for inspection.
+        </div>
+      {:else}
+        <div class="flex min-h-0 items-center justify-center text-sm text-neutral-500">
+          Saved workflows need backend-listed stable ids before inspection.
+        </div>
+      {/if}
     </div>
   {:else}
     <div class="grid min-h-0 flex-1 grid-rows-[minmax(18rem,42%)_minmax(0,1fr)] overflow-hidden">
