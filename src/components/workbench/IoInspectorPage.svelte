@@ -69,6 +69,8 @@
   import {
     buildSavedGraphInspectionDisplayModel,
     buildSavedGraphInspectionOptions,
+    resolveSavedGraphSelectedNodeId,
+    resolveSavedWorkflowInspectionPath,
     type SavedGraphInspectionOption,
   } from './graphInspectionPresenters';
   import RunGraphSnapshot from './RunGraphSnapshot.svelte';
@@ -240,7 +242,7 @@
       }
 
       const options = buildSavedGraphInspectionOptions(workflows);
-      const nextPath = resolveSavedWorkflowPath(requestedPath, options);
+      const nextPath = resolveSavedWorkflowInspectionPath(requestedPath, options);
       savedWorkflows = workflows;
       savedWorkflowOptions = options;
       selectedSavedWorkflowPath = nextPath;
@@ -282,31 +284,6 @@
     resolvedNodeIo = [];
     retentionSummary = [];
     projectionState = null;
-  }
-
-  function resolveSavedWorkflowPath(
-    requestedPath: string | null,
-    options: SavedGraphInspectionOption[],
-  ): string | null {
-    if (requestedPath && options.some((option) => option.inspectionPath === requestedPath)) {
-      return requestedPath;
-    }
-    return options[0]?.inspectionPath ?? null;
-  }
-
-  function resolveSavedGraphSelectedNodeId(
-    currentNodeId: string | null,
-    projection: WorkflowGraphInspectionProjection,
-  ): string | null {
-    const nodeIds = projection.graph.nodes.map((node) => node.id);
-    if (currentNodeId && nodeIds.includes(currentNodeId)) {
-      return currentNodeId;
-    }
-
-    const staleNodeId = projection.diagnostics
-      .map((diagnostic) => diagnostic.node_id)
-      .find((nodeId): nodeId is string => Boolean(nodeId && nodeIds.includes(nodeId)));
-    return staleNodeId ?? nodeIds[0] ?? null;
   }
 
   function resolveSelectedNodeId(

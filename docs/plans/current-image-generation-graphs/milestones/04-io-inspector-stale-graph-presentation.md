@@ -9,9 +9,9 @@ which nodes or edges are stale.
   graph facts.
 - [x] Add saved-graph inspection mode so IO inspector can render a stale graph
   with diagnostics even when no workflow run exists.
-- [ ] Rename or wrap run-specific frontend graph presenters/components where
+- [x] Rename or wrap run-specific frontend graph presenters/components where
   needed so saved-graph inspection does not depend on run-only concepts.
-- [ ] Introduce or extract a shared graph inspection projection/presenter
+- [x] Introduce or extract a shared graph inspection projection/presenter
   layer. Saved-graph inspection and run inspection may have different query
   sources, but they must not become separate graph display models.
 - [x] Mark stale nodes and stale edge issues in the graph view.
@@ -91,13 +91,22 @@ which nodes or edges are stale.
   `npm run typecheck`, and `git diff --check` passed after extracting
   Node-tested saved graph accessible-label and keyboard-selection helpers used
   by the saved graph snapshot component.
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after adding a neutral
+  graph-inspection canvas wrapper that preserves backend stale diagnostics while
+  keeping broader run graph module renaming out of this slice.
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after moving saved graph
+  path selection and selected-node preservation helpers into the Node-tested
+  presenter layer.
 
 **Remaining Follow-Up:**
 
-- Rename or wrap run-specific graph presenters/components so saved and run
-  graph inspection share a clearer display boundary.
 - Add focused component/accessibility tests for keyboard stale-node selection,
   focus preservation, and saved-graph mode without artifact controls using the
   existing Node test strategy where possible.
+- Keep browser-focus-specific verification deferred until the repository adopts
+  a DOM-capable frontend test strategy; do not add test dependencies in this
+  plan pass.
 
 **Status:** Partially completed on 2026-05-10

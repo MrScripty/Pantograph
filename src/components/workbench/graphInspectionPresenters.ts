@@ -1,4 +1,5 @@
 import type {
+  WorkflowGraph,
   WorkflowGraphDiagnostic,
   WorkflowGraphInspectionProjection,
   WorkflowMetadata,
@@ -16,7 +17,7 @@ export interface SavedGraphInspectionOption {
 }
 
 export interface SavedGraphInspectionDisplayModel {
-  canvas: RunGraphCanvasModel;
+  canvas: GraphInspectionCanvasModel;
   diagnostics: WorkflowGraphDiagnostic[];
   selectedNodeId: string | null;
   selectedNodeDiagnostics: WorkflowGraphDiagnostic[];
@@ -24,7 +25,8 @@ export interface SavedGraphInspectionDisplayModel {
   hasRunContext: false;
 }
 
-export type SavedGraphInspectionCanvasNode = RunGraphCanvasModel['nodes'][number];
+export type GraphInspectionCanvasModel = RunGraphCanvasModel;
+export type GraphInspectionCanvasNode = GraphInspectionCanvasModel['nodes'][number];
 
 export function buildSavedGraphInspectionOptions(
   workflows: WorkflowMetadata[],
@@ -54,7 +56,7 @@ export function buildSavedGraphInspectionDisplayModel(
     : [];
 
   return {
-    canvas: buildRunGraphCanvasModel(projection.graph, {}, {}, projection.diagnostics),
+    canvas: buildGraphInspectionCanvasModel(projection.graph, projection.diagnostics),
     diagnostics: projection.diagnostics,
     selectedNodeId,
     selectedNodeDiagnostics,
@@ -63,8 +65,40 @@ export function buildSavedGraphInspectionDisplayModel(
   };
 }
 
+export function resolveSavedWorkflowInspectionPath(
+  requestedPath: string | null,
+  options: SavedGraphInspectionOption[],
+): string | null {
+  if (requestedPath && options.some((option) => option.inspectionPath === requestedPath)) {
+    return requestedPath;
+  }
+  return options[0]?.inspectionPath ?? null;
+}
+
+export function resolveSavedGraphSelectedNodeId(
+  currentNodeId: string | null,
+  projection: WorkflowGraphInspectionProjection,
+): string | null {
+  const nodeIds = projection.graph.nodes.map((node) => node.id);
+  if (currentNodeId && nodeIds.includes(currentNodeId)) {
+    return currentNodeId;
+  }
+
+  const staleNodeId = projection.diagnostics
+    .map((diagnostic) => diagnostic.node_id)
+    .find((nodeId): nodeId is string => Boolean(nodeId && nodeIds.includes(nodeId)));
+  return staleNodeId ?? nodeIds[0] ?? null;
+}
+
+export function buildGraphInspectionCanvasModel(
+  graph: WorkflowGraph,
+  diagnostics: WorkflowGraphDiagnostic[],
+): GraphInspectionCanvasModel {
+  return buildRunGraphCanvasModel(graph, {}, {}, diagnostics);
+}
+
 export function formatSavedGraphNodeAccessibleLabel(
-  node: SavedGraphInspectionCanvasNode,
+  node: GraphInspectionCanvasNode,
 ): string {
   const parts = [`${node.id} ${node.nodeType}`];
   if (node.staleBadgeLabel) {

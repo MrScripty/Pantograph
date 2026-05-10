@@ -156,6 +156,15 @@ Update during implementation:
   accessible-label and keyboard-selection helpers. The saved graph snapshot
   component now uses those helpers for SVG node button labels and Enter/Space
   activation without introducing a new frontend test platform.
+- 2026-05-10: Continued Milestone 4 by adding a neutral graph-inspection canvas
+  wrapper in `graphInspectionPresenters.ts`. Saved graph inspection now uses
+  that shared presenter boundary instead of directly depending on the
+  run-named canvas helper, while preserving the same backend diagnostic display
+  model.
+- 2026-05-10: Continued Milestone 4 by moving saved workflow path resolution
+  and saved graph selected-node preservation into Node-tested presenter
+  helpers. The IO Inspector still owns transient selected-node state, but the
+  fallback rules are now covered without a DOM test harness.
 
 ## Commit Cadence Notes
 
@@ -290,6 +299,10 @@ Worker rules:
 - Milestone 4 continues under the existing Node test strategy; no Vitest,
   Playwright, jsdom, or Svelte Testing Library dependency changes are part of
   this plan pass.
+- Milestone 4 now has a neutral graph-inspection presenter wrapper for saved
+  graph display; larger run component/module renaming is deferred.
+- Milestone 4 saved-graph path and selected-node fallback rules are covered in
+  the presenter layer under the existing Node test strategy.
 
 ### Deviations
 
@@ -345,6 +358,12 @@ Worker rules:
   helpers and by deciding whether the run/saved graph display naming cleanup is
   small enough for this milestone or should be deferred to a dedicated
   component decomposition slice.
+- Defer broader `RunGraphSnapshot.svelte` and `runGraphPresenters.ts` renaming
+  to a dedicated decomposition slice unless a later Milestone 4 bug requires
+  touching those files again.
+- Remaining focus-preservation coverage is limited by the no-new-harness
+  decision. Add more Node-tested state/event helpers only where behavior can be
+  verified without pretending to test browser focus.
 
 ### Verification Summary
 
@@ -417,6 +436,13 @@ Worker rules:
 - `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`,
   `npm run typecheck`, and `git diff --check` passed after extracting
   Node-tested saved graph accessible-label and keyboard-selection helpers.
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after adding the neutral
+  graph-inspection canvas wrapper over the existing graph canvas presenter.
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after moving saved graph
+  path selection and selected-node preservation helpers into the presenter
+  layer.
 
 ### Traceability Links
 
