@@ -129,6 +129,11 @@ Update during implementation:
   presenter/component path to consume backend `graph_diagnostics`. Stale node
   and edge markers now come from backend facts in `WorkflowRunGraphProjection`,
   not frontend inference over node types or missing canvas edges.
+- 2026-05-10: Continued Milestone 4 by exposing saved graph inspection through
+  the Tauri/frontend workflow service boundary. `workflow_graph_inspect`
+  returns the backend `WorkflowGraphInspectionProjection` directly, including
+  selected-node diagnostics, without fabricating run ids or run-shaped
+  compatibility data.
 
 ## Commit Cadence Notes
 
@@ -251,6 +256,8 @@ Worker rules:
   details.
 - Milestone 4 started for run-inspection graph stale markers backed by
   backend `graph_diagnostics`.
+- Milestone 4 saved-graph inspection transport is available through
+  `workflow_graph_inspect`; IO inspector rendering remains a follow-up slice.
 
 ### Deviations
 
@@ -281,6 +288,12 @@ Worker rules:
   facts through the existing presenter/component path; saved/run graph
   presenter extraction is deferred to the next Milestone 4 shared-inspection
   slice.
+- `src-tauri/src/workflow/commands.rs`, `src-tauri/src/workflow/README.md`,
+  `src/services/workflow/WorkflowService.ts`, `src/services/workflow/types.ts`,
+  and `src/services/workflow/README.md` remain above the decomposition-review
+  threshold. The saved-graph inspection transport slice added only a thin
+  command/service boundary and a focused test file; broader command and DTO
+  module extraction is deferred.
 
 ### Follow-Ups
 
@@ -296,6 +309,9 @@ Worker rules:
   cases and then proceed to Milestone 4 IO inspector presentation.
 - Continue Milestone 4 by adding saved-graph inspection mode and selected
   stale-node detail rendering in the I/O details panel.
+- Continue Milestone 4 by wiring IO inspector saved-graph mode to
+  `WorkflowService.inspectWorkflowGraph` and by reusing the run graph display
+  helpers for saved graph diagnostics.
 
 ### Verification Summary
 
@@ -342,6 +358,13 @@ Worker rules:
 - `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts`
   and `npm run typecheck` passed for backend-owned stale graph markers in the
   IO inspector run graph presenter/component path.
+- `node --experimental-strip-types --test src/services/workflow/WorkflowService.graphInspection.test.ts`,
+  `npm run typecheck`, `cargo fmt --check`,
+  `cargo test -p pantograph-workflow-service workflow_graph_inspection`, and
+  `cargo test -p pantograph workflow_graph` passed for the saved-graph
+  inspection Tauri/frontend service boundary. The first attempted Rust command
+  used a non-existent package name (`pantograph-tauri`) and was rerun with the
+  actual package name (`pantograph`).
 
 ### Traceability Links
 

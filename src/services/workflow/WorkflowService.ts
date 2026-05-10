@@ -10,6 +10,8 @@ import type {
   WorkflowCapabilitiesResponse,
   WorkflowEvent,
   WorkflowGraph,
+  WorkflowGraphInspectionProjection,
+  WorkflowGraphInspectionRequest,
   WorkflowFile,
   WorkflowSessionHandle,
   WorkflowSchedulerSnapshotResponse,
@@ -393,6 +395,23 @@ export class WorkflowService extends WorkflowCommandService {
       };
     }
     return invoke<WorkflowFile>('load_workflow', { path });
+  }
+
+  async inspectWorkflowGraph(
+    request: WorkflowGraphInspectionRequest,
+  ): Promise<WorkflowGraphInspectionProjection> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        graph: { nodes: [], edges: [] },
+        selected_node: null,
+        diagnostics: [],
+        run_context: null,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowGraphInspectionProjection>('workflow_graph_inspect', {
+      request,
+    });
   }
 
   async listWorkflows(): Promise<WorkflowMetadata[]> {

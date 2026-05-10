@@ -474,6 +474,7 @@ pub fn run_app() -> AppStartupResult<()> {
             // Workflow persistence commands
             crate::workflow::commands::save_workflow,
             crate::workflow::commands::load_workflow,
+            crate::workflow::commands::workflow_graph_inspect,
             crate::workflow::commands::list_workflows,
             crate::workflow::workflow_persistence_commands::delete_workflow,
             // Headless workflow API commands

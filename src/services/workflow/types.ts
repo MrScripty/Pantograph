@@ -242,6 +242,28 @@ export interface WorkflowRunGraphProjection {
   graph_settings: WorkflowGraphRunSettings;
 }
 
+export interface WorkflowGraphInspectionRequest {
+  path: string;
+  selected_node_id?: string | null;
+}
+
+export interface WorkflowGraphInspectionRunContext {
+  workflow_run_id: string;
+  workflow_id?: string | null;
+}
+
+export interface WorkflowGraphInspectionSelectedNode {
+  node: GraphNode;
+  diagnostics: WorkflowGraphDiagnostic[];
+}
+
+export interface WorkflowGraphInspectionProjection {
+  graph: WorkflowGraph;
+  selected_node?: WorkflowGraphInspectionSelectedNode | null;
+  diagnostics: WorkflowGraphDiagnostic[];
+  run_context?: WorkflowGraphInspectionRunContext | null;
+}
+
 export type WorkflowGraphDiagnosticSeverity = 'error' | 'warning' | 'info';
 export type WorkflowGraphDiagnosticScope = 'graph' | 'node' | 'edge';
 export type WorkflowGraphDiagnosticCode =

@@ -88,6 +88,17 @@ pub fn load_workflow(
 }
 
 #[command]
+pub fn workflow_graph_inspect(
+    request: pantograph_workflow_service::WorkflowGraphInspectionRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+    workflow_graph_store: State<'_, SharedWorkflowGraphStore>,
+) -> Result<pantograph_workflow_service::WorkflowGraphInspectionProjection, String> {
+    workflow_service
+        .workflow_graph_inspect(workflow_graph_store.inner().as_ref(), request)
+        .map_err(|e| e.to_envelope_json())
+}
+
+#[command]
 pub fn list_workflows(
     workflow_service: State<'_, SharedWorkflowService>,
     workflow_graph_store: State<'_, SharedWorkflowGraphStore>,

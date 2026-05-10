@@ -12,6 +12,7 @@ on raw invoke payloads.
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
 | `WorkflowCommandService.ts` | Focused backend-owned scheduler execution-session, queue, and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
 | `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving scheduler execution-session, queue, and retention commands return backend-owned results without optimistic client replacement. |
+| `WorkflowService.graphInspection.test.ts` | Focused IPC boundary test for saved graph inspection projection requests and backend-owned stale diagnostics. |
 | `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, scheduler estimate, run-list, selected-run, run-inspection, local Network, I/O artifact, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
 | `WorkflowProjectionSubscriptionService.ts` | Typed diagnostics projection invalidation subscription helper over the Tauri event bridge. |
 | `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, run-inspection request/response shape, local Network scheduler-load/placement facts, and warm projection freshness state survive the service boundary. |
@@ -82,9 +83,11 @@ method names while projection DTO tests stay focused on Tauri request/response
 contracts.
 Run inspection uses the backend-owned `workflow_run_inspection_query` command
 to fetch the immutable run graph, node statuses, I/O artifact descriptors,
-retention summary, and projection states together. Frontend services forward
-the request exactly and do not reconstruct those persisted facts from multiple
-run-specific queries.
+retention summary, and projection states together. Saved graph inspection uses
+`workflow_graph_inspect` to fetch the backend-owned
+`WorkflowGraphInspectionProjection` without fabricating a workflow run id.
+Frontend services forward these requests exactly and do not reconstruct those
+persisted facts from multiple run-specific queries.
 Run-list and run-detail projection service tests consume the shared
 `pantograph-workflow-service` contract fixture so frontend request/response
 coverage stays aligned with Rust public DTO deserialization.

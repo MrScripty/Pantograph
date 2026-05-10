@@ -62,11 +62,18 @@ which nodes or edges are stale.
   and `npm run typecheck` passed after extending the run graph presenter and
   `RunGraphSnapshot` to consume backend `graph_diagnostics`, mark stale nodes,
   and mark stale edge rows/canvas edges without fabricating diagnostics.
+- `node --experimental-strip-types --test src/services/workflow/WorkflowService.graphInspection.test.ts`,
+  `npm run typecheck`, `cargo fmt --check`,
+  `cargo test -p pantograph-workflow-service workflow_graph_inspection`, and
+  `cargo test -p pantograph workflow_graph` passed after exposing
+  `workflow_graph_inspect` through the Tauri/frontend workflow service boundary
+  as a direct `WorkflowGraphInspectionProjection` read with no fabricated run
+  context.
 
 **Remaining Follow-Up:**
 
 - Add saved-graph inspection mode and a run/saved shared graph inspection
-  presenter shape.
+  presenter shape that consumes `WorkflowService.inspectWorkflowGraph`.
 - Show selected stale-node details in the lower I/O details panel.
 - Add focused component/accessibility tests for keyboard stale-node selection,
   focus preservation, and saved-graph mode without artifact controls.

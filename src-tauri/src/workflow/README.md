@@ -184,6 +184,10 @@ sync-before-snapshot sequence.
 The legacy Tauri-local workflow persistence module has been removed; path
 boundary tests now live with `FileSystemWorkflowGraphStore` in the workflow
 service crate, which is the active owner for save/load/list behavior.
+Saved graph inspection is exposed through the thin `workflow_graph_inspect`
+command, which delegates to `pantograph-workflow-service` and returns
+`WorkflowGraphInspectionProjection` directly instead of constructing run-shaped
+compatibility data in Tauri.
 Managed media conversion is injected into the shared workflow service at
 startup from `app_setup.rs`. The neutral conversion request/result contract
 stays in `pantograph-media-conversion`; the Tauri adapter only resolves
