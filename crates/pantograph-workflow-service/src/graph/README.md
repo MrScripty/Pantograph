@@ -19,9 +19,12 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `executable_topology.rs` | Canonical executable-topology projection and BLAKE3 workflow execution fingerprint calculation for workflow versioning. |
 | `presentation_revision.rs` | Canonical display-metadata projection and BLAKE3 presentation fingerprint calculation for historic graph presentation revisions. |
 | `run_settings.rs` | Canonical node settings projection used by immutable workflow-run audit snapshots. |
+| `contract_validation.rs` | Whole-graph contract validation and structured stale graph diagnostic classification. |
+| `contract_validation_tests.rs` | Structured graph contract validation and stale diagnostic classification tests. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
 | `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
+| `diagnostics.rs` | Structured stale graph diagnostic DTOs and bounded diagnostic payload helpers. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |
@@ -105,6 +108,12 @@ for existing graph-edit callers.
 - Direct incompatible connection rejections should include a backend-owned
   `contract_diagnostic` projection when canonical type compatibility produced a
   typed rejection.
+- Stale graph diagnostics are backend-owned `WorkflowGraphDiagnostic` records.
+  The graph contract validator is the classification source for unknown node
+  types, retired node types, unresolved effective definitions, missing edge
+  endpoints, missing handles, incompatible ports, capacity errors, and cycles.
+  String validation output is a compatibility projection of those structured
+  diagnostics, not a separate validator.
 - Edit-session connection and insertion API methods stay in
   `session_connection_api.rs` so revision-aware connection orchestration and
   insertion response projection remain separate from lifecycle and basic graph

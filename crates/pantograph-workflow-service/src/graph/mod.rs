@@ -1,6 +1,7 @@
 mod canonicalization;
 mod connection_intent;
 mod contract_validation;
+mod diagnostics;
 mod effective_definition;
 mod executable_topology;
 mod group_mutation;
@@ -29,7 +30,13 @@ pub use connection_intent::{
     preview_node_insert_on_edge, rejected_commit_response, rejected_edge_insert_preview_response,
     rejected_insert_on_edge_response, rejected_insert_response,
 };
-pub use contract_validation::validate_workflow_graph_contract;
+pub use contract_validation::{
+    validate_workflow_graph_contract, validate_workflow_graph_contract_diagnostics,
+};
+pub use diagnostics::{
+    WorkflowGraphDiagnostic, WorkflowGraphDiagnosticCode, WorkflowGraphDiagnosticScope,
+    WorkflowGraphDiagnosticSeverity,
+};
 pub use executable_topology::{
     workflow_executable_topology, workflow_executable_topology_with_node_versions,
     workflow_execution_fingerprint, workflow_execution_fingerprint_for_topology,

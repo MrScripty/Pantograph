@@ -1,16 +1,40 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use super::diagnostics::{
+    WorkflowGraphDiagnostic, WorkflowGraphDiagnosticCode, WorkflowGraphDiagnosticSeverity,
+};
 use super::effective_definition::effective_node_definition;
+use super::effective_definition::EffectiveDefinitionError;
 use super::registry::NodeRegistry;
-use super::types::{GraphEdge, WorkflowGraph};
+use super::types::{GraphEdge, GraphNode, WorkflowGraph};
 use super::validation::check_connection_ports;
+
+const RETIRED_NODE_TYPES: &[&str] = &[
+    "diffusion-inference",
+    "llamacpp-inference",
+    "pytorch-inference",
+    "ollama-inference",
+    "embedding",
+    "reranker",
+    "vision-analysis",
+];
 
 pub fn validate_workflow_graph_contract(
     graph: &WorkflowGraph,
     registry: &NodeRegistry,
 ) -> Vec<String> {
-    let mut errors = Vec::new();
-    validate_unique_ids(graph, &mut errors);
+    validate_workflow_graph_contract_diagnostics(graph, registry)
+        .into_iter()
+        .map(|diagnostic| diagnostic.message)
+        .collect()
+}
+
+pub fn validate_workflow_graph_contract_diagnostics(
+    graph: &WorkflowGraph,
+    registry: &NodeRegistry,
+) -> Vec<WorkflowGraphDiagnostic> {
+    let mut diagnostics = Vec::new();
+    validate_unique_ids(graph, &mut diagnostics);
 
     let target_counts = graph
         .edges
@@ -23,32 +47,51 @@ pub fn validate_workflow_graph_contract(
 
     for node in &graph.nodes {
         if let Err(error) = effective_node_definition(node, registry) {
-            errors.push(format!(
-                "node '{}' contract resolution failed: {:?}",
-                node.id, error
-            ));
+            diagnostics.push(diagnostic_from_effective_definition_error(node, error));
         }
     }
 
     for edge in &graph.edges {
-        validate_edge_contract(graph, registry, edge, &target_counts, &mut errors);
+        validate_edge_contract(graph, registry, edge, &target_counts, &mut diagnostics);
     }
 
-    errors
+    diagnostics
 }
 
-fn validate_unique_ids(graph: &WorkflowGraph, errors: &mut Vec<String>) {
+fn validate_unique_ids(graph: &WorkflowGraph, diagnostics: &mut Vec<WorkflowGraphDiagnostic>) {
     let mut node_ids = HashSet::new();
     for node in &graph.nodes {
         if !node_ids.insert(node.id.as_str()) {
-            errors.push(format!("duplicate node id '{}'", node.id));
+            diagnostics.push(
+                WorkflowGraphDiagnostic::node(
+                    WorkflowGraphDiagnosticCode::DuplicateNodeId,
+                    WorkflowGraphDiagnosticSeverity::Error,
+                    &node.id,
+                    &node.node_type,
+                    format!("duplicate node id '{}'", node.id),
+                    true,
+                )
+                .with_detail("node_id", &node.id),
+            );
         }
     }
 
     let mut edge_ids = HashSet::new();
     for edge in &graph.edges {
         if !edge_ids.insert(edge.id.as_str()) {
-            errors.push(format!("duplicate edge id '{}'", edge.id));
+            diagnostics.push(
+                WorkflowGraphDiagnostic::edge(
+                    WorkflowGraphDiagnosticCode::DuplicateEdgeId,
+                    WorkflowGraphDiagnosticSeverity::Error,
+                    &edge.id,
+                    format!("duplicate edge id '{}'", edge.id),
+                    true,
+                )
+                .with_detail("source_node_id", &edge.source)
+                .with_detail("source_port_id", &edge.source_handle)
+                .with_detail("target_node_id", &edge.target)
+                .with_detail("target_port_id", &edge.target_handle),
+            );
         }
     }
 }
@@ -58,39 +101,88 @@ fn validate_edge_contract(
     registry: &NodeRegistry,
     edge: &GraphEdge,
     target_counts: &HashMap<(&str, &str), usize>,
-    errors: &mut Vec<String>,
+    diagnostics: &mut Vec<WorkflowGraphDiagnostic>,
 ) {
     let Some(source_node) = graph.find_node(&edge.source) else {
-        errors.push(format!(
-            "edge '{}' references unknown source node '{}'",
-            edge.id, edge.source
-        ));
+        diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::MissingEdgeSourceNode,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!(
+                    "edge '{}' references unknown source node '{}'",
+                    edge.id, edge.source
+                ),
+                true,
+            )
+            .with_detail("source_node_id", &edge.source)
+            .with_detail("source_port_id", &edge.source_handle),
+        );
         return;
     };
     let Some(target_node) = graph.find_node(&edge.target) else {
-        errors.push(format!(
-            "edge '{}' references unknown target node '{}'",
-            edge.id, edge.target
-        ));
+        diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::MissingEdgeTargetNode,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!(
+                    "edge '{}' references unknown target node '{}'",
+                    edge.id, edge.target
+                ),
+                true,
+            )
+            .with_detail("target_node_id", &edge.target)
+            .with_detail("target_port_id", &edge.target_handle),
+        );
         return;
     };
     if source_node.id == target_node.id {
-        errors.push(format!("edge '{}' connects node to itself", edge.id));
+        diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::SelfConnection,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!("edge '{}' connects node to itself", edge.id),
+                true,
+            )
+            .with_detail("node_id", &source_node.id),
+        );
         return;
     }
 
     let Ok(source_definition) = effective_node_definition(source_node, registry) else {
-        errors.push(format!(
-            "edge '{}' source node '{}' has no resolvable contract",
-            edge.id, source_node.id
-        ));
+        diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::MissingSourceContract,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!(
+                    "edge '{}' source node '{}' has no resolvable contract",
+                    edge.id, source_node.id
+                ),
+                true,
+            )
+            .with_detail("source_node_id", &source_node.id)
+            .with_detail("source_node_type", &source_node.node_type),
+        );
         return;
     };
     let Ok(target_definition) = effective_node_definition(target_node, registry) else {
-        errors.push(format!(
-            "edge '{}' target node '{}' has no resolvable contract",
-            edge.id, target_node.id
-        ));
+        diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::MissingTargetContract,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!(
+                    "edge '{}' target node '{}' has no resolvable contract",
+                    edge.id, target_node.id
+                ),
+                true,
+            )
+            .with_detail("target_node_id", &target_node.id)
+            .with_detail("target_node_type", &target_node.node_type),
+        );
         return;
     };
 
@@ -99,10 +191,21 @@ fn validate_edge_contract(
         .iter()
         .find(|port| port.id == edge.source_handle)
     else {
-        errors.push(format!(
-            "edge '{}' references unknown source output '{}.{}'",
-            edge.id, edge.source, edge.source_handle
-        ));
+        diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::MissingSourceOutput,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!(
+                    "edge '{}' references unknown source output '{}.{}'",
+                    edge.id, edge.source, edge.source_handle
+                ),
+                true,
+            )
+            .with_detail("source_node_id", &edge.source)
+            .with_detail("source_node_type", &source_node.node_type)
+            .with_detail("source_port_id", &edge.source_handle),
+        );
         return;
     };
     let Some(target_port) = target_definition
@@ -110,10 +213,21 @@ fn validate_edge_contract(
         .iter()
         .find(|port| port.id == edge.target_handle)
     else {
-        errors.push(format!(
-            "edge '{}' references unknown target input '{}.{}'",
-            edge.id, edge.target, edge.target_handle
-        ));
+        diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::MissingTargetInput,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!(
+                    "edge '{}' references unknown target input '{}.{}'",
+                    edge.id, edge.target, edge.target_handle
+                ),
+                true,
+            )
+            .with_detail("target_node_id", &edge.target)
+            .with_detail("target_node_type", &target_node.node_type)
+            .with_detail("target_port_id", &edge.target_handle),
+        );
         return;
     };
 
@@ -122,32 +236,147 @@ fn validate_edge_contract(
             .get(&(edge.target.as_str(), edge.target_handle.as_str()))
             .is_some_and(|count| *count > 1)
     {
-        errors.push(format!(
-            "target input '{}.{}' has multiple incoming edges",
-            edge.target, edge.target_handle
-        ));
+        diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::TargetInputCapacityReached,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!(
+                    "target input '{}.{}' has multiple incoming edges",
+                    edge.target, edge.target_handle
+                ),
+                true,
+            )
+            .with_detail("target_node_id", &edge.target)
+            .with_detail("target_port_id", &edge.target_handle),
+        );
     }
 
     match check_connection_ports(&source_node.id, source_port, &target_node.id, target_port) {
         Ok(result) if result.is_compatible() => {}
         Ok(result) => {
             if let Some(diagnostic) = result.rejection {
-                errors.push(format!(
-                    "edge '{}' is incompatible: {}",
-                    edge.id, diagnostic.message
-                ));
+                diagnostics.push(
+                    WorkflowGraphDiagnostic::edge(
+                        WorkflowGraphDiagnosticCode::IncompatiblePortTypes,
+                        WorkflowGraphDiagnosticSeverity::Error,
+                        &edge.id,
+                        format!("edge '{}' is incompatible: {}", edge.id, diagnostic.message),
+                        true,
+                    )
+                    .with_detail("source_node_id", &source_node.id)
+                    .with_detail("source_port_id", &source_port.id)
+                    .with_detail("target_node_id", &target_node.id)
+                    .with_detail("target_port_id", &target_port.id)
+                    .with_detail("rejection_reason", format!("{:?}", diagnostic.reason)),
+                );
             } else {
-                errors.push(format!("edge '{}' is incompatible", edge.id));
+                diagnostics.push(WorkflowGraphDiagnostic::edge(
+                    WorkflowGraphDiagnosticCode::IncompatiblePortTypes,
+                    WorkflowGraphDiagnosticSeverity::Error,
+                    &edge.id,
+                    format!("edge '{}' is incompatible", edge.id),
+                    true,
+                ));
             }
         }
-        Err(error) => errors.push(format!(
-            "edge '{}' compatibility check failed: {}",
-            edge.id, error
-        )),
+        Err(error) => diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::CompatibilityCheckFailed,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!("edge '{}' compatibility check failed: {}", edge.id, error),
+                true,
+            )
+            .with_detail("source_node_id", &source_node.id)
+            .with_detail("source_port_id", &source_port.id)
+            .with_detail("target_node_id", &target_node.id)
+            .with_detail("target_port_id", &target_port.id),
+        ),
     }
 
     if would_create_cycle(graph, &source_node.id, &target_node.id) {
-        errors.push(format!("edge '{}' would create a cycle", edge.id));
+        diagnostics.push(
+            WorkflowGraphDiagnostic::edge(
+                WorkflowGraphDiagnosticCode::CycleDetected,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &edge.id,
+                format!("edge '{}' would create a cycle", edge.id),
+                true,
+            )
+            .with_detail("source_node_id", &source_node.id)
+            .with_detail("target_node_id", &target_node.id),
+        );
+    }
+}
+
+fn diagnostic_from_effective_definition_error(
+    node: &GraphNode,
+    error: EffectiveDefinitionError,
+) -> WorkflowGraphDiagnostic {
+    match error {
+        EffectiveDefinitionError::UnknownNodeType(node_type)
+            if RETIRED_NODE_TYPES.contains(&node_type.as_str()) =>
+        {
+            WorkflowGraphDiagnostic::node(
+                WorkflowGraphDiagnosticCode::RetiredNodeType,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &node.id,
+                &node_type,
+                format!(
+                    "retired node type '{}' is no longer executable; use canonical llm-inference",
+                    node_type
+                ),
+                true,
+            )
+            .with_detail("replacement_node_type", "llm-inference")
+        }
+        EffectiveDefinitionError::UnknownNodeType(node_type) => WorkflowGraphDiagnostic::node(
+            WorkflowGraphDiagnosticCode::UnknownNodeType,
+            WorkflowGraphDiagnosticSeverity::Error,
+            &node.id,
+            &node_type,
+            format!("node '{}' has unknown node type '{}'", node.id, node_type),
+            true,
+        ),
+        EffectiveDefinitionError::InvalidNodeId { node_id, message } => {
+            WorkflowGraphDiagnostic::node(
+                WorkflowGraphDiagnosticCode::InvalidNodeId,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &node.id,
+                &node.node_type,
+                format!("node '{}' has invalid node id: {}", node.id, message),
+                true,
+            )
+            .with_detail("invalid_node_id", node_id)
+        }
+        EffectiveDefinitionError::InvalidNodeType { node_type, message } => {
+            WorkflowGraphDiagnostic::node(
+                WorkflowGraphDiagnosticCode::InvalidNodeType,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &node.id,
+                &node.node_type,
+                format!(
+                    "node '{}' has invalid node type '{}': {}",
+                    node.id, node_type, message
+                ),
+                true,
+            )
+            .with_detail("invalid_node_type", node_type)
+        }
+        EffectiveDefinitionError::InvalidDynamicDefinition { message } => {
+            WorkflowGraphDiagnostic::node(
+                WorkflowGraphDiagnosticCode::InvalidDynamicDefinition,
+                WorkflowGraphDiagnosticSeverity::Error,
+                &node.id,
+                &node.node_type,
+                format!(
+                    "node '{}' dynamic contract definition is invalid: {}",
+                    node.id, message
+                ),
+                true,
+            )
+        }
     }
 }
 
@@ -171,41 +400,5 @@ fn would_create_cycle(graph: &WorkflowGraph, source_node_id: &str, target_node_i
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::graph::{GraphEdge, GraphNode, Position};
-
-    #[test]
-    fn contract_validation_reports_canonical_incompatible_edges() {
-        let registry = NodeRegistry::new();
-        let graph = WorkflowGraph {
-            nodes: vec![
-                GraphNode {
-                    id: "image".to_string(),
-                    node_type: "image-input".to_string(),
-                    position: Position::default(),
-                    data: serde_json::json!({}),
-                },
-                GraphNode {
-                    id: "text".to_string(),
-                    node_type: "text-output".to_string(),
-                    position: Position::default(),
-                    data: serde_json::json!({}),
-                },
-            ],
-            edges: vec![GraphEdge {
-                id: "image-to-text".to_string(),
-                source: "image".to_string(),
-                source_handle: "image".to_string(),
-                target: "text".to_string(),
-                target_handle: "text".to_string(),
-            }],
-            derived_graph: None,
-        };
-
-        let errors = validate_workflow_graph_contract(&graph, &registry);
-
-        assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("source type 'Image' is not compatible"));
-    }
-}
+#[path = "contract_validation_tests.rs"]
+mod tests;

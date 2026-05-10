@@ -5,14 +5,14 @@ inspectable and explain why they cannot be submitted.
 
 **Tasks:**
 
-- [ ] Define a stale graph diagnostic DTO in the backend service/domain layer.
-- [ ] Classify existing node-engine validation, workflow-service contract
+- [x] Define a stale graph diagnostic DTO in the backend service/domain layer.
+- [x] Classify existing node-engine validation, workflow-service contract
   validation, and effective-definition errors into that DTO instead of adding
   a parallel validator.
-- [ ] Replace or wrap string-returning contract-validation paths with
+- [x] Replace or wrap string-returning contract-validation paths with
   structured diagnostics before exposing diagnostics across backend/frontend
   boundaries.
-- [ ] Use the retired-node classification path created by the canonicalization
+- [x] Use the retired-node classification path created by the canonicalization
   split to emit stale diagnostics for retired node types.
 - [ ] Cover unknown node types, retired node types, missing definitions,
   missing nodes, missing edge endpoints, missing edge handles, unresolved Puma
@@ -28,19 +28,19 @@ inspectable and explain why they cannot be submitted.
 - [ ] Keep stale graph validation as a replayable projection over saved graph
   data. Loading the same saved graph should produce the same stale facts without
   requiring workflow-run side effects.
-- [ ] Bound diagnostic reason length and field counts before values cross IPC,
+- [x] Bound diagnostic reason length and field counts before values cross IPC,
   submit/admission, or run-inspection boundaries.
-- [ ] Update diagnostics or workflow-service README ownership notes.
+- [x] Update diagnostics or workflow-service README ownership notes.
 
 **Verification:**
 
-- Unit tests cover each stale graph diagnostic kind.
+- Unit tests cover the foundational stale graph diagnostic kinds.
 - Cross-layer test loads a stale graph and verifies backend returns stale node
   and edge facts without frontend inference.
 - Test verifies a retired node is not silently rewritten by current load/save
   paths.
-- Test verifies stale diagnostic records are structured backend DTOs, not
-  frontend-parsed strings.
+- Test verifies foundational stale diagnostic records are structured backend
+  DTOs, not frontend-parsed strings.
 - Serde round-trip tests cover stale graph diagnostic DTOs and bounded reason
   payloads.
 - Replay test verifies the same stale saved graph produces stable diagnostics
@@ -50,4 +50,22 @@ inspectable and explain why they cannot be submitted.
 - Submit/admission test verifies stale executable graphs are blocked with
   bounded visible reasons.
 
-**Status:** Not started
+**Verification Results:**
+
+- `cargo test -p pantograph-workflow-service graph::` passed after adding
+  `WorkflowGraphDiagnostic`, bounded diagnostic payload helpers, the structured
+  graph contract-validation classifier, and tests for retired node types,
+  unknown node types, missing edge endpoint nodes, missing source outputs,
+  missing target inputs, serde round-trip, and payload bounds.
+
+**Remaining Follow-Up:**
+
+- Add read-model/session/load projection APIs that return
+  `WorkflowGraphDiagnostic` with saved graph snapshots.
+- Extend coverage to unresolved Puma model references and stale dynamic port
+  contracts once the graph inspection projection exists.
+- Add cross-layer saved-graph inspection and submit/admission blocking tests in
+  separate slices to avoid mixing editor stale facts with execution admission
+  behavior.
+
+**Status:** Partially completed on 2026-05-10

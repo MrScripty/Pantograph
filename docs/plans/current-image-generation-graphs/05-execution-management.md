@@ -96,6 +96,17 @@ Update during implementation:
   for downstream diagnostics and planning. This preserves the no-fallback rule:
   the change is deterministic task normalization for current graph intent, not
   a legacy direct-diffusion compatibility route.
+- 2026-05-10: Started Milestone 3 with the backend graph diagnostic DTO and
+  classifier foundation. `WorkflowGraphDiagnostic` is now owned by the graph
+  service facade with typed code/severity/scope fields, bounded message/detail
+  payloads, and contract-validation classification for retired node types,
+  unknown node types, effective-definition failures, missing edge endpoints,
+  missing handles, incompatible ports, capacity errors, and cycles. The older
+  `Vec<String>` graph validator remains as a string projection of the
+  structured diagnostics for existing binding consumers. Contract-validation
+  tests were split into `contract_validation_tests.rs`, keeping the production
+  validation module below the standards decomposition threshold after the DTO
+  addition.
 
 ## Commit Cadence Notes
 
@@ -212,6 +223,8 @@ Worker rules:
 - Milestone 2 completed for tracked workflow/template cleanup, canonicalization
   split, no-rewrite persistence behavior, Pumas diffusion selector/probe task
   projection, and documentation.
+- Milestone 3 partially completed for the backend diagnostic DTO, bounded
+  payload contract, and structured graph contract-validation classifier.
 
 ### Deviations
 
@@ -236,6 +249,9 @@ Worker rules:
 - Plan the next vertical slice for Milestone 3 backend stale graph diagnostics,
   unless the unrelated dirty Pumas plan edit requires integration or cleanup
   first.
+- Continue Milestone 3 by adding the shared saved-graph/read-model inspection
+  projection that returns `WorkflowGraphDiagnostic` alongside the graph
+  snapshot, then wire session/load consumers in a separate validated slice.
 
 ### Verification Summary
 
@@ -262,6 +278,10 @@ Worker rules:
 - A follow-up `rg -n "diffusion-inference" crates src packages .pantograph/workflows -g '!target'`
   reports only `.pantograph/workflows/README.md`; no tracked saved workflow,
   bundled template, or executable producer emits the retired node.
+- `cargo test -p pantograph-workflow-service graph::` passed for the Milestone
+  3 DTO/classifier foundation, including serde round-trip, bounded diagnostic
+  details, retired and unknown node classification, and missing edge
+  endpoint/handle diagnostics.
 
 ### Traceability Links
 
