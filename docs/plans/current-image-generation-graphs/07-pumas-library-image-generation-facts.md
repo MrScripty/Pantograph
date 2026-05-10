@@ -838,6 +838,7 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P5 partial-download follow-up: fixed in Pumas commit `518835c8`. Package-facts dry-run now reports blocked partial-download rows from indexed metadata and existing cache rows without constructing a package inspection context, computing a source fingerprint, regenerating rows, or requiring missing package files.
 - 2026-05-10 P5 report artifact finding: Pumas commit `93a4fae1` persists package-facts dry-run reports as package-facts-specific JSON and Markdown artifacts in the existing migration report directory and index. This covers dry-run machine/human report output for planned regenerate/delete-obsolete/skipped/error fields, but execution/checkpoint DTOs and actual regenerated/deleted row result fields remain open.
 - 2026-05-10 P5 obsolete-row delete prerequisite: Pumas commit `48b37ca2` adds a selected-artifact-safe cache delete path for obsolete empty-selected-artifact package-facts rows. It preserves concrete selected-artifact rows and emits `PackageFactsModified` after the durable delete; migration execution still needs to call it from the backfill runner.
+- 2026-05-10 P5 execution finding: Pumas commit `1992bcfa` adds distinct package-facts planned-work, execution-item, execution-report, and checkpoint DTOs plus a checkpointed runner. The first execution slice materializes work from dry-run inventory, skips partial downloads, regenerates missing/stale rows through canonical selected-model package-facts hydration, deletes planned obsolete rows, records written fingerprints, and clears completed checkpoints. Resume, source-file-change, invalid-json repair, and multi-artifact execution fixtures still need targeted coverage.
 
 ## Implementation Sequencing
 
@@ -1102,16 +1103,16 @@ contract without serving stale facts to Pantograph or other clients.
 **Tasks:**
 - [x] Add a package-facts migration dry-run mode that inventories every indexed
       model and selected artifact.
-- [ ] Add distinct package-facts migration dry-run, execution, item, and
+- [x] Add distinct package-facts migration dry-run, execution, item, and
       checkpoint DTOs, or a typed migration-report envelope with separate
       package-facts payloads.
 - [x] Report detail and summary cache row state per selected artifact:
       `fresh`, `missing`, `stale_contract`, `stale_fingerprint`,
       `invalid_json`, `wrong_selected_artifact`, `blocked_partial_download`, or
       `error`.
-- [ ] Add checkpointed execution keyed by model id, selected artifact id, target
+- [x] Add checkpointed execution keyed by model id, selected artifact id, target
       package-facts contract version, and source fingerprint.
-- [ ] Regenerate detail and summary cache rows through the canonical
+- [x] Regenerate detail and summary cache rows through the canonical
       selected-model package-facts hydration path.
 - [ ] Use the shared package-facts cache freshness classifier for dry-run
       inventory, execution decisions, and post-migration validation.
