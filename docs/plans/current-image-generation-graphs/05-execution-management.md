@@ -232,6 +232,12 @@ Update during implementation:
   technical-fit fallback selection. Unmatched overrides and incomplete
   candidate/runtime state now produce unselected typed diagnostic decisions
   instead of synthetic override candidates or conservative selected runtimes.
+- 2026-05-10: Continued Milestone 5 by retiring fallback-named technical-fit
+  DTO values. Runtime-registry, embedded-runtime projection, and
+  workflow-service tests now use automatic/explicit decisions plus typed
+  missing-candidate or missing-runtime-state reasons instead of
+  `ConservativeFallback`, `OverrideFallback`, or `conservative_fallback`
+  serialized values.
 
 ## Commit Cadence Notes
 
@@ -414,8 +420,8 @@ Worker rules:
   runtime facts. Runtime-registry and embedded-runtime producer-side fallback
   synthesis still needs replacement.
 - Milestone 5 runtime-registry technical-fit selection no longer emits
-  executable fallback decisions. Fallback-named DTO enum variants still exist
-  for contract cleanup, but the canonical selector no longer produces them.
+  executable fallback decisions, and fallback-named technical-fit DTO variants
+  have been removed from runtime-registry/workflow-service contracts.
 
 ### Deviations
 
@@ -485,12 +491,10 @@ Worker rules:
 - Continue Milestone 5 by wiring selected device class into frontend
   run-inspection presentation only from typed backend projection records, not
   by parsing raw diagnostic payload JSON.
-- Continue Milestone 5 by replacing embedded-runtime/runtime-registry
-  fallback-named technical-fit production with typed rejection diagnostics so
-  workflow-service no longer needs to receive fallback-shaped decision DTOs.
-- Continue Milestone 5 by retiring or replacing fallback-named technical-fit
-  DTO variants after verifying no producer emits them and no fixture depends on
-  them as executable selections.
+- Continue Milestone 5 by replacing remaining legacy raw device-string
+  execution paths and frontend synthetic device choices. Technical-fit fallback
+  selection is no longer executable or contract-shaped in the canonical Rust
+  path.
 
 ### Verification Summary
 
@@ -616,6 +620,17 @@ Worker rules:
   `git diff --check` passed after runtime-registry stopped synthesizing
   override fallback candidates and stopped selecting conservative fallback
   runtime candidates.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit_preflight_blocks_missing_candidate_selected_backend`,
+  `cargo test -p pantograph-workflow-service workflow_preflight`,
+  `cargo test -p pantograph-workflow-service workflow_run_honors_blocking_backend_technical_fit_decision`,
+  `cargo test -p pantograph-workflow-service session_runtime_preflight`, and
+  `git diff --check` passed after fallback-named technical-fit DTO variants
+  were removed. The first workflow-service verification attempt used multiple
+  Cargo filters and failed before tests ran; the tests were rerun with valid
+  single-filter commands.
 
 ### Traceability Links
 

@@ -38,7 +38,6 @@ impl RuntimeTechnicalFitFactor {
 pub enum RuntimeTechnicalFitCandidateSourceKind {
     PumasPackageFacts,
     RuntimeCapabilityFallback,
-    OverrideFallback,
     #[default]
     Unknown,
 }
@@ -278,7 +277,6 @@ pub enum RuntimeTechnicalFitSelectionMode {
     #[default]
     Automatic,
     ExplicitOverride,
-    ConservativeFallback,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -295,7 +293,6 @@ pub enum RuntimeTechnicalFitReasonCode {
     MissingCandidateData,
     MissingRuntimeState,
     DeterministicTieBreak,
-    ConservativeFallback,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

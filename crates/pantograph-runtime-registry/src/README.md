@@ -61,7 +61,7 @@ process ownership and app composition stay outside this crate.
   selector, and decision contracts that freeze selector inputs plus
   machine-consumable reason codes before workflow integration lands.
 - `technical_fit_tests.rs`: technical-fit normalization, override, residency,
-  queue-pressure, budget-pressure, and selector fallback tests extracted from
+  queue-pressure, budget-pressure, and selector rejection tests extracted from
   the production selector module.
 - `warmup.rs`: backend-owned warmup/reuse disposition contracts derived from
   runtime registry status for host execution orchestration.

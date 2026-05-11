@@ -187,7 +187,7 @@ async fn keep_alive_session_create_blocks_when_runtime_preflight_fails() {
         8,
         1024,
         WorkflowTechnicalFitDecision {
-            selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: None,
             selected_runtime_id: None,
             selected_backend_key: Some("llama_cpp".to_string()),
@@ -234,7 +234,7 @@ async fn keep_alive_enable_blocks_when_runtime_preflight_fails() {
         8,
         1024,
         WorkflowTechnicalFitDecision {
-            selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: None,
             selected_runtime_id: None,
             selected_backend_key: Some("llama_cpp".to_string()),

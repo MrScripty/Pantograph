@@ -111,7 +111,7 @@ typed diagnostic and the canonical design is fixed.
   carry backend id, task/model support, runtime variant, device class,
   selected device id, resource estimates where known, optional observed
   throughput hints, and device diagnostics.
-- [ ] Replace `ConservativeFallback`, override-fallback candidate synthesis,
+- [x] Replace `ConservativeFallback`, override-fallback candidate synthesis,
   and any fallback-named executable technical-fit selection with typed
   rejection diagnostics. Missing candidate/runtime state may be reported as
   advisory diagnostics, but it must not select an executable backend.
@@ -518,10 +518,9 @@ typed diagnostic and the canonical design is fixed.
     ungrounded fallback decisions bypass runtime readiness through the
     `!enforce_runtime_readiness` early return. The final slice rejects
     fallback/incomplete-state decisions before that early return.
-  - Remaining follow-up: embedded-runtime/runtime-registry producers still
-    expose fallback-named selection modes and reason codes. A later slice must
-    replace producer-side fallback synthesis with typed rejection diagnostics
-    so the compatibility-shaped DTO values can be retired.
+  - Remaining follow-up at commit time: embedded-runtime/runtime-registry
+    producers still exposed fallback-named selection modes and reason codes.
+    The later DTO cleanup slice retired those compatibility-shaped values.
 - 2026-05-10 slice: runtime-registry technical-fit fallback removal.
   - Smallest useful vertical slice: stop runtime-registry from synthesizing
     override fallback candidates or selecting conservative fallback candidates
@@ -535,9 +534,7 @@ typed diagnostic and the canonical design is fixed.
     `crates/pantograph-runtime-registry/README.md`, and this plan directory.
   - No-fallback/no-legacy confirmation: unmatched overrides no longer create
     synthetic executable candidates, and incomplete runtime/candidate state no
-    longer returns selected runtime/backend/model facts. Fallback-named enum
-    values remain present only as not-yet-retired contract values; this slice
-    stops the canonical selector from emitting them.
+    longer returns selected runtime/backend/model facts.
   - Standards/blast-radius gate: runtime-registry remains the backend selector
     owner; public DTO shape is unchanged; workflow-service, embedded-runtime
     adapters, persisted schema, generated files, frontend behavior, feature
@@ -548,10 +545,52 @@ typed diagnostic and the canonical design is fixed.
     `cargo test -p pantograph-runtime-registry technical_fit`,
     `cargo test -p pantograph-embedded-runtime technical_fit`, and
     `git diff --check`.
-  - Remaining follow-up: workflow-service and embedded-runtime DTO enums still
-    expose fallback-named variants for older serialized shapes. A later
-    contract cleanup should remove or replace those variants once all producers
-    and fixtures have migrated.
+  - Remaining follow-up at commit time: workflow-service and embedded-runtime
+    DTO enums still exposed fallback-named variants. The later DTO cleanup
+    slice removed those values.
+- 2026-05-10 slice: technical-fit fallback DTO cleanup.
+  - Smallest useful vertical slice: remove fallback-named technical-fit DTO
+    variants from runtime-registry and workflow-service contracts, remove the
+    embedded-runtime projection arms, and update focused tests to use
+    automatic/explicit decisions with `MissingCandidateData` or
+    `MissingRuntimeState` reason codes.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_preflight.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_run.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_runtime_preflight.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: `ConservativeFallback`,
+    `OverrideFallback`, and `conservative_fallback` are no longer accepted as
+    canonical Rust technical-fit DTO values in the touched contracts. Tests now
+    assert typed missing-state diagnostics instead of fallback-shaped selected
+    decisions.
+  - Standards/blast-radius gate: the touched crates keep their existing
+    ownership boundaries; this is a contract cleanup with no persisted schema,
+    frontend, generated file, feature flag, dependency, lockfile, runtime
+    lifecycle, path/resource, or worker-execution changes; test isolation uses
+    focused runtime-registry, embedded-runtime, and workflow-service tests.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit_preflight_blocks_missing_candidate_selected_backend`,
+    `cargo test -p pantograph-workflow-service workflow_preflight`,
+    `cargo test -p pantograph-workflow-service workflow_run_honors_blocking_backend_technical_fit_decision`,
+    `cargo test -p pantograph-workflow-service session_runtime_preflight`, and
+    `git diff --check`.
+  - Deviation: the first workflow-service verification command attempted
+    multiple Cargo test filters and failed before tests ran. It was rerun as
+    valid single-filter commands.
+  - Remaining follow-up: code search found no fallback-named technical-fit DTO
+    values in runtime-registry, workflow-service, or embedded-runtime after the
+    slice. Remaining Milestone 5 work is now raw device-string execution,
+    managed runtime variant state, frontend device options, and node-engine
+    backend routing.
 
 **Verification:**
 

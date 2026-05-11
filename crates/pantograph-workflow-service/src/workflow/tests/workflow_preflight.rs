@@ -92,13 +92,13 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
             runtime_capabilities: Vec::new(),
         },
         WorkflowTechnicalFitDecision {
-            selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: Some("llama_cpp".to_string()),
             selected_runtime_id: Some("llama_cpp".to_string()),
             selected_backend_key: Some("llama_cpp".to_string()),
             selected_model_id: None,
             reasons: vec![WorkflowTechnicalFitReason::new(
-                WorkflowTechnicalFitReasonCode::ConservativeFallback,
+                WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 Some("llama_cpp"),
             )],
             compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {
@@ -139,13 +139,13 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
     assert_eq!(
         response.technical_fit_decision,
         Some(WorkflowTechnicalFitDecision {
-            selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: Some("llama_cpp".to_string()),
             selected_runtime_id: Some("llama_cpp".to_string()),
             selected_backend_key: Some("llama_cpp".to_string()),
             selected_model_id: None,
             reasons: vec![WorkflowTechnicalFitReason {
-                code: WorkflowTechnicalFitReasonCode::ConservativeFallback,
+                code: WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 candidate_id: Some("llama_cpp".to_string()),
             }],
             compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {

@@ -571,9 +571,6 @@ fn project_selection_mode(
         RuntimeTechnicalFitSelectionMode::ExplicitOverride => {
             WorkflowTechnicalFitSelectionMode::ExplicitOverride
         }
-        RuntimeTechnicalFitSelectionMode::ConservativeFallback => {
-            WorkflowTechnicalFitSelectionMode::ConservativeFallback
-        }
     }
 }
 
@@ -618,9 +615,6 @@ fn project_reason_code(
         }
         RuntimeTechnicalFitReasonCode::DeterministicTieBreak => {
             WorkflowTechnicalFitReasonCode::DeterministicTieBreak
-        }
-        RuntimeTechnicalFitReasonCode::ConservativeFallback => {
-            WorkflowTechnicalFitReasonCode::ConservativeFallback
         }
     }
 }
@@ -806,7 +800,7 @@ mod tests {
     #[test]
     fn workflow_decision_projection_preserves_reason_codes() {
         let decision = RuntimeTechnicalFitDecision {
-            selection_mode: RuntimeTechnicalFitSelectionMode::ConservativeFallback,
+            selection_mode: RuntimeTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: Some("candidate-a".to_string()),
             selected_runtime_id: Some("llama_cpp".to_string()),
             selected_backend_key: Some("llama_cpp".to_string()),
@@ -838,7 +832,7 @@ mod tests {
         assert_eq!(
             projected,
             WorkflowTechnicalFitDecision {
-                selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+                selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
                 selected_candidate_id: Some("candidate-a".to_string()),
                 selected_runtime_id: Some("llama_cpp".to_string()),
                 selected_backend_key: Some("llama_cpp".to_string()),

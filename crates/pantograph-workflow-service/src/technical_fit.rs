@@ -130,7 +130,6 @@ pub enum WorkflowTechnicalFitSelectionMode {
     #[default]
     Automatic,
     ExplicitOverride,
-    ConservativeFallback,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -147,7 +146,6 @@ pub enum WorkflowTechnicalFitReasonCode {
     MissingCandidateData,
     MissingRuntimeState,
     DeterministicTieBreak,
-    ConservativeFallback,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -509,15 +507,13 @@ fn workflow_runtime_preflight_from_decision(
 }
 
 fn decision_has_incomplete_runtime_state(decision: &WorkflowTechnicalFitDecision) -> bool {
-    decision.selection_mode == WorkflowTechnicalFitSelectionMode::ConservativeFallback
-        || decision.reasons.iter().any(|reason| {
-            matches!(
-                reason.code,
-                WorkflowTechnicalFitReasonCode::MissingCandidateData
-                    | WorkflowTechnicalFitReasonCode::MissingRuntimeState
-                    | WorkflowTechnicalFitReasonCode::ConservativeFallback
-            )
-        })
+    decision.reasons.iter().any(|reason| {
+        matches!(
+            reason.code,
+            WorkflowTechnicalFitReasonCode::MissingCandidateData
+                | WorkflowTechnicalFitReasonCode::MissingRuntimeState
+        )
+    })
 }
 
 fn decision_conflicts_with_required_backends(
@@ -644,7 +640,6 @@ fn describe_technical_fit_blocking_issue(decision: &WorkflowTechnicalFitDecision
             reason.code,
             WorkflowTechnicalFitReasonCode::MissingRuntimeState
                 | WorkflowTechnicalFitReasonCode::MissingCandidateData
-                | WorkflowTechnicalFitReasonCode::ConservativeFallback
         )
     }) {
         return format!(
@@ -891,9 +886,9 @@ mod tests {
     }
 
     #[test]
-    fn technical_fit_preflight_blocks_fallback_selected_backend() {
+    fn technical_fit_preflight_blocks_missing_candidate_selected_backend() {
         let decision = WorkflowTechnicalFitDecision {
-            selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: Some("candle".to_string()),
             selected_runtime_id: Some("candle".to_string()),
             selected_backend_key: Some("candle".to_string()),

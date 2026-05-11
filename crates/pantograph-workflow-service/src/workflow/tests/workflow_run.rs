@@ -100,7 +100,7 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
         10,
         256,
         WorkflowTechnicalFitDecision {
-            selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: None,
             selected_runtime_id: None,
             selected_backend_key: Some("llama_cpp".to_string()),
@@ -111,7 +111,7 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
                     None,
                 ),
                 WorkflowTechnicalFitReason::new(
-                    WorkflowTechnicalFitReasonCode::ConservativeFallback,
+                    WorkflowTechnicalFitReasonCode::MissingCandidateData,
                     None,
                 ),
             ],
