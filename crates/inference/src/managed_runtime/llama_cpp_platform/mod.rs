@@ -24,6 +24,12 @@ pub(crate) const LLAMA_CUDA_VARIANT: LlamaRuntimeVariant = LlamaRuntimeVariant {
     display_suffix: Some("CUDA"),
 };
 
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) const LLAMA_METAL_VARIANT: LlamaRuntimeVariant = LlamaRuntimeVariant {
+    runtime_variant_id: "llama_cpp.metal",
+    display_suffix: Some("Metal"),
+};
+
 pub(crate) trait LlamaPlatform: Sync {
     fn release_asset(&self, version: &str) -> ReleaseAsset;
     fn catalog_runtime_variants(&self) -> &'static [LlamaRuntimeVariant] {
@@ -51,9 +57,9 @@ pub(crate) trait LlamaPlatform: Sync {
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod linux;
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[cfg(any(test, all(target_os = "macos", target_arch = "aarch64")))]
 mod macos_arm64;
-#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+#[cfg(any(test, all(target_os = "macos", target_arch = "x86_64")))]
 mod macos_x64;
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 mod windows;

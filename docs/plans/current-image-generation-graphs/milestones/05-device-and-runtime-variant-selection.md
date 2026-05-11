@@ -121,8 +121,13 @@ typed diagnostic and the canonical design is fixed.
     frontend, Tauri, embedded-runtime manager, and backend download-source
     resolver. This closes Linux/Windows CPU/CUDA modeling for the current
     managed llama.cpp archive layout.
-- [ ] Model llama.cpp Metal builds on macOS only when a Metal-capable runtime
+- [x] Model llama.cpp Metal builds on macOS only when a Metal-capable runtime
   is available.
+  - 2026-05-11: macOS arm64/x64 managed llama.cpp platform definitions now
+    advertise `llama_cpp.metal` alongside CPU, while Linux/Windows still expose
+    only their CPU/CUDA variants. Metal validation and command resolution
+    require `libggml-metal.dylib`; missing Metal runtime files return the
+    canonical missing runtime-variant diagnostic instead of falling back to CPU.
 - [x] Make llama.cpp command resolution select an explicit runtime variant
   before constructing `llama-server` arguments.
   - 2026-05-11: `resolve_binary_command` now resolves the persisted selected

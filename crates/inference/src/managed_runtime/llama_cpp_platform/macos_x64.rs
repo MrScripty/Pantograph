@@ -4,7 +4,8 @@ use crate::RuntimeVariantId;
 
 use super::{
     ensure_unix_library_aliases, extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform,
-    ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
+    LlamaRuntimeVariant, ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
+    LLAMA_CPU_VARIANT, LLAMA_METAL_VARIANT,
 };
 
 pub(crate) struct MacOsX64Platform;
@@ -27,11 +28,26 @@ impl LlamaPlatform for MacOsX64Platform {
         &["llama-server"]
     }
 
+    fn catalog_runtime_variants(&self) -> &'static [LlamaRuntimeVariant] {
+        &[LLAMA_CPU_VARIANT, LLAMA_METAL_VARIANT]
+    }
+
     fn validate_installation(
         &self,
         binaries_dir: &Path,
         runtime_variant_id: &RuntimeVariantId,
     ) -> Vec<String> {
+        if runtime_variant_id.as_str() == "llama_cpp.metal" {
+            return validate_required_files(
+                binaries_dir,
+                &[
+                    self.installed_server_name(),
+                    "libllama.dylib",
+                    "libggml-metal.dylib",
+                ],
+            );
+        }
+
         if runtime_variant_id.as_str() != "llama_cpp.cpu" {
             return vec![format!(
                 "unsupported llama.cpp runtime variant '{}'",
@@ -39,14 +55,10 @@ impl LlamaPlatform for MacOsX64Platform {
             )];
         }
 
-        let mut missing = Vec::new();
-        if !binaries_dir.join(self.installed_server_name()).exists() {
-            missing.push(self.installed_server_name().to_string());
-        }
-        if !binaries_dir.join("libllama.dylib").exists() {
-            missing.push("libllama.dylib".to_string());
-        }
-        missing
+        validate_required_files(
+            binaries_dir,
+            &[self.installed_server_name(), "libllama.dylib"],
+        )
     }
 
     fn resolve_command(
@@ -55,7 +67,20 @@ impl LlamaPlatform for MacOsX64Platform {
         runtime_variant_id: &RuntimeVariantId,
         args: &[&str],
     ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
-        if runtime_variant_id.as_str() != "llama_cpp.cpu" {
+        if runtime_variant_id.as_str() == "llama_cpp.metal"
+            && !binaries_dir.join("libggml-metal.dylib").exists()
+        {
+            return Err(
+                ManagedRuntimeCommandResolutionError::missing_llamacpp_selected_variant(
+                    runtime_variant_id,
+                    binaries_dir.join("libggml-metal.dylib"),
+                ),
+            );
+        }
+
+        if runtime_variant_id.as_str() != "llama_cpp.cpu"
+            && runtime_variant_id.as_str() != "llama_cpp.metal"
+        {
             return Err(ManagedRuntimeCommandResolutionError::platform(format!(
                 "unsupported llama.cpp runtime variant '{}'",
                 runtime_variant_id
@@ -96,5 +121,45 @@ impl LlamaPlatform for MacOsX64Platform {
     fn is_runtime_library(&self, file_name: &str) -> bool {
         file_name.starts_with("lib")
             && (file_name.ends_with(".dylib") || file_name.contains(".dylib."))
+    }
+}
+
+fn validate_required_files(binaries_dir: &Path, required_files: &[&str]) -> Vec<String> {
+    required_files
+        .iter()
+        .filter(|relative_path| !binaries_dir.join(relative_path).exists())
+        .map(|relative_path| (*relative_path).to_string())
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LlamaPlatform, PLATFORM};
+    use crate::RuntimeVariantId;
+
+    fn runtime_variant_id(value: &str) -> RuntimeVariantId {
+        RuntimeVariantId::parse(value).expect("valid runtime variant")
+    }
+
+    #[test]
+    fn catalog_runtime_variants_include_metal() {
+        let variants = PLATFORM.catalog_runtime_variants();
+
+        assert!(variants
+            .iter()
+            .any(|variant| variant.runtime_variant_id == "llama_cpp.metal"));
+    }
+
+    #[test]
+    fn validate_installation_requires_metal_runtime_library_for_metal_variant() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(temp_dir.path().join(PLATFORM.installed_server_name()), [])
+            .expect("write server");
+        std::fs::write(temp_dir.path().join("libllama.dylib"), []).expect("write libllama");
+
+        let missing =
+            PLATFORM.validate_installation(temp_dir.path(), &runtime_variant_id("llama_cpp.metal"));
+
+        assert_eq!(missing, vec!["libggml-metal.dylib".to_string()]);
     }
 }

@@ -1603,6 +1603,21 @@ Worker rules:
   `cargo test -p pantograph-embedded-runtime managed_runtime`, and
   `npm run typecheck` passed after managed runtime install/download requests
   became variant-aware.
+- 2026-05-11 macOS llama.cpp Metal variant slice: smallest useful vertical
+  slice was limited to macOS managed-runtime variant exposure, Metal file
+  validation, selected Metal command diagnostics, focused platform tests, and
+  plan notes. Allowed write set:
+  `crates/inference/src/managed_runtime/contracts.rs`,
+  `crates/inference/src/managed_runtime/llama_cpp_platform/mod.rs`,
+  `macos_arm64.rs`, `macos_x64.rs`, and this plan directory. The slice
+  preserves the no-fallback/no-legacy rule by requiring
+  `libggml-metal.dylib` for `llama_cpp.metal` and rejecting missing Metal
+  runtime files with typed runtime-variant diagnostics instead of using CPU.
+- `cargo test -p inference managed_runtime::llama_cpp_platform` and
+  `cargo test -p inference managed_runtime::contracts` passed after macOS
+  llama.cpp managed-runtime variants gained Metal modeling. The first focused
+  test run passed but reported a Linux dead-code warning for the Metal constant;
+  scoping the constant to macOS/test builds removed the warning.
 
 ### Traceability Links
 

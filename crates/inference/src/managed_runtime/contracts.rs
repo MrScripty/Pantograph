@@ -262,6 +262,7 @@ impl ManagedRuntimeCommandResolutionError {
         let backend_id = BackendId::parse("llama_cpp").expect("static backend id is valid");
         let device_class = match runtime_variant_id.as_str() {
             "llama_cpp.cuda" => Some(InferenceDeviceClass::Cuda),
+            "llama_cpp.metal" => Some(InferenceDeviceClass::Metal),
             _ => None,
         };
         Self::MissingRuntimeVariant {
