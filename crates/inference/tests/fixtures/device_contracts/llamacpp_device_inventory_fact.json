@@ -1,0 +1,8 @@
+{
+  "backend_device_id": "CUDA0",
+  "display_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "device_class": "cuda",
+  "device_id": "cuda:0",
+  "total_vram_mb": 8188,
+  "free_vram_mb": 547
+}

@@ -1,12 +1,14 @@
 use inference::{
     BackendExecutionDecision, DeviceResolutionDiagnosticCode, InferenceDeviceClass,
-    InferenceTaskId, RuntimeVariantCapability,
+    InferenceTaskId, LlamaCppDeviceInventoryFact, RuntimeVariantCapability,
 };
 
 const BACKEND_EXECUTION_DECISION_FIXTURE: &str =
     include_str!("fixtures/device_contracts/backend_execution_decision.json");
 const RUNTIME_VARIANT_CAPABILITY_FIXTURE: &str =
     include_str!("fixtures/device_contracts/runtime_variant_capability.json");
+const LLAMACPP_DEVICE_INVENTORY_FACT_FIXTURE: &str =
+    include_str!("fixtures/device_contracts/llamacpp_device_inventory_fact.json");
 
 #[test]
 fn backend_execution_decision_fixture_decodes_through_public_contract() {
@@ -62,6 +64,27 @@ fn runtime_variant_capability_fixture_preserves_diagnostics() {
             .map(|backend_id| backend_id.as_str()),
         Some("llama_cpp")
     );
+}
+
+#[test]
+fn llamacpp_device_inventory_fact_fixture_preserves_canonical_projection() {
+    let fact: LlamaCppDeviceInventoryFact =
+        serde_json::from_str(LLAMACPP_DEVICE_INVENTORY_FACT_FIXTURE)
+            .expect("llama.cpp device inventory fact fixture should decode");
+
+    assert_eq!(fact.backend_device_id, "CUDA0");
+    assert_eq!(fact.device_class, Some(InferenceDeviceClass::Cuda));
+    assert_eq!(
+        fact.device_id.as_ref().map(|id| id.as_str()),
+        Some("cuda:0")
+    );
+    assert_eq!(fact.total_vram_mb, 8_188);
+    assert!(fact.diagnostics.is_empty());
+
+    let encoded = serde_json::to_value(&fact).expect("encode inventory fact");
+    let fixture: serde_json::Value =
+        serde_json::from_str(LLAMACPP_DEVICE_INVENTORY_FACT_FIXTURE).expect("fixture parses");
+    assert_eq!(encoded, fixture);
 }
 
 #[test]

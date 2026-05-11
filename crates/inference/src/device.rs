@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::process::Command;
 
@@ -75,7 +76,8 @@ pub enum DeviceBackendContractError {
 }
 
 /// Canonical fact projected from a backend-local llama.cpp device listing.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct LlamaCppDeviceInventoryFact {
     /// Backend-local selector from `llama-server --list-devices`.
     pub backend_device_id: String,
@@ -90,6 +92,7 @@ pub struct LlamaCppDeviceInventoryFact {
     /// Free reported VRAM in MiB.
     pub free_vram_mb: u64,
     /// Typed diagnostics for unsupported or unprojectable backend-local facts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<DeviceResolutionDiagnostic>,
 }
 

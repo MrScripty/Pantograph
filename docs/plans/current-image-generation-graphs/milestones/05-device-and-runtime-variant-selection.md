@@ -2092,6 +2092,35 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: broader workbench model/runtime/device selectors
     still need to render backend-owned capability facts and submit canonical
     scheduler device policy intent.
+- 2026-05-10 slice: llama.cpp inventory serde fixture.
+  - Smallest useful vertical slice: make `LlamaCppDeviceInventoryFact` a
+    public serde-tested inference DTO and add a fixture that round-trips a
+    canonical CUDA projection.
+  - Allowed write set: `crates/inference/src/device.rs`,
+    `crates/inference/src/lib.rs`,
+    `crates/inference/tests/device_contracts.rs`,
+    `crates/inference/tests/fixtures/device_contracts/llamacpp_device_inventory_fact.json`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: the fixture preserves canonical
+    `cuda:0` projection and typed diagnostics shape; it does not accept raw
+    llama.cpp device selectors as canonical ids, does not add compatibility
+    shims, and does not change runtime startup, scheduler selection, frontend
+    paths, generated DTOs, lockfiles, or workflow fixtures.
+  - Standards/blast-radius gate: this stays in the inference crate public
+    contract and mirrored integration fixture test; no durable state, network,
+    Python, or subprocess execution is involved.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference --test device_contracts llamacpp_device_inventory_fact_fixture_preserves_canonical_projection`,
+    `cargo test -p inference --test device_contracts`,
+    `cargo test -p inference device::tests::parse_llamacpp_inventory_facts`,
+    and `git diff --check`.
+  - Verification deviation: the first fixture run failed because
+    `LlamaCppDeviceInventoryFact.diagnostics` did not default to an empty list;
+    the DTO was fixed with a serde default and the fixture suite passed.
+  - Remaining follow-up: the broad fixture checklist item stays open until all
+    device/runtime DTOs crossing Rust, frontend, diagnostics-ledger, worker,
+    and persisted-state boundaries have explicit fixtures.
 
 **Verification:**
 
@@ -2154,6 +2183,9 @@ typed diagnostic and the canonical design is fixed.
 - Frontend Device Configuration tests prove device config submit validation
   requires a backend-confirmed device and no longer creates synthetic fallback
   choices or stale executable-device submissions.
+- Inference serde fixture tests prove llama.cpp canonical device inventory
+  facts round-trip with backend-local selector attribution, canonical device
+  id/class, VRAM facts, and default-empty diagnostics.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

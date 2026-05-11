@@ -65,7 +65,8 @@ pub use backend::PyTorchBackend;
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use device::{
-    list_llamacpp_devices, parse_llamacpp_device_listing, DeviceBackend, DeviceBackendParseError,
+    list_llamacpp_devices, parse_llamacpp_device_inventory_facts, parse_llamacpp_device_listing,
+    DeviceBackend, DeviceBackendParseError, LlamaCppDeviceInventoryFact,
 };
 pub use device_contracts::{
     BackendExecutionCandidate, BackendExecutionDecision, BackendId, BackendObservedThroughputHint,

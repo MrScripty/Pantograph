@@ -630,6 +630,16 @@ Update during implementation:
   `npm run typecheck`,
   `rg -n "llama-server owns|let llama-server choose|Select your GPU|frontend-owned auto|CPU Only|Provide fallback options" src/components/DeviceConfig.svelte src/components/deviceConfigPresenters.ts src/components/deviceConfigPresenters.test.ts`,
   and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding a serde fixture for canonical
+  llama.cpp device inventory facts. `LlamaCppDeviceInventoryFact` is now a
+  public inference DTO with default-empty diagnostics and a JSON fixture that
+  round-trips a CUDA projection. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p inference --test device_contracts llamacpp_device_inventory_fact_fixture_preserves_canonical_projection`,
+  `cargo test -p inference --test device_contracts`,
+  `cargo test -p inference device::tests::parse_llamacpp_inventory_facts`, and
+  `git diff --check`. The first fixture run failed because diagnostics lacked
+  a serde default; the DTO was fixed and the suite passed.
 
 ## Commit Cadence Notes
 
@@ -1124,6 +1134,13 @@ Worker rules:
   `rg -n "llama-server owns|let llama-server choose|Select your GPU|frontend-owned auto|CPU Only|Provide fallback options" src/components/DeviceConfig.svelte src/components/deviceConfigPresenters.ts src/components/deviceConfigPresenters.test.ts`,
   and `git diff --check` passed after the Device Configuration save path
   began rejecting stale non-backend-confirmed executable-device values.
+- `cargo fmt --all -- --check`,
+  `cargo test -p inference --test device_contracts llamacpp_device_inventory_fact_fixture_preserves_canonical_projection`,
+  `cargo test -p inference --test device_contracts`,
+  `cargo test -p inference device::tests::parse_llamacpp_inventory_facts`, and
+  `git diff --check` passed after `LlamaCppDeviceInventoryFact` gained a
+  public serde fixture. The first fixture run failed on missing diagnostics
+  defaults; adding the serde default fixed the DTO and the test passed.
 
 ### Traceability Links
 
