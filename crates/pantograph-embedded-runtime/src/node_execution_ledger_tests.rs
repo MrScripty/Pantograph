@@ -137,6 +137,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         task_id: Some("text_generation".to_string()),
         backend_key: Some("pytorch".to_string()),
         runtime_id: Some("pytorch.transformers".to_string()),
+        selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         selected_device_class: Some(inference::InferenceDeviceClass::Cuda),
         selected_device_id: Some(inference::InferenceDeviceId::parse("cuda:0").unwrap()),
@@ -220,6 +221,7 @@ fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure(
         task_id: Some("video_understanding".to_string()),
         backend_key: Some("vllm".to_string()),
         runtime_id: Some("vllm".to_string()),
+        selected_runtime_variant_id: None,
         runtime_instance_id: None,
         selected_device_class: None,
         selected_device_id: None,
@@ -347,6 +349,7 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         task_id: Some("text_generation".to_string()),
         backend_key: Some("pytorch".to_string()),
         runtime_id: Some("pytorch.transformers".to_string()),
+        selected_runtime_variant_id: None,
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         selected_device_class: None,
         selected_device_id: None,
@@ -416,6 +419,7 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
     event.cache_handle_id = Some("kv-checkpoint-1".to_string());
     event.artifact_refs = vec!["artifact://audio.wav".to_string()];
     event.resolved_artifact_kind = Some("gguf".to_string());
+    event.selected_runtime_variant_id = Some("pytorch.cuda".to_string());
     event.selected_device_class = Some(inference::InferenceDeviceClass::Cuda);
     event.selected_device_id = Some(inference::InferenceDeviceId::parse("cuda:0").unwrap());
     event.selected_network_node_id = Some("local-node-alpha".to_string());
@@ -445,6 +449,10 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
             );
             assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(
+                payload.selected_runtime_variant_id.as_deref(),
+                Some("pytorch.cuda")
+            );
             assert_eq!(payload.selected_device_class.as_deref(), Some("cuda"));
             assert_eq!(payload.selected_device_id.as_deref(), Some("cuda:0"));
             assert_eq!(
@@ -2475,6 +2483,7 @@ fn inference_lifecycle_event(
         task_id: Some("text_generation".to_string()),
         backend_key: Some("pytorch".to_string()),
         runtime_id: Some("pytorch.transformers".to_string()),
+        selected_runtime_variant_id: None,
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         selected_device_class: None,
         selected_device_id: None,

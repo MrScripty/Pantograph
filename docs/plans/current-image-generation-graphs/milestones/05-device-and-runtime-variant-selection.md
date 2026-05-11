@@ -216,9 +216,15 @@ typed diagnostic and the canonical design is fixed.
     `DeviceResolutionDecision`, and the runtime-load JSON fixture proves the
     selected runtime variant, device class, and device id are serialized as
     resolved decision facts rather than inferred from command arguments.
-- [ ] Update inference lifecycle events, diagnostics ledger projection, and run
+- [x] Update inference lifecycle events, diagnostics ledger projection, and run
   inspection facts to include selected backend id, selected runtime variant,
   device class, and selected device id.
+  - 2026-05-11: inference lifecycle events and diagnostics-ledger inference
+    diagnostic payloads now carry optional `selected_runtime_variant_id`
+    alongside existing backend/device facts. Run-list and run-detail projection
+    consume the explicit payload field and expose/filter/facet it without
+    deriving a runtime variant from runtime id, backend key, command arguments,
+    or raw device strings.
 - [ ] Add scheduler-learning fact fields without implementing learned
   scheduling policy: model id, task kind, selected backend, selected runtime
   variant, selected device class/id, resource estimate when known, execution

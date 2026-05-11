@@ -882,6 +882,8 @@ pub struct InferenceRequestLifecycleEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_instance_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_class: Option<InferenceDeviceClass>,
@@ -2530,6 +2532,7 @@ mod tests {
             task_id: Some("text_generation".to_string()),
             backend_key: Some("llama_cpp".to_string()),
             runtime_id: Some("llama.cpp".to_string()),
+            selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
             runtime_instance_id: Some("llama-main-1".to_string()),
             selected_device_class: Some(InferenceDeviceClass::Cuda),
             selected_device_id: Some(InferenceDeviceId::parse("cuda:0").unwrap()),
@@ -2575,6 +2578,10 @@ mod tests {
         );
         assert_eq!(encoded["resolved_artifact_kind"], serde_json::json!("gguf"));
         assert_eq!(encoded["runtime_id"], serde_json::json!("llama.cpp"));
+        assert_eq!(
+            encoded["selected_runtime_variant_id"],
+            serde_json::json!("llama_cpp.cuda")
+        );
         assert_eq!(encoded["selected_device_class"], serde_json::json!("cuda"));
         assert_eq!(encoded["selected_device_id"], serde_json::json!("cuda:0"));
         assert_eq!(

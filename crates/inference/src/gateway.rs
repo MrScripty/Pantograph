@@ -2708,6 +2708,7 @@ fn record_inference_lifecycle_phase_event_with_references(
         task_id,
         backend_key,
         runtime_id,
+        selected_runtime_variant_id: None,
         runtime_instance_id,
         selected_device_class,
         selected_device_id,

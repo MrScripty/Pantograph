@@ -657,6 +657,7 @@ fn record_task_validation_failure_lifecycle(
             task_id: Some(task_label.to_string()),
             backend_key: backend_key.clone(),
             runtime_id: runtime_id.clone(),
+            selected_runtime_variant_id: None,
             runtime_instance_id: None,
             selected_device_class: None,
             selected_device_id: None,

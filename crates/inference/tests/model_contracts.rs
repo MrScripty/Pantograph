@@ -445,6 +445,7 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
         task_id: Some("text_generation".to_string()),
         backend_key: Some("llama_cpp".to_string()),
         runtime_id: Some("runtime.llama_cpp".to_string()),
+        selected_runtime_variant_id: None,
         runtime_instance_id: Some("runtime.llama_cpp.1".to_string()),
         selected_device_class: None,
         selected_device_id: None,

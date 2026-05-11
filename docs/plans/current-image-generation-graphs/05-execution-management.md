@@ -1660,6 +1660,38 @@ Worker rules:
   `cargo test -p inference runtime_load`, and `git diff --check` passed for
   the reconciliation slice. Remaining runtime-load integration work is tracked
   by later lifecycle/admission checklist items, not this contract item.
+- 2026-05-11 lifecycle selected runtime-variant projection slice: smallest
+  useful vertical slice was limited to adding `selected_runtime_variant_id` to
+  inference lifecycle events, diagnostics-ledger inference diagnostic payloads,
+  embedded-runtime ledger projection, run-list/run-detail inference diagnostic
+  projection, focused tests, and plan notes. Allowed write set:
+  `crates/inference/src/types.rs`, `crates/inference/src/gateway.rs`,
+  `crates/inference/tests/model_contracts.rs`,
+  `crates/node-engine/src/core_executor.rs`,
+  `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+  `crates/pantograph-diagnostics-ledger/src/event.rs`,
+  `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+  `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+  `crates/pantograph-embedded-runtime/src/node_execution_ledger.rs`,
+  `crates/pantograph-embedded-runtime/src/node_execution_ledger_tests.rs`, and
+  this plan directory.
+- The slice preserves the no-fallback/no-legacy rule by carrying runtime
+  variant only when explicitly supplied by the lifecycle fact producer. It does
+  not infer runtime variants from runtime id, backend key, command arguments,
+  or raw device strings. Verification passed:
+  `cargo test -p inference inference_request_lifecycle_event`,
+  `cargo test -p inference --test model_contracts public_inference_contract_json_keys_avoid_scheduler_policy_language`,
+  `cargo test -p pantograph-diagnostics-ledger inference_diagnostic`,
+  `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_appends_inference_execution_diagnostic_summary`,
+  `cargo test -p pantograph-diagnostics-ledger`,
+  and
+  `cargo test -p pantograph-embedded-runtime inference_diagnostic_event_adapter_builds_option_support_summary`.
+  Verification deviation: the first diagnostics-ledger command incorrectly
+  passed two Cargo test filters; it was rerun with single filters. Broader
+  `cargo test -p pantograph-embedded-runtime node_execution_ledger` still fails
+  in pre-existing workflow-sink retained-artifact/status tests with zero
+  recorded rows; the focused inference diagnostic adapter test passed and the
+  broader failure is recorded as a discovered follow-up outside this slice.
 
 ### Traceability Links
 

@@ -1121,6 +1121,10 @@ fn diagnostic_event_ledger_appends_inference_execution_diagnostic_summary() {
             assert_eq!(payload.request_id, "req-a");
             assert_eq!(payload.task_id, "text_generation");
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(
+                payload.selected_runtime_variant_id.as_deref(),
+                Some("pytorch.cuda")
+            );
             assert_eq!(payload.selected_device_class.as_deref(), Some("cuda"));
             assert_eq!(payload.resolved_artifact_kind.as_deref(), Some("gguf"));
             assert_eq!(
@@ -1227,6 +1231,10 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
     );
     assert_eq!(list_record.selected_backend_key.as_deref(), Some("pytorch"));
     assert_eq!(
+        list_record.selected_runtime_variant_id.as_deref(),
+        Some("pytorch.cuda")
+    );
+    assert_eq!(
         list_record.selected_model_id.as_deref(),
         Some("pumas://models/tiny-transformers")
     );
@@ -1251,12 +1259,28 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
         cuda_list_records[0].workflow_run_id.as_str(),
         "workflow_run_alpha"
     );
+    let variant_list_records = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list projection filters by selected runtime variant");
+    assert_eq!(variant_list_records.len(), 1);
+    assert_eq!(
+        variant_list_records[0].workflow_run_id.as_str(),
+        "workflow_run_alpha"
+    );
     let facets = ledger
         .query_run_list_facets(RunListProjectionQuery::default())
         .expect("run list facets load");
     assert!(facets.iter().any(|facet| {
         facet.facet_kind == RunListFacetKind::SelectedDeviceClass
             && facet.facet_value == "cuda"
+            && facet.run_count == 1
+    }));
+    assert!(facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::SelectedRuntimeVariant
+            && facet.facet_value == "pytorch.cuda"
             && facet.run_count == 1
     }));
     assert!(facets.iter().any(|facet| {
@@ -1282,6 +1306,10 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
     assert_eq!(
         detail_record.selected_backend_key.as_deref(),
         Some("pytorch")
+    );
+    assert_eq!(
+        detail_record.selected_runtime_variant_id.as_deref(),
+        Some("pytorch.cuda")
     );
     assert_eq!(
         detail_record.selected_model_id.as_deref(),
@@ -5292,6 +5320,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                 duration_ms: Some(75),
                 selected_backend_key: Some("pytorch".to_string()),
                 selected_backend_family: Some("pytorch".to_string()),
+                selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
                 selected_device_class: Some("cuda".to_string()),
                 selected_device_id: Some("cuda:0".to_string()),
                 selected_network_node_id: Some("local-node-alpha".to_string()),
