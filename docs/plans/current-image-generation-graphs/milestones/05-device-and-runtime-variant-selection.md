@@ -1991,6 +1991,29 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: real vLLM/MLX provider, probe, and admission slices
     still need executable provider ownership before either can be selected; no
     execution is enabled here.
+- 2026-05-10 slice: roadmap backend override rejection tests.
+  - Smallest useful vertical slice: prove explicit vLLM and MLX backend
+    overrides are rejected from roadmap-only capability facts without selecting
+    an unavailable candidate or synthesizing a fallback candidate.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs` and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: explicit roadmap backend preferences
+    produce `CandidateUnavailable` diagnostics and an unselected explicit
+    override decision; no legacy backend, CPU/auto fallback, synthetic
+    candidate, runtime startup path, frontend path, worker path, fixture, or
+    generated DTO changed.
+  - Standards/blast-radius gate: this is a crate-local admission regression
+    test only; embedded-runtime remains the projection owner and
+    runtime-registry remains the selector owner.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-embedded-runtime roadmap_backend_overrides_reject_without_fallback_selection`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`, and
+    `git diff --check`.
+  - Remaining follow-up: the broad impossible-preference checklist item stays
+    open until every listed case is covered by executable or admission tests
+    against the canonical decision path.
 
 **Verification:**
 
@@ -2053,6 +2076,9 @@ typed diagnostic and the canonical design is fixed.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.
+- Embedded-runtime technical-fit tests prove explicit vLLM and MLX roadmap
+  backend overrides reject with typed unavailable diagnostics and do not select
+  fallback candidates.
 - Feature/dependency verification proves affected public crates still build
   with default, no-default-features, and all-features modes when runtime
   feature flags or optional dependencies change.

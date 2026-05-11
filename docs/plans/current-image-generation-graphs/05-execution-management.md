@@ -592,6 +592,15 @@ Update during implementation:
   `cargo test -p pantograph-embedded-runtime technical_fit`, and
   `git diff --check`. The first format check reported rustfmt wrapping;
   `cargo fmt --all` was run and the check passed.
+- 2026-05-10: Continued Milestone 5 by adding embedded-runtime admission
+  regression coverage for explicit vLLM and MLX roadmap backend overrides. The
+  canonical technical-fit projection now has focused coverage proving these
+  preferences produce unselected explicit-override decisions with typed
+  unavailable diagnostics rather than fallback candidates. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-embedded-runtime roadmap_backend_overrides_reject_without_fallback_selection`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`, and
+  `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1064,6 +1073,11 @@ Worker rules:
   capability facts were exposed as unavailable typed diagnostics only. The
   first format check reported rustfmt wrapping; `cargo fmt --all` was run and
   the check passed.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-embedded-runtime roadmap_backend_overrides_reject_without_fallback_selection`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`, and
+  `git diff --check` passed after explicit vLLM and MLX roadmap backend
+  overrides gained unselected-decision regression coverage.
 
 ### Traceability Links
 

@@ -1382,6 +1382,75 @@ mod tests {
     }
 
     #[test]
+    fn roadmap_backend_overrides_reject_without_fallback_selection() {
+        for (backend_key, expected_device_class, expected_variant, message) in [
+            (
+                "mlx",
+                WorkflowTechnicalFitDeviceClass::Metal,
+                "mlx.metal",
+                "MLX",
+            ),
+            (
+                "vllm",
+                WorkflowTechnicalFitDeviceClass::Cpu,
+                "vllm.cpu",
+                "vLLM",
+            ),
+        ] {
+            let workflow_request = build_workflow_technical_fit_request(
+                "workflow-a",
+                &WorkflowRuntimeRequirements::default(),
+                Some(pantograph_workflow_service::WorkflowTechnicalFitOverride {
+                    runtime_id: None,
+                    runtime_variant_id: None,
+                    model_id: None,
+                    backend_key: Some(backend_key.to_string()),
+                }),
+                None,
+                None,
+                None,
+            );
+
+            let runtime_request = build_runtime_technical_fit_request(
+                &workflow_request,
+                None,
+                &crate::runtime_capabilities::roadmap_runtime_capabilities("llama_cpp"),
+            );
+            let registry_decision = select_runtime_technical_fit(&runtime_request);
+            let workflow_decision = project_workflow_technical_fit_decision(&registry_decision);
+
+            assert_eq!(
+                workflow_decision.selection_mode,
+                WorkflowTechnicalFitSelectionMode::ExplicitOverride
+            );
+            assert_eq!(workflow_decision.selected_candidate_id, None);
+            assert_eq!(workflow_decision.selected_runtime_id, None);
+            assert_eq!(workflow_decision.selected_backend_key, None);
+            assert!(workflow_decision.reasons.iter().any(|reason| {
+                reason.code == WorkflowTechnicalFitReasonCode::ExplicitBackendOverride
+                    && reason.candidate_id.is_none()
+            }));
+            assert_eq!(workflow_decision.device_diagnostics.len(), 1);
+            let diagnostic = &workflow_decision.device_diagnostics[0];
+            assert_eq!(
+                diagnostic.code,
+                WorkflowTechnicalFitDeviceDiagnosticCode::CandidateUnavailable
+            );
+            assert_eq!(
+                diagnostic.severity,
+                WorkflowTechnicalFitDeviceDiagnosticSeverity::Error
+            );
+            assert_eq!(diagnostic.device_class, Some(expected_device_class));
+            assert_eq!(
+                diagnostic.runtime_variant_id.as_deref(),
+                Some(expected_variant)
+            );
+            assert_eq!(diagnostic.backend_key.as_deref(), Some(backend_key));
+            assert!(diagnostic.message.contains(message));
+        }
+    }
+
+    #[test]
     fn pumas_package_facts_project_to_advisory_runtime_candidates() {
         let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
             include_str!(
