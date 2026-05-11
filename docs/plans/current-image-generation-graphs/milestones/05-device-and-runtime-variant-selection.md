@@ -202,6 +202,13 @@ typed diagnostic and the canonical design is fixed.
     service API. Remaining numeric boundaries include image dimensions,
     context/token/batch limits, memory estimates, byte-range projections, and
     worker/runtime request fields.
+  - 2026-05-11 partial: llama.cpp runtime startup now rejects
+    `context_size: Some(0)` with the existing typed backend config diagnostic
+    before projecting an effective runtime setting. Batch and micro-batch zero
+    validation already used the same fail-closed path. Remaining numeric
+    boundaries include image dimensions, broader context/token/batch limits,
+    memory estimates, byte-range projections, and worker/runtime request
+    fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3158,6 +3165,31 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: broader checked arithmetic remains needed for image
     dimensions, context/token/batch limits, memory estimates, byte-range
     projections, and worker/runtime request fields.
+- 2026-05-11 slice: llama.cpp context-size fail-closed validation.
+  - Smallest useful vertical slice: include `BackendConfig.context_size` in
+    `LlamaCppRuntimeSettings::try_from_backend_config` positive-value
+    validation so `Some(0)` cannot become an effective llama-server `-c 0`
+    setting.
+  - Allowed write set:
+    `crates/inference/src/backend/mod.rs` and this plan directory.
+  - No-fallback/no-legacy confirmation: invalid explicit context size now
+    returns `BackendError::Config` through the existing typed backend startup
+    boundary. The slice does not replace invalid zero with the default context
+    size and does not preserve the previous executable zero-value path.
+  - Standards/blast-radius gate: llama.cpp runtime setting validation only; no
+    generated files, frontend code, saved workflow fixtures, lockfiles, path
+    roots, Pumas contracts, worker contracts, runtime scheduler policy, or
+    backend lifecycle behavior changed.
+  - Verification passed:
+    `cargo test -p inference llamacpp_runtime_settings_reject_zero_sized_performance_knobs`,
+    `cargo test -p inference llamacpp_runtime_settings`, and
+    `cargo fmt --all -- --check`.
+  - Verification deviation: the two focused Cargo tests were started in
+    parallel and serialized on Cargo package/build locks before passing.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    dimensions, context/token/batch limits outside this llama.cpp startup
+    normalization boundary, memory estimates, byte-range projections, and
+    worker/runtime request fields.
 
 **Verification:**
 

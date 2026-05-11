@@ -1874,6 +1874,25 @@ Worker rules:
   deferred to avoid broadening this slice. Remaining numeric-boundary
   follow-up: image dimensions, context/token/batch limits, memory estimates,
   byte-range projections, and worker/runtime request fields.
+- 2026-05-11 llama.cpp context-size fail-closed validation slice: smallest
+  useful vertical slice was limited to including `BackendConfig.context_size`
+  in `LlamaCppRuntimeSettings::try_from_backend_config` positive-value
+  validation so `Some(0)` cannot become an effective llama-server `-c 0`
+  setting. Allowed write set: `crates/inference/src/backend/mod.rs` and this
+  plan directory.
+- The slice preserves the no-fallback/no-legacy rule because invalid explicit
+  context size now returns `BackendError::Config` through the existing typed
+  backend startup boundary instead of replacing zero with the default context
+  size or preserving the previous executable zero-value path. Verification
+  passed:
+  `cargo test -p inference llamacpp_runtime_settings_reject_zero_sized_performance_knobs`,
+  `cargo test -p inference llamacpp_runtime_settings`, and
+  `cargo fmt --all -- --check`. Deviation: the two focused Cargo tests were
+  started in parallel and serialized on Cargo package/build locks before
+  passing. Remaining numeric-boundary follow-up: image dimensions,
+  context/token/batch limits outside this llama.cpp startup normalization
+  boundary, memory estimates, byte-range projections, and worker/runtime
+  request fields.
 
 ### Traceability Links
 

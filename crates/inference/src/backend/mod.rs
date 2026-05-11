@@ -910,6 +910,7 @@ pub struct LlamaCppRuntimeSettings {
 impl LlamaCppRuntimeSettings {
     /// Normalize and validate a backend start config into effective settings.
     pub fn try_from_backend_config(config: &BackendConfig) -> Result<Self, BackendError> {
+        validate_optional_positive_u32(config.context_size, "context_size")?;
         validate_optional_positive_u32(config.cpu_threads, "cpu_threads")?;
         validate_optional_positive_u32(config.batch_size, "batch_size")?;
         validate_optional_positive_u32(config.ubatch_size, "ubatch_size")?;
@@ -1286,6 +1287,13 @@ mod tests {
     #[test]
     fn llamacpp_runtime_settings_reject_zero_sized_performance_knobs() {
         for (field_name, config) in [
+            (
+                "context_size",
+                BackendConfig {
+                    context_size: Some(0),
+                    ..BackendConfig::default()
+                },
+            ),
             (
                 "cpu_threads",
                 BackendConfig {
