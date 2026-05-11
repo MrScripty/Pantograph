@@ -1551,6 +1551,31 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: provider-specific platform facts are still required
     before MLX-on-Linux/Windows and vLLM unsupported-model cases can be
     validated end to end.
+- 2026-05-10 slice: frontend diagnostics selected-device class.
+  - Smallest useful vertical slice: add `selected_device_class` to frontend
+    diagnostics projection types and render it in the Node-tested diagnostics
+    fact presenter from the backend-projected field.
+  - Allowed write set:
+    `src/services/diagnostics/types.ts`,
+    `src/services/diagnostics/README.md`,
+    `src/components/workbench/diagnosticsPagePresenters.ts`,
+    `src/components/workbench/diagnosticsPagePresenters.test.ts`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: frontend presentation uses the typed
+    backend projection field directly. It does not infer device class from
+    selected device id strings, raw backend config, runtime settings, or payload
+    JSON.
+  - Standards/blast-radius gate for frontend diagnostics presentation:
+    public backend contracts and generated files are unchanged; no new
+    frontend test platform, dependencies, lockfiles, polling, subscriptions,
+    or DOM behavior are introduced; accessibility impact is limited to an
+    existing facts table row label covered by presenter tests.
+  - Verification passed:
+    `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: run-inspection DTOs/presenters still need selected
+    runtime variant facts before the full lifecycle/run-inspection checklist
+    item can be closed.
 
 **Verification:**
 

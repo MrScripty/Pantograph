@@ -93,6 +93,9 @@ panel because no active TypeScript boundary consumes them.
   `task_id`, `selected_backend_key`, and `model_id` when the backend has those
   facts. Frontend consumers should use those typed fields for run/node display
   instead of parsing raw diagnostic event payloads.
+- Run-list and run-detail DTOs carry backend-projected selected device class
+  and selected device id separately. Frontend consumers must render those typed
+  fields directly and must not derive the device class from a device id string.
 
 ## Revisit Triggers
 - Rust-to-TypeScript DTO generation replaces manual interface mirrors.

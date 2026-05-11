@@ -54,6 +54,7 @@ function createRunDetail(): RunDetailProjectionRecord {
     selected_backend_key: 'llama_cpp',
     selected_model_id: 'pumas://models/tiny-gguf',
     selected_task_id: 'text_generation',
+    selected_device_class: 'cuda',
     selected_device_id: 'device-a',
     selected_network_node_id: 'network-a',
     scheduler_queue_position: 1,
@@ -101,6 +102,7 @@ function createRunListPeer(overrides: Partial<RunListProjectionRecord>): RunList
     selected_backend_key: 'llama_cpp',
     selected_model_id: 'pumas://models/tiny-gguf',
     selected_task_id: 'text_generation',
+    selected_device_class: 'cuda',
     selected_device_id: 'device-a',
     selected_network_node_id: 'network-a',
     accepted_at_ms: 86_400_000,
@@ -260,6 +262,7 @@ test('buildDiagnosticsFactRows uses projection fields without ledger parsing', (
     'pumas://models/tiny-gguf',
   );
   assert.equal(rows.find((row) => row.label === 'Selected Task')?.value, 'text_generation');
+  assert.equal(rows.find((row) => row.label === 'Selected Device Class')?.value, 'cuda');
   assert.equal(rows.find((row) => row.label === 'Selected Device')?.value, 'device-a');
   assert.equal(rows.find((row) => row.label === 'Selected Network Node')?.value, 'network-a');
   assert.equal(rows.find((row) => row.label === 'Estimated Queue Wait')?.value, '1.5 s');

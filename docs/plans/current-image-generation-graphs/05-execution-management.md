@@ -460,6 +460,13 @@ Update during implementation:
   `cargo test -p pantograph-embedded-runtime technical_fit`,
   `cargo test -p pantograph-workflow-service technical_fit`, and
   `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by surfacing backend-projected selected
+  device class in frontend diagnostics DTOs and fact rows. The presenter
+  renders `selected_device_class` directly and does not derive class from
+  selected device ids, raw backend config, runtime settings, or diagnostic
+  payload JSON. Verification passed:
+  `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 

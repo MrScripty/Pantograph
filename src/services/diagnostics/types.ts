@@ -122,6 +122,7 @@ export interface RunListProjectionRecord {
   selected_backend_key?: string | null;
   selected_model_id?: string | null;
   selected_task_id?: string | null;
+  selected_device_class?: string | null;
   selected_device_id?: string | null;
   selected_network_node_id?: string | null;
   client_id?: string | null;

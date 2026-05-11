@@ -329,6 +329,7 @@ export function buildDiagnosticsFactRows(run: RunDetailProjectionRecord): Diagno
     { label: 'Selected Backend', value: run.selected_backend_key ?? 'Unassigned', mono: true },
     { label: 'Selected Model', value: run.selected_model_id ?? 'Unassigned', mono: true },
     { label: 'Selected Task', value: run.selected_task_id ?? 'Unassigned', mono: true },
+    { label: 'Selected Device Class', value: run.selected_device_class ?? 'Unassigned', mono: true },
     { label: 'Selected Device', value: run.selected_device_id ?? 'Unassigned', mono: true },
     {
       label: 'Selected Network Node',
