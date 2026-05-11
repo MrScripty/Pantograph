@@ -93,6 +93,10 @@ typed diagnostic and the canonical design is fixed.
 - [ ] Model llama.cpp CPU and CUDA builds on Linux/Windows as runtime variants
   for the same release version where artifacts or local installs expose those
   variants.
+  - 2026-05-11 partial: Linux and Windows llama.cpp platform definitions now
+    declare CPU and CUDA catalog variants for the same release archive, while
+    macOS remains CPU-only until Metal readiness is modeled. Install readiness
+    still needs variant-specific artifact validation before this item can close.
 - [ ] Model llama.cpp Metal builds on macOS only when a Metal-capable runtime
   is available.
 - [ ] Make llama.cpp command resolution select an explicit runtime variant

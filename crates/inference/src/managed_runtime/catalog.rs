@@ -89,15 +89,17 @@ fn catalog_versions_from_releases(
             continue;
         };
 
-        catalog.push(ManagedRuntimeCatalogVersion {
-            version: tag.to_string(),
-            display_label: tag.to_string(),
-            runtime_key: runtime_key_for(definition),
-            runtime_variant_id: definition.default_runtime_variant_id(),
-            platform_key: definition.platform_key().to_string(),
-            archive_name: asset.name.clone(),
-            download_url: asset.browser_download_url.clone(),
-        });
+        for runtime_variant in definition.catalog_runtime_variants() {
+            catalog.push(ManagedRuntimeCatalogVersion {
+                version: tag.to_string(),
+                display_label: catalog_display_label(tag, runtime_variant.display_suffix),
+                runtime_key: runtime_key_for(definition),
+                runtime_variant_id: runtime_variant.runtime_variant_id,
+                platform_key: definition.platform_key().to_string(),
+                archive_name: asset.name.clone(),
+                download_url: asset.browser_download_url.clone(),
+            });
+        }
     }
 
     catalog
@@ -108,15 +110,27 @@ fn fallback_catalog_version(id: ManagedBinaryId) -> Result<ManagedRuntimeCatalog
     let version = definition.default_release_version().to_string();
     let release_asset = definition.release_asset(&version)?;
 
+    let runtime_variant = definition
+        .catalog_runtime_variants()
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("{} has no catalog runtime variants", id.display_name()))?;
+
     Ok(ManagedRuntimeCatalogVersion {
         version: version.clone(),
-        display_label: version.clone(),
+        display_label: catalog_display_label(&version, runtime_variant.display_suffix),
         runtime_key: id.key().to_string(),
-        runtime_variant_id: definition.default_runtime_variant_id(),
+        runtime_variant_id: runtime_variant.runtime_variant_id,
         platform_key: definition.platform_key().to_string(),
         archive_name: release_asset.archive_name.clone(),
         download_url: definition.download_url(&version, &release_asset),
     })
+}
+
+fn catalog_display_label(version: &str, display_suffix: Option<&str>) -> String {
+    display_suffix
+        .map(|suffix| format!("{version} {suffix}"))
+        .unwrap_or_else(|| version.to_string())
 }
 
 fn runtime_key_for(definition: &'static dyn ManagedBinaryDefinition) -> String {
@@ -158,9 +172,44 @@ mod tests {
         let catalog =
             catalog_versions_from_releases(definition(ManagedBinaryId::LlamaCpp), &releases);
 
-        assert_eq!(catalog.len(), 1);
-        assert_eq!(catalog[0].version, "b8248");
-        assert_eq!(catalog[0].runtime_variant_id.as_str(), "llama_cpp.cpu");
-        assert_eq!(catalog[0].archive_name, "llama-b8248-bin-ubuntu-x64.tar.gz");
+        assert_eq!(catalog.len(), expected_llama_catalog_variant_count());
+        let cpu = catalog
+            .iter()
+            .find(|entry| entry.runtime_variant_id.as_str() == "llama_cpp.cpu")
+            .expect("cpu catalog entry");
+        assert_eq!(cpu.version, "b8248");
+        assert_eq!(cpu.display_label, "b8248");
+        assert_eq!(cpu.archive_name, "llama-b8248-bin-ubuntu-x64.tar.gz");
+
+        #[cfg(any(
+            all(target_os = "linux", target_arch = "x86_64"),
+            all(target_os = "windows", target_arch = "x86_64")
+        ))]
+        {
+            let cuda = catalog
+                .iter()
+                .find(|entry| entry.runtime_variant_id.as_str() == "llama_cpp.cuda")
+                .expect("cuda catalog entry");
+            assert_eq!(cuda.version, "b8248");
+            assert_eq!(cuda.display_label, "b8248 CUDA");
+            assert_eq!(cuda.archive_name, cpu.archive_name);
+        }
+    }
+
+    fn expected_llama_catalog_variant_count() -> usize {
+        #[cfg(any(
+            all(target_os = "linux", target_arch = "x86_64"),
+            all(target_os = "windows", target_arch = "x86_64")
+        ))]
+        {
+            2
+        }
+        #[cfg(not(any(
+            all(target_os = "linux", target_arch = "x86_64"),
+            all(target_os = "windows", target_arch = "x86_64")
+        )))]
+        {
+            1
+        }
     }
 }

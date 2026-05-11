@@ -9,6 +9,12 @@ use super::contracts::{
 use crate::RuntimeVariantId;
 use std::path::{Path, PathBuf};
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ManagedRuntimeVariantDefinition {
+    pub(crate) runtime_variant_id: RuntimeVariantId,
+    pub(crate) display_suffix: Option<&'static str>,
+}
+
 pub(crate) trait ManagedBinaryDefinition: Sync {
     fn display_name(&self) -> &'static str;
     fn github_release_repo(&self) -> (&'static str, &'static str);
@@ -16,6 +22,7 @@ pub(crate) trait ManagedBinaryDefinition: Sync {
     fn release_asset(&self, version: &str) -> Result<ReleaseAsset, String>;
     fn download_url(&self, version: &str, release_asset: &ReleaseAsset) -> String;
     fn default_runtime_variant_id(&self) -> RuntimeVariantId;
+    fn catalog_runtime_variants(&self) -> Vec<ManagedRuntimeVariantDefinition>;
     fn platform_key(&self) -> &'static str;
     fn executable_name(&self) -> &'static str;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
@@ -59,6 +66,18 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
 
     fn default_runtime_variant_id(&self) -> RuntimeVariantId {
         RuntimeVariantId::parse("llama_cpp.cpu").expect("static runtime variant id is valid")
+    }
+
+    fn catalog_runtime_variants(&self) -> Vec<ManagedRuntimeVariantDefinition> {
+        current_llama_platform()
+            .catalog_runtime_variants()
+            .iter()
+            .map(|variant| ManagedRuntimeVariantDefinition {
+                runtime_variant_id: RuntimeVariantId::parse(variant.runtime_variant_id)
+                    .expect("static runtime variant id is valid"),
+                display_suffix: variant.display_suffix,
+            })
+            .collect()
     }
 
     fn platform_key(&self) -> &'static str {

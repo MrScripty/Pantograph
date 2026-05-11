@@ -8,8 +8,26 @@ use std::path::{Path, PathBuf};
 
 pub(crate) const LLAMA_CPP_RELEASE_TAG: &str = "b8248";
 
+pub(crate) struct LlamaRuntimeVariant {
+    pub(crate) runtime_variant_id: &'static str,
+    pub(crate) display_suffix: Option<&'static str>,
+}
+
+pub(crate) const LLAMA_CPU_VARIANT: LlamaRuntimeVariant = LlamaRuntimeVariant {
+    runtime_variant_id: "llama_cpp.cpu",
+    display_suffix: None,
+};
+
+pub(crate) const LLAMA_CUDA_VARIANT: LlamaRuntimeVariant = LlamaRuntimeVariant {
+    runtime_variant_id: "llama_cpp.cuda",
+    display_suffix: Some("CUDA"),
+};
+
 pub(crate) trait LlamaPlatform: Sync {
     fn release_asset(&self, version: &str) -> ReleaseAsset;
+    fn catalog_runtime_variants(&self) -> &'static [LlamaRuntimeVariant] {
+        &[LLAMA_CPU_VARIANT]
+    }
     fn installed_server_name(&self) -> &'static str;
     fn validate_installation(&self, binaries_dir: &Path) -> Vec<String>;
     fn resolve_command(

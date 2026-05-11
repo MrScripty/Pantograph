@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use super::{
-    extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform,
-    ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
+    extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform, LlamaRuntimeVariant,
+    ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand, LLAMA_CPU_VARIANT,
+    LLAMA_CUDA_VARIANT,
 };
 
 pub(crate) struct WindowsPlatform;
@@ -15,6 +16,10 @@ impl LlamaPlatform for WindowsPlatform {
             archive_name: format!("llama-{}-bin-win-x64.zip", version),
             archive_kind: ArchiveKind::Zip,
         }
+    }
+
+    fn catalog_runtime_variants(&self) -> &'static [LlamaRuntimeVariant] {
+        &[LLAMA_CPU_VARIANT, LLAMA_CUDA_VARIANT]
     }
 
     fn installed_server_name(&self) -> &'static str {

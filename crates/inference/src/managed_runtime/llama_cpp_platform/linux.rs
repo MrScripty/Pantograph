@@ -2,8 +2,8 @@ use std::path::Path;
 
 use super::{
     ensure_unix_library_aliases, extract_pid_file, find_option_value, prepend_env_path,
-    ArchiveKind, LlamaPlatform, ManagedRuntimeCommandResolutionError, ReleaseAsset,
-    ResolvedCommand,
+    ArchiveKind, LlamaPlatform, LlamaRuntimeVariant, ManagedRuntimeCommandResolutionError,
+    ReleaseAsset, ResolvedCommand, LLAMA_CPU_VARIANT, LLAMA_CUDA_VARIANT,
 };
 
 pub(crate) struct LinuxPlatform;
@@ -16,6 +16,10 @@ impl LlamaPlatform for LinuxPlatform {
             archive_name: format!("llama-{}-bin-ubuntu-x64.tar.gz", version),
             archive_kind: ArchiveKind::TarGz,
         }
+    }
+
+    fn catalog_runtime_variants(&self) -> &'static [LlamaRuntimeVariant] {
+        &[LLAMA_CPU_VARIANT, LLAMA_CUDA_VARIANT]
     }
 
     fn installed_server_name(&self) -> &'static str {

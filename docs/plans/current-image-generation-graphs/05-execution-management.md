@@ -1513,6 +1513,11 @@ Worker rules:
 - `cargo test -p inference managed_runtime::operations::tests::catalog_projection_keeps_same_version_runtime_variants_distinct`
   passed after managed runtime catalog projection stopped collapsing same
   release versions with different runtime variant ids.
+- `cargo test -p inference managed_runtime::catalog` and
+  `cargo test -p inference managed_runtime::operations` passed after Linux and
+  Windows llama.cpp managed-runtime catalog definitions began exposing CPU and
+  CUDA variants for the same release archive. Metal and variant-specific
+  installed-artifact readiness remain follow-ups.
 
 ### Traceability Links
 
