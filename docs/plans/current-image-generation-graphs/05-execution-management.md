@@ -912,6 +912,21 @@ Update during implementation:
   and `git diff --check`. Verification deviation: initial Node and
   workflow-service contract runs caught two missed fixture/search values; those
   were corrected and rerun successfully.
+- 2026-05-11: Continued Milestone 5 by adding typed runtime variant identity to
+  managed-runtime catalog versions, projected version statuses, and persisted
+  installed versions. Existing llama.cpp managed installs default to
+  `llama_cpp.cpu`; variant-specific install jobs, retained artifacts, progress
+  snapshots, selected variant state, and CUDA/Metal readiness remain follow-up
+  slices. Verification passed:
+  `cargo test -p inference managed_runtime::catalog`,
+  `cargo test -p inference managed_runtime::operations`,
+  `cargo test -p inference runtime_load`,
+  `cargo test -p pantograph-embedded-runtime managed_runtime`,
+  `cargo test -p pantograph-embedded-runtime runtime_capabilities`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Verification
+  deviation: the first embedded-runtime compile caught a test-module import
+  scope issue for `RuntimeVariantId`, and the first format check reported
+  rustfmt-only wrapping; both were corrected and rerun.
 
 ## Commit Cadence Notes
 

@@ -421,6 +421,10 @@ fn persist_failed_selected_runtime_version(app_data_dir: &Path, version: &str, e
             versions: vec![inference::ManagedRuntimePersistedVersion {
                 version: version.to_string(),
                 runtime_key: Some(inference::ManagedBinaryId::LlamaCpp.key().to_string()),
+                runtime_variant_id: Some(
+                    inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                        .expect("valid runtime variant"),
+                ),
                 platform_key: Some("linux-x86_64".to_string()),
                 readiness_state: inference::ManagedRuntimeReadinessState::Failed,
                 install_root: Some(install_root.display().to_string()),

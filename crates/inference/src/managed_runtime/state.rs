@@ -3,6 +3,7 @@ use super::contracts::{
     ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
 };
 use super::paths::managed_runtime_dir;
+use crate::RuntimeVariantId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
@@ -38,6 +39,8 @@ pub struct ManagedRuntimePersistedVersion {
     pub version: String,
     #[serde(default)]
     pub runtime_key: Option<String>,
+    #[serde(default)]
+    pub runtime_variant_id: Option<RuntimeVariantId>,
     #[serde(default)]
     pub platform_key: Option<String>,
     pub readiness_state: ManagedRuntimeReadinessState,

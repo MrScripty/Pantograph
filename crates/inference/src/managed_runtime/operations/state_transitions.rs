@@ -58,6 +58,7 @@ pub(super) fn persist_failed_job(
         ManagedRuntimePersistedVersion {
             version: version.to_string(),
             runtime_key: Some(id.key().to_string()),
+            runtime_variant_id: Some(definition(id).default_runtime_variant_id()),
             platform_key: Some(definition(id).platform_key().to_string()),
             readiness_state: ManagedRuntimeReadinessState::Failed,
             install_root: None,
@@ -182,6 +183,7 @@ pub(super) fn persist_install_success(
         ManagedRuntimePersistedVersion {
             version: version.to_string(),
             runtime_key: Some(runtime_key.to_string()),
+            runtime_variant_id: Some(definition(id).default_runtime_variant_id()),
             platform_key: Some(platform_key.to_string()),
             readiness_state: ManagedRuntimeReadinessState::Ready,
             install_root: Some(install_dir.display().to_string()),

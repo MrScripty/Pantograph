@@ -14,6 +14,7 @@ use crate::managed_runtime::{
     ManagedRuntimeHistoryEventKind, ManagedRuntimePersistedJobArtifact,
     ManagedRuntimePersistedVersion,
 };
+use crate::RuntimeVariantId;
 use reqwest::StatusCode;
 use std::path::Path;
 
@@ -31,6 +32,10 @@ fn capability(install_state: ManagedBinaryInstallState) -> ManagedBinaryCapabili
         missing_files: Vec::new(),
         unavailable_reason: None,
     }
+}
+
+fn llama_cpu_variant_id() -> RuntimeVariantId {
+    RuntimeVariantId::parse("llama_cpp.cpu").expect("valid runtime variant")
 }
 
 fn install_fake_runtime_files(dir: &Path, id: ManagedBinaryId) {
@@ -134,6 +139,10 @@ fn snapshot_carries_additive_versions_and_selection_contracts() {
         snapshot.versions[0].runtime_key,
         ManagedBinaryId::LlamaCpp.key()
     );
+    assert_eq!(
+        snapshot.versions[0].runtime_variant_id.as_str(),
+        "llama_cpp.cpu"
+    );
     assert!(!snapshot.versions[0].platform_key.is_empty());
     assert!(!snapshot.versions[0].executable_name.is_empty());
     assert!(snapshot.active_job.is_none());
@@ -152,6 +161,7 @@ fn catalog_versions_remain_installable_after_one_version_is_installed() {
             version: "b8248".to_string(),
             display_label: "b8248".to_string(),
             runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            runtime_variant_id: llama_cpu_variant_id(),
             platform_key: "linux-x86_64".to_string(),
             archive_name: "llama-b8248.tar.gz".to_string(),
             download_url: "https://example.invalid/llama-b8248.tar.gz".to_string(),
@@ -160,6 +170,7 @@ fn catalog_versions_remain_installable_after_one_version_is_installed() {
             version: "b9000".to_string(),
             display_label: "b9000".to_string(),
             runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            runtime_variant_id: llama_cpu_variant_id(),
             platform_key: "linux-x86_64".to_string(),
             archive_name: "llama-b9000.tar.gz".to_string(),
             download_url: "https://example.invalid/llama-b9000.tar.gz".to_string(),
@@ -168,6 +179,7 @@ fn catalog_versions_remain_installable_after_one_version_is_installed() {
     runtime.versions.push(ManagedRuntimePersistedVersion {
         version: "b8248".to_string(),
         runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        runtime_variant_id: Some(llama_cpu_variant_id()),
         platform_key: Some("linux-x86_64".to_string()),
         readiness_state: ManagedRuntimeReadinessState::Ready,
         install_root: Some(installed_dir.display().to_string()),
@@ -285,6 +297,13 @@ fn persist_install_success_records_ready_version_and_selection() {
         runtime.versions[0].runtime_key.as_deref(),
         Some(ManagedBinaryId::LlamaCpp.key())
     );
+    assert_eq!(
+        runtime.versions[0]
+            .runtime_variant_id
+            .as_ref()
+            .map(RuntimeVariantId::as_str),
+        Some("llama_cpp.cpu")
+    );
     assert!(runtime.versions[0].platform_key.is_some());
     assert_eq!(runtime.selection.selected_version.as_deref(), Some("b8248"));
     assert_eq!(runtime.selection.active_version.as_deref(), Some("b8248"));
@@ -378,6 +397,7 @@ fn select_managed_runtime_version_rejects_non_ready_version() {
     runtime.versions.push(ManagedRuntimePersistedVersion {
         version: "b8248".to_string(),
         runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        runtime_variant_id: Some(llama_cpu_variant_id()),
         platform_key: Some("linux-x86_64".to_string()),
         readiness_state: ManagedRuntimeReadinessState::Failed,
         install_root: None,
@@ -442,6 +462,7 @@ fn resolve_runtime_install_dir_rejects_missing_selected_version() {
     runtime.versions = vec![ManagedRuntimePersistedVersion {
         version: "b8248".to_string(),
         runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        runtime_variant_id: Some(llama_cpu_variant_id()),
         platform_key: Some("linux-x86_64".to_string()),
         readiness_state: ManagedRuntimeReadinessState::Ready,
         install_root: Some(install_dir.display().to_string()),
@@ -533,6 +554,7 @@ fn managed_runtime_snapshot_uses_selected_version_failed_readiness() {
     runtime.versions.push(ManagedRuntimePersistedVersion {
         version: "b8248".to_string(),
         runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        runtime_variant_id: Some(llama_cpu_variant_id()),
         platform_key: Some("linux-x86_64".to_string()),
         readiness_state: ManagedRuntimeReadinessState::Failed,
         install_root: Some(install_dir.display().to_string()),

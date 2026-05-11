@@ -354,6 +354,8 @@ mod tests {
                 version: Some("b5920".to_string()),
                 display_label: "b5920".to_string(),
                 runtime_key: "llama_cpp".to_string(),
+                runtime_variant_id: RuntimeVariantId::parse("llama_cpp.cpu")
+                    .expect("valid runtime variant"),
                 platform_key: "linux-x86_64".to_string(),
                 install_root: Some("/opt/pantograph/llama-cpp/b5920".to_string()),
                 executable_name: "llama-server".to_string(),

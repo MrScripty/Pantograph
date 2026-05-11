@@ -218,6 +218,7 @@ fn projected_catalog_version_status(
         version: Some(catalog_version.version.clone()),
         display_label: catalog_version.display_label.clone(),
         runtime_key: catalog_version.runtime_key.clone(),
+        runtime_variant_id: catalog_version.runtime_variant_id.clone(),
         platform_key: catalog_version.platform_key.clone(),
         install_root: None,
         executable_name: definition.executable_name().to_string(),
@@ -244,6 +245,10 @@ fn projected_installed_version_status(
             .runtime_key
             .clone()
             .unwrap_or_else(|| capability.id.key().to_string()),
+        runtime_variant_id: version
+            .runtime_variant_id
+            .clone()
+            .unwrap_or_else(|| definition.default_runtime_variant_id()),
         platform_key: version
             .platform_key
             .clone()
@@ -287,6 +292,7 @@ fn version_status_for_capability(
             ManagedBinaryInstallState::Unsupported => "Unsupported platform".to_string(),
         },
         runtime_key: capability.id.key().to_string(),
+        runtime_variant_id: definition.default_runtime_variant_id(),
         platform_key: definition.platform_key().to_string(),
         install_root: install_root
             .exists()

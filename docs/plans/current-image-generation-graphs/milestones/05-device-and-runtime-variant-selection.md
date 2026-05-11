@@ -64,6 +64,11 @@ typed diagnostic and the canonical design is fixed.
   without reintroducing duplicate binary-management systems. Keep
   `ManagedBinaryId::LlamaCpp` as the binary-management identity and nest
   `RuntimeVariantId` readiness under it.
+  - 2026-05-11 partial: managed-runtime catalog versions, projected version
+    statuses, and persisted installed versions now carry typed
+    `RuntimeVariantId` values. Current llama.cpp managed installs default to
+    `llama_cpp.cpu`; CUDA/Metal variant-specific installs and readiness remain
+    pending.
 - [ ] Include runtime variant id on managed install jobs, retained job
   artifacts, progress snapshots, and install history entries. One active
   managed-binary install job at a time is acceptable initially if the job
@@ -2782,6 +2787,40 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: update saved workflow fixtures/files, if any still
     carry old raw-device or runtime-variant shapes, in a dedicated workflow
     fixture slice.
+- 2026-05-11 slice: managed runtime version variant identity.
+  - Smallest useful vertical slice: add typed `RuntimeVariantId` identity to
+    managed-runtime catalog versions, projected version statuses, and persisted
+    installed versions, while defaulting existing llama.cpp managed installs to
+    `llama_cpp.cpu`.
+  - Allowed write set: `crates/inference/src/managed_runtime/`,
+    `crates/inference/src/runtime_load.rs`,
+    `crates/pantograph-embedded-runtime/src/managed_runtime_manager.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the slice adds a canonical typed
+    variant identity to managed-runtime state/projection instead of inferring
+    variants from platform strings or preserving slash-shaped ids. It does not
+    add duplicate binary managers, compatibility aliases, generated DTO shims,
+    or variant selection fallback behavior.
+  - Standards/blast-radius gate: additive DTO/persisted-state field plus
+    focused tests only; no lockfiles, generated bindings, frontend code, saved
+    workflow files, install job concurrency, catalog download behavior,
+    subprocess launch behavior, or runtime selection policy changed.
+  - Verification passed:
+    `cargo test -p inference managed_runtime::catalog`,
+    `cargo test -p inference managed_runtime::operations`,
+    `cargo test -p inference runtime_load`,
+    `cargo test -p pantograph-embedded-runtime managed_runtime`,
+    `cargo test -p pantograph-embedded-runtime runtime_capabilities`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: embedded-runtime compile first failed because the
+    fixture helper referenced `RuntimeVariantId` outside its test-module import
+    scope; it was corrected to use `inference::RuntimeVariantId` and rerun
+    successfully. The first format check reported rustfmt-only wrapping and
+    passed after `cargo fmt --all`.
+  - Remaining follow-up: include runtime variant id on managed install jobs,
+    retained artifacts, progress snapshots, install history, selected variant
+    state, command resolution, and variant-specific CUDA/Metal readiness.
 
 **Verification:**
 
@@ -2810,6 +2849,9 @@ typed diagnostic and the canonical design is fixed.
   installed/readiness variant under one `ManagedBinaryId::LlamaCpp` identity.
 - Managed runtime path tests prove the retired `app_data/runtimes` tree is not
   accepted as a fallback source for executable runtime files.
+- Managed runtime catalog/projection tests prove catalog versions, installed
+  versions, and projected version statuses carry typed `RuntimeVariantId`
+  values.
 - Managed runtime job tests prove install/progress/history records identify
   their target runtime variant.
 - Runtime-load tests prove requested variants are passed explicitly and missing

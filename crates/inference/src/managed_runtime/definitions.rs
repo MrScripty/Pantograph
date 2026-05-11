@@ -6,6 +6,7 @@ use crate::managed_runtime::llama_cpp_platform::{
 use super::contracts::{
     ManagedBinaryId, ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
 };
+use crate::RuntimeVariantId;
 use std::path::{Path, PathBuf};
 
 pub(crate) trait ManagedBinaryDefinition: Sync {
@@ -14,6 +15,7 @@ pub(crate) trait ManagedBinaryDefinition: Sync {
     fn default_release_version(&self) -> &'static str;
     fn release_asset(&self, version: &str) -> Result<ReleaseAsset, String>;
     fn download_url(&self, version: &str, release_asset: &ReleaseAsset) -> String;
+    fn default_runtime_variant_id(&self) -> RuntimeVariantId;
     fn platform_key(&self) -> &'static str;
     fn executable_name(&self) -> &'static str;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
@@ -53,6 +55,10 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
             "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
             version, release_asset.archive_name
         )
+    }
+
+    fn default_runtime_variant_id(&self) -> RuntimeVariantId {
+        RuntimeVariantId::parse("llama_cpp.cpu").expect("static runtime variant id is valid")
     }
 
     fn platform_key(&self) -> &'static str {

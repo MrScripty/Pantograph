@@ -213,6 +213,10 @@ mod tests {
             versions: vec![ManagedRuntimePersistedVersion {
                 version: "b8248".to_string(),
                 runtime_key: Some("llama_cpp".to_string()),
+                runtime_variant_id: Some(
+                    inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                        .expect("valid runtime variant"),
+                ),
                 platform_key: Some("linux-x86_64".to_string()),
                 readiness_state: ManagedRuntimeReadinessState::Ready,
                 install_root: Some("/tmp/llama-cpp-b8248".to_string()),
@@ -274,6 +278,10 @@ mod tests {
             versions: vec![ManagedRuntimePersistedVersion {
                 version: "b8248".to_string(),
                 runtime_key: Some("llama_cpp".to_string()),
+                runtime_variant_id: Some(
+                    inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                        .expect("valid runtime variant"),
+                ),
                 platform_key: Some("linux-x86_64".to_string()),
                 readiness_state: ManagedRuntimeReadinessState::Ready,
                 install_root: Some("/tmp/llama-cpp-b8248".to_string()),

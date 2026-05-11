@@ -169,6 +169,7 @@ mod tests {
         save_managed_runtime_state, ManagedRuntimePersistedRuntime, ManagedRuntimePersistedState,
         ManagedRuntimePersistedVersion, ManagedRuntimeSelectionState,
     };
+    use crate::RuntimeVariantId;
 
     #[test]
     fn runtime_dependency_status_projects_missing_llama_cpp_snapshot() {
@@ -233,6 +234,9 @@ mod tests {
                 versions: vec![ManagedRuntimePersistedVersion {
                     version: "b8248".to_string(),
                     runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+                    runtime_variant_id: Some(
+                        RuntimeVariantId::parse("llama_cpp.cpu").expect("valid runtime variant"),
+                    ),
                     platform_key: Some(
                         definition(ManagedBinaryId::LlamaCpp)
                             .platform_key()

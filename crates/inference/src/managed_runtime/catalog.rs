@@ -93,6 +93,7 @@ fn catalog_versions_from_releases(
             version: tag.to_string(),
             display_label: tag.to_string(),
             runtime_key: runtime_key_for(definition),
+            runtime_variant_id: definition.default_runtime_variant_id(),
             platform_key: definition.platform_key().to_string(),
             archive_name: asset.name.clone(),
             download_url: asset.browser_download_url.clone(),
@@ -111,6 +112,7 @@ fn fallback_catalog_version(id: ManagedBinaryId) -> Result<ManagedRuntimeCatalog
         version: version.clone(),
         display_label: version.clone(),
         runtime_key: id.key().to_string(),
+        runtime_variant_id: definition.default_runtime_variant_id(),
         platform_key: definition.platform_key().to_string(),
         archive_name: release_asset.archive_name.clone(),
         download_url: definition.download_url(&version, &release_asset),
@@ -158,6 +160,7 @@ mod tests {
 
         assert_eq!(catalog.len(), 1);
         assert_eq!(catalog[0].version, "b8248");
+        assert_eq!(catalog[0].runtime_variant_id.as_str(), "llama_cpp.cpu");
         assert_eq!(catalog[0].archive_name, "llama-b8248-bin-ubuntu-x64.tar.gz");
     }
 }
