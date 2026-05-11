@@ -328,12 +328,17 @@ pub fn estimate_memory_requirements(
             continue;
         };
         if let Some(size_bytes) = extract_model_size_bytes(metadata) {
+            if size_bytes == 0 {
+                return Err(WorkflowServiceError::InvalidRequest(format!(
+                    "model '{model_id}' size_bytes must be greater than zero"
+                )));
+            }
             let size_mb = size_bytes.checked_add(MB - 1).ok_or_else(|| {
                 WorkflowServiceError::InvalidRequest(format!(
                     "model '{model_id}' size_bytes overflows megabyte rounding"
                 ))
             })? / MB;
-            sizes_mb.push(size_mb.max(1));
+            sizes_mb.push(size_mb);
             found_count += 1;
         }
     }
@@ -689,6 +694,22 @@ mod tests {
             err,
             WorkflowServiceError::InvalidRequest(message)
                 if message.contains("size_bytes overflows megabyte rounding")
+        ));
+    }
+
+    #[test]
+    fn memory_estimate_rejects_zero_model_size() {
+        let required = vec!["a".to_string()];
+        let mut metadata = HashMap::new();
+        metadata.insert("a".to_string(), serde_json::json!({ "size_bytes": 0_u64 }));
+
+        let err =
+            estimate_memory_requirements(&required, &metadata).expect_err("zero size should fail");
+
+        assert!(matches!(
+            err,
+            WorkflowServiceError::InvalidRequest(message)
+                if message.contains("size_bytes must be greater than zero")
         ));
     }
 

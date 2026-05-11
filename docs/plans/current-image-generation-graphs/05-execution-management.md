@@ -2088,6 +2088,21 @@ Worker rules:
   numeric-boundary follow-up: image request limits, context/batch limits
   outside this admission budget projection boundary, byte-range projections,
   and worker/runtime request fields.
+- 2026-05-11 workflow capability zero-size memory estimate validation slice:
+  smallest useful vertical slice was limited to rejecting explicit zero
+  `size_bytes` in model metadata before projecting model memory estimates.
+  Allowed write set:
+  `crates/pantograph-workflow-service/src/capabilities.rs` and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because zero-byte model
+  metadata no longer becomes a fabricated 1 MB estimate; it fails with
+  `WorkflowServiceError::InvalidRequest`. Missing model metadata still produces
+  the canonical unknown estimate. Verification passed:
+  `cargo test -p pantograph-workflow-service memory_estimate`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Remaining
+  numeric-boundary follow-up: image request limits, context/batch limits
+  outside this memory estimate validation boundary, byte-range projections, and
+  worker/runtime request fields.
 
 ### Traceability Links
 
