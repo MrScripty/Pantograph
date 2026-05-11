@@ -3521,6 +3521,41 @@ async fn test_kv_gateway_methods_delegate_to_backend() {
     assert_eq!(truncated, vec![1, 2]);
 }
 
+#[test]
+fn embedding_usage_from_results_rejects_token_total_overflow() {
+    let results = vec![InferenceEmbeddingResult {
+        vector: vec![0.0],
+        token_count: Some(u32::MAX as usize + 1),
+        index: Some(0),
+    }];
+
+    let err =
+        embedding_usage_from_results(&results).expect_err("embedding usage above u32 should fail");
+
+    assert!(matches!(
+        err,
+        GatewayError::Backend(BackendError::Config(message))
+            if message.contains("embedding token usage exceeds u32 maximum")
+    ));
+}
+
+#[test]
+fn embedding_usage_from_backend_results_rejects_token_total_overflow() {
+    let results = vec![EmbeddingResult {
+        vector: vec![0.0],
+        token_count: u32::MAX as usize + 1,
+    }];
+
+    let err = embedding_usage_from_backend_results(&results)
+        .expect_err("backend embedding usage above u32 should fail");
+
+    assert!(matches!(
+        err,
+        GatewayError::Backend(BackendError::Config(message))
+            if message.contains("embedding token usage exceeds u32 maximum")
+    ));
+}
+
 #[tokio::test]
 async fn test_mode_info_reports_active_model_target() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "llama.cpp");

@@ -1157,7 +1157,36 @@ impl InferenceGateway {
         );
 
         let result = self.embeddings(texts, model).await;
-        let usage = embedding_usage_from_backend_results(&result);
+        let usage = match &result {
+            Ok(embeddings) => match embedding_usage_from_backend_results(embeddings) {
+                Ok(usage) => usage,
+                Err(error) => {
+                    let usage_result: Result<Vec<EmbeddingResult>, GatewayError> = Err(error);
+                    record_non_streaming_lifecycle_phase_result_with_references(
+                        lifecycle_sink.as_ref(),
+                        InferenceLifecyclePhase::BackendExecution,
+                        request_id,
+                        Some("embedding".to_string()),
+                        backend_key,
+                        runtime_id,
+                        runtime_instance_id,
+                        selected_device_class,
+                        selected_device_id,
+                        model_id,
+                        &usage_result,
+                        Vec::new(),
+                        None,
+                        Vec::new(),
+                        None,
+                        None,
+                        Vec::new(),
+                        None,
+                    );
+                    return usage_result;
+                }
+            },
+            Err(_) => None,
+        };
         record_non_streaming_lifecycle_phase_result_with_references(
             lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::BackendExecution,
@@ -1578,7 +1607,7 @@ impl InferenceGateway {
                         index: Some(index),
                     })
                     .collect();
-                let usage = embedding_usage_from_results(&embeddings);
+                let usage = embedding_usage_from_results(&embeddings)?;
                 Ok(InferenceExecutionResult::Embedding {
                     embeddings,
                     usage,
@@ -3094,51 +3123,62 @@ fn usage_from_execution_result(
     }
 }
 
-fn embedding_usage_from_results(results: &[InferenceEmbeddingResult]) -> Option<InferenceUsage> {
+fn embedding_usage_from_results(
+    results: &[InferenceEmbeddingResult],
+) -> Result<Option<InferenceUsage>, GatewayError> {
     let mut saw_count = false;
     let mut total = 0u64;
 
     for result in results {
         if let Some(token_count) = result.token_count {
             saw_count = true;
-            total = total.saturating_add(token_count as u64);
+            total = total
+                .checked_add(token_count as u64)
+                .ok_or_else(embedding_token_usage_overflow)?;
         }
     }
 
     if !saw_count {
-        return None;
+        return Ok(None);
     }
 
-    let total = total.min(u64::from(u32::MAX)) as u32;
-    Some(InferenceUsage {
+    let total = u32::try_from(total).map_err(|_| embedding_token_usage_overflow())?;
+    Ok(Some(InferenceUsage {
         prompt_tokens: Some(total),
         completion_tokens: None,
         total_tokens: Some(total),
-    })
+    }))
 }
 
 fn embedding_usage_from_backend_results(
-    result: &Result<Vec<EmbeddingResult>, GatewayError>,
-) -> Option<InferenceUsage> {
-    let embeddings = result.as_ref().ok()?;
+    embeddings: &[EmbeddingResult],
+) -> Result<Option<InferenceUsage>, GatewayError> {
     let mut saw_count = false;
     let mut total = 0u64;
 
     for embedding in embeddings {
         saw_count = true;
-        total = total.saturating_add(embedding.token_count as u64);
+        total = total
+            .checked_add(embedding.token_count as u64)
+            .ok_or_else(embedding_token_usage_overflow)?;
     }
 
     if !saw_count {
-        return None;
+        return Ok(None);
     }
 
-    let total = total.min(u64::from(u32::MAX)) as u32;
-    Some(InferenceUsage {
+    let total = u32::try_from(total).map_err(|_| embedding_token_usage_overflow())?;
+    Ok(Some(InferenceUsage {
         prompt_tokens: Some(total),
         completion_tokens: None,
         total_tokens: Some(total),
-    })
+    }))
+}
+
+fn embedding_token_usage_overflow() -> GatewayError {
+    GatewayError::Backend(BackendError::Config(
+        "embedding token usage exceeds u32 maximum".to_string(),
+    ))
 }
 
 fn cache_handle_from_execution_result(

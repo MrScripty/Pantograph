@@ -260,6 +260,12 @@ typed diagnostic and the canonical design is fixed.
     byte sizes or relying on raw `sum()` behavior. Remaining numeric
     boundaries include broader image request limits, context/token/batch
     limits, byte-range projections, and worker/runtime request fields.
+  - 2026-05-11 partial: inference embedding usage aggregation now uses checked
+    token summation and rejects totals that exceed the public `InferenceUsage`
+    `u32` contract with `BackendError::Config` instead of clamping to
+    `u32::MAX`. Remaining numeric boundaries include broader image request
+    limits, context/batch limits, byte-range projections, and worker/runtime
+    request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3452,6 +3458,30 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: broader checked arithmetic remains needed for image
     request limits, context/token/batch limits outside this capability
     estimation boundary, byte-range projections, and worker/runtime request
+    fields.
+- 2026-05-11 slice: inference embedding usage token accounting.
+  - Smallest useful vertical slice: replace embedding usage `saturating_add`
+    plus `u32::MAX` clamping with checked token aggregation and typed gateway
+    failure when the total cannot fit the public `InferenceUsage` fields.
+  - Allowed write set: `crates/inference/src/gateway.rs`,
+    `crates/inference/src/gateway_tests.rs`, and this plan directory.
+  - No-fallback/no-legacy confirmation: embedding usage overflow no longer
+    produces a plausible capped token count; typed execution and lifecycle
+    embedding paths fail with `BackendError::Config`.
+  - Standards/blast-radius gate: embedding usage projection only; no generated
+    files, frontend code, saved workflow fixtures, lockfiles, path roots, Pumas
+    contracts, worker contracts, runtime scheduler policy, or backend
+    lifecycle ownership changed.
+  - Verification passed: `cargo test -p inference embedding_usage` and
+    `cargo test -p inference embedding`, `cargo fmt --all -- --check`, and
+    `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` found
+    rustfmt-only wrapping in the touched gateway tests; `cargo fmt --all` was
+    applied and focused tests plus final format verification were rerun
+    successfully.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    request limits, context/batch limits outside this embedding usage
+    projection boundary, byte-range projections, and worker/runtime request
     fields.
 
 **Verification:**
