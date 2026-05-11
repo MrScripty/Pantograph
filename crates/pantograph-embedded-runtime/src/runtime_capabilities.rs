@@ -167,6 +167,67 @@ pub fn python_runtime_capabilities(
         .collect()
 }
 
+pub fn roadmap_runtime_capabilities(selected_backend_key: &str) -> Vec<WorkflowRuntimeCapability> {
+    vec![
+        roadmap_runtime_capability(
+            RoadmapRuntimeCapabilityInput {
+                runtime_id: "vllm",
+                display_name: "vLLM",
+                backend_keys: vec!["vllm".to_string()],
+                backend_hints: vec![WorkflowBackendHintLabel::Vllm],
+                tasks: vec![
+                    roadmap_text_task(WorkflowInferenceTaskId::TextGeneration),
+                    roadmap_text_task(WorkflowInferenceTaskId::ChatCompletion),
+                ],
+                artifact_kinds: vec![
+                    WorkflowModelArtifactKind::HfCompatibleDirectory,
+                    WorkflowModelArtifactKind::Safetensors,
+                ],
+                runtime_variants: vec![
+                    roadmap_runtime_variant(
+                        "vllm",
+                        "vllm.cpu",
+                        WorkflowInferenceDeviceClass::Cpu,
+                        "vLLM execution is not implemented in Pantograph yet",
+                    ),
+                    roadmap_runtime_variant(
+                        "vllm",
+                        "vllm.cuda",
+                        WorkflowInferenceDeviceClass::Cuda,
+                        "vLLM CUDA execution is not implemented in Pantograph yet",
+                    ),
+                ],
+                unavailable_reason: "vLLM execution is roadmap-only in this build".to_string(),
+            },
+            selected_backend_key,
+        ),
+        roadmap_runtime_capability(
+            RoadmapRuntimeCapabilityInput {
+                runtime_id: "mlx",
+                display_name: "MLX",
+                backend_keys: vec!["mlx".to_string()],
+                backend_hints: vec![WorkflowBackendHintLabel::Mlx],
+                tasks: vec![
+                    roadmap_text_task(WorkflowInferenceTaskId::TextGeneration),
+                    roadmap_text_task(WorkflowInferenceTaskId::ChatCompletion),
+                ],
+                artifact_kinds: vec![
+                    WorkflowModelArtifactKind::HfCompatibleDirectory,
+                    WorkflowModelArtifactKind::Safetensors,
+                ],
+                runtime_variants: vec![roadmap_runtime_variant(
+                    "mlx",
+                    "mlx.metal",
+                    WorkflowInferenceDeviceClass::Metal,
+                    mlx_roadmap_unavailable_message(),
+                )],
+                unavailable_reason: mlx_roadmap_unavailable_message().to_string(),
+            },
+            selected_backend_key,
+        ),
+    ]
+}
+
 pub fn capability_runtime_lifecycle_snapshot(
     capabilities: Option<&WorkflowCapabilitiesResponse>,
 ) -> Option<inference::RuntimeLifecycleSnapshot> {
@@ -222,6 +283,100 @@ pub fn capability_runtime_lifecycle_snapshot(
             .clone()
             .filter(|reason| !reason.trim().is_empty()),
     })
+}
+
+struct RoadmapRuntimeCapabilityInput {
+    runtime_id: &'static str,
+    display_name: &'static str,
+    backend_keys: Vec<String>,
+    backend_hints: Vec<WorkflowBackendHintLabel>,
+    tasks: Vec<WorkflowBackendTaskCapability>,
+    artifact_kinds: Vec<WorkflowModelArtifactKind>,
+    runtime_variants: Vec<WorkflowRuntimeVariantCapability>,
+    unavailable_reason: String,
+}
+
+fn roadmap_runtime_capability(
+    input: RoadmapRuntimeCapabilityInput,
+    selected_backend_key: &str,
+) -> WorkflowRuntimeCapability {
+    WorkflowRuntimeCapability {
+        runtime_id: input.runtime_id.to_string(),
+        display_name: input.display_name.to_string(),
+        install_state: WorkflowRuntimeInstallState::Unsupported,
+        available: false,
+        configured: false,
+        can_install: false,
+        can_remove: false,
+        source_kind: WorkflowRuntimeSourceKind::System,
+        selected: runtime_matches_backend(&input.backend_keys, selected_backend_key),
+        readiness_state: Some(WorkflowRuntimeReadinessState::Unsupported),
+        selected_version: None,
+        supports_external_connection: false,
+        backend_capability_facts: Some(WorkflowBackendCapabilityFacts {
+            tasks: input.tasks,
+            runtime_variants: input.runtime_variants,
+            preprocessing: WorkflowBackendComponentCapability::RequiresPackageComponent,
+            postprocessing: WorkflowBackendComponentCapability::BackendManaged,
+            model_sources: WorkflowBackendModelSourceCapabilityFacts {
+                artifact_kinds: input.artifact_kinds,
+                backend_hints: input.backend_hints,
+                custom_code: WorkflowBackendFeatureSupport::Unsupported,
+            },
+            features: WorkflowBackendFeatureCapabilityFacts {
+                streaming: WorkflowBackendFeatureSupport::Unknown,
+                device_selection: WorkflowBackendFeatureSupport::Supported,
+                external_connection: WorkflowBackendFeatureSupport::Unsupported,
+                kv_cache: WorkflowBackendFeatureSupport::Unknown,
+            },
+            request_lifecycle: WorkflowBackendRequestLifecycleFacts::default(),
+        }),
+        backend_keys: input.backend_keys,
+        missing_files: Vec::new(),
+        unavailable_reason: Some(input.unavailable_reason),
+    }
+}
+
+fn roadmap_text_task(task_id: WorkflowInferenceTaskId) -> WorkflowBackendTaskCapability {
+    WorkflowBackendTaskCapability {
+        task_id,
+        support_tier: WorkflowSupportTier::Roadmap,
+        modality_signature: WorkflowTaskModalitySignature {
+            inputs: vec![WorkflowInferenceModality::Text],
+            outputs: vec![WorkflowInferenceModality::Text],
+        },
+        request_contract: None,
+    }
+}
+
+fn roadmap_runtime_variant(
+    backend_id: &str,
+    runtime_variant_id: &str,
+    device_class: WorkflowInferenceDeviceClass,
+    message: &str,
+) -> WorkflowRuntimeVariantCapability {
+    WorkflowRuntimeVariantCapability {
+        runtime_variant_id: runtime_variant_id.to_string(),
+        device_class,
+        available: false,
+        diagnostics: vec![WorkflowDeviceResolutionDiagnostic {
+            code: WorkflowDeviceResolutionDiagnosticCode::CandidateUnavailable,
+            severity: WorkflowDeviceResolutionDiagnosticSeverity::Error,
+            message: message.to_string(),
+            device_class: Some(device_class),
+            device_id: None,
+            runtime_variant_id: Some(runtime_variant_id.to_string()),
+            backend_id: Some(backend_id.to_string()),
+        }],
+    }
+}
+
+fn mlx_roadmap_unavailable_message() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "MLX execution is roadmap-only in this build"
+    } else {
+        "MLX is macOS-only and is not available on this platform"
+    }
 }
 
 fn runtime_capability_matches_required_backend(
@@ -1052,6 +1207,78 @@ mod tests {
                 Some("python executable is not configured")
             );
         }
+    }
+
+    #[test]
+    fn roadmap_runtime_capabilities_report_vllm_and_mlx_placeholders() {
+        let capabilities = roadmap_runtime_capabilities("vllm");
+
+        let vllm = capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "vllm")
+            .expect("vLLM roadmap capability");
+        assert!(vllm.selected);
+        assert!(!vllm.available);
+        assert!(!vllm.configured);
+        assert_eq!(vllm.install_state, WorkflowRuntimeInstallState::Unsupported);
+        assert_eq!(
+            vllm.readiness_state,
+            Some(WorkflowRuntimeReadinessState::Unsupported)
+        );
+        let vllm_facts = vllm
+            .backend_capability_facts
+            .as_ref()
+            .expect("vLLM backend facts");
+        assert_eq!(
+            vllm_facts.tasks[0].support_tier,
+            WorkflowSupportTier::Roadmap
+        );
+        assert!(vllm_facts
+            .model_sources
+            .backend_hints
+            .contains(&WorkflowBackendHintLabel::Vllm));
+        assert!(vllm_facts.runtime_variants.iter().any(|variant| {
+            variant.runtime_variant_id == "vllm.cpu"
+                && variant.device_class == WorkflowInferenceDeviceClass::Cpu
+                && !variant.available
+        }));
+        assert!(vllm_facts.runtime_variants.iter().any(|variant| {
+            variant.runtime_variant_id == "vllm.cuda"
+                && variant.device_class == WorkflowInferenceDeviceClass::Cuda
+                && !variant.available
+        }));
+
+        let mlx = capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "mlx")
+            .expect("MLX roadmap capability");
+        assert!(!mlx.selected);
+        assert!(!mlx.available);
+        assert_eq!(mlx.install_state, WorkflowRuntimeInstallState::Unsupported);
+        let mlx_facts = mlx
+            .backend_capability_facts
+            .as_ref()
+            .expect("MLX backend facts");
+        assert!(mlx_facts
+            .model_sources
+            .backend_hints
+            .contains(&WorkflowBackendHintLabel::Mlx));
+        assert_eq!(mlx_facts.runtime_variants.len(), 1);
+        assert_eq!(
+            mlx_facts.runtime_variants[0].runtime_variant_id,
+            "mlx.metal"
+        );
+        assert_eq!(
+            mlx_facts.runtime_variants[0].device_class,
+            WorkflowInferenceDeviceClass::Metal
+        );
+        assert!(!mlx_facts.runtime_variants[0].available);
+        assert_eq!(
+            mlx_facts.runtime_variants[0].diagnostics[0]
+                .backend_id
+                .as_deref(),
+            Some("mlx")
+        );
     }
 
     #[test]

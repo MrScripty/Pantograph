@@ -51,6 +51,9 @@ binding behavior.
 - Python interpreter discovery should use explicit candidate iteration helpers
   so process-backed startup remains readable and clippy-clean.
 - Runtime feature flags document which backend families are compiled.
+- vLLM and MLX runtime capabilities are roadmap facts only in this crate; they
+  must remain unavailable diagnostics until an explicit backend provider owns
+  execution.
 - Shutdown and task lifecycle ownership must become explicit as M3 proceeds.
 
 ## Cargo Feature Contract

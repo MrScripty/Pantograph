@@ -99,11 +99,11 @@ typed diagnostic and the canonical design is fixed.
   contracts.
 - [ ] Add PyTorch device probe contract for `cpu` and `cuda` on Linux/Windows,
   plus `mps` on macOS.
-- [ ] Add vLLM device capability placeholder facts for CPU and CUDA only. Do
+- [x] Add vLLM device capability placeholder facts for CPU and CUDA only. Do
   not implement vLLM execution in this slice.
 - [x] Add Candle capability placeholder facts for CPU, CUDA, and macOS Metal.
   Do not expose Candle image generation until executable Candle support exists.
-- [ ] Add future MLX capability facts as macOS-only roadmap facts. MLX must be
+- [x] Add future MLX capability facts as macOS-only roadmap facts. MLX must be
   rejected on Linux/Windows if explicitly requested.
 - [x] Add future-support notes for ROCm/HIP, Vulkan, XPU/iGPU, OpenVINO,
   hybrid/offload, remote hardware plugins, and MLX without implementing them.
@@ -1962,6 +1962,35 @@ typed diagnostic and the canonical design is fixed.
     field only if that page starts requesting backend-filtered comparison
     pages; current diagnostics comparison filtering remains projection-row
     based.
+- 2026-05-10 slice: vLLM and MLX roadmap capability facts.
+  - Smallest useful vertical slice: expose unavailable vLLM CPU/CUDA and MLX
+    Metal runtime capability facts through embedded-runtime workflow
+    capabilities.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/runtime_capabilities.rs`,
+    `crates/pantograph-embedded-runtime/src/embedded_workflow_host.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `crates/pantograph-embedded-runtime/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: vLLM and MLX are reported as
+    unavailable roadmap facts with typed diagnostics only; no executable
+    backend, startup/load path, synthetic device choice, CPU/auto fallback,
+    raw-device parsing, generated files, lockfiles, workers, or saved workflow
+    fixtures were introduced.
+  - Standards/blast-radius gate: embedded-runtime remains workflow capability
+    projection owner; runtime lifecycle ownership and scheduler ranking are
+    unchanged; no persisted schema/dependency/feature changes; tests are
+    crate-local unit tests with no external services.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-embedded-runtime roadmap_runtime_capabilities_report_vllm_and_mlx_placeholders`,
+    `cargo test -p pantograph-embedded-runtime runtime_capabilities`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`, and
+    `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` reported
+    rustfmt wrapping; `cargo fmt --all` was run and the check passed.
+  - Remaining follow-up: real vLLM/MLX provider, probe, and admission slices
+    still need executable provider ownership before either can be selected; no
+    execution is enabled here.
 
 **Verification:**
 
@@ -2021,6 +2050,9 @@ typed diagnostic and the canonical design is fixed.
   and device options come from backend capability facts, with accessible
   selectors, keyboard interaction where interactive, and deterministic cleanup
   for subscriptions or scoped polls.
+- Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
+  facts are reported as unavailable typed diagnostics only and do not expose
+  execution.
 - Feature/dependency verification proves affected public crates still build
   with default, no-default-features, and all-features modes when runtime
   feature flags or optional dependencies change.

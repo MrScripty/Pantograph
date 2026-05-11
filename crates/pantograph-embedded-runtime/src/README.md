@@ -55,7 +55,7 @@ packages.
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke audio and ONNX Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
-| `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime snapshot-to-capability projection, host-runtime, dedicated-embedding, Python-sidecar capability builders, task request-contract projection, and capability-to-lifecycle projection. |
+| `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime snapshot-to-capability projection, host-runtime, dedicated-embedding, Python-sidecar and roadmap vLLM/MLX capability builders, task request-contract projection, and capability-to-lifecycle projection. |
 | `runtime_config.rs` | Owns embedded-runtime configuration and initialization error contracts re-exported by the crate facade. |
 | `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas owner API, explicit Pumas selector access, KV cache, model dependencies, event sinks, execution ids, Python runtime execution records, and host-provided inference lifecycle sinks. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |

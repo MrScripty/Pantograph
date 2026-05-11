@@ -118,6 +118,9 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             python_runtime::resolve_python_executable_for_env_ids(&[]),
             &selected_backend_key,
         ));
+        runtimes.extend(runtime_capabilities::roadmap_runtime_capabilities(
+            &selected_backend_key,
+        ));
         runtimes.extend(self.additional_runtime_capabilities.clone());
         runtimes.sort_by(|left, right| left.runtime_id.cmp(&right.runtime_id));
         Ok(runtimes)

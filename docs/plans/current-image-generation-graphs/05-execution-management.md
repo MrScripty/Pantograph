@@ -582,6 +582,16 @@ Update during implementation:
   `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
   `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding unavailable roadmap capability
+  facts for vLLM CPU/CUDA and MLX Metal. The embedded runtime now reports these
+  typed facts through workflow capabilities while keeping both providers
+  unavailable and non-executable. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-embedded-runtime roadmap_runtime_capabilities_report_vllm_and_mlx_placeholders`,
+  `cargo test -p pantograph-embedded-runtime runtime_capabilities`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`, and
+  `git diff --check`. The first format check reported rustfmt wrapping;
+  `cargo fmt --all` was run and the check passed.
 
 ## Commit Cadence Notes
 
@@ -1046,6 +1056,14 @@ Worker rules:
   `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts`,
   `npm run typecheck`, and `git diff --check` passed after Scheduler run-list
   queries began forwarding typed `selected_runtime_variant_id` filters.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-embedded-runtime roadmap_runtime_capabilities_report_vllm_and_mlx_placeholders`,
+  `cargo test -p pantograph-embedded-runtime runtime_capabilities`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`, and
+  `git diff --check` passed after vLLM CPU/CUDA and MLX Metal roadmap
+  capability facts were exposed as unavailable typed diagnostics only. The
+  first format check reported rustfmt wrapping; `cargo fmt --all` was run and
+  the check passed.
 
 ### Traceability Links
 
