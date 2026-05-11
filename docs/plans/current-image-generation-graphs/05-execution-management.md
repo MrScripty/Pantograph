@@ -709,6 +709,15 @@ Update during implementation:
   `rg -n "selected_device_id|InferenceDeviceId|raw backend config|backend-local selected-device" crates/inference/src/README.md crates/pantograph-embedded-runtime/src/README.md`,
   `rg -n "Update relevant module READMEs" docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
   and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding a runtime-load serde fixture for
+  `RuntimeLoadPhaseRecord`. The fixture locks the dependency-resolved phase
+  shape with managed runtime readiness facts, a canonical
+  `DeviceResolutionDecision`, and command facts without inferring readiness from
+  command-line arguments or raw backend config strings. Verification passed:
+  `cargo test -p inference --test runtime_load_contracts`,
+  `cargo fmt --all -- --check`, and `git diff --check`. The first format check
+  reported rustfmt assertion wrapping; `cargo fmt --all` was run and the check
+  passed.
 
 ## Commit Cadence Notes
 
@@ -1026,6 +1035,8 @@ Worker rules:
   resolved-device ids.
 - README verification searches passed for canonical selected/resolved device id
   ownership notes in inference, embedded runtime, and the milestone checklist.
+- `cargo test -p inference --test runtime_load_contracts` passed for the
+  runtime-load phase serde fixture.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

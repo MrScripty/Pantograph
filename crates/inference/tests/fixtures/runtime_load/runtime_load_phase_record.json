@@ -1,0 +1,40 @@
+{
+  "phase": "dependency_resolved",
+  "runtime": {
+    "runtime_id": "llama_cpp",
+    "display_name": "llama.cpp",
+    "readiness_state": "ready",
+    "selected_version": "b5920",
+    "active_version": "b5920",
+    "default_version": "b5920",
+    "install_root": "/opt/pantograph/llama-cpp/b5920",
+    "missing_files": [],
+    "unavailable_reason": null
+  },
+  "device_decision": {
+    "policy": {
+      "policy": "explicit",
+      "device_class": "cpu",
+      "device_id": "cpu"
+    },
+    "runtime_variant_id": "llama_cpp.cpu",
+    "selected_device_class": "cpu",
+    "selected_device_id": "cpu"
+  },
+  "command": {
+    "executable_path": "/opt/pantograph/llama-server",
+    "working_directory": "/opt/pantograph",
+    "args": [
+      "--port",
+      "8080"
+    ],
+    "env_overrides": [
+      [
+        "LD_LIBRARY_PATH",
+        "/opt/lib"
+      ]
+    ],
+    "pid_file": "/tmp/llama.pid"
+  },
+  "active_runtime": null
+}

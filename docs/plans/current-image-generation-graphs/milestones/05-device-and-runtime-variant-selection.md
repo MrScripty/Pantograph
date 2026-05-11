@@ -2285,6 +2285,30 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: keep READMEs current as later slices move backend
     startup config and worker request device fields behind adapter-owned
     contracts.
+- 2026-05-10 slice: runtime-load phase serde fixture.
+  - Smallest useful vertical slice: add a JSON fixture and integration test for
+    `RuntimeLoadPhaseRecord` so runtime readiness facts, resolved device
+    decisions, and command facts have stable wire-contract coverage.
+  - Allowed write set:
+    `crates/inference/tests/runtime_load_contracts.rs`,
+    `crates/inference/tests/fixtures/runtime_load/runtime_load_phase_record.json`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: the fixture carries a canonical
+    `DeviceResolutionDecision` with explicit CPU policy and selected `cpu`
+    device id; it does not infer readiness from command-line arguments or raw
+    backend config strings.
+  - Standards/blast-radius gate: test-only fixture expansion under the existing
+    Rust integration-test harness; no runtime behavior, generated DTOs,
+    lockfiles, workflow fixtures, frontend contracts, or worker contracts
+    changed.
+  - Verification passed:
+    `cargo test -p inference --test runtime_load_contracts`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` reported
+    rustfmt assertion wrapping; `cargo fmt --all` was run and the check passed.
+  - Remaining follow-up: runtime-load behavior still needs end-to-end
+    integration that consumes scheduler-selected device decisions before
+    backend load.
 
 **Verification:**
 
@@ -2370,6 +2394,9 @@ typed diagnostic and the canonical design is fixed.
   for status and diagnostics consumers.
 - Module READMEs now document canonical selected/resolved device id ownership
   and reject raw backend config or backend-local metadata as selected facts.
+- Inference runtime-load fixture tests prove dependency-resolved phase records
+  carry managed runtime readiness, canonical resolved device decisions, and
+  command facts in a stable serde shape.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.
