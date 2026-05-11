@@ -100,6 +100,9 @@ panel because no active TypeScript boundary consumes them.
 - Run-list query DTOs include a typed `selected_device_class` filter. Frontend
   controls must forward that field to the backend projection rather than
   filtering device classes by parsing selected device id strings.
+- Diagnostics comparison controls include selected device class as its own
+  typed filter so comparisons can separate class-level placement from concrete
+  device ids without parsing or splitting device id strings.
 
 ## Revisit Triggers
 - Rust-to-TypeScript DTO generation replaces manual interface mirrors.

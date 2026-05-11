@@ -491,6 +491,12 @@ Update during implementation:
   `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_inference_diagnostic_selected_facts`,
   `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding a diagnostics comparison filter
+  for selected device class. The UI and presenter use typed
+  `selected_device_class` projection fields for option/filter state and do not
+  parse selected device ids or scheduler payload JSON. Verification passed:
+  `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 

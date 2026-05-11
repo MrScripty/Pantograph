@@ -495,6 +495,7 @@ test('diagnostics comparison filters expose available projection values', () => 
       client_session_id: null,
       retention_policy_id: null,
       selected_runtime_id: null,
+      selected_device_class: null,
       selected_device_id: null,
       selected_network_node_id: null,
       accepted_at_ms: null,
@@ -507,6 +508,7 @@ test('diagnostics comparison filters expose available projection values', () => 
   assert.deepEqual(options.schedulerPolicies, ['policy-a', 'policy-b']);
   assert.deepEqual(options.retentionPolicies, ['retention-a', 'Unassigned']);
   assert.deepEqual(options.selectedRuntimes, ['runtime-a', 'Unassigned']);
+  assert.deepEqual(options.selectedDeviceClasses, ['cuda', 'Unassigned']);
   assert.deepEqual(options.selectedDevices, ['device-a', 'Unassigned']);
   assert.deepEqual(options.selectedNetworkNodes, ['network-a', 'Unassigned']);
   assert.deepEqual(options.clients, ['client-a', 'Unassigned']);
@@ -529,6 +531,7 @@ test('diagnostics comparison filters keep selected run and filter peer rows', ()
         status: 'completed',
         scheduler_policy_id: 'policy-b',
         selected_runtime_id: 'runtime-b',
+        selected_device_class: 'metal',
       }),
       createRunListPeer({ workflow_run_id: 'run-4', workflow_id: 'workflow-b', status: 'completed' }),
     ],
@@ -538,6 +541,7 @@ test('diagnostics comparison filters keep selected run and filter peer rows', ()
       status: 'completed',
       schedulerPolicy: 'policy-b',
       selectedRuntime: 'runtime-a',
+      selectedDeviceClass: 'cuda',
       acceptedDate: '1970-01-02',
     },
   );

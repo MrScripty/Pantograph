@@ -1660,6 +1660,31 @@ typed diagnostic and the canonical design is fixed.
     `npm run typecheck`, and `git diff --check`.
   - Remaining follow-up: diagnostics comparison UI filters can add a
     selected-device-class control in a separate frontend-only slice.
+- 2026-05-10 slice: diagnostics selected-device class comparison filter.
+  - Smallest useful vertical slice: add a diagnostics comparison filter for
+    selected device class using the existing typed run-list projection field
+    and Node-tested comparison presenter helpers.
+  - Allowed write set:
+    `src/components/workbench/DiagnosticsPage.svelte`,
+    `src/components/workbench/diagnosticsPagePresenters.ts`,
+    `src/components/workbench/diagnosticsPagePresenters.test.ts`,
+    `src/services/diagnostics/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: comparison options and filtering read
+    `selected_device_class` directly from typed projection rows. The slice does
+    not infer class from selected device ids, scheduler payload JSON, runtime
+    settings, or backend config strings.
+  - Standards/blast-radius gate for frontend comparison filtering: no backend
+    contracts, generated files, persisted schemas, lockfiles, dependencies,
+    polling/subscription lifecycles, workers, workflow fixtures, or DOM test
+    platform changed; accessible filter naming follows the existing select
+    pattern and is covered by typechecked Svelte wiring plus Node presenter
+    tests.
+  - Verification passed:
+    `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: selected runtime variant facts are still absent from
+    diagnostics run-list/detail projection and should be added as a separate
+    backend contract slice.
 
 **Verification:**
 
