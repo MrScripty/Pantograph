@@ -23,6 +23,10 @@ impl LlamaPlatform for MacOsX64Platform {
         "llama-server-x86_64-apple-darwin"
     }
 
+    fn extracted_server_file_names(&self) -> &'static [&'static str] {
+        &["llama-server"]
+    }
+
     fn validate_installation(&self, binaries_dir: &Path) -> Vec<String> {
         let mut missing = Vec::new();
         if !binaries_dir.join(self.installed_server_name()).exists() {

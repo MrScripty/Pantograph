@@ -1536,6 +1536,19 @@ Worker rules:
   Follow-up: runtime/device inventory calls that need an unselected variant
   should get a variant-aware inventory command path instead of relying on raw
   device flags to choose executables.
+- 2026-05-11 llama.cpp platform-boundary slice: smallest useful vertical slice
+  was limited to archive server-name matching, runtime-variant install
+  subdirectory mapping, focused extraction tests, and plan notes. Allowed write
+  set: `crates/inference/src/managed_runtime/llama_cpp_platform/*` and this
+  plan directory. The slice preserves the no-fallback/no-legacy rule by moving
+  platform layout facts behind `LlamaPlatform` methods instead of adding
+  alternate executable discovery.
+- `cargo test -p inference managed_runtime::llama_cpp_platform` and
+  `cargo test -p inference managed_runtime::operations` passed after shared
+  llama.cpp extraction stopped hard-coding archive server filenames and CUDA
+  subdirectory routing. The first compile failed because the new focused test
+  was added as a second `tests` module; merging it into the existing module
+  fixed the issue.
 
 ### Traceability Links
 

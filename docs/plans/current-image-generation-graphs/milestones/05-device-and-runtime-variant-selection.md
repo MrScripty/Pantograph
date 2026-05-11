@@ -107,9 +107,14 @@ typed diagnostic and the canonical design is fixed.
     `llama_cpp.cuda`, not raw `--device` arguments; missing selected variant
     files return `MissingRuntimeVariant` diagnostics. Linux/macOS/Windows
     platform resolvers reject unsupported variant ids instead of falling back.
-- [ ] Keep platform-specific executable names, archive names, dynamic-library
+- [x] Keep platform-specific executable names, archive names, dynamic-library
   paths, environment variables, and probes inside platform modules or narrow
   platform traits.
+  - 2026-05-11: llama.cpp archive server filenames and runtime-variant
+    extraction subdirectory mapping now live behind the `LlamaPlatform` trait.
+    Linux/Windows own the CUDA archive subdirectory mapping; macOS keeps the
+    default no-variant-subdirectory behavior. Shared extraction no longer
+    hard-codes platform server filenames or CUDA layout decisions.
 - [ ] Validate runtime roots, executable paths, dynamic-library paths, Pumas
   package paths, artifact paths, and worker-visible paths through shared
   allowed-root validation before filesystem or subprocess access.

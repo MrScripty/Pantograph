@@ -28,6 +28,17 @@ impl LlamaPlatform for WindowsPlatform {
         "llama-server-x86_64-pc-windows-msvc.exe"
     }
 
+    fn extracted_server_file_names(&self) -> &'static [&'static str] {
+        &["llama-server.exe"]
+    }
+
+    fn runtime_variant_install_subdir(&self, relative_path: &Path) -> Option<&'static str> {
+        relative_path
+            .components()
+            .any(|component| component.as_os_str() == "cuda")
+            .then_some("cuda")
+    }
+
     fn validate_installation(&self, binaries_dir: &Path) -> Vec<String> {
         let mut missing = Vec::new();
         if !binaries_dir.join(self.installed_server_name()).exists() {

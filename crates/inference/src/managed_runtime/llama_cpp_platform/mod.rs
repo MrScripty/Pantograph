@@ -29,6 +29,10 @@ pub(crate) trait LlamaPlatform: Sync {
     fn catalog_runtime_variants(&self) -> &'static [LlamaRuntimeVariant] {
         &[LLAMA_CPU_VARIANT]
     }
+    fn extracted_server_file_names(&self) -> &'static [&'static str];
+    fn runtime_variant_install_subdir(&self, _relative_path: &Path) -> Option<&'static str> {
+        None
+    }
     fn installed_server_name(&self) -> &'static str;
     fn validate_installation(&self, binaries_dir: &Path) -> Vec<String>;
     fn resolve_command(
@@ -137,24 +141,22 @@ fn copy_relevant_entries(
         let file_name = file_name.to_string_lossy();
         let file_name_ref: &str = file_name.as_ref();
 
-        let is_cuda_entry = relative_path
-            .components()
-            .any(|component| component.as_os_str() == "cuda");
+        let variant_subdir = platform.runtime_variant_install_subdir(relative_path);
 
-        let destination = if file_name_ref == "llama-server" || file_name_ref == "llama-server.exe"
+        let destination = if platform
+            .extracted_server_file_names()
+            .contains(&file_name_ref)
         {
-            if is_cuda_entry {
-                binaries_dir.join("cuda").join(file_name_ref)
+            if let Some(subdir) = variant_subdir {
+                binaries_dir.join(subdir).join(file_name_ref)
             } else {
                 *installed_server = true;
                 binaries_dir.join(platform.installed_server_name())
             }
         } else if platform.is_runtime_library(file_name_ref) {
-            let dest_dir = if is_cuda_entry {
-                binaries_dir.join("cuda")
-            } else {
-                binaries_dir.to_path_buf()
-            };
+            let dest_dir = variant_subdir
+                .map(|subdir| binaries_dir.join(subdir))
+                .unwrap_or_else(|| binaries_dir.to_path_buf());
             dest_dir.join(file_name_ref)
         } else {
             continue;
@@ -328,5 +330,30 @@ mod tests {
     fn test_major_alias_name_extracts_soname() {
         let alias = major_alias_name("libllama.so", "libllama.so.0.0.8248");
         assert_eq!(alias.as_deref(), Some("libllama.so.0"));
+    }
+
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[test]
+    fn install_distribution_uses_platform_archive_server_names_and_variant_subdir() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let extracted_dir = temp_dir.path().join("extracted");
+        let cpu_dir = extracted_dir.join("bin");
+        let cuda_dir = extracted_dir.join("cuda");
+        std::fs::create_dir_all(&cpu_dir).expect("create cpu dir");
+        std::fs::create_dir_all(&cuda_dir).expect("create cuda dir");
+        std::fs::write(cpu_dir.join("llama-server"), []).expect("write cpu server");
+        std::fs::write(cpu_dir.join("libllama.so"), []).expect("write cpu lib");
+        std::fs::write(cuda_dir.join("llama-server"), []).expect("write cuda server");
+        std::fs::write(cuda_dir.join("libllama.so"), []).expect("write cuda lib");
+
+        let install_dir = temp_dir.path().join("install");
+        super::install_distribution(&extracted_dir, &install_dir).expect("install distribution");
+
+        assert!(install_dir
+            .join(super::current_platform().installed_server_name())
+            .exists());
+        assert!(!install_dir.join("llama-server").exists());
+        assert!(install_dir.join("cuda").join("llama-server").exists());
+        assert!(install_dir.join("cuda").join("libllama.so").exists());
     }
 }
