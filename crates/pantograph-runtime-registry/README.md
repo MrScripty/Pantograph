@@ -94,6 +94,8 @@ let snapshot = registry.snapshot();
   summaries from backend/model checks. The selector treats those as candidate
   facts and still uses `supports_runtime_requirements` plus legal factors for
   eligibility and ranking.
+- Runtime capability candidates are serialized as `runtime_capability_facts`.
+  The retired fallback-named source value is not a supported contract alias.
 - Technical-fit selector output must not synthesize executable fallback
   candidates. Unmatched overrides and incomplete runtime state return
   unselected decisions with typed reason codes.

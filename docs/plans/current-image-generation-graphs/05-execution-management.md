@@ -297,6 +297,11 @@ Update during implementation:
 - 2026-05-10: Continued Milestone 5 by applying the same backend-local device
   selector validation to the dedicated llama.cpp embedding sidecar startup
   path before it builds command arguments or calls the process spawner.
+- 2026-05-10: Continued Milestone 5 by removing the remaining fallback-named
+  runtime-registry technical-fit candidate source. Runtime capability
+  candidates now serialize as `runtime_capability_facts`, and the retired
+  `runtime_capability_fallback` value is rejected rather than accepted through
+  an alias.
 
 ## Commit Cadence Notes
 
@@ -690,6 +695,17 @@ Worker rules:
   were removed. The first workflow-service verification attempt used multiple
   Cargo filters and failed before tests ran; the tests were rerun with valid
   single-filter commands.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry runtime_capability_source_kind`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `rg -n "RuntimeCapabilityFallback|runtime_capability_fallback" crates/pantograph-runtime-registry crates/pantograph-embedded-runtime crates/pantograph-workflow-service -g '!target'`,
+  and `git diff --check` passed after the runtime capability candidate source
+  kind was renamed to `runtime_capability_facts`. The search intentionally
+  reports only the negative regression test string for the retired wire value.
+  The first focused test attempt failed because it introduced a `serde_json`
+  dependency assumption in a crate that only depends on `serde`; the test was
+  rewritten to use `serde`'s typed string deserializer.
 
 ### Traceability Links
 

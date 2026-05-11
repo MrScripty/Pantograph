@@ -1,6 +1,13 @@
 use super::*;
 use crate::snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
 use crate::state::RuntimeRegistryStatus;
+use serde::Deserialize;
+
+fn deserialize_source_kind(
+    raw: &'static str,
+) -> Result<RuntimeTechnicalFitCandidateSourceKind, serde::de::value::Error> {
+    RuntimeTechnicalFitCandidateSourceKind::deserialize(serde::de::value::StrDeserializer::new(raw))
+}
 
 fn empty_snapshot() -> RuntimeRegistrySnapshot {
     RuntimeRegistrySnapshot {
@@ -27,6 +34,27 @@ fn runtime_snapshot(
         active_reservation_ids: (0..active_reservation_count as u64).collect(),
         models: Vec::new(),
     }
+}
+
+#[test]
+fn runtime_capability_source_kind_uses_facts_wire_value() {
+    let decoded = deserialize_source_kind("runtime_capability_facts")
+        .expect("runtime capability facts should deserialize");
+
+    assert_eq!(
+        decoded,
+        RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts
+    );
+}
+
+#[test]
+fn runtime_capability_source_kind_rejects_retired_fallback_wire_value() {
+    let decoded = deserialize_source_kind("runtime_capability_fallback");
+
+    assert!(
+        decoded.is_err(),
+        "retired runtime capability fallback source must not deserialize"
+    );
 }
 
 #[test]
@@ -374,7 +402,7 @@ fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
                 runtime_id: Some("runtime-b".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
-                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
                 warmup_state: None,
@@ -388,7 +416,7 @@ fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
                 runtime_id: Some("runtime-a".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
-                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
                 warmup_state: None,
@@ -429,7 +457,7 @@ fn selector_rejects_when_required_context_is_missing() {
             runtime_id: Some("runtime-a".to_string()),
             backend_key: Some("llama_cpp".to_string()),
             model_id: None,
-            source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+            source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
             context_window_tokens: None,
             residency_state: None,
             warmup_state: None,
@@ -475,7 +503,7 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
                 runtime_id: Some("candle".to_string()),
                 backend_key: Some("candle".to_string()),
                 model_id: None,
-                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
                 warmup_state: Some(RuntimeTechnicalFitWarmupState::Ready),
@@ -489,7 +517,7 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
                 runtime_id: Some("llama_cpp".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
-                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Unloaded),
                 warmup_state: None,
@@ -549,7 +577,7 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 runtime_id: Some("runtime-hot".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
-                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
                 warmup_state: None,
@@ -563,7 +591,7 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 runtime_id: Some("runtime-cool".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
-                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
                 warmup_state: None,
@@ -626,7 +654,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 runtime_id: Some("runtime-tight".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
-                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
                 warmup_state: None,
@@ -640,7 +668,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 runtime_id: Some("runtime-roomy".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
-                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
                 warmup_state: None,

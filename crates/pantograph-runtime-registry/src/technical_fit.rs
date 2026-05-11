@@ -37,7 +37,7 @@ impl RuntimeTechnicalFitFactor {
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeTechnicalFitCandidateSourceKind {
     PumasPackageFacts,
-    RuntimeCapabilityFallback,
+    RuntimeCapabilityFacts,
     #[default]
     Unknown,
 }

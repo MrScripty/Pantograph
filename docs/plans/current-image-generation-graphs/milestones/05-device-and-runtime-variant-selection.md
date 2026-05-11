@@ -1010,6 +1010,40 @@ typed diagnostic and the canonical design is fixed.
     `cargo test -p inference embedding_runtime::tests::start_server_rejects_invalid_device_before_spawning`,
     `cargo test -p inference embedding_runtime::tests`, and
     `git diff --check`.
+- 2026-05-10 slice: runtime capability technical-fit source rename.
+  - Smallest useful vertical slice: remove the remaining fallback-named
+    runtime-registry candidate source kind by renaming
+    `RuntimeCapabilityFallback` to `RuntimeCapabilityFacts` and updating the
+    embedded-runtime producer to emit the new source.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`,
+    `crates/pantograph-runtime-registry/README.md`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the retired
+    `runtime_capability_fallback` wire value is rejected in a focused serde
+    regression test. No alias, migration, or compatibility branch was added.
+  - Standards/blast-radius gate: this stays inside the runtime-registry
+    technical-fit contract and the embedded-runtime projection producer.
+    Workflow-service DTOs, persisted schema, frontend behavior, generated
+    files, lockfiles, feature flags, dependencies, sqlite state, managed
+    runtime variant state, and worker execution are unchanged.
+  - Discovered issue fixed in-slice: code search found that the earlier
+    fallback DTO cleanup missed `RuntimeCapabilityFallback` because it was a
+    candidate source kind rather than a selection mode or reason code.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry runtime_capability_source_kind`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `rg -n "RuntimeCapabilityFallback|runtime_capability_fallback" crates/pantograph-runtime-registry crates/pantograph-embedded-runtime crates/pantograph-workflow-service -g '!target'`,
+    and `git diff --check`.
+  - Verification deviation: the first regression-test attempt used
+    `serde_json`, but `pantograph-runtime-registry` intentionally has no
+    `serde_json` dependency. The test was rewritten to use `serde`'s typed
+    string deserializer, avoiding dependency or lockfile changes.
 
 **Verification:**
 

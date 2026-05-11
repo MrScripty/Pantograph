@@ -184,7 +184,7 @@ fn runtime_capability_candidates(
                 .cloned()
                 .or_else(|| Some(capability.runtime_id.clone())),
             model_id: None,
-            source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+            source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
             context_window_tokens: None,
             residency_state: Some(runtime_capability_residency_state(capability)),
             warmup_state: runtime_capability_warmup_state(capability),
@@ -886,6 +886,11 @@ mod tests {
 
         let runtime_request =
             build_runtime_technical_fit_request(&workflow_request, None, &[runtime_capability()]);
+        assert_eq!(
+            runtime_request.candidates[0].source_kind,
+            RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts
+        );
+
         let registry_decision = select_runtime_technical_fit(&runtime_request);
         let workflow_decision = project_workflow_technical_fit_decision(&registry_decision);
 

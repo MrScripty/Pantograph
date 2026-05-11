@@ -101,6 +101,8 @@ process ownership and app composition stay outside this crate.
 - Technical-fit factor, override, and reason-code contracts are also owned here
   so later workflow integration consumes one backend selector vocabulary rather
   than inventing adapter-local routing semantics.
+- Runtime capability candidates use the `runtime_capability_facts` source kind.
+  Fallback-named source kinds are not accepted as technical-fit contract values.
 - Technical-fit selection is also computed here from normalized request input,
   explicit override precedence, and live runtime snapshot facts so workflow and
   host layers do not drift on candidate ranking or rejection behavior.
