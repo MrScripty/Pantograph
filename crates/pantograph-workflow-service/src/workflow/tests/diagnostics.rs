@@ -127,6 +127,16 @@ fn workflow_diagnostics_usage_query_validates_ids_and_bounds() {
         oversized_page,
         Err(WorkflowServiceError::InvalidRequest(_))
     ));
+
+    let zero_page =
+        service.workflow_diagnostics_usage_query(WorkflowDiagnosticsUsageQueryRequest {
+            page_size: Some(0),
+            ..WorkflowDiagnosticsUsageQueryRequest::default()
+        });
+    assert!(matches!(
+        zero_page,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
 }
 
 #[test]
@@ -227,6 +237,16 @@ fn workflow_scheduler_timeline_query_validates_bounds() {
             .code(),
         WorkflowErrorCode::InvalidRequest
     );
+
+    let zero_limit =
+        service.workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
+            limit: Some(0),
+            ..WorkflowSchedulerTimelineQueryRequest::default()
+        });
+    assert!(matches!(
+        zero_limit,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
 
     let oversized_projection_batch =
         service.workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
@@ -623,6 +643,15 @@ fn workflow_run_list_query_validates_bounds() {
     });
     assert!(matches!(
         oversized_projection_batch,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let zero_limit = service.workflow_run_list_query(WorkflowRunListQueryRequest {
+        limit: Some(0),
+        ..WorkflowRunListQueryRequest::default()
+    });
+    assert!(matches!(
+        zero_limit,
         Err(WorkflowServiceError::InvalidRequest(_))
     ));
 }
@@ -1513,6 +1542,27 @@ fn workflow_io_artifact_query_validates_bounds() {
         oversized_limit,
         Err(WorkflowServiceError::InvalidRequest(_))
     ));
+
+    let zero_limit = service.workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+        workflow_run_id: Some("run-a".to_string()),
+        node_id: None,
+        producer_node_id: None,
+        consumer_node_id: None,
+        artifact_role: None,
+        media_type: None,
+        retention_state: None,
+        retention_policy_id: None,
+        runtime_id: None,
+        selected_backend_key: None,
+        model_id: None,
+        after_event_seq: None,
+        limit: Some(0),
+        projection_batch_size: None,
+    });
+    assert!(matches!(
+        zero_limit,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
 }
 
 #[test]
@@ -1591,6 +1641,24 @@ fn workflow_node_status_query_does_not_mutate_projection_state() {
         .projection_state("node_status")
         .expect("node status state query")
         .is_none());
+}
+
+#[test]
+fn workflow_node_status_query_rejects_zero_limit() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let zero_limit = service.workflow_node_status_query(WorkflowNodeStatusQueryRequest {
+        workflow_run_id: Some("run-a".to_string()),
+        node_id: None,
+        status: None,
+        after_event_seq: None,
+        limit: Some(0),
+        projection_batch_size: None,
+    });
+    assert!(matches!(
+        zero_limit,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
 }
 
 #[test]
@@ -2168,6 +2236,20 @@ fn workflow_library_usage_query_validates_bounds() {
     });
     assert!(matches!(
         oversized_limit,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let zero_limit = service.workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+        asset_id: None,
+        workflow_run_id: None,
+        workflow_id: None,
+        workflow_version_id: None,
+        after_event_seq: None,
+        limit: Some(0),
+        projection_batch_size: None,
+    });
+    assert!(matches!(
+        zero_limit,
         Err(WorkflowServiceError::InvalidRequest(_))
     ));
 }

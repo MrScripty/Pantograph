@@ -1554,10 +1554,11 @@ impl WorkflowDiagnosticsUsageQueryRequest {
             started_at_ms: self.started_at_ms,
             ended_before_ms: self.ended_before_ms,
             page: self.page,
-            page_size: self
-                .page_size
-                .unwrap_or_else(|| DiagnosticsQuery::default().page_size)
-                .max(1),
+            page_size: resolve_positive_optional_u32(
+                "page_size",
+                self.page_size,
+                DiagnosticsQuery::default().page_size,
+            )?,
         };
         query.validate().map_err(WorkflowServiceError::from)?;
         Ok(query)
@@ -1589,10 +1590,11 @@ impl WorkflowSchedulerTimelineQueryRequest {
             workflow_id: parse_optional_id("workflow_id", self.workflow_id)?,
             scheduler_policy_id: self.scheduler_policy_id,
             after_event_seq: self.after_event_seq,
-            limit: self
-                .limit
-                .unwrap_or_else(|| SchedulerTimelineProjectionQuery::default().limit)
-                .max(1),
+            limit: resolve_positive_optional_u32(
+                "limit",
+                self.limit,
+                SchedulerTimelineProjectionQuery::default().limit,
+            )?,
         })
     }
 }
@@ -1623,10 +1625,11 @@ impl WorkflowRunListQueryRequest {
             error_severity: self.error_severity,
             error_phase: self.error_phase,
             after_event_seq: self.after_event_seq,
-            limit: self
-                .limit
-                .unwrap_or_else(|| RunListProjectionQuery::default().limit)
-                .max(1),
+            limit: resolve_positive_optional_u32(
+                "limit",
+                self.limit,
+                RunListProjectionQuery::default().limit,
+            )?,
         })
     }
 }
@@ -1681,7 +1684,7 @@ impl WorkflowIoArtifactQueryRequest {
             selected_backend_key: self.selected_backend_key,
             model_id: self.model_id,
             after_event_seq: self.after_event_seq,
-            limit: self.limit.unwrap_or(100).max(1),
+            limit: resolve_positive_optional_u32("limit", self.limit, 100)?,
         };
         query.validate(500).map_err(WorkflowServiceError::from)?;
         Ok(query)
@@ -1712,7 +1715,7 @@ impl WorkflowNodeStatusQueryRequest {
             node_id: self.node_id,
             status: self.status,
             after_event_seq: self.after_event_seq,
-            limit: self.limit.unwrap_or(250).max(1),
+            limit: resolve_positive_optional_u32("limit", self.limit, 250)?,
         };
         query.validate(500).map_err(WorkflowServiceError::from)?;
         Ok(query)
@@ -1730,11 +1733,25 @@ impl WorkflowLibraryUsageQueryRequest {
                 self.workflow_version_id,
             )?,
             after_event_seq: self.after_event_seq,
-            limit: self.limit.unwrap_or(100).max(1),
+            limit: resolve_positive_optional_u32("limit", self.limit, 100)?,
         };
         query.validate(500).map_err(WorkflowServiceError::from)?;
         Ok(query)
     }
+}
+
+fn resolve_positive_optional_u32(
+    field: &'static str,
+    value: Option<u32>,
+    default_value: u32,
+) -> Result<u32, WorkflowServiceError> {
+    let resolved = value.unwrap_or(default_value);
+    if resolved == 0 {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "{field} must be greater than zero"
+        )));
+    }
+    Ok(resolved)
 }
 
 fn parse_id<T>(field: &'static str, value: String) -> Result<T, WorkflowServiceError>
