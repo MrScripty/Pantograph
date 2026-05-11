@@ -2615,6 +2615,35 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: continue removing backend-local PyTorch runtime load
     raw `"auto"` arguments as the executable startup adapter moves from direct
     worker strings to typed load intent.
+- 2026-05-11 slice: typed PyTorch direct load device input.
+  - Smallest useful vertical slice: change PyTorch direct/package model load
+    APIs and direct worker-envelope builders to accept
+    `Option<InferenceDeviceId>`, then parse node-engine PyTorch workflow
+    device input at the adapter boundary.
+  - Allowed write set: `crates/inference/src/backend/pytorch.rs`,
+    `crates/inference/src/backend/pytorch_tests.rs`,
+    `crates/node-engine/src/core_executor/pytorch_nodes.rs`,
+    `crates/inference/src/backend/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: omitted or explicit `auto` device
+    intent remains `None`; explicit devices must be canonical
+    `InferenceDeviceId`; node-engine rejects legacy backend-local ids such as
+    `CUDA0` before backend load instead of forwarding raw strings.
+  - Standards/blast-radius gate: PyTorch adapter API and node-engine adapter
+    parsing only; no generated DTOs, lockfiles, workflow fixtures, frontend
+    code, scheduler ranking, managed-runtime install state, or persisted schema
+    changed.
+  - Verification passed:
+    `cargo test -p inference --features backend-pytorch test_pytorch_direct_load_envelope`,
+    `cargo test -p inference --features backend-pytorch test_pytorch_load_envelope`,
+    `cargo test -p inference --features backend-pytorch test_can_reuse_loaded_model_requires_matching_request`,
+    `cargo test -p node-engine --features pytorch-nodes pytorch_load_device_from_inputs`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: one PyTorch test command attempted two Cargo test
+    filters and failed before tests ran; both filters were rerun individually
+    and passed.
+  - Remaining follow-up: connect PyTorch node execution to canonical scheduler
+    selected-device decisions rather than direct workflow input once node-engine
+    backend routing is replaced.
 
 **Verification:**
 
@@ -2733,6 +2762,9 @@ typed diagnostic and the canonical design is fixed.
   parsed before backend config construction.
 - PyTorch helper tests prove omitted auto intent remains absent and explicit
   devices remain canonical `InferenceDeviceId` in test-only load args.
+- PyTorch direct/package load tests prove executable load APIs accept
+  canonical `InferenceDeviceId` values or omitted auto intent, and node-engine
+  parser tests reject legacy PyTorch device strings before backend load.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

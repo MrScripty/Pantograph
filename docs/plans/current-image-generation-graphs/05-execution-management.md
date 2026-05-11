@@ -852,6 +852,18 @@ Update during implementation:
   passed:
   `cargo test -p inference --features backend-pytorch test_pytorch_transformers_load_args`,
   `cargo fmt --all -- --check`, and `git diff --check`.
+- 2026-05-11: Continued Milestone 5 by typing PyTorch direct/package model load
+  device inputs as `Option<InferenceDeviceId>`. Node-engine PyTorch execution
+  now parses workflow device input at the adapter boundary, treats omitted or
+  explicit `auto` as `None`, and rejects legacy ids such as `CUDA0` before
+  calling the inference backend. Verification passed:
+  `cargo test -p inference --features backend-pytorch test_pytorch_direct_load_envelope`,
+  `cargo test -p inference --features backend-pytorch test_pytorch_load_envelope`,
+  `cargo test -p inference --features backend-pytorch test_can_reuse_loaded_model_requires_matching_request`,
+  `cargo test -p node-engine --features pytorch-nodes pytorch_load_device_from_inputs`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Verification
+  deviation: the first PyTorch test attempt used two Cargo filters and failed
+  before tests ran; both filters were rerun separately and passed.
 
 ## Commit Cadence Notes
 
@@ -1205,6 +1217,9 @@ Worker rules:
 - PyTorch helper tests now prove the test-only Transformers load args keep
   device as `Option<InferenceDeviceId>` and model auto policy by omission
   rather than a raw `"auto"` device string.
+- PyTorch direct/package load tests now prove executable load APIs accept
+  canonical `InferenceDeviceId` values or omitted auto intent, while node-engine
+  rejects legacy PyTorch device strings before backend load.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

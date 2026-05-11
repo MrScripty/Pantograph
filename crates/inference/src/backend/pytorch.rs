@@ -790,18 +790,16 @@ fn task_join_error_message(error: impl std::fmt::Display) -> String {
 
 fn pytorch_startup_device(
     device: Option<&BackendStartupDeviceIntent>,
-) -> Result<String, BackendError> {
+) -> Result<Option<InferenceDeviceId>, BackendError> {
     match device {
         None | Some(BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Auto)) => {
-            Ok("auto".to_string())
+            Ok(None)
         }
-        Some(BackendStartupDeviceIntent::CanonicalDevice(device_id)) => {
-            Ok(device_id.as_str().to_string())
-        }
+        Some(BackendStartupDeviceIntent::CanonicalDevice(device_id)) => Ok(Some(device_id.clone())),
         Some(BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit {
             device_id: Some(device_id),
             ..
-        })) => Ok(device_id.as_str().to_string()),
+        })) => Ok(Some(device_id.clone())),
         Some(BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit {
             device_id: None,
             ..
@@ -999,26 +997,6 @@ pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
     .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
 }
 
-fn worker_device_id_from_backend_device(
-    device: Option<&str>,
-) -> Result<Option<InferenceDeviceId>, BackendError> {
-    let Some(device) = device else {
-        return Ok(None);
-    };
-    let trimmed = device.trim();
-    if trimmed.is_empty() {
-        return Err(BackendError::Config(
-            "PyTorch worker load envelope device must be non-empty when present".to_string(),
-        ));
-    }
-    if trimmed == "auto" {
-        return Ok(None);
-    }
-    InferenceDeviceId::parse(trimmed)
-        .map(Some)
-        .map_err(|error| BackendError::Config(format!("Invalid PyTorch worker device id: {error}")))
-}
-
 impl PyTorchBackend {
     pub fn new() -> Self {
         Self {
@@ -1152,12 +1130,15 @@ impl PyTorchBackend {
     fn can_reuse_loaded_model(
         &self,
         model_path: &str,
-        device: &str,
+        device: Option<&InferenceDeviceId>,
         model_type: Option<&str>,
     ) -> bool {
         self.loaded_model.as_ref().is_some_and(|loaded| {
+            let Some(device) = device else {
+                return false;
+            };
             loaded.model_path == model_path
-                && loaded.device.as_str() == device
+                && &loaded.device == device
                 && model_type.is_none_or(|requested| loaded.model_type == requested)
         })
     }
@@ -1202,7 +1183,7 @@ impl PyTorchBackend {
     pub async fn load_model(
         &mut self,
         model_path: &str,
-        device: &str,
+        device: Option<&InferenceDeviceId>,
         model_type: Option<&str>,
     ) -> Result<LoadedModelInfo, BackendError> {
         self.load_model_with_trust_policy(
@@ -1220,7 +1201,7 @@ impl PyTorchBackend {
         &mut self,
         request_id: impl Into<String>,
         package: &ResolvedModelPackageFacts,
-        device: Option<&str>,
+        device: Option<&InferenceDeviceId>,
         security_policy: ModelLoadSecurityPolicy,
     ) -> Result<LoadedModelInfo, BackendError> {
         let envelope = Self::transformers_load_envelope_from_package(
@@ -1239,7 +1220,7 @@ impl PyTorchBackend {
     fn transformers_load_envelope_from_package(
         request_id: impl Into<String>,
         package: &ResolvedModelPackageFacts,
-        device: Option<&str>,
+        device: Option<&InferenceDeviceId>,
         trust_policy: PyTorchTransformersTrustPolicy,
     ) -> Result<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>, BackendError> {
         if !package.uses_current_contract() {
@@ -1292,7 +1273,7 @@ impl PyTorchBackend {
                 task_id,
                 task_profile: Some(task_profile),
                 model_type_hint,
-                device: worker_device_id_from_backend_device(device)?,
+                device: device.cloned(),
                 trust_policy,
                 generation_defaults,
             },
@@ -1302,7 +1283,7 @@ impl PyTorchBackend {
     fn transformers_load_envelope_from_direct_path(
         request_id: impl Into<String>,
         model_path: impl Into<String>,
-        device: Option<&str>,
+        device: Option<&InferenceDeviceId>,
         model_type: Option<&str>,
         trust_policy: PyTorchTransformersTrustPolicy,
     ) -> Result<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>, BackendError> {
@@ -1327,7 +1308,7 @@ impl PyTorchBackend {
                     required_components: vec![],
                 }),
                 model_type_hint: model_type.map(str::to_string),
-                device: worker_device_id_from_backend_device(device)?,
+                device: device.cloned(),
                 trust_policy,
                 generation_defaults: None,
             },
@@ -2413,14 +2394,14 @@ impl PyTorchBackend {
     async fn load_model_with_trust_policy(
         &mut self,
         model_path: &str,
-        device: &str,
+        device: Option<&InferenceDeviceId>,
         model_type: Option<&str>,
         trust_policy: PyTorchTransformersTrustPolicy,
     ) -> Result<LoadedModelInfo, BackendError> {
         let envelope = Self::transformers_load_envelope_from_direct_path(
             format!("pytorch-direct-load-{}", Uuid::new_v4().simple()),
             model_path,
-            Some(device),
+            device,
             model_type,
             trust_policy,
         )?;
@@ -2758,7 +2739,7 @@ impl InferenceBackend for PyTorchBackend {
             let model_type = config.model_type.as_deref();
             let model_path = model_path.to_string_lossy().to_string();
 
-            if self.can_reuse_loaded_model(&model_path, &device, model_type) {
+            if self.can_reuse_loaded_model(&model_path, device.as_ref(), model_type) {
                 self.ready = true;
                 log::info!("PyTorch backend: reusing loaded model {}", model_path);
                 return Ok(BackendStartOutcome {
@@ -2767,7 +2748,8 @@ impl InferenceBackend for PyTorchBackend {
                 });
             }
 
-            self.load_model(&model_path, &device, model_type).await?;
+            self.load_model(&model_path, device.as_ref(), model_type)
+                .await?;
 
             return Ok(BackendStartOutcome {
                 runtime_reused: Some(false),

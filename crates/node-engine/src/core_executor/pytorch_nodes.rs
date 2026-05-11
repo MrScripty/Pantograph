@@ -27,6 +27,31 @@ async fn pytorch_model_needs_load(model_path: &str) -> Result<bool> {
     }
 }
 
+fn pytorch_load_device_from_inputs(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<Option<inference::InferenceDeviceId>> {
+    let Some(value) = inputs.get("device") else {
+        return Ok(None);
+    };
+    let Some(device) = value
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Err(NodeEngineError::ExecutionFailed(
+            "PyTorch device input must be a non-empty string when provided".to_string(),
+        ));
+    };
+    if device == "auto" {
+        return Ok(None);
+    }
+    inference::InferenceDeviceId::parse(device)
+        .map(Some)
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Invalid PyTorch device input: {error}"))
+        })
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub(crate) struct PyTorchTypedGenerationSettings {
     pub(crate) max_tokens: Option<i64>,
@@ -160,11 +185,7 @@ pub(crate) async fn execute_pytorch_inference(
         .and_then(|m| m.as_i64())
         .or(generation_settings.max_tokens)
         .unwrap_or(512);
-    let device = inputs
-        .get("device")
-        .and_then(|d| d.as_str())
-        .unwrap_or("auto")
-        .to_string();
+    let device = pytorch_load_device_from_inputs(inputs)?;
     let model_type = inputs
         .get("model_type")
         .and_then(|t| t.as_str())
@@ -180,7 +201,7 @@ pub(crate) async fn execute_pytorch_inference(
     if pytorch_model_needs_load(&model_path).await? {
         log::info!("PyTorchInference: loading model from '{}'", model_path);
         inference::backend::pytorch::PyTorchBackend::new()
-            .load_model(&model_path, &device, model_type.as_deref())
+            .load_model(&model_path, device.as_ref(), model_type.as_deref())
             .await
             .map_err(|error| {
                 NodeEngineError::ExecutionFailed(format!("PyTorch model load failed: {}", error))
@@ -297,9 +318,49 @@ pub(crate) async fn execute_pytorch_inference(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn pytorch_text_generation_stream_port_uses_canonical_response_output() {
         assert_eq!(TEXT_GENERATION_STREAM_PORT, "response");
+    }
+
+    #[test]
+    fn pytorch_load_device_from_inputs_omits_auto_policy() {
+        let mut inputs = HashMap::new();
+        inputs.insert("device".to_string(), serde_json::json!("auto"));
+
+        assert_eq!(
+            pytorch_load_device_from_inputs(&inputs).expect("auto policy should parse"),
+            None
+        );
+    }
+
+    #[test]
+    fn pytorch_load_device_from_inputs_parses_canonical_device_id() {
+        let mut inputs = HashMap::new();
+        inputs.insert("device".to_string(), serde_json::json!("cuda:0"));
+
+        let device =
+            pytorch_load_device_from_inputs(&inputs).expect("canonical device should parse");
+
+        assert_eq!(device.as_ref().map(|id| id.as_str()), Some("cuda:0"));
+    }
+
+    #[test]
+    fn pytorch_load_device_from_inputs_rejects_legacy_device_id() {
+        let mut inputs = HashMap::new();
+        inputs.insert("device".to_string(), serde_json::json!("CUDA0"));
+
+        let error =
+            pytorch_load_device_from_inputs(&inputs).expect_err("legacy id should fail closed");
+
+        match error {
+            NodeEngineError::ExecutionFailed(message) => {
+                assert!(message.contains("Invalid PyTorch device input"));
+                assert!(message.contains("invalid identifier shape"));
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
     }
 }

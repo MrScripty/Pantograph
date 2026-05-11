@@ -200,6 +200,10 @@ fn create_backend() {
   through the same versioned worker-envelope pattern as Transformers load and
   text generation. Unsupported non-null audio `extra_options` fail closed until
   they are deliberately mapped to backend-local kwargs.
+- PyTorch direct and package model load APIs accept `Option<InferenceDeviceId>`
+  for device intent. `None` is the only backend-local auto signal at this
+  boundary; explicit devices must already be canonical ids before worker load
+  envelopes are built.
 - PyTorch model unload crosses the embedded Python boundary through a versioned
   worker envelope and typed response decoder. The adapter clears Rust-side
   loaded-model state only after a correlated structured unload success.

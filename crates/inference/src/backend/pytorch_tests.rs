@@ -278,12 +278,15 @@ fn test_can_reuse_loaded_model_requires_matching_request() {
         model_type: "text-generation".to_string(),
         device: inference_device_id("cuda"),
     });
+    let cuda = inference_device_id("cuda");
+    let cpu = inference_device_id("cpu");
 
-    assert!(backend.can_reuse_loaded_model("/models/demo", "cuda", None));
-    assert!(backend.can_reuse_loaded_model("/models/demo", "cuda", Some("text-generation")));
-    assert!(!backend.can_reuse_loaded_model("/models/other", "cuda", None));
-    assert!(!backend.can_reuse_loaded_model("/models/demo", "cpu", None));
-    assert!(!backend.can_reuse_loaded_model("/models/demo", "cuda", Some("dllm")));
+    assert!(backend.can_reuse_loaded_model("/models/demo", Some(&cuda), None));
+    assert!(backend.can_reuse_loaded_model("/models/demo", Some(&cuda), Some("text-generation")));
+    assert!(!backend.can_reuse_loaded_model("/models/other", Some(&cuda), None));
+    assert!(!backend.can_reuse_loaded_model("/models/demo", Some(&cpu), None));
+    assert!(!backend.can_reuse_loaded_model("/models/demo", Some(&cuda), Some("dllm")));
+    assert!(!backend.can_reuse_loaded_model("/models/demo", None, Some("text-generation")));
 }
 
 #[test]
@@ -4792,7 +4795,7 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
     let envelope = PyTorchBackend::transformers_load_envelope_from_package(
         "req-pumas-load",
         &facts,
-        Some("cuda:0"),
+        Some(&inference_device_id("cuda:0")),
         trust_policy,
     )
     .expect("map package facts to worker envelope");
@@ -4883,7 +4886,7 @@ fn test_pytorch_transformers_load_args_use_worker_envelope_payload() {
     let envelope = PyTorchBackend::transformers_load_envelope_from_package(
         "req-pumas-load",
         &facts,
-        Some("cuda:0"),
+        Some(&inference_device_id("cuda:0")),
         PyTorchTransformersTrustPolicy::from(ModelLoadSecurityPolicy {
             trust_remote_code: ModelRemoteCodePolicy::Allow,
             network: ModelLoadNetworkPolicy::AllowNetwork,
@@ -4923,7 +4926,7 @@ fn test_pytorch_direct_load_envelope_uses_transformers_contract() {
     let envelope = PyTorchBackend::transformers_load_envelope_from_direct_path(
         "req-direct-load",
         "/models/direct-hf",
-        Some("cpu"),
+        Some(&inference_device_id("cpu")),
         Some("dllm"),
         PyTorchTransformersTrustPolicy::default(),
     )
@@ -4971,23 +4974,6 @@ fn test_pytorch_direct_load_envelope_uses_transformers_contract() {
 }
 
 #[test]
-fn test_pytorch_direct_load_envelope_rejects_legacy_device_id() {
-    match PyTorchBackend::transformers_load_envelope_from_direct_path(
-        "req-direct-invalid-device",
-        "/models/direct-hf",
-        Some("CUDA0"),
-        None,
-        PyTorchTransformersTrustPolicy::default(),
-    ) {
-        Err(BackendError::Config(message)) => {
-            assert!(message.contains("Invalid PyTorch worker device id"));
-            assert!(message.contains("invalid identifier shape"));
-        }
-        other => panic!("expected invalid direct device config error, got {other:?}"),
-    }
-}
-
-#[test]
 fn test_pytorch_transformers_load_args_default_device_auto() {
     let fixture = include_str!(
         "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
@@ -5026,7 +5012,7 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_contract_version()
     let mut envelope = PyTorchBackend::transformers_load_envelope_from_package(
         "req-pumas-load",
         &facts,
-        Some("cpu"),
+        Some(&inference_device_id("cpu")),
         PyTorchTransformersTrustPolicy {
             allow_remote_code: true,
             accepted_sources: vec!["configuration_tiny.py".to_string()],
@@ -5059,7 +5045,7 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_wrong_operation() 
     let mut envelope = PyTorchBackend::transformers_load_envelope_from_package(
         "req-pumas-load",
         &facts,
-        Some("cpu"),
+        Some(&inference_device_id("cpu")),
         PyTorchTransformersTrustPolicy {
             allow_remote_code: true,
             accepted_sources: vec!["configuration_tiny.py".to_string()],
@@ -5093,7 +5079,7 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_invalid_model_sour
     let mut envelope = PyTorchBackend::transformers_load_envelope_from_package(
         "req-pumas-load",
         &facts,
-        Some("cpu"),
+        Some(&inference_device_id("cpu")),
         PyTorchTransformersTrustPolicy {
             allow_remote_code: true,
             accepted_sources: vec!["configuration_tiny.py".to_string()],
@@ -5127,7 +5113,7 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_empty_entry_path()
     let mut envelope = PyTorchBackend::transformers_load_envelope_from_direct_path(
         "req-empty-entry",
         " ",
-        Some("cpu"),
+        Some(&inference_device_id("cpu")),
         None,
         PyTorchTransformersTrustPolicy::default(),
     )
@@ -5147,7 +5133,7 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_mismatched_model_s
     let mut envelope = PyTorchBackend::transformers_load_envelope_from_direct_path(
         "req-mismatch-source",
         "/models/direct-hf",
-        Some("cpu"),
+        Some(&inference_device_id("cpu")),
         None,
         PyTorchTransformersTrustPolicy::default(),
     )
@@ -5172,7 +5158,7 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_mismatched_task_pr
     let mut envelope = PyTorchBackend::transformers_load_envelope_from_direct_path(
         "req-mismatch-task",
         "/models/direct-hf",
-        Some("cpu"),
+        Some(&inference_device_id("cpu")),
         None,
         PyTorchTransformersTrustPolicy::default(),
     )
@@ -5270,7 +5256,7 @@ fn test_pytorch_load_envelope_rejects_custom_code_without_trust_opt_in() {
     match PyTorchBackend::transformers_load_envelope_from_package(
         "req-pumas-load",
         &facts,
-        Some("cpu"),
+        Some(&inference_device_id("cpu")),
         PyTorchTransformersTrustPolicy::default(),
     ) {
         Err(BackendError::Config(message)) => {
@@ -5291,7 +5277,7 @@ fn test_pytorch_load_envelope_rejects_unsupported_artifact_kind() {
     match PyTorchBackend::transformers_load_envelope_from_package(
         "req-gguf-load",
         &facts,
-        Some("cpu"),
+        Some(&inference_device_id("cpu")),
         PyTorchTransformersTrustPolicy::default(),
     ) {
         Err(BackendError::Config(message)) => {
