@@ -1930,6 +1930,26 @@ Worker rules:
   passing. Remaining numeric-boundary follow-up: image request limits beyond
   zero dimensions, context/token/batch limits, memory estimates, byte-range
   projections, and worker/runtime request fields.
+- 2026-05-11 image generation positive count validation slice: smallest useful
+  vertical slice was limited to extending typed image generation gateway
+  validation to reject explicit zero `num_inference_steps` and
+  `num_images_per_prompt` before backend dispatch. Allowed write set:
+  `crates/inference/src/gateway.rs`, `crates/inference/src/gateway_tests.rs`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because explicit zero
+  image count/request values now fail with `BackendError::Config`; the gateway
+  does not replace them with backend defaults, clamp to one, or pass zero
+  through to backend implementations. `None` remains an absent option owned by
+  the selected backend. Verification passed:
+  `cargo test -p inference test_generate_image_rejects_zero_positive_count_options`,
+  `cargo test -p inference test_generate_image_rejects_zero_dimensions`, and
+  `cargo fmt --all -- --check`. Deviations: the first
+  `cargo fmt --all -- --check` found rustfmt-only wrapping; `cargo fmt --all`
+  was applied and verification was rerun successfully. The two focused Cargo
+  tests were started in parallel and serialized on Cargo package/build locks
+  before passing. Remaining numeric-boundary follow-up: image request limits
+  beyond positive-count validation, context/token/batch limits, memory
+  estimates, byte-range projections, and worker/runtime request fields.
 
 ### Traceability Links
 

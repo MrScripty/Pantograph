@@ -993,6 +993,39 @@ async fn test_generate_image_rejects_zero_dimensions() {
 }
 
 #[tokio::test]
+async fn test_generate_image_rejects_zero_positive_count_options() {
+    for (field_name, num_inference_steps, num_images_per_prompt) in [
+        ("image.num_inference_steps", Some(0), Some(1)),
+        ("image.num_images_per_prompt", Some(20), Some(0)),
+    ] {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+        let error = gateway
+            .generate_image(ImageGenerationRequest {
+                model: "mock".to_string(),
+                prompt: "paper lantern".to_string(),
+                negative_prompt: None,
+                width: Some(512),
+                height: Some(512),
+                num_inference_steps,
+                guidance_scale: Some(4.0),
+                seed: Some(7),
+                scheduler: None,
+                num_images_per_prompt,
+                init_image: None,
+                mask_image: None,
+                strength: None,
+                extra_options: serde_json::Value::Null,
+            })
+            .await
+            .expect_err("zero image count option should fail closed");
+        assert!(
+            error.to_string().contains(field_name),
+            "expected {field_name} in {error}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn test_transcribe_audio_forwards_to_active_backend() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let result = gateway

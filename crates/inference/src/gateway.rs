@@ -2280,12 +2280,17 @@ fn push_audio_transcription_option_diagnostic(
 }
 
 fn validate_image_generation_request(request: &ImageGenerationRequest) -> Result<(), BackendError> {
-    validate_optional_positive_image_dimension(request.width, "image.width")?;
-    validate_optional_positive_image_dimension(request.height, "image.height")?;
+    validate_optional_positive_image_u32(request.width, "image.width")?;
+    validate_optional_positive_image_u32(request.height, "image.height")?;
+    validate_optional_positive_image_u32(request.num_inference_steps, "image.num_inference_steps")?;
+    validate_optional_positive_image_u32(
+        request.num_images_per_prompt,
+        "image.num_images_per_prompt",
+    )?;
     Ok(())
 }
 
-fn validate_optional_positive_image_dimension(
+fn validate_optional_positive_image_u32(
     value: Option<u32>,
     field_name: &'static str,
 ) -> Result<(), BackendError> {
