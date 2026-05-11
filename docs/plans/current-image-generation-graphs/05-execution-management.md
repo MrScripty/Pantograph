@@ -1913,6 +1913,23 @@ Worker rules:
   context/token/batch limits outside this projection rebuild validation
   boundary, memory estimates, byte-range projections, and worker/runtime
   request fields.
+- 2026-05-11 image generation zero-dimension validation slice: smallest useful
+  vertical slice was limited to validating typed image generation width and
+  height at the inference gateway before backend dispatch. Allowed write set:
+  `crates/inference/src/gateway.rs`, `crates/inference/src/gateway_tests.rs`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because explicit zero
+  dimensions now fail with `BackendError::Config`; the gateway does not replace
+  them with backend defaults, clamp to one, or pass zero through to backend
+  implementations. `None` remains an absent option owned by the selected
+  backend. Verification passed:
+  `cargo test -p inference test_generate_image_rejects_zero_dimensions`,
+  `cargo test -p inference test_execute_typed_forwards_image_generation_to_active_backend`,
+  and `cargo fmt --all -- --check`. Deviation: the two focused Cargo tests
+  were started in parallel and serialized on Cargo package/build locks before
+  passing. Remaining numeric-boundary follow-up: image request limits beyond
+  zero dimensions, context/token/batch limits, memory estimates, byte-range
+  projections, and worker/runtime request fields.
 
 ### Traceability Links
 

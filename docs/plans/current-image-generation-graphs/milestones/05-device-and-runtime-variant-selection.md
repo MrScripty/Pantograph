@@ -215,6 +215,12 @@ typed diagnostic and the canonical design is fixed.
     shape. Remaining numeric boundaries include image dimensions, broader
     context/token/batch limits, memory estimates, byte-range projections, and
     worker/runtime request fields.
+  - 2026-05-11 partial: inference gateway image generation now rejects
+    explicit zero width or height with `BackendError::Config` before backend
+    dispatch. Absent dimensions remain backend-owned/defaulted options.
+    Remaining numeric boundaries include broader image request limits,
+    context/token/batch limits, memory estimates, byte-range projections, and
+    worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3221,6 +3227,29 @@ typed diagnostic and the canonical design is fixed.
     dimensions, context/token/batch limits outside this projection rebuild
     validation boundary, memory estimates, byte-range projections, and
     worker/runtime request fields.
+- 2026-05-11 slice: image generation zero-dimension validation.
+  - Smallest useful vertical slice: validate typed image generation width and
+    height at the inference gateway before backend dispatch.
+  - Allowed write set:
+    `crates/inference/src/gateway.rs`,
+    `crates/inference/src/gateway_tests.rs`, and this plan directory.
+  - No-fallback/no-legacy confirmation: explicit zero dimensions now fail with
+    `BackendError::Config`; the gateway does not replace them with backend
+    defaults, clamp to one, or pass zero through to backend implementations.
+    `None` remains an absent option owned by the selected backend.
+  - Standards/blast-radius gate: typed image generation request validation
+    only; no generated files, frontend code, saved workflow fixtures,
+    lockfiles, path roots, Pumas contracts, worker contracts, runtime
+    scheduler policy, or backend lifecycle behavior changed.
+  - Verification passed:
+    `cargo test -p inference test_generate_image_rejects_zero_dimensions`,
+    `cargo test -p inference test_execute_typed_forwards_image_generation_to_active_backend`,
+    and `cargo fmt --all -- --check`.
+  - Verification deviation: the two focused Cargo tests were started in
+    parallel and serialized on Cargo package/build locks before passing.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    request limits beyond zero dimensions, context/token/batch limits, memory
+    estimates, byte-range projections, and worker/runtime request fields.
 
 **Verification:**
 

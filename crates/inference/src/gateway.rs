@@ -1240,6 +1240,7 @@ impl InferenceGateway {
         &self,
         request: ImageGenerationRequest,
     ) -> Result<ImageGenerationResult, GatewayError> {
+        validate_image_generation_request(&request)?;
         let guard = self.backend.read().await;
         if !guard.is_ready() {
             return Err(GatewayError::Backend(BackendError::NotReady));
@@ -2276,6 +2277,24 @@ fn push_audio_transcription_option_diagnostic(
         backend_key: backend_key.map(ToOwned::to_owned),
         message: Some(message.to_string()),
     });
+}
+
+fn validate_image_generation_request(request: &ImageGenerationRequest) -> Result<(), BackendError> {
+    validate_optional_positive_image_dimension(request.width, "image.width")?;
+    validate_optional_positive_image_dimension(request.height, "image.height")?;
+    Ok(())
+}
+
+fn validate_optional_positive_image_dimension(
+    value: Option<u32>,
+    field_name: &'static str,
+) -> Result<(), BackendError> {
+    if value == Some(0) {
+        return Err(BackendError::Config(format!(
+            "{field_name} must be greater than zero when provided"
+        )));
+    }
+    Ok(())
 }
 
 fn typed_image_generation_option_diagnostics(
