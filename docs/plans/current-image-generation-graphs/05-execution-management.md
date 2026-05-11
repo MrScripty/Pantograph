@@ -1565,6 +1565,26 @@ Worker rules:
   stopped overwriting each other. Discovered follow-up: manual selection still
   accepts only a version string, so same-version variant switching needs a
   variant-aware command/API in a later slice.
+- 2026-05-11 managed-runtime variant-selection slice: smallest useful vertical
+  slice was limited to selected/default version updates, embedded-runtime and
+  Tauri command plumbing, frontend manager selection controls, focused backend
+  selection tests, and plan notes. Allowed write set:
+  `crates/inference/src/managed_runtime/operations.rs`,
+  `operations/state_transitions.rs`, `operations_tests.rs`,
+  `crates/pantograph-embedded-runtime/src/managed_runtime_manager.rs`,
+  `src-tauri/src/llm/commands/binary.rs`,
+  `src/services/managedRuntime/ManagedRuntimeService.ts`,
+  `src/components/runtime-manager/ManagedRuntimeCard.svelte`,
+  `src/components/runtime-manager/ManagedRuntimeCatalogPanel.svelte`, and this
+  plan directory. The slice preserves the no-fallback/no-legacy rule by
+  rejecting ambiguous same-version selections unless the caller supplies the
+  selected `RuntimeVariantId`.
+- `cargo test -p inference managed_runtime::operations`,
+  `cargo test -p pantograph-embedded-runtime managed_runtime`, and
+  `npm run typecheck` passed after selected/default runtime updates became
+  variant-aware. Remaining follow-up: managed runtime install/download commands
+  still accept only a version string and need variant-aware download-source
+  selection before same-release CPU/CUDA catalog installs can close.
 
 ### Traceability Links
 

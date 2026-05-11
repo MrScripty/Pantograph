@@ -11,7 +11,7 @@ use pantograph_embedded_runtime::{
 use pantograph_managed_dependencies::ManagedDependencyStatus;
 use tauri::{command, ipc::Channel, AppHandle, Manager};
 
-use inference::ManagedBinaryId;
+use inference::{ManagedBinaryId, RuntimeVariantId};
 
 fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
@@ -124,9 +124,15 @@ pub async fn select_managed_runtime_version(
     app: AppHandle,
     binary_id: ManagedBinaryId,
     version: Option<String>,
+    runtime_variant_id: Option<RuntimeVariantId>,
 ) -> Result<ManagedRuntimeManagerRuntimeView, String> {
     let app_data_dir = app_data_dir(&app)?;
-    select_managed_runtime_manager_version(&app_data_dir, binary_id, version.as_deref())
+    select_managed_runtime_manager_version(
+        &app_data_dir,
+        binary_id,
+        version.as_deref(),
+        runtime_variant_id.as_ref(),
+    )
 }
 
 /// Update the default runtime version that future selections inherit from.
@@ -135,7 +141,13 @@ pub async fn set_default_managed_runtime_version(
     app: AppHandle,
     binary_id: ManagedBinaryId,
     version: Option<String>,
+    runtime_variant_id: Option<RuntimeVariantId>,
 ) -> Result<ManagedRuntimeManagerRuntimeView, String> {
     let app_data_dir = app_data_dir(&app)?;
-    set_default_managed_runtime_manager_version_view(&app_data_dir, binary_id, version.as_deref())
+    set_default_managed_runtime_manager_version_view(
+        &app_data_dir,
+        binary_id,
+        version.as_deref(),
+        runtime_variant_id.as_ref(),
+    )
 }

@@ -329,6 +329,88 @@ fn persist_install_success_keeps_same_version_runtime_variants_distinct() {
         .any(|version| version.runtime_variant_id == Some(llama_cuda_variant_id())));
 }
 
+#[test]
+fn select_managed_runtime_version_rejects_ambiguous_same_version_variants() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    persist_install_success(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        "b8248",
+        &temp_dir.path().join("runtimes/llama-cpp-b8248-cpu"),
+        ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
+        "linux-x86_64",
+    )
+    .expect("persist cpu install");
+    persist_install_success(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        "b8248",
+        &temp_dir.path().join("runtimes/llama-cpp-b8248-cuda"),
+        ManagedBinaryId::LlamaCpp.key(),
+        llama_cuda_variant_id(),
+        "linux-x86_64",
+    )
+    .expect("persist cuda install");
+
+    let error = select_managed_runtime_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b8248"),
+        None,
+    )
+    .expect_err("ambiguous variant selection should fail");
+
+    assert!(error.contains("multiple runtime variants"));
+}
+
+#[test]
+fn select_managed_runtime_version_uses_explicit_runtime_variant() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    persist_install_success(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        "b8248",
+        &temp_dir.path().join("runtimes/llama-cpp-b8248-cpu"),
+        ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
+        "linux-x86_64",
+    )
+    .expect("persist cpu install");
+    persist_install_success(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        "b8248",
+        &temp_dir.path().join("runtimes/llama-cpp-b8248-cuda"),
+        ManagedBinaryId::LlamaCpp.key(),
+        llama_cuda_variant_id(),
+        "linux-x86_64",
+    )
+    .expect("persist cuda install");
+
+    select_managed_runtime_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b8248"),
+        Some(&llama_cuda_variant_id()),
+    )
+    .expect("select cuda variant");
+
+    let state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+    let runtime = state
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+        .expect("llama runtime state");
+
+    assert_eq!(
+        runtime.selection.selected_runtime_variant_id,
+        Some(llama_cuda_variant_id())
+    );
+}
+
 #[tokio::test]
 async fn remove_binary_version_removes_one_installed_version_and_clears_selection() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -357,8 +439,13 @@ async fn remove_binary_version_removes_one_installed_version_and_clears_selectio
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist second install");
-    select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b9000"))
-        .expect("select second runtime");
+    select_managed_runtime_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b9000"),
+        None,
+    )
+    .expect("select second runtime");
 
     crate::managed_runtime::remove_binary_version(
         temp_dir.path(),
@@ -484,10 +571,20 @@ fn select_managed_runtime_version_updates_persisted_selection() {
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
-    select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b8248"))
-        .expect("select runtime version");
-    set_default_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b8248"))
-        .expect("set default runtime version");
+    select_managed_runtime_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b8248"),
+        None,
+    )
+    .expect("select runtime version");
+    set_default_managed_runtime_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b8248"),
+        None,
+    )
+    .expect("set default runtime version");
 
     let state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = state
@@ -528,9 +625,13 @@ fn select_managed_runtime_version_rejects_unknown_version() {
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
-    let error =
-        select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("other"))
-            .expect_err("unknown version should fail");
+    let error = select_managed_runtime_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("other"),
+        None,
+    )
+    .expect_err("unknown version should fail");
 
     assert!(error.contains("is not installed"));
 }
@@ -552,9 +653,13 @@ fn select_managed_runtime_version_rejects_non_ready_version() {
     });
     save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
 
-    let error =
-        select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b8248"))
-            .expect_err("non-ready version should fail");
+    let error = select_managed_runtime_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b8248"),
+        None,
+    )
+    .expect_err("non-ready version should fail");
 
     assert!(error.contains("is not ready for selection"));
 }
@@ -576,9 +681,13 @@ fn select_managed_runtime_version_rejects_missing_runtime_variant_id() {
     });
     save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
 
-    let error =
-        select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b8248"))
-            .expect_err("missing runtime variant id should fail");
+    let error = select_managed_runtime_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b8248"),
+        None,
+    )
+    .expect_err("missing runtime variant id should fail");
 
     assert!(error.contains("does not have a canonical runtime variant id"));
 }
@@ -598,8 +707,13 @@ fn resolve_runtime_install_dir_uses_selected_version_install_root() {
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
-    select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b8248"))
-        .expect("select runtime version");
+    select_managed_runtime_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b8248"),
+        None,
+    )
+    .expect("select runtime version");
 
     let resolved_install_dir =
         resolve_runtime_install_dir(temp_dir.path(), ManagedBinaryId::LlamaCpp)

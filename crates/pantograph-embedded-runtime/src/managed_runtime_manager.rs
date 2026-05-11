@@ -130,8 +130,9 @@ pub fn select_managed_runtime_manager_version(
     app_data_dir: &Path,
     runtime_id: ManagedBinaryId,
     version: Option<&str>,
+    runtime_variant_id: Option<&inference::RuntimeVariantId>,
 ) -> Result<ManagedRuntimeManagerRuntimeView, String> {
-    select_managed_runtime_version(app_data_dir, runtime_id, version)?;
+    select_managed_runtime_version(app_data_dir, runtime_id, version, runtime_variant_id)?;
     inspect_managed_runtime_manager_runtime(app_data_dir, runtime_id)
 }
 
@@ -139,8 +140,9 @@ pub fn set_default_managed_runtime_manager_version_view(
     app_data_dir: &Path,
     runtime_id: ManagedBinaryId,
     version: Option<&str>,
+    runtime_variant_id: Option<&inference::RuntimeVariantId>,
 ) -> Result<ManagedRuntimeManagerRuntimeView, String> {
-    set_default_managed_runtime_version(app_data_dir, runtime_id, version)?;
+    set_default_managed_runtime_version(app_data_dir, runtime_id, version, runtime_variant_id)?;
     inspect_managed_runtime_manager_runtime(app_data_dir, runtime_id)
 }
 
@@ -312,6 +314,7 @@ mod tests {
             temp_dir.path(),
             ManagedBinaryId::LlamaCpp,
             Some("b8248"),
+            None,
         )
         .expect("select managed runtime version");
 

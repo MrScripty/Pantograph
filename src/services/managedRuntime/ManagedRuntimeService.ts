@@ -178,13 +178,15 @@ class ManagedRuntimeServiceClass {
 
   public async selectRuntimeVersion(
     runtimeId: ManagedRuntimeId,
-    version: string | null
+    version: string | null,
+    runtimeVariantId: string | null
   ): Promise<ManagedRuntimeManagerRuntimeView> {
     const runtime = await invoke<ManagedRuntimeManagerRuntimeView>(
       'select_managed_runtime_version',
       {
         binaryId: runtimeId,
         version,
+        runtimeVariantId,
       }
     );
     this.upsertRuntime(runtime);
@@ -193,13 +195,15 @@ class ManagedRuntimeServiceClass {
 
   public async setDefaultRuntimeVersion(
     runtimeId: ManagedRuntimeId,
-    version: string | null
+    version: string | null,
+    runtimeVariantId: string | null
   ): Promise<ManagedRuntimeManagerRuntimeView> {
     const runtime = await invoke<ManagedRuntimeManagerRuntimeView>(
       'set_default_managed_runtime_version',
       {
         binaryId: runtimeId,
         version,
+        runtimeVariantId,
       }
     );
     this.upsertRuntime(runtime);

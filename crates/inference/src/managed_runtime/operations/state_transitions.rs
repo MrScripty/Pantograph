@@ -401,29 +401,55 @@ pub(super) fn update_runtime_selection(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     version: Option<&str>,
+    runtime_variant_id: Option<&RuntimeVariantId>,
     target: SelectionTarget,
 ) -> Result<(), String> {
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
 
     let runtime_variant_id = if let Some(version) = version {
-        let Some(persisted_version) = runtime
+        let candidates = runtime
             .versions
             .iter()
-            .find(|entry| entry.version == version)
-        else {
+            .filter(|entry| entry.version == version);
+        let mut candidates: Vec<_> = if let Some(runtime_variant_id) = runtime_variant_id {
+            candidates
+                .filter(|entry| entry.runtime_variant_id.as_ref() == Some(runtime_variant_id))
+                .collect()
+        } else {
+            candidates.collect()
+        };
+
+        if candidates.is_empty() {
             return Err(format!(
-                "{} version '{}' is not installed",
+                "{} version '{}'{} is not installed",
+                id.display_name(),
+                version,
+                runtime_variant_id
+                    .map(|variant| format!(" variant '{}'", variant))
+                    .unwrap_or_default()
+            ));
+        };
+        if runtime_variant_id.is_none() && candidates.len() > 1 {
+            return Err(format!(
+                "{} version '{}' has multiple runtime variants; provide runtime variant id",
                 id.display_name(),
                 version
             ));
-        };
+        }
+
+        let persisted_version = candidates.remove(0);
 
         if persisted_version.readiness_state != ManagedRuntimeReadinessState::Ready {
             return Err(format!(
-                "{} version '{}' is not ready for selection",
+                "{} version '{}' variant '{}' is not ready for selection",
                 id.display_name(),
-                version
+                version,
+                persisted_version
+                    .runtime_variant_id
+                    .as_ref()
+                    .map(RuntimeVariantId::as_str)
+                    .unwrap_or("<missing>")
             ));
         }
 
@@ -438,6 +464,13 @@ pub(super) fn update_runtime_selection(
                 )
             })?
     } else {
+        if let Some(runtime_variant_id) = runtime_variant_id {
+            return Err(format!(
+                "{} runtime variant '{}' cannot be selected without a version",
+                id.display_name(),
+                runtime_variant_id
+            ));
+        }
         default_runtime_variant_id(id)
     };
 

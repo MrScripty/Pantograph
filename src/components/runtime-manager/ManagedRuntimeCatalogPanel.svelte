@@ -11,8 +11,8 @@
     installRequested: boolean;
     installingVersion: string | null;
     removingVersion: string | null;
-    onUpdateSelected: (version: string | null) => Promise<void>;
-    onUpdateDefault: (version: string | null) => Promise<void>;
+    onUpdateSelected: (version: string | null, runtimeVariantId: string | null) => Promise<void>;
+    onUpdateDefault: (version: string | null, runtimeVariantId: string | null) => Promise<void>;
     onInstallVersion: (version: string | null) => Promise<void>;
     onRemoveVersion: (version: string) => Promise<void>;
     versionBadgeLabel: (version: ManagedRuntimeVersionStatus) => string;
@@ -31,6 +31,30 @@
     onRemoveVersion,
     versionBadgeLabel,
   }: Props = $props();
+
+  function versionOptionValue(version: string | null, runtimeVariantId: string | null): string {
+    if (!version || !runtimeVariantId) {
+      return '';
+    }
+
+    return `${encodeURIComponent(version)}:${encodeURIComponent(runtimeVariantId)}`;
+  }
+
+  function parseVersionOptionValue(value: string): [string | null, string | null] {
+    if (!value) {
+      return [null, null];
+    }
+
+    const separatorIndex = value.indexOf(':');
+    if (separatorIndex < 0) {
+      return [null, null];
+    }
+
+    return [
+      decodeURIComponent(value.slice(0, separatorIndex)),
+      decodeURIComponent(value.slice(separatorIndex + 1)),
+    ];
+  }
 </script>
 
 <div class="min-w-0">
@@ -43,14 +67,21 @@
       <select
         id={`${runtime.id}-selected-version`}
         class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-200"
-        value={runtime.selection.selected_version ?? ''}
+        value={versionOptionValue(
+          runtime.selection.selected_version,
+          runtime.selection.selected_runtime_variant_id
+        )}
         disabled={selectionUpdating}
         onchange={(event) =>
-          onUpdateSelected((event.currentTarget as HTMLSelectElement).value || null)}
+          onUpdateSelected(
+            ...parseVersionOptionValue((event.currentTarget as HTMLSelectElement).value)
+          )}
       >
         <option value="">Automatic</option>
         {#each selectableVersions as version (version.display_label)}
-          <option value={version.version ?? ''}>{version.display_label}</option>
+          <option value={versionOptionValue(version.version, version.runtime_variant_id)}>
+            {version.display_label}
+          </option>
         {/each}
       </select>
 
@@ -60,14 +91,21 @@
       <select
         id={`${runtime.id}-default-version`}
         class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-200"
-        value={runtime.selection.default_version ?? ''}
+        value={versionOptionValue(
+          runtime.selection.default_version,
+          runtime.selection.default_runtime_variant_id
+        )}
         disabled={selectionUpdating}
         onchange={(event) =>
-          onUpdateDefault((event.currentTarget as HTMLSelectElement).value || null)}
+          onUpdateDefault(
+            ...parseVersionOptionValue((event.currentTarget as HTMLSelectElement).value)
+          )}
       >
         <option value="">Unset</option>
         {#each selectableVersions as version (version.display_label)}
-          <option value={version.version ?? ''}>{version.display_label}</option>
+          <option value={versionOptionValue(version.version, version.runtime_variant_id)}>
+            {version.display_label}
+          </option>
         {/each}
       </select>
     </div>

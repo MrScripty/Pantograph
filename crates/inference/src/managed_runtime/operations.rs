@@ -12,6 +12,7 @@ use super::paths::{
 use super::state::{
     load_managed_runtime_state, runtime_state_entry, ManagedRuntimePersistedJobArtifact,
 };
+use crate::RuntimeVariantId;
 use futures_util::TryStreamExt;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
@@ -247,18 +248,32 @@ pub fn select_managed_runtime_version(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     version: Option<&str>,
+    runtime_variant_id: Option<&RuntimeVariantId>,
 ) -> Result<(), String> {
     ensure_first_party_runtime(id)?;
-    update_runtime_selection(app_data_dir, id, version, SelectionTarget::Selected)
+    update_runtime_selection(
+        app_data_dir,
+        id,
+        version,
+        runtime_variant_id,
+        SelectionTarget::Selected,
+    )
 }
 
 pub fn set_default_managed_runtime_version(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     version: Option<&str>,
+    runtime_variant_id: Option<&RuntimeVariantId>,
 ) -> Result<(), String> {
     ensure_first_party_runtime(id)?;
-    update_runtime_selection(app_data_dir, id, version, SelectionTarget::Default)
+    update_runtime_selection(
+        app_data_dir,
+        id,
+        version,
+        runtime_variant_id,
+        SelectionTarget::Default,
+    )
 }
 
 pub fn cancel_binary_download(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(), String> {

@@ -107,12 +107,12 @@
     }
   }
 
-  async function updateSelectedVersion(version: string | null) {
+  async function updateSelectedVersion(version: string | null, runtimeVariantId: string | null) {
     selectionUpdating = true;
     error = null;
 
     try {
-      await managedRuntimeService.selectRuntimeVersion(runtime.id, version);
+      await managedRuntimeService.selectRuntimeVersion(runtime.id, version, runtimeVariantId);
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -120,12 +120,12 @@
     }
   }
 
-  async function updateDefaultVersion(version: string | null) {
+  async function updateDefaultVersion(version: string | null, runtimeVariantId: string | null) {
     selectionUpdating = true;
     error = null;
 
     try {
-      await managedRuntimeService.setDefaultRuntimeVersion(runtime.id, version);
+      await managedRuntimeService.setDefaultRuntimeVersion(runtime.id, version, runtimeVariantId);
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {

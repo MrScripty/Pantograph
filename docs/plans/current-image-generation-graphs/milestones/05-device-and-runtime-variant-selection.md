@@ -109,6 +109,12 @@ typed diagnostic and the canonical design is fixed.
     state. Remaining follow-up: public manual selection still accepts only a
     version string, so same-version variant selection needs a variant-aware
     command/API before this item can close.
+  - 2026-05-11 partial: manual selected/default version updates now require an
+    explicit `RuntimeVariantId` when a version has multiple installed variants,
+    and the Tauri/frontend manager selection controls submit version+variant
+    pairs. Remaining follow-up: install/download requests still accept only a
+    version string, so same-release catalog install actions need variant-aware
+    download-source selection before this item can close.
 - [ ] Model llama.cpp Metal builds on macOS only when a Metal-capable runtime
   is available.
 - [x] Make llama.cpp command resolution select an explicit runtime variant
