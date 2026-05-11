@@ -208,9 +208,14 @@ typed diagnostic and the canonical design is fixed.
     with a typed `backend_incompatible` diagnostic. This closes the listed
     impossible-preference examples together with the existing llama.cpp
     diffusion, MLX roadmap/platform, and Candle image-generation coverage.
-- [ ] Update runtime-load contracts so load readiness consumes a resolved
+- [x] Update runtime-load contracts so load readiness consumes a resolved
   device decision rather than inferring from command-line arguments or raw
   backend config strings.
+  - 2026-05-11 reconciliation: existing runtime-load contract slices already
+    require `RuntimeLoadPhaseRecord::dependency_resolved` to consume
+    `DeviceResolutionDecision`, and the runtime-load JSON fixture proves the
+    selected runtime variant, device class, and device id are serialized as
+    resolved decision facts rather than inferred from command arguments.
 - [ ] Update inference lifecycle events, diagnostics ledger projection, and run
   inspection facts to include selected backend id, selected runtime variant,
   device class, and selected device id.

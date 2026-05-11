@@ -1648,6 +1648,18 @@ Worker rules:
   and `cargo test -p pantograph-embedded-runtime technical_fit` passed. This
   closes the broad impossible-preference checklist item with existing llama.cpp
   diffusion, MLX roadmap/platform, and Candle image-generation coverage.
+- 2026-05-11 runtime-load contract reconciliation slice: smallest useful
+  vertical slice was limited to marking the already-implemented runtime-load
+  resolved-device contract complete after rechecking
+  `RuntimeLoadPhaseRecord::dependency_resolved`, the public runtime-load JSON
+  fixture, and existing plan notes. Allowed write set: this plan directory.
+  The no-fallback/no-legacy rule is preserved because the contract requires a
+  `DeviceResolutionDecision`; no load-readiness DTO can be constructed from
+  command arguments or raw backend config strings alone.
+- `cargo test -p inference --test runtime_load_contracts`,
+  `cargo test -p inference runtime_load`, and `git diff --check` passed for
+  the reconciliation slice. Remaining runtime-load integration work is tracked
+  by later lifecycle/admission checklist items, not this contract item.
 
 ### Traceability Links
 
