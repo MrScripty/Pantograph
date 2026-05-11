@@ -63,6 +63,7 @@ pub async fn install_managed_runtime(
     app: AppHandle,
     binary_id: ManagedBinaryId,
     version: Option<String>,
+    runtime_variant_id: Option<RuntimeVariantId>,
     channel: Channel<ManagedRuntimeManagerProgress>,
 ) -> Result<(), String> {
     let app_data_dir = app_data_dir(&app)?;
@@ -70,6 +71,7 @@ pub async fn install_managed_runtime(
         &app_data_dir,
         binary_id,
         version.as_deref(),
+        runtime_variant_id.as_ref(),
         |progress| {
             let _ = channel.send(progress);
         },

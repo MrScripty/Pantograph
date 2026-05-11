@@ -336,6 +336,7 @@ pub async fn download_binary<F>(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     requested_version: Option<&str>,
+    requested_runtime_variant_id: Option<&RuntimeVariantId>,
     mut on_progress: F,
 ) -> Result<(), String>
 where
@@ -347,7 +348,13 @@ where
     clear_cancellation_request(id);
     clear_pause_request(id);
     let definition = definition(id);
-    let download_source = resolve_download_source(app_data_dir, id, requested_version).await?;
+    let download_source = resolve_download_source(
+        app_data_dir,
+        id,
+        requested_version,
+        requested_runtime_variant_id,
+    )
+    .await?;
     let runtime_variant_id = download_source.runtime_variant_id.clone();
     let runtime_version = download_source.version.clone();
     if definition.system_command().is_some() {

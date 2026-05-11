@@ -2,11 +2,11 @@ use super::{
     binary_capability, cancel_binary_download, definition, download_response_mode,
     ensure_runtime_state_entry, existing_download_artifact, finish_requested_cancellation,
     finish_requested_pause, pause_binary_download, persist_install_success, persist_remove_success,
-    readiness_state_for_capability, resolve_binary_command, resolve_runtime_install_dir,
-    runtime_install_dir_for_projection, select_managed_runtime_version,
-    set_default_managed_runtime_version, snapshot_from_capability, DownloadResponseMode,
-    ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeJobState,
-    ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
+    readiness_state_for_capability, resolve_binary_command, resolve_download_source,
+    resolve_runtime_install_dir, runtime_install_dir_for_projection,
+    select_managed_runtime_version, set_default_managed_runtime_version, snapshot_from_capability,
+    DownloadResponseMode, ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState,
+    ManagedRuntimeJobState, ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
 };
 use crate::managed_runtime::managed_runtime_dir;
 use crate::managed_runtime::{
@@ -282,6 +282,87 @@ fn catalog_projection_keeps_same_version_runtime_variants_distinct() {
     assert_eq!(cpu.install_state, ManagedBinaryInstallState::Installed);
     assert_eq!(cuda.install_state, ManagedBinaryInstallState::Missing);
     assert!(cuda.installable);
+}
+
+#[tokio::test]
+async fn resolve_download_source_rejects_ambiguous_same_version_variants() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+    let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+    runtime.catalog_refreshed_at_ms = Some(u64::MAX);
+    runtime.catalog_versions = vec![
+        ManagedRuntimeCatalogVersion {
+            version: "b8248".to_string(),
+            display_label: "b8248 CPU".to_string(),
+            runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            runtime_variant_id: llama_cpu_variant_id(),
+            platform_key: "linux-x86_64".to_string(),
+            archive_name: "llama-b8248-cpu.tar.gz".to_string(),
+            download_url: "https://example.invalid/llama-b8248-cpu.tar.gz".to_string(),
+        },
+        ManagedRuntimeCatalogVersion {
+            version: "b8248".to_string(),
+            display_label: "b8248 CUDA".to_string(),
+            runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            runtime_variant_id: llama_cuda_variant_id(),
+            platform_key: "linux-x86_64".to_string(),
+            archive_name: "llama-b8248-cuda.tar.gz".to_string(),
+            download_url: "https://example.invalid/llama-b8248-cuda.tar.gz".to_string(),
+        },
+    ];
+    save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+    let error = resolve_download_source(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b8248"),
+        None,
+    )
+    .await
+    .expect_err("ambiguous download source should fail");
+
+    assert!(error.contains("multiple runtime variants"));
+}
+
+#[tokio::test]
+async fn resolve_download_source_uses_explicit_runtime_variant() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+    let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+    runtime.catalog_refreshed_at_ms = Some(u64::MAX);
+    runtime.catalog_versions = vec![
+        ManagedRuntimeCatalogVersion {
+            version: "b8248".to_string(),
+            display_label: "b8248 CPU".to_string(),
+            runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            runtime_variant_id: llama_cpu_variant_id(),
+            platform_key: "linux-x86_64".to_string(),
+            archive_name: "llama-b8248-cpu.tar.gz".to_string(),
+            download_url: "https://example.invalid/llama-b8248-cpu.tar.gz".to_string(),
+        },
+        ManagedRuntimeCatalogVersion {
+            version: "b8248".to_string(),
+            display_label: "b8248 CUDA".to_string(),
+            runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            runtime_variant_id: llama_cuda_variant_id(),
+            platform_key: "linux-x86_64".to_string(),
+            archive_name: "llama-b8248-cuda.tar.gz".to_string(),
+            download_url: "https://example.invalid/llama-b8248-cuda.tar.gz".to_string(),
+        },
+    ];
+    save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+    let source = resolve_download_source(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        Some("b8248"),
+        Some(&llama_cuda_variant_id()),
+    )
+    .await
+    .expect("resolve cuda source");
+
+    assert_eq!(source.runtime_variant_id, llama_cuda_variant_id());
+    assert_eq!(source.archive_name, "llama-b8248-cuda.tar.gz");
 }
 
 #[test]

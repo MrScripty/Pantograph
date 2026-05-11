@@ -89,6 +89,7 @@ pub(super) async fn resolve_download_source(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     requested_version: Option<&str>,
+    requested_runtime_variant_id: Option<&RuntimeVariantId>,
 ) -> Result<ManagedRuntimeDownloadSource, String> {
     let definition = definition(id);
     let state = load_managed_runtime_state(app_data_dir)?;
@@ -107,18 +108,30 @@ pub(super) async fn resolve_download_source(
             })
         })
         .or_else(|| runtime.and_then(|runtime| runtime.selection.selected_version.clone()));
+    let preferred_runtime_variant_id = requested_runtime_variant_id
+        .cloned()
+        .or_else(|| {
+            runtime.and_then(|runtime| {
+                runtime
+                    .active_job
+                    .as_ref()
+                    .filter(|job| job.state == ManagedRuntimeJobState::Paused)
+                    .and(runtime.active_job_artifact.as_ref())
+                    .map(|artifact| artifact.runtime_variant_id.clone())
+            })
+        })
+        .or_else(|| {
+            runtime.and_then(|runtime| runtime.selection.selected_runtime_variant_id.clone())
+        });
 
     if let Some(version) = preferred_version.as_deref() {
-        if let Some(download_source) = runtime
-            .and_then(|runtime| {
-                runtime
-                    .catalog_versions
-                    .iter()
-                    .find(|entry| entry.version == version)
-            })
-            .map(download_source_from_catalog)
-        {
-            return Ok(download_source);
+        if let Some(runtime) = runtime.filter(|runtime| !runtime.catalog_versions.is_empty()) {
+            return select_catalog_download_source(
+                definition.display_name(),
+                &runtime.catalog_versions,
+                version,
+                preferred_runtime_variant_id.as_ref(),
+            );
         }
     }
 
@@ -141,19 +154,12 @@ pub(super) async fn resolve_download_source(
     let catalog = fetch_managed_runtime_catalog(id).await?;
     persist_catalog_versions(app_data_dir, id, catalog.clone())?;
     if let Some(version) = preferred_version.as_deref() {
-        if let Some(download_source) = catalog
-            .iter()
-            .find(|entry| entry.version == version)
-            .map(download_source_from_catalog)
-        {
-            return Ok(download_source);
-        }
-
-        return Err(format!(
-            "{} version {} is not available for the current platform",
+        return select_catalog_download_source(
             definition.display_name(),
-            version
-        ));
+            &catalog,
+            version,
+            preferred_runtime_variant_id.as_ref(),
+        );
     }
 
     if let Some(download_source) = catalog.first().map(download_source_from_catalog) {
@@ -170,6 +176,43 @@ pub(super) async fn resolve_download_source(
         archive_name: release_asset.archive_name.clone(),
         download_url: definition.download_url(&version, &release_asset),
     })
+}
+
+fn select_catalog_download_source(
+    runtime_name: &str,
+    catalog: &[ManagedRuntimeCatalogVersion],
+    version: &str,
+    runtime_variant_id: Option<&RuntimeVariantId>,
+) -> Result<ManagedRuntimeDownloadSource, String> {
+    let mut matches: Vec<_> = catalog
+        .iter()
+        .filter(|entry| entry.version == version)
+        .filter(|entry| {
+            runtime_variant_id
+                .map(|variant| &entry.runtime_variant_id == variant)
+                .unwrap_or(true)
+        })
+        .collect();
+
+    if matches.is_empty() {
+        return Err(format!(
+            "{} version {}{} is not available for the current platform",
+            runtime_name,
+            version,
+            runtime_variant_id
+                .map(|variant| format!(" variant '{}'", variant))
+                .unwrap_or_default()
+        ));
+    }
+
+    if runtime_variant_id.is_none() && matches.len() > 1 {
+        return Err(format!(
+            "{} version {} has multiple runtime variants; provide runtime variant id",
+            runtime_name, version
+        ));
+    }
+
+    Ok(download_source_from_catalog(matches.remove(0)))
 }
 
 fn download_source_from_catalog(

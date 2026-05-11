@@ -33,7 +33,7 @@
   let lastProgressAtMs = $state<number | null>(null);
   let error: string | null = $state(null);
 
-  async function installRuntime(version: string | null = null) {
+  async function installRuntime(version: string | null = null, runtimeVariantId: string | null = null) {
     installRequested = true;
     installingVersion = version;
     lastProgressAtMs = null;
@@ -45,7 +45,8 @@
         () => {
           lastProgressAtMs = Date.now();
         },
-        version
+        version,
+        runtimeVariantId
       );
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);

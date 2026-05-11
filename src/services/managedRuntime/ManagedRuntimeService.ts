@@ -113,7 +113,8 @@ class ManagedRuntimeServiceClass {
   public async installRuntime(
     runtimeId: ManagedRuntimeId,
     onProgress: ManagedRuntimeProgressListener,
-    version?: string | null
+    version?: string | null,
+    runtimeVariantId?: string | null
   ): Promise<void> {
     const channel = new Channel<ManagedRuntimeProgress>();
     channel.onmessage = (event) => {
@@ -125,6 +126,7 @@ class ManagedRuntimeServiceClass {
       await invoke('install_managed_runtime', {
         binaryId: runtimeId,
         version,
+        runtimeVariantId,
         channel,
       });
       await this.inspectRuntime(runtimeId);

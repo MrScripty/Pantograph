@@ -70,18 +70,25 @@ pub async fn install_managed_runtime_manager_runtime<F>(
     app_data_dir: &Path,
     runtime_id: ManagedBinaryId,
     version: Option<&str>,
+    runtime_variant_id: Option<&inference::RuntimeVariantId>,
     mut on_progress: F,
 ) -> Result<(), String>
 where
     F: FnMut(ManagedRuntimeManagerProgress),
 {
     let mut last_runtime = inspect_managed_runtime_manager_runtime(app_data_dir, runtime_id)?;
-    download_binary(app_data_dir, runtime_id, version, |progress| {
-        let runtime = inspect_managed_runtime_manager_runtime(app_data_dir, runtime_id)
-            .unwrap_or_else(|_| last_runtime.clone());
-        last_runtime = runtime.clone();
-        on_progress(project_progress(runtime_id, progress, runtime));
-    })
+    download_binary(
+        app_data_dir,
+        runtime_id,
+        version,
+        runtime_variant_id,
+        |progress| {
+            let runtime = inspect_managed_runtime_manager_runtime(app_data_dir, runtime_id)
+                .unwrap_or_else(|_| last_runtime.clone());
+            last_runtime = runtime.clone();
+            on_progress(project_progress(runtime_id, progress, runtime));
+        },
+    )
     .await
 }
 

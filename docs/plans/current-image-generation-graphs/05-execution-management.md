@@ -1585,6 +1585,24 @@ Worker rules:
   variant-aware. Remaining follow-up: managed runtime install/download commands
   still accept only a version string and need variant-aware download-source
   selection before same-release CPU/CUDA catalog installs can close.
+- 2026-05-11 managed-runtime variant-install slice: smallest useful vertical
+  slice was limited to download-source selection, embedded-runtime and Tauri
+  install command plumbing, frontend manager install actions, focused backend
+  download-source tests, and plan notes. Allowed write set:
+  `crates/inference/src/managed_runtime/operations.rs`,
+  `operations/download.rs`, `operations_tests.rs`,
+  `crates/pantograph-embedded-runtime/src/managed_runtime_manager.rs`,
+  `src-tauri/src/llm/commands/binary.rs`,
+  `src/services/managedRuntime/ManagedRuntimeService.ts`,
+  `src/components/runtime-manager/ManagedRuntimeCard.svelte`,
+  `src/components/runtime-manager/ManagedRuntimeCatalogPanel.svelte`, and this
+  plan directory. The slice preserves the no-fallback/no-legacy rule by
+  rejecting ambiguous same-version catalog install requests unless the caller
+  supplies `RuntimeVariantId`.
+- `cargo test -p inference managed_runtime::operations`,
+  `cargo test -p pantograph-embedded-runtime managed_runtime`, and
+  `npm run typecheck` passed after managed runtime install/download requests
+  became variant-aware.
 
 ### Traceability Links
 

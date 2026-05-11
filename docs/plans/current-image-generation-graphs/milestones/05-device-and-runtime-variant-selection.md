@@ -95,7 +95,7 @@ typed diagnostic and the canonical design is fixed.
     version and variant together, snapshot readiness/status matching uses
     `(version, runtime_variant_id)`, and strict install-dir resolution rejects
     missing selected version+variant pairs instead of resolving by version only.
-- [ ] Model llama.cpp CPU and CUDA builds on Linux/Windows as runtime variants
+- [x] Model llama.cpp CPU and CUDA builds on Linux/Windows as runtime variants
   for the same release version where artifacts or local installs expose those
   variants.
   - 2026-05-11 partial: Linux and Windows llama.cpp platform definitions now
@@ -115,6 +115,12 @@ typed diagnostic and the canonical design is fixed.
     pairs. Remaining follow-up: install/download requests still accept only a
     version string, so same-release catalog install actions need variant-aware
     download-source selection before this item can close.
+  - 2026-05-11: managed runtime install/download commands now accept
+    version+variant intent, reject ambiguous same-version catalog requests
+    without a `RuntimeVariantId`, and carry the selected variant through the
+    frontend, Tauri, embedded-runtime manager, and backend download-source
+    resolver. This closes Linux/Windows CPU/CUDA modeling for the current
+    managed llama.cpp archive layout.
 - [ ] Model llama.cpp Metal builds on macOS only when a Metal-capable runtime
   is available.
 - [x] Make llama.cpp command resolution select an explicit runtime variant
