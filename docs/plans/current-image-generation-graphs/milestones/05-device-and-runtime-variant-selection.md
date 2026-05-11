@@ -2491,6 +2491,43 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: type or replace legacy `DeviceConfig.device` and
     shared `BackendConfig.device` without accepting raw strings as trusted
     internal state beyond the adapter boundary.
+- 2026-05-11 slice: typed legacy sidecar device config.
+  - Smallest useful vertical slice: change `DeviceConfig.device` from `String`
+    to backend-local `DeviceBackend`, preserve strict llama.cpp selector string
+    serde at the DTO boundary, and update server, embedding, gateway, and
+    llama.cpp tests that construct sidecar runtime state.
+  - Allowed write set: `crates/inference/src/config.rs`,
+    `crates/inference/src/server.rs`,
+    `crates/inference/src/embedding_runtime.rs`,
+    `crates/inference/src/backend/mod.rs`,
+    `crates/inference/src/backend/llamacpp.rs`,
+    `crates/inference/src/backend/llamacpp_support.rs`,
+    `crates/inference/src/server_tests.rs`,
+    `crates/inference/src/gateway_tests.rs`, and this plan directory.
+  - No-fallback/no-legacy confirmation: invalid sidecar selectors can no longer
+    be represented as `DeviceConfig` runtime state; serde rejects malformed
+    selectors and canonical ids in the llama.cpp selector namespace; command
+    construction uses `DeviceBackend::to_arg` and omits only typed `Auto`.
+  - Standards/blast-radius gate: backend-local DTO typing and focused tests
+    only; no generated DTOs, lockfiles, workflow fixtures, frontend code,
+    scheduler ranking, managed-runtime installation state, or worker execution
+    behavior changed.
+  - Verification passed:
+    `cargo test -p inference config::tests::device_config`,
+    `cargo test -p inference active_runtime_descriptor`,
+    `cargo test -p inference start_sidecar_inference_applies_runtime_settings_to_llama_server_args`,
+    `cargo test -p inference llamacpp_runtime_settings`,
+    `cargo test -p inference embedding_runtime::tests`,
+    `cargo test -p inference test_mode_info_runtime_facts_report_active_runtime_selected_device`,
+    `cargo test -p inference backend::llamacpp::tests`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Discovered issue fixed in-slice: llama.cpp model fingerprint hashing used
+    the display representation of the typed device; it now uses the stable
+    backend selector id via `DeviceBackend::to_id`.
+  - Remaining follow-up: migrate shared `BackendConfig.device`,
+    `InferenceStartRequest.device`, `EmbeddingStartRequest.device`, and the
+    test-only PyTorch load args helper through explicit startup/device intent
+    contracts without accepting raw strings as trusted internal state.
 
 **Verification:**
 
@@ -2598,6 +2635,9 @@ typed diagnostic and the canonical design is fixed.
 - llama.cpp runtime-settings tests prove normalized effective settings store
   `DeviceBackend`, reject canonical ids in the llama.cpp selector namespace,
   and only project to raw `DeviceConfig` at the sidecar DTO boundary.
+- Sidecar device config tests prove legacy llama.cpp selector JSON decodes into
+  typed `DeviceBackend`, rejects invalid selectors and canonical ids, and
+  command/runtime projections cannot carry invalid raw device strings.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

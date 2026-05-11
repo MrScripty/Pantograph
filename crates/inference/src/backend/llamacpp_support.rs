@@ -498,7 +498,7 @@ pub fn kv_cache_model_fingerprint_for_mode(
             "llamacpp:{}:{}:{}:{}:{}",
             model_path,
             mmproj_path.unwrap_or("none"),
-            device.device,
+            device.device.to_id(),
             device.gpu_layers,
             context_size
         ),

@@ -1,5 +1,6 @@
 use super::{parse_sidecar_pid, LlamaServer, ServerMode};
 use crate::config::DeviceConfig;
+use crate::device::DeviceBackend;
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::runtime_load::LlamaCppRuntimeMode;
 use crate::InferenceDeviceClass;
@@ -40,7 +41,7 @@ fn base_url_reflects_sidecar_port_override() {
             model_path: "/models/main.gguf".to_string(),
             mmproj_path: None,
             device: DeviceConfig {
-                device: "auto".to_string(),
+                device: DeviceBackend::Auto,
                 gpu_layers: -1,
             },
             context_size: crate::constants::defaults::CONTEXT_SIZE,
@@ -67,7 +68,7 @@ fn kv_slot_save_dir_is_scoped_under_app_data_dir() {
 fn inference_runtime_matcher_requires_matching_port() {
     let mut server = LlamaServer::new();
     let device = DeviceConfig {
-        device: "Vulkan0".to_string(),
+        device: DeviceBackend::Vulkan(0),
         gpu_layers: 40,
     };
     server.set_test_runtime_state(
@@ -142,7 +143,7 @@ fn inference_runtime_matcher_requires_matching_port() {
 fn active_runtime_descriptor_reports_ready_sidecar_identity() {
     let mut server = LlamaServer::new();
     let device = DeviceConfig {
-        device: "CUDA0".to_string(),
+        device: DeviceBackend::Cuda(0),
         gpu_layers: 40,
     };
     server.set_test_runtime_state(
@@ -193,7 +194,7 @@ fn active_runtime_descriptor_omits_selected_facts_for_unresolved_auto() {
             port: 11434,
             model_path: "/models/embed.gguf".to_string(),
             device: DeviceConfig {
-                device: "auto".to_string(),
+                device: DeviceBackend::Auto,
                 gpu_layers: -1,
             },
         },
@@ -210,124 +211,6 @@ fn active_runtime_descriptor_omits_selected_facts_for_unresolved_auto() {
 }
 
 #[test]
-fn active_runtime_descriptor_rejects_invalid_device_state() {
-    let mut server = LlamaServer::new();
-    server.set_test_runtime_state(
-        ServerMode::SidecarReranking {
-            port: 11434,
-            model_path: "/models/rerank.gguf".to_string(),
-            device: DeviceConfig {
-                device: "CUDAx".to_string(),
-                gpu_layers: 40,
-            },
-        },
-        true,
-    );
-
-    assert!(server.active_runtime_descriptor().is_none());
-}
-
-#[tokio::test]
-async fn sidecar_start_rejects_invalid_device_before_spawning() {
-    let temp = tempfile::tempdir().expect("temp dir");
-    let captured_args = Arc::new(Mutex::new(Vec::<String>::new()));
-    let killed = Arc::new(AtomicBool::new(false));
-    let spawner = Arc::new(ErroringProcessSpawner {
-        app_data_dir: temp.path().to_path_buf(),
-        killed: killed.clone(),
-        captured_args: Some(captured_args.clone()),
-    });
-    let invalid_device = DeviceConfig {
-        device: "CUDAx".to_string(),
-        gpu_layers: 40,
-    };
-
-    let mut inference_server = LlamaServer::new();
-    inference_server.set_test_runtime_state(
-        ServerMode::External {
-            url: "http://127.0.0.1:11434".to_string(),
-        },
-        true,
-    );
-    let inference_result = inference_server
-        .start_sidecar_inference(
-            spawner.clone(),
-            "/models/main.gguf",
-            None,
-            &invalid_device,
-            4096,
-            None,
-            None,
-            None,
-            Some(18080),
-        )
-        .await;
-    assert_invalid_device_rejected_without_spawn(
-        inference_result,
-        &captured_args,
-        &killed,
-        &inference_server,
-    );
-
-    let mut embedding_server = LlamaServer::new();
-    embedding_server.set_test_runtime_state(
-        ServerMode::External {
-            url: "http://127.0.0.1:11434".to_string(),
-        },
-        true,
-    );
-    let embedding_result = embedding_server
-        .start_sidecar_embedding(
-            spawner.clone(),
-            "/models/embed.gguf",
-            &invalid_device,
-            Some(18081),
-        )
-        .await;
-    assert_invalid_device_rejected_without_spawn(
-        embedding_result,
-        &captured_args,
-        &killed,
-        &embedding_server,
-    );
-
-    let mut reranking_server = LlamaServer::new();
-    reranking_server.set_test_runtime_state(
-        ServerMode::External {
-            url: "http://127.0.0.1:11434".to_string(),
-        },
-        true,
-    );
-    let reranking_result = reranking_server
-        .start_sidecar_reranking(spawner, "/models/rerank.gguf", &invalid_device, Some(18082))
-        .await;
-    assert_invalid_device_rejected_without_spawn(
-        reranking_result,
-        &captured_args,
-        &killed,
-        &reranking_server,
-    );
-}
-
-fn assert_invalid_device_rejected_without_spawn(
-    result: Result<(), String>,
-    captured_args: &Arc<Mutex<Vec<String>>>,
-    killed: &Arc<AtomicBool>,
-    server: &LlamaServer,
-) {
-    let error = result.expect_err("invalid device selector should fail before spawning");
-    assert!(error.contains("Invalid llama.cpp device selector"));
-    assert!(error.contains("CUDAx"));
-    assert!(
-        captured_args.lock().expect("captured args lock").is_empty(),
-        "invalid device selector must not spawn llama-server"
-    );
-    assert!(!killed.load(Ordering::SeqCst));
-    assert_eq!(server.mode_info().mode, "external");
-    assert_eq!(server.base_url().as_deref(), Some("http://127.0.0.1:11434"));
-}
-
-#[test]
 fn active_runtime_descriptor_requires_ready_managed_sidecar() {
     let mut server = LlamaServer::new();
     server.set_test_runtime_state(
@@ -335,7 +218,7 @@ fn active_runtime_descriptor_requires_ready_managed_sidecar() {
             port: 11434,
             model_path: "/models/embed.gguf".to_string(),
             device: DeviceConfig {
-                device: "auto".to_string(),
+                device: DeviceBackend::Auto,
                 gpu_layers: -1,
             },
         },
@@ -436,7 +319,7 @@ async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
             "/models/main.gguf",
             None,
             &DeviceConfig {
-                device: "auto".to_string(),
+                device: DeviceBackend::Auto,
                 gpu_layers: -1,
             },
             4096,
@@ -477,7 +360,7 @@ async fn start_sidecar_inference_applies_runtime_settings_to_llama_server_args()
             "/models/main.gguf",
             Some("/models/mmproj.gguf"),
             &DeviceConfig {
-                device: "Vulkan0".to_string(),
+                device: DeviceBackend::Vulkan(0),
                 gpu_layers: 12,
             },
             16384,

@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 
 use crate::backend::BackendStartOutcome;
 use crate::config::DeviceConfig;
+use crate::device::DeviceBackend;
 use crate::model_contracts::{
     CacheGenerationOptions, GenerationOptions, InferenceLifecyclePhase, InferenceTaskId,
     LengthGenerationOptions, OptionSupportState, ResolvedModelPackageFacts,
@@ -276,7 +277,7 @@ impl InferenceBackend for MockActiveLlamaBackend {
             model_path: PathBuf::from("/models/embed.gguf"),
             mmproj_path: None,
             device: DeviceConfig {
-                device: "CUDA0".to_string(),
+                device: DeviceBackend::Cuda(0),
                 gpu_layers: 40,
             },
             selected_device_class: Some(InferenceDeviceClass::Cuda),

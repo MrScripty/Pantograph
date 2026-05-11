@@ -797,6 +797,23 @@ Update during implementation:
   happens only at the sidecar DTO boundary. Verification passed:
   `cargo test -p inference llamacpp_runtime_settings`,
   `cargo fmt --all -- --check`, and `git diff --check`.
+- 2026-05-11: Continued Milestone 5 by typing legacy sidecar
+  `DeviceConfig.device` as backend-local `DeviceBackend`. The serialized JSON
+  shape remains the llama.cpp selector string at the sidecar DTO boundary, but
+  invalid selectors and canonical ids such as `cuda:0` now fail serde/input
+  decoding instead of becoming runtime state. Server and embedding sidecar
+  command construction now projects typed selectors through `DeviceBackend`.
+  Verification passed:
+  `cargo test -p inference config::tests::device_config`,
+  `cargo test -p inference active_runtime_descriptor`,
+  `cargo test -p inference start_sidecar_inference_applies_runtime_settings_to_llama_server_args`,
+  `cargo test -p inference llamacpp_runtime_settings`,
+  `cargo test -p inference embedding_runtime::tests`,
+  `cargo test -p inference test_mode_info_runtime_facts_report_active_runtime_selected_device`,
+  `cargo test -p inference backend::llamacpp::tests`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Discovered issue fixed
+  in-slice: model fingerprint hashing was using the display label for typed
+  devices; it now hashes the stable backend selector id.
 
 ## Commit Cadence Notes
 
@@ -1043,9 +1060,9 @@ Worker rules:
   decision. Add more Node-tested state/event helpers only where behavior can be
   verified without pretending to test browser focus.
 - Continue Milestone 5 by replacing remaining legacy raw device-string
-  execution paths with these contracts. The remaining work includes replacing
-  `DeviceConfig` as the sidecar DTO, managed runtime command variant selection,
-  frontend device options, technical-fit fallbacks, and node-engine backend
+  execution paths with these contracts. The remaining work includes migrating
+  shared `BackendConfig.device` and startup request fields, managed runtime
+  command variant selection, frontend device options, and node-engine backend
   routing.
 - Continue Milestone 5 by wiring selected device class into frontend
   run-inspection presentation only from typed backend projection records, not
@@ -1136,6 +1153,10 @@ Worker rules:
 - llama.cpp runtime-settings tests now prove effective device state is parsed
   into `DeviceBackend`, rejects canonical `cuda:0` as a llama.cpp selector, and
   projects back to the existing sidecar `DeviceConfig` only at the DTO boundary.
+- Sidecar device config tests now prove `DeviceConfig.device` stores typed
+  backend-local `DeviceBackend` internally, serde preserves the existing
+  llama.cpp selector string shape, and invalid selectors or canonical ids fail
+  before sidecar runtime state exists.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

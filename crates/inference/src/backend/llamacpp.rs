@@ -540,6 +540,7 @@ mod tests {
 
     use crate::config::DeviceConfig;
     use crate::constants::defaults;
+    use crate::device::DeviceBackend;
     use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
     use crate::server::ServerMode;
 
@@ -612,7 +613,7 @@ mod tests {
             model_path: "/models/main.gguf".to_string(),
             mmproj_path: None,
             device: DeviceConfig {
-                device: "Vulkan0".to_string(),
+                device: DeviceBackend::Vulkan(0),
                 gpu_layers: 40,
             },
             context_size: 8192,
@@ -651,7 +652,7 @@ mod tests {
             model_path: "/models/main.gguf".to_string(),
             mmproj_path: Some("/models/vision.mmproj".to_string()),
             device: DeviceConfig {
-                device: "auto".to_string(),
+                device: DeviceBackend::Auto,
                 gpu_layers: -1,
             },
             context_size: defaults::CONTEXT_SIZE,
@@ -680,7 +681,7 @@ mod tests {
                 model_path: "/models/main.gguf".to_string(),
                 mmproj_path: Some("/models/vision.mmproj".to_string()),
                 device: DeviceConfig {
-                    device: "Vulkan0".to_string(),
+                    device: DeviceBackend::Vulkan(0),
                     gpu_layers: 40,
                 },
                 context_size: 16384,
@@ -726,7 +727,7 @@ mod tests {
                 model_path: "/models/main.gguf".to_string(),
                 mmproj_path: None,
                 device: DeviceConfig {
-                    device: "Vulkan0".to_string(),
+                    device: DeviceBackend::Vulkan(0),
                     gpu_layers: 40,
                 },
                 context_size: defaults::CONTEXT_SIZE,
@@ -765,7 +766,7 @@ mod tests {
                 model_path: "/models/main.gguf".to_string(),
                 mmproj_path: None,
                 device: DeviceConfig {
-                    device: "Vulkan0".to_string(),
+                    device: DeviceBackend::Vulkan(0),
                     gpu_layers: 40,
                 },
                 context_size: defaults::CONTEXT_SIZE,
@@ -805,7 +806,7 @@ mod tests {
                 model_path: "/models/main.gguf".to_string(),
                 mmproj_path: None,
                 device: DeviceConfig {
-                    device: "Vulkan0".to_string(),
+                    device: DeviceBackend::Vulkan(0),
                     gpu_layers: 40,
                 },
                 context_size: 4096,

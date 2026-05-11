@@ -13,8 +13,7 @@ use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::sync::RwLock;
 
 use crate::config::DeviceConfig;
-use crate::constants::{device_types, hosts, ports, timeouts};
-use crate::device::DeviceBackend;
+use crate::constants::{hosts, ports, timeouts};
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::ServerModeInfo;
@@ -116,14 +115,7 @@ fn active_runtime_descriptor(
 fn selected_contract_device(
     device: &DeviceConfig,
 ) -> Option<Option<(InferenceDeviceClass, InferenceDeviceId)>> {
-    let backend = DeviceBackend::try_from_id(&device.device).ok()?;
-    Some(backend.to_contract_device().ok())
-}
-
-fn validate_llamacpp_device_config(device: &DeviceConfig) -> Result<(), String> {
-    DeviceBackend::try_from_id(&device.device)
-        .map(|_| ())
-        .map_err(|error| format!("Invalid llama.cpp device selector: {}", error))
+    Some(device.device.to_contract_device().ok())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -292,8 +284,6 @@ impl LlamaServer {
         ubatch_size: Option<u32>,
         port_override: Option<u16>,
     ) -> Result<(), String> {
-        validate_llamacpp_device_config(device)?;
-
         // Stop any existing connection
         self.stop();
 
@@ -339,9 +329,9 @@ impl LlamaServer {
         }
 
         // Add device selection if not "auto"
-        if device.device != device_types::AUTO {
+        if let Some(device_arg) = device.device.to_arg() {
             args.push("--device".to_string());
-            args.push(device.device.clone());
+            args.push(device_arg);
         }
 
         if let Some(cpu_threads) = cpu_threads {
@@ -398,8 +388,6 @@ impl LlamaServer {
         device: &DeviceConfig,
         port_override: Option<u16>,
     ) -> Result<(), String> {
-        validate_llamacpp_device_config(device)?;
-
         // Stop any existing connection
         self.stop();
 
@@ -429,9 +417,9 @@ impl LlamaServer {
         ];
 
         // Add device selection if not "auto"
-        if device.device != device_types::AUTO {
+        if let Some(device_arg) = device.device.to_arg() {
             args.push("--device".to_string());
-            args.push(device.device.clone());
+            args.push(device_arg);
         }
 
         log::info!(
@@ -466,8 +454,6 @@ impl LlamaServer {
         device: &DeviceConfig,
         port_override: Option<u16>,
     ) -> Result<(), String> {
-        validate_llamacpp_device_config(device)?;
-
         self.stop();
 
         let port = port_override.unwrap_or(ports::SERVER);
@@ -492,9 +478,9 @@ impl LlamaServer {
             pid_file_str,
         ];
 
-        if device.device != device_types::AUTO {
+        if let Some(device_arg) = device.device.to_arg() {
             args.push("--device".to_string());
-            args.push(device.device.clone());
+            args.push(device_arg);
         }
 
         log::info!(

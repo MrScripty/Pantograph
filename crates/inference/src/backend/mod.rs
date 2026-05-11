@@ -925,7 +925,7 @@ impl LlamaCppRuntimeSettings {
     #[must_use]
     pub fn device_config(&self) -> DeviceConfig {
         DeviceConfig {
-            device: self.device.to_id(),
+            device: self.device.clone(),
             gpu_layers: self.gpu_layers,
         }
     }
@@ -1200,7 +1200,7 @@ mod tests {
         assert_eq!(
             settings.device_config(),
             DeviceConfig {
-                device: defaults::DEVICE.to_string(),
+                device: DeviceBackend::Auto,
                 gpu_layers: defaults::GPU_LAYERS,
             }
         );
