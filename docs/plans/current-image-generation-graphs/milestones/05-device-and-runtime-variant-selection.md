@@ -163,7 +163,7 @@ typed diagnostic and the canonical design is fixed.
 - [ ] Remove optimistic frontend executable-device state. Frontend may keep
   transient form intent, but displayed runtime/device readiness must come from
   backend-confirmed snapshots.
-- [ ] Remove frontend fallback device options such as synthetic CPU-only lists
+- [x] Remove frontend fallback device options such as synthetic CPU-only lists
   after backend device discovery failure. Discovery failures render backend
   diagnostics/unavailable state and cannot create executable choices.
 - [ ] Replace or scope polling-heavy frontend refresh paths. Any remaining poll
@@ -1044,6 +1044,30 @@ typed diagnostic and the canonical design is fixed.
     `serde_json`, but `pantograph-runtime-registry` intentionally has no
     `serde_json` dependency. The test was rewritten to use `serde`'s typed
     string deserializer, avoiding dependency or lockfile changes.
+- 2026-05-10 slice: frontend synthetic device option removal.
+  - Smallest useful vertical slice: stop `DeviceConfig.svelte` from creating a
+    synthetic CPU-only device list after backend device discovery fails and
+    cover device option projection through the repository's existing Node test
+    runner.
+  - Allowed write set:
+    `src/components/DeviceConfig.svelte`,
+    `src/components/deviceConfigPresenters.ts`,
+    `src/components/deviceConfigPresenters.test.ts`,
+    `src/components/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: discovery failures now keep
+    `availableDevices` empty and display unavailable state. The frontend does
+    not add CPU, auto, or llama.cpp-specific executable choices unless the
+    backend reports them.
+  - Standards/blast-radius gate: this stays inside the settings-side frontend
+    presentation layer. Backend contracts, generated files, lockfiles,
+    persisted schema, runtime execution, sqlite state, and worker execution are
+    unchanged; accessibility keeps the existing labeled native select and
+    disables it when no backend-confirmed options exist.
+  - Verification passed:
+    `node --experimental-strip-types --test src/components/deviceConfigPresenters.test.ts`,
+    `npm run typecheck`,
+    `rg -n "Provide fallback options|CPU Only|let llama-server choose|buildBackendConfirmedDeviceOptions|deviceLoadError" src/components/DeviceConfig.svelte src/components/deviceConfigPresenters.ts src/components/deviceConfigPresenters.test.ts`,
+    and `git diff --check`.
 
 **Verification:**
 

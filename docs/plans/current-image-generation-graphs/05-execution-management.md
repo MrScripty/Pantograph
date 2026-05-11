@@ -302,6 +302,10 @@ Update during implementation:
   candidates now serialize as `runtime_capability_facts`, and the retired
   `runtime_capability_fallback` value is rejected rather than accepted through
   an alias.
+- 2026-05-10: Continued Milestone 5 by removing frontend synthetic device
+  options after backend discovery failure. `DeviceConfig.svelte` now renders
+  only backend-confirmed device options and keeps the selector unavailable when
+  discovery returns no usable facts.
 
 ## Commit Cadence Notes
 
@@ -706,6 +710,11 @@ Worker rules:
   The first focused test attempt failed because it introduced a `serde_json`
   dependency assumption in a crate that only depends on `serde`; the test was
   rewritten to use `serde`'s typed string deserializer.
+- `node --experimental-strip-types --test src/components/deviceConfigPresenters.test.ts`,
+  `npm run typecheck`,
+  `rg -n "Provide fallback options|CPU Only|let llama-server choose|buildBackendConfirmedDeviceOptions|deviceLoadError" src/components/DeviceConfig.svelte src/components/deviceConfigPresenters.ts src/components/deviceConfigPresenters.test.ts`,
+  and `git diff --check` passed after frontend device options stopped
+  synthesizing CPU-only or auto choices when backend discovery fails.
 
 ### Traceability Links
 

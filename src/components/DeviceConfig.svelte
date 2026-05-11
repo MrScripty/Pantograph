@@ -4,6 +4,11 @@
   import { LLMService } from '../services/LLMService';
   import { RagService } from '../services/RagService';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
+  import {
+    buildBackendConfirmedDeviceOptions,
+    formatDeviceDisplayName,
+    resolveSelectedDeviceName,
+  } from './deviceConfigPresenters';
 
   let state: ConfigState = $state(ConfigService.getState());
   let unsubscribe: (() => void) | null = null;
@@ -114,10 +119,7 @@
       if (!silent) {
         deviceLoadError = String(error);
         console.error('Failed to load devices:', error);
-        // Provide fallback options
-        availableDevices = [
-          { id: 'none', name: 'CPU Only', total_vram_mb: 0, free_vram_mb: 0 },
-        ];
+        availableDevices = [];
       }
     } finally {
       if (silent) {
@@ -160,14 +162,6 @@
     return `${layers} layers`;
   };
 
-  const formatVram = (mb: number): string => {
-    if (mb === 0) return '';
-    if (mb >= 1024) {
-      return `${(mb / 1024).toFixed(1)} GB`;
-    }
-    return `${mb} MB`;
-  };
-
   const formatVramValue = (mb: number): string => {
     if (mb <= 0) return '0 MB';
     if (mb >= 1024) {
@@ -176,17 +170,8 @@
     return `${mb} MB`;
   };
 
-  const getDeviceDisplayName = (device: DeviceInfo): string => {
-    if (device.id === 'none') return device.name;
-    if (device.id === 'auto') return 'Auto (let llama-server choose)';
-    const vram = formatVram(device.total_vram_mb);
-    return vram ? `${device.name} (${vram})` : device.name;
-  };
-
   const getSelectedDeviceName = (): string => {
-    if (selectedDevice === 'auto') return 'Auto';
-    const device = availableDevices.find(d => d.id === selectedDevice);
-    return device?.name || selectedDevice;
+    return resolveSelectedDeviceName(selectedDevice, availableDevices);
   };
 
   let hasChanges = $derived(
@@ -213,11 +198,7 @@
     : null
   );
 
-  // Add auto option to device list if not present
-  let deviceOptions = $derived([
-    { id: 'auto', name: 'Auto (let llama-server choose)', total_vram_mb: 0, free_vram_mb: 0 },
-    ...availableDevices.filter(d => d.id !== 'auto'),
-  ]);
+  let deviceOptions = $derived(buildBackendConfirmedDeviceOptions(availableDevices));
 
   // Minimum VRAM needed for embedding model (~800MB with buffer)
   const EMBEDDING_MODEL_VRAM_MB = 800;
@@ -307,17 +288,23 @@
           <select
             id="compute-device-select"
             bind:value={selectedDevice}
-            disabled={isLoadingDevices}
+            disabled={isLoadingDevices || deviceOptions.length === 0}
             class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 disabled:opacity-50"
             style="color-scheme: dark;"
           >
             {#each deviceOptions as device (device.id)}
-              <option value={device.id} class="bg-neutral-900 text-neutral-200">{getDeviceDisplayName(device)}</option>
+              <option value={device.id} class="bg-neutral-900 text-neutral-200">{formatDeviceDisplayName(device)}</option>
             {/each}
           </select>
-          <div class="text-[10px] text-neutral-600">
-            Select your GPU for inference. Use dGPU for better performance.
-          </div>
+          {#if deviceOptions.length === 0}
+            <div class="text-[10px] text-neutral-600">
+              No backend-confirmed devices available.
+            </div>
+          {:else}
+            <div class="text-[10px] text-neutral-600">
+              Select your GPU for inference. Use dGPU for better performance.
+            </div>
+          {/if}
         </div>
 
         <!-- GPU Layers -->

@@ -32,6 +32,9 @@ architecture views on top of the shared editor.
 | `workflowPaletteDrag.ts` | Computes app palette drag eligibility, drag payload parsing, and graph-space drop positions. |
 | `workflowPaletteDrag.test.ts` | Unit coverage for app palette drag parsing and drop-position projection. |
 | `workflowGraphTypes.ts` | Defines the app workflow graph node and edge component registry used by SvelteFlow. |
+| `DeviceConfig.svelte` | Settings-side device configuration UI that renders backend-confirmed device facts and never synthesizes executable device options after discovery failures. |
+| `deviceConfigPresenters.ts` | Pure device option and label presenters used by `DeviceConfig.svelte`. |
+| `deviceConfigPresenters.test.ts` | Unit coverage for backend-confirmed device option projection and no synthetic fallback options. |
 | `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
