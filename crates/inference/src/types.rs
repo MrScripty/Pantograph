@@ -1095,7 +1095,7 @@ pub struct RuntimeFactSnapshot {
     #[serde(default)]
     pub active_model_target: Option<String>,
     #[serde(default)]
-    pub resolved_device: Option<String>,
+    pub resolved_device: Option<InferenceDeviceId>,
     #[serde(default)]
     pub warmup_started_at_ms: Option<u64>,
     #[serde(default)]
@@ -1116,7 +1116,7 @@ impl RuntimeFactSnapshot {
     pub fn from_lifecycle(
         backend_key: Option<String>,
         active_model_target: Option<String>,
-        resolved_device: Option<String>,
+        resolved_device: Option<InferenceDeviceId>,
         lifecycle: RuntimeLifecycleSnapshot,
     ) -> Self {
         let readiness = lifecycle.runtime_fact_readiness();
@@ -1206,13 +1206,13 @@ pub struct ServerModeInfo {
     pub active_model_target: Option<String>,
     /// Backend-owned explicit non-auto device fact for the active runtime.
     #[serde(default)]
-    pub active_resolved_device: Option<String>,
+    pub active_resolved_device: Option<InferenceDeviceId>,
     /// Backend-owned target descriptor for the dedicated embedding runtime model.
     #[serde(default)]
     pub embedding_model_target: Option<String>,
     /// Backend-owned explicit non-auto device fact for the dedicated embedding runtime.
     #[serde(default)]
-    pub embedding_resolved_device: Option<String>,
+    pub embedding_resolved_device: Option<InferenceDeviceId>,
     /// Backend-owned lifecycle snapshot for the active runtime.
     #[serde(default)]
     pub active_runtime: Option<RuntimeLifecycleSnapshot>,
@@ -2770,7 +2770,7 @@ mod tests {
         let fact = RuntimeFactSnapshot::from_lifecycle(
             Some("llama_cpp".to_string()),
             Some("/models/qwen.gguf".to_string()),
-            Some("cuda:0".to_string()),
+            Some(InferenceDeviceId::parse("cuda:0").unwrap()),
             RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama.cpp".to_string()),
                 runtime_instance_id: Some("llama-main-1".to_string()),
@@ -2791,7 +2791,10 @@ mod tests {
             fact.active_model_target.as_deref(),
             Some("/models/qwen.gguf")
         );
-        assert_eq!(fact.resolved_device.as_deref(), Some("cuda:0"));
+        assert_eq!(
+            fact.resolved_device.as_ref().map(|id| id.as_str()),
+            Some("cuda:0")
+        );
         assert_eq!(fact.readiness, RuntimeFactReadiness::Ready);
         assert_eq!(fact.reuse_result, RuntimeFactReuseResult::Reused);
         assert_eq!(
@@ -2887,9 +2890,9 @@ mod tests {
             model_path: Some("/models/from-mode.gguf".to_string()),
             is_embedding_mode: false,
             active_model_target: Some("/models/qwen.gguf".to_string()),
-            active_resolved_device: Some("cuda:0".to_string()),
+            active_resolved_device: Some(InferenceDeviceId::parse("cuda:0").unwrap()),
             embedding_model_target: Some("/models/embed.gguf".to_string()),
-            embedding_resolved_device: Some("cpu".to_string()),
+            embedding_resolved_device: Some(InferenceDeviceId::parse("cpu").unwrap()),
             active_runtime: Some(RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama.cpp".to_string()),
                 runtime_instance_id: Some("llama-main-1".to_string()),
@@ -2918,13 +2921,19 @@ mod tests {
             facts[0].active_model_target.as_deref(),
             Some("/models/qwen.gguf")
         );
-        assert_eq!(facts[0].resolved_device.as_deref(), Some("cuda:0"));
+        assert_eq!(
+            facts[0].resolved_device.as_ref().map(|id| id.as_str()),
+            Some("cuda:0")
+        );
         assert_eq!(facts[0].readiness, RuntimeFactReadiness::Ready);
         assert_eq!(
             facts[1].active_model_target.as_deref(),
             Some("/models/embed.gguf")
         );
-        assert_eq!(facts[1].resolved_device.as_deref(), Some("cpu"));
+        assert_eq!(
+            facts[1].resolved_device.as_ref().map(|id| id.as_str()),
+            Some("cpu")
+        );
         assert_eq!(facts[1].reuse_result, RuntimeFactReuseResult::Reused);
     }
 

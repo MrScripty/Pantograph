@@ -1935,7 +1935,10 @@ async fn test_mode_info_runtime_facts_report_active_runtime_selected_device() {
     let facts = gateway.mode_info().await.runtime_fact_snapshots();
 
     assert_eq!(facts.len(), 1);
-    assert_eq!(facts[0].resolved_device.as_deref(), Some("cuda:0"));
+    assert_eq!(
+        facts[0].resolved_device.as_ref().map(|id| id.as_str()),
+        Some("cuda:0")
+    );
 }
 
 #[tokio::test]

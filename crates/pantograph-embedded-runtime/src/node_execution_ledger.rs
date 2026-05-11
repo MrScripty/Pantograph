@@ -1107,7 +1107,8 @@ fn build_inference_diagnostic_event_ledger_append_request(
     let selected_device_class = event
         .selected_device_class
         .and_then(|device_class| bounded_diagnostic_metadata(Some(device_class.canonical_label())));
-    let selected_device_id = bounded_diagnostic_metadata(event.selected_device_id.as_deref());
+    let selected_device_id =
+        bounded_diagnostic_metadata(event.selected_device_id.as_ref().map(|id| id.as_str()));
     let selected_network_node_id =
         bounded_diagnostic_metadata(event.selected_network_node_id.as_deref());
 

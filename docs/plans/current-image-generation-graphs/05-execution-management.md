@@ -685,6 +685,21 @@ Update during implementation:
   `cargo fmt --all -- --check`, and `git diff --check`. The first format check
   reported rustfmt wrapping in the new error attribute; `cargo fmt --all` was
   run and the check passed.
+- 2026-05-10: Continued Milestone 5 by typing `ServerModeInfo` and
+  `RuntimeFactSnapshot` resolved-device fields as canonical
+  `InferenceDeviceId` while preserving the serialized string shape consumed by
+  frontend and host status readers. Embedded-runtime ledger projection now
+  reads canonical ids instead of sanitizing path-shaped selected-device strings.
+  Verification passed: `cargo test -p inference runtime_fact_snapshot`,
+  `cargo test -p inference test_mode_info_runtime_facts_report_active_runtime_selected_device`,
+  `cargo test -p pantograph-embedded-runtime host_runtime_mode_snapshot_copies_runtime_facts_from_mode_info`,
+  `cargo test -p pantograph-embedded-runtime hosted_runtime_constructor_syncs_registry_and_derives_capabilities_from_mode_info`,
+  `cargo test -p pantograph-embedded-runtime inference_lifecycle_event_adapter_builds_node_status_event_with_backend_context`,
+  `cargo test -p pantograph-embedded-runtime inference_diagnostic_event_adapter_drops_path_shaped_runtime_metadata`,
+  `cargo fmt --all -- --check`, and `git diff --check`. The first
+  embedded-runtime compile exposed ledger consumers and tests still
+  constructing raw selected-device strings; those were converted to canonical
+  ids or removed where invalid ids are now rejected before ledger projection.
 
 ## Commit Cadence Notes
 
@@ -996,6 +1011,10 @@ Worker rules:
   passed for typed lifecycle selected-device ids.
 - `cargo test -p inference device_contracts::tests` passed for explicit device
   candidate mismatch rejection in canonical backend execution decisions.
+- `cargo test -p inference runtime_fact_snapshot`,
+  `cargo test -p inference test_mode_info_runtime_facts_report_active_runtime_selected_device`,
+  and focused embedded-runtime host/ledger tests passed for typed runtime fact
+  resolved-device ids.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

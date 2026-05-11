@@ -707,8 +707,7 @@ impl InferenceGateway {
         let active_resolved_device = self
             .active_llamacpp_runtime_descriptor()
             .await
-            .and_then(|descriptor| descriptor.selected_device_id)
-            .map(|device_id| device_id.as_str().to_string());
+            .and_then(|descriptor| descriptor.selected_device_id);
         let backend_key = canonical_backend_key(&backend_name);
 
         ServerModeInfo {

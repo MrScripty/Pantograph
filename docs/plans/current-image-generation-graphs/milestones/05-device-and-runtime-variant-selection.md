@@ -2232,6 +2232,39 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: full scheduler/runtime-load integration still needs to
     convert unavailable explicit requests into bounded device diagnostics before
     backend load.
+- 2026-05-10 slice: typed runtime fact resolved-device ids.
+  - Smallest useful vertical slice: replace `ServerModeInfo` and
+    `RuntimeFactSnapshot` resolved-device raw strings with canonical
+    `InferenceDeviceId`, preserving the same JSON string shape for frontend and
+    host consumers.
+  - Allowed write set: `crates/inference/src/types.rs`,
+    `crates/inference/src/gateway.rs`, `crates/inference/src/gateway_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/host_runtime.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/runtime_lifecycle_capability_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger.rs`,
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger_tests.rs`, and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: status/runtime fact DTOs now carry
+    validated canonical device ids; path-shaped selected-device ids cannot be
+    constructed and then sanitized by diagnostics-ledger projection.
+  - Standards/blast-radius gate: DTO and projection typing only; no backend
+    startup config, frontend code, generated DTOs, lockfiles, workflow fixtures,
+    scheduler queue policy, or runtime load behavior changed.
+  - Verification passed:
+    `cargo test -p inference runtime_fact_snapshot`,
+    `cargo test -p inference test_mode_info_runtime_facts_report_active_runtime_selected_device`,
+    `cargo test -p pantograph-embedded-runtime host_runtime_mode_snapshot_copies_runtime_facts_from_mode_info`,
+    `cargo test -p pantograph-embedded-runtime hosted_runtime_constructor_syncs_registry_and_derives_capabilities_from_mode_info`,
+    `cargo test -p pantograph-embedded-runtime inference_lifecycle_event_adapter_builds_node_status_event_with_backend_context`,
+    `cargo test -p pantograph-embedded-runtime inference_diagnostic_event_adapter_drops_path_shaped_runtime_metadata`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first embedded-runtime compile exposed ledger
+    consumers and tests still constructing raw selected-device strings; those
+    were converted to canonical ids or removed where the invalid path-shaped id
+    is now rejected before ledger projection.
+  - Remaining follow-up: backend startup config and worker request device fields
+    still carry backend-local raw strings and need separate adapter-owned
+    boundary slices.
 
 **Verification:**
 
@@ -2312,6 +2345,9 @@ typed diagnostic and the canonical design is fixed.
 - Inference device-contract tests prove explicit device policy cannot produce
   a selected decision from a mismatched CPU/GPU class or different concrete
   device id.
+- Inference and embedded-runtime tests prove runtime fact resolved-device ids
+  use canonical `InferenceDeviceId` while preserving serialized string output
+  for status and diagnostics consumers.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

@@ -139,7 +139,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         runtime_id: Some("pytorch.transformers".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         selected_device_class: Some(inference::InferenceDeviceClass::Cuda),
-        selected_device_id: Some("cuda:0".to_string()),
+        selected_device_id: Some(inference::InferenceDeviceId::parse("cuda:0").unwrap()),
         selected_network_node_id: Some("local-node-alpha".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         resolved_artifact_kind: None,
@@ -417,7 +417,7 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
     event.artifact_refs = vec!["artifact://audio.wav".to_string()];
     event.resolved_artifact_kind = Some("gguf".to_string());
     event.selected_device_class = Some(inference::InferenceDeviceClass::Cuda);
-    event.selected_device_id = Some("cuda:0".to_string());
+    event.selected_device_id = Some(inference::InferenceDeviceId::parse("cuda:0").unwrap());
     event.selected_network_node_id = Some("local-node-alpha".to_string());
 
     let request = inference_diagnostic_event_ledger_append_request(&context, &event)
@@ -807,7 +807,6 @@ fn inference_diagnostic_event_adapter_drops_path_shaped_runtime_metadata() {
     event.runtime_id = Some("file:///tmp/private/pytorch-runtime".to_string());
     event.backend_key = Some("/tmp/private/backend".to_string());
     event.model_id = Some("/tmp/private/model.gguf".to_string());
-    event.selected_device_id = Some("/tmp/private/gpu0".to_string());
     event.selected_network_node_id = Some("~/private-node".to_string());
     event.compatibility_issues = vec![inference::InferenceCompatibilityIssueSummary {
         kind: "unsupported_model_artifact".to_string(),
