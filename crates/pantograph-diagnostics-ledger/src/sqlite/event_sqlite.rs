@@ -523,7 +523,7 @@ pub(super) fn query_run_list_projection(
                 model_cache_state, scheduler_reason, latest_error_event_id,
                 latest_error_severity, latest_error_phase, latest_error_code,
                 latest_error_message, fatal_error_event_id, error_count, warning_count,
-                last_event_seq, last_updated_at_ms
+                last_event_seq, last_updated_at_ms, selected_runtime_variant_id
          FROM run_list_projection
          WHERE (?1 IS NULL OR workflow_id = ?1)
            AND (?2 IS NULL OR workflow_version_id = ?2)
@@ -783,7 +783,8 @@ pub(super) fn query_run_detail_projection(
                 model_cache_state, scheduler_reason, latest_error_event_id,
                 latest_error_severity, latest_error_phase, latest_error_code,
                 latest_error_message, fatal_error_event_id, error_count, warning_count,
-                timeline_event_count, last_event_seq, last_updated_at_ms
+                timeline_event_count, last_event_seq, last_updated_at_ms,
+                selected_runtime_variant_id
          FROM run_detail_projection
          WHERE workflow_run_id = ?1",
     )?;
@@ -2582,23 +2583,31 @@ fn apply_run_list_projection_model_lifecycle_error_facts(
     };
     let payload = DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload.clone());
     let error_facts = error_projection_facts(event, &payload);
-    if error_facts.latest_error_event_id.is_none() {
+    let selected_runtime_variant_id = match &payload {
+        DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) => {
+            payload.selected_runtime_variant_id.as_deref()
+        }
+        _ => None,
+    };
+    if error_facts.latest_error_event_id.is_none() && selected_runtime_variant_id.is_none() {
         return Ok(());
     }
     tx.execute(
         "UPDATE run_list_projection
-         SET latest_error_event_id = COALESCE(?1, latest_error_event_id),
-             latest_error_severity = COALESCE(?2, latest_error_severity),
-             latest_error_phase = COALESCE(?3, latest_error_phase),
-             latest_error_code = COALESCE(?4, latest_error_code),
-             latest_error_message = COALESCE(?5, latest_error_message),
-             fatal_error_event_id = COALESCE(?6, fatal_error_event_id),
-             error_count = error_count + ?7,
-             warning_count = warning_count + ?8,
-             last_event_seq = ?9,
-             last_updated_at_ms = ?10
-         WHERE workflow_run_id = ?11",
+         SET selected_runtime_variant_id = COALESCE(?1, selected_runtime_variant_id),
+             latest_error_event_id = COALESCE(?2, latest_error_event_id),
+             latest_error_severity = COALESCE(?3, latest_error_severity),
+             latest_error_phase = COALESCE(?4, latest_error_phase),
+             latest_error_code = COALESCE(?5, latest_error_code),
+             latest_error_message = COALESCE(?6, latest_error_message),
+             fatal_error_event_id = COALESCE(?7, fatal_error_event_id),
+             error_count = error_count + ?8,
+             warning_count = warning_count + ?9,
+             last_event_seq = ?10,
+             last_updated_at_ms = ?11
+         WHERE workflow_run_id = ?12",
         params![
+            selected_runtime_variant_id,
             error_facts.latest_error_event_id.as_deref(),
             error_facts
                 .latest_error_severity
@@ -3109,23 +3118,31 @@ fn apply_run_detail_projection_model_lifecycle_error_facts(
     };
     let payload = DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload.clone());
     let error_facts = error_projection_facts(event, &payload);
-    if error_facts.latest_error_event_id.is_none() {
+    let selected_runtime_variant_id = match &payload {
+        DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) => {
+            payload.selected_runtime_variant_id.as_deref()
+        }
+        _ => None,
+    };
+    if error_facts.latest_error_event_id.is_none() && selected_runtime_variant_id.is_none() {
         return Ok(());
     }
     tx.execute(
         "UPDATE run_detail_projection
-         SET latest_error_event_id = COALESCE(?1, latest_error_event_id),
-             latest_error_severity = COALESCE(?2, latest_error_severity),
-             latest_error_phase = COALESCE(?3, latest_error_phase),
-             latest_error_code = COALESCE(?4, latest_error_code),
-             latest_error_message = COALESCE(?5, latest_error_message),
-             fatal_error_event_id = COALESCE(?6, fatal_error_event_id),
-             error_count = error_count + ?7,
-             warning_count = warning_count + ?8,
-             last_event_seq = ?9,
-             last_updated_at_ms = ?10
-         WHERE workflow_run_id = ?11",
+         SET selected_runtime_variant_id = COALESCE(?1, selected_runtime_variant_id),
+             latest_error_event_id = COALESCE(?2, latest_error_event_id),
+             latest_error_severity = COALESCE(?3, latest_error_severity),
+             latest_error_phase = COALESCE(?4, latest_error_phase),
+             latest_error_code = COALESCE(?5, latest_error_code),
+             latest_error_message = COALESCE(?6, latest_error_message),
+             fatal_error_event_id = COALESCE(?7, fatal_error_event_id),
+             error_count = error_count + ?8,
+             warning_count = warning_count + ?9,
+             last_event_seq = ?10,
+             last_updated_at_ms = ?11
+         WHERE workflow_run_id = ?12",
         params![
+            selected_runtime_variant_id,
             error_facts.latest_error_event_id.as_deref(),
             error_facts
                 .latest_error_severity
@@ -3432,6 +3449,7 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
         scheduler_policy_id: row.get(10)?,
         retention_policy_id: row.get(11)?,
         selected_runtime_id: row.get(12)?,
+        selected_runtime_variant_id: row.get(40)?,
         selected_backend_key: row.get(13)?,
         selected_model_id: row.get(14)?,
         selected_task_id: row.get(15)?,
@@ -3511,6 +3529,7 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
         scheduler_policy_id: row.get(10)?,
         retention_policy_id: row.get(11)?,
         selected_runtime_id: row.get(12)?,
+        selected_runtime_variant_id: row.get(48)?,
         selected_backend_key: row.get(13)?,
         selected_model_id: row.get(14)?,
         selected_task_id: row.get(15)?,

@@ -1827,6 +1827,41 @@ typed diagnostic and the canonical design is fixed.
     need a durable selected-runtime-variant column and frontend typed DTOs
     before run inspection can filter or render selected runtime variant without
     parsing event payload JSON.
+- 2026-05-10 slice: diagnostics projection selected runtime variant.
+  - Smallest useful vertical slice: add durable
+    `selected_runtime_variant_id` fields to diagnostics-ledger run-list and
+    run-detail projections, expose them through workflow-service/frontend DTOs,
+    and populate them from typed scheduler model lifecycle payloads.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/schema.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-workflow-service/tests/contract.rs`,
+    `src/services/diagnostics/types.ts`,
+    `src/services/diagnostics/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: projection updates copy
+    `selected_runtime_variant_id` only from typed scheduler lifecycle payloads.
+    The slice does not infer variants from runtime ids, selected backend keys,
+    device ids/classes, runtime settings, scheduler payload JSON, or backend
+    config strings.
+  - Standards/blast-radius gate for durable diagnostics projection: projection
+    versions are bumped and schema repair adds nullable text columns; no
+    generated files, lockfiles, dependencies, workers, polling, or workflow
+    fixtures changed. Frontend impact is type-only DTO exposure with no UI
+    rendering or accessibility surface yet.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+    `cargo test -p pantograph-diagnostics-ledger current_schema_repairs_all_drifted_projection_tables`,
+    `cargo test -p pantograph-diagnostics-ledger current_schema_repairs_missing_run_error_projection_columns`,
+    `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+    `cargo test -p pantograph-workflow-service workflow_run_detail_query_contract_snapshot`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: scheduler/diagnostics frontend presenters can now add
+    selected-runtime-variant rendering or filters from typed DTO fields in a
+    separate frontend slice; no component should parse lifecycle payload JSON
+    for the variant.
 
 **Verification:**
 

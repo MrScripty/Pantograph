@@ -881,6 +881,10 @@ fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
         run.latest_error_message.as_deref(),
         Some("runtime model load failed after diagnostic error")
     );
+    assert_eq!(
+        run.selected_runtime_variant_id.as_deref(),
+        Some("llama_cpp.cuda")
+    );
     assert_eq!(run.latest_error_severity, None);
     assert_eq!(run.latest_error_phase, None);
     assert_eq!(run.latest_error_code, None);
@@ -897,6 +901,10 @@ fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
     assert_eq!(
         detail.latest_error_event_id.as_deref(),
         Some("diagnostic-error-model-alpha")
+    );
+    assert_eq!(
+        detail.selected_runtime_variant_id.as_deref(),
+        Some("llama_cpp.cuda")
     );
     assert_eq!(detail.error_count, 0);
     assert_eq!(detail.warning_count, 0);

@@ -67,9 +67,9 @@ panel because no active TypeScript boundary consumes them.
   consumers can compare backend placement without inferring backend choice from
   runtime ids.
 - Run-list and run-detail DTOs carry scheduler-selected runtime, device class,
-  device id, and network-node fields when the backend has placement facts.
-  Consumers should use those typed fields and facets for placement comparison
-  instead of parsing scheduler payload JSON.
+  runtime variant, device id, and network-node fields when the backend has
+  placement facts. Consumers should use those typed fields and facets for
+  placement comparison instead of parsing scheduler payload JSON.
 - Run-list, run-detail, and scheduler-estimate DTOs carry typed scheduler
   model-cache posture when the backend has cache facts. Consumers should use
   those typed fields instead of parsing estimate payload JSON.

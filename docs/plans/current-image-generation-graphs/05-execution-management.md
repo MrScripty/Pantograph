@@ -540,6 +540,20 @@ Update during implementation:
   `cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution`
   still fails at its Library usage projection assertion with zero assets; this
   is recorded as a separate projection/test-fragility issue.
+- 2026-05-10: Continued Milestone 5 by adding durable diagnostics run-list and
+  run-detail projection fields for `selected_runtime_variant_id`, populated
+  only from typed scheduler lifecycle payloads and exposed through
+  workflow-service/frontend DTOs. The slice bumps projection versions and adds
+  nullable schema-repair columns, without deriving variants from runtime ids,
+  backend keys, devices, runtime settings, scheduler payload JSON, or backend
+  config strings. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+  `cargo test -p pantograph-diagnostics-ledger current_schema_repairs_all_drifted_projection_tables`,
+  `cargo test -p pantograph-diagnostics-ledger current_schema_repairs_missing_run_error_projection_columns`,
+  `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+  `cargo test -p pantograph-workflow-service workflow_run_detail_query_contract_snapshot`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
