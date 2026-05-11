@@ -164,6 +164,7 @@ fn os_string_to_string(value: OsString) -> String {
 #[cfg(test)]
 mod tests {
     use super::super::definitions::definition;
+    use super::super::paths::managed_version_install_dir;
     use super::*;
     use crate::managed_runtime::{
         save_managed_runtime_state, ManagedRuntimePersistedRuntime, ManagedRuntimePersistedState,
@@ -194,7 +195,8 @@ mod tests {
     #[test]
     fn runtime_sidecar_command_projection_preserves_resolved_command_facts() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
-        let install_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+        let install_dir =
+            managed_version_install_dir(temp_dir.path(), ManagedBinaryId::LlamaCpp, "b8248");
         install_fake_runtime_files(&install_dir, ManagedBinaryId::LlamaCpp);
         save_ready_runtime_state(temp_dir.path(), &install_dir);
 

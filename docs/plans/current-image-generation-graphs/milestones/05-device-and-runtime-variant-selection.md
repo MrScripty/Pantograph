@@ -2977,6 +2977,7 @@ typed diagnostic and the canonical design is fixed.
     backend-owned runtime library path, and validate each command environment
     path value through the shared allowed-root validator before handoff.
   - Allowed write set: `crates/inference/src/managed_runtime/contracts.rs`,
+    `crates/inference/src/managed_runtime/neutral_contracts.rs`,
     `crates/inference/src/managed_runtime/paths.rs`,
     `crates/inference/src/managed_runtime/mod.rs`,
     `crates/inference/src/managed_runtime/operations.rs`,
@@ -2994,10 +2995,14 @@ typed diagnostic and the canonical design is fixed.
   - Verification passed:
     `cargo test -p inference managed_runtime::paths`,
     `cargo test -p inference managed_runtime::llama_cpp_platform::linux::tests`,
-    and `cargo test -p inference resolve_binary_command`.
+    `cargo test -p inference resolve_binary_command`, and
+    `cargo test -p inference runtime_sidecar_command_projection_preserves_resolved_command_facts`.
   - Verification deviation: the focused Cargo tests were started in parallel
     and serialized on Cargo package/build locks; the completed results above
-    passed after the locks cleared.
+    passed after the locks cleared. A broader neutral-contract check exposed a
+    stale test fixture still using the retired `app_data/runtimes` install
+    root; the fixture now uses the canonical managed runtime version
+    directory and the focused check passes.
   - Remaining follow-up: pid files, Pumas package paths, artifact paths, and
     worker-visible paths still need shared allowed-root validation before
     filesystem or subprocess access.
