@@ -75,7 +75,7 @@ fn canonicalize_workflow_graph_repairs_llm_stream_edge_to_text_output() {
                 "llm-inference",
                 json!({
                     "task_kind": "text_generation",
-                    "runtime_hint": "llamacpp",
+                    "backend_key": "llama_cpp",
                     "pumas_model_ref": {
                         "source": "puma-lib",
                         "status": "resolved",
@@ -131,7 +131,7 @@ fn canonicalize_workflow_graph_hydrates_current_image_generation_settings() {
                 "llm-inference",
                 json!({
                     "task_kind": "image_generation",
-                    "runtime_hint": "pytorch"
+                    "backend_key": "pytorch"
                 }),
             ),
         ],

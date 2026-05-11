@@ -940,6 +940,31 @@ typed diagnostic and the canonical design is fixed.
   - Verification deviation: the first focused Node command failed
     `templateService.test.ts` because `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
     still used `runtime_hint`; it was updated and the same command passed.
+- 2026-05-10 slice: workflow-service current graph fixture backend-key cleanup.
+  - Smallest useful vertical slice: update workflow-service current graph
+    canonicalization/session test fixtures from `runtime_hint` to
+    `backend_key`, while retaining the explicit capability tests that prove
+    legacy runtime hints are ignored.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/graph/canonicalization_tests.rs`,
+    `crates/pantograph-workflow-service/src/graph/session_tests.rs`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: current workflow-service graph
+    fixtures now use canonical `backend_key`; no migration, alias, or
+    compatibility behavior was added for old graph data.
+  - Standards/blast-radius gate: this is a test-fixture-only workflow-service
+    cleanup. Public DTOs, persistence code, generated files, frontend files,
+    lockfiles, feature flags, dependencies, sqlite state, and runtime execution
+    are unchanged.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service graph::`,
+    `cargo test -p pantograph-workflow-service extract_required_backends`,
+    no-match search for `runtime_hint` in workflow-service graph tests, and
+    `git diff --check`.
+  - Verification deviation: an initial cargo command attempted to pass three
+    test filters at once, which Cargo rejected; verification was rerun with the
+    broader `graph::` filter.
 
 **Verification:**
 

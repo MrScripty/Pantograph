@@ -60,7 +60,7 @@ fn inference_to_output_graph() -> WorkflowGraph {
                 position: Position { x: 0.0, y: 0.0 },
                 data: serde_json::json!({
                     "task_kind": "text_generation",
-                    "runtime_hint": "llamacpp",
+                    "backend_key": "llama_cpp",
                     "pumas_model_ref": {
                         "source": "puma-lib",
                         "status": "resolved",

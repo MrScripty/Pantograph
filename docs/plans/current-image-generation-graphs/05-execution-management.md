@@ -286,6 +286,9 @@ Update during implementation:
   definitions, built-in templates, and the tracked Tiny SD saved workflow.
   These current graph producers now use `backend_key`; no descriptor alias or
   saved-workflow compatibility shim was added.
+- 2026-05-10: Continued Milestone 5 by updating workflow-service current graph
+  canonicalization/session fixtures to use `backend_key`. Capability tests that
+  prove legacy runtime hints are ignored remain as explicit negative coverage.
 
 ## Commit Cadence Notes
 
