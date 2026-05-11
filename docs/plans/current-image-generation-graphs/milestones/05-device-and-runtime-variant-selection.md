@@ -174,6 +174,11 @@ typed diagnostic and the canonical design is fixed.
     those dynamic-library path values through the shared allowed-root
     validator. Pid files, Pumas package paths, artifact paths, and
     worker-visible paths remain pending.
+  - 2026-05-11 partial: managed-runtime command handoff now validates
+    extracted `--pid-file` paths against `app_data_dir`, resolving relative
+    pid-file arguments under that root and rejecting absolute paths outside it
+    with typed path diagnostics. Pumas package paths, artifact paths, and
+    worker-visible paths remain pending.
 - [ ] Use checked arithmetic and typed diagnostics for image dimensions, context
   lengths, token limits, batch sizes, memory estimates, output-size
   calculations, and byte ranges that cross IPC, persisted, worker, or runtime
@@ -3004,6 +3009,33 @@ typed diagnostic and the canonical design is fixed.
     root; the fixture now uses the canonical managed runtime version
     directory and the focused check passes.
   - Remaining follow-up: pid files, Pumas package paths, artifact paths, and
+    worker-visible paths still need shared allowed-root validation before
+    filesystem or subprocess access.
+- 2026-05-11 slice: managed runtime pid-file path validation.
+  - Smallest useful vertical slice: validate managed-runtime command
+    `--pid-file` paths against `app_data_dir` before command handoff, while
+    preserving relative pid-file intent by resolving it under the same root.
+  - Allowed write set: `crates/inference/src/managed_runtime/contracts.rs`,
+    `crates/inference/src/managed_runtime/operations.rs`,
+    `crates/inference/src/managed_runtime/operations_tests.rs`,
+    `crates/inference/src/managed_runtime/neutral_contracts.rs`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: arbitrary absolute pid-file paths are
+    no longer preserved as subprocess write targets. Escaped pid-file requests
+    fail with `ManagedRuntimeCommandResolutionError::PathValidation` and no
+    alternate pid-file path is synthesized.
+  - Standards/blast-radius gate: managed-runtime command path validation and
+    command projection tests only; no generated DTOs, frontend code, saved
+    workflow files, runtime feature flags, dependency changes, scheduler
+    policy, install state, dynamic-library path behavior, or subprocess
+    lifecycle ownership changed.
+  - Verification passed:
+    `cargo test -p inference resolve_binary_command` and
+    `cargo test -p inference runtime_sidecar_command_projection_preserves_resolved_command_facts`.
+  - Verification deviation: the focused Cargo tests were started in parallel
+    and serialized on Cargo package/build locks; the completed results above
+    passed after the locks cleared.
+  - Remaining follow-up: Pumas package paths, artifact paths, and
     worker-visible paths still need shared allowed-root validation before
     filesystem or subprocess access.
 

@@ -225,6 +225,7 @@ pub enum ManagedRuntimePathKind {
     ExecutablePath,
     WorkingDirectory,
     DynamicLibraryPath,
+    PidFile,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

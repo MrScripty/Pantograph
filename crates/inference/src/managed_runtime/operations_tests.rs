@@ -1292,6 +1292,53 @@ fn resolve_binary_command_rejects_install_root_outside_managed_runtime_root() {
     assert!(error.to_string().contains("outside allowed root"));
 }
 
+#[test]
+fn resolve_binary_command_rejects_pid_file_outside_app_data_root() {
+    let app_data_dir = tempfile::tempdir().expect("app data dir");
+    let outside_dir = tempfile::tempdir().expect("outside dir");
+    let install_dir =
+        managed_version_install_dir(app_data_dir.path(), ManagedBinaryId::LlamaCpp, "b8248");
+    install_fake_runtime_files(&install_dir, ManagedBinaryId::LlamaCpp);
+
+    let mut state = load_managed_runtime_state(app_data_dir.path()).expect("load runtime state");
+    let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+    runtime.versions.push(ManagedRuntimePersistedVersion {
+        version: "b8248".to_string(),
+        runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        runtime_variant_id: Some(llama_cpu_variant_id()),
+        platform_key: Some(
+            definition(ManagedBinaryId::LlamaCpp)
+                .platform_key()
+                .to_string(),
+        ),
+        readiness_state: ManagedRuntimeReadinessState::Ready,
+        install_root: Some(install_dir.display().to_string()),
+        last_ready_at_ms: Some(42),
+        last_error: None,
+    });
+    runtime.selection.selected_version = Some("b8248".to_string());
+    runtime.selection.selected_runtime_variant_id = Some(llama_cpu_variant_id());
+    save_managed_runtime_state(app_data_dir.path(), &state).expect("save runtime state");
+
+    let outside_pid_file = outside_dir.path().join("llama.pid");
+    let outside_pid_file = outside_pid_file.to_string_lossy().into_owned();
+    let error = resolve_binary_command(
+        app_data_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        &["--pid-file", outside_pid_file.as_str()],
+    )
+    .expect_err("escaped pid file should fail before command handoff");
+
+    assert!(matches!(
+        error,
+        ManagedRuntimeCommandResolutionError::PathValidation {
+            path_kind: ManagedRuntimePathKind::PidFile,
+            ..
+        }
+    ));
+    assert!(error.to_string().contains("outside allowed root"));
+}
+
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
 fn resolve_binary_command_uses_selected_cuda_runtime_variant() {

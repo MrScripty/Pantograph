@@ -214,7 +214,11 @@ mod tests {
         assert!(command.executable_path.contains("llama-server"));
         assert_eq!(command.working_directory, install_dir.display().to_string());
         assert_eq!(command.args, vec!["--port".to_string(), "8080".to_string()]);
-        assert_eq!(command.pid_file.as_deref(), Some("server.pid"));
+        let expected_pid_file = temp_dir.path().join("server.pid").display().to_string();
+        assert_eq!(
+            command.pid_file.as_deref(),
+            Some(expected_pid_file.as_str())
+        );
         assert!(!command.env_overrides.is_empty());
     }
 

@@ -909,6 +909,7 @@ pub fn resolve_binary_command(
 
     if let Some(executable_path) = definition.system_command() {
         let (args, pid_file) = extract_pid_file(args);
+        let pid_file = validate_optional_pid_file(id, app_data_dir, pid_file)?;
         let working_directory = executable_path
             .parent()
             .map(Path::to_path_buf)
@@ -941,12 +942,13 @@ pub fn resolve_binary_command(
     }
 
     let command = definition.resolve_command(&install_dir, &target.runtime_variant_id, args)?;
-    validate_resolved_command_paths(id, &install_dir, command)
+    validate_resolved_command_paths(id, &install_dir, app_data_dir, command)
 }
 
 fn validate_resolved_command_paths(
     id: ManagedBinaryId,
     install_dir: &Path,
+    app_data_dir: &Path,
     command: ResolvedCommand,
 ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
     let executable_path = validate_managed_runtime_path(
@@ -975,13 +977,27 @@ fn validate_resolved_command_paths(
             .map(|validated_path| (key.clone(), validated_path.into_os_string()))
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let pid_file = validate_optional_pid_file(id, app_data_dir, command.pid_file.clone())?;
 
     Ok(ResolvedCommand {
         executable_path,
         working_directory,
         env_overrides,
+        pid_file,
         ..command
     })
+}
+
+fn validate_optional_pid_file(
+    id: ManagedBinaryId,
+    app_data_dir: &Path,
+    pid_file: Option<PathBuf>,
+) -> Result<Option<PathBuf>, ManagedRuntimeCommandResolutionError> {
+    pid_file
+        .map(|path| {
+            validate_managed_runtime_path(id, ManagedRuntimePathKind::PidFile, &path, app_data_dir)
+        })
+        .transpose()
 }
 
 fn validate_managed_runtime_path(
