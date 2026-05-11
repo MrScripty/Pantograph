@@ -51,9 +51,10 @@ use pantograph_workflow_service::{
     WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
     WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
     WorkflowSupportTier, WorkflowTaskModalitySignature, WorkflowTaskRequestContract,
-    WorkflowTaskStreamingSupport, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
-    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowTaskStreamingSupport, WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest,
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -1409,6 +1410,35 @@ fn workbench_settings_network_cross_layer_fixture_deserializes() {
         artifact_format_capabilities.audio_formats[0].provided_by_dependency_id,
         "ffmpeg"
     );
+}
+
+#[test]
+fn workflow_technical_fit_cross_layer_fixture_deserializes() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/technical_fit_contract.json"))
+            .expect("fixture parses");
+
+    let request: WorkflowTechnicalFitRequest =
+        serde_json::from_value(fixture["technical_fit_request"].clone())
+            .expect("technical-fit request fixture matches Rust DTO");
+    let decision: WorkflowTechnicalFitDecision =
+        serde_json::from_value(fixture["technical_fit_decision"].clone())
+            .expect("technical-fit decision fixture matches Rust DTO");
+
+    assert_eq!(
+        serde_json::to_value(&request).expect("serialize technical-fit request"),
+        fixture["technical_fit_request"]
+    );
+    assert_eq!(
+        serde_json::to_value(&decision).expect("serialize technical-fit decision"),
+        fixture["technical_fit_decision"]
+    );
+    assert_eq!(request.workflow_id, "wf-image");
+    assert_eq!(
+        decision.selected_runtime_variant_id.as_deref(),
+        Some("pytorch/linux-x64/cuda")
+    );
+    assert_eq!(decision.selected_device_id.as_deref(), Some("cuda:0"));
 }
 
 #[test]

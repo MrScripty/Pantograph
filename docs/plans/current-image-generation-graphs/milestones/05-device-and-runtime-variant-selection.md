@@ -1348,6 +1348,35 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: broader explicit backend/runtime incompatibility
     cases still need concrete task/model/platform candidate facts before their
     end-to-end admission tests can be marked complete.
+- 2026-05-10 slice: workflow technical-fit cross-layer fixture.
+  - Smallest useful vertical slice: add a shared JSON fixture for the
+    workflow-service technical-fit request/decision boundary and consume it
+    from both Rust serde tests and the existing Node frontend test harness.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/tests/contract.rs`,
+    `crates/pantograph-workflow-service/tests/fixtures/technical_fit_contract.json`,
+    `src/services/workflow/WorkflowService.commands.test.ts`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the fixture pins explicit typed
+    runtime id, runtime variant id, backend key, device policy, selected device
+    class/id, resource estimate, throughput hint, and bounded device
+    diagnostics. It does not include legacy raw device strings, fallback-named
+    selection modes, or runtime-hint fields.
+  - Standards/blast-radius gate for cross-layer fixture coverage: workflow
+    service remains the Rust DTO owner; frontend types remain a hand-maintained
+    mirror consumed by the existing Node test platform; production behavior,
+    runtime lifecycle ownership, persisted schemas, generated files, feature
+    flags, dependencies, lockfiles, workers, and workflow fixtures are
+    untouched.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service --test contract workflow_technical_fit_cross_layer_fixture_deserializes`,
+    `node --experimental-strip-types --test src/services/workflow/WorkflowService.commands.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining fixture coverage: runtime-registry, Tauri command transport,
+    diagnostics-ledger technical-fit projections if added, Python worker, and
+    persisted-state boundaries still need their own fixtures before the broad
+    serde-fixture checklist item can be closed.
 
 **Verification:**
 

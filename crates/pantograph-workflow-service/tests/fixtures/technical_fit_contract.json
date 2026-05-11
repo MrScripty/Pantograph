@@ -1,0 +1,90 @@
+{
+  "technical_fit_request": {
+    "workflow_id": "wf-image",
+    "runtime_requirements": {
+      "estimated_peak_vram_mb": 8192,
+      "estimated_peak_ram_mb": 16384,
+      "estimated_min_vram_mb": 4096,
+      "estimated_min_ram_mb": 8192,
+      "estimation_confidence": "estimated",
+      "required_models": [
+        "pumas://models/juggernaut-x-v10-sdxl"
+      ],
+      "required_backends": [
+        "pytorch"
+      ],
+      "required_extensions": [
+        "diffusers"
+      ]
+    },
+    "override_selection": {
+      "runtime_id": "pytorch",
+      "runtime_variant_id": "pytorch/linux-x64/cuda",
+      "model_id": "pumas://models/juggernaut-x-v10-sdxl",
+      "backend_key": "pytorch"
+    },
+    "device_policy": {
+      "policy": "explicit",
+      "device_class": "cuda",
+      "device_id": "cuda:0"
+    },
+    "session_id": "session-image",
+    "usage_profile": "interactive",
+    "queue_pressure": {
+      "current_session_queue_depth": 1,
+      "total_queued_run_count": 3,
+      "loaded_runtime_count": 1,
+      "loaded_runtime_capacity": 2
+    }
+  },
+  "technical_fit_decision": {
+    "selection_mode": "automatic",
+    "selected_candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0",
+    "selected_runtime_id": "pytorch",
+    "selected_runtime_variant_id": "pytorch/linux-x64/cuda",
+    "selected_backend_key": "pytorch",
+    "selected_model_id": "pumas://models/juggernaut-x-v10-sdxl",
+    "selected_device_class": "cuda",
+    "selected_device_id": "cuda:0",
+    "resource_estimate": {
+      "estimated_peak_vram_mb": 8192,
+      "estimated_peak_ram_mb": 16384,
+      "estimated_min_vram_mb": 4096,
+      "estimated_min_ram_mb": 8192
+    },
+    "observed_throughput_hint": {
+      "images_per_second_milli": 125,
+      "sample_count": 4
+    },
+    "device_diagnostics": [
+      {
+        "code": "candidate_unavailable",
+        "severity": "warning",
+        "message": "CUDA runtime warmup is pending",
+        "device_class": "cuda",
+        "device_id": "cuda:0",
+        "runtime_variant_id": "pytorch/linux-x64/cuda",
+        "backend_key": "pytorch"
+      }
+    ],
+    "reasons": [
+      {
+        "code": "runtime_requirements",
+        "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+      },
+      {
+        "code": "queue_pressure",
+        "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+      }
+    ],
+    "compatibility_report": {
+      "status": "accepted",
+      "compatible": true,
+      "task": "supported",
+      "model_source": "supported",
+      "preprocessing": "supported",
+      "postprocessing": "supported"
+    },
+    "compatibility_issue_count": 0
+  }
+}

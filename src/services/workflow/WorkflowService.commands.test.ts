@@ -30,12 +30,19 @@ import type {
   WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueuePushFrontResponse,
   WorkflowSessionQueueReprioritizeResponse,
+  WorkflowTechnicalFitDecision,
+  WorkflowTechnicalFitRequest,
 } from './types.ts';
 
 interface WorkbenchSettingsNetworkContractFixture {
   artifact_policy: WorkflowArtifactPolicy;
   artifact_format_settings_response: WorkflowArtifactFormatSettingsQueryResponse;
   artifact_format_capabilities: WorkflowArtifactFormatCapabilities;
+}
+
+interface TechnicalFitContractFixture {
+  technical_fit_request: WorkflowTechnicalFitRequest;
+  technical_fit_decision: WorkflowTechnicalFitDecision;
 }
 
 function installWindowMock(): void {
@@ -49,6 +56,14 @@ function loadWorkbenchSettingsNetworkContractFixture(): WorkbenchSettingsNetwork
     import.meta.url,
   );
   return JSON.parse(readFileSync(fixtureUrl, 'utf8')) as WorkbenchSettingsNetworkContractFixture;
+}
+
+function loadTechnicalFitContractFixture(): TechnicalFitContractFixture {
+  const fixtureUrl = new URL(
+    '../../../crates/pantograph-workflow-service/tests/fixtures/technical_fit_contract.json',
+    import.meta.url,
+  );
+  return JSON.parse(readFileSync(fixtureUrl, 'utf8')) as TechnicalFitContractFixture;
 }
 
 function standardRetentionSettings(retentionDays: number): DiagnosticsRetentionPolicySettings {
@@ -181,6 +196,27 @@ test('mock node definitions expose canonical Pumas inference ports', () => {
       }
     }
   }
+});
+
+test('technical-fit contract fixture preserves runtime variant and device facts', () => {
+  const fixture = loadTechnicalFitContractFixture();
+  const request: WorkflowTechnicalFitRequest = fixture.technical_fit_request;
+  const decision: WorkflowTechnicalFitDecision = fixture.technical_fit_decision;
+
+  assert.equal(request.override_selection?.runtime_id, 'pytorch');
+  assert.equal(request.override_selection?.runtime_variant_id, 'pytorch/linux-x64/cuda');
+  assert.equal(request.device_policy?.policy, 'explicit');
+  if (request.device_policy?.policy === 'explicit') {
+    assert.equal(request.device_policy.device_class, 'cuda');
+    assert.equal(request.device_policy.device_id, 'cuda:0');
+  }
+
+  assert.equal(decision.selected_runtime_variant_id, 'pytorch/linux-x64/cuda');
+  assert.equal(decision.selected_device_class, 'cuda');
+  assert.equal(decision.selected_device_id, 'cuda:0');
+  assert.equal(decision.device_diagnostics?.[0]?.code, 'candidate_unavailable');
+  assert.equal(decision.device_diagnostics?.[0]?.severity, 'warning');
+  assert.equal(decision.reasons?.[0]?.code, 'runtime_requirements');
 });
 
 test('frontend inference payload contract accepts roadmap depth execution kinds', () => {

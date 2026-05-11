@@ -394,6 +394,15 @@ Update during implementation:
   Verification passed: `cargo fmt --all -- --check`,
   `cargo test -p pantograph-workflow-service technical_fit`, and
   `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding a cross-layer workflow
+  technical-fit fixture shared by Rust serde coverage and the existing Node
+  frontend test harness. The fixture pins typed runtime variant, explicit
+  device policy, selected device facts, estimates, throughput hints, and
+  bounded diagnostics without adding a new test platform. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-workflow-service --test contract workflow_technical_fit_cross_layer_fixture_deserializes`,
+  `node --experimental-strip-types --test src/services/workflow/WorkflowService.commands.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
