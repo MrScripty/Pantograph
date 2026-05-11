@@ -412,6 +412,15 @@ Update during implementation:
   `cargo test -p pantograph-embedded-runtime technical_fit`,
   `cargo test -p pantograph-workflow-service technical_fit`, and
   `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding a runtime-registry
+  `no_valid_candidate` error diagnostic for automatic technical-fit decisions
+  with no eligible candidate. Explicit device misses still use the more
+  specific `explicit_device_unavailable` diagnostic. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`, and
+  `git diff --check`.
 
 ## Commit Cadence Notes
 

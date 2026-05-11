@@ -131,6 +131,9 @@ process ownership and app composition stay outside this crate.
 - Auto technical-fit policy must resolve exactly one highest-ranked candidate.
   Equally ranked candidates return an unselected `ambiguous_auto_resolution`
   diagnostic instead of using candidate-id ordering as executable selection.
+  When no candidate is eligible, auto returns an unselected
+  `no_valid_candidate` diagnostic rather than relying on missing-state reasons
+  alone.
 - Technical-fit candidate and decision DTOs carry runtime variant id, typed
   selected device class/id, resource estimates, observed-throughput hints, and
   bounded device diagnostics when producers provide those facts. The selector

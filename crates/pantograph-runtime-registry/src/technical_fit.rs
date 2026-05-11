@@ -754,7 +754,7 @@ pub fn select_runtime_technical_fit(
     unselected_decision_with_device_diagnostics(
         RuntimeTechnicalFitSelectionMode::Automatic,
         reasons,
-        explicit_device_unavailable_diagnostics(&normalized),
+        automatic_no_valid_candidate_diagnostics(&normalized),
     )
 }
 
@@ -922,6 +922,25 @@ fn explicit_device_unavailable_diagnostics(
         message: "technical-fit could not satisfy the explicit device policy".to_string(),
         device_class: Some(*device_class),
         device_id: device_id.clone(),
+        runtime_variant_id: None,
+        backend_key: None,
+    }]
+}
+
+fn automatic_no_valid_candidate_diagnostics(
+    request: &RuntimeTechnicalFitRequest,
+) -> Vec<RuntimeTechnicalFitDeviceDiagnostic> {
+    let explicit_device_diagnostics = explicit_device_unavailable_diagnostics(request);
+    if !explicit_device_diagnostics.is_empty() {
+        return explicit_device_diagnostics;
+    }
+
+    vec![RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: "technical-fit auto policy found no valid candidate".to_string(),
+        device_class: None,
+        device_id: None,
         runtime_variant_id: None,
         backend_key: None,
     }]

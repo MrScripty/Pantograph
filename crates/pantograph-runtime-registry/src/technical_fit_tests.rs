@@ -1014,6 +1014,18 @@ fn selector_rejects_when_required_context_is_missing() {
         reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
             && reason.candidate_id.as_deref() == Some("runtime-a")
     }));
+    assert_eq!(
+        decision.device_diagnostics,
+        vec![RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "technical-fit auto policy found no valid candidate".to_string(),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: None,
+            backend_key: None,
+        }]
+    );
 }
 
 #[test]
@@ -1084,6 +1096,18 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
         reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
             && reason.candidate_id.as_deref() == Some("llama_cpp")
     }));
+    assert_eq!(
+        decision.device_diagnostics,
+        vec![RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "technical-fit auto policy found no valid candidate".to_string(),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: None,
+            backend_key: None,
+        }]
+    );
 }
 
 #[test]

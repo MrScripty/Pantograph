@@ -1408,6 +1408,35 @@ typed diagnostic and the canonical design is fixed.
     missing-candidate/runtime-state reasons, and remaining old raw-device
     execution paths still need removal before the broad auto-mode checklist item
     can be closed.
+- 2026-05-10 slice: runtime-registry no-valid-auto diagnostic.
+  - Smallest useful vertical slice: add a `no_valid_candidate` error
+    diagnostic to automatic technical-fit decisions when candidate facts exist
+    but no candidate is eligible, while preserving the more specific
+    `explicit_device_unavailable` diagnostic for explicit device policy
+    misses.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: auto-mode failure now returns an
+    unselected typed diagnostic instead of relying on reason codes alone or
+    selecting a lower-priority/ineligible candidate.
+  - Standards/blast-radius gate for runtime-registry selector diagnostics:
+    selector policy remains backend-owned in runtime-registry; workflow-service
+    and embedded-runtime DTO shapes already carry the diagnostic code; runtime
+    lifecycle ownership, persisted schemas, frontend behavior, generated files,
+    feature flags, dependencies, lockfiles, workers, and workflow fixtures are
+    untouched.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`, and
+    `git diff --check`.
+  - Remaining follow-up: remaining old raw-device/default-backend execution
+    paths still need removal before the broad auto-mode checklist item can be
+    closed.
 
 **Verification:**
 
