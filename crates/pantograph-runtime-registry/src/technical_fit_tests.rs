@@ -532,6 +532,18 @@ fn selector_rejects_ineligible_explicit_backend_override_without_selection() {
         reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
             && reason.candidate_id.is_none()
     }));
+    assert_eq!(
+        decision.device_diagnostics,
+        vec![RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "llama.cpp cannot execute diffusion image generation".to_string(),
+            device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
+            device_id: Some("cpu".to_string()),
+            runtime_variant_id: Some("llama_cpp/linux-x64/cpu".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+        }]
+    );
 }
 
 #[test]

@@ -653,7 +653,7 @@ pub fn select_runtime_technical_fit(
         return unselected_decision_with_device_diagnostics(
             RuntimeTechnicalFitSelectionMode::ExplicitOverride,
             reasons,
-            explicit_device_unavailable_diagnostics(&normalized),
+            explicit_override_rejection_diagnostics(&normalized, &candidates, override_selection),
         );
     }
 
@@ -924,6 +924,24 @@ fn explicit_device_unavailable_diagnostics(
         runtime_variant_id: None,
         backend_key: None,
     }]
+}
+
+fn explicit_override_rejection_diagnostics(
+    request: &RuntimeTechnicalFitRequest,
+    candidates: &[RuntimeTechnicalFitCandidate],
+    override_selection: &RuntimeTechnicalFitOverride,
+) -> Vec<RuntimeTechnicalFitDeviceDiagnostic> {
+    let explicit_device_diagnostics = explicit_device_unavailable_diagnostics(request);
+    if !explicit_device_diagnostics.is_empty() {
+        return explicit_device_diagnostics;
+    }
+
+    candidates
+        .iter()
+        .filter(|candidate| candidate_matches_override(candidate, override_selection))
+        .min_by(|left, right| compare_candidate_ids(left, right))
+        .map(|candidate| candidate.device_diagnostics.clone())
+        .unwrap_or_default()
 }
 
 fn automatic_no_valid_candidate_diagnostics(

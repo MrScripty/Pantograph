@@ -1493,6 +1493,35 @@ typed diagnostic and the canonical design is fixed.
   - Remaining fixture coverage: Tauri command transport, Python worker, and
     any future persisted technical-fit state still need their own fixtures
     before the broad serde-fixture checklist item can be closed.
+- 2026-05-10 slice: explicit override candidate diagnostics.
+  - Smallest useful vertical slice: preserve bounded diagnostics from the best
+    matching but ineligible explicit override candidate on the unselected
+    runtime-registry decision.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: explicit backend/runtime/model
+    overrides remain unselected when candidate eligibility fails. The selector
+    now returns the candidate's typed incompatibility diagnostics instead of
+    selecting the requested backend, synthesizing an override candidate, or
+    falling back to another backend/device.
+  - Standards/blast-radius gate for runtime-registry override diagnostics:
+    runtime-registry remains selector-policy owner; workflow-service and
+    embedded-runtime already transport device diagnostics; public DTO shape,
+    runtime lifecycle ownership, persisted schemas, frontend behavior,
+    generated files, feature flags, dependencies, lockfiles, workers, and
+    workflow fixtures are untouched.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`, and
+    `git diff --check`.
+  - Remaining follow-up: unmatched explicit runtime/variant/platform requests
+    with no matching candidate still need synthetic bounded diagnostics for
+    cases such as MLX on Linux/Windows once those provider facts exist.
 
 **Verification:**
 

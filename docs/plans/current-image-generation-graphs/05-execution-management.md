@@ -441,6 +441,16 @@ Update during implementation:
   `cargo test -p pantograph-runtime-registry --test technical_fit_contract`,
   `cargo test -p pantograph-runtime-registry technical_fit`, and
   `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by preserving bounded diagnostics from the
+  best matching but ineligible explicit technical-fit override candidate.
+  llama.cpp-for-diffusion style explicit backend requests now return the
+  candidate's `backend_incompatible` diagnostic on the unselected decision
+  instead of only reason codes. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`, and
+  `git diff --check`.
 
 ## Commit Cadence Notes
 
