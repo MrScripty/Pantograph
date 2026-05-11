@@ -138,9 +138,9 @@ contracts below without reintroducing fallback or legacy execution behavior.
 ### Execution Selection
 
 - The single execution backend-key normalization boundary is the future
-  inference planner entry point, scoped by task and artifact. `runtime_hint =
-  "diffusers"` resolves to PyTorch execution only when the task is
-  `image_generation` and the selected artifact kind is `diffusers_bundle`.
+  inference planner entry point, scoped by task and artifact. Graph-visible
+  executable backend intent uses `backend_key = "pytorch"` for diffusion image
+  generation until Pantograph owns a separately registered Diffusers backend.
 - `diffusers` remains a dependency/capability label in runtime capabilities,
   model-library facts, diagnostics, and Pumas evidence. It is not a separate
   Pantograph execution backend in this plan.

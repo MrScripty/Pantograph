@@ -200,10 +200,10 @@ throughput decisions.
   used as the first larger repaired saved workflow. Other diffusion/image
   families should work when Pumas facts, dependencies, and backend support are
   present.
-- The `runtime_hint` for current graph authoring can accept `pytorch` or
-  `diffusers`, but execution resolves both to the PyTorch backend in this
-  slice. `diffusers` remains a dependency/capability label until Pantograph
-  owns a separately registered Diffusers backend.
+- Current graph authoring uses `backend_key = "pytorch"` for executable
+  diffusion/image-generation intent. `diffusers` remains a dependency and
+  capability label until Pantograph owns a separately registered Diffusers
+  backend; it is not a graph-visible backend preference.
 - Stale graph diagnostics are factual validation results, not workflow-run
   diagnostic events unless they occur during submission, admission, or
   execution.

@@ -117,7 +117,7 @@
         "data": {
           "label": "Tiny SD Turbo Image Generation",
           "task_kind": "image_generation",
-          "runtime_hint": "pytorch"
+          "backend_key": "pytorch"
         }
       },
       {

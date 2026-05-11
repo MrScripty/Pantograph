@@ -281,6 +281,11 @@ Update during implementation:
   also exposed and fixed a package-facts text-generation route that could still
   enter the old llama.cpp execution branch from backend hints; prompt-bearing
   package-facts text requests now use the typed gateway path.
+- 2026-05-10: Continued Milestone 5 by removing graph-visible
+  `runtime_hint` from the canonical `llm-inference` descriptor, frontend mock
+  definitions, built-in templates, and the tracked Tiny SD saved workflow.
+  These current graph producers now use `backend_key`; no descriptor alias or
+  saved-workflow compatibility shim was added.
 
 ## Commit Cadence Notes
 
@@ -374,10 +379,10 @@ Worker rules:
 
 ## Recommendations
 
-- Prefer `runtime_hint = "pytorch"` for the first saved Juggernaut workflow
-  for clarity. Accept `runtime_hint = "diffusers"` only through centralized
-  normalization that resolves it to PyTorch execution until there is a
-  separately registered Diffusers backend.
+- Prefer `backend_key = "pytorch"` for the first saved Juggernaut workflow and
+  other executable diffusion image-generation graphs. Keep `diffusers` as
+  package/runtime capability evidence until there is a separately registered
+  Diffusers backend.
 - Keep stale graph diagnostics separate from workflow-run diagnostics unless
   a stale graph reaches submission, admission, or execution. This avoids
   polluting the run ledger with editor/load validation facts.

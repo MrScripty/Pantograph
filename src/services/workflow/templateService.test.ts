@@ -132,7 +132,7 @@ test('tiny sd template uses canonical image-generation inference', () => {
       (node) =>
         node.node_type === 'llm-inference' &&
         node.data?.task_kind === 'image_generation' &&
-        node.data?.runtime_hint === 'diffusers',
+        node.data?.backend_key === 'pytorch',
     ),
     'tiny sd template must use canonical llm-inference',
   );
@@ -185,7 +185,8 @@ test('tracked image-generation workflows use canonical llm inference shape', () 
       `${workflow.metadata.name} must not use retired direct diffusion inference`,
     );
     assert.equal(inferenceNode.data?.task_kind, 'image_generation');
-    assert.equal(inferenceNode.data?.runtime_hint, 'pytorch');
+    assert.equal(inferenceNode.data?.backend_key, 'pytorch');
+    assert.equal(inferenceNode.data?.runtime_hint, undefined);
     assert.equal(
       typeof pumaNode.data?.model_id,
       'string',

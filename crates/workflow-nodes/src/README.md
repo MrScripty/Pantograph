@@ -123,9 +123,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   `vision-analysis`, are not registered built-ins. Saved graph upgrades and
   stale-node diagnostics belong to workflow-service canonicalization and
   node-engine guardrails, not workflow-node descriptor shims.
-- Canonical `llm-inference` declares `task_kind` and `runtime_hint` as
-  optional graph-visible inputs because saved-workflow migration, preflight,
-  and execution already consume those fields as canonical node data.
+- Canonical `llm-inference` declares `task_kind` and `backend_key` as optional
+  graph-visible inputs because current preflight and execution consume those
+  fields as canonical node data. Legacy `runtime_hint` is not a descriptor
+  input or compatibility alias.
 - Direct `diffusion-inference` is retired from the built-in descriptor
   inventory. New image-generation authoring must use canonical
   `llm-inference` with `task_kind = image_generation`; old direct-diffusion

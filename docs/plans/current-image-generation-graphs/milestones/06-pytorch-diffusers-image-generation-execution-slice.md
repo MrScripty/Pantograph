@@ -27,9 +27,10 @@ PyTorch/diffusers and produce a retained image artifact.
   gateway, and workflow runtime preflight mappings so execution selection,
   runtime display, and dependency diagnostics do not each maintain conflicting
   `diffusers` rules.
-- [ ] Add or update centralized normalization tests for graph `runtime_hint =
-  diffusers`, graph `runtime_hint = pytorch`, and Pumas Diffusers package
-  hints.
+- [ ] Add or update centralized normalization tests for graph
+  `backend_key = pytorch` and Pumas Diffusers package hints. `diffusers`
+  remains package/runtime capability evidence, not a graph-visible backend
+  preference.
 - [ ] Ensure `ImageGenerationRequest` is populated from canonical
   `llm-inference` inputs: prompt, negative prompt, width, height, steps,
   guidance scale, seed, scheduler, and image count.

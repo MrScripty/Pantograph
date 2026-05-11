@@ -357,7 +357,7 @@ fn llm_input_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
             ],
             InferencePortPayloadRole::Options,
         ),
-        "task_kind" | "runtime_hint" | "task_options" | "inference_settings" => {
+        "task_kind" | "backend_key" | "task_options" | "inference_settings" => {
             task_role_payloads(&llm_supported_task_ids(), InferencePortPayloadRole::Options)
         }
         "prompt" | "system_prompt" | "context" | "tools" => vec![

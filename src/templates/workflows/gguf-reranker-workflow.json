@@ -88,7 +88,7 @@
           "data": {
             "label": "GGUF Reranker",
             "task_kind": "rerank",
-            "runtime_hint": "llamacpp",
+            "backend_key": "llama_cpp",
             "task_options": {
               "top_k": 3,
               "return_documents": true

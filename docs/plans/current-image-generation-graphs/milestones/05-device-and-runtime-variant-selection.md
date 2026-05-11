@@ -898,6 +898,48 @@ typed diagnostic and the canonical design is fixed.
     because the prompt-bearing shortcut ran before explicit image-generation
     dispatch; the guard was moved after all explicit typed task arms and the
     module was rerun successfully.
+- 2026-05-10 slice: graph-visible `runtime_hint` descriptor removal.
+  - Smallest useful vertical slice: replace the graph/frontend
+    `llm-inference` descriptor input, mocks, built-in templates, and tracked
+    Tiny SD saved workflow data from legacy `runtime_hint` to canonical
+    `backend_key`.
+  - Allowed write set:
+    `crates/workflow-nodes/src/processing/inference.rs`,
+    `crates/workflow-nodes/src/contracts.rs`,
+    `crates/workflow-nodes/src/README.md`,
+    `packages/svelte-graph/src/backends/MockWorkflowBackend.ts`,
+    `src/services/workflow/mocks.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    `src/services/workflow/templateService.test.ts`,
+    `src/templates/workflows/tiny-sd-turbo-text-to-image.json`,
+    `src/templates/workflows/gguf-reranker-workflow.json`,
+    `.pantograph/workflows/tiny-sd-turbo-diffusion.json`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: no `runtime_hint` alias or descriptor
+    compatibility port was retained. Executable diffusion image-generation
+    graph intent now uses `backend_key = "pytorch"`; `diffusers` remains
+    package/runtime capability evidence, not a graph-visible backend
+    preference.
+  - Standards/blast-radius gate: workflow-nodes remains the Rust descriptor
+    owner, frontend mocks/tests remain frontend-only contract fixtures, and
+    saved/template workflow edits are intentional current-shape fixture
+    updates. No generated files, lockfiles, feature flags, dependencies,
+    sqlite state, worker execution, or runtime process ownership changed.
+  - Discovered issue fixed in slice: focused Node template verification failed
+    after template updates because tracked `.pantograph` Tiny SD workflow data
+    still persisted `runtime_hint`; the saved workflow fixture was rewritten to
+    `backend_key`.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p workflow-nodes --lib inference`,
+    `node --experimental-strip-types --test src/services/workflow/WorkflowService.commands.test.ts src/services/workflow/templateService.test.ts`,
+    `npm run typecheck`,
+    no-match search for runtime-hint descriptor/template data in the touched
+    Rust/frontend/template/workflow scopes except explicit negative assertions
+    and README history, and `git diff --check`.
+  - Verification deviation: the first focused Node command failed
+    `templateService.test.ts` because `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
+    still used `runtime_hint`; it was updated and the same command passed.
 
 **Verification:**
 
