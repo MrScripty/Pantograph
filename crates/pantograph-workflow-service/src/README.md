@@ -162,6 +162,8 @@ executor, the service fails closed.
   as backend requirements. Current workflow backend requirements must come from
   explicit backend/package facts until typed backend preference intent replaces
   raw workflow strings.
+- Graph edit helpers and KV-cache memory-impact summaries do not treat legacy
+  `runtime_hint` fields as current runtime/backend signals.
 - Host calls that load/unload runtimes occur outside session-store locks.
 - Trace stores own canonical event timestamps, idempotent terminal replay, and
   retry/reset behavior for repeated execution ids.

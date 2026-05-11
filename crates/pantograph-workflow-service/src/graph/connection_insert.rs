@@ -88,7 +88,6 @@ fn edge_insert_input_priority(port: &PortDefinition) -> u8 {
     match port.id.as_str() {
         "prompt" => 0,
         "task_kind"
-        | "runtime_hint"
         | "model"
         | "model_name"
         | "model_id"

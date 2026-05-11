@@ -692,6 +692,35 @@ typed diagnostic and the canonical design is fixed.
     helper-test import, and the old lifecycle test expectation that the helper
     starts llama.cpp automatically. Formatting, the import, and the test
     expectation were fixed before rerunning verification.
+- 2026-05-10 slice: workflow graph helper `runtime_hint` signal removal.
+  - Smallest useful vertical slice: remove `runtime_hint` from workflow-service
+    graph edit input-priority metadata and KV-cache memory-impact
+    backend-change detection, then update focused fixtures to use
+    `backend_key`.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/graph/connection_insert.rs`,
+    `crates/pantograph-workflow-service/src/graph/memory_impact.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: workflow-service graph helpers no
+    longer treat retired `runtime_hint` fields as current runtime/backend
+    signals or preferred connection targets. No compatibility alias is added.
+  - Standards/blast-radius gate: workflow-service remains the graph helper and
+    memory-impact owner; public DTO shape, runtime lifecycle, persisted schema,
+    frontend behavior, generated files, feature flags, dependencies, lockfiles,
+    path/resource access, and worker execution are unchanged; test isolation
+    uses focused workflow-service graph memory-impact tests.
+  - Discovered follow-up: node-engine and embedded-runtime execution request
+    contracts still parse `runtime_hint`; those paths cross execution
+    ownership and require separate replacement slices.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service graph::memory_impact`,
+    no-match search for `runtime_hint`, `runtimeHint`, and
+    `runtime_hint_details` in the touched graph helper files, and
+    `git diff --check`.
+  - Deviation: the first formatting check failed on one rustfmt line wrap.
+    `cargo fmt --all` was run and verification was repeated successfully.
 
 **Verification:**
 

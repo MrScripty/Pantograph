@@ -254,6 +254,10 @@ Update during implementation:
   already active, session load now fails closed with a runtime diagnostic until
   the canonical runtime/device decision path supplies a selected runtime and
   device.
+- 2026-05-10: Continued Milestone 5 by removing workflow-service graph helper
+  special handling for legacy `runtime_hint`. Edge insert prioritization and
+  KV-cache memory-impact backend-change detection now use current backend/model
+  fields instead of treating `runtime_hint` as a runtime/backend signal.
 
 ## Commit Cadence Notes
 

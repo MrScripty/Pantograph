@@ -198,10 +198,7 @@ fn kv_capable_node_data_change_reason(
         return Some("model_changed".to_string());
     }
 
-    if tracked_value_changed(before_node, after_node, &["runtime_hint"])
-        || tracked_value_changed(before_node, after_node, &["runtimeHint"])
-        || tracked_value_changed(before_node, after_node, &["runtime_hint_details"])
-        || tracked_value_changed(before_node, after_node, &["backend_key"])
+    if tracked_value_changed(before_node, after_node, &["backend_key"])
         || tracked_value_changed(before_node, after_node, &["environment_ref"])
         || tracked_value_changed(before_node, after_node, &["device"])
     {
@@ -372,7 +369,7 @@ mod tests {
                     position: Position { x: 120.0, y: 0.0 },
                     data: serde_json::json!({
                         "task_kind": "text_generation",
-                        "runtime_hint": "llamacpp",
+                        "backend_key": "llama_cpp",
                         "pumas_model_ref": {
                             "model_id": "llm/a",
                             "selected_artifact_path": "/models/a.gguf"
@@ -637,8 +634,7 @@ mod tests {
     fn kv_capable_backend_change_uses_runtime_backend_changed_reason() {
         let before = sample_kv_graph();
         let mut after = sample_kv_graph();
-        after.find_node_mut("llm").expect("llm").data["runtime_hint"] =
-            serde_json::json!("transformers_pytorch");
+        after.find_node_mut("llm").expect("llm").data["backend_key"] = serde_json::json!("pytorch");
 
         let impact = graph_memory_impact_from_graph_change(&before, &after, &["llm".to_string()])
             .expect("impact");
