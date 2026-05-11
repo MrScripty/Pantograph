@@ -290,6 +290,10 @@ export function schedulerSelectedRuntimeFilterOptions(runs: RunListProjectionRec
   return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_runtime_id)));
 }
 
+export function schedulerSelectedDeviceClassFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_device_class)));
+}
+
 export function schedulerSelectedDeviceFilterOptions(runs: RunListProjectionRecord[]): string[] {
   return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_device_id)));
 }
@@ -399,6 +403,11 @@ export function filterAndSortSchedulerRuns(
     )
     .filter(
       (run) =>
+        filters.selectedDeviceClass === 'all' ||
+        formatSchedulerPlacementLabel(run.selected_device_class) === filters.selectedDeviceClass,
+    )
+    .filter(
+      (run) =>
         filters.selectedDevice === 'all' ||
         formatSchedulerPlacementLabel(run.selected_device_id) === filters.selectedDevice,
     )
@@ -441,6 +450,9 @@ export function buildSchedulerRunListQuery(
   }
   if (isAssignedFilterValue(filters.selectedRuntime)) {
     request.selected_runtime_id = filters.selectedRuntime;
+  }
+  if (isAssignedFilterValue(filters.selectedDeviceClass)) {
+    request.selected_device_class = filters.selectedDeviceClass;
   }
   if (isAssignedFilterValue(filters.selectedDevice)) {
     request.selected_device_id = filters.selectedDevice;

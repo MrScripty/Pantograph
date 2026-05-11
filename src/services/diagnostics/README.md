@@ -96,6 +96,9 @@ panel because no active TypeScript boundary consumes them.
 - Run-list and run-detail DTOs carry backend-projected selected device class
   and selected device id separately. Frontend consumers must render those typed
   fields directly and must not derive the device class from a device id string.
+- Run-list query DTOs include a typed `selected_device_class` filter. Frontend
+  controls must forward that field to the backend projection rather than
+  filtering device classes by parsing selected device id strings.
 
 ## Revisit Triggers
 - Rust-to-TypeScript DTO generation replaces manual interface mirrors.

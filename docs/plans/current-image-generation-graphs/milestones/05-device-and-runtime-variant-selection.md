@@ -1600,6 +1600,36 @@ typed diagnostic and the canonical design is fixed.
     selected device id, and selected network node only; adding a selected
     device-class backend query filter should be a separate query-contract
     slice if needed.
+- 2026-05-10 slice: scheduler selected-device class query filter.
+  - Smallest useful vertical slice: add a frontend scheduler Device Class
+    filter that forwards the backend-supported `selected_device_class`
+    run-list query field and filters local presentation rows from the typed
+    projection field.
+  - Allowed write set:
+    `src/services/diagnostics/types.ts`,
+    `src/services/diagnostics/README.md`,
+    `src/stores/schedulerRunListStore.ts`,
+    `src/stores/schedulerRunListStore.test.ts`,
+    `src/components/workbench/SchedulerPage.svelte`,
+    `src/components/workbench/schedulerPagePresenters.ts`,
+    `src/components/workbench/schedulerPagePresenters.test.ts`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the filter sends typed
+    `selected_device_class` to the backend query and uses typed run-list
+    projection fields for local option/filter state. It does not derive device
+    class from `selected_device_id`, raw scheduler payload JSON, runtime
+    settings, or backend config strings.
+  - Standards/blast-radius gate for scheduler query presentation: no backend
+    contracts, generated files, persisted schemas, lockfiles, dependencies,
+    polling/subscription lifecycles, or scheduler command behavior changed;
+    tests use the existing Node store/presenter harness.
+  - Verification passed:
+    `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
+    `node --experimental-strip-types --test src/stores/schedulerRunListStore.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: backend run-list facets still expose selected device
+    id rather than selected device class; adding a backend facet kind is a
+    separate ledger/query contract slice.
 
 **Verification:**
 

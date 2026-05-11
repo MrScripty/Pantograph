@@ -51,6 +51,7 @@
     schedulerClientSessionFilterOptions,
     schedulerPolicyFilterOptions,
     schedulerRetentionFilterOptions,
+    schedulerSelectedDeviceClassFilterOptions,
     schedulerSelectedDeviceFilterOptions,
     schedulerSelectedNetworkNodeFilterOptions,
     schedulerSelectedRuntimeFilterOptions,
@@ -113,6 +114,7 @@
   let clientSessionOptions = $derived(schedulerClientSessionFilterOptions(runs));
   let bucketOptions = $derived(schedulerBucketFilterOptions(runs));
   let selectedRuntimeOptions = $derived(schedulerSelectedRuntimeFilterOptions(runs));
+  let selectedDeviceClassOptions = $derived(schedulerSelectedDeviceClassFilterOptions(runs));
   let selectedDeviceOptions = $derived(schedulerSelectedDeviceFilterOptions(runs));
   let selectedNetworkNodeOptions = $derived(schedulerSelectedNetworkNodeFilterOptions(runs));
   let acceptedDateOptions = $derived(schedulerAcceptedDateFilterOptions(runs));
@@ -687,6 +689,22 @@
         <option value="all">all</option>
         {#each selectedRuntimeOptions as selectedRuntime (selectedRuntime)}
           <option value={selectedRuntime}>{selectedRuntime}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-device-class-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Device Class
+      </label>
+      <select
+        id="scheduler-device-class-filter"
+        value={$schedulerRunFilters.selectedDeviceClass}
+        onchange={(event) => setSchedulerRunFilters({ selectedDeviceClass: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each selectedDeviceClassOptions as selectedDeviceClass (selectedDeviceClass)}
+          <option value={selectedDeviceClass}>{selectedDeviceClass}</option>
         {/each}
       </select>
     </div>

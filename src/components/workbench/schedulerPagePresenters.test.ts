@@ -39,6 +39,7 @@ import {
   schedulerPolicyFilterOptions,
   schedulerRetentionFilterOptions,
   schedulerRunSupportsQueueControls,
+  schedulerSelectedDeviceClassFilterOptions,
   schedulerSelectedDeviceFilterOptions,
   schedulerSelectedNetworkNodeFilterOptions,
   schedulerSelectedRuntimeFilterOptions,
@@ -264,6 +265,7 @@ test('filterAndSortSchedulerRuns filters by status and search text', () => {
     clientSession: 'all',
     bucket: 'all',
     selectedRuntime: 'all',
+    selectedDeviceClass: 'all',
     selectedDevice: 'all',
     selectedNetworkNode: 'all',
     acceptedDate: 'all',
@@ -294,6 +296,7 @@ test('filterAndSortSchedulerRuns searches client scope facts', () => {
       clientSession: 'all',
       bucket: 'all',
       selectedRuntime: 'all',
+      selectedDeviceClass: 'all',
       selectedDevice: 'all',
       selectedNetworkNode: 'all',
       acceptedDate: 'all',
@@ -320,6 +323,7 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
       clientSession: 'all',
       bucket: 'all',
       selectedRuntime: 'all',
+      selectedDeviceClass: 'all',
       selectedDevice: 'all',
       selectedNetworkNode: 'all',
       acceptedDate: 'all',
@@ -337,6 +341,7 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
       clientSession: 'all',
       bucket: 'all',
       selectedRuntime: 'all',
+      selectedDeviceClass: 'all',
       selectedDevice: 'all',
       selectedNetworkNode: 'all',
       acceptedDate: 'all',
@@ -388,6 +393,7 @@ test('scheduler policy filters use explicit projection labels', () => {
   assert.deepEqual(schedulerClientSessionFilterOptions(runs), ['Unassigned', 'session-a', 'session-b']);
   assert.deepEqual(schedulerBucketFilterOptions(runs), ['Unassigned', 'bucket-a', 'bucket-b']);
   assert.deepEqual(schedulerSelectedRuntimeFilterOptions(runs), ['Unassigned', 'runtime-a', 'runtime-b']);
+  assert.deepEqual(schedulerSelectedDeviceClassFilterOptions(runs), ['Unassigned', 'cuda', 'metal']);
   assert.deepEqual(schedulerSelectedDeviceFilterOptions(runs), ['Unassigned', 'device-a', 'device-b']);
   assert.deepEqual(schedulerSelectedNetworkNodeFilterOptions(runs), [
     'Unassigned',
@@ -405,6 +411,7 @@ test('scheduler policy filters use explicit projection labels', () => {
       clientSession: 'session-b',
       bucket: 'bucket-b',
       selectedRuntime: 'runtime-b',
+      selectedDeviceClass: 'metal',
       selectedDevice: 'device-b',
       selectedNetworkNode: 'network-node-b',
       acceptedDate: '1970-01-03',
@@ -480,6 +487,7 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
         clientSession: 'session-a',
         bucket: 'bucket-a',
         selectedRuntime: 'runtime-a',
+        selectedDeviceClass: 'cuda',
         selectedDevice: 'device-a',
         selectedNetworkNode: 'network-node-a',
         acceptedDate: '1970-01-02',
@@ -496,6 +504,7 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
       client_session_id: 'session-a',
       bucket_id: 'bucket-a',
       selected_runtime_id: 'runtime-a',
+      selected_device_class: 'cuda',
       selected_device_id: 'device-a',
       selected_network_node_id: 'network-node-a',
       accepted_at_from_ms: 86_400_000,
@@ -513,6 +522,7 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
         clientSession: 'all',
         bucket: 'all',
         selectedRuntime: 'Unassigned',
+        selectedDeviceClass: 'Unassigned',
         selectedDevice: 'all',
         selectedNetworkNode: 'all',
         acceptedDate: 'all',

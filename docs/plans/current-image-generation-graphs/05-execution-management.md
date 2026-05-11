@@ -474,6 +474,14 @@ Update during implementation:
   deriving class from device id strings. Verification passed:
   `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding a frontend scheduler Device Class
+  filter that forwards the backend-supported `selected_device_class` run-list
+  query field. The store and presenter use the typed projection field for
+  option/filter state and do not derive class from selected device id strings
+  or scheduler payload JSON. Verification passed:
+  `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
+  `node --experimental-strip-types --test src/stores/schedulerRunListStore.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 

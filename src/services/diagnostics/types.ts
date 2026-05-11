@@ -328,6 +328,7 @@ export interface WorkflowRunListQueryRequest {
   scheduler_policy_id?: string | null;
   retention_policy_id?: string | null;
   selected_runtime_id?: string | null;
+  selected_device_class?: string | null;
   selected_device_id?: string | null;
   selected_network_node_id?: string | null;
   client_id?: string | null;
