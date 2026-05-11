@@ -51,6 +51,7 @@
     schedulerClientSessionFilterOptions,
     schedulerPolicyFilterOptions,
     schedulerRetentionFilterOptions,
+    schedulerSelectedBackendFilterOptions,
     schedulerSelectedDeviceClassFilterOptions,
     schedulerSelectedDeviceFilterOptions,
     schedulerSelectedNetworkNodeFilterOptions,
@@ -114,6 +115,7 @@
   let clientSessionOptions = $derived(schedulerClientSessionFilterOptions(runs));
   let bucketOptions = $derived(schedulerBucketFilterOptions(runs));
   let selectedRuntimeOptions = $derived(schedulerSelectedRuntimeFilterOptions(runs));
+  let selectedBackendOptions = $derived(schedulerSelectedBackendFilterOptions(runs));
   let selectedDeviceClassOptions = $derived(schedulerSelectedDeviceClassFilterOptions(runs));
   let selectedDeviceOptions = $derived(schedulerSelectedDeviceFilterOptions(runs));
   let selectedNetworkNodeOptions = $derived(schedulerSelectedNetworkNodeFilterOptions(runs));
@@ -689,6 +691,22 @@
         <option value="all">all</option>
         {#each selectedRuntimeOptions as selectedRuntime (selectedRuntime)}
           <option value={selectedRuntime}>{selectedRuntime}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-backend-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Backend
+      </label>
+      <select
+        id="scheduler-backend-filter"
+        value={$schedulerRunFilters.selectedBackend}
+        onchange={(event) => setSchedulerRunFilters({ selectedBackend: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each selectedBackendOptions as selectedBackend (selectedBackend)}
+          <option value={selectedBackend}>{selectedBackend}</option>
         {/each}
       </select>
     </div>

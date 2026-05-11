@@ -103,6 +103,9 @@ panel because no active TypeScript boundary consumes them.
 - Run-list query DTOs include a typed `selected_device_class` filter. Frontend
   controls must forward that field to the backend projection rather than
   filtering device classes by parsing selected device id strings.
+- Run-list query DTOs include a typed `selected_backend_key` filter. Frontend
+  controls must forward that field to the backend projection instead of
+  deriving backend choice from runtime ids or scheduler payload JSON.
 - Diagnostics comparison controls include selected device class as its own
   typed filter so comparisons can separate class-level placement from concrete
   device ids without parsing or splitting device id strings.

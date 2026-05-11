@@ -514,6 +514,18 @@ Update during implementation:
   `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_inference_diagnostic_selected_facts`,
   `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding `selected_backend_key` as a
+  diagnostics-ledger/workflow-service run-list query filter and wiring the
+  scheduler Backend filter through typed frontend store and presenter state.
+  The query and local filter path use typed `selected_backend_key` projection
+  fields and do not infer backend choice from runtime ids, selected device ids,
+  scheduler payload JSON, runtime settings, or backend config strings.
+  Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-diagnostics-ledger run_list_projection_drains_lifecycle_events_incrementally`,
+  `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+  `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 

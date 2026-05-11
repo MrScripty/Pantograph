@@ -290,6 +290,10 @@ export function schedulerSelectedRuntimeFilterOptions(runs: RunListProjectionRec
   return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_runtime_id)));
 }
 
+export function schedulerSelectedBackendFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_backend_key)));
+}
+
 export function schedulerSelectedDeviceClassFilterOptions(runs: RunListProjectionRecord[]): string[] {
   return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_device_class)));
 }
@@ -403,6 +407,11 @@ export function filterAndSortSchedulerRuns(
     )
     .filter(
       (run) =>
+        filters.selectedBackend === 'all' ||
+        formatSchedulerPlacementLabel(run.selected_backend_key) === filters.selectedBackend,
+    )
+    .filter(
+      (run) =>
         filters.selectedDeviceClass === 'all' ||
         formatSchedulerPlacementLabel(run.selected_device_class) === filters.selectedDeviceClass,
     )
@@ -450,6 +459,9 @@ export function buildSchedulerRunListQuery(
   }
   if (isAssignedFilterValue(filters.selectedRuntime)) {
     request.selected_runtime_id = filters.selectedRuntime;
+  }
+  if (isAssignedFilterValue(filters.selectedBackend)) {
+    request.selected_backend_key = filters.selectedBackend;
   }
   if (isAssignedFilterValue(filters.selectedDeviceClass)) {
     request.selected_device_class = filters.selectedDeviceClass;
@@ -513,6 +525,7 @@ function schedulerRunMatchesSearch(run: RunListProjectionRecord, search: string)
     run.bucket_id,
     run.workflow_execution_session_id,
     run.selected_runtime_id,
+    run.selected_backend_key,
     run.selected_device_class,
     run.selected_device_id,
     run.selected_network_node_id,

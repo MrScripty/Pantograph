@@ -142,6 +142,8 @@ pub struct WorkflowRunListQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_class: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_id: Option<String>,
@@ -1596,6 +1598,7 @@ impl WorkflowRunListQueryRequest {
             scheduler_policy_id: self.scheduler_policy_id,
             retention_policy_id: self.retention_policy_id,
             selected_runtime_id: self.selected_runtime_id,
+            selected_backend_key: self.selected_backend_key,
             selected_device_class: self.selected_device_class,
             selected_device_id: self.selected_device_id,
             selected_network_node_id: self.selected_network_node_id,

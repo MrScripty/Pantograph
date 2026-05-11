@@ -713,6 +713,7 @@ fn diagnostic_event_ledger_projects_fatal_error_as_failed_run() {
             scheduler_policy_id: None,
             retention_policy_id: None,
             selected_runtime_id: None,
+            selected_backend_key: None,
             selected_device_class: None,
             selected_device_id: None,
             selected_network_node_id: None,
@@ -2013,6 +2014,17 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         runtime_scoped[0].workflow_run_id.as_str(),
         "workflow_run_alpha"
     );
+    let backend_scoped = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            selected_backend_key: Some("pytorch".to_string()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list backend filter loads");
+    assert_eq!(backend_scoped.len(), 1);
+    assert_eq!(
+        backend_scoped[0].workflow_run_id.as_str(),
+        "workflow_run_alpha"
+    );
 
     let mut second_snapshot = sample_run_snapshot_event("workflow_run_beta");
     second_snapshot.occurred_at_ms = 1_050;
@@ -2120,6 +2132,11 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
     assert!(facets.iter().any(|facet| {
         facet.facet_kind == RunListFacetKind::SelectedRuntime
             && facet.facet_value == "llama_cpp"
+            && facet.run_count == 1
+    }));
+    assert!(facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::SelectedBackend
+            && facet.facet_value == "pytorch"
             && facet.run_count == 1
     }));
 }

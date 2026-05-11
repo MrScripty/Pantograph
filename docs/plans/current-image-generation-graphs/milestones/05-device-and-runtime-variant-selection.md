@@ -1744,6 +1744,49 @@ typed diagnostic and the canonical design is fixed.
     selected-backend filter; adding it should be a separate backend/frontend
     query-contract slice if scheduler or diagnostics pages need server-side
     backend filtering.
+- 2026-05-10 slice: scheduler selected-backend query filter.
+  - Smallest useful vertical slice: add `selected_backend_key` to the backend
+    run-list query contract and wire the scheduler Backend filter through the
+    existing typed store, presenter, and page path.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+    `crates/pantograph-workflow-service/tests/contract.rs`,
+    `src/services/diagnostics/types.ts`,
+    `src/services/diagnostics/README.md`,
+    `src/stores/schedulerRunListStore.ts`,
+    `src/stores/schedulerRunListStore.test.ts`,
+    `src/components/workbench/SchedulerPage.svelte`,
+    `src/components/workbench/schedulerPagePresenters.ts`,
+    `src/components/workbench/schedulerPagePresenters.test.ts`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the backend query and frontend filter
+    forward typed `selected_backend_key`, and local scheduler filters read typed
+    `selected_backend_key` projection rows. The slice does not infer backend
+    choice from runtime ids, selected device ids, scheduler payload JSON,
+    runtime settings, or backend config strings.
+  - Standards/blast-radius gate for ledger/workflow-service/frontend query
+    contract: persisted projection schema already owns `selected_backend_key`;
+    no migration, generated files, lockfiles, dependencies,
+    polling/subscription lifecycle, worker path, or workflow fixture changed;
+    tests use focused Rust contract/projection coverage plus the existing Node
+    store/presenter harness.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-diagnostics-ledger run_list_projection_drains_lifecycle_events_incrementally`,
+    `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+    `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Verification deviations fixed during the slice: the first focused Rust test
+    passes exposed two exhaustive DTO initializers that needed the new optional
+    `selected_backend_key` field, and the workflow-service JSON contract
+    expected request was updated to include the typed filter.
+  - Remaining follow-up: selected runtime variant facts remain a separate
+    backend-owned source-of-truth slice; diagnostics comparison can already use
+    selected-backend facets, and scheduler/run-list queries now support
+    server-side selected-backend filtering.
 
 **Verification:**
 
