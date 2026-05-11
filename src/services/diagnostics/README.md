@@ -63,6 +63,9 @@ panel because no active TypeScript boundary consumes them.
   projections. Consumers should use those counts for mixed-version, policy,
   and selected placement summaries instead of rebuilding them from raw ledger
   events or sampled pages.
+- Run-list facets include selected backend separately from selected runtime so
+  consumers can compare backend placement without inferring backend choice from
+  runtime ids.
 - Run-list and run-detail DTOs carry scheduler-selected runtime, device class,
   device id, and network-node fields when the backend has placement facts.
   Consumers should use those typed fields and facets for placement comparison

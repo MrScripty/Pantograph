@@ -505,6 +505,15 @@ Update during implementation:
   `npm run typecheck`, and `git diff --check`. A selected-runtime-variant
   follow-up remains because current active llama.cpp runtime descriptors do not
   yet expose a backend-owned runtime variant id.
+- 2026-05-10: Continued Milestone 5 by adding `selected_backend_key` as a
+  diagnostics-ledger run-list facet kind and rendering diagnostics comparison
+  counts from that backend facet. The facet groups the typed projection column
+  and does not derive backend choice from runtime ids, selected device ids, or
+  raw payload JSON. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_inference_diagnostic_selected_facts`,
+  `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 

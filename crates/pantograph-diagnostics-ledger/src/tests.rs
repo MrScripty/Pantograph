@@ -1229,6 +1229,11 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
             && facet.facet_value == "cuda"
             && facet.run_count == 1
     }));
+    assert!(facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::SelectedBackend
+            && facet.facet_value == "pytorch"
+            && facet.run_count == 1
+    }));
 
     let detail_state = ledger
         .drain_run_detail_projection(10)

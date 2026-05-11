@@ -286,6 +286,7 @@ test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', ()
       scheduler_policy_id: 'policy-a',
       retention_policy_id: 'retention-b',
       selected_runtime_id: 'runtime-a',
+      selected_backend_key: 'llama_cpp',
       selected_device_class: 'cuda',
       selected_device_id: 'device-b',
       selected_network_node_id: 'network-a',
@@ -301,6 +302,7 @@ test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', ()
       scheduler_policy_id: 'policy-b',
       retention_policy_id: 'retention-a',
       selected_runtime_id: 'runtime-b',
+      selected_backend_key: 'pytorch',
       selected_device_class: 'metal',
       selected_device_id: 'device-a',
       selected_network_node_id: 'network-b',
@@ -323,6 +325,7 @@ test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', ()
   assert.equal(summary.rows.find((row) => row.label === 'Scheduler Policy')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Retention Policy')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime')?.count, 2);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Backend')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Device Class')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Device')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Network Node')?.count, 2);
@@ -360,6 +363,8 @@ test('buildDiagnosticsFacetSummary prefers backend projection facets when provid
     { facet_kind: 'retention_policy', facet_value: 'retention-a', run_count: 15 },
     { facet_kind: 'selected_runtime', facet_value: 'runtime-a', run_count: 14 },
     { facet_kind: 'selected_runtime', facet_value: 'runtime-b', run_count: 1 },
+    { facet_kind: 'selected_backend', facet_value: 'llama_cpp', run_count: 12 },
+    { facet_kind: 'selected_backend', facet_value: 'pytorch', run_count: 3 },
     { facet_kind: 'selected_device_class', facet_value: 'cuda', run_count: 13 },
     { facet_kind: 'selected_device_class', facet_value: 'metal', run_count: 2 },
     { facet_kind: 'selected_device', facet_value: 'device-a', run_count: 15 },
@@ -371,6 +376,8 @@ test('buildDiagnosticsFacetSummary prefers backend projection facets when provid
   assert.equal(summary.rows.find((row) => row.label === 'Status')?.total, 15);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime')?.count, 14);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime')?.total, 15);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Backend')?.count, 12);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Backend')?.total, 15);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Device Class')?.count, 13);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Device Class')?.total, 15);
   assert.match(summary.mixedVersionWarning ?? '', /2 workflow versions/);

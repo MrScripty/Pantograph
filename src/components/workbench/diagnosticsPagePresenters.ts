@@ -454,6 +454,15 @@ export function buildDiagnosticsFacetSummary(
       'selected_runtime',
     ),
     buildDiagnosticsFacetRow(
+      'Selected Backend',
+      optionalFacetLabel(activeRun.selected_backend_key),
+      scopedRuns,
+      (run) => optionalFacetLabel(run.selected_backend_key),
+      total,
+      backendFacets,
+      'selected_backend',
+    ),
+    buildDiagnosticsFacetRow(
       'Selected Device Class',
       optionalFacetLabel(activeRun.selected_device_class),
       scopedRuns,

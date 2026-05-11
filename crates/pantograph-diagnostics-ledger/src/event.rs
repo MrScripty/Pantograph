@@ -2365,6 +2365,7 @@ pub enum RunListFacetKind {
     SchedulerPolicy,
     RetentionPolicy,
     SelectedRuntime,
+    SelectedBackend,
     SelectedDeviceClass,
     SelectedDevice,
     SelectedNetworkNode,
