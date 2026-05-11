@@ -27,6 +27,7 @@ pub enum ManagedRuntimeHistoryEventKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimeInstallHistoryEntry {
+    pub runtime_variant_id: RuntimeVariantId,
     pub event: ManagedRuntimeHistoryEventKind,
     pub version: Option<String>,
     pub at_ms: u64,
@@ -52,6 +53,7 @@ pub struct ManagedRuntimePersistedVersion {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimePersistedJobArtifact {
+    pub runtime_variant_id: RuntimeVariantId,
     pub version: String,
     pub archive_name: String,
     pub archive_path: String,
@@ -244,6 +246,7 @@ fn reconcile_interrupted_jobs(state: &mut ManagedRuntimePersistedState) -> bool 
         runtime
             .install_history
             .push(ManagedRuntimeInstallHistoryEntry {
+                runtime_variant_id: job.runtime_variant_id.clone(),
                 event: ManagedRuntimeHistoryEventKind::RecoveryReconciled,
                 version: None,
                 at_ms: current_unix_timestamp_ms(),
@@ -283,6 +286,10 @@ mod tests {
         ManagedRuntimePersistedState, ManagedRuntimeSelectionState,
     };
     use std::fs;
+
+    fn llama_cpu_variant_id() -> crate::RuntimeVariantId {
+        crate::RuntimeVariantId::parse("llama_cpp.cpu").expect("valid runtime variant")
+    }
 
     #[test]
     fn load_returns_default_when_state_file_is_missing() {
@@ -375,6 +382,7 @@ mod tests {
                 versions: Vec::new(),
                 selection: ManagedRuntimeSelectionState::default(),
                 active_job: Some(ManagedRuntimeJobStatus {
+                    runtime_variant_id: llama_cpu_variant_id(),
                     state: ManagedRuntimeJobState::Downloading,
                     status: "Downloading".to_string(),
                     current: 5,
@@ -384,6 +392,7 @@ mod tests {
                     error: None,
                 }),
                 active_job_artifact: Some(ManagedRuntimePersistedJobArtifact {
+                    runtime_variant_id: llama_cpu_variant_id(),
                     version: "b8248".to_string(),
                     archive_name: "llama-b8248.tar.gz".to_string(),
                     archive_path: temp_dir
@@ -420,6 +429,7 @@ mod tests {
                 versions: Vec::new(),
                 selection: ManagedRuntimeSelectionState::default(),
                 active_job: Some(ManagedRuntimeJobStatus {
+                    runtime_variant_id: llama_cpu_variant_id(),
                     state: ManagedRuntimeJobState::Downloading,
                     status: "Downloading".to_string(),
                     current: 5,
@@ -429,6 +439,7 @@ mod tests {
                     error: None,
                 }),
                 active_job_artifact: Some(ManagedRuntimePersistedJobArtifact {
+                    runtime_variant_id: llama_cpu_variant_id(),
                     version: "b8248".to_string(),
                     archive_name: "llama-b8248.tar.gz".to_string(),
                     archive_path: temp_dir

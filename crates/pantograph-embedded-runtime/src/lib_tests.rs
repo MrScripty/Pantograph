@@ -455,6 +455,8 @@ fn persist_interrupted_runtime_job(app_data_dir: &Path) {
             versions: Vec::new(),
             selection: inference::ManagedRuntimeSelectionState::default(),
             active_job: Some(inference::ManagedRuntimeJobStatus {
+                runtime_variant_id: inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                    .expect("valid runtime variant"),
                 state: inference::ManagedRuntimeJobState::Downloading,
                 status: "Downloading".to_string(),
                 current: 5,

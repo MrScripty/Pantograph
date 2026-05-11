@@ -36,6 +36,7 @@ pub struct ManagedRuntimeManagerRuntimeView {
 #[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimeManagerProgress {
     pub runtime_id: ManagedBinaryId,
+    pub runtime_variant_id: inference::RuntimeVariantId,
     pub status: String,
     pub current: u64,
     pub total: u64,
@@ -179,6 +180,7 @@ fn project_progress(
 ) -> ManagedRuntimeManagerProgress {
     ManagedRuntimeManagerProgress {
         runtime_id,
+        runtime_variant_id: progress.runtime_variant_id,
         status: progress.status,
         current: progress.current,
         total: progress.total,
@@ -231,6 +233,8 @@ mod tests {
             active_job: None,
             active_job_artifact: None,
             install_history: vec![ManagedRuntimeInstallHistoryEntry {
+                runtime_variant_id: inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                    .expect("valid runtime variant"),
                 event: ManagedRuntimeHistoryEventKind::Installed,
                 version: Some("b8248".to_string()),
                 at_ms: 42,
@@ -330,6 +334,8 @@ mod tests {
         let progress = project_progress(
             ManagedBinaryId::LlamaCpp,
             DownloadProgress {
+                runtime_variant_id: inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                    .expect("valid runtime variant"),
                 status: "Downloading".to_string(),
                 current: 64,
                 total: 128,
@@ -343,6 +349,8 @@ mod tests {
             progress,
             ManagedRuntimeManagerProgress {
                 runtime_id: ManagedBinaryId::LlamaCpp,
+                runtime_variant_id: inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                    .expect("valid runtime variant"),
                 status: "Downloading".to_string(),
                 current: 64,
                 total: 128,

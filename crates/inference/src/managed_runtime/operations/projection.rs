@@ -52,6 +52,7 @@ fn projected_job_artifact_status(
 ) -> Option<ManagedRuntimeJobArtifactStatus> {
     let artifact = runtime.active_job_artifact.as_ref()?;
     Some(ManagedRuntimeJobArtifactStatus {
+        runtime_variant_id: artifact.runtime_variant_id.clone(),
         version: artifact.version.clone(),
         archive_name: artifact.archive_name.clone(),
         downloaded_bytes: artifact.downloaded_bytes,

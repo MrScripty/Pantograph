@@ -10,6 +10,7 @@ use super::super::state::{
     ManagedRuntimePersistedRuntime, ManagedRuntimePersistedVersion,
 };
 use super::{take_cancellation_request, take_pause_request};
+use crate::RuntimeVariantId;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -38,12 +39,14 @@ pub(super) fn persist_failed_job(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     version: &str,
+    runtime_variant_id: RuntimeVariantId,
     status: String,
     error: String,
 ) -> Result<(), String> {
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: runtime_variant_id.clone(),
         state: ManagedRuntimeJobState::Failed,
         status,
         current: 0,
@@ -58,7 +61,7 @@ pub(super) fn persist_failed_job(
         ManagedRuntimePersistedVersion {
             version: version.to_string(),
             runtime_key: Some(id.key().to_string()),
-            runtime_variant_id: Some(definition(id).default_runtime_variant_id()),
+            runtime_variant_id: Some(runtime_variant_id.clone()),
             platform_key: Some(definition(id).platform_key().to_string()),
             readiness_state: ManagedRuntimeReadinessState::Failed,
             install_root: None,
@@ -69,6 +72,7 @@ pub(super) fn persist_failed_job(
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
+            runtime_variant_id,
             event: ManagedRuntimeHistoryEventKind::ValidationFailed,
             version: Some(version.to_string()),
             at_ms: current_unix_timestamp_ms(),
@@ -87,7 +91,9 @@ fn persist_paused_job(
 ) -> Result<(), String> {
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
+    let runtime_variant_id = job_artifact.runtime_variant_id.clone();
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: runtime_variant_id.clone(),
         state: ManagedRuntimeJobState::Paused,
         status: "Paused".to_string(),
         current,
@@ -100,6 +106,7 @@ fn persist_paused_job(
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
+            runtime_variant_id,
             event: ManagedRuntimeHistoryEventKind::Paused,
             version: Some(version.to_string()),
             at_ms: current_unix_timestamp_ms(),
@@ -114,6 +121,7 @@ fn persist_cancelled_job(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     version: &str,
+    runtime_variant_id: RuntimeVariantId,
     current: u64,
     total: u64,
     job_artifact: Option<ManagedRuntimePersistedJobArtifact>,
@@ -121,6 +129,7 @@ fn persist_cancelled_job(
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: runtime_variant_id.clone(),
         state: ManagedRuntimeJobState::Cancelled,
         status: "Cancelled".to_string(),
         current,
@@ -133,6 +142,7 @@ fn persist_cancelled_job(
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
+            runtime_variant_id,
             event: ManagedRuntimeHistoryEventKind::Cancelled,
             version: Some(version.to_string()),
             at_ms: current_unix_timestamp_ms(),
@@ -161,9 +171,18 @@ pub(super) fn discard_retained_job_artifact(
         let _ = fs::remove_file(&artifact_path);
     }
     let version = artifact.version.clone();
+    let runtime_variant_id = artifact.runtime_variant_id.clone();
     let current = artifact.downloaded_bytes;
     let total = artifact.total_bytes;
-    persist_cancelled_job(app_data_dir, id, &version, current, total, None)
+    persist_cancelled_job(
+        app_data_dir,
+        id,
+        &version,
+        runtime_variant_id,
+        current,
+        total,
+        None,
+    )
 }
 
 pub(super) fn persist_install_success(
@@ -172,6 +191,7 @@ pub(super) fn persist_install_success(
     version: &str,
     install_dir: &Path,
     runtime_key: &str,
+    runtime_variant_id: RuntimeVariantId,
     platform_key: &str,
 ) -> Result<(), String> {
     let mut state = load_managed_runtime_state(app_data_dir)?;
@@ -183,7 +203,7 @@ pub(super) fn persist_install_success(
         ManagedRuntimePersistedVersion {
             version: version.to_string(),
             runtime_key: Some(runtime_key.to_string()),
-            runtime_variant_id: Some(definition(id).default_runtime_variant_id()),
+            runtime_variant_id: Some(runtime_variant_id.clone()),
             platform_key: Some(platform_key.to_string()),
             readiness_state: ManagedRuntimeReadinessState::Ready,
             install_root: Some(install_dir.display().to_string()),
@@ -201,6 +221,7 @@ pub(super) fn persist_install_success(
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
+            runtime_variant_id,
             event: ManagedRuntimeHistoryEventKind::Installed,
             version: Some(version.to_string()),
             at_ms: current_unix_timestamp_ms(),
@@ -217,6 +238,7 @@ pub(super) fn persist_remove_success(
     let Some(runtime) = runtime_state_entry_mut(&mut state, id) else {
         return Ok(());
     };
+    let runtime_variant_id = default_runtime_variant_id(id);
 
     let removed_versions = runtime
         .versions
@@ -246,6 +268,7 @@ pub(super) fn persist_remove_success(
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
+            runtime_variant_id,
             event: ManagedRuntimeHistoryEventKind::Removed,
             version: removed_versions.first().cloned(),
             at_ms: current_unix_timestamp_ms(),
@@ -263,6 +286,7 @@ pub(super) fn persist_remove_version_success(
     let Some(runtime) = runtime_state_entry_mut(&mut state, id) else {
         return Ok(());
     };
+    let runtime_variant_id = default_runtime_variant_id(id);
 
     runtime
         .versions
@@ -275,6 +299,7 @@ pub(super) fn persist_remove_version_success(
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
+            runtime_variant_id,
             event: ManagedRuntimeHistoryEventKind::Removed,
             version: Some(version.to_string()),
             at_ms: current_unix_timestamp_ms(),
@@ -287,6 +312,7 @@ pub(super) fn finish_requested_cancellation(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     version: &str,
+    runtime_variant_id: RuntimeVariantId,
     current: u64,
     total: u64,
     job_artifact: Option<ManagedRuntimePersistedJobArtifact>,
@@ -295,7 +321,15 @@ pub(super) fn finish_requested_cancellation(
         return Ok(false);
     }
 
-    persist_cancelled_job(app_data_dir, id, version, current, total, job_artifact)?;
+    persist_cancelled_job(
+        app_data_dir,
+        id,
+        version,
+        runtime_variant_id,
+        current,
+        total,
+        job_artifact,
+    )?;
     Ok(true)
 }
 
@@ -354,7 +388,7 @@ pub(super) fn update_runtime_selection(
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
 
-    if let Some(version) = version {
+    let runtime_variant_id = if let Some(version) = version {
         let Some(persisted_version) = runtime
             .versions
             .iter()
@@ -374,7 +408,20 @@ pub(super) fn update_runtime_selection(
                 version
             ));
         }
-    }
+
+        persisted_version
+            .runtime_variant_id
+            .clone()
+            .ok_or_else(|| {
+                format!(
+                    "{} version '{}' does not have a canonical runtime variant id",
+                    id.display_name(),
+                    version
+                )
+            })?
+    } else {
+        default_runtime_variant_id(id)
+    };
 
     let version = version.map(str::to_string);
     match target {
@@ -389,6 +436,7 @@ pub(super) fn update_runtime_selection(
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
+            runtime_variant_id,
             event: ManagedRuntimeHistoryEventKind::SelectionUpdated,
             version,
             at_ms: current_unix_timestamp_ms(),
@@ -466,6 +514,10 @@ fn selection_target_label(target: SelectionTarget) -> &'static str {
         SelectionTarget::Selected => "selected_version_updated",
         SelectionTarget::Default => "default_version_updated",
     }
+}
+
+fn default_runtime_variant_id(id: ManagedBinaryId) -> RuntimeVariantId {
+    definition(id).default_runtime_variant_id()
 }
 
 fn clear_selection_version(selection: &mut Option<String>, removed_version: &str) {

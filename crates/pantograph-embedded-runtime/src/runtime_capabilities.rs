@@ -1732,6 +1732,8 @@ mod tests {
                     default_version: Some("b8248".to_string()),
                 },
                 active_job: Some(inference::ManagedRuntimeJobStatus {
+                    runtime_variant_id: inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                        .expect("valid runtime variant"),
                     state: inference::ManagedRuntimeJobState::Validating,
                     status: "Validating b8248".to_string(),
                     current: 1,

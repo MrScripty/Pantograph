@@ -330,6 +330,7 @@ where
     clear_pause_request(id);
     let definition = definition(id);
     let download_source = resolve_download_source(app_data_dir, id, requested_version).await?;
+    let runtime_variant_id = download_source.runtime_variant_id.clone();
     let runtime_version = download_source.version.clone();
     if definition.system_command().is_some() {
         return Err(format!(
@@ -373,6 +374,7 @@ where
         retained_artifact
             .as_ref()
             .map(|artifact| ManagedRuntimePersistedJobArtifact {
+                runtime_variant_id: runtime_variant_id.clone(),
                 version: runtime_version.clone(),
                 archive_name: download_source.archive_name.clone(),
                 archive_path: artifact.temp_path.display().to_string(),
@@ -384,6 +386,7 @@ where
         app_data_dir,
         id,
         ManagedRuntimeJobStatus {
+            runtime_variant_id: runtime_variant_id.clone(),
             state: ManagedRuntimeJobState::Queued,
             status: format!("Queued {} install", definition.display_name()),
             current: downloaded,
@@ -396,6 +399,7 @@ where
     )?;
 
     on_progress(DownloadProgress {
+        runtime_variant_id: runtime_variant_id.clone(),
         status: if downloaded > 0 {
             format!("Resuming {} download...", definition.display_name())
         } else {
@@ -411,6 +415,7 @@ where
         app_data_dir,
         id,
         ManagedRuntimeJobStatus {
+            runtime_variant_id: runtime_variant_id.clone(),
             state: ManagedRuntimeJobState::Downloading,
             status: if downloaded > 0 {
                 format!("Resuming {}", definition.display_name())
@@ -488,6 +493,7 @@ where
             downloaded += chunk.len() as u64;
 
             let job_artifact = ManagedRuntimePersistedJobArtifact {
+                runtime_variant_id: runtime_variant_id.clone(),
                 version: runtime_version.clone(),
                 archive_name: download_source.archive_name.clone(),
                 archive_path: temp_path.display().to_string(),
@@ -499,6 +505,7 @@ where
                 app_data_dir,
                 id,
                 ManagedRuntimeJobStatus {
+                    runtime_variant_id: runtime_variant_id.clone(),
                     state: ManagedRuntimeJobState::Downloading,
                     status: if requested_resume_from > 0 {
                         "Resuming".to_string()
@@ -518,6 +525,7 @@ where
                 app_data_dir,
                 id,
                 &runtime_version,
+                runtime_variant_id.clone(),
                 downloaded,
                 total_size,
                 None,
@@ -525,6 +533,7 @@ where
                 drop(file);
                 let _ = fs::remove_file(&temp_path);
                 on_progress(DownloadProgress {
+                    runtime_variant_id: runtime_variant_id.clone(),
                     status: "Cancelled".to_string(),
                     current: downloaded,
                     total: total_size,
@@ -544,6 +553,7 @@ where
             )? {
                 drop(file);
                 on_progress(DownloadProgress {
+                    runtime_variant_id: runtime_variant_id.clone(),
                     status: "Paused".to_string(),
                     current: downloaded,
                     total: total_size,
@@ -554,6 +564,7 @@ where
             }
 
             on_progress(DownloadProgress {
+                runtime_variant_id: runtime_variant_id.clone(),
                 status: if requested_resume_from > 0 {
                     "Resuming...".to_string()
                 } else {
@@ -568,6 +579,7 @@ where
     }
 
     let download_artifact = ManagedRuntimePersistedJobArtifact {
+        runtime_variant_id: runtime_variant_id.clone(),
         version: runtime_version.clone(),
         archive_name: download_source.archive_name.clone(),
         archive_path: temp_path.display().to_string(),
@@ -579,12 +591,14 @@ where
         app_data_dir,
         id,
         &runtime_version,
+        runtime_variant_id.clone(),
         downloaded,
         total_size,
         None,
     )? {
         let _ = fs::remove_file(&temp_path);
         on_progress(DownloadProgress {
+            runtime_variant_id: runtime_variant_id.clone(),
             status: "Cancelled".to_string(),
             current: downloaded,
             total: total_size,
@@ -603,6 +617,7 @@ where
         download_artifact.clone(),
     )? {
         on_progress(DownloadProgress {
+            runtime_variant_id: runtime_variant_id.clone(),
             status: "Paused".to_string(),
             current: downloaded,
             total: total_size,
@@ -613,6 +628,7 @@ where
     }
 
     on_progress(DownloadProgress {
+        runtime_variant_id: runtime_variant_id.clone(),
         status: "Extracting...".to_string(),
         current: total_size,
         total: total_size,
@@ -624,6 +640,7 @@ where
         app_data_dir,
         id,
         ManagedRuntimeJobStatus {
+            runtime_variant_id: runtime_variant_id.clone(),
             state: ManagedRuntimeJobState::Extracting,
             status: "Extracting".to_string(),
             current: total_size,
@@ -661,6 +678,7 @@ where
             app_data_dir,
             id,
             &runtime_version,
+            runtime_variant_id.clone(),
             "Install failed".to_string(),
             error.clone(),
         )?;
@@ -671,12 +689,14 @@ where
         app_data_dir,
         id,
         &runtime_version,
+        runtime_variant_id.clone(),
         total_size,
         total_size,
         None,
     )? {
         let _ = fs::remove_dir_all(&staging_dir);
         on_progress(DownloadProgress {
+            runtime_variant_id: runtime_variant_id.clone(),
             status: "Cancelled".to_string(),
             current: total_size,
             total: total_size,
@@ -690,6 +710,7 @@ where
         app_data_dir,
         id,
         ManagedRuntimeJobStatus {
+            runtime_variant_id: runtime_variant_id.clone(),
             state: ManagedRuntimeJobState::Validating,
             status: "Validating".to_string(),
             current: total_size,
@@ -712,6 +733,7 @@ where
             app_data_dir,
             id,
             &runtime_version,
+            runtime_variant_id.clone(),
             "Validation failed".to_string(),
             error.clone(),
         )?;
@@ -722,12 +744,14 @@ where
         app_data_dir,
         id,
         &runtime_version,
+        runtime_variant_id.clone(),
         total_size,
         total_size,
         None,
     )? {
         let _ = fs::remove_dir_all(&staging_dir);
         on_progress(DownloadProgress {
+            runtime_variant_id: runtime_variant_id.clone(),
             status: "Cancelled".to_string(),
             current: total_size,
             total: total_size,
@@ -749,6 +773,7 @@ where
         .map_err(|e| format!("Failed to finalize install: {}", e))?;
 
     on_progress(DownloadProgress {
+        runtime_variant_id: runtime_variant_id.clone(),
         status: "Complete".to_string(),
         current: total_size,
         total: total_size,
@@ -767,6 +792,7 @@ where
         &runtime_version,
         &install_dir,
         &download_source.runtime_key,
+        runtime_variant_id.clone(),
         &download_source.platform_key,
     )?;
     clear_cancellation_request(id);

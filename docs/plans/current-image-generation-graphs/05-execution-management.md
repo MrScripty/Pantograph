@@ -1486,6 +1486,19 @@ Worker rules:
   `git diff --check` passed after `LlamaCppDeviceInventoryFact` gained a
   public serde fixture. The first fixture run failed on missing diagnostics
   defaults; adding the serde default fixed the DTO and the test passed.
+- `cargo test -p inference managed_runtime::operations`,
+  `cargo test -p inference managed_runtime::state`,
+  `cargo test -p pantograph-embedded-runtime managed_runtime`,
+  `npm run typecheck`, `cargo fmt --all -- --check`, and `git diff --check`
+  passed after managed runtime install jobs, retained artifacts, progress
+  snapshots, and install history entries began carrying typed
+  `RuntimeVariantId`. `npm run -w frontend check:types` was attempted first and
+  failed because this repository has no `frontend` workspace; the root
+  `npm run typecheck` script was used instead. The first inference compile
+  caught a misplaced `runtime_variant_id` initialization in the capability
+  path; it was moved to the download/install path and then tightened to use the
+  selected `ManagedRuntimeDownloadSource` rather than definition-level
+  inference.
 
 ### Traceability Links
 

@@ -69,10 +69,15 @@ typed diagnostic and the canonical design is fixed.
     `RuntimeVariantId` values. Current llama.cpp managed installs default to
     `llama_cpp.cpu`; CUDA/Metal variant-specific installs and readiness remain
     pending.
-- [ ] Include runtime variant id on managed install jobs, retained job
+- [x] Include runtime variant id on managed install jobs, retained job
   artifacts, progress snapshots, and install history entries. One active
   managed-binary install job at a time is acceptable initially if the job
   clearly identifies its target variant.
+  - 2026-05-11: `ManagedRuntimeDownloadSource`, active job status, retained
+    job artifacts, projected artifact status, progress DTOs, and install
+    history entries now carry typed `RuntimeVariantId`. Selection rejects ready
+    persisted versions that do not have a canonical runtime variant id instead
+    of inferring one.
 - [ ] Update selected version, selected variant, active job, retained artifact,
   and readiness through one durable state-transition path. Do not split related
   state across independent locks or cancellation points.

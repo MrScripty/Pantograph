@@ -59,6 +59,7 @@ export interface ManagedRuntimeVersionStatus {
   version: string | null;
   display_label: string;
   runtime_key: string;
+  runtime_variant_id: string;
   platform_key: string;
   install_root: string | null;
   executable_name: string;
@@ -84,6 +85,7 @@ export interface ManagedDependencyVersionStatus {
 }
 
 export interface ManagedRuntimeJobStatus {
+  runtime_variant_id: string;
   state: ManagedRuntimeJobState;
   status: string;
   current: number;
@@ -94,6 +96,7 @@ export interface ManagedRuntimeJobStatus {
 }
 
 export interface ManagedRuntimeJobArtifactStatus {
+  runtime_variant_id: string;
   version: string;
   archive_name: string;
   downloaded_bytes: number;
@@ -102,6 +105,7 @@ export interface ManagedRuntimeJobArtifactStatus {
 }
 
 export interface ManagedRuntimeInstallHistoryEntry {
+  runtime_variant_id: string;
   event: ManagedRuntimeHistoryEventKind;
   version: string | null;
   at_ms: number;
@@ -146,6 +150,7 @@ export interface ManagedDependencyStatus {
 
 export interface ManagedRuntimeProgress {
   runtime_id: ManagedRuntimeId;
+  runtime_variant_id: string;
   status: string;
   current: number;
   total: number;

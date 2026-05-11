@@ -8,6 +8,7 @@ use super::super::state::{
     save_managed_runtime_state,
 };
 use super::state_transitions::current_unix_timestamp_ms;
+use crate::RuntimeVariantId;
 use reqwest::StatusCode;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,6 +32,7 @@ pub(super) enum DownloadResponseMode {
 pub(super) struct ManagedRuntimeDownloadSource {
     pub(super) version: String,
     pub(super) runtime_key: String,
+    pub(super) runtime_variant_id: RuntimeVariantId,
     pub(super) platform_key: String,
     pub(super) archive_name: String,
     pub(super) download_url: String,
@@ -163,6 +165,7 @@ pub(super) async fn resolve_download_source(
     Ok(ManagedRuntimeDownloadSource {
         version: version.clone(),
         runtime_key: id.key().to_string(),
+        runtime_variant_id: definition.default_runtime_variant_id(),
         platform_key: definition.platform_key().to_string(),
         archive_name: release_asset.archive_name.clone(),
         download_url: definition.download_url(&version, &release_asset),
@@ -175,6 +178,7 @@ fn download_source_from_catalog(
     ManagedRuntimeDownloadSource {
         version: catalog_version.version.clone(),
         runtime_key: catalog_version.runtime_key.clone(),
+        runtime_variant_id: catalog_version.runtime_variant_id.clone(),
         platform_key: catalog_version.platform_key.clone(),
         archive_name: catalog_version.archive_name.clone(),
         download_url: catalog_version.download_url.clone(),

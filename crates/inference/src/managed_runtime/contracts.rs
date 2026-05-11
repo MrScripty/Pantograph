@@ -138,6 +138,7 @@ pub struct ManagedRuntimeVersionStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimeJobStatus {
+    pub runtime_variant_id: RuntimeVariantId,
     pub state: ManagedRuntimeJobState,
     pub status: String,
     pub current: u64,
@@ -150,6 +151,7 @@ pub struct ManagedRuntimeJobStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimeJobArtifactStatus {
+    pub runtime_variant_id: RuntimeVariantId,
     pub version: String,
     pub archive_name: String,
     pub downloaded_bytes: u64,
@@ -179,6 +181,7 @@ pub struct ManagedRuntimeSnapshot {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DownloadProgress {
+    pub runtime_variant_id: RuntimeVariantId,
     pub status: String,
     pub current: u64,
     pub total: u64,

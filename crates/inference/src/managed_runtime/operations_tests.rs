@@ -85,6 +85,7 @@ fn existing_download_artifact_uses_current_file_length() {
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
     runtime.active_job_artifact = Some(ManagedRuntimePersistedJobArtifact {
+        runtime_variant_id: llama_cpu_variant_id(),
         version: "b8248".to_string(),
         archive_name: "llama-b8248.tar.gz".to_string(),
         archive_path: artifact_path.display().to_string(),
@@ -228,6 +229,7 @@ async fn remove_binary_version_removes_one_installed_version_and_clears_selectio
         "b8248",
         &first_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist first install");
@@ -237,6 +239,7 @@ async fn remove_binary_version_removes_one_installed_version_and_clears_selectio
         "b9000",
         &second_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist second install");
@@ -280,6 +283,7 @@ fn persist_install_success_records_ready_version_and_selection() {
         "b8248",
         &install_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
@@ -320,6 +324,7 @@ fn persist_remove_success_clears_versions_and_selection() {
         "b8248",
         &install_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
@@ -349,6 +354,7 @@ fn select_managed_runtime_version_updates_persisted_selection() {
         "b8248",
         &install_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
@@ -366,6 +372,11 @@ fn select_managed_runtime_version_updates_persisted_selection() {
 
     assert_eq!(runtime.selection.selected_version.as_deref(), Some("b8248"));
     assert_eq!(runtime.selection.default_version.as_deref(), Some("b8248"));
+    let last_history = runtime
+        .install_history
+        .last()
+        .expect("selection history entry");
+    assert_eq!(last_history.runtime_variant_id, llama_cpu_variant_id());
 }
 
 #[test]
@@ -379,6 +390,7 @@ fn select_managed_runtime_version_rejects_unknown_version() {
         "b8248",
         &install_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
@@ -414,6 +426,30 @@ fn select_managed_runtime_version_rejects_non_ready_version() {
 }
 
 #[test]
+fn select_managed_runtime_version_rejects_missing_runtime_variant_id() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+    let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+    runtime.versions.push(ManagedRuntimePersistedVersion {
+        version: "b8248".to_string(),
+        runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        runtime_variant_id: None,
+        platform_key: Some("linux-x86_64".to_string()),
+        readiness_state: ManagedRuntimeReadinessState::Ready,
+        install_root: None,
+        last_ready_at_ms: None,
+        last_error: None,
+    });
+    save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+    let error =
+        select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b8248"))
+            .expect_err("missing runtime variant id should fail");
+
+    assert!(error.contains("does not have a canonical runtime variant id"));
+}
+
+#[test]
 fn resolve_runtime_install_dir_uses_selected_version_install_root() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let install_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
@@ -424,6 +460,7 @@ fn resolve_runtime_install_dir_uses_selected_version_install_root() {
         "b8248",
         &install_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
@@ -448,6 +485,7 @@ fn resolve_runtime_install_dir_rejects_missing_selected_version() {
         "b8248",
         &install_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
@@ -488,6 +526,7 @@ fn runtime_install_dir_for_projection_falls_back_when_selected_version_is_missin
         "b8248",
         &install_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
@@ -522,6 +561,7 @@ fn binary_capability_tolerates_stale_selected_version_state() {
         "b8248",
         &install_dir,
         ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
         definition(ManagedBinaryId::LlamaCpp).platform_key(),
     )
     .expect("persist install success");
@@ -589,6 +629,7 @@ fn managed_runtime_snapshot_uses_reconciled_interrupted_job_readiness() {
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: llama_cpu_variant_id(),
         state: ManagedRuntimeJobState::Downloading,
         status: "Downloading b8248".to_string(),
         current: 5,
@@ -623,6 +664,7 @@ fn cancel_binary_download_rejects_non_cancellable_jobs() {
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: llama_cpu_variant_id(),
         state: ManagedRuntimeJobState::Extracting,
         status: "Extracting".to_string(),
         current: 10,
@@ -645,6 +687,7 @@ fn pause_binary_download_rejects_non_cancellable_jobs() {
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: llama_cpu_variant_id(),
         state: ManagedRuntimeJobState::Extracting,
         status: "Extracting".to_string(),
         current: 10,
@@ -667,6 +710,7 @@ fn finish_requested_cancellation_persists_cancelled_job_and_history() {
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: llama_cpu_variant_id(),
         state: ManagedRuntimeJobState::Downloading,
         status: "Downloading".to_string(),
         current: 32,
@@ -683,6 +727,7 @@ fn finish_requested_cancellation_persists_cancelled_job_and_history() {
         temp_dir.path(),
         ManagedBinaryId::LlamaCpp,
         "b8248",
+        llama_cpu_variant_id(),
         32,
         64,
         None,
@@ -697,18 +742,15 @@ fn finish_requested_cancellation_persists_cancelled_job_and_history() {
         .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
         .expect("llama runtime state");
     let active_job = runtime.active_job.as_ref().expect("cancelled job");
+    assert_eq!(active_job.runtime_variant_id, llama_cpu_variant_id());
     assert_eq!(active_job.state, ManagedRuntimeJobState::Cancelled);
     assert_eq!(active_job.status, "Cancelled");
     assert_eq!(active_job.current, 32);
     assert_eq!(active_job.total, 64);
     assert!(runtime.active_job_artifact.is_none());
-    assert_eq!(
-        runtime
-            .install_history
-            .last()
-            .map(|entry| entry.event.clone()),
-        Some(ManagedRuntimeHistoryEventKind::Cancelled)
-    );
+    let history = runtime.install_history.last().expect("cancel history");
+    assert_eq!(history.runtime_variant_id, llama_cpu_variant_id());
+    assert_eq!(history.event, ManagedRuntimeHistoryEventKind::Cancelled);
 }
 
 #[test]
@@ -720,6 +762,7 @@ fn finish_requested_pause_persists_paused_job_and_history() {
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: llama_cpu_variant_id(),
         state: ManagedRuntimeJobState::Downloading,
         status: "Downloading".to_string(),
         current: 32,
@@ -738,6 +781,7 @@ fn finish_requested_pause_persists_paused_job_and_history() {
         32,
         64,
         ManagedRuntimePersistedJobArtifact {
+            runtime_variant_id: llama_cpu_variant_id(),
             version: "b8248".to_string(),
             archive_name: "llama-b8248.tar.gz".to_string(),
             archive_path: artifact_path.display().to_string(),
@@ -755,19 +799,16 @@ fn finish_requested_pause_persists_paused_job_and_history() {
         .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
         .expect("llama runtime state");
     let active_job = runtime.active_job.as_ref().expect("paused job");
+    assert_eq!(active_job.runtime_variant_id, llama_cpu_variant_id());
     assert_eq!(active_job.state, ManagedRuntimeJobState::Paused);
     assert_eq!(active_job.status, "Paused");
     assert_eq!(active_job.current, 32);
     assert_eq!(active_job.total, 64);
     assert!(active_job.resumable);
     assert!(runtime.active_job_artifact.is_some());
-    assert_eq!(
-        runtime
-            .install_history
-            .last()
-            .map(|entry| entry.event.clone()),
-        Some(ManagedRuntimeHistoryEventKind::Paused)
-    );
+    let history = runtime.install_history.last().expect("pause history");
+    assert_eq!(history.runtime_variant_id, llama_cpu_variant_id());
+    assert_eq!(history.event, ManagedRuntimeHistoryEventKind::Paused);
 }
 
 #[test]
@@ -779,6 +820,7 @@ fn cancel_binary_download_discards_paused_artifact() {
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: llama_cpu_variant_id(),
         state: ManagedRuntimeJobState::Paused,
         status: "Paused".to_string(),
         current: 32,
@@ -788,6 +830,7 @@ fn cancel_binary_download_discards_paused_artifact() {
         error: None,
     });
     runtime.active_job_artifact = Some(ManagedRuntimePersistedJobArtifact {
+        runtime_variant_id: llama_cpu_variant_id(),
         version: "b8248".to_string(),
         archive_name: "llama-b8248.tar.gz".to_string(),
         archive_path: artifact_path.display().to_string(),
@@ -806,16 +849,13 @@ fn cancel_binary_download_discards_paused_artifact() {
         .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
         .expect("llama runtime state");
     let active_job = runtime.active_job.as_ref().expect("cancelled job");
+    assert_eq!(active_job.runtime_variant_id, llama_cpu_variant_id());
     assert_eq!(active_job.state, ManagedRuntimeJobState::Cancelled);
     assert!(runtime.active_job_artifact.is_none());
     assert!(!artifact_path.exists());
-    assert_eq!(
-        runtime
-            .install_history
-            .last()
-            .map(|entry| entry.event.clone()),
-        Some(ManagedRuntimeHistoryEventKind::Cancelled)
-    );
+    let history = runtime.install_history.last().expect("cancel history");
+    assert_eq!(history.runtime_variant_id, llama_cpu_variant_id());
+    assert_eq!(history.event, ManagedRuntimeHistoryEventKind::Cancelled);
 }
 
 #[test]
@@ -827,6 +867,7 @@ fn managed_runtime_snapshot_projects_retained_job_artifact() {
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
     runtime.active_job = Some(ManagedRuntimeJobStatus {
+        runtime_variant_id: llama_cpu_variant_id(),
         state: ManagedRuntimeJobState::Cancelled,
         status: "Cancelled".to_string(),
         current: 64,
@@ -836,6 +877,7 @@ fn managed_runtime_snapshot_projects_retained_job_artifact() {
         error: None,
     });
     runtime.active_job_artifact = Some(ManagedRuntimePersistedJobArtifact {
+        runtime_variant_id: llama_cpu_variant_id(),
         version: "b8248".to_string(),
         archive_name: "llama-b8248.tar.gz".to_string(),
         archive_path: artifact_path.display().to_string(),
@@ -851,6 +893,7 @@ fn managed_runtime_snapshot_projects_retained_job_artifact() {
     .expect("managed runtime snapshot");
 
     let artifact = snapshot.job_artifact.expect("job artifact");
+    assert_eq!(artifact.runtime_variant_id, llama_cpu_variant_id());
     assert_eq!(artifact.version, "b8248");
     assert_eq!(artifact.archive_name, "llama-b8248.tar.gz");
     assert_eq!(artifact.downloaded_bytes, 64);

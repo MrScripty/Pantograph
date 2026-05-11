@@ -255,6 +255,8 @@ mod tests {
     fn runtime_load_facts_reject_active_mutating_job() {
         let mut snapshot = snapshot_with_readiness(ManagedRuntimeReadinessState::Ready, true);
         snapshot.active_job = Some(ManagedRuntimeJobStatus {
+            runtime_variant_id: crate::RuntimeVariantId::parse("llama_cpp.cpu")
+                .expect("valid runtime variant"),
             state: ManagedRuntimeJobState::Downloading,
             status: "downloading selected llama.cpp archive".to_string(),
             current: 1,
