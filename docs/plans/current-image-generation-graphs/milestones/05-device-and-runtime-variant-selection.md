@@ -2186,6 +2186,27 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: DTO fixture coverage still needs non-inference
     device/runtime boundaries, especially frontend, diagnostics-ledger, worker,
     and persisted-state contracts.
+- 2026-05-10 slice: typed lifecycle selected-device ids.
+  - Smallest useful vertical slice: replace the inference lifecycle event
+    `selected_device_id` raw string field and gateway lifecycle plumbing with
+    canonical `InferenceDeviceId`.
+  - Allowed write set: `crates/inference/src/types.rs`,
+    `crates/inference/src/gateway.rs`, `crates/inference/src/gateway_tests.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: lifecycle event deserialization now
+    rejects legacy backend-local selectors such as `CUDA0` instead of accepting
+    them as diagnostic facts.
+  - Standards/blast-radius gate: typed DTO boundary only; no scheduler
+    selection policy, backend startup config, generated DTOs, lockfiles,
+    frontend code, or workflow fixtures changed.
+  - Verification passed:
+    `cargo test -p inference inference_request_lifecycle_event`,
+    `cargo test -p inference test_lifecycle_events_carry_active_runtime_selected_device`,
+    `cargo fmt --all -- --check`,
+    `rg -n "selected_device_id: Option<String>|selected_device_id.as_deref|selected_device_id: Some\\(\\\"cuda:0" crates/inference/src/types.rs crates/inference/src/gateway.rs crates/inference/src/gateway_tests.rs`,
+    and `git diff --check`.
+  - Remaining follow-up: other raw device string crossings remain, including
+    backend startup config and frontend/settings boundaries.
 
 **Verification:**
 
@@ -2260,6 +2281,9 @@ typed diagnostic and the canonical design is fixed.
 - Inference serde fixture tests prove resolved device decisions preserve the
   canonical runtime variant and selected device choice consumed by runtime
   load.
+- Inference lifecycle tests prove request lifecycle events carry canonical
+  `InferenceDeviceId` values and reject legacy backend-local selected-device
+  strings during deserialization.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

@@ -665,6 +665,15 @@ Update during implementation:
   `cargo fmt --all -- --check`, and `git diff --check`. The first format check
   reported rustfmt import wrapping; `cargo fmt --all` was run and the check
   passed.
+- 2026-05-10: Continued Milestone 5 by replacing inference lifecycle event
+  `selected_device_id` raw strings with canonical `InferenceDeviceId` in the
+  event DTO and gateway lifecycle plumbing. Lifecycle event deserialization now
+  rejects legacy backend-local selectors such as `CUDA0`. Verification passed:
+  `cargo test -p inference inference_request_lifecycle_event`,
+  `cargo test -p inference test_lifecycle_events_carry_active_runtime_selected_device`,
+  `cargo fmt --all -- --check`,
+  `rg -n "selected_device_id: Option<String>|selected_device_id.as_deref|selected_device_id: Some\\(\\\"cuda:0" crates/inference/src/types.rs crates/inference/src/gateway.rs crates/inference/src/gateway_tests.rs`,
+  and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -971,6 +980,9 @@ Worker rules:
   candidate contract coverage.
 - `cargo test -p inference --test device_contracts` passed for the
   device-resolution decision fixture consumed by runtime-load contracts.
+- `cargo test -p inference inference_request_lifecycle_event` and
+  `cargo test -p inference test_lifecycle_events_carry_active_runtime_selected_device`
+  passed for typed lifecycle selected-device ids.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

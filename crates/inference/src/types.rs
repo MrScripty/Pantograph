@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::device_contracts::InferenceDeviceClass;
+use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId};
 use crate::model_contracts::{
     resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, GenerationOptions,
     InferenceExecutionInputKind, InferenceExecutionResultKind, InferenceLifecyclePhase,
@@ -886,7 +886,7 @@ pub struct InferenceRequestLifecycleEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_class: Option<InferenceDeviceClass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selected_device_id: Option<String>,
+    pub selected_device_id: Option<InferenceDeviceId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_network_node_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2532,7 +2532,7 @@ mod tests {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-main-1".to_string()),
             selected_device_class: Some(InferenceDeviceClass::Cuda),
-            selected_device_id: Some("cuda:0".to_string()),
+            selected_device_id: Some(InferenceDeviceId::parse("cuda:0").unwrap()),
             selected_network_node_id: Some("local-node-alpha".to_string()),
             model_id: Some("pumas://models/tiny-llama".to_string()),
             resolved_artifact_kind: Some("gguf".to_string()),
@@ -2604,6 +2604,20 @@ mod tests {
             serde_json::json!("unsupported_option")
         );
         assert_eq!(decoded, event);
+    }
+
+    #[test]
+    fn inference_request_lifecycle_event_rejects_legacy_selected_device_id() {
+        let error = serde_json::from_value::<InferenceRequestLifecycleEvent>(serde_json::json!({
+            "phase": "backend_execution",
+            "kind": "started",
+            "occurred_at_ms": 42,
+            "selected_device_class": "cuda",
+            "selected_device_id": "CUDA0"
+        }))
+        .expect_err("legacy selected device id should fail lifecycle event decoding");
+
+        assert!(error.to_string().contains("invalid identifier shape"));
     }
 
     #[test]

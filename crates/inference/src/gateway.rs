@@ -20,7 +20,7 @@ use crate::backend::{
     BackendRegistry, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
-use crate::device_contracts::InferenceDeviceClass;
+use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase, ModelArtifactKind,
@@ -1596,7 +1596,7 @@ impl InferenceGateway {
         Option<String>,
         Option<String>,
         Option<InferenceDeviceClass>,
-        Option<String>,
+        Option<InferenceDeviceId>,
     ) {
         let runtime_snapshot = self.runtime_lifecycle_snapshot().await;
         let runtime_id = runtime_snapshot.runtime_id.clone();
@@ -1608,8 +1608,7 @@ impl InferenceGateway {
             .and_then(|runtime| runtime.selected_device_class);
         let selected_device_id = active_runtime
             .as_ref()
-            .and_then(|runtime| runtime.selected_device_id.as_ref())
-            .map(|device_id| device_id.as_str().to_string());
+            .and_then(|runtime| runtime.selected_device_id.clone());
         (
             backend_key,
             runtime_id,
@@ -1690,7 +1689,7 @@ struct LifecycleStream {
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     compatibility_report: Option<InferenceCompatibilityReportSummary>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
@@ -1711,7 +1710,7 @@ impl LifecycleStream {
         runtime_id: Option<String>,
         runtime_instance_id: Option<String>,
         selected_device_class: Option<InferenceDeviceClass>,
-        selected_device_id: Option<String>,
+        selected_device_id: Option<InferenceDeviceId>,
         model_id: Option<String>,
         compatibility_report: Option<InferenceCompatibilityReportSummary>,
         compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
@@ -2419,7 +2418,7 @@ fn record_inference_lifecycle_event(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
     detail: Option<String>,
@@ -2449,7 +2448,7 @@ fn record_inference_lifecycle_phase_event(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
     detail: Option<String>,
@@ -2481,7 +2480,7 @@ fn record_model_package_resolution_lifecycle_if_present(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
 ) {
     let Some(package_facts) = request.resolved_model_package_facts.as_ref() else {
@@ -2556,7 +2555,7 @@ fn record_inference_lifecycle_phase_event_with_option_diagnostics(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
     detail: Option<String>,
@@ -2591,7 +2590,7 @@ fn record_inference_lifecycle_phase_event_with_diagnostics(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
     detail: Option<String>,
@@ -2632,7 +2631,7 @@ fn record_inference_lifecycle_phase_event_with_references(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     kind: InferenceRequestLifecycleEventKind,
     detail: Option<String>,
@@ -2680,7 +2679,7 @@ fn record_non_streaming_lifecycle_result<T>(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
 ) {
@@ -2708,7 +2707,7 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     result: &Result<InferenceExecutionResult, GatewayError>,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
@@ -2747,7 +2746,7 @@ fn record_non_streaming_lifecycle_result_with_option_diagnostics<T>(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
@@ -2778,7 +2777,7 @@ fn record_non_streaming_lifecycle_phase_result<T>(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
 ) {
@@ -2808,7 +2807,7 @@ fn record_successful_non_streaming_lifecycle_phase(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
 ) {
     record_inference_lifecycle_phase_event(
@@ -2851,7 +2850,7 @@ fn record_non_streaming_lifecycle_phase_result_with_option_diagnostics<T>(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
@@ -2884,7 +2883,7 @@ fn record_non_streaming_lifecycle_phase_result_with_diagnostics<T>(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
@@ -2923,7 +2922,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
     runtime_id: Option<String>,
     runtime_instance_id: Option<String>,
     selected_device_class: Option<InferenceDeviceClass>,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<InferenceDeviceId>,
     model_id: Option<String>,
     result: &Result<T, GatewayError>,
     option_diagnostics: Vec<OptionCompatibilityDiagnostic>,

@@ -1815,7 +1815,7 @@ async fn test_lifecycle_events_carry_active_runtime_selected_device() {
         .all(|event| event.selected_device_class == Some(InferenceDeviceClass::Cuda)));
     assert!(events
         .iter()
-        .all(|event| event.selected_device_id.as_deref() == Some("cuda:0")));
+        .all(|event| event.selected_device_id.as_ref().map(|id| id.as_str()) == Some("cuda:0")));
 }
 
 #[tokio::test]
