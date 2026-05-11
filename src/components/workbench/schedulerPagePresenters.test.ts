@@ -71,7 +71,7 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
     bucket_id: 'bucket-a',
     workflow_execution_session_id: 'exec-session-a',
     selected_runtime_id: 'runtime-a',
-    selected_runtime_variant_id: 'runtime-a/cuda',
+    selected_runtime_variant_id: 'runtime_a.cuda',
     selected_backend_key: 'llama_cpp',
     selected_device_class: 'cuda',
     selected_device_id: 'device-a',
@@ -148,14 +148,14 @@ test('scheduler policy presenters keep missing dense table facts explicit', () =
   assert.equal(formatSchedulerScopeLabel(''), 'Unassigned');
   assert.equal(formatSchedulerPlacementLabel('runtime-a'), 'runtime-a');
   assert.equal(formatSchedulerPlacementLabel(''), 'Unassigned');
-  assert.equal(formatSchedulerRuntimePlacementLabel(run({})), 'runtime-a / runtime-a/cuda');
+  assert.equal(formatSchedulerRuntimePlacementLabel(run({})), 'runtime-a / runtime_a.cuda');
   assert.equal(
     formatSchedulerRuntimePlacementLabel(run({ selected_runtime_variant_id: null })),
     'runtime-a',
   );
   assert.equal(
     formatSchedulerRuntimePlacementLabel(run({ selected_runtime_id: null })),
-    'runtime-a/cuda',
+    'runtime_a.cuda',
   );
   assert.equal(formatSchedulerDevicePlacementLabel(run({})), 'cuda / device-a');
   assert.equal(formatSchedulerDevicePlacementLabel(run({ selected_device_id: null })), 'cuda');
@@ -326,13 +326,13 @@ test('filterAndSortSchedulerRuns searches client scope facts', () => {
 
 test('filterAndSortSchedulerRuns searches selected runtime variant facts', () => {
   const runs = [
-    run({ workflow_run_id: 'run-a', selected_runtime_variant_id: 'llama_cpp/linux-x64/cpu' }),
-    run({ workflow_run_id: 'run-b', selected_runtime_variant_id: 'llama_cpp/linux-x64/cuda' }),
+    run({ workflow_run_id: 'run-a', selected_runtime_variant_id: 'llama_cpp.cpu' }),
+    run({ workflow_run_id: 'run-b', selected_runtime_variant_id: 'llama_cpp.cuda' }),
   ];
 
   assert.deepEqual(
     filterAndSortSchedulerRuns(runs, {
-      search: 'linux-x64/cuda',
+      search: 'llama_cpp.cuda',
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'all',
@@ -417,7 +417,7 @@ test('scheduler policy filters use explicit projection labels', () => {
       client_session_id: 'session-b',
       bucket_id: 'bucket-b',
       selected_runtime_id: 'runtime-b',
-      selected_runtime_variant_id: 'runtime-b/metal',
+      selected_runtime_variant_id: 'runtime_b.metal',
       selected_backend_key: 'pytorch',
       selected_device_class: 'metal',
       selected_device_id: 'device-b',
@@ -449,8 +449,8 @@ test('scheduler policy filters use explicit projection labels', () => {
   assert.deepEqual(schedulerSelectedRuntimeFilterOptions(runs), ['Unassigned', 'runtime-a', 'runtime-b']);
   assert.deepEqual(schedulerSelectedRuntimeVariantFilterOptions(runs), [
     'Unassigned',
-    'runtime-a/cuda',
-    'runtime-b/metal',
+    'runtime_a.cuda',
+    'runtime_b.metal',
   ]);
   assert.deepEqual(schedulerSelectedBackendFilterOptions(runs), ['Unassigned', 'llama_cpp', 'pytorch']);
   assert.deepEqual(schedulerSelectedDeviceClassFilterOptions(runs), ['Unassigned', 'cuda', 'metal']);
@@ -471,7 +471,7 @@ test('scheduler policy filters use explicit projection labels', () => {
       clientSession: 'session-b',
       bucket: 'bucket-b',
       selectedRuntime: 'runtime-b',
-      selectedRuntimeVariant: 'runtime-b/metal',
+      selectedRuntimeVariant: 'runtime_b.metal',
       selectedBackend: 'pytorch',
       selectedDeviceClass: 'metal',
       selectedDevice: 'device-b',
@@ -549,7 +549,7 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
         clientSession: 'session-a',
         bucket: 'bucket-a',
         selectedRuntime: 'runtime-a',
-        selectedRuntimeVariant: 'runtime-a/cuda',
+        selectedRuntimeVariant: 'runtime_a.cuda',
         selectedBackend: 'llama_cpp',
         selectedDeviceClass: 'cuda',
         selectedDevice: 'device-a',
@@ -568,7 +568,7 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
       client_session_id: 'session-a',
       bucket_id: 'bucket-a',
       selected_runtime_id: 'runtime-a',
-      selected_runtime_variant_id: 'runtime-a/cuda',
+      selected_runtime_variant_id: 'runtime_a.cuda',
       selected_backend_key: 'llama_cpp',
       selected_device_class: 'cuda',
       selected_device_id: 'device-a',

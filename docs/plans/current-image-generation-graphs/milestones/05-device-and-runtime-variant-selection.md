@@ -181,6 +181,10 @@ typed diagnostic and the canonical design is fixed.
 - [ ] Update canonical workflows and fixtures to the new device policy/runtime
   variant shape. Do not add legacy compatibility shims for old raw-device
   workflow shapes.
+  - 2026-05-11 partial: updated technical-fit Rust/TypeScript contract
+    fixtures and presenter tests from slash-shaped runtime variant ids to the
+    canonical dot-shaped `RuntimeVariantId` examples such as
+    `llama_cpp.cuda` and `pytorch.cuda`. Saved workflow files remain pending.
 - [ ] If runtime feature flags or optional dependencies change, document the
   feature contract and run affected public crates through default,
   no-default-features, and all-features checks.
@@ -2741,6 +2745,43 @@ typed diagnostic and the canonical design is fixed.
     converted into an explicit typed `State` variant instead of a broad
     string-to-error conversion. The first format check reported rustfmt-only
     wrapping and passed after `cargo fmt --all`.
+- 2026-05-11 slice: canonical runtime variant fixture ids.
+  - Smallest useful vertical slice: replace slash-shaped runtime variant ids in
+    technical-fit and scheduler/diagnostics fixture tests with canonical
+    dot-shaped ids that match `RuntimeVariantId` validation.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/06-device-runtime-selection.md`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/tests/contract.rs`,
+    `crates/pantograph-workflow-service/tests/fixtures/technical_fit_contract.json`,
+    `src/components/workbench/diagnosticsPagePresenters.test.ts`,
+    `src/components/workbench/schedulerPagePresenters.test.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`,
+    `src/stores/schedulerRunListStore.test.ts`, and this plan directory.
+  - No-fallback/no-legacy confirmation: fixtures no longer preserve
+    slash-shaped runtime variant ids such as `llama_cpp/linux-x64/cuda` or
+    `pytorch/linux-x64/cuda`; no compatibility parser, alias, or production
+    fallback was added.
+  - Standards/blast-radius gate: fixture/test data and plan examples only; no
+    production routing, generated DTOs, lockfiles, persisted schema, saved
+    workflow files, runtime catalog state, or frontend component behavior
+    changed.
+  - Verification passed:
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`,
+    `cargo test -p pantograph-workflow-service --test contract workflow_technical_fit_cross_layer_fixture_deserializes`,
+    `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/components/workbench/diagnosticsPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts src/services/workflow/WorkflowService.commands.test.ts`,
+    `bash -lc 'if rg -n "[a-z0-9_-]+/[a-z0-9_-]+/(cpu|cuda|metal)|runtime-a/cuda|runtime-b/metal|llama_cpp/|pytorch/" crates/pantograph-embedded-runtime crates/pantograph-workflow-service src -g "*.rs" -g "*.ts" -g "*.svelte" -g "*.json"; then exit 1; else exit 0; fi'`,
+    and `git diff --check`.
+  - Verification deviation: the first Node run failed because the scheduler
+    search expectation and shared technical-fit JSON fixture still contained
+    old slash-shaped values; the first workflow-service contract run also
+    started before the fixture update was complete. Both were corrected and
+    rerun successfully.
+  - Remaining follow-up: update saved workflow fixtures/files, if any still
+    carry old raw-device or runtime-variant shapes, in a dedicated workflow
+    fixture slice.
 
 **Verification:**
 
@@ -2763,6 +2804,8 @@ typed diagnostic and the canonical design is fixed.
 - Managed runtime contract tests prove missing CUDA command resolution
   serializes as a typed `missing_runtime_variant` diagnostic for
   `llama_cpp.cuda`.
+- Technical-fit and frontend presenter fixture tests prove runtime variant ids
+  use canonical dot-shaped ids rather than slash-shaped legacy examples.
 - Managed runtime tests prove one llama.cpp release can expose more than one
   installed/readiness variant under one `ManagedBinaryId::LlamaCpp` identity.
 - Managed runtime path tests prove the retired `app_data/runtimes` tree is not

@@ -53,7 +53,7 @@ test('withSchedulerRunFilters applies partial updates without losing existing fi
     status: 'scheduled',
     client: 'client-a',
     selectedRuntime: 'runtime-a',
-    selectedRuntimeVariant: 'runtime-a/cuda',
+    selectedRuntimeVariant: 'runtime_a.cuda',
     selectedBackend: 'llama_cpp',
     selectedDeviceClass: 'cuda',
   });
@@ -67,7 +67,7 @@ test('withSchedulerRunFilters applies partial updates without losing existing fi
     clientSession: 'all',
     bucket: 'all',
     selectedRuntime: 'runtime-a',
-    selectedRuntimeVariant: 'runtime-a/cuda',
+    selectedRuntimeVariant: 'runtime_a.cuda',
     selectedBackend: 'llama_cpp',
     selectedDeviceClass: 'cuda',
     selectedDevice: 'all',

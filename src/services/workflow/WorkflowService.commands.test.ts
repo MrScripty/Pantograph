@@ -204,14 +204,14 @@ test('technical-fit contract fixture preserves runtime variant and device facts'
   const decision: WorkflowTechnicalFitDecision = fixture.technical_fit_decision;
 
   assert.equal(request.override_selection?.runtime_id, 'pytorch');
-  assert.equal(request.override_selection?.runtime_variant_id, 'pytorch/linux-x64/cuda');
+  assert.equal(request.override_selection?.runtime_variant_id, 'pytorch.cuda');
   assert.equal(request.device_policy?.policy, 'explicit');
   if (request.device_policy?.policy === 'explicit') {
     assert.equal(request.device_policy.device_class, 'cuda');
     assert.equal(request.device_policy.device_id, 'cuda:0');
   }
 
-  assert.equal(decision.selected_runtime_variant_id, 'pytorch/linux-x64/cuda');
+  assert.equal(decision.selected_runtime_variant_id, 'pytorch.cuda');
   assert.equal(decision.selected_device_class, 'cuda');
   assert.equal(decision.selected_device_id, 'cuda:0');
   assert.equal(decision.device_diagnostics?.[0]?.code, 'candidate_unavailable');

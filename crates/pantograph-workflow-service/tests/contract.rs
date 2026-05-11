@@ -1453,7 +1453,7 @@ fn workflow_technical_fit_cross_layer_fixture_deserializes() {
     assert_eq!(request.workflow_id, "wf-image");
     assert_eq!(
         decision.selected_runtime_variant_id.as_deref(),
-        Some("pytorch/linux-x64/cuda")
+        Some("pytorch.cuda")
     );
     assert_eq!(decision.selected_device_id.as_deref(), Some("cuda:0"));
 }

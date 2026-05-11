@@ -1037,7 +1037,7 @@ mod tests {
             backend_capability_facts: Some(WorkflowBackendCapabilityFacts {
                 tasks: Vec::new(),
                 runtime_variants: vec![WorkflowRuntimeVariantCapability {
-                    runtime_variant_id: "llama_cpp/linux-x64/cuda".to_string(),
+                    runtime_variant_id: "llama_cpp.cuda".to_string(),
                     device_class: WorkflowInferenceDeviceClass::Cuda,
                     available: true,
                     diagnostics: vec![WorkflowDeviceResolutionDiagnostic {
@@ -1046,7 +1046,7 @@ mod tests {
                         message: "cuda runtime warmup pending".to_string(),
                         device_class: Some(WorkflowInferenceDeviceClass::Cuda),
                         device_id: Some("cuda:0".to_string()),
-                        runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                        runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                         backend_id: Some("llama_cpp".to_string()),
                     }],
                 }],
@@ -1120,7 +1120,7 @@ mod tests {
             },
             Some(pantograph_workflow_service::WorkflowTechnicalFitOverride {
                 runtime_id: Some("llama.cpp".to_string()),
-                runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                 model_id: Some("model-a".to_string()),
                 backend_key: Some("llama.cpp".to_string()),
             }),
@@ -1149,7 +1149,7 @@ mod tests {
             runtime_request.override_selection,
             Some(RuntimeTechnicalFitOverride {
                 runtime_id: Some("llama_cpp".to_string()),
-                runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                 model_id: Some("model-a".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
             })
@@ -1165,7 +1165,7 @@ mod tests {
         assert_eq!(runtime_request.candidates[0].candidate_id, "llama_cpp");
         assert_eq!(
             runtime_request.candidates[0].runtime_variant_id.as_deref(),
-            Some("llama_cpp/linux-x64/cuda")
+            Some("llama_cpp.cuda")
         );
         assert_eq!(
             runtime_request.candidates[0].device_class,
@@ -1204,7 +1204,7 @@ mod tests {
             selection_mode: RuntimeTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: Some("candidate-a".to_string()),
             selected_runtime_id: Some("llama_cpp".to_string()),
-            selected_runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+            selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
             selected_backend_key: Some("llama_cpp".to_string()),
             selected_model_id: Some("model-a".to_string()),
             selected_device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
@@ -1226,7 +1226,7 @@ mod tests {
                 message: "cuda runtime warmup pending".to_string(),
                 device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
                 device_id: Some("cuda:0".to_string()),
-                runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
             }],
             reasons: vec![RuntimeTechnicalFitReason::new(
@@ -1259,7 +1259,7 @@ mod tests {
                 selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
                 selected_candidate_id: Some("candidate-a".to_string()),
                 selected_runtime_id: Some("llama_cpp".to_string()),
-                selected_runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                 selected_backend_key: Some("llama_cpp".to_string()),
                 selected_model_id: Some("model-a".to_string()),
                 selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
@@ -1281,7 +1281,7 @@ mod tests {
                     message: "cuda runtime warmup pending".to_string(),
                     device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
                     device_id: Some("cuda:0".to_string()),
-                    runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                    runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                     backend_key: Some("llama_cpp".to_string()),
                 }],
                 reasons: vec![WorkflowTechnicalFitReason {
@@ -1349,7 +1349,7 @@ mod tests {
                 selection_mode: WorkflowTechnicalFitSelectionMode::ExplicitOverride,
                 selected_candidate_id: Some("llama_cpp".to_string()),
                 selected_runtime_id: Some("llama_cpp".to_string()),
-                selected_runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                 selected_backend_key: Some("llama_cpp".to_string()),
                 selected_model_id: None,
                 selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
@@ -1367,7 +1367,7 @@ mod tests {
                     message: "cuda runtime warmup pending".to_string(),
                     device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
                     device_id: Some("cuda:0".to_string()),
-                    runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                    runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                     backend_key: Some("llama_cpp".to_string()),
                 }],
                 reasons: vec![WorkflowTechnicalFitReason {

@@ -114,7 +114,7 @@ Add Pantograph-owned contracts before backend implementation:
 | `InferenceDevicePolicy` | User intent: `auto`, `cpu`, `device_class`, or concrete `device_id`. This is not backend-specific command-line syntax. Hybrid/offload is reserved for a later plan. |
 | `InferenceDeviceClass` | Initial stable classes: `Cpu`, `Cuda`, `Metal`, `Mps`, and `Unknown`. Future-reserved classes: `Rocm`, `Xpu`, `Vulkan`, `OpenVino`, and `Remote`. |
 | `InferenceDeviceId` | Validated concrete id with backend display label, class, ordinal if known, and source backend/probe. |
-| `RuntimeVariantId` | Stable runtime-artifact identity such as `llama_cpp/linux-x64/cpu`, `llama_cpp/linux-x64/cuda`, `llama_cpp/windows-x64/cpu`, `llama_cpp/windows-x64/cuda`, `llama_cpp/macos-arm64/metal`, or `pytorch/python/cu129`. |
+| `RuntimeVariantId` | Stable runtime-artifact identity such as `llama_cpp.cpu`, `llama_cpp.cuda`, `llama_cpp.windows_cpu`, `llama_cpp.windows_cuda`, `llama_cpp.macos_metal`, or `pytorch.cuda`. |
 | `RuntimeVariantCapability` | Backend-owned facts for supported device classes, required libraries, package/build source, version, install state, and readiness diagnostics. |
 | `DeviceResolutionRequest` | Planner input: backend, task, model facts, user device policy, resource estimate, runtime candidates, and host device inventory. |
 | `DeviceResolutionDecision` | Planner output: selected runtime variant, selected device id, selected device class, explicit/auto mode, and bounded reasons. |

@@ -19,7 +19,7 @@
     },
     "override_selection": {
       "runtime_id": "pytorch",
-      "runtime_variant_id": "pytorch/linux-x64/cuda",
+      "runtime_variant_id": "pytorch.cuda",
       "model_id": "pumas://models/juggernaut-x-v10-sdxl",
       "backend_key": "pytorch"
     },
@@ -41,7 +41,7 @@
     "selection_mode": "automatic",
     "selected_candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0",
     "selected_runtime_id": "pytorch",
-    "selected_runtime_variant_id": "pytorch/linux-x64/cuda",
+    "selected_runtime_variant_id": "pytorch.cuda",
     "selected_backend_key": "pytorch",
     "selected_model_id": "pumas://models/juggernaut-x-v10-sdxl",
     "selected_device_class": "cuda",
@@ -63,7 +63,7 @@
         "message": "CUDA runtime warmup is pending",
         "device_class": "cuda",
         "device_id": "cuda:0",
-        "runtime_variant_id": "pytorch/linux-x64/cuda",
+        "runtime_variant_id": "pytorch.cuda",
         "backend_key": "pytorch"
       }
     ],

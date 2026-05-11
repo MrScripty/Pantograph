@@ -1030,7 +1030,7 @@ mod tests {
             &runtime_requirements(),
             Some(WorkflowTechnicalFitOverride {
                 runtime_id: Some(" runtime-a ".to_string()),
-                runtime_variant_id: Some(" pytorch/linux-x64/cuda ".to_string()),
+                runtime_variant_id: Some(" pytorch.cuda ".to_string()),
                 model_id: Some(" model-a ".to_string()),
                 backend_key: Some("llama.cpp".to_string()),
             }),
@@ -1063,7 +1063,7 @@ mod tests {
             request.override_selection,
             Some(WorkflowTechnicalFitOverride {
                 runtime_id: Some("runtime-a".to_string()),
-                runtime_variant_id: Some("pytorch/linux-x64/cuda".to_string()),
+                runtime_variant_id: Some("pytorch.cuda".to_string()),
                 model_id: Some("model-a".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
             })
@@ -1226,7 +1226,7 @@ mod tests {
                 message: "CUDA device is not available".to_string(),
                 device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
                 device_id: Some(" cuda:0 ".to_string()),
-                runtime_variant_id: Some("pytorch/linux-x64/cuda".to_string()),
+                runtime_variant_id: Some("pytorch.cuda".to_string()),
                 backend_key: Some("pytorch".to_string()),
             }],
             reasons: Vec::new(),

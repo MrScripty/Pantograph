@@ -900,6 +900,18 @@ Update during implementation:
   deviation: the first compile found one remaining state-resolution `String`
   error inside command resolution, which was converted into a typed `State`
   variant; rustfmt-only wrapping was also corrected.
+- 2026-05-11: Continued Milestone 5 by updating technical-fit and
+  scheduler/diagnostics fixture runtime variant ids from slash-shaped examples
+  to canonical dot-shaped ids such as `llama_cpp.cuda` and `pytorch.cuda`.
+  Verification passed:
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`,
+  `cargo test -p pantograph-workflow-service --test contract workflow_technical_fit_cross_layer_fixture_deserializes`,
+  `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/components/workbench/diagnosticsPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts src/services/workflow/WorkflowService.commands.test.ts`,
+  `bash -lc 'if rg -n "[a-z0-9_-]+/[a-z0-9_-]+/(cpu|cuda|metal)|runtime-a/cuda|runtime-b/metal|llama_cpp/|pytorch/" crates/pantograph-embedded-runtime crates/pantograph-workflow-service src -g "*.rs" -g "*.ts" -g "*.svelte" -g "*.json"; then exit 1; else exit 0; fi'`,
+  and `git diff --check`. Verification deviation: initial Node and
+  workflow-service contract runs caught two missed fixture/search values; those
+  were corrected and rerun successfully.
 
 ## Commit Cadence Notes
 
