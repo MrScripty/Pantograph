@@ -648,6 +648,15 @@ Update during implementation:
   `cargo fmt --all -- --check`,
   `cargo test -p inference gpu_layers_remain_llamacpp_runtime_setting_not_device_policy`,
   and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding serde fixtures for
+  `DeviceResolutionRequest` and `BackendExecutionCandidate`. The fixtures
+  preserve canonical device policy, runtime/backend/device ids, task/model
+  evidence, resource estimates, and observed throughput without accepting raw
+  backend-local device strings. Verification passed:
+  `cargo test -p inference --test device_contracts`,
+  `cargo fmt --all -- --check`, and `git diff --check`. The first format check
+  reported rustfmt wrapping in the new test; `cargo fmt --all` was run and the
+  check passed.
 
 ## Commit Cadence Notes
 
@@ -949,6 +958,9 @@ Worker rules:
 - `cargo test -p inference gpu_layers_remain_llamacpp_runtime_setting_not_device_policy`
   passed for preserving llama.cpp `gpu_layers` as a backend-local runtime
   setting outside canonical cross-backend device policy.
+- `cargo test -p inference --test device_contracts` passed for device/runtime
+  serde fixtures, including device-resolution request and backend execution
+  candidate contract coverage.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

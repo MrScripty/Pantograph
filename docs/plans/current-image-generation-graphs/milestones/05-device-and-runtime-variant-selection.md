@@ -2140,6 +2140,31 @@ typed diagnostic and the canonical design is fixed.
     and `git diff --check`.
   - Remaining follow-up: hybrid placement, CPU/GPU split, and offload
     capability reporting still need a separate backend-capability design slice.
+- 2026-05-10 slice: device-resolution request and candidate fixtures.
+  - Smallest useful vertical slice: add serde fixtures for
+    `DeviceResolutionRequest` and `BackendExecutionCandidate` so scheduler
+    admission input and candidate evidence have stable wire-contract coverage.
+  - Allowed write set: `crates/inference/tests/device_contracts.rs`,
+    `crates/inference/tests/fixtures/device_contracts/backend_execution_candidate.json`,
+    `crates/inference/tests/fixtures/device_contracts/device_resolution_request.json`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: the fixtures use canonical
+    `InferenceDevicePolicy`, `RuntimeVariantId`, `BackendId`, and
+    `InferenceDeviceId` shapes; they do not normalize raw backend device
+    strings or introduce compatibility shims.
+  - Standards/blast-radius gate: test-only fixture expansion under the
+    existing Rust integration-test harness; no runtime behavior, generated DTOs,
+    lockfiles, workflow fixtures, or frontend contracts changed.
+  - Verification passed:
+    `cargo test -p inference --test device_contracts`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` reported
+    rustfmt wrapping in the new test; `cargo fmt --all` was run and the check
+    passed.
+  - Remaining follow-up: the broad serde fixture checklist item stays open
+    until every remaining device/runtime DTO crossing Rust, frontend,
+    diagnostics-ledger, worker, and persisted-state boundaries has explicit
+    fixture coverage.
 
 **Verification:**
 
@@ -2208,6 +2233,9 @@ typed diagnostic and the canonical design is fixed.
 - Inference backend tests prove llama.cpp `gpu_layers` stays a backend-local
   runtime setting and is not serialized into canonical cross-backend device
   policy.
+- Inference serde fixture tests prove device-resolution requests and
+  scheduler-facing backend execution candidates preserve canonical ids, policy
+  shape, task/model evidence, resource estimates, and throughput hints.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

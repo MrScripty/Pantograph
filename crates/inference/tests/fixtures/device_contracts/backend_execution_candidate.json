@@ -1,0 +1,23 @@
+{
+  "backend_id": "pytorch",
+  "model_compatible": true,
+  "model_ref": {
+    "model_id": "pumas://model/juggernaut-xl",
+    "revision": "snapshot-2026-05-10",
+    "selected_artifact_id": "diffusers"
+  },
+  "supported_task_ids": [
+    "image_generation"
+  ],
+  "runtime_variant_id": "pytorch.cuda",
+  "device_class": "cuda",
+  "device_id": "cuda:0",
+  "resource_estimate": {
+    "ram_mb": 16384,
+    "vram_mb": 8192,
+    "context_tokens": 77
+  },
+  "observed_throughput": {
+    "images_per_minute": 4.5
+  }
+}
