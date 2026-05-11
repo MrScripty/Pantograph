@@ -94,6 +94,9 @@ let snapshot = registry.snapshot();
   summaries from backend/model checks. The selector treats those as candidate
   facts and still uses `supports_runtime_requirements` plus legal factors for
   eligibility and ranking.
+- Technical-fit selector output must not synthesize executable fallback
+  candidates. Unmatched overrides and incomplete runtime state return
+  unselected decisions with typed reason codes.
 - Defaults: absent observations mean the registry has no current fact for that
   runtime.
 - Enums and labels: status and reason-code enums are semantic contracts, not

@@ -522,6 +522,36 @@ typed diagnostic and the canonical design is fixed.
     expose fallback-named selection modes and reason codes. A later slice must
     replace producer-side fallback synthesis with typed rejection diagnostics
     so the compatibility-shaped DTO values can be retired.
+- 2026-05-10 slice: runtime-registry technical-fit fallback removal.
+  - Smallest useful vertical slice: stop runtime-registry from synthesizing
+    override fallback candidates or selecting conservative fallback candidates
+    when no eligible runtime candidate exists. The selector now returns an
+    unselected decision with typed explicit-override, missing-candidate, and
+    missing-runtime-state reasons.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`,
+    `crates/pantograph-runtime-registry/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: unmatched overrides no longer create
+    synthetic executable candidates, and incomplete runtime/candidate state no
+    longer returns selected runtime/backend/model facts. Fallback-named enum
+    values remain present only as not-yet-retired contract values; this slice
+    stops the canonical selector from emitting them.
+  - Standards/blast-radius gate: runtime-registry remains the backend selector
+    owner; public DTO shape is unchanged; workflow-service, embedded-runtime
+    adapters, persisted schema, generated files, frontend behavior, feature
+    flags, dependencies, and lockfiles are not changed; test isolation uses
+    crate-local selector tests plus embedded-runtime projection tests.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`, and
+    `git diff --check`.
+  - Remaining follow-up: workflow-service and embedded-runtime DTO enums still
+    expose fallback-named variants for older serialized shapes. A later
+    contract cleanup should remove or replace those variants once all producers
+    and fixtures have migrated.
 
 **Verification:**
 

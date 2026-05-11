@@ -365,17 +365,10 @@ pub fn select_runtime_technical_fit(
     request: &RuntimeTechnicalFitRequest,
 ) -> RuntimeTechnicalFitDecision {
     let normalized = request.normalized();
-    let mut candidates = normalized.candidates.clone();
+    let candidates = normalized.candidates.clone();
     let mut reasons = Vec::new();
 
     if let Some(override_selection) = normalized.override_selection.as_ref() {
-        if !candidates
-            .iter()
-            .any(|candidate| candidate_matches_override(candidate, override_selection))
-        {
-            candidates.push(override_fallback_candidate(override_selection));
-        }
-
         if let Some(candidate) = candidates
             .iter()
             .filter(|candidate| candidate_matches_override(candidate, override_selection))
@@ -399,6 +392,24 @@ pub fn select_runtime_technical_fit(
                 reasons,
             );
         }
+
+        if override_selection.model_id.is_some() {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::ExplicitModelOverride,
+                None,
+            ));
+        }
+        if override_selection.backend_key.is_some() {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
+                None,
+            ));
+        }
+        reasons.push(RuntimeTechnicalFitReason::new(
+            RuntimeTechnicalFitReasonCode::MissingCandidateData,
+            None,
+        ));
+        return unselected_decision(RuntimeTechnicalFitSelectionMode::ExplicitOverride, reasons);
     }
 
     let mut eligible_candidates = candidates
@@ -471,23 +482,8 @@ pub fn select_runtime_technical_fit(
         );
     }
 
-    let scoped_fallback_candidates = candidates
-        .iter()
-        .filter(|candidate| {
-            let runtime_snapshot = candidate_runtime_snapshot(candidate, &normalized);
-            candidate_matches_required_models(candidate, runtime_snapshot, &normalized)
-                && candidate_matches_required_backends(candidate, runtime_snapshot, &normalized)
-        })
-        .collect::<Vec<_>>();
-    let fallback_candidate = scoped_fallback_candidates
-        .into_iter()
-        .min_by(|left, right| compare_candidate_ids(left, right))
-        .or_else(|| {
-            candidates
-                .iter()
-                .min_by(|left, right| compare_candidate_ids(left, right))
-        });
-    if fallback_candidate.is_none() {
+    let scoped_diagnostic_candidate = diagnostic_candidate(&candidates, &normalized);
+    if candidates.is_empty() {
         reasons.push(RuntimeTechnicalFitReason::new(
             RuntimeTechnicalFitReasonCode::MissingCandidateData,
             None,
@@ -499,39 +495,35 @@ pub fn select_runtime_technical_fit(
         {
             reasons.push(RuntimeTechnicalFitReason::new(
                 RuntimeTechnicalFitReasonCode::MissingRuntimeState,
-                fallback_candidate.map(|candidate| candidate.candidate_id.as_str()),
+                scoped_diagnostic_candidate.map(|candidate| candidate.candidate_id.as_str()),
             ));
         }
         reasons.push(RuntimeTechnicalFitReason::new(
             RuntimeTechnicalFitReasonCode::MissingCandidateData,
-            fallback_candidate.map(|candidate| candidate.candidate_id.as_str()),
+            scoped_diagnostic_candidate.map(|candidate| candidate.candidate_id.as_str()),
         ));
     }
-    reasons.push(RuntimeTechnicalFitReason::new(
-        RuntimeTechnicalFitReasonCode::ConservativeFallback,
-        fallback_candidate.map(|candidate| candidate.candidate_id.as_str()),
-    ));
 
-    if let Some(candidate) = fallback_candidate {
-        decision_from_candidate(
-            RuntimeTechnicalFitSelectionMode::ConservativeFallback,
-            candidate,
-            reasons,
-        )
-    } else {
-        RuntimeTechnicalFitDecision {
-            selection_mode: RuntimeTechnicalFitSelectionMode::ConservativeFallback,
-            selected_candidate_id: None,
-            selected_runtime_id: None,
-            selected_backend_key: None,
-            selected_model_id: None,
-            reasons,
-            compatibility_report: None,
-            compatibility_issue_count: 0,
-            compatibility_issues: Vec::new(),
-        }
-        .normalized()
-    }
+    unselected_decision(RuntimeTechnicalFitSelectionMode::Automatic, reasons)
+}
+
+fn diagnostic_candidate<'a>(
+    candidates: &'a [RuntimeTechnicalFitCandidate],
+    normalized: &RuntimeTechnicalFitRequest,
+) -> Option<&'a RuntimeTechnicalFitCandidate> {
+    candidates
+        .iter()
+        .filter(|candidate| {
+            let runtime_snapshot = candidate_runtime_snapshot(candidate, normalized);
+            candidate_matches_required_models(candidate, runtime_snapshot, normalized)
+                && candidate_matches_required_backends(candidate, runtime_snapshot, normalized)
+        })
+        .min_by(|left, right| compare_candidate_ids(left, right))
+        .or_else(|| {
+            candidates
+                .iter()
+                .min_by(|left, right| compare_candidate_ids(left, right))
+        })
 }
 
 fn normalize_runtime_id(value: Option<&str>) -> Option<String> {
@@ -604,30 +596,6 @@ fn derive_candidate_id(
     }
 }
 
-fn override_fallback_candidate(
-    override_selection: &RuntimeTechnicalFitOverride,
-) -> RuntimeTechnicalFitCandidate {
-    RuntimeTechnicalFitCandidate {
-        candidate_id: derive_candidate_id(
-            None,
-            override_selection.backend_key.as_deref(),
-            override_selection.model_id.as_deref(),
-        ),
-        runtime_id: None,
-        backend_key: override_selection.backend_key.clone(),
-        model_id: override_selection.model_id.clone(),
-        source_kind: RuntimeTechnicalFitCandidateSourceKind::OverrideFallback,
-        context_window_tokens: None,
-        residency_state: None,
-        warmup_state: None,
-        supports_runtime_requirements: true,
-        compatibility_report: None,
-        compatibility_issue_count: 0,
-        compatibility_issues: Vec::new(),
-    }
-    .normalized()
-}
-
 fn decision_from_candidate(
     selection_mode: RuntimeTechnicalFitSelectionMode,
     candidate: &RuntimeTechnicalFitCandidate,
@@ -643,6 +611,24 @@ fn decision_from_candidate(
         compatibility_report: candidate.compatibility_report.clone(),
         compatibility_issue_count: candidate.compatibility_issue_count,
         compatibility_issues: candidate.compatibility_issues.clone(),
+    }
+    .normalized()
+}
+
+fn unselected_decision(
+    selection_mode: RuntimeTechnicalFitSelectionMode,
+    reasons: Vec<RuntimeTechnicalFitReason>,
+) -> RuntimeTechnicalFitDecision {
+    RuntimeTechnicalFitDecision {
+        selection_mode,
+        selected_candidate_id: None,
+        selected_runtime_id: None,
+        selected_backend_key: None,
+        selected_model_id: None,
+        reasons,
+        compatibility_report: None,
+        compatibility_issue_count: 0,
+        compatibility_issues: Vec::new(),
     }
     .normalized()
 }

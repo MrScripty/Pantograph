@@ -103,14 +103,16 @@ process ownership and app composition stay outside this crate.
   than inventing adapter-local routing semantics.
 - Technical-fit selection is also computed here from normalized request input,
   explicit override precedence, and live runtime snapshot facts so workflow and
-  host layers do not drift on candidate ranking or conservative fallback
-  behavior.
+  host layers do not drift on candidate ranking or rejection behavior.
+  Incomplete runtime/candidate state and unmatched overrides produce
+  unselected typed diagnostics instead of synthetic or conservative fallback
+  executable decisions.
 - Technical-fit resource-pressure interpretation is also computed here so queue
   depth, loaded-runtime saturation, and reservation headroom affect candidate
   ordering through one backend-owned selector instead of adapter-local tie
   breakers.
 - Technical-fit normalization, override, residency, queue-pressure,
-  budget-pressure, and selector fallback tests stay in
+  budget-pressure, and selector rejection tests stay in
   `technical_fit_tests.rs` so selector contracts stay separate from production
   ranking helpers.
 - Reclaim sequencing is also computed here so hosts can ask whether an

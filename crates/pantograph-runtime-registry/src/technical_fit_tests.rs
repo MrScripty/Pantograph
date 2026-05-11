@@ -289,6 +289,58 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
 }
 
 #[test]
+fn selector_rejects_unmatched_override_without_synthetic_candidate() {
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: Vec::new(),
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: Some(RuntimeTechnicalFitOverride {
+            model_id: Some("model-b".to_string()),
+            backend_key: Some("pytorch".to_string()),
+        }),
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![RuntimeTechnicalFitCandidate {
+            candidate_id: "runtime-a".to_string(),
+            runtime_id: Some("runtime-a".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            model_id: Some("model-a".to_string()),
+            source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
+            context_window_tokens: Some(8192),
+            residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
+            warmup_state: Some(RuntimeTechnicalFitWarmupState::Ready),
+            supports_runtime_requirements: true,
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        }],
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selection_mode,
+        RuntimeTechnicalFitSelectionMode::ExplicitOverride
+    );
+    assert_eq!(decision.selected_candidate_id, None);
+    assert_eq!(decision.selected_runtime_id, None);
+    assert_eq!(decision.selected_backend_key, None);
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::ExplicitModelOverride
+            && reason.candidate_id.is_none()
+    }));
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::ExplicitBackendOverride
+            && reason.candidate_id.is_none()
+    }));
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
+            && reason.candidate_id.is_none()
+    }));
+}
+
+#[test]
 fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: RuntimeRegistrySnapshot {
@@ -362,7 +414,7 @@ fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
 }
 
 #[test]
-fn selector_falls_back_conservatively_when_required_context_is_missing() {
+fn selector_rejects_when_required_context_is_missing() {
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: empty_snapshot(),
         workflow_id: Some("workflow-a".to_string()),
@@ -391,21 +443,23 @@ fn selector_falls_back_conservatively_when_required_context_is_missing() {
 
     assert_eq!(
         decision.selection_mode,
-        RuntimeTechnicalFitSelectionMode::ConservativeFallback
+        RuntimeTechnicalFitSelectionMode::Automatic
     );
-    assert_eq!(decision.selected_candidate_id.as_deref(), Some("runtime-a"));
+    assert_eq!(decision.selected_candidate_id, None);
+    assert_eq!(decision.selected_runtime_id, None);
+    assert_eq!(decision.selected_backend_key, None);
     assert!(decision.reasons.iter().any(|reason| {
         reason.code == RuntimeTechnicalFitReasonCode::MissingRuntimeState
             && reason.candidate_id.as_deref() == Some("runtime-a")
     }));
     assert!(decision.reasons.iter().any(|reason| {
-        reason.code == RuntimeTechnicalFitReasonCode::ConservativeFallback
+        reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
             && reason.candidate_id.as_deref() == Some("runtime-a")
     }));
 }
 
 #[test]
-fn selector_conservative_fallback_stays_with_required_backend_candidate() {
+fn selector_rejects_required_backend_candidate_without_fallback_selection() {
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: empty_snapshot(),
         workflow_id: Some("workflow-a".to_string()),
@@ -450,13 +504,13 @@ fn selector_conservative_fallback_stays_with_required_backend_candidate() {
 
     assert_eq!(
         decision.selection_mode,
-        RuntimeTechnicalFitSelectionMode::ConservativeFallback
+        RuntimeTechnicalFitSelectionMode::Automatic
     );
-    assert_eq!(decision.selected_candidate_id.as_deref(), Some("llama_cpp"));
-    assert_eq!(decision.selected_runtime_id.as_deref(), Some("llama_cpp"));
-    assert_eq!(decision.selected_backend_key.as_deref(), Some("llama_cpp"));
+    assert_eq!(decision.selected_candidate_id, None);
+    assert_eq!(decision.selected_runtime_id, None);
+    assert_eq!(decision.selected_backend_key, None);
     assert!(decision.reasons.iter().any(|reason| {
-        reason.code == RuntimeTechnicalFitReasonCode::ConservativeFallback
+        reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
             && reason.candidate_id.as_deref() == Some("llama_cpp")
     }));
 }

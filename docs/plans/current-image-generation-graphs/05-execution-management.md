@@ -228,6 +228,10 @@ Update during implementation:
   `MissingCandidateData`, and `MissingRuntimeState` decisions now produce
   blocking `WorkflowRuntimeIssue` diagnostics before run/session admission,
   even when the decision includes a selected runtime id.
+- 2026-05-10: Continued Milestone 5 by removing runtime-registry
+  technical-fit fallback selection. Unmatched overrides and incomplete
+  candidate/runtime state now produce unselected typed diagnostic decisions
+  instead of synthetic override candidates or conservative selected runtimes.
 
 ## Commit Cadence Notes
 
@@ -409,6 +413,9 @@ Worker rules:
   technical-fit decisions instead of treating them as warning-only selected
   runtime facts. Runtime-registry and embedded-runtime producer-side fallback
   synthesis still needs replacement.
+- Milestone 5 runtime-registry technical-fit selection no longer emits
+  executable fallback decisions. Fallback-named DTO enum variants still exist
+  for contract cleanup, but the canonical selector no longer produces them.
 
 ### Deviations
 
@@ -481,6 +488,9 @@ Worker rules:
 - Continue Milestone 5 by replacing embedded-runtime/runtime-registry
   fallback-named technical-fit production with typed rejection diagnostics so
   workflow-service no longer needs to receive fallback-shaped decision DTOs.
+- Continue Milestone 5 by retiring or replacing fallback-named technical-fit
+  DTO variants after verifying no producer emits them and no fixture depends on
+  them as executable selections.
 
 ### Verification Summary
 
@@ -600,6 +610,12 @@ Worker rules:
   before the early-return gap was fixed; the corrected slice rejects
   fallback/incomplete-state decisions before readiness enforcement can be
   skipped.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`, and
+  `git diff --check` passed after runtime-registry stopped synthesizing
+  override fallback candidates and stopped selecting conservative fallback
+  runtime candidates.
 
 ### Traceability Links
 
