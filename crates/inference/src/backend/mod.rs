@@ -891,7 +891,7 @@ impl Default for BackendConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LlamaCppRuntimeSettings {
     /// Effective llama.cpp device selector.
-    pub device: String,
+    pub device: DeviceBackend,
     /// Effective number of GPU layers (`-1` means all layers).
     pub gpu_layers: i32,
     /// Effective context size used for llama-server `-c`.
@@ -925,13 +925,13 @@ impl LlamaCppRuntimeSettings {
     #[must_use]
     pub fn device_config(&self) -> DeviceConfig {
         DeviceConfig {
-            device: self.device.clone(),
+            device: self.device.to_id(),
             gpu_layers: self.gpu_layers,
         }
     }
 }
 
-fn validate_llamacpp_device(device: Option<&str>) -> Result<String, BackendError> {
+fn validate_llamacpp_device(device: Option<&str>) -> Result<DeviceBackend, BackendError> {
     let Some(device) = device.map(str::trim).filter(|value| !value.is_empty()) else {
         return Err(BackendError::Config(
             "llama.cpp device setting is required; use explicit auto policy when scheduler-owned selection is intended"
@@ -943,7 +943,7 @@ fn validate_llamacpp_device(device: Option<&str>) -> Result<String, BackendError
             "invalid llama.cpp device setting '{device}': {error}"
         ))
     })?;
-    Ok(backend.to_id())
+    Ok(backend)
 }
 
 fn validate_optional_positive_u32(
@@ -1191,7 +1191,7 @@ mod tests {
         })
         .expect("default backend config should be valid explicit auto");
 
-        assert_eq!(settings.device, defaults::DEVICE);
+        assert_eq!(settings.device, DeviceBackend::Auto);
         assert_eq!(settings.gpu_layers, defaults::GPU_LAYERS);
         assert_eq!(settings.context_size, defaults::CONTEXT_SIZE);
         assert_eq!(settings.cpu_threads, None);
@@ -1222,7 +1222,7 @@ mod tests {
         assert_eq!(
             settings,
             LlamaCppRuntimeSettings {
-                device: "Vulkan0".to_string(),
+                device: DeviceBackend::Vulkan(0),
                 gpu_layers: 42,
                 context_size: 8192,
                 cpu_threads: Some(8),
@@ -1299,6 +1299,7 @@ mod tests {
             (Some("  "), "device setting is required"),
             (Some("unknown"), "unknown llama.cpp device selector"),
             (Some("CUDAx"), "invalid ordinal"),
+            (Some("cuda:0"), "unknown llama.cpp device selector"),
         ] {
             let error = LlamaCppRuntimeSettings::try_from_backend_config(&BackendConfig {
                 device: device.map(str::to_string),

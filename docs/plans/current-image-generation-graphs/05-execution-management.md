@@ -789,6 +789,14 @@ Update during implementation:
   migrated. Verification passed:
   `cargo test -p inference startup_device`, `cargo fmt --all -- --check`, and
   `git diff --check`.
+- 2026-05-11: Continued Milestone 5 by typing the effective
+  `LlamaCppRuntimeSettings.device` field as backend-local `DeviceBackend`
+  after validation. `BackendConfig.device` still accepts the shared raw
+  startup string for now, but normalized llama.cpp runtime settings no longer
+  carry a raw device string internally; projection to legacy `DeviceConfig`
+  happens only at the sidecar DTO boundary. Verification passed:
+  `cargo test -p inference llamacpp_runtime_settings`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1125,6 +1133,9 @@ Worker rules:
 - Startup-device intent tests prove scheduler policy, canonical selected
   device ids, and llama.cpp-local selectors remain distinct and are not inferred
   from one another during the shared startup-config migration.
+- llama.cpp runtime-settings tests now prove effective device state is parsed
+  into `DeviceBackend`, rejects canonical `cuda:0` as a llama.cpp selector, and
+  projects back to the existing sidecar `DeviceConfig` only at the DTO boundary.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

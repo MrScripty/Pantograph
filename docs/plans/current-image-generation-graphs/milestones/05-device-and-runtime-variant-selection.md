@@ -2469,6 +2469,28 @@ typed diagnostic and the canonical design is fixed.
     `EmbeddingStartRequest.device`, `BackendConfig.device`, and legacy
     `DeviceConfig.device` through this explicit intent boundary in later
     slices without preserving raw-string compatibility shims.
+- 2026-05-11 slice: typed llama.cpp effective runtime device.
+  - Smallest useful vertical slice: change normalized
+    `LlamaCppRuntimeSettings.device` from `String` to backend-local
+    `DeviceBackend` while leaving the shared `BackendConfig.device` input and
+    legacy sidecar `DeviceConfig` output untouched for separate migration
+    slices.
+  - Allowed write set: `crates/inference/src/backend/mod.rs` and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: validation still requires an explicit
+    llama.cpp selector, parses it once into `DeviceBackend`, rejects canonical
+    `cuda:0` as a llama.cpp selector, and does not infer canonical selected
+    facts from backend-local settings.
+  - Standards/blast-radius gate: backend-local runtime-settings typing and
+    focused tests only; no gateway API fields, sidecar command DTOs, generated
+    DTOs, lockfiles, workflow fixtures, frontend code, scheduler ranking, or
+    worker execution behavior changed.
+  - Verification passed:
+    `cargo test -p inference llamacpp_runtime_settings`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: type or replace legacy `DeviceConfig.device` and
+    shared `BackendConfig.device` without accepting raw strings as trusted
+    internal state beyond the adapter boundary.
 
 **Verification:**
 
@@ -2573,6 +2595,9 @@ typed diagnostic and the canonical design is fixed.
 - Startup-device intent tests prove scheduler policy, canonical device ids, and
   llama.cpp-local selectors stay in separate typed variants before shared
   startup config is migrated.
+- llama.cpp runtime-settings tests prove normalized effective settings store
+  `DeviceBackend`, reject canonical ids in the llama.cpp selector namespace,
+  and only project to raw `DeviceConfig` at the sidecar DTO boundary.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.
