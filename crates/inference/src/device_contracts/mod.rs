@@ -48,6 +48,14 @@ pub enum DeviceContractError {
         /// Invalid value.
         value: String,
     },
+    /// An identifier used a reserved policy keyword.
+    #[error("{field} uses reserved identifier: {value}")]
+    ReservedIdentifier {
+        /// Contract field that failed validation.
+        field: &'static str,
+        /// Reserved value.
+        value: String,
+    },
     /// No backend candidates were available for a scheduler decision.
     #[error("backend execution decision requires one candidate, got none")]
     EmptyBackendCandidates,

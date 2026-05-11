@@ -736,6 +736,14 @@ Update during implementation:
   as separate commands; the existing worker load fixture had a stale nested
   `source_contract_version: 1`, which was updated to `2` so
   `model_source.validate_for_backend_load()` passes.
+- 2026-05-11: Continued Milestone 5 by reserving `auto` out of
+  `InferenceDeviceId`. Automatic device selection must now be represented by
+  `InferenceDevicePolicy::Auto` or by an omitted backend-worker device field,
+  not by a concrete device id string. PyTorch worker load-envelope tests now
+  reject explicit `"auto"` in `payload.device`. Verification passed:
+  `cargo test -p inference device_contracts`,
+  `cargo test -p inference --features backend-pytorch test_pytorch_worker_load_envelope_rejects_auto_device_field`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1059,6 +1067,9 @@ Worker rules:
   for typed worker load device ids, legacy-device rejection, direct-load
   construction, package projection, default auto omission, and the repaired
   load fixture.
+- Device-contract parser tests now prove `auto` is a reserved scheduler policy
+  keyword, not a concrete `InferenceDeviceId`; the PyTorch worker load contract
+  also rejects explicit `"auto"` in `payload.device`.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

@@ -2345,6 +2345,29 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: PyTorch audio transcription still carries a
     backend-local `device: String` because it accepts `"auto"` directly; that
     needs a separate worker adapter boundary slice.
+- 2026-05-11 slice: reserve `auto` out of concrete device ids.
+  - Smallest useful vertical slice: make `InferenceDeviceId::parse("auto")`
+    return a typed reserved-identifier error and add a PyTorch worker
+    load-envelope guard proving explicit `"auto"` in `payload.device` is
+    rejected.
+  - Allowed write set: `crates/inference/src/device_contracts/mod.rs`,
+    `crates/inference/src/device_contracts/ids.rs`,
+    `crates/inference/src/device_contracts/tests.rs`,
+    `crates/inference/src/backend/pytorch_tests.rs`, and this plan directory.
+  - No-fallback/no-legacy confirmation: automatic selection remains a scheduler
+    policy (`InferenceDevicePolicy::Auto`) or an omitted backend-worker device
+    field; it cannot cross boundaries as a concrete selected device id.
+  - Standards/blast-radius gate: pure contract validation plus focused tests
+    only; no generated DTOs, lockfiles, workflow fixtures, frontend code,
+    runtime startup policy, Python worker behavior, or scheduler ranking
+    changed.
+  - Verification passed:
+    `cargo test -p inference device_contracts`,
+    `cargo test -p inference --features backend-pytorch test_pytorch_worker_load_envelope_rejects_auto_device_field`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: audio transcription worker requests still need their
+    raw `"auto"` device field replaced with omitted/canonical device intent at
+    the worker boundary.
 
 **Verification:**
 
@@ -2436,6 +2459,9 @@ typed diagnostic and the canonical design is fixed.
 - PyTorch worker load-contract tests prove Transformers load envelopes carry
   canonical `InferenceDeviceId` values or omit device for backend-local auto,
   and reject legacy backend-local device ids.
+- Device-contract tests prove `auto` is reserved for scheduler policy and is
+  rejected as a concrete `InferenceDeviceId`; PyTorch worker load tests reject
+  explicit `"auto"` device fields.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

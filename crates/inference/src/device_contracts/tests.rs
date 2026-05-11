@@ -26,12 +26,27 @@ fn device_id_parser_accepts_canonical_device_ids() {
 
 #[test]
 fn device_id_parser_rejects_legacy_or_malformed_values() {
-    for value in ["", "  ", "CUDA0", "CUDAx", "cuda:", "cuda::0", "cuda/0"] {
+    for value in [
+        "", "  ", "auto", "CUDA0", "CUDAx", "cuda:", "cuda::0", "cuda/0",
+    ] {
         assert!(
             InferenceDeviceId::parse(value).is_err(),
             "{value:?} should fail validation"
         );
     }
+}
+
+#[test]
+fn device_id_parser_reports_auto_as_reserved_policy_keyword() {
+    let error = InferenceDeviceId::parse("auto").expect_err("auto is policy, not a device id");
+
+    assert_eq!(
+        error,
+        DeviceContractError::ReservedIdentifier {
+            field: "device_id",
+            value: "auto".to_string()
+        }
+    );
 }
 
 #[test]

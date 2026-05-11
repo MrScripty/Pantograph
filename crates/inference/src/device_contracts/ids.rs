@@ -17,7 +17,7 @@ pub struct InferenceDeviceId(String);
 impl InferenceDeviceId {
     /// Parse and validate a concrete device id.
     pub fn parse(value: impl AsRef<str>) -> Result<Self, DeviceContractError> {
-        validate_identifier(
+        let device_id = validate_identifier(
             "device_id",
             value.as_ref(),
             DEVICE_ID_MAX_LEN,
@@ -25,8 +25,14 @@ impl InferenceDeviceId {
                 colon: true,
                 dot: false,
             },
-        )
-        .map(Self)
+        )?;
+        if device_id == "auto" {
+            return Err(DeviceContractError::ReservedIdentifier {
+                field: "device_id",
+                value: device_id,
+            });
+        }
+        Ok(Self(device_id))
     }
 
     /// Borrow the validated id.

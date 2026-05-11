@@ -471,6 +471,20 @@ fn test_pytorch_worker_load_envelope_rejects_legacy_device_id() {
 }
 
 #[test]
+fn test_pytorch_worker_load_envelope_rejects_auto_device_field() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"
+    ))
+    .expect("decode worker load fixture");
+    value["payload"]["device"] = serde_json::json!("auto");
+
+    let error =
+        serde_json::from_value::<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>>(value)
+            .expect_err("auto worker device should be omitted, not sent as a device id");
+    assert!(error.to_string().contains("reserved identifier"));
+}
+
+#[test]
 fn test_pytorch_worker_load_envelope_tolerates_additive_fields() {
     let mut value: serde_json::Value = serde_json::from_str(include_str!(
         "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"
