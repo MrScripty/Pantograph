@@ -117,7 +117,7 @@
         "data": {
           "label": "Juggernaut X v10 Image Generation",
           "task_kind": "image_generation",
-          "runtime_hint": "pytorch"
+          "backend_key": "pytorch"
         }
       },
       {

@@ -591,6 +591,40 @@ typed diagnostic and the canonical design is fixed.
     slice. Remaining Milestone 5 work is now raw device-string execution,
     managed runtime variant state, frontend device options, and node-engine
     backend routing.
+- 2026-05-10 slice: workflow capability `runtime_hint` removal.
+  - Smallest useful vertical slice: stop workflow-service capability
+    extraction from converting `runtime_hint`/`runtimeHint` values into
+    executable backend requirements, and update the current Juggernaut image
+    workflow to carry its backend requirement through `backend_key`.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/capabilities.rs`,
+    `crates/pantograph-workflow-service/src/README.md`,
+    `.pantograph/workflows/juggernaut-x-v10-sdxl.json`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: legacy `runtime_hint` values are no
+    longer accepted as a backend-requirement source in workflow-service
+    capability extraction. The slice does not add a compatibility mapper or
+    infer backend requirements from task names; remaining typed backend
+    preference work stays explicit in this milestone.
+  - Standards/blast-radius gate: workflow-service remains the capability and
+    admission owner; public DTO shape is unchanged; runtime lifecycle,
+    persisted schema, frontend behavior, generated files, feature flags,
+    dependencies, lockfiles, and worker execution are untouched; test isolation
+    uses focused workflow-service capability unit tests plus the default
+    capability integration path.
+  - Discovered follow-up: other graph editor, embedded-runtime, and node-engine
+    paths still mention or consume `runtime_hint`; those paths require separate
+    slices because they cross execution, memory-impact, and producer ownership
+    boundaries.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service capabilities`,
+    `cargo test -p pantograph-workflow-service default_capabilities_derive_runtime_requirements_from_workflow`,
+    `node -e "JSON.parse(require('fs').readFileSync('.pantograph/workflows/juggernaut-x-v10-sdxl.json', 'utf8'))"`,
+    and `git diff --check`.
+  - Deviation: `jq empty .pantograph/workflows/juggernaut-x-v10-sdxl.json`
+    could not run because `jq` is not installed in the environment. The JSON
+    syntax check was rerun with Node.
 
 **Verification:**
 

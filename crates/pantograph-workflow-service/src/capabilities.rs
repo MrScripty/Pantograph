@@ -542,17 +542,6 @@ fn extract_backend_keys_from_value(
                         }
                     }
                 }
-                if key.eq_ignore_ascii_case("runtime_hint")
-                    || key.eq_ignore_ascii_case("runtimeHint")
-                {
-                    if let Some(raw) = child.as_str() {
-                        if let Some(backend_key) = backend_key_for_runtime_hint(raw) {
-                            if !gguf_context || backend_key == "llama_cpp" {
-                                out.insert(backend_key);
-                            }
-                        }
-                    }
-                }
                 extract_backend_keys_from_value(child, out, gguf_context);
             }
         }
@@ -607,26 +596,6 @@ fn path_has_gguf_extension(path: &str) -> bool {
         .extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"))
-}
-
-fn backend_key_for_runtime_hint(raw: &str) -> Option<String> {
-    let normalized = raw.trim().to_ascii_lowercase();
-    if normalized.is_empty() {
-        return None;
-    }
-
-    let backend_key = match normalized.as_str() {
-        "transformers_pytorch"
-        | "transformers-pytorch"
-        | "pytorch_transformers"
-        | "pytorch-transformers" => "pytorch".to_string(),
-        other => canonical_runtime_backend_key(other),
-    };
-    if backend_key.is_empty() {
-        None
-    } else {
-        Some(backend_key)
-    }
 }
 
 fn derive_roles(node_type: &str, data: &serde_json::Value) -> HashSet<String> {
@@ -779,7 +748,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_required_backends_infers_supported_runtime_specific_node_backends() {
+    fn extract_required_backends_ignores_runtime_hint_values() {
         let nodes = vec![
             StoredGraphNode {
                 id: "torch".to_string(),
@@ -795,10 +764,7 @@ mod tests {
             },
         ];
 
-        assert_eq!(
-            extract_required_backends(&nodes),
-            vec!["llama_cpp".to_string(), "pytorch".to_string()]
-        );
+        assert!(extract_required_backends(&nodes).is_empty());
     }
 
     #[test]
@@ -860,7 +826,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_required_backends_does_not_ignore_retired_ollama_hints() {
+    fn extract_required_backends_ignores_retired_runtime_hints() {
         let nodes = vec![StoredGraphNode {
             id: "ollama".to_string(),
             node_type: "llm-inference".to_string(),
@@ -868,10 +834,7 @@ mod tests {
             position: StoredPosition::default(),
         }];
 
-        assert_eq!(
-            extract_required_backends(&nodes),
-            vec!["retiredollama".to_string()]
-        );
+        assert!(extract_required_backends(&nodes).is_empty());
     }
 
     #[test]
@@ -897,7 +860,7 @@ mod tests {
                 node_type: "llm-inference".to_string(),
                 data: serde_json::json!({
                     "task_kind": "text_generation",
-                    "runtime_hint": "llamacpp"
+                    "backend_key": "llama_cpp"
                 }),
                 position: StoredPosition::default(),
             },
@@ -906,7 +869,7 @@ mod tests {
                 node_type: "llm-inference".to_string(),
                 data: serde_json::json!({
                     "task_kind": "text_generation",
-                    "runtime_hint": "transformers_pytorch"
+                    "backend_key": "pytorch"
                 }),
                 position: StoredPosition::default(),
             },

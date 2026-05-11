@@ -238,6 +238,12 @@ Update during implementation:
   missing-candidate or missing-runtime-state reasons instead of
   `ConservativeFallback`, `OverrideFallback`, or `conservative_fallback`
   serialized values.
+- 2026-05-10: Continued Milestone 5 by retiring workflow-service
+  `runtime_hint` capability extraction as an executable backend requirement
+  source. The current Juggernaut image workflow now records `backend_key:
+  pytorch` on the image-generation node, and legacy `runtime_hint` values are
+  ignored by capability extraction instead of being canonicalized into backend
+  requirements.
 
 ## Commit Cadence Notes
 
