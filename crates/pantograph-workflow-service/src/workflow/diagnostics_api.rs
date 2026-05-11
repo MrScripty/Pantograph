@@ -1287,7 +1287,12 @@ impl WorkflowService {
                 "reason must be non-empty".to_string(),
             ));
         }
-        let limit = request.limit.unwrap_or(500).max(1);
+        let limit = request.limit.unwrap_or(500);
+        if limit == 0 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "limit must be greater than zero".to_string(),
+            ));
+        }
         if limit > 500 {
             return Err(WorkflowServiceError::InvalidRequest(
                 "limit exceeds maximum 500".to_string(),

@@ -2377,6 +2377,25 @@ fn workflow_retention_cleanup_expires_artifacts_through_projection() {
     }));
 }
 
+#[test]
+fn workflow_retention_cleanup_rejects_zero_limit() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let error = service
+        .workflow_retention_cleanup_apply(WorkflowRetentionCleanupRequest {
+            limit: Some(0),
+            reason: "developer requested cleanup".to_string(),
+        })
+        .expect_err("explicit zero cleanup limit should fail closed");
+
+    assert!(matches!(error, WorkflowServiceError::InvalidRequest(_)));
+    assert!(
+        error.message().contains("limit must be greater than zero"),
+        "unexpected cleanup limit error: {}",
+        error.message()
+    );
+}
+
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
     DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::WorkflowService,

@@ -227,6 +227,12 @@ typed diagnostic and the canonical design is fixed.
     boundaries include broader image request limits, context/token/batch
     limits, memory estimates, byte-range projections, and worker/runtime
     request fields.
+  - 2026-05-11 partial: workflow retention cleanup now rejects explicit
+    `limit: Some(0)` with `WorkflowServiceError::InvalidRequest` instead of
+    normalizing it to one. `None` remains the canonical defaulted request
+    shape. Remaining numeric boundaries include broader image request limits,
+    context/token/batch limits, memory estimates, byte-range projections, and
+    worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3284,6 +3290,31 @@ typed diagnostic and the canonical design is fixed.
     request limits beyond positive-count validation, context/token/batch
     limits, memory estimates, byte-range projections, and worker/runtime
     request fields.
+- 2026-05-11 slice: retention cleanup zero-limit validation.
+  - Smallest useful vertical slice: remove the `.max(1)` fallback from
+    `workflow_retention_cleanup_apply` and reject explicit `limit: Some(0)`
+    through the existing workflow-service invalid-request boundary.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/diagnostics.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: explicit zero no longer becomes
+    cleanup limit one. `None` still selects the canonical default because it
+    is an absent option, not an invalid explicit numeric request.
+  - Standards/blast-radius gate: retention cleanup request validation only; no
+    generated files, frontend code, saved workflow fixtures, lockfiles, path
+    roots, Pumas contracts, worker contracts, runtime scheduler policy, or
+    backend lifecycle behavior changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service workflow_retention_cleanup_rejects_zero_limit`,
+    `cargo test -p pantograph-workflow-service workflow_retention_cleanup_expires_artifacts_through_projection`,
+    and `cargo fmt --all -- --check`.
+  - Verification deviation: the two focused Cargo tests were started in
+    parallel and serialized on Cargo package/build locks before passing.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    request limits, context/token/batch limits outside this retention-cleanup
+    validation boundary, memory estimates, byte-range projections, and
+    worker/runtime request fields.
 
 **Verification:**
 

@@ -1950,6 +1950,26 @@ Worker rules:
   before passing. Remaining numeric-boundary follow-up: image request limits
   beyond positive-count validation, context/token/batch limits, memory
   estimates, byte-range projections, and worker/runtime request fields.
+- 2026-05-11 retention cleanup zero-limit validation slice: smallest useful
+  vertical slice was limited to removing the `.max(1)` fallback from
+  `workflow_retention_cleanup_apply` and rejecting explicit `limit: Some(0)`
+  through the existing workflow-service invalid-request boundary. Allowed
+  write set:
+  `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/diagnostics.rs`, and
+  this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because explicit zero no
+  longer becomes cleanup limit one. `None` still selects the canonical default
+  because it is an absent option, not an invalid explicit numeric request.
+  Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_retention_cleanup_rejects_zero_limit`,
+  `cargo test -p pantograph-workflow-service workflow_retention_cleanup_expires_artifacts_through_projection`,
+  and `cargo fmt --all -- --check`. Deviation: the two focused Cargo tests
+  were started in parallel and serialized on Cargo package/build locks before
+  passing. Remaining numeric-boundary follow-up: image request limits,
+  context/token/batch limits outside this retention-cleanup validation
+  boundary, memory estimates, byte-range projections, and worker/runtime
+  request fields.
 
 ### Traceability Links
 
