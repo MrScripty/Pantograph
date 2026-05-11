@@ -2165,6 +2165,27 @@ typed diagnostic and the canonical design is fixed.
     until every remaining device/runtime DTO crossing Rust, frontend,
     diagnostics-ledger, worker, and persisted-state boundaries has explicit
     fixture coverage.
+- 2026-05-10 slice: device-resolution decision fixture.
+  - Smallest useful vertical slice: add a serde fixture for
+    `DeviceResolutionDecision`, the resolved device choice consumed by runtime
+    load contracts.
+  - Allowed write set: `crates/inference/tests/device_contracts.rs`,
+    `crates/inference/tests/fixtures/device_contracts/device_resolution_decision.json`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: the fixture encodes a canonical
+    explicit CUDA policy and selected canonical `cuda:0` device id; it does
+    not preserve or translate backend-local raw selectors.
+  - Standards/blast-radius gate: test-only fixture expansion under the
+    existing Rust integration-test harness; no runtime behavior, generated DTOs,
+    lockfiles, workflow fixtures, or frontend contracts changed.
+  - Verification passed:
+    `cargo test -p inference --test device_contracts`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` reported
+    rustfmt import wrapping; `cargo fmt --all` was run and the check passed.
+  - Remaining follow-up: DTO fixture coverage still needs non-inference
+    device/runtime boundaries, especially frontend, diagnostics-ledger, worker,
+    and persisted-state contracts.
 
 **Verification:**
 
@@ -2236,6 +2257,9 @@ typed diagnostic and the canonical design is fixed.
 - Inference serde fixture tests prove device-resolution requests and
   scheduler-facing backend execution candidates preserve canonical ids, policy
   shape, task/model evidence, resource estimates, and throughput hints.
+- Inference serde fixture tests prove resolved device decisions preserve the
+  canonical runtime variant and selected device choice consumed by runtime
+  load.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

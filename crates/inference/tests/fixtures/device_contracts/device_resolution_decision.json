@@ -1,0 +1,10 @@
+{
+  "policy": {
+    "policy": "explicit",
+    "device_class": "cuda",
+    "device_id": "cuda:0"
+  },
+  "runtime_variant_id": "pytorch.cuda",
+  "selected_device_class": "cuda",
+  "selected_device_id": "cuda:0"
+}

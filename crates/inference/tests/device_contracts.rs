@@ -1,13 +1,15 @@
 use inference::{
-    BackendExecutionCandidate, BackendExecutionDecision, DeviceResolutionDiagnosticCode,
-    DeviceResolutionRequest, InferenceDeviceClass, InferenceDevicePolicy, InferenceTaskId,
-    LlamaCppDeviceInventoryFact, RuntimeVariantCapability,
+    BackendExecutionCandidate, BackendExecutionDecision, DeviceResolutionDecision,
+    DeviceResolutionDiagnosticCode, DeviceResolutionRequest, InferenceDeviceClass,
+    InferenceDevicePolicy, InferenceTaskId, LlamaCppDeviceInventoryFact, RuntimeVariantCapability,
 };
 
 const BACKEND_EXECUTION_DECISION_FIXTURE: &str =
     include_str!("fixtures/device_contracts/backend_execution_decision.json");
 const BACKEND_EXECUTION_CANDIDATE_FIXTURE: &str =
     include_str!("fixtures/device_contracts/backend_execution_candidate.json");
+const DEVICE_RESOLUTION_DECISION_FIXTURE: &str =
+    include_str!("fixtures/device_contracts/device_resolution_decision.json");
 const DEVICE_RESOLUTION_REQUEST_FIXTURE: &str =
     include_str!("fixtures/device_contracts/device_resolution_request.json");
 const RUNTIME_VARIANT_CAPABILITY_FIXTURE: &str =
@@ -118,6 +120,35 @@ fn device_resolution_request_fixture_preserves_explicit_policy() {
     let encoded = serde_json::to_value(&request).expect("encode request");
     let fixture: serde_json::Value =
         serde_json::from_str(DEVICE_RESOLUTION_REQUEST_FIXTURE).expect("fixture parses");
+    assert_eq!(encoded, fixture);
+}
+
+#[test]
+fn device_resolution_decision_fixture_preserves_runtime_load_device_choice() {
+    let decision: DeviceResolutionDecision =
+        serde_json::from_str(DEVICE_RESOLUTION_DECISION_FIXTURE)
+            .expect("device resolution decision fixture should decode");
+
+    let InferenceDevicePolicy::Explicit {
+        device_class,
+        device_id,
+    } = &decision.policy
+    else {
+        panic!("decision fixture should use explicit policy");
+    };
+    assert_eq!(*device_class, InferenceDeviceClass::Cuda);
+    assert_eq!(device_id.as_ref().map(|id| id.as_str()), Some("cuda:0"));
+    assert_eq!(decision.runtime_variant_id.as_str(), "pytorch.cuda");
+    assert_eq!(decision.selected_device_class, InferenceDeviceClass::Cuda);
+    assert_eq!(
+        decision.selected_device_id.as_ref().map(|id| id.as_str()),
+        Some("cuda:0")
+    );
+    assert!(decision.diagnostics.is_empty());
+
+    let encoded = serde_json::to_value(&decision).expect("encode decision");
+    let fixture: serde_json::Value =
+        serde_json::from_str(DEVICE_RESOLUTION_DECISION_FIXTURE).expect("fixture parses");
     assert_eq!(encoded, fixture);
 }
 
