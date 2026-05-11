@@ -2103,6 +2103,22 @@ Worker rules:
   numeric-boundary follow-up: image request limits, context/batch limits
   outside this memory estimate validation boundary, byte-range projections, and
   worker/runtime request fields.
+- 2026-05-11 artifact retention cleanup TTL arithmetic slice: smallest useful
+  vertical slice was limited to replacing retention cleanup TTL
+  second-to-millisecond saturation and cutoff saturation with checked
+  arithmetic. Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/artifact_store.rs` and this
+  plan directory.
+- The slice preserves the no-fallback/no-legacy rule because impossible
+  retention TTL arithmetic no longer projects a saturated cleanup cutoff; it
+  fails with `ArtifactStoreError::ArtifactAccountingOverflow`. Verification
+  passed:
+  `cargo test -p pantograph-workflow-service retention_cleanup_rejects_ttl_millisecond_overflow`
+  and `cargo test -p pantograph-workflow-service artifact_store`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Remaining
+  numeric-boundary follow-up: image request limits, context/batch limits
+  outside this retention cleanup boundary, byte-range projections, and
+  worker/runtime request fields.
 
 ### Traceability Links
 

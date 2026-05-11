@@ -293,7 +293,17 @@ impl ArtifactStore {
         let Some(ttl_seconds) = self.manifest.policy.ttl_seconds else {
             return Ok(0);
         };
-        let cutoff_ms = now_ms.saturating_sub(ttl_seconds.saturating_mul(1000));
+        let ttl_ms = ttl_seconds.checked_mul(1000).ok_or(
+            ArtifactStoreError::ArtifactAccountingOverflow {
+                field: "retention.ttl_ms",
+            },
+        )?;
+        let cutoff_ms =
+            now_ms
+                .checked_sub(ttl_ms)
+                .ok_or(ArtifactStoreError::ArtifactAccountingOverflow {
+                    field: "retention.cutoff_ms",
+                })?;
         let root_dir = self.root_dir.clone();
         let mut evict_cache_ids = Vec::new();
         let mut expired_count = 0;
@@ -713,6 +723,25 @@ mod tests {
             error,
             ArtifactStoreError::ArtifactAccountingOverflow {
                 field: "stats.retained_body_bytes"
+            }
+        ));
+    }
+
+    #[test]
+    fn retention_cleanup_rejects_ttl_millisecond_overflow() {
+        let temp = tempfile::tempdir().expect("temp artifact store");
+        let mut policy = policy_without_size_limits();
+        policy.ttl_seconds = Some(u64::MAX);
+        let mut store = ArtifactStore::open(temp.path(), policy).expect("open artifact store");
+
+        let error = store
+            .apply_retention_cleanup(u64::MAX)
+            .expect_err("ttl millisecond overflow should fail");
+
+        assert!(matches!(
+            error,
+            ArtifactStoreError::ArtifactAccountingOverflow {
+                field: "retention.ttl_ms"
             }
         ));
     }

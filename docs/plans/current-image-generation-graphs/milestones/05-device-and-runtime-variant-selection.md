@@ -279,6 +279,12 @@ typed diagnostic and the canonical design is fixed.
     estimate. Remaining numeric boundaries include broader image request
     limits, context/batch limits, byte-range projections, and worker/runtime
     request fields.
+  - 2026-05-11 partial: artifact retention cleanup now uses checked TTL
+    second-to-millisecond projection and checked cutoff subtraction, returning
+    `ArtifactStoreError::ArtifactAccountingOverflow` instead of saturating an
+    overflowing cleanup horizon. Remaining numeric boundaries include broader
+    image request limits, context/batch limits, byte-range projections, and
+    worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3539,6 +3545,27 @@ typed diagnostic and the canonical design is fixed.
     request limits, context/batch limits outside this memory estimate
     validation boundary, byte-range projections, and worker/runtime request
     fields.
+- 2026-05-11 slice: artifact retention cleanup TTL arithmetic.
+  - Smallest useful vertical slice: replace retention cleanup TTL
+    second-to-millisecond saturation and cutoff saturation with checked
+    arithmetic.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/artifact_store.rs` and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: impossible retention TTL arithmetic no
+    longer projects a saturated cleanup cutoff; it fails with
+    `ArtifactStoreError::ArtifactAccountingOverflow`.
+  - Standards/blast-radius gate: artifact retention cleanup arithmetic only;
+    no generated files, frontend code, saved workflow fixtures, lockfiles, path
+    roots, Pumas contracts, worker contracts, runtime scheduler policy, or
+    backend lifecycle ownership changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service retention_cleanup_rejects_ttl_millisecond_overflow`
+    and `cargo test -p pantograph-workflow-service artifact_store`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    request limits, context/batch limits outside this retention cleanup
+    boundary, byte-range projections, and worker/runtime request fields.
 
 **Verification:**
 
