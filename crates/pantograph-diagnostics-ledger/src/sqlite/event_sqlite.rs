@@ -621,6 +621,13 @@ pub(super) fn query_run_list_facets(
     query_run_list_facet(
         ledger,
         &query,
+        RunListFacetKind::SelectedDeviceClass,
+        "COALESCE(selected_device_class, 'Unassigned')",
+        &mut facets,
+    )?;
+    query_run_list_facet(
+        ledger,
+        &query,
         RunListFacetKind::SelectedDevice,
         "COALESCE(selected_device_id, 'Unassigned')",
         &mut facets,

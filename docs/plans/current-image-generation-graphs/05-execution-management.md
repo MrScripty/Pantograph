@@ -482,6 +482,15 @@ Update during implementation:
   `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
   `node --experimental-strip-types --test src/stores/schedulerRunListStore.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding `selected_device_class` as a
+  diagnostics-ledger run-list facet kind and rendering diagnostics comparison
+  counts from that backend facet. The facet groups the typed projection column
+  and does not derive class from selected device ids or raw payload JSON.
+  Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_inference_diagnostic_selected_facts`,
+  `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 

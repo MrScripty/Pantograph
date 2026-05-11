@@ -60,8 +60,9 @@ panel because no active TypeScript boundary consumes them.
   those fields as facts from projections rather than deriving conversion state
   from payload media types.
 - Run-list responses carry backend-owned `facets` derived from materialized
-  projections. Consumers should use those counts for mixed-version and policy
-  summaries instead of rebuilding them from raw ledger events or sampled pages.
+  projections. Consumers should use those counts for mixed-version, policy,
+  and selected placement summaries instead of rebuilding them from raw ledger
+  events or sampled pages.
 - Run-list and run-detail DTOs carry scheduler-selected runtime, device class,
   device id, and network-node fields when the backend has placement facts.
   Consumers should use those typed fields and facets for placement comparison

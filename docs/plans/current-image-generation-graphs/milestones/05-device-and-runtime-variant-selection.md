@@ -1630,6 +1630,36 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: backend run-list facets still expose selected device
     id rather than selected device class; adding a backend facet kind is a
     separate ledger/query contract slice.
+- 2026-05-10 slice: diagnostics selected-device class facet contract.
+  - Smallest useful vertical slice: add `selected_device_class` as a backend
+    run-list facet kind and render the diagnostics comparison row from backend
+    facet counts.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-diagnostics-ledger/src/README.md`,
+    `src/services/diagnostics/types.ts`,
+    `src/services/diagnostics/README.md`,
+    `src/components/workbench/diagnosticsPagePresenters.ts`,
+    `src/components/workbench/diagnosticsPagePresenters.test.ts`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: facet rows group the typed
+    `selected_device_class` projection column and diagnostics presenters
+    consume the typed `selected_device_class` facet kind. The slice does not
+    parse selected device ids, scheduler payload JSON, runtime settings, or
+    backend config strings to infer device class.
+  - Standards/blast-radius gate for ledger/front-end facet contract:
+    persisted projection schema already owns `selected_device_class`; no
+    migration, generated files, lockfiles, dependencies, polling/subscription
+    lifecycles, worker paths, or workflow fixtures changed.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_inference_diagnostic_selected_facts`,
+    `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: diagnostics comparison UI filters can add a
+    selected-device-class control in a separate frontend-only slice.
 
 **Verification:**
 

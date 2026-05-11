@@ -1221,6 +1221,14 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
         cuda_list_records[0].workflow_run_id.as_str(),
         "workflow_run_alpha"
     );
+    let facets = ledger
+        .query_run_list_facets(RunListProjectionQuery::default())
+        .expect("run list facets load");
+    assert!(facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::SelectedDeviceClass
+            && facet.facet_value == "cuda"
+            && facet.run_count == 1
+    }));
 
     let detail_state = ledger
         .drain_run_detail_projection(10)

@@ -154,6 +154,7 @@ export type RunListFacetKind =
   | 'scheduler_policy'
   | 'retention_policy'
   | 'selected_runtime'
+  | 'selected_device_class'
   | 'selected_device'
   | 'selected_network_node';
 
