@@ -1,0 +1,139 @@
+{
+  "technical_fit_request": {
+    "runtime_snapshot": {
+      "generated_at_ms": 123,
+      "runtimes": [
+        {
+          "runtime_id": "pytorch",
+          "display_name": "PyTorch",
+          "backend_keys": [
+            "pytorch"
+          ],
+          "status": "ready",
+          "runtime_instance_id": "pytorch-runtime-1",
+          "last_error": null,
+          "last_transition_at_ms": 120,
+          "active_reservation_ids": [],
+          "models": []
+        }
+      ],
+      "reservations": []
+    },
+    "workflow_id": "wf-image",
+    "required_model_ids": [
+      "pumas://models/juggernaut-x-v10-sdxl"
+    ],
+    "required_backend_keys": [
+      "pytorch"
+    ],
+    "required_extensions": [
+      "diffusers"
+    ],
+    "required_context_window_tokens": 8192,
+    "override_selection": {
+      "runtime_id": "pytorch",
+      "runtime_variant_id": "pytorch/linux-x64/cuda",
+      "model_id": "pumas://models/juggernaut-x-v10-sdxl",
+      "backend_key": "pytorch"
+    },
+    "device_policy": {
+      "policy": "explicit",
+      "device_class": "cuda",
+      "device_id": "cuda:0"
+    },
+    "legal_factors": [
+      "runtime_requirements",
+      "residency_reuse",
+      "queue_pressure"
+    ],
+    "candidates": [
+      {
+        "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0",
+        "runtime_id": "pytorch",
+        "runtime_variant_id": "pytorch/linux-x64/cuda",
+        "backend_key": "pytorch",
+        "model_id": "pumas://models/juggernaut-x-v10-sdxl",
+        "device_class": "cuda",
+        "selected_device_id": "cuda:0",
+        "resource_estimate": {
+          "estimated_peak_vram_mb": 8192,
+          "estimated_peak_ram_mb": 16384,
+          "estimated_min_vram_mb": 4096,
+          "estimated_min_ram_mb": 8192
+        },
+        "observed_throughput_hint": {
+          "images_per_second_milli": 125,
+          "sample_count": 4
+        },
+        "source_kind": "pumas_package_facts",
+        "context_window_tokens": 16384,
+        "residency_state": "loaded",
+        "warmup_state": "warm",
+        "supports_runtime_requirements": true,
+        "compatibility_report": {
+          "status": "accepted",
+          "compatible": true,
+          "task": "supported",
+          "model_source": "supported",
+          "preprocessing": "supported",
+          "postprocessing": "supported"
+        },
+        "compatibility_issue_count": 0
+      }
+    ],
+    "resource_pressure": {
+      "queued_run_count": 1,
+      "loaded_runtime_count": 1,
+      "loaded_runtime_capacity": 2,
+      "estimated_peak_vram_mb": 8192,
+      "estimated_peak_ram_mb": 16384
+    }
+  },
+  "selected_decision": {
+    "selection_mode": "explicit_override",
+    "selected_candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0",
+    "selected_runtime_id": "pytorch",
+    "selected_runtime_variant_id": "pytorch/linux-x64/cuda",
+    "selected_backend_key": "pytorch",
+    "selected_model_id": "pumas://models/juggernaut-x-v10-sdxl",
+    "selected_device_class": "cuda",
+    "selected_device_id": "cuda:0",
+    "resource_estimate": {
+      "estimated_peak_vram_mb": 8192,
+      "estimated_peak_ram_mb": 16384,
+      "estimated_min_vram_mb": 4096,
+      "estimated_min_ram_mb": 8192
+    },
+    "observed_throughput_hint": {
+      "images_per_second_milli": 125,
+      "sample_count": 4
+    },
+    "reasons": [
+      {
+        "code": "explicit_runtime_override",
+        "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+      },
+      {
+        "code": "explicit_runtime_variant_override",
+        "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+      },
+      {
+        "code": "explicit_model_override",
+        "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+      },
+      {
+        "code": "explicit_backend_override",
+        "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+      }
+    ],
+    "compatibility_report": {
+      "status": "accepted",
+      "compatible": true,
+      "task": "supported",
+      "model_source": "supported",
+      "preprocessing": "supported",
+      "postprocessing": "supported"
+    },
+    "compatibility_issue_count": 0
+  }
+}

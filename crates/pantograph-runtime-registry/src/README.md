@@ -63,6 +63,8 @@ process ownership and app composition stay outside this crate.
 - `technical_fit_tests.rs`: technical-fit normalization, override, residency,
   queue-pressure, budget-pressure, and selector rejection tests extracted from
   the production selector module.
+- `../tests/technical_fit_contract.rs`: public technical-fit serde fixture and
+  selector round-trip coverage for the runtime-registry crate boundary.
 - `warmup.rs`: backend-owned warmup/reuse disposition contracts derived from
   runtime registry status for host execution orchestration.
 - `reclaim.rs`: backend-owned reclaim disposition contracts that tell hosts

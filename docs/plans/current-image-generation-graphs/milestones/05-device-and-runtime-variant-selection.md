@@ -1463,6 +1463,36 @@ typed diagnostic and the canonical design is fixed.
     `cargo test -p pantograph-embedded-runtime technical_fit`,
     `cargo test -p pantograph-workflow-service technical_fit`,
     `npm run typecheck`, and `git diff --check`.
+- 2026-05-10 slice: runtime-registry technical-fit serde fixture.
+  - Smallest useful vertical slice: add a public runtime-registry
+    technical-fit JSON fixture plus integration test that deserializes the
+    request/decision DTOs, reserializes them byte-for-shape through
+    `serde_json::Value`, and verifies selector output against the fixture.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/Cargo.toml`,
+    `Cargo.lock`,
+    `crates/pantograph-runtime-registry/tests/technical_fit_contract.rs`,
+    `crates/pantograph-runtime-registry/tests/fixtures/technical_fit_contract.json`,
+    `crates/pantograph-runtime-registry/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the fixture uses explicit typed
+    runtime/backend/model/device intent and selected runtime variant/device
+    facts. It does not include fallback source kinds, deterministic tie-break
+    reasons, raw backend device strings, or legacy runtime hints.
+  - Standards/blast-radius gate for runtime-registry fixture coverage:
+    runtime-registry remains the selector contract owner; the only dependency
+    impact is a crate-local `serde_json` dev-dependency already present in the
+    workspace lockfile; production code, runtime lifecycle ownership, persisted
+    schemas, frontend behavior, generated files, feature flags, workers, and
+    workflow fixtures are untouched.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry --test technical_fit_contract`,
+    `cargo test -p pantograph-runtime-registry technical_fit`, and
+    `git diff --check`.
+  - Remaining fixture coverage: Tauri command transport, Python worker, and
+    any future persisted technical-fit state still need their own fixtures
+    before the broad serde-fixture checklist item can be closed.
 
 **Verification:**
 

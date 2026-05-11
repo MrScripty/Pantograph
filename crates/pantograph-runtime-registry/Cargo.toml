@@ -15,3 +15,6 @@ workspace = true
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 serde.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

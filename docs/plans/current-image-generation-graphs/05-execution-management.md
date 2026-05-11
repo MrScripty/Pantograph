@@ -432,6 +432,15 @@ Update during implementation:
   `cargo test -p pantograph-embedded-runtime technical_fit`,
   `cargo test -p pantograph-workflow-service technical_fit`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding a runtime-registry
+  technical-fit serde fixture and integration test. The fixture round-trips the
+  public request/decision DTOs and verifies selector output with typed runtime
+  variant/device facts. `serde_json` was added as a crate-local dev-dependency,
+  so `Cargo.lock` changed as part of this test slice. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry --test technical_fit_contract`,
+  `cargo test -p pantograph-runtime-registry technical_fit`, and
+  `git diff --check`.
 
 ## Commit Cadence Notes
 
