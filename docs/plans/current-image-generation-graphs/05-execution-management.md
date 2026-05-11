@@ -700,6 +700,15 @@ Update during implementation:
   embedded-runtime compile exposed ledger consumers and tests still
   constructing raw selected-device strings; those were converted to canonical
   ids or removed where invalid ids are now rejected before ledger projection.
+- 2026-05-10: Continued Milestone 5 with a documentation slice updating
+  inference and embedded-runtime README invariants for selected/resolved device
+  ownership. The READMEs now say lifecycle/status/ledger selected device facts
+  come from canonical device DTOs and active runtime descriptors, not raw
+  backend config strings or sanitized backend-local metadata. Verification
+  passed:
+  `rg -n "selected_device_id|InferenceDeviceId|raw backend config|backend-local selected-device" crates/inference/src/README.md crates/pantograph-embedded-runtime/src/README.md`,
+  `rg -n "Update relevant module READMEs" docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+  and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1015,6 +1024,8 @@ Worker rules:
   `cargo test -p inference test_mode_info_runtime_facts_report_active_runtime_selected_device`,
   and focused embedded-runtime host/ledger tests passed for typed runtime fact
   resolved-device ids.
+- README verification searches passed for canonical selected/resolved device id
+  ownership notes in inference, embedded runtime, and the milestone checklist.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

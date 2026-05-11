@@ -174,7 +174,7 @@ typed diagnostic and the canonical design is fixed.
 - [ ] If runtime feature flags or optional dependencies change, document the
   feature contract and run affected public crates through default,
   no-default-features, and all-features checks.
-- [ ] Update relevant module READMEs for runtime variant ownership and device
+- [x] Update relevant module READMEs for runtime variant ownership and device
   policy boundaries.
 
 **Implementation Notes:**
@@ -2265,6 +2265,26 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: backend startup config and worker request device fields
     still carry backend-local raw strings and need separate adapter-owned
     boundary slices.
+- 2026-05-10 slice: module README device-boundary refresh.
+  - Smallest useful vertical slice: update inference and embedded-runtime
+    README invariants to match the canonical selected/resolved device id
+    boundaries implemented in Milestone 5.
+  - Allowed write set: `crates/inference/src/README.md`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: documentation now states selected and
+    resolved device facts come from canonical device DTOs and active runtime
+    descriptors, not raw backend config strings or sanitized backend-local
+    metadata.
+  - Standards/blast-radius gate: documentation-only slice; no source,
+    generated DTOs, lockfiles, workflow fixtures, or frontend behavior changed.
+  - Verification passed:
+    `rg -n "selected_device_id|InferenceDeviceId|raw backend config|backend-local selected-device" crates/inference/src/README.md crates/pantograph-embedded-runtime/src/README.md`,
+    `rg -n "Update relevant module READMEs" docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and `git diff --check`.
+  - Remaining follow-up: keep READMEs current as later slices move backend
+    startup config and worker request device fields behind adapter-owned
+    contracts.
 
 **Verification:**
 
@@ -2348,6 +2368,8 @@ typed diagnostic and the canonical design is fixed.
 - Inference and embedded-runtime tests prove runtime fact resolved-device ids
   use canonical `InferenceDeviceId` while preserving serialized string output
   for status and diagnostics consumers.
+- Module READMEs now document canonical selected/resolved device id ownership
+  and reject raw backend config or backend-local metadata as selected facts.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

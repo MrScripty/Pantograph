@@ -386,6 +386,10 @@ from current backend/package facts, not from legacy runtime hints.
   diagnostics from runtime-registry candidates and decisions. The bridge may
   project closed enum values between crates, but it must not convert unknown
   backend-local device strings into selected facts.
+- Host runtime and diagnostics-ledger adapters consume canonical
+  `InferenceDeviceId` selected/resolved device facts from inference status and
+  lifecycle DTOs. Path-shaped or backend-local selected-device metadata must be
+  rejected before projection, not sanitized into ledger facts.
 - Producer-specific runtime capability mapping must stay in backend Rust so
   adapters do not drift on runtime ids, install state, or backend-key aliases.
 - Backend capability projection must preserve runtime variant capability

@@ -149,9 +149,10 @@ normalizing them to executable defaults.
   only after backend-local selectors parse and project successfully. Unresolved
   `auto` and unsupported backend-local selectors omit selected facts, while
   malformed active device state fails closed without producing a descriptor.
-- Request lifecycle events have an optional typed `selected_device_class`
-  contract field. Producers must populate it only from canonical device facts,
-  not by inferring scheduler decisions from raw backend config strings.
+- Request lifecycle events have optional typed `selected_device_class` and
+  `selected_device_id` contract fields. Producers must populate them only from
+  canonical device facts, not by inferring scheduler decisions from raw backend
+  config strings.
 - Gateway request lifecycle events source selected device class/id from the
   active llama.cpp runtime descriptor when it carries canonical facts. A raw
   `BackendConfig.device` value by itself is not emitted as a selected device.
@@ -382,8 +383,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - `ServerModeInfo` is the backend-owned runtime status contract for GUI and host
   adapters; hosts should consume it directly instead of deriving reduced local
   status shapes. Runtime fact snapshots projected from `ServerModeInfo` may
-  include explicit non-`auto` resolved device facts from backend config without
-  extending `RuntimeLifecycleSnapshot` itself.
+  include validated explicit non-`auto` `InferenceDeviceId` facts from active
+  runtime descriptors without extending `RuntimeLifecycleSnapshot` itself, but
+  must not derive resolved devices from raw backend config strings.
 - Gateway lifecycle and capability payloads are backend-owned runtime facts; a
   higher Pantograph policy layer may interpret them, but this crate must not
   publish scheduler-policy conclusions as if they were raw backend facts.
