@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::backend::BackendError;
+use crate::device_contracts::InferenceDeviceId;
 use crate::model_contracts::{
     InferenceTaskId, ModelArtifactKind, ModelAuthTokenSource, ModelLoadCachePolicy,
     ModelLoadNetworkPolicy, ModelLoadSecurityPolicy, ModelRemoteCodePolicy,
@@ -82,7 +83,7 @@ pub(super) struct PyTorchTransformersLoadRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_type_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub device: Option<String>,
+    pub device: Option<InferenceDeviceId>,
     #[serde(default)]
     pub trust_policy: PyTorchTransformersTrustPolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]

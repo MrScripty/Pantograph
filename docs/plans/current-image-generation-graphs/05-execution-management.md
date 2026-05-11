@@ -718,6 +718,24 @@ Update during implementation:
   `cargo fmt --all -- --check`, and `git diff --check`. The first format check
   reported rustfmt assertion wrapping; `cargo fmt --all` was run and the check
   passed.
+- 2026-05-11: Continued Milestone 5 by typing PyTorch Transformers worker load
+  request `device` as `Option<InferenceDeviceId>`. The adapter maps omitted or
+  `auto` backend intent to omitted worker device, while concrete worker load
+  devices must be canonical ids and legacy selectors such as `CUDA0` are
+  rejected before Python. Verification passed:
+  `cargo test -p inference --features backend-pytorch test_pytorch_worker_load_envelope_decodes_fixture`,
+  `cargo test -p inference --features backend-pytorch test_pytorch_worker_load_envelope_rejects_legacy_device_id`,
+  `cargo test -p inference --features backend-pytorch test_pytorch_direct_load_envelope_rejects_legacy_device_id`,
+  `cargo test -p inference --features backend-pytorch test_pytorch_load_envelope_maps_pumas_package_facts`,
+  `cargo test -p inference --features backend-pytorch test_pytorch_direct_load_envelope_uses_transformers_contract`,
+  `cargo test -p inference --features backend-pytorch test_pytorch_transformers_load_args_default_device_auto`,
+  `cargo fmt --all -- --check`,
+  `rg -n "payload\\.device\\.as_deref|device: Option<String>" crates/inference/src/backend/pytorch_worker_contract.rs crates/inference/src/backend/pytorch.rs crates/inference/src/backend/pytorch_tests.rs`
+  reported no matches, and `git diff --check`. Verification deviations fixed
+  during the slice: the first cargo command used two filters, so it was rerun
+  as separate commands; the existing worker load fixture had a stale nested
+  `source_contract_version: 1`, which was updated to `2` so
+  `model_source.validate_for_backend_load()` passes.
 
 ## Commit Cadence Notes
 
@@ -1037,6 +1055,10 @@ Worker rules:
   ownership notes in inference, embedded runtime, and the milestone checklist.
 - `cargo test -p inference --test runtime_load_contracts` passed for the
   runtime-load phase serde fixture.
+- Focused PyTorch worker load tests passed with `--features backend-pytorch`
+  for typed worker load device ids, legacy-device rejection, direct-load
+  construction, package projection, default auto omission, and the repaired
+  load fixture.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

@@ -431,7 +431,10 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
     assert!(task_profile
         .required_components
         .contains(&ProcessorComponentKind::Tokenizer));
-    assert_eq!(envelope.payload.device.as_deref(), Some("cuda:0"));
+    assert_eq!(
+        envelope.payload.device.as_ref().map(|id| id.as_str()),
+        Some("cuda:0")
+    );
     assert!(!envelope.payload.trust_policy.allow_remote_code);
     assert!(envelope.payload.trust_policy.local_files_only);
     assert_eq!(
@@ -451,6 +454,20 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
 
     PyTorchBackend::validate_transformers_load_envelope(&envelope)
         .expect("load fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_load_envelope_rejects_legacy_device_id() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"
+    ))
+    .expect("decode worker load fixture");
+    value["payload"]["device"] = serde_json::json!("CUDA0");
+
+    let error =
+        serde_json::from_value::<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>>(value)
+            .expect_err("legacy worker device id should fail contract decoding");
+    assert!(error.to_string().contains("invalid identifier shape"));
 }
 
 #[test]
@@ -4668,7 +4685,10 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
         .required_components
         .contains(&ProcessorComponentKind::Tokenizer));
     assert_eq!(envelope.payload.model_type_hint.as_deref(), Some("llama"));
-    assert_eq!(envelope.payload.device.as_deref(), Some("cuda:0"));
+    assert_eq!(
+        envelope.payload.device.as_ref().map(|id| id.as_str()),
+        Some("cuda:0")
+    );
     assert!(envelope.payload.trust_policy.allow_remote_code);
     assert_eq!(
         envelope.payload.trust_policy.decision_id.as_deref(),
@@ -4746,7 +4766,8 @@ fn test_pytorch_direct_load_envelope_uses_transformers_contract() {
         Some("cpu"),
         Some("dllm"),
         PyTorchTransformersTrustPolicy::default(),
-    );
+    )
+    .expect("direct load envelope should build");
 
     PyTorchBackend::validate_transformers_load_envelope(&envelope)
         .expect("direct load envelope should validate");
@@ -4763,7 +4784,10 @@ fn test_pytorch_direct_load_envelope_uses_transformers_contract() {
     assert_eq!(envelope.payload.entry_path, "/models/direct-hf");
     assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
     assert_eq!(envelope.payload.model_type_hint.as_deref(), Some("dllm"));
-    assert_eq!(envelope.payload.device.as_deref(), Some("cpu"));
+    assert_eq!(
+        envelope.payload.device.as_ref().map(|id| id.as_str()),
+        Some("cpu")
+    );
     let model_source = envelope
         .payload
         .model_source
@@ -4784,6 +4808,23 @@ fn test_pytorch_direct_load_envelope_uses_transformers_contract() {
         task_profile.loader,
         PyTorchTransformersModelLoader::CausalLm
     );
+}
+
+#[test]
+fn test_pytorch_direct_load_envelope_rejects_legacy_device_id() {
+    match PyTorchBackend::transformers_load_envelope_from_direct_path(
+        "req-direct-invalid-device",
+        "/models/direct-hf",
+        Some("CUDA0"),
+        None,
+        PyTorchTransformersTrustPolicy::default(),
+    ) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Invalid PyTorch worker device id"));
+            assert!(message.contains("invalid identifier shape"));
+        }
+        other => panic!("expected invalid direct device config error, got {other:?}"),
+    }
 }
 
 #[test]
@@ -4929,7 +4970,8 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_empty_entry_path()
         Some("cpu"),
         None,
         PyTorchTransformersTrustPolicy::default(),
-    );
+    )
+    .expect("direct load envelope should build");
     envelope.payload.model_source = None;
 
     match PyTorchBackend::validate_transformers_load_envelope(&envelope) {
@@ -4948,7 +4990,8 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_mismatched_model_s
         Some("cpu"),
         None,
         PyTorchTransformersTrustPolicy::default(),
-    );
+    )
+    .expect("direct load envelope should build");
     envelope
         .payload
         .model_source
@@ -4972,7 +5015,8 @@ fn test_pytorch_transformers_load_envelope_validation_rejects_mismatched_task_pr
         Some("cpu"),
         None,
         PyTorchTransformersTrustPolicy::default(),
-    );
+    )
+    .expect("direct load envelope should build");
     envelope
         .payload
         .task_profile

@@ -39,7 +39,8 @@ use super::{
     EmbeddingResult, InferenceBackend,
 };
 use crate::device_contracts::{
-    DeviceResolutionDiagnosticCode, InferenceDeviceClass, RuntimeVariantCapability,
+    DeviceResolutionDiagnosticCode, InferenceDeviceClass, InferenceDeviceId,
+    RuntimeVariantCapability,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
@@ -968,6 +969,26 @@ pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
     .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
 }
 
+fn worker_device_id_from_backend_device(
+    device: Option<&str>,
+) -> Result<Option<InferenceDeviceId>, BackendError> {
+    let Some(device) = device else {
+        return Ok(None);
+    };
+    let trimmed = device.trim();
+    if trimmed.is_empty() {
+        return Err(BackendError::Config(
+            "PyTorch worker load envelope device must be non-empty when present".to_string(),
+        ));
+    }
+    if trimmed == "auto" {
+        return Ok(None);
+    }
+    InferenceDeviceId::parse(trimmed)
+        .map(Some)
+        .map_err(|error| BackendError::Config(format!("Invalid PyTorch worker device id: {error}")))
+}
+
 impl PyTorchBackend {
     pub fn new() -> Self {
         Self {
@@ -1241,7 +1262,7 @@ impl PyTorchBackend {
                 task_id,
                 task_profile: Some(task_profile),
                 model_type_hint,
-                device: device.map(str::to_string),
+                device: worker_device_id_from_backend_device(device)?,
                 trust_policy,
                 generation_defaults,
             },
@@ -1254,9 +1275,9 @@ impl PyTorchBackend {
         device: Option<&str>,
         model_type: Option<&str>,
         trust_policy: PyTorchTransformersTrustPolicy,
-    ) -> PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest> {
+    ) -> Result<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>, BackendError> {
         let model_path = model_path.into();
-        PyTorchWorkerEnvelope::new(
+        Ok(PyTorchWorkerEnvelope::new(
             request_id,
             PyTorchWorkerOperation::LoadTransformersModel,
             PyTorchTransformersLoadRequest {
@@ -1276,11 +1297,11 @@ impl PyTorchBackend {
                     required_components: vec![],
                 }),
                 model_type_hint: model_type.map(str::to_string),
-                device: device.map(str::to_string),
+                device: worker_device_id_from_backend_device(device)?,
                 trust_policy,
                 generation_defaults: None,
             },
-        )
+        ))
     }
 
     async fn load_transformers_envelope(
@@ -1759,14 +1780,6 @@ impl PyTorchBackend {
                 "PyTorch worker load envelope requires a non-empty entry_path".to_string(),
             ));
         }
-        if let Some(device) = envelope.payload.device.as_deref() {
-            if device.trim().is_empty() {
-                return Err(BackendError::Config(
-                    "PyTorch worker load envelope device must be non-empty when present"
-                        .to_string(),
-                ));
-            }
-        }
         if let Some(task_profile) = &envelope.payload.task_profile {
             if task_profile.task_id != envelope.payload.task_id {
                 return Err(BackendError::Config(format!(
@@ -2066,7 +2079,11 @@ impl PyTorchBackend {
     ) -> PyTorchTransformersLoadArgs {
         PyTorchTransformersLoadArgs {
             model_path: request.entry_path.clone(),
-            device: request.device.clone().unwrap_or_else(|| "auto".to_string()),
+            device: request
+                .device
+                .as_ref()
+                .map(|device_id| device_id.as_str().to_string())
+                .unwrap_or_else(|| "auto".to_string()),
             model_type: request.model_type_hint.clone(),
             trust_policy: request.trust_policy.clone(),
         }
@@ -2380,7 +2397,7 @@ impl PyTorchBackend {
             Some(device),
             model_type,
             trust_policy,
-        );
+        )?;
         self.load_transformers_envelope(envelope).await
     }
 

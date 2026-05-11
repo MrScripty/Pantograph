@@ -2309,6 +2309,42 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: runtime-load behavior still needs end-to-end
     integration that consumes scheduler-selected device decisions before
     backend load.
+- 2026-05-11 slice: typed PyTorch worker load device contract.
+  - Smallest useful vertical slice: replace the PyTorch Transformers worker
+    load request `device` raw string with `Option<InferenceDeviceId>` and keep
+    `auto` as omitted worker-device intent at the adapter boundary.
+  - Allowed write set: `crates/inference/src/backend/pytorch_worker_contract.rs`,
+    `crates/inference/src/backend/pytorch.rs`,
+    `crates/inference/src/backend/pytorch_tests.rs`,
+    `crates/inference/tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: worker load envelopes now reject legacy
+    backend-local selectors such as `CUDA0` during contract decoding or direct
+    envelope construction instead of forwarding them to Python; omitted device
+    remains the worker's backend-local auto request.
+  - Standards/blast-radius gate: load-contract typing and fixture repair only;
+    no Python worker behavior, audio transcription device handling, generated
+    DTOs, lockfiles, workflow fixtures, frontend code, or scheduler policy
+    changed.
+  - Verification passed:
+    `cargo test -p inference --features backend-pytorch test_pytorch_worker_load_envelope_decodes_fixture`,
+    `cargo test -p inference --features backend-pytorch test_pytorch_worker_load_envelope_rejects_legacy_device_id`,
+    `cargo test -p inference --features backend-pytorch test_pytorch_direct_load_envelope_rejects_legacy_device_id`,
+    `cargo test -p inference --features backend-pytorch test_pytorch_load_envelope_maps_pumas_package_facts`,
+    `cargo test -p inference --features backend-pytorch test_pytorch_direct_load_envelope_uses_transformers_contract`,
+    `cargo test -p inference --features backend-pytorch test_pytorch_transformers_load_args_default_device_auto`,
+    `cargo fmt --all -- --check`,
+    `rg -n "payload\\.device\\.as_deref|device: Option<String>" crates/inference/src/backend/pytorch_worker_contract.rs crates/inference/src/backend/pytorch.rs crates/inference/src/backend/pytorch_tests.rs`
+    reported no matches, and `git diff --check`.
+  - Verification deviations fixed during the slice: an initial cargo command
+    attempted to pass two test filters and failed; the filters were rerun as
+    separate commands. The existing worker load fixture also failed
+    `model_source.validate_for_backend_load()` because its nested
+    `source_contract_version` was stale at `1`; the fixture was updated to the
+    current contract version `2` and the fixture decode test passed.
+  - Remaining follow-up: PyTorch audio transcription still carries a
+    backend-local `device: String` because it accepts `"auto"` directly; that
+    needs a separate worker adapter boundary slice.
 
 **Verification:**
 
@@ -2397,6 +2433,9 @@ typed diagnostic and the canonical design is fixed.
 - Inference runtime-load fixture tests prove dependency-resolved phase records
   carry managed runtime readiness, canonical resolved device decisions, and
   command facts in a stable serde shape.
+- PyTorch worker load-contract tests prove Transformers load envelopes carry
+  canonical `InferenceDeviceId` values or omit device for backend-local auto,
+  and reject legacy backend-local device ids.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.
