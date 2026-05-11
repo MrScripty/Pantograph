@@ -11,9 +11,9 @@ pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
 pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 4;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
-pub const RUN_LIST_PROJECTION_VERSION: i64 = 9;
+pub const RUN_LIST_PROJECTION_VERSION: i64 = 10;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
-pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 8;
+pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 9;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
 pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 6;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
@@ -2379,6 +2379,8 @@ pub struct RunListProjectionRecord {
     pub estimate_confidence: Option<String>,
     pub estimated_queue_wait_ms: Option<u64>,
     pub estimated_duration_ms: Option<u64>,
+    pub output_artifact_count: u64,
+    pub output_artifact_total_size_bytes: u64,
     pub model_cache_state: Option<SchedulerModelCacheState>,
     pub scheduler_reason: Option<String>,
     pub latest_error_event_id: Option<String>,
@@ -2458,6 +2460,8 @@ pub struct RunDetailProjectionRecord {
     pub estimate_confidence: Option<String>,
     pub estimated_queue_wait_ms: Option<u64>,
     pub estimated_duration_ms: Option<u64>,
+    pub output_artifact_count: u64,
+    pub output_artifact_total_size_bytes: u64,
     pub model_cache_state: Option<SchedulerModelCacheState>,
     pub scheduler_reason: Option<String>,
     pub latest_error_event_id: Option<String>,

@@ -1328,6 +1328,93 @@ fn diagnostic_event_ledger_projects_inference_diagnostic_selected_facts() {
 }
 
 #[test]
+fn run_projections_record_scheduler_learning_output_descriptor_measures() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event appends");
+    ledger
+        .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
+        .expect("run started event appends");
+    ledger
+        .append_diagnostic_event(sample_inference_execution_diagnostic_event())
+        .expect("inference diagnostic event appends");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "workflow_run_alpha",
+            "llm-node",
+            "workflow_input",
+            "artifact_prompt",
+        ))
+        .expect("input artifact event appends");
+    let output_event = ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "workflow_run_alpha",
+            "llm-node",
+            "node_output",
+            "artifact_image",
+        ))
+        .expect("output artifact event appends");
+    ledger
+        .append_diagnostic_event(sample_run_terminal_event("workflow_run_alpha"))
+        .expect("terminal event appends");
+
+    let list_state = ledger
+        .drain_run_list_projection(10)
+        .expect("run list projection drains");
+    assert_eq!(list_state.projection_version, RUN_LIST_PROJECTION_VERSION);
+    assert_eq!(
+        list_state.last_applied_event_seq,
+        output_event.event_seq + 1
+    );
+    let list_records = ledger
+        .query_run_list_projection(RunListProjectionQuery::default())
+        .expect("run list projection loads");
+    assert_eq!(list_records.len(), 1);
+    let list_record = &list_records[0];
+    assert_eq!(
+        list_record.selected_model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    assert_eq!(
+        list_record.selected_task_id.as_deref(),
+        Some("text_generation")
+    );
+    assert_eq!(list_record.selected_backend_key.as_deref(), Some("pytorch"));
+    assert_eq!(
+        list_record.selected_runtime_variant_id.as_deref(),
+        Some("pytorch.cuda")
+    );
+    assert_eq!(list_record.selected_device_class.as_deref(), Some("cuda"));
+    assert_eq!(list_record.selected_device_id.as_deref(), Some("cuda:0"));
+    assert_eq!(list_record.estimated_duration_ms, None);
+    assert_eq!(list_record.duration_ms, Some(80));
+    assert_eq!(list_record.status, RunListProjectionStatus::Completed);
+    assert_eq!(list_record.output_artifact_count, 1);
+    assert_eq!(list_record.output_artifact_total_size_bytes, 1_024);
+
+    let detail_state = ledger
+        .drain_run_detail_projection(10)
+        .expect("run detail projection drains");
+    assert_eq!(
+        detail_state.projection_version,
+        RUN_DETAIL_PROJECTION_VERSION
+    );
+    assert_eq!(
+        detail_state.last_applied_event_seq,
+        output_event.event_seq + 1
+    );
+    let detail_record = ledger
+        .query_run_detail_projection(RunDetailProjectionQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+        })
+        .expect("run detail projection loads")
+        .expect("run detail exists");
+    assert_eq!(detail_record.output_artifact_count, 1);
+    assert_eq!(detail_record.output_artifact_total_size_bytes, 1_024);
+}
+
+#[test]
 fn diagnostic_event_ledger_validates_inference_execution_diagnostic_scope_and_bounds() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let mut missing_node = sample_inference_execution_diagnostic_event();
@@ -4299,6 +4386,52 @@ fn existing_v20_schema_adds_scheduler_model_cache_projection_columns() {
         "run_detail_projection",
         "model_cache_state"
     ));
+}
+
+#[test]
+fn existing_v24_schema_adds_scheduler_learning_output_projection_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (24, 0, 'pantograph-diagnostics-ledger-v24');
+            CREATE TABLE run_list_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE run_detail_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );",
+        )
+        .expect("v24 schema marker and old run projections are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    for table in ["run_list_projection", "run_detail_projection"] {
+        assert!(sqlite_column_exists(&conn, table, "output_artifact_count"));
+        assert!(sqlite_column_exists(
+            &conn,
+            table,
+            "output_artifact_total_size_bytes"
+        ));
+    }
 }
 
 #[test]

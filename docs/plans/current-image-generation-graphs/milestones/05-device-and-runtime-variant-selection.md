@@ -225,12 +225,19 @@ typed diagnostic and the canonical design is fixed.
     consume the explicit payload field and expose/filter/facet it without
     deriving a runtime variant from runtime id, backend key, command arguments,
     or raw device strings.
-- [ ] Add scheduler-learning fact fields without implementing learned
+- [x] Add scheduler-learning fact fields without implementing learned
   scheduling policy: model id, task kind, selected backend, selected runtime
   variant, selected device class/id, resource estimate when known, execution
   duration, terminal status, and artifact descriptor output-size measures.
-- [ ] Keep scheduler-learning facts descriptor-level. Do not require scheduler
+- [x] Keep scheduler-learning facts descriptor-level. Do not require scheduler
   learning to inspect retained artifact bodies.
+  - 2026-05-11: diagnostics-ledger run-list and run-detail projections now
+    expose the selected model/task/backend/runtime/device facts, existing
+    estimated duration resource facts, terminal status/duration, and
+    descriptor-level output artifact measures. Output facts are limited to
+    output artifact descriptor count and total reported byte size from
+    `io.artifact_observed`; no retained artifact body inspection or learned
+    scheduler policy was added.
 - [ ] Add lifecycle ownership for device probes, install jobs, progress streams,
   and refresh events. Each background task must have a tracked owner,
   cancellation path, shutdown behavior, and panic/error reporting.

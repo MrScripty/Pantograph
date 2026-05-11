@@ -1692,6 +1692,42 @@ Worker rules:
   in pre-existing workflow-sink retained-artifact/status tests with zero
   recorded rows; the focused inference diagnostic adapter test passed and the
   broader failure is recorded as a discovered follow-up outside this slice.
+- 2026-05-11 scheduler-learning output descriptor facts slice: smallest useful
+  vertical slice was limited to diagnostics-ledger run-list/run-detail
+  projection schema, projection DTOs, descriptor-only output artifact rollups,
+  workflow-service contract fixtures, module README ownership notes, and this
+  plan directory. Allowed write set:
+  `crates/pantograph-diagnostics-ledger/src/event.rs`,
+  `crates/pantograph-diagnostics-ledger/src/schema.rs`,
+  `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+  `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+  `crates/pantograph-diagnostics-ledger/src/README.md`,
+  `crates/pantograph-workflow-service/tests/contract.rs`,
+  `crates/pantograph-workflow-service/tests/fixtures/run_projection_contract.json`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule by only promoting
+  canonical `io.artifact_observed` descriptor facts into run projections. It
+  does not inspect retained artifact bodies, infer backend/device choices from
+  raw runtime strings, add a learned scheduler, or preserve old selection
+  behavior. Existing run projections already carried model id, task kind,
+  selected backend, selected runtime variant, selected device class/id,
+  estimated duration when known, execution duration, and terminal status; this
+  slice added output descriptor count and total reported byte size with checked
+  arithmetic before SQLite updates.
+- Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger run_projections_record_scheduler_learning_output_descriptor_measures`,
+  `cargo test -p pantograph-diagnostics-ledger existing_v24_schema_adds_scheduler_learning_output_projection_columns`,
+  `cargo test -p pantograph-diagnostics-ledger`,
+  `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+  `cargo test -p pantograph-workflow-service workflow_run_detail_query_contract_snapshot`,
+  `cargo test -p pantograph-workflow-service --test contract`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+  Verification deviation: one initial workflow-service command incorrectly
+  passed two Cargo test filters in a single invocation; the two filters were
+  rerun separately and then the full contract test binary passed. Discovered
+  issue fixed within the slice: run projections previously filtered out
+  `io.artifact_observed`, so descriptor facts could not reach run-list or
+  run-detail projections.
 
 ### Traceability Links
 

@@ -884,6 +884,8 @@ fn workflow_run_list_query_contract_snapshot() {
             estimate_confidence: Some("low".to_string()),
             estimated_queue_wait_ms: Some(250),
             estimated_duration_ms: Some(1000),
+            output_artifact_count: 1,
+            output_artifact_total_size_bytes: 1_024,
             model_cache_state: Some(SchedulerModelCacheState::CacheHit),
             scheduler_reason: Some("queued behind one run".to_string()),
             latest_error_event_id: Some("error-event-1".to_string()),
@@ -921,7 +923,7 @@ fn workflow_run_list_query_contract_snapshot() {
         ],
         projection_state: ProjectionStateRecord {
             projection_name: "run_list".to_string(),
-            projection_version: 8,
+            projection_version: 10,
             last_applied_event_seq: 15,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -991,6 +993,8 @@ fn workflow_run_list_query_contract_snapshot() {
             "estimate_confidence": "low",
             "estimated_queue_wait_ms": 250,
             "estimated_duration_ms": 1000,
+            "output_artifact_count": 1,
+            "output_artifact_total_size_bytes": 1024,
             "model_cache_state": "cache_hit",
             "scheduler_reason": "queued behind one run",
             "latest_error_event_id": "error-event-1",
@@ -1023,7 +1027,7 @@ fn workflow_run_list_query_contract_snapshot() {
         }],
         "projection_state": {
             "projection_name": "run_list",
-            "projection_version": 8,
+            "projection_version": 10,
             "last_applied_event_seq": 15,
             "status": "current",
             "rebuilt_at_ms": null,
@@ -1077,6 +1081,8 @@ fn workflow_run_detail_query_contract_snapshot() {
             estimate_confidence: Some("low".to_string()),
             estimated_queue_wait_ms: Some(250),
             estimated_duration_ms: Some(1000),
+            output_artifact_count: 1,
+            output_artifact_total_size_bytes: 1_024,
             model_cache_state: Some(SchedulerModelCacheState::CacheHit),
             scheduler_reason: Some("queued behind one run".to_string()),
             latest_error_event_id: Some("error-event-1".to_string()),
@@ -1122,7 +1128,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         }],
         projection_state: ProjectionStateRecord {
             projection_name: "run_detail".to_string(),
-            projection_version: 7,
+            projection_version: 9,
             last_applied_event_seq: 15,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -1190,6 +1196,8 @@ fn workflow_run_detail_query_contract_snapshot() {
             "estimate_confidence": "low",
             "estimated_queue_wait_ms": 250,
             "estimated_duration_ms": 1000,
+            "output_artifact_count": 1,
+            "output_artifact_total_size_bytes": 1024,
             "model_cache_state": "cache_hit",
             "scheduler_reason": "queued behind one run",
             "latest_error_event_id": "error-event-1",
@@ -1234,7 +1242,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         }],
         "projection_state": {
             "projection_name": "run_detail",
-            "projection_version": 7,
+            "projection_version": 9,
             "last_applied_event_seq": 15,
             "status": "current",
             "rebuilt_at_ms": null,
@@ -1282,7 +1290,7 @@ fn workflow_run_inspection_query_contract_snapshot() {
         retention_summary: Vec::new(),
         run_projection_state: ProjectionStateRecord {
             projection_name: "run_detail".to_string(),
-            projection_version: 7,
+            projection_version: 9,
             last_applied_event_seq: 15,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -1327,7 +1335,7 @@ fn workflow_run_inspection_query_contract_snapshot() {
     let expected_response = serde_json::json!({
         "run_projection_state": {
             "projection_name": "run_detail",
-            "projection_version": 7,
+            "projection_version": 9,
             "last_applied_event_seq": 15,
             "status": "current",
             "rebuilt_at_ms": null,
@@ -1774,7 +1782,7 @@ fn workflow_diagnostics_projection_refresh_contract_snapshot() {
             projection_kind: WorkflowDiagnosticsProjectionKind::RunDetail,
             projection_state: ProjectionStateRecord {
                 projection_name: "run_detail".to_string(),
-                projection_version: 7,
+                projection_version: 9,
                 last_applied_event_seq: 42,
                 status: ProjectionStatus::Current,
                 rebuilt_at_ms: None,
@@ -1825,7 +1833,7 @@ fn workflow_diagnostics_projection_refresh_contract_snapshot() {
             "projection_kind": "run_detail",
             "projection_state": {
                 "projection_name": "run_detail",
-                "projection_version": 7,
+                "projection_version": 9,
                 "last_applied_event_seq": 42,
                 "status": "current",
                 "rebuilt_at_ms": null,

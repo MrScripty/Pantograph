@@ -80,6 +80,10 @@ selected model id, selected task id, selected device class, and selected device
 id where scheduler/run payloads do not already provide those facts.
 Scheduler-owned selected runtime, device, and network-node fields keep their
 native lifecycle semantics and are not overwritten by inference payloads.
+Run-list and run-detail projections retain descriptor-level output artifact
+measures for later scheduler learning by counting output artifact descriptors
+and summing their reported byte sizes. These projections do not inspect
+artifact payload bodies.
 Inference option-support summaries use
 `inference.execution_diagnostic_observed` events. These rows are bounded
 system metadata for request id, task id, lifecycle phase/kind, selected backend,

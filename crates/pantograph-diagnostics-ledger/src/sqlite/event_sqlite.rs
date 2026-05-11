@@ -8,22 +8,22 @@ use crate::event::{
     DiagnosticErrorSeverity, DiagnosticEventAppendRequest, DiagnosticEventKind,
     DiagnosticEventPayload, DiagnosticEventPrivacyClass, DiagnosticEventRecord,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, IoArtifactLifecycleState,
-    IoArtifactPayloadKind, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
-    IoArtifactRetentionState, IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord,
-    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeExecutionCacheStatus,
-    NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
-    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus,
-    RetentionArtifactStateChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
-    RunListFacetKind, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerModelCacheState, SchedulerQueueControlAction,
-    SchedulerQueueControlActorScope, SchedulerQueueControlOutcome, SchedulerQueueControlPayload,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
-    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
-    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
-    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
-    SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    IoArtifactObservedPayload, IoArtifactPayloadKind, IoArtifactProjectionQuery,
+    IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryQuery,
+    IoArtifactRetentionSummaryRecord, IoArtifactRole, LibraryUsageProjectionQuery,
+    LibraryUsageProjectionRecord, NodeExecutionCacheStatus, NodeExecutionProjectionStatus,
+    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
+    ProjectionStateUpdate, ProjectionStatus, RetentionArtifactStateChangedPayload,
+    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord,
+    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerModelCacheState, SchedulerQueueControlAction, SchedulerQueueControlActorScope,
+    SchedulerQueueControlOutcome, SchedulerQueueControlPayload, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
+    IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
+    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
+    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
+    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use crate::records::MAX_PAGE_SIZE;
 use crate::util::now_ms;
@@ -523,7 +523,8 @@ pub(super) fn query_run_list_projection(
                 model_cache_state, scheduler_reason, latest_error_event_id,
                 latest_error_severity, latest_error_phase, latest_error_code,
                 latest_error_message, fatal_error_event_id, error_count, warning_count,
-                last_event_seq, last_updated_at_ms, selected_runtime_variant_id
+                last_event_seq, last_updated_at_ms, selected_runtime_variant_id,
+                output_artifact_count, output_artifact_total_size_bytes
          FROM run_list_projection
          WHERE (?1 IS NULL OR workflow_id = ?1)
            AND (?2 IS NULL OR workflow_version_id = ?2)
@@ -795,7 +796,8 @@ pub(super) fn query_run_detail_projection(
                 latest_error_severity, latest_error_phase, latest_error_code,
                 latest_error_message, fatal_error_event_id, error_count, warning_count,
                 timeline_event_count, last_event_seq, last_updated_at_ms,
-                selected_runtime_variant_id
+                selected_runtime_variant_id, output_artifact_count,
+                output_artifact_total_size_bytes
          FROM run_detail_projection
          WHERE workflow_run_id = ?1",
     )?;
@@ -1359,6 +1361,7 @@ fn diagnostic_projection_events_after(
                 'run.snapshot_accepted',
                 'node.execution_status',
                 'inference.execution_diagnostic_observed',
+                'io.artifact_observed',
                 'diagnostic.error_occurred'
            )
          ORDER BY event_seq
@@ -2357,6 +2360,9 @@ fn apply_run_list_projection_event(
     if let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &payload {
         return apply_run_list_projection_model_lifecycle_error_facts(tx, event, payload);
     }
+    if let DiagnosticEventPayload::IoArtifactObserved(payload) = &payload {
+        return apply_run_list_projection_output_artifact_facts(tx, event, payload);
+    }
     let status = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
@@ -2848,6 +2854,9 @@ fn apply_run_detail_projection_event(
     if let DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) = &payload {
         return apply_run_detail_projection_model_lifecycle_error_facts(tx, event, payload);
     }
+    if let DiagnosticEventPayload::IoArtifactObserved(payload) = &payload {
+        return apply_run_detail_projection_output_artifact_facts(tx, event, payload);
+    }
     let status = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
@@ -3176,6 +3185,99 @@ fn apply_run_detail_projection_model_lifecycle_error_facts(
     Ok(())
 }
 
+fn apply_run_list_projection_output_artifact_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &IoArtifactObservedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    apply_run_projection_output_artifact_facts(tx, "run_list_projection", event, payload)
+}
+
+fn apply_run_detail_projection_output_artifact_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &IoArtifactObservedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    apply_run_projection_output_artifact_facts(tx, "run_detail_projection", event, payload)
+}
+
+fn apply_run_projection_output_artifact_facts(
+    tx: &rusqlite::Transaction<'_>,
+    table_name: &'static str,
+    event: &DiagnosticEventRecord,
+    payload: &IoArtifactObservedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    if !matches!(
+        payload.artifact_role,
+        IoArtifactRole::NodeOutput | IoArtifactRole::WorkflowOutput
+    ) {
+        return Ok(());
+    }
+    let size_bytes = payload
+        .size_bytes
+        .map(i64::try_from)
+        .transpose()
+        .map_err(|_| DiagnosticsLedgerError::InvalidField {
+            field: "output_artifact_total_size_bytes",
+        })?
+        .unwrap_or(0);
+    let Some((current_count, current_size_bytes)) = tx
+        .query_row(
+            format!(
+                "SELECT output_artifact_count, output_artifact_total_size_bytes
+                 FROM {table_name}
+                 WHERE workflow_run_id = ?1"
+            )
+            .as_str(),
+            params![workflow_run_id.as_str()],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )
+        .optional()?
+    else {
+        return Ok(());
+    };
+    if current_count < 0 || current_size_bytes < 0 {
+        return Err(DiagnosticsLedgerError::InvalidField {
+            field: "output_artifact_projection",
+        });
+    }
+    let output_artifact_count =
+        current_count
+            .checked_add(1)
+            .ok_or(DiagnosticsLedgerError::InvalidField {
+                field: "output_artifact_count",
+            })?;
+    let output_artifact_total_size_bytes =
+        current_size_bytes
+            .checked_add(size_bytes)
+            .ok_or(DiagnosticsLedgerError::InvalidField {
+                field: "output_artifact_total_size_bytes",
+            })?;
+
+    tx.execute(
+        format!(
+            "UPDATE {table_name}
+             SET output_artifact_count = ?1,
+                 output_artifact_total_size_bytes = ?2,
+                 last_event_seq = ?3,
+                 last_updated_at_ms = ?4
+             WHERE workflow_run_id = ?5"
+        )
+        .as_str(),
+        params![
+            output_artifact_count,
+            output_artifact_total_size_bytes,
+            event.event_seq,
+            event.occurred_at_ms,
+            workflow_run_id.as_str(),
+        ],
+    )?;
+    Ok(())
+}
+
 fn apply_library_usage_projection_event(
     tx: &rusqlite::Transaction<'_>,
     event: &DiagnosticEventRecord,
@@ -3492,6 +3594,8 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
         estimate_confidence: row.get(25)?,
         estimated_queue_wait_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64_saturating),
         estimated_duration_ms: row.get::<_, Option<i64>>(27)?.map(i64_to_u64_saturating),
+        output_artifact_count: row.get::<_, i64>(41).map(i64_to_u64_saturating)?,
+        output_artifact_total_size_bytes: row.get::<_, i64>(42).map(i64_to_u64_saturating)?,
         model_cache_state: row
             .get::<_, Option<String>>(28)?
             .map(parse_scheduler_model_cache_state)
@@ -3579,6 +3683,8 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
         estimate_confidence: row.get(32)?,
         estimated_queue_wait_ms: row.get::<_, Option<i64>>(33)?.map(i64_to_u64_saturating),
         estimated_duration_ms: row.get::<_, Option<i64>>(34)?.map(i64_to_u64_saturating),
+        output_artifact_count: row.get::<_, i64>(49).map(i64_to_u64_saturating)?,
+        output_artifact_total_size_bytes: row.get::<_, i64>(50).map(i64_to_u64_saturating)?,
         model_cache_state: row
             .get::<_, Option<String>>(35)?
             .map(parse_scheduler_model_cache_state)
