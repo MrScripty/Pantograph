@@ -941,7 +941,48 @@ fn explicit_override_rejection_diagnostics(
         .filter(|candidate| candidate_matches_override(candidate, override_selection))
         .min_by(|left, right| compare_candidate_ids(left, right))
         .map(|candidate| candidate.device_diagnostics.clone())
-        .unwrap_or_default()
+        .filter(|diagnostics| !diagnostics.is_empty())
+        .unwrap_or_else(|| synthetic_explicit_override_diagnostic(override_selection))
+}
+
+fn synthetic_explicit_override_diagnostic(
+    override_selection: &RuntimeTechnicalFitOverride,
+) -> Vec<RuntimeTechnicalFitDeviceDiagnostic> {
+    if override_selection.runtime_variant_id.is_some() {
+        return vec![RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "technical-fit could not satisfy the explicit runtime variant override"
+                .to_string(),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: override_selection.runtime_variant_id.clone(),
+            backend_key: override_selection.backend_key.clone(),
+        }];
+    }
+
+    if override_selection.backend_key.is_some() {
+        return vec![RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "technical-fit could not satisfy the explicit backend override".to_string(),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: None,
+            backend_key: override_selection.backend_key.clone(),
+        }];
+    }
+
+    vec![RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: "technical-fit could not satisfy the explicit runtime or model override"
+            .to_string(),
+        device_class: None,
+        device_id: None,
+        runtime_variant_id: None,
+        backend_key: None,
+    }]
 }
 
 fn automatic_no_valid_candidate_diagnostics(

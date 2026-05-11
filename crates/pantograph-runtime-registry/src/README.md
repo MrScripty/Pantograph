@@ -118,7 +118,9 @@ process ownership and app composition stay outside this crate.
 - Explicit overrides still have to satisfy candidate eligibility. A matching
   backend/runtime/model/variant candidate with unsupported task/model facts is
   rejected instead of selected as an executable override, and its bounded
-  diagnostics are preserved on the unselected decision.
+  diagnostics are preserved on the unselected decision. Unmatched explicit
+  overrides return synthetic bounded diagnostics scoped to the requested
+  runtime variant, backend, or runtime/model intent.
 - Technical-fit resource-pressure interpretation is also computed here so queue
   depth, loaded-runtime saturation, and reservation headroom affect candidate
   ordering through one backend-owned selector instead of adapter-local tie

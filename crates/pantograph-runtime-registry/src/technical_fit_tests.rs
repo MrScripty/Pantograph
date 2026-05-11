@@ -679,6 +679,19 @@ fn selector_rejects_unmatched_runtime_variant_override_without_synthetic_candida
         reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
             && reason.candidate_id.is_none()
     }));
+    assert_eq!(
+        decision.device_diagnostics,
+        vec![RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "technical-fit could not satisfy the explicit runtime variant override"
+                .to_string(),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: Some("pytorch/linux-x64/cuda".to_string()),
+            backend_key: Some("pytorch".to_string()),
+        }]
+    );
 }
 
 #[test]

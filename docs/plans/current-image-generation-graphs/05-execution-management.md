@@ -451,6 +451,15 @@ Update during implementation:
   `cargo test -p pantograph-embedded-runtime technical_fit`,
   `cargo test -p pantograph-workflow-service technical_fit`, and
   `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding synthetic bounded diagnostics
+  for explicit override intent that has no matching technical-fit candidate.
+  Runtime variant misses now return `missing_runtime_variant` on the unselected
+  decision instead of reason codes alone. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`, and
+  `git diff --check`.
 
 ## Commit Cadence Notes
 

@@ -1522,6 +1522,35 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: unmatched explicit runtime/variant/platform requests
     with no matching candidate still need synthetic bounded diagnostics for
     cases such as MLX on Linux/Windows once those provider facts exist.
+- 2026-05-10 slice: unmatched explicit override diagnostics.
+  - Smallest useful vertical slice: synthesize bounded runtime-registry
+    diagnostics when explicit override intent has no matching candidate at
+    all, with runtime-variant overrides returning
+    `missing_runtime_variant`.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: unmatched explicit override intent now
+    remains unselected with typed diagnostics rather than being represented
+    only by reason codes, synthesizing an executable candidate, or falling back
+    to another backend/runtime/device.
+  - Standards/blast-radius gate for runtime-registry synthetic diagnostics:
+    selector policy remains runtime-registry-owned; workflow-service and
+    embedded-runtime already transport the diagnostic codes; public DTO shape,
+    runtime lifecycle ownership, persisted schemas, frontend behavior,
+    generated files, feature flags, dependencies, lockfiles, workers, and
+    workflow fixtures are untouched.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`, and
+    `git diff --check`.
+  - Remaining follow-up: provider-specific platform facts are still required
+    before MLX-on-Linux/Windows and vLLM unsupported-model cases can be
+    validated end to end.
 
 **Verification:**
 
