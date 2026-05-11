@@ -467,6 +467,13 @@ Update during implementation:
   payload JSON. Verification passed:
   `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by surfacing backend-projected selected
+  device class in the scheduler run-list placement column. The scheduler
+  presenter combines typed `selected_device_class` and `selected_device_id`
+  fields for display and search without parsing scheduler payload JSON or
+  deriving class from device id strings. Verification passed:
+  `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 

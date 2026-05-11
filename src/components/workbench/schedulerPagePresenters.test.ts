@@ -13,6 +13,7 @@ import {
   filterSchedulerTimelineEvents,
   filterAndSortSchedulerRuns,
   formatSchedulerAcceptedDateLabel,
+  formatSchedulerDevicePlacementLabel,
   formatSchedulerEstimateDuration,
   formatSchedulerPlacementLabel,
   formatSchedulerModelCacheState,
@@ -66,6 +67,7 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
     bucket_id: 'bucket-a',
     workflow_execution_session_id: 'exec-session-a',
     selected_runtime_id: 'runtime-a',
+    selected_device_class: 'cuda',
     selected_device_id: 'device-a',
     selected_network_node_id: 'network-node-a',
     scheduler_queue_position: null,
@@ -140,6 +142,12 @@ test('scheduler policy presenters keep missing dense table facts explicit', () =
   assert.equal(formatSchedulerScopeLabel(''), 'Unassigned');
   assert.equal(formatSchedulerPlacementLabel('runtime-a'), 'runtime-a');
   assert.equal(formatSchedulerPlacementLabel(''), 'Unassigned');
+  assert.equal(formatSchedulerDevicePlacementLabel(run({})), 'cuda / device-a');
+  assert.equal(formatSchedulerDevicePlacementLabel(run({ selected_device_id: null })), 'cuda');
+  assert.equal(
+    formatSchedulerDevicePlacementLabel(run({ selected_device_class: null })),
+    'device-a',
+  );
   assert.equal(formatSchedulerAcceptedDateLabel(86_400_000), '1970-01-02');
   assert.equal(formatSchedulerAcceptedDateLabel(null), 'Unassigned');
 });
@@ -354,6 +362,7 @@ test('scheduler policy filters use explicit projection labels', () => {
       client_session_id: 'session-b',
       bucket_id: 'bucket-b',
       selected_runtime_id: 'runtime-b',
+      selected_device_class: 'metal',
       selected_device_id: 'device-b',
       selected_network_node_id: 'network-node-b',
       accepted_at_ms: 172_800_000,
@@ -366,6 +375,7 @@ test('scheduler policy filters use explicit projection labels', () => {
       client_session_id: null,
       bucket_id: null,
       selected_runtime_id: null,
+      selected_device_class: null,
       selected_device_id: null,
       selected_network_node_id: null,
       accepted_at_ms: null,

@@ -1576,6 +1576,30 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: run-inspection DTOs/presenters still need selected
     runtime variant facts before the full lifecycle/run-inspection checklist
     item can be closed.
+- 2026-05-10 slice: scheduler run-list selected-device class presentation.
+  - Smallest useful vertical slice: render scheduler run-list placement with
+    backend-projected selected device class plus selected device id through the
+    existing Node-tested scheduler presenter layer.
+  - Allowed write set:
+    `src/components/workbench/SchedulerPage.svelte`,
+    `src/components/workbench/schedulerPagePresenters.ts`,
+    `src/components/workbench/schedulerPagePresenters.test.ts`,
+    `src/services/diagnostics/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: scheduler presentation uses typed
+    `selected_device_class` and `selected_device_id` projection fields and does
+    not infer class from device ids, raw scheduler payload JSON, runtime
+    settings, or backend config strings.
+  - Standards/blast-radius gate for scheduler frontend presentation:
+    backend contracts, generated files, persisted schemas, lockfiles,
+    dependencies, polling/subscription lifecycles, and scheduler command
+    behavior are unchanged; tests use the existing Node presenter harness.
+  - Verification passed:
+    `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: scheduler filters still target selected runtime,
+    selected device id, and selected network node only; adding a selected
+    device-class backend query filter should be a separate query-contract
+    slice if needed.
 
 **Verification:**
 

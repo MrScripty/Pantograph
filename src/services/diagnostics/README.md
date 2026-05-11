@@ -62,10 +62,10 @@ panel because no active TypeScript boundary consumes them.
 - Run-list responses carry backend-owned `facets` derived from materialized
   projections. Consumers should use those counts for mixed-version and policy
   summaries instead of rebuilding them from raw ledger events or sampled pages.
-- Run-list and run-detail DTOs carry scheduler-selected runtime, device, and
-  network-node fields when the backend has placement facts. Consumers should
-  use those typed fields and facets for placement comparison instead of parsing
-  scheduler payload JSON.
+- Run-list and run-detail DTOs carry scheduler-selected runtime, device class,
+  device id, and network-node fields when the backend has placement facts.
+  Consumers should use those typed fields and facets for placement comparison
+  instead of parsing scheduler payload JSON.
 - Run-list, run-detail, and scheduler-estimate DTOs carry typed scheduler
   model-cache posture when the backend has cache facts. Consumers should use
   those typed fields instead of parsing estimate payload JSON.

@@ -35,6 +35,7 @@
     formatSchedulerTimelineKind,
     formatSchedulerTimelineSource,
     formatSchedulerDuration,
+    formatSchedulerDevicePlacementLabel,
     formatSchedulerEstimateLabel,
     formatSchedulerModelCacheState,
     formatSchedulerPlacementLabel,
@@ -827,8 +828,8 @@
                 <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerPlacementLabel(run.selected_runtime_id)}>
                   {formatSchedulerPlacementLabel(run.selected_runtime_id)}
                 </td>
-                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerPlacementLabel(run.selected_device_id)}>
-                  {formatSchedulerPlacementLabel(run.selected_device_id)}
+                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerDevicePlacementLabel(run)}>
+                  {formatSchedulerDevicePlacementLabel(run)}
                 </td>
                 <td class="max-w-[12rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerPlacementLabel(run.selected_network_node_id)}>
                   {formatSchedulerPlacementLabel(run.selected_network_node_id)}
