@@ -1377,6 +1377,37 @@ typed diagnostic and the canonical design is fixed.
     diagnostics-ledger technical-fit projections if added, Python worker, and
     persisted-state boundaries still need their own fixtures before the broad
     serde-fixture checklist item can be closed.
+- 2026-05-10 slice: runtime-registry auto ambiguity rejection.
+  - Smallest useful vertical slice: replace automatic deterministic
+    candidate-id tie-break selection with an unselected
+    `ambiguous_auto_resolution` diagnostic when multiple eligible candidates
+    have equal selector priority.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: auto mode must now resolve exactly one
+    highest-ranked candidate. Ambiguity is not converted into a selected
+    runtime/backend/device by stable candidate ordering, CPU defaults, or old
+    raw-device behavior.
+  - Standards/blast-radius gate for runtime-registry selector policy:
+    runtime-registry remains the owner of selector policy and reason/diagnostic
+    contracts; workflow-service and embedded-runtime projection DTO shapes are
+    unchanged; runtime lifecycle ownership, persisted schemas, frontend
+    behavior, generated files, feature flags, dependencies, lockfiles, workers,
+    and workflow fixtures are untouched; test isolation uses focused
+    runtime-registry selector tests plus projection/admission smoke coverage.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`, and
+    `git diff --check`.
+  - Remaining follow-up: zero-valid-candidate auto-mode diagnostics still use
+    missing-candidate/runtime-state reasons, and remaining old raw-device
+    execution paths still need removal before the broad auto-mode checklist item
+    can be closed.
 
 **Verification:**
 

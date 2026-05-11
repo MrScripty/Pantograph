@@ -665,6 +665,16 @@ pub fn select_runtime_technical_fit(
     eligible_candidates.sort_by(|left, right| compare_candidates(left, right, &normalized));
 
     if let Some(selected_candidate) = eligible_candidates.first().copied() {
+        if eligible_candidates.iter().skip(1).any(|candidate| {
+            compare_candidate_priority(selected_candidate, candidate, &normalized).is_eq()
+        }) {
+            return unselected_decision_with_device_diagnostics(
+                RuntimeTechnicalFitSelectionMode::Automatic,
+                Vec::new(),
+                vec![ambiguous_auto_resolution_diagnostic()],
+            );
+        }
+
         reasons.push(RuntimeTechnicalFitReason::new(
             RuntimeTechnicalFitReasonCode::RuntimeRequirements,
             Some(selected_candidate.candidate_id.as_str()),
@@ -708,15 +718,6 @@ pub fn select_runtime_technical_fit(
         {
             reasons.push(RuntimeTechnicalFitReason::new(
                 RuntimeTechnicalFitReasonCode::BudgetPressure,
-                Some(selected_candidate.candidate_id.as_str()),
-            ));
-        }
-
-        if eligible_candidates.iter().skip(1).any(|candidate| {
-            compare_candidate_priority(selected_candidate, candidate, &normalized).is_eq()
-        }) {
-            reasons.push(RuntimeTechnicalFitReason::new(
-                RuntimeTechnicalFitReasonCode::DeterministicTieBreak,
                 Some(selected_candidate.candidate_id.as_str()),
             ));
         }
@@ -924,6 +925,18 @@ fn explicit_device_unavailable_diagnostics(
         runtime_variant_id: None,
         backend_key: None,
     }]
+}
+
+fn ambiguous_auto_resolution_diagnostic() -> RuntimeTechnicalFitDeviceDiagnostic {
+    RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: "technical-fit auto policy matched multiple equally ranked candidates".to_string(),
+        device_class: None,
+        device_id: None,
+        runtime_variant_id: None,
+        backend_key: None,
+    }
 }
 
 fn candidate_matches_override(

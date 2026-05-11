@@ -869,7 +869,7 @@ fn selector_rejects_unmatched_override_without_synthetic_candidate() {
 }
 
 #[test]
-fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
+fn selector_rejects_ambiguous_auto_resolution_without_tie_break() {
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: RuntimeRegistrySnapshot {
             generated_at_ms: 123,
@@ -946,12 +946,22 @@ fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
         decision.selection_mode,
         RuntimeTechnicalFitSelectionMode::Automatic
     );
-    assert_eq!(decision.selected_candidate_id.as_deref(), Some("runtime-a"));
-    assert_eq!(decision.selected_runtime_id.as_deref(), Some("runtime-a"));
-    assert!(decision.reasons.iter().any(|reason| {
-        reason.code == RuntimeTechnicalFitReasonCode::DeterministicTieBreak
-            && reason.candidate_id.as_deref() == Some("runtime-a")
-    }));
+    assert_eq!(decision.selected_candidate_id, None);
+    assert_eq!(decision.selected_runtime_id, None);
+    assert!(decision.reasons.is_empty());
+    assert_eq!(
+        decision.device_diagnostics,
+        vec![RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "technical-fit auto policy matched multiple equally ranked candidates"
+                .to_string(),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: None,
+            backend_key: None,
+        }]
+    );
 }
 
 #[test]

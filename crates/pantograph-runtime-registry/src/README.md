@@ -128,6 +128,9 @@ process ownership and app composition stay outside this crate.
   facts. If no candidate reports the requested class/id, the decision is
   unselected with an `explicit_device_unavailable` diagnostic rather than
   selecting another candidate as a fallback.
+- Auto technical-fit policy must resolve exactly one highest-ranked candidate.
+  Equally ranked candidates return an unselected `ambiguous_auto_resolution`
+  diagnostic instead of using candidate-id ordering as executable selection.
 - Technical-fit candidate and decision DTOs carry runtime variant id, typed
   selected device class/id, resource estimates, observed-throughput hints, and
   bounded device diagnostics when producers provide those facts. The selector
