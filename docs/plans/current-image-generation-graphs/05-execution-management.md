@@ -1728,6 +1728,22 @@ Worker rules:
   issue fixed within the slice: run projections previously filtered out
   `io.artifact_observed`, so descriptor facts could not reach run-list or
   run-detail projections.
+- 2026-05-11 backend capability contract reconciliation slice: smallest useful
+  vertical slice was limited to validating existing capability-contract code
+  and marking the checklist item complete. Allowed write set: this plan
+  directory. The no-fallback/no-legacy rule is preserved because the existing
+  contract reports adapter-owned capability facts and unavailable roadmap facts
+  without ranking candidates, selecting alternate backends, or translating raw
+  device strings outside backend/runtime boundaries.
+- Verification passed:
+  `cargo test -p inference test_capabilities`,
+  `cargo test -p inference backend_capability_facts_preserve_runtime_variant_facts`,
+  `cargo test -p inference capabilities`,
+  `cargo test -p pantograph-embedded-runtime roadmap_runtime_capabilities_report_vllm_and_mlx_placeholders`,
+  and `cargo test -p pantograph-embedded-runtime runtime_capabilities`.
+  Deviation: this was a plan reconciliation slice because previous Milestone 5
+  slices had already added `BackendCapabilityFacts.runtime_variants`,
+  llama.cpp/PyTorch/Candle adapter facts, and vLLM/MLX roadmap facts.
 
 ### Traceability Links
 

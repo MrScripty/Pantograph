@@ -45,10 +45,18 @@ typed diagnostic and the canonical design is fixed.
   options, executable technical-fit conservative fallback, override-fallback
   candidate synthesis, gateway active-backend inference, and node-engine
   backend routing that chooses independently of the scheduler decision.
-- [ ] Add a common backend-adapter capability contract for llama.cpp, PyTorch,
+- [x] Add a common backend-adapter capability contract for llama.cpp, PyTorch,
   vLLM, Candle, and future MLX. The contract reports facts and performs
   backend-specific translation; it must not rank candidates across backends or
   own cross-workflow scheduling policy.
+  - 2026-05-11 reconciliation: the existing `BackendCapabilityFacts`
+    contract carries canonical task, model-source, feature, and
+    `RuntimeVariantCapability` facts for executable inference adapters.
+    llama.cpp, PyTorch, and Candle expose their facts through adapter
+    `static_capabilities`; embedded-runtime roadmap capability facts expose
+    vLLM CPU/CUDA and future MLX Metal as unavailable/non-executable facts.
+    Ranking remains in scheduler/runtime-registry decisions, not in adapters
+    or roadmap fact providers.
 - [ ] Keep backend adapter startup/load functions lifecycle-owned by the
   embedded runtime or another explicit composition-root owner. Adapters must
   not create global Tokio runtimes, untracked tasks, unbounded worker queues, or
