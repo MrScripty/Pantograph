@@ -308,15 +308,15 @@ pub(crate) fn extract_required_extensions(
 pub fn estimate_memory_requirements(
     required_models: &[String],
     model_metadata: &HashMap<String, serde_json::Value>,
-) -> (Option<u64>, Option<u64>, Option<u64>, Option<u64>, String) {
+) -> Result<(Option<u64>, Option<u64>, Option<u64>, Option<u64>, String), WorkflowServiceError> {
     if required_models.is_empty() {
-        return (
+        return Ok((
             Some(0),
             Some(0),
             Some(0),
             Some(0),
             "exact_no_models".to_string(),
-        );
+        ));
     }
 
     const MB: u64 = 1024 * 1024;
@@ -328,17 +328,27 @@ pub fn estimate_memory_requirements(
             continue;
         };
         if let Some(size_bytes) = extract_model_size_bytes(metadata) {
-            let size_mb = (size_bytes.saturating_add(MB - 1)) / MB;
+            let size_mb = size_bytes.checked_add(MB - 1).ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "model '{model_id}' size_bytes overflows megabyte rounding"
+                ))
+            })? / MB;
             sizes_mb.push(size_mb.max(1));
             found_count += 1;
         }
     }
 
     if sizes_mb.is_empty() {
-        return (None, None, None, None, "unknown".to_string());
+        return Ok((None, None, None, None, "unknown".to_string()));
     }
 
-    let peak = sizes_mb.iter().sum::<u64>();
+    let peak = sizes_mb.iter().try_fold(0_u64, |total, size_mb| {
+        total.checked_add(*size_mb).ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(
+                "model memory estimate overflows megabyte total".to_string(),
+            )
+        })
+    })?;
     let min = sizes_mb.into_iter().max().unwrap_or(0);
     let confidence = if found_count == required_models.len() {
         "estimated_from_model_sizes"
@@ -346,13 +356,13 @@ pub fn estimate_memory_requirements(
         "partial_model_sizes"
     };
 
-    (
+    Ok((
         Some(peak),
         Some(peak),
         Some(min),
         Some(min),
         confidence.to_string(),
-    )
+    ))
 }
 
 fn compute_graph_fingerprint(nodes: &[StoredGraphNode], edges: &[StoredGraphEdge]) -> String {
@@ -636,7 +646,8 @@ mod tests {
     fn memory_estimate_is_unknown_when_no_sizes_exist() {
         let required = vec!["a".to_string()];
         let metadata = HashMap::new();
-        let (_, _, _, _, confidence) = estimate_memory_requirements(&required, &metadata);
+        let (_, _, _, _, confidence) =
+            estimate_memory_requirements(&required, &metadata).expect("estimate memory");
         assert_eq!(confidence, "unknown");
     }
 
@@ -654,12 +665,31 @@ mod tests {
         );
 
         let (peak_vram, peak_ram, min_vram, min_ram, confidence) =
-            estimate_memory_requirements(&required, &metadata);
+            estimate_memory_requirements(&required, &metadata).expect("estimate memory");
         assert_eq!(peak_vram, Some(3));
         assert_eq!(peak_ram, Some(3));
         assert_eq!(min_vram, Some(2));
         assert_eq!(min_ram, Some(2));
         assert_eq!(confidence, "estimated_from_model_sizes");
+    }
+
+    #[test]
+    fn memory_estimate_rejects_model_size_rounding_overflow() {
+        let required = vec!["a".to_string()];
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "a".to_string(),
+            serde_json::json!({ "size_bytes": u64::MAX }),
+        );
+
+        let err = estimate_memory_requirements(&required, &metadata)
+            .expect_err("model size rounding overflow should fail");
+
+        assert!(matches!(
+            err,
+            WorkflowServiceError::InvalidRequest(message)
+                if message.contains("size_bytes overflows megabyte rounding")
+        ));
     }
 
     #[test]

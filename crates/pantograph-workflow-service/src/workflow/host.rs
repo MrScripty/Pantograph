@@ -125,7 +125,7 @@ pub trait WorkflowHost: Send + Sync {
             estimated_min_vram_mb,
             estimated_min_ram_mb,
             estimation_confidence,
-        ) = capabilities::estimate_memory_requirements(&required_models, &model_metadata);
+        ) = capabilities::estimate_memory_requirements(&required_models, &model_metadata)?;
         let model_usages = capabilities::extract_model_usages(stored.nodes());
         let mut models = Vec::with_capacity(model_usages.len());
         for usage in model_usages {

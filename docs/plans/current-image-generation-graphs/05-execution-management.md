@@ -2033,6 +2033,26 @@ Worker rules:
   numeric-boundary follow-up: image request limits, context/token/batch limits
   outside this reservation accounting boundary, memory estimates, byte-range
   projections, and worker/runtime request fields.
+- 2026-05-11 workflow capability memory estimate accounting slice: smallest
+  useful vertical slice was limited to replacing saturating model-size megabyte
+  rounding and raw peak-memory summation in `estimate_memory_requirements` with
+  checked arithmetic and typed workflow-service errors. Allowed write set:
+  `crates/pantograph-workflow-service/src/capabilities.rs`,
+  `crates/pantograph-workflow-service/src/workflow/host.rs`, and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because invalid model
+  metadata size arithmetic no longer saturates into a plausible memory
+  estimate; it fails through `WorkflowServiceError::InvalidRequest`. Absent
+  model sizes still produce the canonical unknown estimate. Verification
+  passed: `cargo test -p pantograph-workflow-service memory_estimate` and
+  `cargo test -p pantograph-workflow-service workflow_capabilities`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Deviation: the first
+  `cargo fmt --all -- --check` found rustfmt-only wrapping in the touched
+  capability tests; `cargo fmt --all` was applied and focused tests plus final
+  format verification were rerun successfully.
+  Remaining numeric-boundary follow-up: image request limits,
+  context/token/batch limits outside this capability estimation boundary,
+  byte-range projections, and worker/runtime request fields.
 
 ### Traceability Links
 

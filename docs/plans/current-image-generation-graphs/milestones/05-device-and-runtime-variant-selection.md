@@ -254,6 +254,12 @@ typed diagnostic and the canonical design is fixed.
     behavior. Remaining numeric boundaries include broader image request
     limits, context/token/batch limits, memory estimates, byte-range
     projections, and worker/runtime request fields.
+  - 2026-05-11 partial: workflow capability memory estimation now uses checked
+    model-size rounding and checked total summation, returning
+    `WorkflowServiceError::InvalidRequest` for overflow instead of saturating
+    byte sizes or relying on raw `sum()` behavior. Remaining numeric
+    boundaries include broader image request limits, context/token/batch
+    limits, byte-range projections, and worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3418,6 +3424,35 @@ typed diagnostic and the canonical design is fixed.
     request limits, context/token/batch limits outside this reservation
     accounting boundary, memory estimates, byte-range projections, and
     worker/runtime request fields.
+- 2026-05-11 slice: workflow capability memory estimate accounting.
+  - Smallest useful vertical slice: replace saturating model-size megabyte
+    rounding and raw peak-memory summation in
+    `estimate_memory_requirements` with checked arithmetic and typed
+    workflow-service errors.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/capabilities.rs`,
+    `crates/pantograph-workflow-service/src/workflow/host.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: invalid model metadata size arithmetic
+    no longer saturates into a plausible memory estimate; it fails through
+    `WorkflowServiceError::InvalidRequest`. Absent model sizes still produce
+    the canonical unknown estimate.
+  - Standards/blast-radius gate: workflow capability estimation only; no
+    generated files, frontend code, saved workflow fixtures, lockfiles, path
+    roots, Pumas contracts, worker contracts, runtime scheduler policy, or
+    backend lifecycle behavior changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service memory_estimate` and
+    `cargo test -p pantograph-workflow-service workflow_capabilities`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` found
+    rustfmt-only wrapping in the touched capability tests; `cargo fmt --all`
+    was applied and focused tests plus final format verification were rerun
+    successfully.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    request limits, context/token/batch limits outside this capability
+    estimation boundary, byte-range projections, and worker/runtime request
+    fields.
 
 **Verification:**
 
