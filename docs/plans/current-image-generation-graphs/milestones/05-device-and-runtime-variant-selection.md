@@ -198,6 +198,13 @@ typed diagnostic and the canonical design is fixed.
   diagnostics. Examples: llama.cpp for diffusion image generation, MLX on
   Linux/Windows, Candle image generation before executable Candle support, or
   vLLM for unsupported model/task artifacts.
+  - 2026-05-11 partial: explicit Candle backend overrides for Diffusers
+    image-generation package facts now remain unselected and project the
+    candidate compatibility issue as a typed `backend_incompatible`
+    diagnostic. No Candle executable candidate, CPU/auto fallback, or alternate
+    backend selection is synthesized. Remaining follow-up: add the vLLM
+    unsupported model/task artifact case against canonical backend facts before
+    closing this broad checklist item.
 - [ ] Update runtime-load contracts so load readiness consumes a resolved
   device decision rather than inferring from command-line arguments or raw
   backend config strings.

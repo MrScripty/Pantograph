@@ -1618,6 +1618,23 @@ Worker rules:
   llama.cpp managed-runtime variants gained Metal modeling. The first focused
   test run passed but reported a Linux dead-code warning for the Metal constant;
   scoping the constant to macOS/test builds removed the warning.
+- 2026-05-11 Candle explicit image-generation override rejection slice:
+  smallest useful vertical slice was limited to runtime-registry explicit
+  override diagnostics, embedded-runtime technical-fit projection coverage, and
+  plan notes. Allowed write set:
+  `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs`, and this plan
+  directory. The slice preserves the no-fallback/no-legacy rule by keeping
+  explicit Candle backend preference unselected for Diffusers image-generation
+  package facts and projecting the backend compatibility issue as a typed
+  `backend_incompatible` diagnostic instead of selecting Candle, inventing a
+  candidate, or falling back to CPU/auto/another backend.
+- `cargo test -p pantograph-embedded-runtime candle_image_generation_override_rejects_backend_incompatibility_without_selection`,
+  `cargo test -p pantograph-runtime-registry technical_fit`, and
+  `cargo test -p pantograph-embedded-runtime technical_fit` passed. Remaining
+  follow-up: vLLM unsupported model/task artifact preference rejection still
+  needs canonical backend-fact coverage before the broad impossible-preference
+  checklist item closes.
 
 ### Traceability Links
 

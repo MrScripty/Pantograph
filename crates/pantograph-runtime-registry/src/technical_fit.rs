@@ -940,9 +940,48 @@ fn explicit_override_rejection_diagnostics(
         .iter()
         .filter(|candidate| candidate_matches_override(candidate, override_selection))
         .min_by(|left, right| compare_candidate_ids(left, right))
-        .map(|candidate| candidate.device_diagnostics.clone())
+        .map(candidate_rejection_diagnostics)
         .filter(|diagnostics| !diagnostics.is_empty())
         .unwrap_or_else(|| synthetic_explicit_override_diagnostic(override_selection))
+}
+
+fn candidate_rejection_diagnostics(
+    candidate: &RuntimeTechnicalFitCandidate,
+) -> Vec<RuntimeTechnicalFitDeviceDiagnostic> {
+    if !candidate.device_diagnostics.is_empty() {
+        return candidate.device_diagnostics.clone();
+    }
+
+    let compatibility_rejected = candidate
+        .compatibility_report
+        .as_ref()
+        .map(|report| !report.compatible)
+        .unwrap_or(false)
+        || candidate.compatibility_issue_count > 0
+        || !candidate.compatibility_issues.is_empty();
+    if !compatibility_rejected {
+        return Vec::new();
+    }
+
+    let message = candidate
+        .compatibility_issues
+        .first()
+        .map(|issue| issue.message.clone())
+        .filter(|message| !message.trim().is_empty())
+        .unwrap_or_else(|| {
+            "technical-fit explicit override candidate is incompatible with the requested model or task"
+                .to_string()
+        });
+
+    vec![RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message,
+        device_class: candidate.device_class,
+        device_id: candidate.selected_device_id.clone(),
+        runtime_variant_id: candidate.runtime_variant_id.clone(),
+        backend_key: candidate.backend_key.clone(),
+    }]
 }
 
 fn synthetic_explicit_override_diagnostic(

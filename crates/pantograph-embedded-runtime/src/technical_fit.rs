@@ -1808,4 +1808,75 @@ mod tests {
             Some("accepted")
         );
     }
+
+    #[test]
+    fn candle_image_generation_override_rejects_backend_incompatibility_without_selection() {
+        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+            include_str!(
+                "../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
+            ),
+        )
+        .expect("decode image generation package facts fixture");
+        let workflow_request = build_workflow_technical_fit_request(
+            "workflow-a",
+            &WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: None,
+                estimated_peak_ram_mb: None,
+                estimated_min_vram_mb: None,
+                estimated_min_ram_mb: None,
+                estimation_confidence: "fixture".to_string(),
+                required_models: vec!["image/stable-diffusion/tiny-sd".to_string()],
+                required_backends: vec!["candle".to_string()],
+                required_extensions: Vec::new(),
+            },
+            Some(pantograph_workflow_service::WorkflowTechnicalFitOverride {
+                runtime_id: None,
+                runtime_variant_id: None,
+                model_id: None,
+                backend_key: Some("candle".to_string()),
+            }),
+            None,
+            None,
+            None,
+        );
+        let backends = vec![backend_info(
+            "candle",
+            vec![inference::ModelArtifactKind::DiffusersBundle],
+            vec![inference::BackendHintLabel::Candle],
+        )];
+
+        let runtime_request = build_runtime_technical_fit_request_with_backend_package_facts(
+            &workflow_request,
+            None,
+            &[],
+            &backends,
+            &[package_facts],
+        );
+
+        let registry_decision = select_runtime_technical_fit(&runtime_request);
+        let workflow_decision = project_workflow_technical_fit_decision(&registry_decision);
+
+        assert_eq!(
+            workflow_decision.selection_mode,
+            WorkflowTechnicalFitSelectionMode::ExplicitOverride
+        );
+        assert_eq!(workflow_decision.selected_candidate_id, None);
+        assert_eq!(workflow_decision.selected_backend_key, None);
+        assert!(workflow_decision.reasons.iter().any(|reason| {
+            reason.code == WorkflowTechnicalFitReasonCode::ExplicitBackendOverride
+                && reason.candidate_id.is_none()
+        }));
+        assert_eq!(workflow_decision.device_diagnostics.len(), 1);
+        let diagnostic = &workflow_decision.device_diagnostics[0];
+        assert_eq!(
+            diagnostic.code,
+            WorkflowTechnicalFitDeviceDiagnosticCode::BackendIncompatible
+        );
+        assert_eq!(
+            diagnostic.severity,
+            WorkflowTechnicalFitDeviceDiagnosticSeverity::Error
+        );
+        assert_eq!(diagnostic.backend_key.as_deref(), Some("candle"));
+        assert!(diagnostic.message.contains("ImageGeneration"));
+    }
 }
