@@ -1818,6 +1818,31 @@ Worker rules:
   follow-up: image dimensions, context/token/batch limits, memory estimates,
   disk budget summation, artifact stats summation, byte-range projections, and
   worker/runtime request fields.
+- 2026-05-11 artifact-store disk-budget checked summation slice: smallest
+  useful vertical slice was limited to replacing the artifact-store
+  disk-budget `sum::<u64>().saturating_add(...)` projection with checked
+  accumulation across retained artifacts, pending streams, and the replacement
+  body size. Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/artifact_store.rs` and this
+  plan directory.
+- The slice preserves the no-fallback/no-legacy rule because disk projection
+  overflow now returns typed `ArtifactStoreError::ArtifactAccountingOverflow {
+  field: "disk_usage_bytes" }` before any new artifact body, descriptor,
+  manifest, or memory-cache state is written; it does not clamp or saturate
+  projected disk usage. Verification passed:
+  `cargo test -p pantograph-workflow-service disk_limit_projection_rejects_total_byte_overflow`,
+  `cargo test -p pantograph-workflow-service workflow::artifact_store`, and
+  `cargo test -p pantograph-workflow-service --test artifact_store`.
+  Deviations: `cargo fmt --all -- --check` found rustfmt-only wrapping before
+  verification; `cargo fmt --all` was applied and the tests above passed after
+  formatting. Parallel Cargo tests serialized on package/build locks before
+  passing. Discovered issue/deferred follow-up: `artifact_store.rs` is already
+  over the 500-line coding-standards decomposition-review trigger; splitting
+  was deferred because the slice stayed within disk-accounting behavior and
+  the existing colocated unit-test pattern. Remaining numeric-boundary
+  follow-up: image dimensions, context/token/batch limits, memory estimates,
+  artifact stats summation, byte-range projections, and worker/runtime request
+  fields.
 
 ### Traceability Links
 

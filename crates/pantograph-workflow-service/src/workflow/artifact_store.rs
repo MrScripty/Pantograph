@@ -413,17 +413,24 @@ impl ArtifactStore {
             .artifacts
             .iter()
             .filter(|entry| entry.descriptor.artifact_id != artifact_id)
-            .map(|entry| {
-                if let Some(stream) = &entry.pending_stream {
+            .try_fold(0_u64, |total, entry| {
+                let entry_bytes = if let Some(stream) = &entry.pending_stream {
                     stream.byte_length
                 } else if entry.body_file.is_some() {
                     entry.descriptor.byte_length.unwrap_or_default()
                 } else {
                     0
-                }
-            })
-            .sum::<u64>()
-            .saturating_add(replacement_body_bytes);
+                };
+                total.checked_add(entry_bytes).ok_or(
+                    ArtifactStoreError::ArtifactAccountingOverflow {
+                        field: "disk_usage_bytes",
+                    },
+                )
+            })?
+            .checked_add(replacement_body_bytes)
+            .ok_or(ArtifactStoreError::ArtifactAccountingOverflow {
+                field: "disk_usage_bytes",
+            })?;
         if projected_bytes > max_bytes {
             return Err(ArtifactStoreError::DiskLimitExceeded {
                 actual_bytes: projected_bytes,
@@ -572,6 +579,68 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn disk_limit_projection_rejects_total_byte_overflow() {
+        let temp = tempfile::tempdir().expect("temp artifact store");
+        let mut store = ArtifactStore::open(temp.path(), policy_with_max_disk_bytes(u64::MAX))
+            .expect("open artifact store");
+        store
+            .write_artifact(ArtifactWriteRequest {
+                artifact_id: Some("artifact-existing".to_string()),
+                payload_kind: ArtifactPayloadKind::GenericBinary,
+                media_type: "application/octet-stream".to_string(),
+                format: None,
+                attribution: ArtifactAttribution {
+                    workflow_run_id: "run-overflow".to_string(),
+                    workflow_id: None,
+                    workflow_version_id: None,
+                    node_id: None,
+                    port_id: None,
+                    model_id: None,
+                    runtime_id: None,
+                },
+                artifact_role: None,
+                parent_artifact_id: None,
+                revision_index: None,
+                body: Vec::new(),
+            })
+            .expect("write existing artifact");
+        let entry = store
+            .entry_mut("artifact-existing")
+            .expect("existing entry");
+        entry.descriptor.byte_length = Some(u64::MAX);
+
+        let error = store
+            .write_artifact(ArtifactWriteRequest {
+                artifact_id: Some("artifact-new".to_string()),
+                payload_kind: ArtifactPayloadKind::GenericBinary,
+                media_type: "application/octet-stream".to_string(),
+                format: None,
+                attribution: ArtifactAttribution {
+                    workflow_run_id: "run-overflow".to_string(),
+                    workflow_id: None,
+                    workflow_version_id: None,
+                    node_id: None,
+                    port_id: None,
+                    model_id: None,
+                    runtime_id: None,
+                },
+                artifact_role: None,
+                parent_artifact_id: None,
+                revision_index: None,
+                body: vec![1],
+            })
+            .expect_err("disk projection overflow should fail");
+
+        assert!(matches!(
+            error,
+            ArtifactStoreError::ArtifactAccountingOverflow {
+                field: "disk_usage_bytes"
+            }
+        ));
+        assert!(store.entry("artifact-new").is_err());
+    }
+
     fn policy_with_delete_on_consume() -> ArtifactPolicy {
         ArtifactPolicy {
             policy_id: "test-policy".to_string(),
@@ -604,6 +673,19 @@ mod tests {
             policy_version: 1,
             ttl_seconds: None,
             max_disk_bytes: None,
+            max_memory_bytes: None,
+            max_single_artifact_bytes: None,
+            spill_threshold_bytes: None,
+            delete_on_consume: false,
+        }
+    }
+
+    fn policy_with_max_disk_bytes(max_disk_bytes: u64) -> ArtifactPolicy {
+        ArtifactPolicy {
+            policy_id: "test-policy".to_string(),
+            policy_version: 1,
+            ttl_seconds: None,
+            max_disk_bytes: Some(max_disk_bytes),
             max_memory_bytes: None,
             max_single_artifact_bytes: None,
             spill_threshold_bytes: None,

@@ -187,10 +187,14 @@ typed diagnostic and the canonical design is fixed.
     chunk byte-length updates now use checked arithmetic. Cache capacity
     overflow skips insertion without mutating counters, and stream byte-length
     overflow returns typed `ArtifactStoreError::ArtifactAccountingOverflow`
-    projected through the workflow artifact API. Remaining numeric boundaries
-    include image dimensions, context/token/batch limits, memory estimates,
-    disk budget summation, artifact stats summation, byte-range projections,
-    and worker/runtime request fields.
+    projected through the workflow artifact API.
+  - 2026-05-11 partial: artifact-store disk-budget projection now uses checked
+    summation for retained bodies, pending streams, and replacement body bytes.
+    Overflow returns typed `ArtifactStoreError::ArtifactAccountingOverflow`
+    instead of preserving the previous saturating total. Remaining numeric
+    boundaries include image dimensions, context/token/batch limits, memory
+    estimates, artifact stats summation, byte-range projections, and
+    worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3078,6 +3082,37 @@ typed diagnostic and the canonical design is fixed.
     dimensions, context/token/batch limits, memory estimates, disk budget
     summation, artifact stats summation, byte-range projections, and
     worker/runtime request fields.
+- 2026-05-11 slice: artifact-store disk-budget checked summation.
+  - Smallest useful vertical slice: replace the artifact-store disk-budget
+    `sum::<u64>().saturating_add(...)` projection with checked accumulation
+    across retained artifacts, pending streams, and the replacement body size.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/artifact_store.rs` and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: overflow now returns typed
+    `ArtifactStoreError::ArtifactAccountingOverflow { field:
+    "disk_usage_bytes" }` before any new artifact body, descriptor, manifest,
+    or memory-cache state is written. The slice does not clamp or saturate
+    projected disk usage.
+  - Standards/blast-radius gate: artifact-store disk accounting only; no API
+    DTOs, generated files, frontend code, saved workflow fixtures, lockfiles,
+    path roots, Pumas contracts, worker contracts, runtime scheduler policy, or
+    backend startup behavior changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service disk_limit_projection_rejects_total_byte_overflow`,
+    `cargo test -p pantograph-workflow-service workflow::artifact_store`, and
+    `cargo test -p pantograph-workflow-service --test artifact_store`.
+  - Verification deviations: `cargo fmt --all -- --check` found rustfmt-only
+    wrapping before verification; `cargo fmt --all` was applied and the tests
+    above passed after formatting. Parallel Cargo tests serialized on package
+    and build locks before passing.
+  - Discovered issue/deferred follow-up: `artifact_store.rs` is already over
+    the 500-line coding-standards decomposition-review trigger. The split was
+    deferred because this slice intentionally stayed within disk-accounting
+    behavior and the existing colocated unit-test pattern.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    dimensions, context/token/batch limits, memory estimates, artifact stats
+    summation, byte-range projections, and worker/runtime request fields.
 
 **Verification:**
 
