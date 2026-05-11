@@ -241,6 +241,20 @@ export function formatSchedulerPlacementLabel(value: string | null | undefined):
   return value && value.trim().length > 0 ? value : 'Unassigned';
 }
 
+export function formatSchedulerRuntimePlacementLabel(
+  run: Pick<RunListProjectionRecord, 'selected_runtime_id' | 'selected_runtime_variant_id'>,
+): string {
+  const runtimeId = formatSchedulerPlacementLabel(run.selected_runtime_id);
+  const runtimeVariantId = formatSchedulerPlacementLabel(run.selected_runtime_variant_id);
+  if (runtimeId === 'Unassigned') {
+    return runtimeVariantId;
+  }
+  if (runtimeVariantId === 'Unassigned') {
+    return runtimeId;
+  }
+  return `${runtimeId} / ${runtimeVariantId}`;
+}
+
 export function formatSchedulerDevicePlacementLabel(
   run: Pick<RunListProjectionRecord, 'selected_device_class' | 'selected_device_id'>,
 ): string {
@@ -525,6 +539,7 @@ function schedulerRunMatchesSearch(run: RunListProjectionRecord, search: string)
     run.bucket_id,
     run.workflow_execution_session_id,
     run.selected_runtime_id,
+    run.selected_runtime_variant_id,
     run.selected_backend_key,
     run.selected_device_class,
     run.selected_device_id,

@@ -25,6 +25,7 @@ import {
   formatSchedulerReasonLabel,
   formatSchedulerRetentionLabel,
   formatSchedulerRetentionStateLabel,
+  formatSchedulerRuntimePlacementLabel,
   formatSchedulerScopeLabel,
   formatSchedulerStatusLabel,
   formatSchedulerTimelineKind,
@@ -69,6 +70,7 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
     bucket_id: 'bucket-a',
     workflow_execution_session_id: 'exec-session-a',
     selected_runtime_id: 'runtime-a',
+    selected_runtime_variant_id: 'runtime-a/cuda',
     selected_backend_key: 'llama_cpp',
     selected_device_class: 'cuda',
     selected_device_id: 'device-a',
@@ -145,6 +147,15 @@ test('scheduler policy presenters keep missing dense table facts explicit', () =
   assert.equal(formatSchedulerScopeLabel(''), 'Unassigned');
   assert.equal(formatSchedulerPlacementLabel('runtime-a'), 'runtime-a');
   assert.equal(formatSchedulerPlacementLabel(''), 'Unassigned');
+  assert.equal(formatSchedulerRuntimePlacementLabel(run({})), 'runtime-a / runtime-a/cuda');
+  assert.equal(
+    formatSchedulerRuntimePlacementLabel(run({ selected_runtime_variant_id: null })),
+    'runtime-a',
+  );
+  assert.equal(
+    formatSchedulerRuntimePlacementLabel(run({ selected_runtime_id: null })),
+    'runtime-a/cuda',
+  );
   assert.equal(formatSchedulerDevicePlacementLabel(run({})), 'cuda / device-a');
   assert.equal(formatSchedulerDevicePlacementLabel(run({ selected_device_id: null })), 'cuda');
   assert.equal(
@@ -292,6 +303,33 @@ test('filterAndSortSchedulerRuns searches client scope facts', () => {
   assert.deepEqual(
     filterAndSortSchedulerRuns(runs, {
       search: 'bucket-side',
+      status: 'all',
+      schedulerPolicy: 'all',
+      retentionPolicy: 'all',
+      client: 'all',
+      clientSession: 'all',
+      bucket: 'all',
+      selectedRuntime: 'all',
+      selectedBackend: 'all',
+      selectedDeviceClass: 'all',
+      selectedDevice: 'all',
+      selectedNetworkNode: 'all',
+      acceptedDate: 'all',
+      sort: 'workflow_asc',
+    }).map((item) => item.workflow_run_id),
+    ['run-b'],
+  );
+});
+
+test('filterAndSortSchedulerRuns searches selected runtime variant facts', () => {
+  const runs = [
+    run({ workflow_run_id: 'run-a', selected_runtime_variant_id: 'llama_cpp/linux-x64/cpu' }),
+    run({ workflow_run_id: 'run-b', selected_runtime_variant_id: 'llama_cpp/linux-x64/cuda' }),
+  ];
+
+  assert.deepEqual(
+    filterAndSortSchedulerRuns(runs, {
+      search: 'linux-x64/cuda',
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'all',

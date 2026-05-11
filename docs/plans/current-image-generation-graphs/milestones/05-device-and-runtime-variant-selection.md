@@ -1862,6 +1862,31 @@ typed diagnostic and the canonical design is fixed.
     selected-runtime-variant rendering or filters from typed DTO fields in a
     separate frontend slice; no component should parse lifecycle payload JSON
     for the variant.
+- 2026-05-10 slice: scheduler selected runtime variant presentation.
+  - Smallest useful vertical slice: render selected runtime variant in the
+    scheduler run-list runtime placement column and include it in scheduler
+    run-list search from typed frontend DTO fields.
+  - Allowed write set:
+    `src/components/workbench/SchedulerPage.svelte`,
+    `src/components/workbench/schedulerPagePresenters.ts`,
+    `src/components/workbench/schedulerPagePresenters.test.ts`,
+    `src/services/diagnostics/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: the presenter reads
+    `selected_runtime_variant_id` directly. It does not infer variants from
+    runtime ids, selected backend keys, device ids/classes, runtime settings,
+    backend config strings, or scheduler payload JSON.
+  - Standards/blast-radius gate for frontend presentation: existing Node
+    presenter tests are retained as the test platform; no backend contracts,
+    schema, generated files, lockfiles, dependencies, polling paths, saved
+    workflow fixtures, or worker code changed. The Svelte table still renders
+    backend projection facts declaratively with existing title text for
+    truncated values.
+  - Verification passed:
+    `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: runtime-variant-specific facets or query filters
+    remain a separate backend/frontend projection slice; this slice does not
+    overload the existing selected-runtime filter with variant values.
 
 **Verification:**
 

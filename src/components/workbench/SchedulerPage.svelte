@@ -39,6 +39,7 @@
     formatSchedulerEstimateLabel,
     formatSchedulerModelCacheState,
     formatSchedulerPlacementLabel,
+    formatSchedulerRuntimePlacementLabel,
     formatSchedulerTimestamp,
     formatSchedulerPriority,
     formatSchedulerQueuePosition,
@@ -861,8 +862,8 @@
                 <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerScopeLabel(run.bucket_id)}>
                   {formatSchedulerScopeLabel(run.bucket_id)}
                 </td>
-                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerPlacementLabel(run.selected_runtime_id)}>
-                  {formatSchedulerPlacementLabel(run.selected_runtime_id)}
+                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerRuntimePlacementLabel(run)}>
+                  {formatSchedulerRuntimePlacementLabel(run)}
                 </td>
                 <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerDevicePlacementLabel(run)}>
                   {formatSchedulerDevicePlacementLabel(run)}

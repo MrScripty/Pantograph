@@ -70,6 +70,10 @@ panel because no active TypeScript boundary consumes them.
   runtime variant, device id, and network-node fields when the backend has
   placement facts. Consumers should use those typed fields and facets for
   placement comparison instead of parsing scheduler payload JSON.
+- Scheduler run-list presenters render selected runtime variant from
+  `selected_runtime_variant_id` alongside `selected_runtime_id`. They must not
+  infer runtime variants from runtime ids, backend keys, device ids/classes,
+  backend config strings, or scheduler payload JSON.
 - Run-list, run-detail, and scheduler-estimate DTOs carry typed scheduler
   model-cache posture when the backend has cache facts. Consumers should use
   those typed fields instead of parsing estimate payload JSON.

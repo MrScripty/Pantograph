@@ -554,6 +554,14 @@ Update during implementation:
   `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
   `cargo test -p pantograph-workflow-service workflow_run_detail_query_contract_snapshot`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by rendering selected runtime variant in
+  the scheduler run-list runtime placement column and search path. The
+  frontend presenter consumes the typed `selected_runtime_variant_id` field
+  directly and does not infer variants from runtime ids, backend keys, device
+  ids/classes, backend config strings, or scheduler payload JSON. Verification
+  passed:
+  `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1001,6 +1009,10 @@ Worker rules:
   `cargo test -p pantograph-runtime-registry technical_fit`, and
   `git diff --check` passed after explicit overrides started reusing canonical
   candidate eligibility instead of bypassing incompatible task/model facts.
+- `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after scheduler run-list
+  runtime placement labels and search began using typed
+  `selected_runtime_variant_id` without adding a new frontend test platform.
 
 ### Traceability Links
 
