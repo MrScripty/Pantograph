@@ -2070,6 +2070,24 @@ Worker rules:
   successfully. Remaining numeric-boundary follow-up: image request limits,
   context/batch limits outside this embedding usage projection boundary,
   byte-range projections, and worker/runtime request fields.
+- 2026-05-11 runtime-registry admission budget underflow validation slice:
+  smallest useful vertical slice was limited to replacing runtime admission
+  available-budget saturating subtraction with checked subtraction across total
+  budget, safety margin, and reserved resource claims. Allowed write set:
+  `crates/pantograph-runtime-registry/src/lib.rs`,
+  `crates/pantograph-runtime-registry/src/lib_tests/admission.rs`, and this
+  plan directory.
+- The slice preserves the no-fallback/no-legacy rule because impossible budget
+  arithmetic no longer becomes zero available resource; it returns typed
+  `RuntimeRegistryError::ResourceBudgetUnderflow`. Valid exhausted budgets
+  still produce existing insufficient RAM/VRAM admission diagnostics.
+  Verification passed:
+  `cargo test -p pantograph-runtime-registry available_budget_underflow_returns_typed_error`
+  and `cargo test -p pantograph-runtime-registry admission`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Remaining
+  numeric-boundary follow-up: image request limits, context/batch limits
+  outside this admission budget projection boundary, byte-range projections,
+  and worker/runtime request fields.
 
 ### Traceability Links
 

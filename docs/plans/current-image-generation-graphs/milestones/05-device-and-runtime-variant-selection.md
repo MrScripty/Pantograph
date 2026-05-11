@@ -266,6 +266,13 @@ typed diagnostic and the canonical design is fixed.
     `u32::MAX`. Remaining numeric boundaries include broader image request
     limits, context/batch limits, byte-range projections, and worker/runtime
     request fields.
+  - 2026-05-11 partial: runtime-registry admission budget projection now uses
+    checked subtraction for total budget, safety margin, and existing
+    reservations, returning typed `RuntimeRegistryError::ResourceBudgetUnderflow`
+    instead of saturating impossible budgets to zero available resource.
+    Remaining numeric boundaries include broader image request limits,
+    context/batch limits, byte-range projections, and worker/runtime request
+    fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3481,6 +3488,29 @@ typed diagnostic and the canonical design is fixed.
     successfully.
   - Remaining follow-up: broader checked arithmetic remains needed for image
     request limits, context/batch limits outside this embedding usage
+    projection boundary, byte-range projections, and worker/runtime request
+    fields.
+- 2026-05-11 slice: runtime-registry admission budget underflow validation.
+  - Smallest useful vertical slice: replace runtime admission available-budget
+    saturating subtraction with checked subtraction across total budget, safety
+    margin, and reserved resource claims.
+  - Allowed write set: `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/lib_tests/admission.rs`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: impossible budget arithmetic no longer
+    becomes zero available resource; it returns typed
+    `RuntimeRegistryError::ResourceBudgetUnderflow`. Valid exhausted budgets
+    still produce existing insufficient RAM/VRAM admission diagnostics.
+  - Standards/blast-radius gate: runtime-registry admission budget arithmetic
+    only; no generated files, frontend code, saved workflow fixtures,
+    lockfiles, path roots, Pumas contracts, worker contracts, runtime
+    scheduler policy, or backend lifecycle ownership changed.
+  - Verification passed:
+    `cargo test -p pantograph-runtime-registry available_budget_underflow_returns_typed_error`
+    and `cargo test -p pantograph-runtime-registry admission`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    request limits, context/batch limits outside this admission budget
     projection boundary, byte-range projections, and worker/runtime request
     fields.
 

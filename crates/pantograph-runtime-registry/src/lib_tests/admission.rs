@@ -259,3 +259,20 @@ fn reserved_resource_accounting_overflow_returns_typed_error() {
         }
     );
 }
+
+#[test]
+fn available_budget_underflow_returns_typed_error() {
+    let err = available_budget_mb("pytorch", "ram_mb", Some(1024), 1536, 0)
+        .expect_err("safety margin above total budget should fail");
+
+    assert_eq!(
+        err,
+        RuntimeRegistryError::ResourceBudgetUnderflow {
+            runtime_id: "pytorch".to_string(),
+            resource_kind: "ram_mb",
+            total_mb: 1024,
+            safety_margin_mb: 1536,
+            reserved_mb: 0,
+        }
+    );
+}

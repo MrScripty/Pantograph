@@ -89,6 +89,17 @@ pub enum RuntimeRegistryError {
         runtime_id: String,
         resource_kind: &'static str,
     },
+
+    #[error(
+        "runtime '{runtime_id}' admission budget underflowed for {resource_kind}: total={total_mb}MB safety_margin={safety_margin_mb}MB reserved={reserved_mb}MB"
+    )]
+    ResourceBudgetUnderflow {
+        runtime_id: String,
+        resource_kind: &'static str,
+        total_mb: u64,
+        safety_margin_mb: u64,
+        reserved_mb: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -688,10 +699,12 @@ fn admission_failure(
             |reservation| reservation.claim.ram_mb,
         )?;
         let available_ram_mb = available_budget_mb(
+            &record.runtime_id,
+            "ram_mb",
             budget.total_ram_mb,
             budget.safety_margin_ram_mb,
             reserved_ram_mb,
-        );
+        )?;
         if requested_ram_mb > available_ram_mb {
             return Ok(Some(RuntimeAdmissionFailure::InsufficientRam {
                 requested_mb: requested_ram_mb,
@@ -712,10 +725,12 @@ fn admission_failure(
             |reservation| reservation.claim.vram_mb,
         )?;
         let available_vram_mb = available_budget_mb(
+            &record.runtime_id,
+            "vram_mb",
             budget.total_vram_mb,
             budget.safety_margin_vram_mb,
             reserved_vram_mb,
-        );
+        )?;
         if requested_vram_mb > available_vram_mb {
             return Ok(Some(RuntimeAdmissionFailure::InsufficientVram {
                 requested_mb: requested_vram_mb,
@@ -788,11 +803,32 @@ where
         })
 }
 
-fn available_budget_mb(total_mb: Option<u64>, safety_margin_mb: u64, reserved_mb: u64) -> u64 {
-    total_mb
-        .unwrap_or(u64::MAX)
-        .saturating_sub(safety_margin_mb)
-        .saturating_sub(reserved_mb)
+fn available_budget_mb(
+    runtime_id: &str,
+    resource_kind: &'static str,
+    total_mb: Option<u64>,
+    safety_margin_mb: u64,
+    reserved_mb: u64,
+) -> Result<u64, RuntimeRegistryError> {
+    let total_mb = total_mb.unwrap_or(u64::MAX);
+    let after_safety = total_mb.checked_sub(safety_margin_mb).ok_or_else(|| {
+        RuntimeRegistryError::ResourceBudgetUnderflow {
+            runtime_id: runtime_id.to_string(),
+            resource_kind,
+            total_mb,
+            safety_margin_mb,
+            reserved_mb,
+        }
+    })?;
+    after_safety.checked_sub(reserved_mb).ok_or_else(|| {
+        RuntimeRegistryError::ResourceBudgetUnderflow {
+            runtime_id: runtime_id.to_string(),
+            resource_kind,
+            total_mb,
+            safety_margin_mb,
+            reserved_mb,
+        }
+    })
 }
 
 fn update_existing_reservation_from_request(
