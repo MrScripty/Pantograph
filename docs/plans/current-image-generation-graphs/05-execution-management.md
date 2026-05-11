@@ -289,6 +289,11 @@ Update during implementation:
 - 2026-05-10: Continued Milestone 5 by updating workflow-service current graph
   canonicalization/session fixtures to use `backend_key`. Capability tests that
   prove legacy runtime hints are ignored remain as explicit negative coverage.
+- 2026-05-10: Continued Milestone 5 by validating llama.cpp sidecar
+  `DeviceConfig.device` selectors before inference, embedding, or reranking
+  startup stops an existing runtime or spawns `llama-server`. Malformed
+  selectors now fail locally instead of being passed through or hidden from
+  selected-device facts.
 
 ## Commit Cadence Notes
 

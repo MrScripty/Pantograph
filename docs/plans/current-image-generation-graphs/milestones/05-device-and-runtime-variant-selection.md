@@ -965,6 +965,33 @@ typed diagnostic and the canonical design is fixed.
   - Verification deviation: an initial cargo command attempted to pass three
     test filters at once, which Cargo rejected; verification was rerun with the
     broader `graph::` filter.
+- 2026-05-10 slice: llama.cpp sidecar startup device-selector validation.
+  - Smallest useful vertical slice: validate backend-local llama.cpp
+    `DeviceConfig.device` values before inference, embedding, or reranking
+    sidecar startup stops an existing runtime or spawns `llama-server`.
+  - Allowed write set:
+    `crates/inference/src/server.rs`, `crates/inference/src/server_tests.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: malformed selectors such as `CUDAx`
+    now fail before process spawn instead of being passed through to
+    `llama-server` or erased from selected-device facts. No unknown-to-auto,
+    ordinal-to-zero, or compatibility parser path was added.
+  - Standards/blast-radius gate: this stays inside the inference crate's
+    llama.cpp sidecar lifecycle owner. Public DTOs, managed runtime catalog
+    state, frontend behavior, generated files, lockfiles, feature flags,
+    dependencies, sqlite state, and worker execution are unchanged.
+  - Remaining follow-up: `active_runtime_descriptor()` still exposes `Option`
+    and therefore cannot return the typed parse diagnostic for already-mutated
+    invalid test state. Startup now prevents that state for normal sidecar
+    entry points; changing the descriptor API is a broader compatibility slice.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference sidecar_start_rejects_invalid_device_before_spawning`,
+    `cargo test -p inference active_runtime_descriptor`,
+    `cargo test -p inference start_sidecar_inference`, and `git diff --check`.
+  - Verification deviation: the first format check failed after the new test
+    because one assertion needed rustfmt compaction; `cargo fmt --all` was run
+    and the format check passed afterward.
 
 **Verification:**
 

@@ -120,6 +120,12 @@ fn selected_contract_device(
     Some(backend.to_contract_device().ok())
 }
 
+fn validate_llamacpp_device_config(device: &DeviceConfig) -> Result<(), String> {
+    DeviceBackend::try_from_id(&device.device)
+        .map(|_| ())
+        .map_err(|error| format!("Invalid llama.cpp device selector: {}", error))
+}
+
 #[derive(Debug, Clone, Copy)]
 enum SlotAction {
     Save,
@@ -286,6 +292,8 @@ impl LlamaServer {
         ubatch_size: Option<u32>,
         port_override: Option<u16>,
     ) -> Result<(), String> {
+        validate_llamacpp_device_config(device)?;
+
         // Stop any existing connection
         self.stop();
 
@@ -390,6 +398,8 @@ impl LlamaServer {
         device: &DeviceConfig,
         port_override: Option<u16>,
     ) -> Result<(), String> {
+        validate_llamacpp_device_config(device)?;
+
         // Stop any existing connection
         self.stop();
 
@@ -456,6 +466,8 @@ impl LlamaServer {
         device: &DeviceConfig,
         port_override: Option<u16>,
     ) -> Result<(), String> {
+        validate_llamacpp_device_config(device)?;
+
         self.stop();
 
         let port = port_override.unwrap_or(ports::SERVER);
