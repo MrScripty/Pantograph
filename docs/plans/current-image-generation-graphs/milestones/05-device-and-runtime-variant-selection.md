@@ -1685,6 +1685,33 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: selected runtime variant facts are still absent from
     diagnostics run-list/detail projection and should be added as a separate
     backend contract slice.
+- 2026-05-10 slice: diagnostics selected-backend comparison filter.
+  - Smallest useful vertical slice: add a diagnostics comparison filter for
+    selected backend using the existing typed `selected_backend_key` run-list
+    projection field and Node-tested comparison presenter helpers.
+  - Allowed write set:
+    `src/components/workbench/DiagnosticsPage.svelte`,
+    `src/components/workbench/diagnosticsPagePresenters.ts`,
+    `src/components/workbench/diagnosticsPagePresenters.test.ts`,
+    `src/services/diagnostics/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: comparison options and filtering read
+    `selected_backend_key` directly from typed projection rows. The slice does
+    not infer backend choice from runtime ids, selected device ids, scheduler
+    payload JSON, runtime settings, or backend config strings.
+  - Standards/blast-radius gate for frontend comparison filtering: no backend
+    contracts, generated files, persisted schemas, lockfiles, dependencies,
+    polling/subscription lifecycles, workers, workflow fixtures, or DOM test
+    platform changed; accessible filter naming follows the existing select
+    pattern and is covered by typechecked Svelte wiring plus Node presenter
+    tests.
+  - Verification passed:
+    `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Discovered issue retained for follow-up: selected runtime variant needs a
+    backend-owned source of truth before lifecycle and ledger projection can
+    expose it. Current active llama.cpp runtime descriptors carry selected
+    device class/id but not runtime variant id, so deriving a variant from the
+    device id would violate the no-fallback/no-inference rule.
 
 **Verification:**
 

@@ -614,6 +614,20 @@
                 </select>
               </label>
               <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Backend
+                <select
+                  aria-label="Diagnostics selected backend filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.selectedBackend}
+                  onchange={(event) => updateComparisonFilter('selectedBackend', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.selectedBackends as selectedBackend (selectedBackend)}
+                    <option value={selectedBackend}>{selectedBackend}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
                 Device Class
                 <select
                   aria-label="Diagnostics selected device class filter"

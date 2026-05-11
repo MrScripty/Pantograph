@@ -103,6 +103,9 @@ panel because no active TypeScript boundary consumes them.
 - Diagnostics comparison controls include selected device class as its own
   typed filter so comparisons can separate class-level placement from concrete
   device ids without parsing or splitting device id strings.
+- Diagnostics comparison controls include selected backend as its own typed
+  filter so backend placement can be compared without parsing scheduler
+  payload JSON or runtime ids.
 
 ## Revisit Triggers
 - Rust-to-TypeScript DTO generation replaces manual interface mirrors.

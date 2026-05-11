@@ -497,6 +497,14 @@ Update during implementation:
   parse selected device ids or scheduler payload JSON. Verification passed:
   `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding a diagnostics comparison filter
+  for selected backend. The UI and presenter use typed `selected_backend_key`
+  projection fields and do not infer backend choice from runtime ids, selected
+  device ids, or scheduler payload JSON. Verification passed:
+  `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check`. A selected-runtime-variant
+  follow-up remains because current active llama.cpp runtime descriptors do not
+  yet expose a backend-owned runtime variant id.
 
 ## Commit Cadence Notes
 

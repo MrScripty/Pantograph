@@ -78,6 +78,7 @@ export interface DiagnosticsComparisonFilters {
   schedulerPolicy: string;
   retentionPolicy: string;
   selectedRuntime: string;
+  selectedBackend: string;
   selectedDeviceClass: string;
   selectedDevice: string;
   selectedNetworkNode: string;
@@ -95,6 +96,7 @@ export interface DiagnosticsComparisonFilterOptions {
   schedulerPolicies: string[];
   retentionPolicies: string[];
   selectedRuntimes: string[];
+  selectedBackends: string[];
   selectedDeviceClasses: string[];
   selectedDevices: string[];
   selectedNetworkNodes: string[];
@@ -112,6 +114,7 @@ export const DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS: DiagnosticsComparisonFilter
   schedulerPolicy: DIAGNOSTICS_FILTER_ALL,
   retentionPolicy: DIAGNOSTICS_FILTER_ALL,
   selectedRuntime: DIAGNOSTICS_FILTER_ALL,
+  selectedBackend: DIAGNOSTICS_FILTER_ALL,
   selectedDeviceClass: DIAGNOSTICS_FILTER_ALL,
   selectedDevice: DIAGNOSTICS_FILTER_ALL,
   selectedNetworkNode: DIAGNOSTICS_FILTER_ALL,
@@ -138,6 +141,7 @@ export const EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS: DiagnosticsComparisonF
   schedulerPolicies: [],
   retentionPolicies: [],
   selectedRuntimes: [],
+  selectedBackends: [],
   selectedDeviceClasses: [],
   selectedDevices: [],
   selectedNetworkNodes: [],
@@ -594,6 +598,7 @@ export function buildDiagnosticsComparisonFilterOptions(
     schedulerPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.scheduler_policy_id))),
     retentionPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.retention_policy_id))),
     selectedRuntimes: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.selected_runtime_id))),
+    selectedBackends: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.selected_backend_key))),
     selectedDeviceClasses: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.selected_device_class))),
     selectedDevices: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.selected_device_id))),
     selectedNetworkNodes: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.selected_network_node_id))),
@@ -623,6 +628,7 @@ export function hasActiveDiagnosticsComparisonFilters(filters: DiagnosticsCompar
     filters.schedulerPolicy !== DIAGNOSTICS_FILTER_ALL ||
     filters.retentionPolicy !== DIAGNOSTICS_FILTER_ALL ||
     filters.selectedRuntime !== DIAGNOSTICS_FILTER_ALL ||
+    filters.selectedBackend !== DIAGNOSTICS_FILTER_ALL ||
     filters.selectedDeviceClass !== DIAGNOSTICS_FILTER_ALL ||
     filters.selectedDevice !== DIAGNOSTICS_FILTER_ALL ||
     filters.selectedNetworkNode !== DIAGNOSTICS_FILTER_ALL ||
@@ -683,6 +689,7 @@ function diagnosticsRunMatchesFilters(
     filterMatches(optionalFacetLabel(run.scheduler_policy_id), filters.schedulerPolicy) &&
     filterMatches(optionalFacetLabel(run.retention_policy_id), filters.retentionPolicy) &&
     filterMatches(optionalFacetLabel(run.selected_runtime_id), filters.selectedRuntime) &&
+    filterMatches(optionalFacetLabel(run.selected_backend_key), filters.selectedBackend) &&
     filterMatches(optionalFacetLabel(run.selected_device_class), filters.selectedDeviceClass) &&
     filterMatches(optionalFacetLabel(run.selected_device_id), filters.selectedDevice) &&
     filterMatches(optionalFacetLabel(run.selected_network_node_id), filters.selectedNetworkNode) &&
