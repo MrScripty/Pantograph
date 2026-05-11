@@ -780,6 +780,15 @@ Update during implementation:
   needs an explicit typed startup/device-intent design that separates
   scheduler-facing canonical policy from backend-local adapter selectors
   before implementation continues.
+- 2026-05-11: Resolved the startup-device re-plan design with a narrow
+  inference backend contract slice. `BackendStartupDeviceIntent` now separates
+  scheduler-facing `InferenceDevicePolicy`, concrete canonical
+  `InferenceDeviceId`, and backend-local llama.cpp `DeviceBackend` selectors.
+  The slice does not rewire `BackendConfig.device`; it establishes the typed
+  adapter-facing transition contract needed before shared startup fields are
+  migrated. Verification passed:
+  `cargo test -p inference startup_device`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1113,6 +1122,9 @@ Worker rules:
 - PyTorch worker response tests now prove loaded-model and live-KV selected
   device facts decode as canonical `InferenceDeviceId` values and reject
   explicit auto or legacy ids.
+- Startup-device intent tests prove scheduler policy, canonical selected
+  device ids, and llama.cpp-local selectors remain distinct and are not inferred
+  from one another during the shared startup-config migration.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

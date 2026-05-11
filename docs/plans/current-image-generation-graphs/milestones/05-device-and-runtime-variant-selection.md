@@ -2443,6 +2443,32 @@ typed diagnostic and the canonical design is fixed.
     fields, updating gateway callers, and deciding whether llama.cpp
     backend-local selector types live beside `DeviceBackend` or in a new
     backend-adapter intent DTO.
+- 2026-05-11 slice: backend startup device-intent transition contract.
+  - Smallest useful vertical slice: add `BackendStartupDeviceIntent` and a
+    typed error so shared startup wiring can distinguish scheduler-facing
+    `InferenceDevicePolicy`, concrete canonical `InferenceDeviceId`, and
+    backend-local llama.cpp `DeviceBackend` selectors before `BackendConfig`
+    is migrated.
+  - Allowed write set: `crates/inference/src/backend/startup_device.rs`,
+    `crates/inference/src/backend/mod.rs`, `crates/inference/src/lib.rs`,
+    `crates/inference/src/backend/README.md`,
+    `docs/plans/current-image-generation-graphs/06-device-runtime-selection.md`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: constructors are explicit by namespace;
+    canonical ids reject `auto`/`CUDA0`, llama.cpp selectors accept
+    backend-local `auto`/`CUDA0` but reject canonical `cuda:0`, and no branch
+    infers one namespace from another.
+  - Standards/blast-radius gate: additive contract and tests only; no runtime
+    startup behavior, generated DTOs, lockfiles, workflow fixtures, frontend
+    code, scheduler ranking, worker execution, or legacy field rewiring
+    changed.
+  - Verification passed:
+    `cargo test -p inference startup_device`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: migrate `InferenceStartRequest.device`,
+    `EmbeddingStartRequest.device`, `BackendConfig.device`, and legacy
+    `DeviceConfig.device` through this explicit intent boundary in later
+    slices without preserving raw-string compatibility shims.
 
 **Verification:**
 
@@ -2544,6 +2570,9 @@ typed diagnostic and the canonical design is fixed.
 - PyTorch worker response tests prove selected device facts in loaded-model and
   live-KV responses are canonical `InferenceDeviceId` values and reject
   explicit auto or legacy ids.
+- Startup-device intent tests prove scheduler policy, canonical device ids, and
+  llama.cpp-local selectors stay in separate typed variants before shared
+  startup config is migrated.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

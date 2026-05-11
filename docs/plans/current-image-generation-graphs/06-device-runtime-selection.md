@@ -121,6 +121,7 @@ Add Pantograph-owned contracts before backend implementation:
 | `DeviceResolutionDiagnostic` | Typed failure for unavailable device, missing runtime variant, incompatible backend build, insufficient memory, unsupported precision, unsupported platform, or unsafe/unknown device id. |
 | `BackendExecutionCandidate` | Scheduler-facing fact package for one feasible or rejected backend/runtime/device/model/task combination. It includes backend id, task support, model artifact compatibility, runtime variant, device facts, static memory/resource estimates where known, optional observed-throughput hints, and bounded diagnostics. |
 | `BackendExecutionDecision` | Scheduler-selected execution choice. It references one candidate, records whether the user requested an explicit backend/device/runtime preference, and carries rejection diagnostics when no candidate can satisfy the request. |
+| `BackendStartupDeviceIntent` | Adapter-facing transition contract for startup wiring. It keeps scheduler-facing `InferenceDevicePolicy`, selected canonical `InferenceDeviceId`, and backend-local llama.cpp selectors in separate variants while old shared startup config is migrated. |
 
 The first implementation slice must add these contracts and tests before any
 managed-runtime, registry, backend, or frontend behavior is changed. The
@@ -128,6 +129,13 @@ existing `crates/inference/src/device.rs` behavior is llama.cpp adapter logic,
 not a cross-backend contract; implementation should move or wrap it behind
 llama.cpp-specific inventory and command-translation modules instead of
 expanding it as the canonical device model.
+
+Shared startup wiring must not infer between device namespaces. During the
+migration away from raw `BackendConfig.device`, code that still needs to carry
+startup intent should use an explicit intent source: scheduler policy,
+canonical selected device id, or llama.cpp-local selector. `auto` is valid as
+`InferenceDevicePolicy::Auto` or as a backend-local llama.cpp selector at the
+adapter boundary; it is not a concrete `InferenceDeviceId`.
 
 ## Design Rules
 

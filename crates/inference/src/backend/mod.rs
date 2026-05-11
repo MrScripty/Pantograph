@@ -6,6 +6,7 @@
 
 pub mod compatibility;
 pub mod registry;
+mod startup_device;
 
 #[cfg(feature = "backend-llamacpp")]
 pub mod llamacpp;
@@ -63,6 +64,7 @@ pub use compatibility::{
     BackendCompatibilityReport, BackendCompatibilityRequest, BackendCompatibilityStatus,
 };
 pub use registry::{canonical_backend_key, BackendFactory, BackendRegistry};
+pub use startup_device::{BackendStartupDeviceIntent, BackendStartupDeviceIntentError};
 
 /// Error types for backend operations
 #[derive(Debug, thiserror::Error)]

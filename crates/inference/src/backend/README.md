@@ -13,6 +13,7 @@ isolated here.
 | ----------- | ----------- |
 | `mod.rs` | The backend trait, capability model, shared config, and backend error contract. |
 | `registry.rs` | Compile-time backend registration and backend discovery helpers. |
+| `startup_device.rs` | Typed startup device intent contract that separates scheduler-facing device policy/canonical ids from backend-local llama.cpp selectors before shared startup fields are migrated. |
 | `llamacpp.rs` | llama.cpp backend adapter for chat, embeddings, and sidecar reranking. |
 | `llamacpp_support.rs` | Shared llama.cpp request parsing, SSE usage parsing, rerank response normalization, sidecar start helpers, and KV-cache fingerprint helpers used by `llamacpp.rs`. |
 | `candle.rs` | Feature-gated Candle backend staging for embedding-only HF-compatible safetensors package facts, including capability declaration, package-source mapping, and local load-plan validation while executable model loading remains disabled. |
@@ -129,6 +130,11 @@ fn create_backend() {
 - Backend `start()` results own lifecycle reuse facts when a backend can attach
   to an already-loaded runtime. Callers should consume that outcome instead of
   inferring reuse from adapter-local state.
+- Startup device intent must distinguish scheduler-facing
+  `InferenceDevicePolicy`, concrete canonical `InferenceDeviceId` values, and
+  backend-local llama.cpp selectors. Do not infer canonical ids from
+  llama.cpp-local strings or route backend-local selectors through canonical
+  selected-device DTOs.
 - `ChatChunk.usage` is optional append-only stream metadata for bounded token
   counts. Backends may emit it on content chunks or usage-only terminal
   payloads; consumers must not expect prompts, generated text, logits, tensors,

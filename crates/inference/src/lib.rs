@@ -50,8 +50,9 @@ pub use backend::{
     BackendConfig, BackendError, BackendFactory, BackendFeatureCapabilityFacts,
     BackendFeatureSupport, BackendInfo, BackendModelSourceCapabilityFacts, BackendRegistry,
     BackendRequestCancellationSemantics, BackendRequestCleanupSemantics,
-    BackendRequestLifecycleFacts, BackendRequestLifecyclePhaseFacts, BackendTaskCapability,
-    ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendRequestLifecycleFacts, BackendRequestLifecyclePhaseFacts, BackendStartupDeviceIntent,
+    BackendStartupDeviceIntentError, BackendTaskCapability, ChatChunk, EmbeddingResult,
+    InferenceBackend,
 };
 
 #[cfg(feature = "backend-llamacpp")]
