@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn loaded_runtime_capacity_limit_clamps_to_valid_session_bounds() {
+fn loaded_runtime_capacity_limit_validates_session_bounds() {
     let service = WorkflowService::with_capacity_limits(4, 4);
 
     service
@@ -16,28 +16,22 @@ fn loaded_runtime_capacity_limit_clamps_to_valid_session_bounds() {
         2
     );
 
-    service
-        .set_loaded_runtime_capacity_limit(Some(0))
-        .expect("clamp loaded-runtime capacity to minimum");
-    assert_eq!(
-        service
-            .session_store
-            .lock()
-            .expect("session store lock poisoned")
-            .max_loaded_sessions,
-        1
-    );
+    let zero = service.set_loaded_runtime_capacity_limit(Some(0));
+    assert!(matches!(zero, Err(WorkflowServiceError::InvalidRequest(_))));
 
-    service
-        .set_loaded_runtime_capacity_limit(Some(99))
-        .expect("clamp loaded-runtime capacity to session limit");
+    let above_session_limit = service.set_loaded_runtime_capacity_limit(Some(99));
+    assert!(matches!(
+        above_session_limit,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
     assert_eq!(
         service
             .session_store
             .lock()
             .expect("session store lock poisoned")
             .max_loaded_sessions,
-        4
+        2
     );
 
     service

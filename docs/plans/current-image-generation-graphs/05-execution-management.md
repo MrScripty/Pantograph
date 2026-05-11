@@ -1995,6 +1995,24 @@ Worker rules:
   image request limits, context/token/batch limits outside this diagnostics
   query validation boundary, memory estimates, byte-range projections, and
   worker/runtime request fields.
+- 2026-05-11 loaded-runtime capacity limit validation slice: smallest useful
+  vertical slice was limited to replacing the
+  `set_loaded_runtime_capacity_limit` min/max clamp with explicit validation
+  for zero and above-session-limit values. Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/session_capacity_limits.rs`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because explicit invalid
+  capacity limits no longer become one or `max_sessions`; they return
+  `WorkflowServiceError::InvalidRequest` and leave the last valid limit
+  unchanged. `None` remains the canonical reset to the service session limit.
+  Verification passed:
+  `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_validates_session_bounds`
+  and `cargo test -p pantograph-workflow-service session_capacity_limits`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+  Remaining numeric-boundary follow-up: image request limits,
+  context/token/batch limits outside this capacity setter validation boundary,
+  memory estimates, byte-range projections, and worker/runtime request fields.
 
 ### Traceability Links
 

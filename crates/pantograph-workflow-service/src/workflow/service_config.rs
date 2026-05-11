@@ -163,10 +163,22 @@ impl WorkflowService {
         max_loaded_sessions: Option<usize>,
     ) -> Result<(), WorkflowServiceError> {
         let mut store = self.session_store_guard()?;
-        store.max_loaded_sessions = max_loaded_sessions
-            .unwrap_or(store.max_sessions)
-            .max(1)
-            .min(store.max_sessions);
+        let Some(max_loaded_sessions) = max_loaded_sessions else {
+            store.max_loaded_sessions = store.max_sessions;
+            return Ok(());
+        };
+        if max_loaded_sessions == 0 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "max_loaded_sessions must be greater than zero".to_string(),
+            ));
+        }
+        if max_loaded_sessions > store.max_sessions {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "max_loaded_sessions must be less than or equal to max_sessions ({})",
+                store.max_sessions
+            )));
+        }
+        store.max_loaded_sessions = max_loaded_sessions;
         Ok(())
     }
 

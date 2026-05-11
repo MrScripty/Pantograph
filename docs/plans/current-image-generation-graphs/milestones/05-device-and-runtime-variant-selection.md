@@ -240,6 +240,13 @@ typed diagnostic and the canonical design is fixed.
     the canonical defaulted request shape. Remaining numeric boundaries include
     broader image request limits, context/token/batch limits, memory estimates,
     byte-range projections, and worker/runtime request fields.
+  - 2026-05-11 partial: loaded-runtime capacity limit updates now reject
+    explicit zero or above-session-limit values with
+    `WorkflowServiceError::InvalidRequest` instead of clamping them to one or
+    `max_sessions`. `None` remains the canonical reset to the service session
+    limit. Remaining numeric boundaries include broader image request limits,
+    context/token/batch limits, memory estimates, byte-range projections, and
+    worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3351,6 +3358,31 @@ typed diagnostic and the canonical design is fixed.
     and final format verification passed before commit.
   - Remaining follow-up: broader checked arithmetic remains needed for image
     request limits, context/token/batch limits outside this diagnostics query
+    validation boundary, memory estimates, byte-range projections, and
+    worker/runtime request fields.
+- 2026-05-11 slice: loaded-runtime capacity limit validation.
+  - Smallest useful vertical slice: replace the
+    `set_loaded_runtime_capacity_limit` min/max clamp with explicit validation
+    for zero and above-session-limit values.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_capacity_limits.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: explicit invalid capacity limits no
+    longer become one or `max_sessions`; they return
+    `WorkflowServiceError::InvalidRequest` and leave the last valid limit
+    unchanged. `None` remains the canonical reset to the service session
+    limit.
+  - Standards/blast-radius gate: workflow-service capacity setter validation
+    only; no generated files, frontend code, saved workflow fixtures,
+    lockfiles, path roots, Pumas contracts, worker contracts, runtime
+    scheduler policy, or backend lifecycle behavior changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_validates_session_bounds`
+    and `cargo test -p pantograph-workflow-service session_capacity_limits`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    request limits, context/token/batch limits outside this capacity setter
     validation boundary, memory estimates, byte-range projections, and
     worker/runtime request fields.
 
