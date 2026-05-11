@@ -1,10 +1,11 @@
 use std::path::Path;
 
 use super::{
-    ensure_unix_library_aliases, extract_pid_file, find_option_value, prepend_env_path,
-    ArchiveKind, LlamaPlatform, LlamaRuntimeVariant, ManagedRuntimeCommandResolutionError,
-    ReleaseAsset, ResolvedCommand, LLAMA_CPU_VARIANT, LLAMA_CUDA_VARIANT,
+    ensure_unix_library_aliases, extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform,
+    LlamaRuntimeVariant, ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
+    LLAMA_CPU_VARIANT, LLAMA_CUDA_VARIANT,
 };
+use crate::RuntimeVariantId;
 
 pub(crate) struct LinuxPlatform;
 
@@ -43,27 +44,30 @@ impl LlamaPlatform for LinuxPlatform {
     fn resolve_command(
         &self,
         binaries_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
         args: &[&str],
     ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
-        let device = find_option_value(args, "--device").unwrap_or_default();
-        let use_cuda = device.starts_with("CUDA");
-
-        let (executable_path, library_dir) = if use_cuda {
+        let (executable_path, library_dir) = if runtime_variant_id.as_str() == "llama_cpp.cuda" {
             let cuda_executable = binaries_dir.join("cuda/llama-server");
             if !cuda_executable.exists() {
                 return Err(
-                    ManagedRuntimeCommandResolutionError::missing_llamacpp_cuda_variant(
-                        device,
+                    ManagedRuntimeCommandResolutionError::missing_llamacpp_selected_variant(
+                        runtime_variant_id,
                         cuda_executable,
                     ),
                 );
             }
             (cuda_executable, binaries_dir.join("cuda"))
-        } else {
+        } else if runtime_variant_id.as_str() == "llama_cpp.cpu" {
             (
                 binaries_dir.join(self.installed_server_name()),
                 binaries_dir.to_path_buf(),
             )
+        } else {
+            return Err(ManagedRuntimeCommandResolutionError::platform(format!(
+                "unsupported llama.cpp runtime variant '{}'",
+                runtime_variant_id
+            )));
         };
 
         if !executable_path.exists() {
@@ -112,15 +116,24 @@ mod tests {
 
     use super::{LlamaPlatform, PLATFORM};
     use crate::managed_runtime::ManagedRuntimeCommandResolutionError;
+    use crate::RuntimeVariantId;
+
+    fn runtime_variant_id(value: &str) -> RuntimeVariantId {
+        RuntimeVariantId::parse(value).expect("valid runtime variant")
+    }
 
     #[test]
-    fn resolve_command_rejects_cuda_device_without_cuda_runtime_variant() {
+    fn resolve_command_rejects_selected_cuda_variant_without_cuda_runtime() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let cpu_server = temp_dir.path().join(PLATFORM.installed_server_name());
         std::fs::write(&cpu_server, []).expect("write cpu server");
 
         let error = PLATFORM
-            .resolve_command(temp_dir.path(), &["--device", "CUDA0"])
+            .resolve_command(
+                temp_dir.path(),
+                &runtime_variant_id("llama_cpp.cuda"),
+                &["--device", "CUDA0"],
+            )
             .expect_err("missing CUDA runtime variant should fail");
 
         let ManagedRuntimeCommandResolutionError::MissingRuntimeVariant {
@@ -136,12 +149,19 @@ mod tests {
             diagnostic.code,
             DeviceResolutionDiagnosticCode::MissingRuntimeVariant
         );
-        assert_eq!(requested_device.as_deref(), Some("CUDA0"));
+        assert_eq!(
+            diagnostic
+                .runtime_variant_id
+                .as_ref()
+                .map(RuntimeVariantId::as_str),
+            Some("llama_cpp.cuda")
+        );
+        assert_eq!(requested_device, None);
         assert!(missing_path.ends_with("cuda/llama-server"));
     }
 
     #[test]
-    fn resolve_command_uses_cuda_runtime_variant_when_requested() {
+    fn resolve_command_uses_selected_cuda_runtime_variant() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let cuda_dir = temp_dir.path().join("cuda");
         std::fs::create_dir_all(&cuda_dir).expect("create cuda dir");
@@ -149,7 +169,11 @@ mod tests {
         std::fs::write(&cuda_server, []).expect("write cuda server");
 
         let resolved = PLATFORM
-            .resolve_command(temp_dir.path(), &["--device=CUDA0"])
+            .resolve_command(
+                temp_dir.path(),
+                &runtime_variant_id("llama_cpp.cuda"),
+                &["--device=CUDA0"],
+            )
             .expect("resolve CUDA runtime command");
 
         assert_eq!(resolved.executable_path, cuda_server);
@@ -161,5 +185,22 @@ mod tests {
                 && value
                     .to_string_lossy()
                     .starts_with(cuda_library_path.as_ref())));
+    }
+
+    #[test]
+    fn resolve_command_does_not_infer_cuda_variant_from_device_arg() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let cpu_server = temp_dir.path().join(PLATFORM.installed_server_name());
+        std::fs::write(&cpu_server, []).expect("write cpu server");
+
+        let resolved = PLATFORM
+            .resolve_command(
+                temp_dir.path(),
+                &runtime_variant_id("llama_cpp.cpu"),
+                &["--device=CUDA0"],
+            )
+            .expect("resolve CPU runtime command");
+
+        assert_eq!(resolved.executable_path, cpu_server);
     }
 }

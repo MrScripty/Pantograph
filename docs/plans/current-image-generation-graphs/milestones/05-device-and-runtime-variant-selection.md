@@ -99,8 +99,14 @@ typed diagnostic and the canonical design is fixed.
     still needs variant-specific artifact validation before this item can close.
 - [ ] Model llama.cpp Metal builds on macOS only when a Metal-capable runtime
   is available.
-- [ ] Make llama.cpp command resolution select an explicit runtime variant
+- [x] Make llama.cpp command resolution select an explicit runtime variant
   before constructing `llama-server` arguments.
+  - 2026-05-11: `resolve_binary_command` now resolves the persisted selected
+    version and runtime variant as one install target before platform command
+    construction. Linux CUDA command selection depends on selected
+    `llama_cpp.cuda`, not raw `--device` arguments; missing selected variant
+    files return `MissingRuntimeVariant` diagnostics. Linux/macOS/Windows
+    platform resolvers reject unsupported variant ids instead of falling back.
 - [ ] Keep platform-specific executable names, archive names, dynamic-library
   paths, environment variables, and probes inside platform modules or narrow
   platform traits.

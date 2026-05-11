@@ -2,7 +2,7 @@ use super::{
     binary_capability, cancel_binary_download, definition, download_response_mode,
     ensure_runtime_state_entry, existing_download_artifact, finish_requested_cancellation,
     finish_requested_pause, pause_binary_download, persist_install_success, persist_remove_success,
-    readiness_state_for_capability, resolve_runtime_install_dir,
+    readiness_state_for_capability, resolve_binary_command, resolve_runtime_install_dir,
     runtime_install_dir_for_projection, select_managed_runtime_version,
     set_default_managed_runtime_version, snapshot_from_capability, DownloadResponseMode,
     ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeJobState,
@@ -988,4 +988,49 @@ fn managed_runtime_snapshot_projects_retained_job_artifact() {
     assert_eq!(artifact.downloaded_bytes, 64);
     assert_eq!(artifact.total_bytes, 128);
     assert!(artifact.retained);
+}
+
+#[test]
+fn resolve_binary_command_rejects_missing_selected_runtime_variant() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    let error = resolve_binary_command(temp_dir.path(), ManagedBinaryId::LlamaCpp, &[])
+        .expect_err("missing selected runtime variant should fail");
+
+    assert!(error
+        .to_string()
+        .contains("does not have managed runtime state"));
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn resolve_binary_command_uses_selected_cuda_runtime_variant() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let install_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+    install_fake_runtime_files(&install_dir, ManagedBinaryId::LlamaCpp);
+    let cuda_dir = install_dir.join("cuda");
+    std::fs::create_dir_all(&cuda_dir).expect("create cuda dir");
+    let cuda_server = cuda_dir.join("llama-server");
+    std::fs::write(&cuda_server, []).expect("write cuda server");
+
+    let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+    let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+    runtime.versions.push(ManagedRuntimePersistedVersion {
+        version: "b8248".to_string(),
+        runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        runtime_variant_id: Some(llama_cuda_variant_id()),
+        platform_key: Some("linux-x86_64".to_string()),
+        readiness_state: ManagedRuntimeReadinessState::Ready,
+        install_root: Some(install_dir.display().to_string()),
+        last_ready_at_ms: Some(42),
+        last_error: None,
+    });
+    runtime.selection.selected_version = Some("b8248".to_string());
+    runtime.selection.selected_runtime_variant_id = Some(llama_cuda_variant_id());
+    save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+    let resolved = resolve_binary_command(temp_dir.path(), ManagedBinaryId::LlamaCpp, &[])
+        .expect("resolve command");
+
+    assert_eq!(resolved.executable_path, cuda_server);
 }

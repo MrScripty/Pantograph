@@ -32,13 +32,15 @@ use self::download::{persist_catalog_versions, resolve_download_source};
 #[cfg(test)]
 use self::projection::readiness_state_for_capability;
 use self::projection::snapshot_from_capability;
+#[cfg(test)]
+use self::state_transitions::resolve_runtime_install_dir;
 use self::state_transitions::{
     discard_retained_job_artifact, persist_active_job, persist_active_job_with_artifact,
     persist_failed_job, update_runtime_selection, SelectionTarget,
 };
 use self::state_transitions::{
     finish_requested_cancellation, finish_requested_pause, persist_install_success,
-    persist_remove_success, persist_remove_version_success, resolve_runtime_install_dir,
+    persist_remove_success, persist_remove_version_success, resolve_runtime_install_target,
     runtime_install_dir_for_projection,
 };
 use super::contracts::ManagedRuntimeCommandResolutionError;
@@ -899,9 +901,9 @@ pub fn resolve_binary_command(
         });
     }
 
-    let install_dir = resolve_runtime_install_dir(app_data_dir, id)
+    let target = resolve_runtime_install_target(app_data_dir, id)
         .map_err(ManagedRuntimeCommandResolutionError::state)?;
-    let missing = definition.validate_installation(&install_dir);
+    let missing = definition.validate_installation(&target.install_dir);
     if let Some(first_missing) = missing.first() {
         return Err(ManagedRuntimeCommandResolutionError::MissingRuntimeFiles {
             runtime_id: id,
@@ -910,7 +912,7 @@ pub fn resolve_binary_command(
         });
     }
 
-    definition.resolve_command(&install_dir, args)
+    definition.resolve_command(&target.install_dir, &target.runtime_variant_id, args)
 }
 
 #[cfg(test)]

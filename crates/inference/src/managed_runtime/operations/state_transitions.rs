@@ -469,11 +469,58 @@ pub(super) fn update_runtime_selection(
     save_managed_runtime_state(app_data_dir, &state)
 }
 
+#[cfg(test)]
 pub(super) fn resolve_runtime_install_dir(
     app_data_dir: &Path,
     id: ManagedBinaryId,
 ) -> Result<PathBuf, String> {
     resolve_runtime_install_dir_with_mode(app_data_dir, id, InstallDirResolutionMode::Strict)
+}
+
+pub(super) struct RuntimeInstallTarget {
+    pub(super) install_dir: PathBuf,
+    pub(super) runtime_variant_id: RuntimeVariantId,
+}
+
+pub(super) fn resolve_runtime_install_target(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+) -> Result<RuntimeInstallTarget, String> {
+    let state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = runtime_state_entry(&state, id)
+        .ok_or_else(|| format!("{} does not have managed runtime state", id.display_name()))?;
+    let (version, runtime_variant_id) = preferred_runtime_selection(&runtime.selection)
+        .ok_or_else(|| {
+            format!(
+                "{} does not have a selected managed runtime version and variant",
+                id.display_name()
+            )
+        })?;
+    let persisted_version = runtime
+        .versions
+        .iter()
+        .find(|entry| {
+            entry.version == version
+                && entry.runtime_variant_id.as_ref() == Some(runtime_variant_id)
+        })
+        .ok_or_else(|| {
+            format!(
+                "{} selected version '{}' variant '{}' is not installed",
+                id.display_name(),
+                version,
+                runtime_variant_id
+            )
+        })?;
+    let fallback_install_dir = managed_install_dir(app_data_dir, id);
+
+    Ok(RuntimeInstallTarget {
+        install_dir: persisted_version
+            .install_root
+            .as_deref()
+            .map(PathBuf::from)
+            .unwrap_or(fallback_install_dir),
+        runtime_variant_id: runtime_variant_id.clone(),
+    })
 }
 
 pub(super) fn runtime_install_dir_for_projection(
@@ -484,6 +531,7 @@ pub(super) fn runtime_install_dir_for_projection(
 }
 
 enum InstallDirResolutionMode {
+    #[cfg(test)]
     Strict,
     BestEffort,
 }
@@ -509,6 +557,7 @@ fn resolve_runtime_install_dir_with_mode(
         entry.version == version && entry.runtime_variant_id.as_ref() == Some(runtime_variant_id)
     }) else {
         return match mode {
+            #[cfg(test)]
             InstallDirResolutionMode::Strict => Err(format!(
                 "{} selected version '{}' variant '{}' is not installed",
                 id.display_name(),

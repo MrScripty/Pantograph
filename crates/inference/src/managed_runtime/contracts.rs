@@ -255,25 +255,30 @@ impl ManagedRuntimeCommandResolutionError {
         }
     }
 
-    pub(crate) fn missing_llamacpp_cuda_variant(device: &str, missing_path: PathBuf) -> Self {
-        let runtime_variant_id =
-            RuntimeVariantId::parse("llama_cpp.cuda").expect("static runtime variant id is valid");
+    pub(crate) fn missing_llamacpp_selected_variant(
+        runtime_variant_id: &RuntimeVariantId,
+        missing_path: PathBuf,
+    ) -> Self {
         let backend_id = BackendId::parse("llama_cpp").expect("static backend id is valid");
+        let device_class = match runtime_variant_id.as_str() {
+            "llama_cpp.cuda" => Some(InferenceDeviceClass::Cuda),
+            _ => None,
+        };
         Self::MissingRuntimeVariant {
             diagnostic: DeviceResolutionDiagnostic {
                 code: DeviceResolutionDiagnosticCode::MissingRuntimeVariant,
                 severity: DeviceResolutionDiagnosticSeverity::Error,
                 message: format!(
-                    "llama.cpp CUDA runtime variant requested for device '{}' but CUDA server binary is missing at {}",
-                    device,
+                    "llama.cpp runtime variant '{}' is selected but server binary is missing at {}",
+                    runtime_variant_id,
                     missing_path.display()
                 ),
-                device_class: Some(InferenceDeviceClass::Cuda),
+                device_class,
                 device_id: None,
-                runtime_variant_id: Some(runtime_variant_id),
+                runtime_variant_id: Some(runtime_variant_id.clone()),
                 backend_id: Some(backend_id),
             },
-            requested_device: Some(device.to_string()),
+            requested_device: None,
             missing_path,
         }
     }
@@ -314,12 +319,14 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{ManagedRuntimeCommandResolutionError, ManagedRuntimeCommandResolutionError::*};
-    use crate::DeviceResolutionDiagnosticCode;
+    use crate::{DeviceResolutionDiagnosticCode, RuntimeVariantId};
 
     #[test]
     fn command_resolution_error_serializes_missing_runtime_variant_diagnostic() {
-        let error = ManagedRuntimeCommandResolutionError::missing_llamacpp_cuda_variant(
-            "CUDA0",
+        let runtime_variant_id =
+            RuntimeVariantId::parse("llama_cpp.cuda").expect("valid runtime variant");
+        let error = ManagedRuntimeCommandResolutionError::missing_llamacpp_selected_variant(
+            &runtime_variant_id,
             PathBuf::from("/tmp/runtime/cuda/llama-server"),
         );
 
@@ -329,7 +336,7 @@ mod tests {
             encoded["kind"],
             serde_json::json!("missing_runtime_variant")
         );
-        assert_eq!(encoded["requested_device"], serde_json::json!("CUDA0"));
+        assert_eq!(encoded["requested_device"], serde_json::Value::Null);
         assert_eq!(
             encoded["diagnostic"]["code"],
             serde_json::json!("missing_runtime_variant")

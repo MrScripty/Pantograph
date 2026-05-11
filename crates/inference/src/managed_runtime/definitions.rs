@@ -30,6 +30,7 @@ pub(crate) trait ManagedBinaryDefinition: Sync {
     fn resolve_command(
         &self,
         install_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
         args: &[&str],
     ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError>;
 
@@ -99,9 +100,10 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
     fn resolve_command(
         &self,
         install_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
         args: &[&str],
     ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
-        current_llama_platform().resolve_command(install_dir, args)
+        current_llama_platform().resolve_command(install_dir, runtime_variant_id, args)
     }
 }
 

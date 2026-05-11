@@ -1518,6 +1518,24 @@ Worker rules:
   Windows llama.cpp managed-runtime catalog definitions began exposing CPU and
   CUDA variants for the same release archive. Metal and variant-specific
   installed-artifact readiness remain follow-ups.
+- 2026-05-11 explicit llama.cpp runtime-variant command-resolution slice:
+  smallest useful vertical slice was limited to managed runtime command target
+  resolution, platform-specific llama.cpp command selection, focused command
+  diagnostics, and the plan notes. Allowed write set:
+  `crates/inference/src/managed_runtime/contracts.rs`,
+  `definitions.rs`, `operations.rs`, `operations/state_transitions.rs`,
+  `operations_tests.rs`, `llama_cpp_platform/*`, and this plan directory.
+  The slice preserves the no-fallback/no-legacy rule by requiring a persisted
+  selected runtime variant before command construction and by refusing to infer
+  CUDA selection from raw llama.cpp `--device` arguments.
+- `cargo test -p inference managed_runtime::operations`,
+  `cargo test -p inference managed_runtime::contracts`,
+  `cargo test -p inference managed_runtime::llama_cpp_platform::linux::tests`,
+  `cargo fmt --all`, `cargo fmt --all -- --check`, and `git diff --check`
+  passed after command resolution began selecting the explicit runtime variant.
+  Follow-up: runtime/device inventory calls that need an unselected variant
+  should get a variant-aware inventory command path instead of relying on raw
+  device flags to choose executables.
 
 ### Traceability Links
 

@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use crate::RuntimeVariantId;
+
 use super::{
     ensure_unix_library_aliases, extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform,
     ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
@@ -35,8 +37,16 @@ impl LlamaPlatform for MacOsX64Platform {
     fn resolve_command(
         &self,
         binaries_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
         args: &[&str],
     ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
+        if runtime_variant_id.as_str() != "llama_cpp.cpu" {
+            return Err(ManagedRuntimeCommandResolutionError::platform(format!(
+                "unsupported llama.cpp runtime variant '{}'",
+                runtime_variant_id
+            )));
+        }
+
         let executable_path = binaries_dir.join(self.installed_server_name());
         if !executable_path.exists() {
             return Err(ManagedRuntimeCommandResolutionError::platform(format!(

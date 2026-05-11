@@ -2,6 +2,7 @@ use crate::managed_runtime::{
     extract_pid_file as extract_pid_file_impl, prepend_env_path as prepend_env_path_impl,
     ArchiveKind, ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
 };
+use crate::RuntimeVariantId;
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -33,6 +34,7 @@ pub(crate) trait LlamaPlatform: Sync {
     fn resolve_command(
         &self,
         binaries_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
         args: &[&str],
     ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError>;
     fn finalize_installation(&self, binaries_dir: &Path) -> Result<(), String>;
@@ -221,6 +223,7 @@ pub(crate) fn extract_pid_file(args: &[&str]) -> (Vec<OsString>, Option<PathBuf>
     extract_pid_file_impl(args)
 }
 
+#[cfg(test)]
 pub(crate) fn find_option_value<'a>(args: &'a [&'a str], option_name: &str) -> Option<&'a str> {
     let mut index = 0;
     while index < args.len() {
