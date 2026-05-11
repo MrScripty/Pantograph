@@ -601,6 +601,16 @@ Update during implementation:
   `cargo test -p pantograph-embedded-runtime roadmap_backend_overrides_reject_without_fallback_selection`,
   `cargo test -p pantograph-embedded-runtime technical_fit`, and
   `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding canonical llama.cpp
+  `--list-devices` inventory fact projection. Existing backend-local
+  `DeviceInfo` parsing remains available, while the new projection emits
+  validated CPU/CUDA device facts and typed diagnostics for unsupported
+  backend-local selectors such as Vulkan. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p inference device::tests::parse_llamacpp_inventory_facts`,
+  `cargo test -p inference device::tests`, and `git diff --check`. The first
+  format check reported rustfmt wrapping; `cargo fmt --all` was run and the
+  check passed.
 
 ## Commit Cadence Notes
 
@@ -1078,6 +1088,12 @@ Worker rules:
   `cargo test -p pantograph-embedded-runtime technical_fit`, and
   `git diff --check` passed after explicit vLLM and MLX roadmap backend
   overrides gained unselected-decision regression coverage.
+- `cargo fmt --all -- --check`,
+  `cargo test -p inference device::tests::parse_llamacpp_inventory_facts`,
+  `cargo test -p inference device::tests`, and `git diff --check` passed after
+  llama.cpp `--list-devices` output gained canonical inventory fact projection
+  while preserving existing backend-local parsing. The first format check
+  reported rustfmt wrapping; `cargo fmt --all` was run and the check passed.
 
 ### Traceability Links
 

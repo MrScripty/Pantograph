@@ -13,7 +13,7 @@ details.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `backend/` | Backend trait definitions and concrete supported engine adapters such as llama.cpp, Candle, and PyTorch. |
-| `device.rs` | Backend-local llama.cpp device inventory parsing and command-selector formatting. |
+| `device.rs` | Backend-local llama.cpp device inventory parsing, canonical inventory fact projection, and command-selector formatting. |
 | `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
@@ -136,6 +136,9 @@ normalizing them to executable defaults.
   are resolved. `auto` and unsupported backend-local selectors such as Vulkan
   return `DeviceBackendContractError` instead of synthesizing selected device
   facts.
+- llama.cpp `--list-devices` output may be parsed into backend-local
+  `DeviceInfo` for existing callers or projected into canonical inventory
+  facts with typed diagnostics for unsupported backend-local selectors.
 - `BackendConfig::default()` carries explicit `auto` device intent. Blank,
   missing, unknown, or malformed llama.cpp device selectors fail before sidecar
   startup instead of being normalized to an executable default.

@@ -94,7 +94,7 @@ typed diagnostic and the canonical design is fixed.
 - [ ] Remove hidden llama.cpp CPU fallback when CUDA is requested but CUDA
   runtime files are missing. Return a typed device/runtime-variant diagnostic
   instead.
-- [ ] Add backend device inventory facts for llama.cpp `--list-devices` and
+- [x] Add backend device inventory facts for llama.cpp `--list-devices` and
   preserve existing parsing while moving it behind the canonical device
   contracts.
 - [ ] Add PyTorch device probe contract for `cpu` and `cuda` on Linux/Windows,
@@ -2014,6 +2014,32 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: the broad impossible-preference checklist item stays
     open until every listed case is covered by executable or admission tests
     against the canonical decision path.
+- 2026-05-10 slice: llama.cpp device inventory fact projection.
+  - Smallest useful vertical slice: keep existing `DeviceInfo` parsing for
+    llama.cpp `--list-devices` and add canonical `LlamaCppDeviceInventoryFact`
+    projection that maps CPU/CUDA selectors into validated device facts while
+    reporting unsupported backend-local selectors as typed diagnostics.
+  - Allowed write set: `crates/inference/src/device.rs`,
+    `crates/inference/src/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: unsupported backend-local selectors
+    such as Vulkan now produce `UnsupportedDeviceClass` diagnostics in the
+    canonical inventory projection; no parser fallback, auto selection,
+    ordinal-zero coercion, command resolution, runtime startup, frontend path,
+    generated DTO, fixture, or lockfile changed.
+  - Standards/blast-radius gate: the slice stays inside the inference
+    backend-local llama.cpp adapter boundary, uses validated `BackendId` and
+    `InferenceDeviceId` contracts, and keeps scheduler ranking/admission
+    outside the inference crate.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference device::tests::parse_llamacpp_inventory_facts`,
+    `cargo test -p inference device::tests`, and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` reported
+    rustfmt wrapping in `device.rs`; `cargo fmt --all` was run and the check
+    passed.
+  - Remaining follow-up: future slices still need to feed inventory facts into
+    managed-runtime/runtime-capability refresh flows before scheduler admission
+    can consume live host device inventory.
 
 **Verification:**
 
@@ -2079,6 +2105,10 @@ typed diagnostic and the canonical design is fixed.
 - Embedded-runtime technical-fit tests prove explicit vLLM and MLX roadmap
   backend overrides reject with typed unavailable diagnostics and do not select
   fallback candidates.
+- Inference device tests prove llama.cpp `--list-devices` output can still be
+  parsed as backend-local `DeviceInfo` and can also project CPU/CUDA into
+  canonical inventory facts while unsupported backend-local selectors emit
+  typed diagnostics.
 - Feature/dependency verification proves affected public crates still build
   with default, no-default-features, and all-features modes when runtime
   feature flags or optional dependencies change.

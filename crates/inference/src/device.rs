@@ -9,7 +9,10 @@ use tokio::process::Command;
 
 use crate::config::DeviceInfo;
 use crate::constants::device_types;
-use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId};
+use crate::device_contracts::{
+    BackendId, DeviceResolutionDiagnostic, DeviceResolutionDiagnosticCode,
+    DeviceResolutionDiagnosticSeverity, InferenceDeviceClass, InferenceDeviceId,
+};
 use crate::managed_runtime::{resolve_binary_command, ManagedBinaryId};
 
 /// Represents a compute backend for inference
@@ -69,6 +72,25 @@ pub enum DeviceBackendContractError {
         /// Validation failure message.
         message: String,
     },
+}
+
+/// Canonical fact projected from a backend-local llama.cpp device listing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LlamaCppDeviceInventoryFact {
+    /// Backend-local selector from `llama-server --list-devices`.
+    pub backend_device_id: String,
+    /// Human-readable device name reported by llama.cpp.
+    pub display_name: String,
+    /// Canonical device class when Pantograph can safely project the selector.
+    pub device_class: Option<InferenceDeviceClass>,
+    /// Canonical device id when Pantograph can safely project the selector.
+    pub device_id: Option<InferenceDeviceId>,
+    /// Total reported VRAM in MiB.
+    pub total_vram_mb: u64,
+    /// Free reported VRAM in MiB.
+    pub free_vram_mb: u64,
+    /// Typed diagnostics for unsupported or unprojectable backend-local facts.
+    pub diagnostics: Vec<DeviceResolutionDiagnostic>,
 }
 
 impl DeviceBackend {
@@ -270,6 +292,61 @@ pub fn parse_llamacpp_device_listing(output: &str) -> Vec<DeviceInfo> {
     devices
 }
 
+#[must_use]
+pub fn parse_llamacpp_device_inventory_facts(output: &str) -> Vec<LlamaCppDeviceInventoryFact> {
+    parse_llamacpp_device_listing(output)
+        .into_iter()
+        .map(llamacpp_device_inventory_fact)
+        .collect()
+}
+
+fn llamacpp_device_inventory_fact(device: DeviceInfo) -> LlamaCppDeviceInventoryFact {
+    let (device_class, device_id, diagnostics) = match DeviceBackend::try_from_id(&device.id)
+        .map_err(|error| error.to_string())
+        .and_then(|backend| {
+            backend
+                .to_contract_device()
+                .map_err(|error| error.to_string())
+        }) {
+        Ok((device_class, device_id)) => (Some(device_class), Some(device_id), Vec::new()),
+        Err(error) => (
+            None,
+            None,
+            vec![llamacpp_inventory_projection_diagnostic(
+                &device.id,
+                error.to_string(),
+            )],
+        ),
+    };
+
+    LlamaCppDeviceInventoryFact {
+        backend_device_id: device.id,
+        display_name: device.name,
+        device_class,
+        device_id,
+        total_vram_mb: device.total_vram_mb,
+        free_vram_mb: device.free_vram_mb,
+        diagnostics,
+    }
+}
+
+fn llamacpp_inventory_projection_diagnostic(
+    backend_device_id: &str,
+    error: String,
+) -> DeviceResolutionDiagnostic {
+    DeviceResolutionDiagnostic {
+        code: DeviceResolutionDiagnosticCode::UnsupportedDeviceClass,
+        severity: DeviceResolutionDiagnosticSeverity::Error,
+        message: format!(
+            "llama.cpp device '{backend_device_id}' cannot be projected into canonical device facts: {error}"
+        ),
+        device_class: None,
+        device_id: None,
+        runtime_variant_id: None,
+        backend_id: Some(BackendId::parse("llama_cpp").expect("static backend id is valid")),
+    }
+}
+
 pub async fn list_llamacpp_devices(app_data_dir: &Path) -> Result<Vec<DeviceInfo>, String> {
     let resolved = resolve_binary_command(
         app_data_dir,
@@ -440,6 +517,64 @@ Available devices:
         assert_eq!(devices.len(), 2);
         assert_eq!(devices[0].id, "none");
         assert_eq!(devices[1].id, "CUDA1");
+    }
+
+    #[test]
+    fn parse_llamacpp_inventory_facts_projects_supported_devices() {
+        let facts = parse_llamacpp_device_inventory_facts(
+            "
+Available devices:
+  CUDA0: NVIDIA GeForce RTX 4060 Laptop GPU (8188 MiB, 547 MiB free)
+",
+        );
+
+        assert_eq!(facts.len(), 2);
+        assert_eq!(facts[0].backend_device_id, "none");
+        assert_eq!(facts[0].device_class, Some(InferenceDeviceClass::Cpu));
+        assert_eq!(
+            facts[0].device_id.as_ref().map(InferenceDeviceId::as_str),
+            Some("cpu")
+        );
+        assert!(facts[0].diagnostics.is_empty());
+        assert_eq!(facts[1].backend_device_id, "CUDA0");
+        assert_eq!(facts[1].device_class, Some(InferenceDeviceClass::Cuda));
+        assert_eq!(
+            facts[1].device_id.as_ref().map(InferenceDeviceId::as_str),
+            Some("cuda:0")
+        );
+        assert_eq!(facts[1].total_vram_mb, 8_188);
+        assert_eq!(facts[1].free_vram_mb, 547);
+        assert!(facts[1].diagnostics.is_empty());
+    }
+
+    #[test]
+    fn parse_llamacpp_inventory_facts_reports_unsupported_backend_devices() {
+        let facts = parse_llamacpp_device_inventory_facts(
+            "
+Available devices:
+  Vulkan0: Intel(R) Graphics (RPL-P) (32003 MiB, 28803 MiB free)
+",
+        );
+
+        let vulkan = facts
+            .iter()
+            .find(|fact| fact.backend_device_id == "Vulkan0")
+            .expect("vulkan fact");
+        assert_eq!(vulkan.device_class, None);
+        assert_eq!(vulkan.device_id, None);
+        assert_eq!(vulkan.diagnostics.len(), 1);
+        assert_eq!(
+            vulkan.diagnostics[0].code,
+            DeviceResolutionDiagnosticCode::UnsupportedDeviceClass
+        );
+        assert_eq!(
+            vulkan.diagnostics[0]
+                .backend_id
+                .as_ref()
+                .map(BackendId::as_str),
+            Some("llama_cpp")
+        );
+        assert!(vulkan.diagnostics[0].message.contains("Vulkan0"));
     }
 
     #[test]
