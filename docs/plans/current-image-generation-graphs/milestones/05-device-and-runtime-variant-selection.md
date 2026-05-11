@@ -2207,6 +2207,31 @@ typed diagnostic and the canonical design is fixed.
     and `git diff --check`.
   - Remaining follow-up: other raw device string crossings remain, including
     backend startup config and frontend/settings boundaries.
+- 2026-05-10 slice: explicit device candidate mismatch guard.
+  - Smallest useful vertical slice: make
+    `BackendExecutionDecision::try_from_selected_candidate` reject a selected
+    candidate whose device class or concrete device id does not match an
+    explicit `InferenceDevicePolicy`.
+  - Allowed write set: `crates/inference/src/device_contracts/mod.rs`,
+    `crates/inference/src/device_contracts/planning.rs`,
+    `crates/inference/src/device_contracts/tests.rs`, and this plan directory.
+  - No-fallback/no-legacy confirmation: explicit CUDA policy can no longer
+    construct a selected CPU decision through the canonical decision DTO
+    constructor; mismatches return typed `DeviceContractError` variants.
+  - Standards/blast-radius gate: pure synchronous contract validation and unit
+    tests only; no backend startup, frontend behavior, generated DTOs,
+    lockfiles, workflow fixtures, or scheduler queue policy changed.
+  - Verification passed:
+    `cargo test -p inference device_contracts::tests::explicit_device_policy_rejects_mismatched_selected_candidate`,
+    `cargo test -p inference device_contracts::tests::backend_execution_decision_requires_one_selected_candidate`,
+    `cargo test -p inference device_contracts::tests`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` reported
+    rustfmt wrapping in the new error attribute; `cargo fmt --all` was run and
+    the check passed.
+  - Remaining follow-up: full scheduler/runtime-load integration still needs to
+    convert unavailable explicit requests into bounded device diagnostics before
+    backend load.
 
 **Verification:**
 
@@ -2284,6 +2309,9 @@ typed diagnostic and the canonical design is fixed.
 - Inference lifecycle tests prove request lifecycle events carry canonical
   `InferenceDeviceId` values and reject legacy backend-local selected-device
   strings during deserialization.
+- Inference device-contract tests prove explicit device policy cannot produce
+  a selected decision from a mismatched CPU/GPU class or different concrete
+  device id.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

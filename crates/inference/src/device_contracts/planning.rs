@@ -275,6 +275,7 @@ impl BackendExecutionDecision {
         }
 
         let candidate = candidates.remove(0);
+        validate_explicit_policy_matches_candidate(&policy, &candidate)?;
         let device_decision = DeviceResolutionDecision {
             policy,
             runtime_variant_id: candidate.runtime_variant_id.clone(),
@@ -294,4 +295,35 @@ impl BackendExecutionDecision {
             diagnostics: candidate.diagnostics,
         })
     }
+}
+
+fn validate_explicit_policy_matches_candidate(
+    policy: &InferenceDevicePolicy,
+    candidate: &BackendExecutionCandidate,
+) -> Result<(), DeviceContractError> {
+    let InferenceDevicePolicy::Explicit {
+        device_class,
+        device_id,
+    } = policy
+    else {
+        return Ok(());
+    };
+
+    if candidate.device_class != *device_class {
+        return Err(DeviceContractError::ExplicitDeviceClassUnavailable {
+            requested: *device_class,
+            candidate: candidate.device_class,
+        });
+    }
+
+    if let Some(requested_device_id) = device_id {
+        if candidate.device_id.as_ref() != Some(requested_device_id) {
+            return Err(DeviceContractError::ExplicitDeviceIdUnavailable {
+                requested: requested_device_id.clone(),
+                candidate: candidate.device_id.clone(),
+            });
+        }
+    }
+
+    Ok(())
 }

@@ -674,6 +674,17 @@ Update during implementation:
   `cargo fmt --all -- --check`,
   `rg -n "selected_device_id: Option<String>|selected_device_id.as_deref|selected_device_id: Some\\(\\\"cuda:0" crates/inference/src/types.rs crates/inference/src/gateway.rs crates/inference/src/gateway_tests.rs`,
   and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding an explicit device candidate
+  mismatch guard to `BackendExecutionDecision::try_from_selected_candidate`.
+  Explicit CUDA policy can no longer construct a selected CPU decision through
+  the canonical decision DTO constructor; mismatches return typed
+  `DeviceContractError` variants. Verification passed:
+  `cargo test -p inference device_contracts::tests::explicit_device_policy_rejects_mismatched_selected_candidate`,
+  `cargo test -p inference device_contracts::tests::backend_execution_decision_requires_one_selected_candidate`,
+  `cargo test -p inference device_contracts::tests`,
+  `cargo fmt --all -- --check`, and `git diff --check`. The first format check
+  reported rustfmt wrapping in the new error attribute; `cargo fmt --all` was
+  run and the check passed.
 
 ## Commit Cadence Notes
 
@@ -983,6 +994,8 @@ Worker rules:
 - `cargo test -p inference inference_request_lifecycle_event` and
   `cargo test -p inference test_lifecycle_events_carry_active_runtime_selected_device`
   passed for typed lifecycle selected-device ids.
+- `cargo test -p inference device_contracts::tests` passed for explicit device
+  candidate mismatch rejection in canonical backend execution decisions.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

@@ -197,3 +197,58 @@ fn backend_execution_decision_requires_one_selected_candidate() {
         InferenceDeviceClass::Cuda
     );
 }
+
+#[test]
+fn explicit_device_policy_rejects_mismatched_selected_candidate() {
+    let cpu_candidate = BackendExecutionCandidate {
+        backend_id: backend_id("llama_cpp"),
+        model_compatible: true,
+        model_ref: None,
+        supported_task_ids: vec![InferenceTaskId::TextGeneration],
+        runtime_variant_id: runtime_variant_id("llama_cpp.cpu"),
+        device_class: InferenceDeviceClass::Cpu,
+        device_id: Some(device_id("cpu")),
+        resource_estimate: None,
+        observed_throughput: None,
+        diagnostics: Vec::new(),
+    };
+
+    let class_error = BackendExecutionDecision::try_from_selected_candidate(
+        vec![cpu_candidate.clone()],
+        InferenceDevicePolicy::Explicit {
+            device_class: InferenceDeviceClass::Cuda,
+            device_id: None,
+        },
+        Some(InferenceTaskId::TextGeneration),
+    )
+    .expect_err("explicit CUDA policy must not select CPU candidate");
+    assert_eq!(
+        class_error,
+        DeviceContractError::ExplicitDeviceClassUnavailable {
+            requested: InferenceDeviceClass::Cuda,
+            candidate: InferenceDeviceClass::Cpu,
+        }
+    );
+
+    let id_error = BackendExecutionDecision::try_from_selected_candidate(
+        vec![BackendExecutionCandidate {
+            device_class: InferenceDeviceClass::Cuda,
+            device_id: Some(device_id("cuda:1")),
+            runtime_variant_id: runtime_variant_id("llama_cpp.cuda"),
+            ..cpu_candidate
+        }],
+        InferenceDevicePolicy::Explicit {
+            device_class: InferenceDeviceClass::Cuda,
+            device_id: Some(device_id("cuda:0")),
+        },
+        Some(InferenceTaskId::TextGeneration),
+    )
+    .expect_err("explicit CUDA device id must not select another CUDA device");
+    assert_eq!(
+        id_error,
+        DeviceContractError::ExplicitDeviceIdUnavailable {
+            requested: device_id("cuda:0"),
+            candidate: Some(device_id("cuda:1")),
+        }
+    );
+}

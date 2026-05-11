@@ -57,4 +57,24 @@ pub enum DeviceContractError {
         /// Number of candidates supplied.
         count: usize,
     },
+    /// A selected candidate did not match the requested explicit device class.
+    #[error(
+        "explicit device policy requested {requested}, but selected candidate uses {candidate}"
+    )]
+    ExplicitDeviceClassUnavailable {
+        /// Requested device class.
+        requested: InferenceDeviceClass,
+        /// Candidate device class.
+        candidate: InferenceDeviceClass,
+    },
+    /// A selected candidate did not match the requested explicit device id.
+    #[error(
+        "explicit device policy requested {requested}, but selected candidate uses {candidate:?}"
+    )]
+    ExplicitDeviceIdUnavailable {
+        /// Requested device id.
+        requested: InferenceDeviceId,
+        /// Candidate device id, when known.
+        candidate: Option<InferenceDeviceId>,
+    },
 }
