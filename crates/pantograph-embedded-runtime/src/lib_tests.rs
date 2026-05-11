@@ -887,7 +887,7 @@ fn edit_session_embedding_graph(model_id: &str) -> WorkflowGraph {
                 position: Position { x: 200.0, y: 0.0 },
                 data: serde_json::json!({
                     "task_kind": "embedding",
-                    "runtime_hint": "llamacpp"
+                    "backend_key": "llama_cpp"
                 }),
             },
         ],

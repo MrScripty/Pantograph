@@ -42,7 +42,7 @@ fn test_build_text_generation_execution_request_preserves_canonical_inputs() {
         "task_kind".to_string(),
         serde_json::json!("chat-completion"),
     );
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("vllm"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("vllm"));
     inputs.insert(
         "pumas_model_ref".to_string(),
         serde_json::json!({
@@ -62,7 +62,6 @@ fn test_build_text_generation_execution_request_preserves_canonical_inputs() {
         .expect("canonical text generation request should build");
 
     assert_eq!(request.task_id, InferenceTaskId::ChatCompletion);
-    assert_eq!(request.runtime_hint.as_deref(), Some("vllm"));
     assert_eq!(
         request.model_ref,
         Some(PumasModelRef {
@@ -978,7 +977,7 @@ fn test_build_embedding_execution_request_preserves_canonical_inputs() {
     inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));
     inputs.insert("text".to_string(), serde_json::json!("hello"));
     inputs.insert("model".to_string(), serde_json::json!("embed-model"));
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("llama_cpp"));
     inputs.insert(
         "pumas_model_ref".to_string(),
         serde_json::json!({
@@ -992,7 +991,6 @@ fn test_build_embedding_execution_request_preserves_canonical_inputs() {
 
     assert_eq!(request.task_id, InferenceTaskId::Embedding);
     assert_eq!(request.model_name.as_deref(), Some("embed-model"));
-    assert_eq!(request.runtime_hint.as_deref(), Some("llamacpp"));
     assert_eq!(
         request.model_ref,
         Some(PumasModelRef {
@@ -1099,7 +1097,7 @@ fn test_build_rerank_execution_request_preserves_canonical_inputs() {
     );
     inputs.insert("top_k".to_string(), serde_json::json!(2));
     inputs.insert("return_documents".to_string(), serde_json::json!(false));
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("llama_cpp"));
     inputs.insert("gpu_layers".to_string(), serde_json::json!(12));
     inputs.insert("temperature".to_string(), serde_json::json!(0.2));
     inputs.insert(
@@ -1122,7 +1120,6 @@ fn test_build_rerank_execution_request_preserves_canonical_inputs() {
 
     assert_eq!(request.task_id, InferenceTaskId::Rerank);
     assert_eq!(request.model_name.as_deref(), Some("/tmp/reranker.gguf"));
-    assert_eq!(request.runtime_hint.as_deref(), Some("llamacpp"));
     assert_eq!(
         request.model_ref,
         Some(PumasModelRef {
@@ -1312,7 +1309,7 @@ fn test_build_image_generation_execution_request_preserves_canonical_inputs() {
         "prompt".to_string(),
         serde_json::json!("paint a quiet lake"),
     );
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("pytorch"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert(
         "task_options".to_string(),
         serde_json::json!({
@@ -1343,7 +1340,6 @@ fn test_build_image_generation_execution_request_preserves_canonical_inputs() {
         request.model_name.as_deref(),
         Some("/models/tiny-diffusion")
     );
-    assert_eq!(request.runtime_hint.as_deref(), Some("pytorch"));
     assert_eq!(
         request.model_ref,
         Some(PumasModelRef {
@@ -1761,7 +1757,7 @@ fn test_build_audio_transcription_execution_request_preserves_canonical_inputs()
         }),
     );
     inputs.insert("model_name".to_string(), serde_json::json!("whisper-tiny"));
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("pytorch"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert("language".to_string(), serde_json::json!("en"));
     inputs.insert("prompt".to_string(), serde_json::json!("domain terms"));
     inputs.insert("asr_task".to_string(), serde_json::json!("transcribe"));
@@ -1772,7 +1768,6 @@ fn test_build_audio_transcription_execution_request_preserves_canonical_inputs()
 
     assert_eq!(request.task_id, InferenceTaskId::AudioTranscription);
     assert_eq!(request.model_name.as_deref(), Some("whisper-tiny"));
-    assert_eq!(request.runtime_hint.as_deref(), Some("pytorch"));
     match request.input {
         InferenceExecutionInput::AudioTranscription { request } => {
             assert_eq!(request.model, "whisper-tiny");
@@ -2320,7 +2315,7 @@ async fn test_canonical_llm_rejects_unresolved_migration_model_reference_before_
         serde_json::json!({"node_type": "llm-inference"}),
     );
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("llama_cpp"));
     inputs.insert(
         "model_path".to_string(),
         serde_json::json!("/tmp/legacy.gguf"),
@@ -2381,16 +2376,13 @@ async fn test_unload_model_rejects_ollama_model_ref_without_network() {
 
 #[cfg(all(feature = "inference-nodes", feature = "pytorch-nodes"))]
 #[tokio::test]
-async fn test_canonical_llm_pytorch_hint_dispatches_to_dependency_preflight() {
+async fn test_canonical_llm_pytorch_backend_key_dispatches_to_dependency_preflight() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "_data".to_string(),
         serde_json::json!({"node_type": "llm-inference"}),
     );
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
@@ -2448,7 +2440,7 @@ async fn test_canonical_llm_pytorch_package_facts_dispatches_to_dependency_prefl
 #[tokio::test]
 async fn test_dependency_preflight_skips_canonical_llamacpp() {
     let mut inputs = HashMap::new();
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("llama_cpp"));
     let extensions = ExecutorExtensions::new();
     let resolved = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
         .await
@@ -2460,7 +2452,6 @@ async fn test_dependency_preflight_skips_canonical_llamacpp() {
 #[tokio::test]
 async fn test_dependency_preflight_skips_retired_direct_diffusion_node() {
     let mut inputs = HashMap::new();
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("diffusers"));
     inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
     let extensions = ExecutorExtensions::new();
     let resolved = enforce_dependency_preflight("diffusion-inference", &inputs, &extensions)
@@ -2477,7 +2468,7 @@ async fn test_dependency_preflight_blocks_canonical_pytorch_without_resolver() {
         "model_path".to_string(),
         serde_json::json!("/tmp/model.gguf"),
     );
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("pytorch"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     let extensions = ExecutorExtensions::new();
     let err = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
         .await
@@ -2502,10 +2493,7 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
     extensions.set(extension_keys::INFERENCE_LIFECYCLE_SINK, lifecycle_sink);
 
     let mut inputs = HashMap::new();
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert(
         "resolved_model_source".to_string(),
         resolved_model_source_with_artifact_kind(
@@ -2582,10 +2570,7 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
     extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
 
     let mut inputs = HashMap::new();
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert(
         "task_kind".to_string(),
         serde_json::json!("text-generation"),
@@ -2679,10 +2664,7 @@ async fn test_dependency_preflight_lifecycle_failure_redacts_model_path() {
     extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
 
     let mut inputs = HashMap::new();
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert(
         "model_path".to_string(),
         serde_json::json!("/tmp/private/tiny-hf"),
@@ -2728,10 +2710,7 @@ async fn test_dependency_preflight_lifecycle_failure_redacts_model_path() {
 #[test]
 fn test_dependency_preflight_lifecycle_context_reads_resolved_artifact_kind() {
     let mut inputs = HashMap::new();
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert(
         "resolved_model_source".to_string(),
         resolved_model_source_with_artifact_kind(
@@ -2906,7 +2885,7 @@ async fn test_canonical_llm_depth_estimation_rejects_contract_only_with_lifecycl
         "task_kind".to_string(),
         serde_json::json!("depth_estimation"),
     );
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("pytorch"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert(
         "pumas_model_ref".to_string(),
         serde_json::json!({
@@ -3133,10 +3112,7 @@ async fn test_dependency_preflight_maps_hf_transformers_source_to_pytorch_reques
     extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
 
     let mut inputs = HashMap::new();
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert(
         "task_kind".to_string(),
         serde_json::json!("text-generation"),
@@ -3569,7 +3545,7 @@ async fn test_canonical_llm_video_understanding_rejects_contract_only_with_lifec
         "task_kind".to_string(),
         serde_json::json!("video_understanding"),
     );
-    inputs.insert("runtime_hint".to_string(), serde_json::json!("vllm"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("vllm"));
     inputs.insert(
         "pumas_model_ref".to_string(),
         serde_json::json!({

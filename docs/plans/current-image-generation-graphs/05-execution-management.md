@@ -273,6 +273,14 @@ Update during implementation:
   dependency-preflight backend preference selection. Node-engine preflight now
   uses `backend_key`, package facts, or inferred task/model facts, and retired
   inference node guidance points to `backend_key`.
+- 2026-05-10: Continued Milestone 5 by retiring
+  `InferenceExecutionRequest.runtime_hint` from the public inference DTO and
+  node-engine request builders. Typed inference execution requests no longer
+  carry backend/runtime preference strings; scheduler-facing contracts remain
+  the owner for backend/runtime/device decisions. Broad node-engine verification
+  also exposed and fixed a package-facts text-generation route that could still
+  enter the old llama.cpp execution branch from backend hints; prompt-bearing
+  package-facts text requests now use the typed gateway path.
 
 ## Commit Cadence Notes
 

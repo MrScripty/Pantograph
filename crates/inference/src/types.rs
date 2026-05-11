@@ -65,8 +65,6 @@ pub struct InferenceExecutionRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_hint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved_model_package_facts: Option<ResolvedModelPackageFacts>,
     pub input: InferenceExecutionInput,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -109,7 +107,6 @@ impl InferenceExecutionRequest {
             task_id: InferenceTaskId::ChatCompletion,
             model_ref: None,
             model_name: Some(request.model),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::TextGeneration {
                 prompt: None,
@@ -1455,7 +1452,6 @@ mod tests {
                 migration_diagnostics: Vec::new(),
             }),
             model_name: None,
-            runtime_hint: Some("pytorch".to_string()),
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::TextGeneration {
                 prompt: Some("Hello".to_string()),
@@ -1495,7 +1491,6 @@ mod tests {
             task_id: InferenceTaskId::Embedding,
             model_ref: None,
             model_name: Some("sentence-transformers/tiny".to_string()),
-            runtime_hint: Some("candle".to_string()),
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::Embedding {
                 texts: vec!["first".to_string(), "second".to_string()],
@@ -1529,7 +1524,6 @@ mod tests {
             task_id: InferenceTaskId::Rerank,
             model_ref: None,
             model_name: Some("reranker/tiny".to_string()),
-            runtime_hint: Some("pytorch".to_string()),
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::Rerank {
                 query: "needle".to_string(),
@@ -1561,7 +1555,6 @@ mod tests {
             task_id: InferenceTaskId::ImageGeneration,
             model_ref: None,
             model_name: Some("diffusers/tiny".to_string()),
-            runtime_hint: Some("diffusers".to_string()),
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::ImageGeneration {
                 request: ImageGenerationRequest {
@@ -1611,7 +1604,6 @@ mod tests {
             task_id: InferenceTaskId::TextGeneration,
             model_ref: None,
             model_name: Some("tiny-model".to_string()),
-            runtime_hint: Some("pytorch".to_string()),
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::TextGeneration {
                 prompt: Some("Hello".to_string()),
@@ -1649,7 +1641,6 @@ mod tests {
                 "input",
                 "model_name",
                 "request_id",
-                "runtime_hint",
                 "task_id",
             ])
         );
@@ -1685,7 +1676,6 @@ mod tests {
         assert_eq!(decoded.request_id, None);
         assert_eq!(decoded.task_id, InferenceTaskId::Embedding);
         assert_eq!(decoded.model_ref, None);
-        assert_eq!(decoded.runtime_hint, None);
         assert_eq!(decoded.resolved_model_package_facts, None);
         assert_eq!(decoded.generation_options, None);
         assert_eq!(decoded.extra_options, Value::Null);
@@ -1707,7 +1697,6 @@ mod tests {
             task_id: InferenceTaskId::AudioTranscription,
             model_ref: None,
             model_name: Some("openai/whisper-tiny".to_string()),
-            runtime_hint: Some("pytorch".to_string()),
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::AudioTranscription {
                 request: AudioTranscriptionRequest {
@@ -1769,7 +1758,6 @@ mod tests {
             task_id: InferenceTaskId::ImageUnderstanding,
             model_ref: None,
             model_name: Some("vision-language-roadmap".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::ImageUnderstanding {
                 request: ImageUnderstandingRequest {
@@ -1787,7 +1775,6 @@ mod tests {
             task_id: InferenceTaskId::VideoUnderstanding,
             model_ref: None,
             model_name: Some("video-language-roadmap".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::VideoUnderstanding {
                 request: VideoUnderstandingRequest {
@@ -1807,7 +1794,6 @@ mod tests {
             task_id: InferenceTaskId::DepthEstimation,
             model_ref: None,
             model_name: Some("depth-roadmap".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::DepthEstimation {
                 request: DepthEstimationRequest {
@@ -1826,7 +1812,6 @@ mod tests {
             task_id: InferenceTaskId::MultimodalGeneration,
             model_ref: None,
             model_name: Some("multimodal-roadmap".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::MultimodalGeneration {
                 request: MultimodalGenerationRequest {
@@ -2082,7 +2067,6 @@ mod tests {
             task_id: InferenceTaskId::Embedding,
             model_ref: None,
             model_name: Some("tiny".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::TextGeneration {
                 prompt: Some("Hi".to_string()),
@@ -2113,7 +2097,6 @@ mod tests {
             task_id: InferenceTaskId::TextGeneration,
             model_ref: None,
             model_name: Some("tiny".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::TextGeneration {
                 prompt: Some("   ".to_string()),
@@ -2134,7 +2117,6 @@ mod tests {
             task_id: InferenceTaskId::Embedding,
             model_ref: None,
             model_name: Some("tiny".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::Embedding {
                 texts: vec!["alpha".to_string(), " \t ".to_string()],
@@ -2154,7 +2136,6 @@ mod tests {
             task_id: InferenceTaskId::Rerank,
             model_ref: None,
             model_name: Some("tiny".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::Rerank {
                 query: "find this".to_string(),
@@ -2180,7 +2161,6 @@ mod tests {
             task_id: InferenceTaskId::AudioTranscription,
             model_ref: None,
             model_name: Some("tiny-audio".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::AudioTranscription {
                 request: AudioTranscriptionRequest {
@@ -2210,7 +2190,6 @@ mod tests {
             task_id: InferenceTaskId::AudioTranscription,
             model_ref: None,
             model_name: Some("tiny-audio".to_string()),
-            runtime_hint: None,
             resolved_model_package_facts: None,
             input: InferenceExecutionInput::AudioTranscription {
                 request: AudioTranscriptionRequest {
@@ -2247,7 +2226,6 @@ mod tests {
                 task_id: task_id.clone(),
                 model_ref: None,
                 model_name: Some("roadmap-model".to_string()),
-                runtime_hint: None,
                 resolved_model_package_facts: None,
                 input: InferenceExecutionInput::TextGeneration {
                     prompt: Some("hello".to_string()),

@@ -987,7 +987,6 @@ async fn test_execute_typed_forwards_image_generation_to_active_backend() {
         task_id: InferenceTaskId::ImageGeneration,
         model_ref: None,
         model_name: Some("mock-image".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::ImageGeneration {
             request: ImageGenerationRequest {
@@ -1051,7 +1050,6 @@ async fn test_execute_typed_forwards_audio_transcription_to_active_backend() {
         task_id: InferenceTaskId::AudioTranscription,
         model_ref: None,
         model_name: Some("mock-asr".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::AudioTranscription {
             request: AudioTranscriptionRequest {
@@ -1122,7 +1120,6 @@ async fn test_execute_typed_embedding_returns_task_option_diagnostics() {
         task_id: InferenceTaskId::Embedding,
         model_ref: None,
         model_name: Some("mock-embedding".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::Embedding {
             texts: vec!["alpha beta".to_string()],
@@ -1166,7 +1163,6 @@ async fn test_execute_typed_rerank_returns_task_option_diagnostics() {
         task_id: InferenceTaskId::Rerank,
         model_ref: None,
         model_name: Some("mock-rerank".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::Rerank {
             query: "alpha".to_string(),
@@ -1220,7 +1216,6 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
         task_id: InferenceTaskId::TextGeneration,
         model_ref: None,
         model_name: Some("mock-text".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
@@ -1420,7 +1415,6 @@ async fn test_execute_typed_text_lifecycle_reports_usage_from_terminal_chunk() {
         task_id: InferenceTaskId::TextGeneration,
         model_ref: None,
         model_name: Some("mock-text".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("SECRET_PROMPT should not reach lifecycle diagnostics".to_string()),
@@ -1509,7 +1503,6 @@ async fn test_execute_typed_text_filters_path_shaped_cache_handle() {
         task_id: InferenceTaskId::TextGeneration,
         model_ref: None,
         model_name: Some("mock-text".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
@@ -1563,7 +1556,6 @@ async fn test_execute_typed_with_lifecycle_reports_package_compatibility() {
         task_id: InferenceTaskId::TextGeneration,
         model_ref: Some(package_facts.model_ref.clone()),
         model_name: Some("mock-text".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
@@ -1647,7 +1639,6 @@ async fn test_execute_typed_rerank_lifecycle_reports_task_option_diagnostics() {
         task_id: InferenceTaskId::Rerank,
         model_ref: None,
         model_name: Some("mock-rerank".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::Rerank {
             query: "alpha".to_string(),
@@ -1713,7 +1704,6 @@ async fn test_execute_typed_embedding_lifecycle_reports_extra_option_diagnostics
         task_id: InferenceTaskId::Embedding,
         model_ref: None,
         model_name: Some("mock-embedding".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::Embedding {
             texts: vec!["alpha".to_string()],
@@ -1769,7 +1759,6 @@ async fn test_execute_typed_validates_before_backend_execution() {
         task_id: InferenceTaskId::Embedding,
         model_ref: None,
         model_name: Some("mock-image".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::ImageGeneration {
             request: ImageGenerationRequest {
@@ -1979,7 +1968,6 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
         task_id: InferenceTaskId::ImageGeneration,
         model_ref: None,
         model_name: Some("mock-image".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::ImageGeneration {
             request: ImageGenerationRequest {
@@ -2109,7 +2097,6 @@ fn test_typed_text_request_model_name_falls_back_to_package_facts() {
         task_id: InferenceTaskId::TextGeneration,
         model_ref: None,
         model_name: None,
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
@@ -2138,7 +2125,6 @@ async fn test_execute_typed_audio_lifecycle_reports_extra_option_diagnostics() {
         task_id: InferenceTaskId::AudioTranscription,
         model_ref: None,
         model_name: Some("mock-asr".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::AudioTranscription {
             request: AudioTranscriptionRequest {
@@ -2275,7 +2261,6 @@ async fn test_execute_typed_audio_lifecycle_omits_local_path_artifact_refs() {
         task_id: InferenceTaskId::AudioTranscription,
         model_ref: None,
         model_name: Some("mock-asr".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::AudioTranscription {
             request: AudioTranscriptionRequest {
@@ -2399,7 +2384,6 @@ async fn test_contract_only_typed_lifecycle_collects_bounded_artifact_refs() {
             task_id,
             model_ref: None,
             model_name: Some("mock-contract".to_string()),
-            runtime_hint: Some("mock".to_string()),
             resolved_model_package_facts: None,
             input,
             generation_options: None,
@@ -2457,7 +2441,6 @@ async fn test_execute_typed_with_lifecycle_records_validation_failure_without_ba
         task_id: InferenceTaskId::Embedding,
         model_ref: None,
         model_name: Some("mock-image".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::ImageGeneration {
             request: ImageGenerationRequest {
@@ -2522,7 +2505,6 @@ async fn test_execute_typed_with_lifecycle_rejects_package_task_mismatch_before_
         task_id: InferenceTaskId::TextGeneration,
         model_ref: Some(package_facts.model_ref.clone()),
         model_name: Some("mock-text".to_string()),
-        runtime_hint: Some("mock".to_string()),
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
@@ -2658,7 +2640,6 @@ async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_ph
         task_id: InferenceTaskId::TextGeneration,
         model_ref: Some(package_facts.model_ref.clone()),
         model_name: Some("typed-model".to_string()),
-        runtime_hint: None,
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
@@ -2814,7 +2795,6 @@ async fn test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage() {
         task_id: InferenceTaskId::TextGeneration,
         model_ref: Some(package_facts.model_ref.clone()),
         model_name: Some("typed-model".to_string()),
-        runtime_hint: None,
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("SECRET_STREAM_PROMPT should not reach lifecycle".to_string()),
@@ -2879,7 +2859,6 @@ async fn test_stream_typed_text_with_lifecycle_filters_path_shaped_cache_handle(
         task_id: InferenceTaskId::TextGeneration,
         model_ref: None,
         model_name: Some("typed-model".to_string()),
-        runtime_hint: None,
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),
@@ -2985,7 +2964,6 @@ async fn test_stream_typed_text_with_lifecycle_records_failed_backend_compatibil
         task_id: InferenceTaskId::TextGeneration,
         model_ref: Some(package_facts.model_ref.clone()),
         model_name: Some("typed-model".to_string()),
-        runtime_hint: None,
         resolved_model_package_facts: Some(package_facts),
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),

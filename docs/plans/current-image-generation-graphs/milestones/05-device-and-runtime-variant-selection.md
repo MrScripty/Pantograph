@@ -832,6 +832,72 @@ typed diagnostic and the canonical design is fixed.
   - Deviation: the first node-engine test commands omitted
     `--features inference-nodes` and matched zero feature-gated tests. They
     were rerun with the feature enabled.
+- 2026-05-10 slice: typed inference request `runtime_hint` contract removal.
+  - Smallest useful vertical slice: remove
+    `InferenceExecutionRequest.runtime_hint` from the public inference DTO and
+    stop node-engine inference request builders from reading
+    `runtime_hint`/`runtimeHint` into typed execution requests.
+  - Allowed write set:
+    `crates/inference/src/types.rs`,
+    `crates/inference/src/README.md`,
+    `crates/inference/src/gateway_tests.rs`,
+    `crates/inference/tests/model_contracts.rs`,
+    `crates/node-engine/src/core_executor.rs`,
+    `crates/node-engine/src/core_executor/inference_nodes.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/engine/node_preparation.rs`,
+    `crates/node-engine/src/engine/workflow_execution_session.rs`,
+    `crates/node-engine/src/engine/workflow_execution_session/tests/workflow_execution_session_tests/kv_cache_memory.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: typed inference execution requests no
+    longer carry backend/runtime preference strings. Backend/runtime/device
+    decisions remain owned by scheduler-facing candidate/decision contracts;
+    no compatibility field or alias was retained on the request DTO.
+    Package-facts text-generation requests also stay on the typed gateway path
+    instead of allowing llama.cpp backend hints to invoke the old direct
+    execution branch.
+  - Standards/blast-radius gate: inference remains the public typed execution
+    DTO owner and node-engine remains the request-builder/execution-routing
+    owner; persisted SQLite schema, frontend behavior, generated files, feature
+    flags, dependencies, lockfiles, path/resource access, and worker execution
+    are unchanged; test isolation uses focused inference serde/contract tests,
+    gateway tests, node-engine request-builder/execution tests, and fixture
+    projection tests.
+  - Discovered issue fixed in slice: broad node-engine verification exposed
+    package-facts text-generation requests being routed to the old llama.cpp
+    execution branch when package backend hints resolved to llama.cpp. The
+    executor now handles explicit text-generation contracts and prompt-bearing
+    package-facts text requests through the typed gateway before backend-key
+    legacy dispatch.
+  - Discovered follow-up: one focused node-engine regression test still uses a
+    `runtime_hint` input to prove dependency-preflight ignores the legacy field;
+    remove that test input once all saved graph/producer paths have stopped
+    emitting it.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference typed_execution_request`,
+    `cargo test -p inference --test model_contracts inference_execution_request_wire_contract_preserves_tags_defaults_and_unknown_fields`,
+    `cargo test -p inference gateway::tests`,
+    `cargo test -p node-engine --features inference-nodes core_executor::tests::inference_tests`,
+    `cargo test -p node-engine --features pytorch-nodes test_canonical_llm_pytorch_backend_key_dispatches_to_dependency_preflight`,
+    `cargo test -p node-engine --features pytorch-nodes test_dependency_preflight_records_lifecycle_success_with_resolver`,
+    `cargo test -p node-engine --features inference-nodes kv_cache_memory`,
+    `cargo test -p node-engine --features inference-nodes node_preparation`,
+    `cargo test -p pantograph-embedded-runtime workflow_graph_embedding_helpers_detect_embedding_and_llamacpp_nodes`,
+    runtime-hint search over touched Rust/README scopes, and
+    `git diff --check`.
+  - Verification deviations: an initial model-contract command used the stale
+    `canonical_rerank_execution_request_serde_defaults_and_ignores_unknown_fields`
+    filter and matched zero tests, then the correct
+    `inference_execution_request_wire_contract_preserves_tags_defaults_and_unknown_fields`
+    test was run. The first full node-engine inference module run failed two
+    package-facts text-routing tests; after routing prompt-bearing package-facts
+    text requests through the typed gateway, the module was rerun successfully.
+    A second intermediate run failed the image-generation package-facts test
+    because the prompt-bearing shortcut ran before explicit image-generation
+    dispatch; the guard was moved after all explicit typed task arms and the
+    module was rerun successfully.
 
 **Verification:**
 

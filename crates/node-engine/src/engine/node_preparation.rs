@@ -218,7 +218,7 @@ mod tests {
                 node_type: "llm-inference".to_string(),
                 data: serde_json::json!({
                     "task_kind": "text_generation",
-                    "runtime_hint": "llamacpp"
+                    "backend_key": "llama_cpp"
                 }),
                 position: (0.0, 0.0),
             }],
@@ -286,7 +286,7 @@ mod tests {
                 node_type: "llm-inference".to_string(),
                 data: serde_json::json!({
                     "task_kind": "text_generation",
-                    "runtime_hint": "llamacpp"
+                    "backend_key": "llama_cpp"
                 }),
                 position: (0.0, 0.0),
             }],
@@ -352,7 +352,7 @@ mod tests {
                 node_type: "llm-inference".to_string(),
                 data: serde_json::json!({
                     "task_kind": "text_generation",
-                    "runtime_hint": "llamacpp"
+                    "backend_key": "llama_cpp"
                 }),
                 position: (0.0, 0.0),
             }],

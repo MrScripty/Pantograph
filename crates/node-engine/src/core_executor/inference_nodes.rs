@@ -271,7 +271,6 @@ pub(crate) fn build_text_generation_execution_request(
             inputs,
             &["model_name", "modelName", "model", "model_id", "modelId"],
         ),
-        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
         resolved_model_package_facts,
         input: inference::InferenceExecutionInput::TextGeneration {
             prompt: Some(full_prompt),
@@ -558,7 +557,6 @@ pub(crate) fn build_embedding_execution_request(
             &["model", "model_name", "modelName", "model_id", "modelId"],
         )
         .filter(|model| !model.trim().is_empty()),
-        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
         resolved_model_package_facts,
         input: inference::InferenceExecutionInput::Embedding {
             texts: vec![text.to_string()],
@@ -695,7 +693,6 @@ pub(crate) fn build_rerank_execution_request(
         task_id: inference::InferenceTaskId::Rerank,
         model_ref,
         model_name,
-        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
         resolved_model_package_facts,
         input: inference::InferenceExecutionInput::Rerank {
             query: query.to_string(),
@@ -866,7 +863,6 @@ pub(crate) fn build_image_generation_execution_request(
         task_id: inference::InferenceTaskId::ImageGeneration,
         model_ref,
         model_name: Some(model.clone()),
-        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
         resolved_model_package_facts,
         input: inference::InferenceExecutionInput::ImageGeneration {
             request: inference::ImageGenerationRequest {
@@ -938,7 +934,6 @@ pub(crate) fn build_audio_transcription_execution_request(
         task_id: inference::InferenceTaskId::AudioTranscription,
         model_ref,
         model_name: model_name.clone(),
-        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
         resolved_model_package_facts,
         input: inference::InferenceExecutionInput::AudioTranscription {
             request: inference::AudioTranscriptionRequest {

@@ -346,7 +346,6 @@ fn inference_execution_request_wire_contract_preserves_tags_defaults_and_unknown
     assert_eq!(request.task_id, InferenceTaskId::Rerank);
     assert_eq!(request.model_name.as_deref(), Some("reranker-model"));
     assert!(request.model_ref.is_none());
-    assert!(request.runtime_hint.is_none());
     assert!(request.resolved_model_package_facts.is_none());
     assert!(request.generation_options.is_none());
     assert!(request.extra_options.is_null());
@@ -495,7 +494,6 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
         task_id: InferenceTaskId::TextGeneration,
         model_ref: None,
         model_name: Some("tiny".to_string()),
-        runtime_hint: Some("pytorch".to_string()),
         resolved_model_package_facts: None,
         input: InferenceExecutionInput::TextGeneration {
             prompt: Some("hello".to_string()),

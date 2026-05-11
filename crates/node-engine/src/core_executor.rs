@@ -91,6 +91,14 @@ pub fn resolve_node_type(task_id: &str, inputs: &HashMap<String, serde_json::Val
         })
 }
 
+#[cfg(feature = "inference-nodes")]
+fn has_resolved_model_package_facts(inputs: &HashMap<String, serde_json::Value>) -> bool {
+    inputs
+        .get("resolved_model_package_facts")
+        .or_else(|| inputs.get("resolvedModelPackageFacts"))
+        .is_some_and(|value| !value.is_null())
+}
+
 /// Core task executor that handles all host-independent node types.
 ///
 /// For nodes requiring host-specific resources, wrap this in a
@@ -260,6 +268,17 @@ impl TaskExecutor for CoreTaskExecutor {
                     preferred_backend.as_deref(),
                 )?;
                 match canonical_inference_input_kind(&canonical_inputs) {
+                    Some(InferenceExecutionInputKind::TextGeneration) => {
+                        execute_llm_inference(
+                            self.gateway.as_ref(),
+                            &canonical_inputs,
+                            task_id,
+                            self.event_sink.as_ref(),
+                            exec_id,
+                            extensions,
+                        )
+                        .await
+                    }
                     Some(InferenceExecutionInputKind::Embedding) => {
                         execute_embedding_inference(
                             self.gateway.as_ref(),
@@ -297,6 +316,22 @@ impl TaskExecutor for CoreTaskExecutor {
                             extensions,
                             task_id,
                             exec_id,
+                        )
+                        .await
+                    }
+                    _ if has_resolved_model_package_facts(&canonical_inputs)
+                        && canonical_inputs
+                            .get("prompt")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|prompt| !prompt.trim().is_empty()) =>
+                    {
+                        execute_llm_inference(
+                            self.gateway.as_ref(),
+                            &canonical_inputs,
+                            task_id,
+                            self.event_sink.as_ref(),
+                            exec_id,
+                            extensions,
                         )
                         .await
                     }

@@ -311,6 +311,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   `task_id`, tagged `input`, Pumas model reference, resolved package facts,
   generation options, and scoped backend extras have already been validated at
   the adapter edge.
+- `InferenceExecutionRequest` does not carry backend/runtime preference strings
+  such as legacy `runtime_hint`; backend and device selection must come from
+  scheduler-facing candidate/decision contracts.
 - Typed task execution results return `InferenceExecutionResult` variants plus
   bounded usage, cache-handle, and option-diagnostic facts. Callers should not
   infer scheduler admission, reservation, priority, eviction, or final backend

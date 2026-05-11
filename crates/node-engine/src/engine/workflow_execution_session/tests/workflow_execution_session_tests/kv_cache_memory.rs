@@ -44,7 +44,7 @@ async fn sync_bound_session_node_memory_from_cache_projects_kv_cache_reference()
         node_type: "llm-inference".to_string(),
         data: serde_json::json!({
             "task_kind": "text_generation",
-            "runtime_hint": "llamacpp"
+            "backend_key": "llama_cpp"
         }),
         position: (0.0, 0.0),
     });
