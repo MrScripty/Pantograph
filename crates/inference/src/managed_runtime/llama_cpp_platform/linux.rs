@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::{
-    ensure_unix_library_aliases, extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform,
+    ensure_unix_library_aliases, extract_pid_file, managed_env_path, ArchiveKind, LlamaPlatform,
     LlamaRuntimeVariant, ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
     LLAMA_CPU_VARIANT, LLAMA_CUDA_VARIANT,
 };
@@ -105,7 +105,7 @@ impl LlamaPlatform for LinuxPlatform {
             executable_path,
             working_directory: binaries_dir.to_path_buf(),
             args,
-            env_overrides: vec![prepend_env_path("LD_LIBRARY_PATH", &library_dir, ":")],
+            env_overrides: vec![managed_env_path("LD_LIBRARY_PATH", &library_dir)],
             pid_file,
         })
     }
@@ -223,14 +223,10 @@ mod tests {
             .expect("resolve CUDA runtime command");
 
         assert_eq!(resolved.executable_path, cuda_server);
-        let cuda_library_path = cuda_dir.to_string_lossy();
         assert!(resolved
             .env_overrides
             .iter()
-            .any(|(key, value)| key == "LD_LIBRARY_PATH"
-                && value
-                    .to_string_lossy()
-                    .starts_with(cuda_library_path.as_ref())));
+            .any(|(key, value)| key == "LD_LIBRARY_PATH" && value == cuda_dir.as_os_str()));
     }
 
     #[test]

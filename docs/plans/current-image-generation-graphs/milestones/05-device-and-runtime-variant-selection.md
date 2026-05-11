@@ -168,6 +168,12 @@ typed diagnostic and the canonical design is fixed.
     resolved executable and working-directory paths before command handoff.
     Dynamic-library environment path entries, pid files, Pumas package paths,
     artifact paths, and worker-visible paths remain pending.
+  - 2026-05-11 partial: managed-runtime command construction now emits only
+    owned library-search path values for `LD_LIBRARY_PATH`,
+    `DYLD_LIBRARY_PATH`, and Windows `PATH`, and command handoff validates
+    those dynamic-library path values through the shared allowed-root
+    validator. Pid files, Pumas package paths, artifact paths, and
+    worker-visible paths remain pending.
 - [ ] Use checked arithmetic and typed diagnostics for image dimensions, context
   lengths, token limits, batch sizes, memory estimates, output-size
   calculations, and byte ranges that cross IPC, persisted, worker, or runtime
@@ -2965,6 +2971,36 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: validate dynamic-library environment path entries,
     pid files, Pumas package paths, artifact paths, and worker-visible paths
     through the same shared validator before filesystem or subprocess access.
+- 2026-05-11 slice: managed runtime dynamic-library path validation.
+  - Smallest useful vertical slice: stop inheriting host library-search tails
+    into managed llama.cpp command environment overrides, emit only the
+    backend-owned runtime library path, and validate each command environment
+    path value through the shared allowed-root validator before handoff.
+  - Allowed write set: `crates/inference/src/managed_runtime/contracts.rs`,
+    `crates/inference/src/managed_runtime/paths.rs`,
+    `crates/inference/src/managed_runtime/mod.rs`,
+    `crates/inference/src/managed_runtime/operations.rs`,
+    `crates/inference/src/managed_runtime/llama_cpp_platform/`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: managed runtime command launch no
+    longer preserves unvalidated inherited host `LD_LIBRARY_PATH`,
+    `DYLD_LIBRARY_PATH`, or Windows `PATH` entries as fallback dynamic-library
+    search locations. Only backend-owned, allowed-root-validated runtime paths
+    are handed off.
+  - Standards/blast-radius gate: managed-runtime command environment
+    construction and validation only; no generated DTOs, frontend code, saved
+    workflow files, runtime feature flags, dependency changes, scheduler
+    policy, install state, or subprocess lifecycle ownership changed.
+  - Verification passed:
+    `cargo test -p inference managed_runtime::paths`,
+    `cargo test -p inference managed_runtime::llama_cpp_platform::linux::tests`,
+    and `cargo test -p inference resolve_binary_command`.
+  - Verification deviation: the focused Cargo tests were started in parallel
+    and serialized on Cargo package/build locks; the completed results above
+    passed after the locks cleared.
+  - Remaining follow-up: pid files, Pumas package paths, artifact paths, and
+    worker-visible paths still need shared allowed-root validation before
+    filesystem or subprocess access.
 
 **Verification:**
 

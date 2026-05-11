@@ -1,5 +1,5 @@
 use crate::managed_runtime::{
-    extract_pid_file as extract_pid_file_impl, prepend_env_path as prepend_env_path_impl,
+    extract_pid_file as extract_pid_file_impl, managed_env_path as managed_env_path_impl,
     ArchiveKind, ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
 };
 use crate::RuntimeVariantId;
@@ -251,8 +251,8 @@ pub(crate) fn find_option_value<'a>(args: &'a [&'a str], option_name: &str) -> O
     None
 }
 
-pub(crate) fn prepend_env_path(key: &str, prefix: &Path, separator: &str) -> (OsString, OsString) {
-    prepend_env_path_impl(key, prefix, separator)
+pub(crate) fn managed_env_path(key: &str, path: &Path) -> (OsString, OsString) {
+    managed_env_path_impl(key, path)
 }
 
 #[cfg(unix)]

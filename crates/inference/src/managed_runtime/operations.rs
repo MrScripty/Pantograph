@@ -961,10 +961,25 @@ fn validate_resolved_command_paths(
         &command.working_directory,
         install_dir,
     )?;
+    let env_overrides = command
+        .env_overrides
+        .iter()
+        .map(|(key, value)| {
+            let path = PathBuf::from(value.as_os_str());
+            validate_managed_runtime_path(
+                id,
+                ManagedRuntimePathKind::DynamicLibraryPath,
+                &path,
+                install_dir,
+            )
+            .map(|validated_path| (key.clone(), validated_path.into_os_string()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(ResolvedCommand {
         executable_path,
         working_directory,
+        env_overrides,
         ..command
     })
 }

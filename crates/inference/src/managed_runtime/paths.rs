@@ -49,21 +49,15 @@ pub(crate) fn extract_pid_file(args: &[&str]) -> (Vec<OsString>, Option<PathBuf>
     (sanitized, pid_file)
 }
 
-pub(crate) fn prepend_env_path(key: &str, prefix: &Path, separator: &str) -> (OsString, OsString) {
-    let mut value = prefix.as_os_str().to_os_string();
-    if let Some(existing) = std::env::var_os(key) {
-        if !existing.is_empty() {
-            value.push(separator);
-            value.push(existing);
-        }
-    }
-
-    (OsString::from(key), value)
+pub(crate) fn managed_env_path(key: &str, path: &Path) -> (OsString, OsString) {
+    (OsString::from(key), path.as_os_str().to_os_string())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_pid_file, managed_install_dir, managed_version_install_dir};
+    use super::{
+        extract_pid_file, managed_env_path, managed_install_dir, managed_version_install_dir,
+    };
     use crate::managed_runtime::ManagedBinaryId;
 
     #[test]
@@ -123,5 +117,15 @@ mod tests {
                 .join("runtimes")
                 .join("llama-cpp")
         );
+    }
+
+    #[test]
+    fn managed_env_path_uses_only_owned_path() {
+        let path = std::path::Path::new("/tmp/pantograph-owned-runtime");
+
+        let (key, value) = managed_env_path("LD_LIBRARY_PATH", path);
+
+        assert_eq!(key, "LD_LIBRARY_PATH");
+        assert_eq!(value, path.as_os_str());
     }
 }

@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::RuntimeVariantId;
 
 use super::{
-    extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform, LlamaRuntimeVariant,
+    extract_pid_file, managed_env_path, ArchiveKind, LlamaPlatform, LlamaRuntimeVariant,
     ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand, LLAMA_CPU_VARIANT,
     LLAMA_CUDA_VARIANT,
 };
@@ -105,7 +105,7 @@ impl LlamaPlatform for WindowsPlatform {
             executable_path,
             working_directory: binaries_dir.to_path_buf(),
             args,
-            env_overrides: vec![prepend_env_path("PATH", binaries_dir, ";")],
+            env_overrides: vec![managed_env_path("PATH", binaries_dir)],
             pid_file,
         })
     }

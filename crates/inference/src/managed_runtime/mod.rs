@@ -36,4 +36,4 @@ pub use state::{
 };
 
 pub(crate) use contracts::{ArchiveKind, ReleaseAsset};
-pub(crate) use paths::{extract_pid_file, prepend_env_path};
+pub(crate) use paths::{extract_pid_file, managed_env_path};
