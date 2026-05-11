@@ -1893,6 +1893,26 @@ Worker rules:
   context/token/batch limits outside this llama.cpp startup normalization
   boundary, memory estimates, byte-range projections, and worker/runtime
   request fields.
+- 2026-05-11 diagnostics projection rebuild batch-size validation slice:
+  smallest useful vertical slice was limited to removing the `.max(1)`
+  fallback from `workflow_projection_rebuild` and rejecting explicit
+  `batch_size: Some(0)` through the existing workflow-service invalid-request
+  boundary. Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/diagnostics.rs`, and
+  this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because explicit zero no
+  longer becomes batch size one. `None` still selects the canonical default
+  because it is an absent option, not an invalid explicit numeric request.
+  Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_projection_rebuild_validates_bounds`,
+  `cargo test -p pantograph-workflow-service workflow_diagnostics_projection_refresh_validates_request`,
+  and `cargo fmt --all -- --check`. Deviation: the two focused Cargo tests
+  were started in parallel and serialized on Cargo package/build locks before
+  passing. Remaining numeric-boundary follow-up: image dimensions,
+  context/token/batch limits outside this projection rebuild validation
+  boundary, memory estimates, byte-range projections, and worker/runtime
+  request fields.
 
 ### Traceability Links
 

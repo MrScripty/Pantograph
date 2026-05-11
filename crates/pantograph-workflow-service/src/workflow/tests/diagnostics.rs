@@ -1777,6 +1777,12 @@ fn workflow_diagnostics_projection_refresh_validates_request() {
 fn workflow_projection_rebuild_validates_bounds() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
 
+    let zero = service.workflow_projection_rebuild(WorkflowProjectionRebuildRequest {
+        projection_name: "run_list".to_string(),
+        batch_size: Some(0),
+    });
+    assert!(matches!(zero, Err(WorkflowServiceError::InvalidRequest(_))));
+
     let oversized = service.workflow_projection_rebuild(WorkflowProjectionRebuildRequest {
         projection_name: "run_list".to_string(),
         batch_size: Some(501),

@@ -209,6 +209,12 @@ typed diagnostic and the canonical design is fixed.
     boundaries include image dimensions, broader context/token/batch limits,
     memory estimates, byte-range projections, and worker/runtime request
     fields.
+  - 2026-05-11 partial: diagnostics projection rebuild now rejects explicit
+    `batch_size: Some(0)` with `WorkflowServiceError::InvalidRequest` instead
+    of normalizing it to one. `None` remains the intentional defaulted request
+    shape. Remaining numeric boundaries include image dimensions, broader
+    context/token/batch limits, memory estimates, byte-range projections, and
+    worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3189,6 +3195,31 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: broader checked arithmetic remains needed for image
     dimensions, context/token/batch limits outside this llama.cpp startup
     normalization boundary, memory estimates, byte-range projections, and
+    worker/runtime request fields.
+- 2026-05-11 slice: diagnostics projection rebuild batch-size validation.
+  - Smallest useful vertical slice: remove the `.max(1)` fallback from
+    `workflow_projection_rebuild` and reject explicit `batch_size: Some(0)`
+    through the existing workflow-service invalid-request boundary.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/diagnostics.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: explicit zero no longer becomes
+    batch size one. `None` still selects the canonical default because it is an
+    absent option, not an invalid explicit numeric request.
+  - Standards/blast-radius gate: diagnostics projection rebuild request
+    validation only; no generated files, frontend code, saved workflow
+    fixtures, lockfiles, path roots, Pumas contracts, worker contracts,
+    runtime scheduler policy, or backend lifecycle behavior changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service workflow_projection_rebuild_validates_bounds`,
+    `cargo test -p pantograph-workflow-service workflow_diagnostics_projection_refresh_validates_request`,
+    and `cargo fmt --all -- --check`.
+  - Verification deviation: the two focused Cargo tests were started in
+    parallel and serialized on Cargo package/build locks before passing.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    dimensions, context/token/batch limits outside this projection rebuild
+    validation boundary, memory estimates, byte-range projections, and
     worker/runtime request fields.
 
 **Verification:**

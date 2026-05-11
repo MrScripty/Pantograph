@@ -1179,7 +1179,12 @@ impl WorkflowService {
         &self,
         request: WorkflowProjectionRebuildRequest,
     ) -> Result<WorkflowProjectionRebuildResponse, WorkflowServiceError> {
-        let batch_size = request.batch_size.unwrap_or(500).max(1);
+        let batch_size = request.batch_size.unwrap_or(500);
+        if batch_size == 0 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "batch_size must be greater than zero".to_string(),
+            ));
+        }
         if batch_size > 500 {
             return Err(WorkflowServiceError::InvalidRequest(
                 "batch_size exceeds maximum 500".to_string(),
