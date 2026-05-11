@@ -84,6 +84,11 @@ typed diagnostic and the canonical design is fixed.
 - [ ] Validate runtime roots, executable paths, dynamic-library paths, Pumas
   package paths, artifact paths, and worker-visible paths through shared
   allowed-root validation before filesystem or subprocess access.
+  - 2026-05-11 partial: removed the legacy managed runtime root probe so
+    `managed_install_dir` resolves only under the canonical
+    `third-party/runtimes` tree. Shared allowed-root validation for executable,
+    dynamic-library, Pumas package, artifact, and worker-visible paths remains
+    pending.
 - [ ] Use checked arithmetic and typed diagnostics for image dimensions, context
   lengths, token limits, batch sizes, memory estimates, output-size
   calculations, and byte ranges that cross IPC, persisted, worker, or runtime
@@ -2644,6 +2649,30 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: connect PyTorch node execution to canonical scheduler
     selected-device decisions rather than direct workflow input once node-engine
     backend routing is replaced.
+- 2026-05-11 slice: managed runtime canonical root enforcement.
+  - Smallest useful vertical slice: remove the legacy managed runtime root
+    lookup from `managed_install_dir` and replace the old fallback test with a
+    regression test that proves an existing `app_data/runtimes/llama-cpp`
+    directory is ignored.
+  - Allowed write set: `crates/inference/src/managed_runtime/paths.rs` and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: managed runtime command resolution,
+    projection, install, and remove paths can no longer discover executable
+    runtime files from the retired `app_data/runtimes` tree. They resolve only
+    through the canonical `app_data/third-party/runtimes` path.
+  - Standards/blast-radius gate: path helper and crate-local unit coverage
+    only; no persisted-state schema, generated DTOs, frontend code, lockfiles,
+    workflow fixtures, runtime variant selection, subprocess launch behavior,
+    or managed install job lifecycle changed.
+  - Verification passed:
+    `cargo test -p inference managed_runtime::paths`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Discovered issue fixed in-slice: `managed_install_dir` still accepted a
+    legacy runtime root when it existed, which was incompatible with the
+    milestone's no-fallback/no-legacy rule.
+  - Remaining follow-up: implement shared allowed-root validation for runtime
+    roots, executable paths, dynamic-library paths, Pumas package paths,
+    artifact paths, and worker-visible paths.
 
 **Verification:**
 
@@ -2662,6 +2691,8 @@ typed diagnostic and the canonical design is fixed.
   resolution select the intended runtime variant without hidden fallback.
 - Managed runtime tests prove one llama.cpp release can expose more than one
   installed/readiness variant under one `ManagedBinaryId::LlamaCpp` identity.
+- Managed runtime path tests prove the retired `app_data/runtimes` tree is not
+  accepted as a fallback source for executable runtime files.
 - Managed runtime job tests prove install/progress/history records identify
   their target runtime variant.
 - Runtime-load tests prove requested variants are passed explicitly and missing

@@ -864,6 +864,17 @@ Update during implementation:
   `cargo fmt --all -- --check`, and `git diff --check`. Verification
   deviation: the first PyTorch test attempt used two Cargo filters and failed
   before tests ran; both filters were rerun separately and passed.
+- 2026-05-11: Continued Milestone 5 by removing the legacy managed runtime
+  root probe from `managed_install_dir`. Managed runtime command resolution,
+  projection, install, and remove paths now resolve only under the canonical
+  `app_data/third-party/runtimes` tree instead of accepting a retired
+  `app_data/runtimes` directory when it happens to exist. Verification passed:
+  `cargo test -p inference managed_runtime::paths`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Discovered issue fixed
+  in-slice: the legacy path probe was a no-legacy violation. Remaining
+  follow-up: shared allowed-root validation for runtime roots, executables,
+  dynamic libraries, Pumas package paths, artifact paths, and worker-visible
+  paths.
 
 ## Commit Cadence Notes
 
