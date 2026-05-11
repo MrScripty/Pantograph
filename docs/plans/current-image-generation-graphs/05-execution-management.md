@@ -1510,6 +1510,9 @@ Worker rules:
   failed because two tests still constructed stale selected-version-only state;
   updating those fixtures to include the selected variant exercised the new
   no-version-only selection rule.
+- `cargo test -p inference managed_runtime::operations::tests::catalog_projection_keeps_same_version_runtime_variants_distinct`
+  passed after managed runtime catalog projection stopped collapsing same
+  release versions with different runtime variant ids.
 
 ### Traceability Links
 

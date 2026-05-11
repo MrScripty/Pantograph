@@ -209,10 +209,10 @@ fn projected_catalog_version_status(
     definition: &'static dyn ManagedBinaryDefinition,
     catalog_version: &ManagedRuntimeCatalogVersion,
 ) -> ManagedRuntimeVersionStatus {
-    let installed_version = runtime
-        .versions
-        .iter()
-        .find(|version| version.version == catalog_version.version);
+    let installed_version = runtime.versions.iter().find(|version| {
+        version.version == catalog_version.version
+            && version.runtime_variant_id.as_ref() == Some(&catalog_version.runtime_variant_id)
+    });
 
     if let Some(installed_version) = installed_version {
         return projected_installed_version_status(

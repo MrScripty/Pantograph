@@ -38,6 +38,10 @@ fn llama_cpu_variant_id() -> RuntimeVariantId {
     RuntimeVariantId::parse("llama_cpp.cpu").expect("valid runtime variant")
 }
 
+fn llama_cuda_variant_id() -> RuntimeVariantId {
+    RuntimeVariantId::parse("llama_cpp.cuda").expect("valid runtime variant")
+}
+
 fn install_fake_runtime_files(dir: &Path, id: ManagedBinaryId) {
     std::fs::create_dir_all(dir).expect("create runtime dir");
     for file_name in definition(id).validate_installation(dir) {
@@ -213,6 +217,68 @@ fn catalog_versions_remain_installable_after_one_version_is_installed() {
     assert!(!installed.installable);
     assert_eq!(missing.install_state, ManagedBinaryInstallState::Missing);
     assert!(missing.installable);
+}
+
+#[test]
+fn catalog_projection_keeps_same_version_runtime_variants_distinct() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let installed_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+    install_fake_runtime_files(&installed_dir, ManagedBinaryId::LlamaCpp);
+
+    let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+    let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+    runtime.catalog_versions = vec![
+        ManagedRuntimeCatalogVersion {
+            version: "b8248".to_string(),
+            display_label: "b8248 CPU".to_string(),
+            runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            runtime_variant_id: llama_cpu_variant_id(),
+            platform_key: "linux-x86_64".to_string(),
+            archive_name: "llama-b8248-cpu.tar.gz".to_string(),
+            download_url: "https://example.invalid/llama-b8248-cpu.tar.gz".to_string(),
+        },
+        ManagedRuntimeCatalogVersion {
+            version: "b8248".to_string(),
+            display_label: "b8248 CUDA".to_string(),
+            runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            runtime_variant_id: llama_cuda_variant_id(),
+            platform_key: "linux-x86_64".to_string(),
+            archive_name: "llama-b8248-cuda.tar.gz".to_string(),
+            download_url: "https://example.invalid/llama-b8248-cuda.tar.gz".to_string(),
+        },
+    ];
+    runtime.versions.push(ManagedRuntimePersistedVersion {
+        version: "b8248".to_string(),
+        runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        runtime_variant_id: Some(llama_cpu_variant_id()),
+        platform_key: Some("linux-x86_64".to_string()),
+        readiness_state: ManagedRuntimeReadinessState::Ready,
+        install_root: Some(installed_dir.display().to_string()),
+        last_ready_at_ms: Some(42),
+        last_error: None,
+    });
+    save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+    let snapshot = crate::managed_runtime::managed_runtime_snapshot(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+    )
+    .expect("managed runtime snapshot");
+
+    let cpu = snapshot
+        .versions
+        .iter()
+        .find(|version| version.runtime_variant_id == llama_cpu_variant_id())
+        .expect("cpu version");
+    let cuda = snapshot
+        .versions
+        .iter()
+        .find(|version| version.runtime_variant_id == llama_cuda_variant_id())
+        .expect("cuda version");
+
+    assert_eq!(cpu.install_state, ManagedBinaryInstallState::Installed);
+    assert_eq!(cuda.install_state, ManagedBinaryInstallState::Missing);
+    assert!(cuda.installable);
 }
 
 #[tokio::test]
