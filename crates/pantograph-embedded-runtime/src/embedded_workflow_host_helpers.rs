@@ -712,8 +712,6 @@ fn read_inference_backend_hint(data: &serde_json::Value) -> Option<String> {
         &[
             "backend_key",
             "backendKey",
-            "runtime_hint",
-            "runtimeHint",
             "recommended_backend",
             "recommendedBackend",
         ],

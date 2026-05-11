@@ -262,6 +262,10 @@ Update during implementation:
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed
   workflow backend intent is wired.
+- 2026-05-10: Continued Milestone 5 by removing `runtime_hint` from embedded
+  host llama.cpp model-path detection. The helper now recognizes current
+  backend/package facts only when deciding whether an inference node targets
+  llama.cpp.
 
 ## Commit Cadence Notes
 

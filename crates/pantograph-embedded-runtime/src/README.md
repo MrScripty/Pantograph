@@ -165,6 +165,8 @@ closed with a runtime diagnostic instead of launching a backend-owned fallback.
 Dependency-environment preflight ignores legacy `runtime_hint` as a backend
 preference input. Backend requirements must come from current backend/package
 facts until typed backend preference intent is wired end to end.
+Embedded host llama.cpp model-path detection follows the same rule and does
+not accept `runtime_hint` as evidence that an inference node targets llama.cpp.
 
 ## Alternatives Rejected
 - Resolve executable paths directly from `ModelRecord.metadata`.

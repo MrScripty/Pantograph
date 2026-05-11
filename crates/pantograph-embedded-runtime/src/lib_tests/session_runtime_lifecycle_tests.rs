@@ -149,7 +149,7 @@ fn write_llamacpp_puma_workflow(root: &Path, workflow_id: &str, model_path: &Pat
                     "node_type": "llm-inference",
                     "data": {
                         "prompt": "hello",
-                        "runtime_hint": "llamacpp"
+                        "backend_key": "llama_cpp"
                     },
                     "position": { "x": 200.0, "y": 0.0 }
                 },

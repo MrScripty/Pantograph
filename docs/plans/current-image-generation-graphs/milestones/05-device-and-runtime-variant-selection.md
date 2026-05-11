@@ -749,6 +749,31 @@ typed diagnostic and the canonical design is fixed.
     `cargo test -p pantograph-embedded-runtime canonical_llm_inference_falls_through_to_core_executor`,
     no-match search for `runtime_hint`/`runtimeHint` in
     `task_executor/dependency_environment.rs`, and `git diff --check`.
+- 2026-05-10 slice: embedded host llama.cpp `runtime_hint` detection removal.
+  - Smallest useful vertical slice: remove `runtime_hint`/`runtimeHint` from
+    embedded host llama.cpp inference-node detection and update the session
+    runtime lifecycle fixture to use `backend_key`.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/embedded_workflow_host_helpers.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/session_runtime_lifecycle_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the helper no longer treats
+    `runtime_hint` as evidence that a workflow should resolve a llama.cpp model
+    path. Current backend/package facts are required.
+  - Standards/blast-radius gate: embedded-runtime remains the workflow host
+    helper owner; public DTO shape, runtime lifecycle, persisted schema,
+    frontend behavior, generated files, feature flags, dependencies,
+    lockfiles, path/resource access, and worker execution are unchanged; test
+    isolation uses the session runtime lifecycle coverage.
+  - Discovered follow-up: `embedding_workflow` still has runtime-hint-specific
+    embedding selection helpers and fixtures that need their own replacement
+    slice.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-embedded-runtime session_runtime_lifecycle`,
+    no-match search for `runtime_hint`/`runtimeHint` in
+    `embedded_workflow_host_helpers.rs`, and `git diff --check`.
 
 **Verification:**
 
