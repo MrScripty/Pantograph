@@ -113,19 +113,10 @@ impl TauriTaskExecutor {
     }
 
     pub(super) fn preferred_backend_key(
-        node_type: &str,
+        _node_type: &str,
         inputs: &HashMap<String, serde_json::Value>,
         requirements: Option<&ModelDependencyRequirements>,
     ) -> Option<String> {
-        if node_type == "llm-inference" {
-            if let Some(backend) = Self::canonical_backend_key(
-                Self::read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"])
-                    .as_deref(),
-            ) {
-                return Some(backend);
-            }
-        }
-
         Self::canonical_backend_key(
             Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
                 .as_deref(),

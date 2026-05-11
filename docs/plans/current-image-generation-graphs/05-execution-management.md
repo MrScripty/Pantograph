@@ -258,6 +258,10 @@ Update during implementation:
   special handling for legacy `runtime_hint`. Edge insert prioritization and
   KV-cache memory-impact backend-change detection now use current backend/model
   fields instead of treating `runtime_hint` as a runtime/backend signal.
+- 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
+  preflight backend preference from legacy `runtime_hint`. Backend preference
+  now comes from `backend_key` or package/requirements facts until typed
+  workflow backend intent is wired.
 
 ## Commit Cadence Notes
 

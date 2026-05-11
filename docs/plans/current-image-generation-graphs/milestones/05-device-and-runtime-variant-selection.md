@@ -721,6 +721,34 @@ typed diagnostic and the canonical design is fixed.
     `git diff --check`.
   - Deviation: the first formatting check failed on one rustfmt line wrap.
     `cargo fmt --all` was run and verification was repeated successfully.
+- 2026-05-10 slice: dependency preflight `runtime_hint` backend preference
+  removal.
+  - Smallest useful vertical slice: remove `runtime_hint`/`runtimeHint` from
+    embedded-runtime dependency-environment backend preference selection and
+    pin the behavior with a focused task-executor test.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: dependency preflight no longer treats
+    legacy `runtime_hint` as executable backend preference. It uses current
+    `backend_key`, package facts, or dependency requirements only, with typed
+    backend preference intent still a separate remaining milestone task.
+  - Standards/blast-radius gate: embedded-runtime remains the dependency
+    preflight adapter owner; public DTO shape, runtime lifecycle, persisted
+    schema, frontend behavior, generated files, feature flags, dependencies,
+    lockfiles, path/resource access, and worker execution are unchanged; test
+    isolation uses focused task-executor unit tests with in-memory stubs.
+  - Discovered follow-up: node-engine inference request DTOs and dependency
+    preflight still parse `runtime_hint`; those require a node-engine contract
+    replacement slice.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-embedded-runtime preferred_backend_key_ignores_legacy_runtime_hint`,
+    `cargo test -p pantograph-embedded-runtime canonical_llm_inference_falls_through_to_core_executor`,
+    no-match search for `runtime_hint`/`runtimeHint` in
+    `task_executor/dependency_environment.rs`, and `git diff --check`.
 
 **Verification:**
 

@@ -162,6 +162,9 @@ Workflow session load no longer starts llama.cpp from this crate with a raw
 `auto` device when the requested model is inactive. Until the canonical
 runtime/device decision path supplies a selected runtime, the helper fails
 closed with a runtime diagnostic instead of launching a backend-owned fallback.
+Dependency-environment preflight ignores legacy `runtime_hint` as a backend
+preference input. Backend requirements must come from current backend/package
+facts until typed backend preference intent is wired end to end.
 
 ## Alternatives Rejected
 - Resolve executable paths directly from `ModelRecord.metadata`.

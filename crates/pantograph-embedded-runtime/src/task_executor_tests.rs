@@ -15,6 +15,19 @@ fn canonical_backend_key_accepts_llama_cpp_alias() {
     );
 }
 
+#[test]
+fn preferred_backend_key_ignores_legacy_runtime_hint() {
+    let inputs = HashMap::from([
+        ("backend_key".to_string(), serde_json::json!("pytorch")),
+        ("runtime_hint".to_string(), serde_json::json!("llamacpp")),
+    ]);
+
+    assert_eq!(
+        TauriTaskExecutor::preferred_backend_key("llm-inference", &inputs, None),
+        Some("pytorch".to_string())
+    );
+}
+
 #[tokio::test]
 async fn canonical_llm_inference_falls_through_to_core_executor() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
@@ -32,10 +45,6 @@ async fn canonical_llm_inference_falls_through_to_core_executor() {
     let mut inputs = HashMap::new();
     inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
     let error = executor
