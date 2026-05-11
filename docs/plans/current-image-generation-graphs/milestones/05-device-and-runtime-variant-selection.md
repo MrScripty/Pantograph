@@ -60,7 +60,7 @@ typed diagnostic and the canonical design is fixed.
   Planning, admission, runtime registry, diagnostics, and frontend contracts
   must not pass llama.cpp/PyTorch/vLLM raw device strings as trusted internal
   state.
-- [ ] Add a runtime-variant dimension to managed runtime catalog/status state
+- [x] Add a runtime-variant dimension to managed runtime catalog/status state
   without reintroducing duplicate binary-management systems. Keep
   `ManagedBinaryId::LlamaCpp` as the binary-management identity and nest
   `RuntimeVariantId` readiness under it.
@@ -72,6 +72,11 @@ typed diagnostic and the canonical design is fixed.
   - 2026-05-11 partial: catalog/status projection now joins catalog entries
     to installed versions by `(version, runtime_variant_id)` rather than
     version only, so same-release CPU/CUDA entries stay distinct.
+  - 2026-05-11: install validation, projected executable readiness, and
+    command resolution now all receive the selected `RuntimeVariantId`.
+    Persisted installed versions are upserted by `(version, runtime_variant_id)`
+    so one managed binary can retain same-release CPU and CUDA entries without
+    a second binary-management system.
 - [x] Include runtime variant id on managed install jobs, retained job
   artifacts, progress snapshots, and install history entries. One active
   managed-binary install job at a time is acceptable initially if the job
@@ -97,6 +102,13 @@ typed diagnostic and the canonical design is fixed.
     declare CPU and CUDA catalog variants for the same release archive, while
     macOS remains CPU-only until Metal readiness is modeled. Install readiness
     still needs variant-specific artifact validation before this item can close.
+  - 2026-05-11 partial: Linux CUDA readiness now requires
+    `cuda/llama-server`, `cuda/libllama.so`, and `cuda/libggml.so`; Windows
+    accepts CPU/CUDA variant ids against its current root executable/DLL layout.
+    Same-release CPU/CUDA installs no longer overwrite each other in persisted
+    state. Remaining follow-up: public manual selection still accepts only a
+    version string, so same-version variant selection needs a variant-aware
+    command/API before this item can close.
 - [ ] Model llama.cpp Metal builds on macOS only when a Metal-capable runtime
   is available.
 - [x] Make llama.cpp command resolution select an explicit runtime variant

@@ -44,12 +44,15 @@ fn llama_cuda_variant_id() -> RuntimeVariantId {
 
 fn install_fake_runtime_files(dir: &Path, id: ManagedBinaryId) {
     std::fs::create_dir_all(dir).expect("create runtime dir");
-    for file_name in definition(id).validate_installation(dir) {
+    let runtime_variant_id = definition(id).default_runtime_variant_id();
+    for file_name in definition(id).validate_installation(dir, &runtime_variant_id) {
         std::fs::write(dir.join(&file_name), [])
             .unwrap_or_else(|_| panic!("write fake runtime file {file_name}"));
     }
     assert!(
-        definition(id).validate_installation(dir).is_empty(),
+        definition(id)
+            .validate_installation(dir, &runtime_variant_id)
+            .is_empty(),
         "fake runtime files should satisfy install validation"
     );
 }
@@ -279,6 +282,51 @@ fn catalog_projection_keeps_same_version_runtime_variants_distinct() {
     assert_eq!(cpu.install_state, ManagedBinaryInstallState::Installed);
     assert_eq!(cuda.install_state, ManagedBinaryInstallState::Missing);
     assert!(cuda.installable);
+}
+
+#[test]
+fn persist_install_success_keeps_same_version_runtime_variants_distinct() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let cpu_dir = temp_dir.path().join("runtimes/llama-cpp-b8248-cpu");
+    let cuda_dir = temp_dir.path().join("runtimes/llama-cpp-b8248-cuda");
+
+    persist_install_success(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        "b8248",
+        &cpu_dir,
+        ManagedBinaryId::LlamaCpp.key(),
+        llama_cpu_variant_id(),
+        "linux-x86_64",
+    )
+    .expect("persist cpu install");
+    persist_install_success(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        "b8248",
+        &cuda_dir,
+        ManagedBinaryId::LlamaCpp.key(),
+        llama_cuda_variant_id(),
+        "linux-x86_64",
+    )
+    .expect("persist cuda install");
+
+    let state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+    let runtime = state
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+        .expect("llama runtime state");
+
+    assert_eq!(runtime.versions.len(), 2);
+    assert!(runtime
+        .versions
+        .iter()
+        .any(|version| version.runtime_variant_id == Some(llama_cpu_variant_id())));
+    assert!(runtime
+        .versions
+        .iter()
+        .any(|version| version.runtime_variant_id == Some(llama_cuda_variant_id())));
 }
 
 #[tokio::test]
@@ -1012,6 +1060,8 @@ fn resolve_binary_command_uses_selected_cuda_runtime_variant() {
     std::fs::create_dir_all(&cuda_dir).expect("create cuda dir");
     let cuda_server = cuda_dir.join("llama-server");
     std::fs::write(&cuda_server, []).expect("write cuda server");
+    std::fs::write(cuda_dir.join("libllama.so"), []).expect("write cuda libllama");
+    std::fs::write(cuda_dir.join("libggml.so"), []).expect("write cuda libggml");
 
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);

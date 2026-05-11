@@ -1549,6 +1549,22 @@ Worker rules:
   subdirectory routing. The first compile failed because the new focused test
   was added as a second `tests` module; merging it into the existing module
   fixed the issue.
+- 2026-05-11 managed-runtime variant-readiness slice: smallest useful vertical
+  slice was limited to variant-aware install validation, installed-version
+  upsert identity, focused readiness/state tests, and plan notes. Allowed write
+  set: `crates/inference/src/managed_runtime/definitions.rs`,
+  `llama_cpp_platform/*`, `operations.rs`, `operations/projection.rs`,
+  `operations/state_transitions.rs`, `operations_tests.rs`,
+  `neutral_contracts.rs`, and this plan directory. The slice preserves the
+  no-fallback/no-legacy rule by requiring the requested runtime variant's
+  files for readiness instead of reusing CPU readiness for CUDA.
+- `cargo test -p inference managed_runtime::llama_cpp_platform`,
+  `cargo test -p inference managed_runtime::operations`, and
+  `cargo test -p inference managed_runtime::neutral_contracts` passed after
+  validation became runtime-variant aware and same-release installed variants
+  stopped overwriting each other. Discovered follow-up: manual selection still
+  accepts only a version string, so same-version variant switching needs a
+  variant-aware command/API in a later slice.
 
 ### Traceability Links
 

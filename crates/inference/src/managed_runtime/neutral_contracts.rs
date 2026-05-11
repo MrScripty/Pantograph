@@ -218,7 +218,8 @@ mod tests {
 
     fn install_fake_runtime_files(dir: &Path, id: ManagedBinaryId) {
         std::fs::create_dir_all(dir).expect("create runtime dir");
-        for file_name in definition(id).validate_installation(dir) {
+        let runtime_variant_id = definition(id).default_runtime_variant_id();
+        for file_name in definition(id).validate_installation(dir, &runtime_variant_id) {
             std::fs::write(dir.join(&file_name), [])
                 .unwrap_or_else(|_| panic!("write fake runtime file {file_name}"));
         }

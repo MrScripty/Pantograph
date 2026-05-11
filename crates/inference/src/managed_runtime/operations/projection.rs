@@ -282,7 +282,7 @@ fn projected_installed_version_status(
             .as_deref()
             .map(|install_root| {
                 definition
-                    .validate_installation(Path::new(install_root))
+                    .validate_installation(Path::new(install_root), &runtime_variant_id)
                     .is_empty()
             })
             .unwrap_or(false),

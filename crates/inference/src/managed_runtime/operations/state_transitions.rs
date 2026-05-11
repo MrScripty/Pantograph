@@ -372,11 +372,10 @@ fn upsert_persisted_version(
     runtime: &mut ManagedRuntimePersistedRuntime,
     version: ManagedRuntimePersistedVersion,
 ) {
-    if let Some(existing) = runtime
-        .versions
-        .iter_mut()
-        .find(|existing| existing.version == version.version)
-    {
+    if let Some(existing) = runtime.versions.iter_mut().find(|existing| {
+        existing.version == version.version
+            && existing.runtime_variant_id == version.runtime_variant_id
+    }) {
         *existing = version;
         return;
     }

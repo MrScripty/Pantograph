@@ -34,7 +34,11 @@ pub(crate) trait LlamaPlatform: Sync {
         None
     }
     fn installed_server_name(&self) -> &'static str;
-    fn validate_installation(&self, binaries_dir: &Path) -> Vec<String>;
+    fn validate_installation(
+        &self,
+        binaries_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
+    ) -> Vec<String>;
     fn resolve_command(
         &self,
         binaries_dir: &Path,

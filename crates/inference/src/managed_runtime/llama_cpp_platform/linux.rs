@@ -38,18 +38,29 @@ impl LlamaPlatform for LinuxPlatform {
             .then_some("cuda")
     }
 
-    fn validate_installation(&self, binaries_dir: &Path) -> Vec<String> {
-        let mut missing = Vec::new();
-        if !binaries_dir.join(self.installed_server_name()).exists() {
-            missing.push(self.installed_server_name().to_string());
+    fn validate_installation(
+        &self,
+        binaries_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
+    ) -> Vec<String> {
+        if runtime_variant_id.as_str() == "llama_cpp.cuda" {
+            return validate_required_files(
+                binaries_dir,
+                &["cuda/llama-server", "cuda/libllama.so", "cuda/libggml.so"],
+            );
         }
-        if !binaries_dir.join("libllama.so").exists() {
-            missing.push("libllama.so".to_string());
+
+        if runtime_variant_id.as_str() != "llama_cpp.cpu" {
+            return vec![format!(
+                "unsupported llama.cpp runtime variant '{}'",
+                runtime_variant_id
+            )];
         }
-        if !binaries_dir.join("libggml.so").exists() {
-            missing.push("libggml.so".to_string());
-        }
-        missing
+
+        validate_required_files(
+            binaries_dir,
+            &[self.installed_server_name(), "libllama.so", "libggml.so"],
+        )
     }
 
     fn resolve_command(
@@ -121,6 +132,14 @@ impl LlamaPlatform for LinuxPlatform {
     }
 }
 
+fn validate_required_files(binaries_dir: &Path, required_files: &[&str]) -> Vec<String> {
+    required_files
+        .iter()
+        .filter(|relative_path| !binaries_dir.join(relative_path).exists())
+        .map(|relative_path| (*relative_path).to_string())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use crate::DeviceResolutionDiagnosticCode;
@@ -169,6 +188,22 @@ mod tests {
         );
         assert_eq!(requested_device, None);
         assert!(missing_path.ends_with("cuda/llama-server"));
+    }
+
+    #[test]
+    fn validate_installation_checks_selected_cuda_variant_files() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let cpu_server = temp_dir.path().join(PLATFORM.installed_server_name());
+        std::fs::write(&cpu_server, []).expect("write cpu server");
+        std::fs::write(temp_dir.path().join("libllama.so"), []).expect("write cpu libllama");
+        std::fs::write(temp_dir.path().join("libggml.so"), []).expect("write cpu libggml");
+
+        let missing =
+            PLATFORM.validate_installation(temp_dir.path(), &runtime_variant_id("llama_cpp.cuda"));
+
+        assert!(missing.contains(&"cuda/llama-server".to_string()));
+        assert!(missing.contains(&"cuda/libllama.so".to_string()));
+        assert!(missing.contains(&"cuda/libggml.so".to_string()));
     }
 
     #[test]

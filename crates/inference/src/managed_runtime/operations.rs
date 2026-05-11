@@ -160,7 +160,8 @@ pub fn binary_capability(
         });
     }
 
-    let missing_files = definition.validate_installation(&install_dir);
+    let missing_files =
+        definition.validate_installation(&install_dir, &definition.default_runtime_variant_id());
     let install_state = if missing_files.is_empty() {
         ManagedBinaryInstallState::Installed
     } else {
@@ -723,7 +724,7 @@ where
         },
     )?;
 
-    let missing = definition.validate_installation(&staging_dir);
+    let missing = definition.validate_installation(&staging_dir, &runtime_variant_id);
     if let Some(first_missing) = missing.first() {
         let _ = fs::remove_dir_all(&staging_dir);
         let error = format!(
@@ -903,7 +904,7 @@ pub fn resolve_binary_command(
 
     let target = resolve_runtime_install_target(app_data_dir, id)
         .map_err(ManagedRuntimeCommandResolutionError::state)?;
-    let missing = definition.validate_installation(&target.install_dir);
+    let missing = definition.validate_installation(&target.install_dir, &target.runtime_variant_id);
     if let Some(first_missing) = missing.first() {
         return Err(ManagedRuntimeCommandResolutionError::MissingRuntimeFiles {
             runtime_id: id,

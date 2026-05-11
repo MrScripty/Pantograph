@@ -25,7 +25,11 @@ pub(crate) trait ManagedBinaryDefinition: Sync {
     fn catalog_runtime_variants(&self) -> Vec<ManagedRuntimeVariantDefinition>;
     fn platform_key(&self) -> &'static str;
     fn executable_name(&self) -> &'static str;
-    fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
+    fn validate_installation(
+        &self,
+        install_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
+    ) -> Vec<String>;
     fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String>;
     fn resolve_command(
         &self,
@@ -89,8 +93,12 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
         current_llama_platform().installed_server_name()
     }
 
-    fn validate_installation(&self, install_dir: &Path) -> Vec<String> {
-        current_llama_platform().validate_installation(install_dir)
+    fn validate_installation(
+        &self,
+        install_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
+    ) -> Vec<String> {
+        current_llama_platform().validate_installation(install_dir, runtime_variant_id)
     }
 
     fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String> {

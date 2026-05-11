@@ -27,7 +27,18 @@ impl LlamaPlatform for MacOsX64Platform {
         &["llama-server"]
     }
 
-    fn validate_installation(&self, binaries_dir: &Path) -> Vec<String> {
+    fn validate_installation(
+        &self,
+        binaries_dir: &Path,
+        runtime_variant_id: &RuntimeVariantId,
+    ) -> Vec<String> {
+        if runtime_variant_id.as_str() != "llama_cpp.cpu" {
+            return vec![format!(
+                "unsupported llama.cpp runtime variant '{}'",
+                runtime_variant_id
+            )];
+        }
+
         let mut missing = Vec::new();
         if !binaries_dir.join(self.installed_server_name()).exists() {
             missing.push(self.installed_server_name().to_string());
