@@ -562,6 +562,16 @@ Update during implementation:
   passed:
   `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding selected runtime variant as a
+  backend-owned run-list facet and diagnostics comparison filter. Ledger facets,
+  workflow-service contract fixtures, TypeScript DTOs, and Diagnostics page
+  presenters now use `selected_runtime_variant_id` directly, without splitting
+  runtime ids or parsing scheduler payload JSON. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+  `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+  `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1013,6 +1023,13 @@ Worker rules:
   `npm run typecheck`, and `git diff --check` passed after scheduler run-list
   runtime placement labels and search began using typed
   `selected_runtime_variant_id` without adding a new frontend test platform.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+  `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+  `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after run-list facets and
+  diagnostics comparison controls began exposing typed
+  `selected_runtime_variant_id`.
 
 ### Traceability Links
 

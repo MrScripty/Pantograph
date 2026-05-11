@@ -51,6 +51,7 @@ function createRunDetail(): RunDetailProjectionRecord {
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
     selected_runtime_id: 'runtime-a',
+    selected_runtime_variant_id: 'runtime-a/cuda',
     selected_backend_key: 'llama_cpp',
     selected_model_id: 'pumas://models/tiny-gguf',
     selected_task_id: 'text_generation',
@@ -99,6 +100,7 @@ function createRunListPeer(overrides: Partial<RunListProjectionRecord>): RunList
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
     selected_runtime_id: 'runtime-a',
+    selected_runtime_variant_id: 'runtime-a/cuda',
     selected_backend_key: 'llama_cpp',
     selected_model_id: 'pumas://models/tiny-gguf',
     selected_task_id: 'text_generation',
@@ -256,6 +258,7 @@ test('buildDiagnosticsFactRows uses projection fields without ledger parsing', (
   assert.equal(rows.find((row) => row.label === 'Queue Position')?.value, '1');
   assert.equal(rows.find((row) => row.label === 'Execution Session')?.value, 'exec-session-a');
   assert.equal(rows.find((row) => row.label === 'Selected Runtime')?.value, 'runtime-a');
+  assert.equal(rows.find((row) => row.label === 'Selected Runtime Variant')?.value, 'runtime-a/cuda');
   assert.equal(rows.find((row) => row.label === 'Selected Backend')?.value, 'llama_cpp');
   assert.equal(
     rows.find((row) => row.label === 'Selected Model')?.value,
@@ -286,6 +289,7 @@ test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', ()
       scheduler_policy_id: 'policy-a',
       retention_policy_id: 'retention-b',
       selected_runtime_id: 'runtime-a',
+      selected_runtime_variant_id: 'runtime-a/cuda',
       selected_backend_key: 'llama_cpp',
       selected_device_class: 'cuda',
       selected_device_id: 'device-b',
@@ -302,6 +306,7 @@ test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', ()
       scheduler_policy_id: 'policy-b',
       retention_policy_id: 'retention-a',
       selected_runtime_id: 'runtime-b',
+      selected_runtime_variant_id: 'runtime-b/metal',
       selected_backend_key: 'pytorch',
       selected_device_class: 'metal',
       selected_device_id: 'device-a',
@@ -325,6 +330,7 @@ test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', ()
   assert.equal(summary.rows.find((row) => row.label === 'Scheduler Policy')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Retention Policy')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime')?.count, 2);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime Variant')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Backend')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Device Class')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Device')?.count, 2);
@@ -363,6 +369,8 @@ test('buildDiagnosticsFacetSummary prefers backend projection facets when provid
     { facet_kind: 'retention_policy', facet_value: 'retention-a', run_count: 15 },
     { facet_kind: 'selected_runtime', facet_value: 'runtime-a', run_count: 14 },
     { facet_kind: 'selected_runtime', facet_value: 'runtime-b', run_count: 1 },
+    { facet_kind: 'selected_runtime_variant', facet_value: 'runtime-a/cuda', run_count: 13 },
+    { facet_kind: 'selected_runtime_variant', facet_value: 'runtime-b/metal', run_count: 2 },
     { facet_kind: 'selected_backend', facet_value: 'llama_cpp', run_count: 12 },
     { facet_kind: 'selected_backend', facet_value: 'pytorch', run_count: 3 },
     { facet_kind: 'selected_device_class', facet_value: 'cuda', run_count: 13 },
@@ -376,6 +384,8 @@ test('buildDiagnosticsFacetSummary prefers backend projection facets when provid
   assert.equal(summary.rows.find((row) => row.label === 'Status')?.total, 15);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime')?.count, 14);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime')?.total, 15);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime Variant')?.count, 13);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime Variant')?.total, 15);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Backend')?.count, 12);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Backend')?.total, 15);
   assert.equal(summary.rows.find((row) => row.label === 'Selected Device Class')?.count, 13);
@@ -502,6 +512,7 @@ test('diagnostics comparison filters expose available projection values', () => 
       client_session_id: null,
       retention_policy_id: null,
       selected_runtime_id: null,
+      selected_runtime_variant_id: null,
       selected_backend_key: null,
       selected_device_class: null,
       selected_device_id: null,
@@ -516,6 +527,7 @@ test('diagnostics comparison filters expose available projection values', () => 
   assert.deepEqual(options.schedulerPolicies, ['policy-a', 'policy-b']);
   assert.deepEqual(options.retentionPolicies, ['retention-a', 'Unassigned']);
   assert.deepEqual(options.selectedRuntimes, ['runtime-a', 'Unassigned']);
+  assert.deepEqual(options.selectedRuntimeVariants, ['runtime-a/cuda', 'Unassigned']);
   assert.deepEqual(options.selectedBackends, ['llama_cpp', 'Unassigned']);
   assert.deepEqual(options.selectedDeviceClasses, ['cuda', 'Unassigned']);
   assert.deepEqual(options.selectedDevices, ['device-a', 'Unassigned']);
@@ -540,6 +552,7 @@ test('diagnostics comparison filters keep selected run and filter peer rows', ()
         status: 'completed',
         scheduler_policy_id: 'policy-b',
         selected_runtime_id: 'runtime-b',
+        selected_runtime_variant_id: 'runtime-b/metal',
         selected_backend_key: 'pytorch',
         selected_device_class: 'metal',
       }),
@@ -551,6 +564,7 @@ test('diagnostics comparison filters keep selected run and filter peer rows', ()
       status: 'completed',
       schedulerPolicy: 'policy-b',
       selectedRuntime: 'runtime-a',
+      selectedRuntimeVariant: 'runtime-a/cuda',
       selectedBackend: 'llama_cpp',
       selectedDeviceClass: 'cuda',
       acceptedDate: '1970-01-02',

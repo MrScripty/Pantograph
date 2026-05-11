@@ -1887,6 +1887,43 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: runtime-variant-specific facets or query filters
     remain a separate backend/frontend projection slice; this slice does not
     overload the existing selected-runtime filter with variant values.
+- 2026-05-10 slice: diagnostics selected runtime variant comparison facet.
+  - Smallest useful vertical slice: expose `selected_runtime_variant_id` as a
+    run-list facet, include it in workflow-service/frontend contract fixtures,
+    and add diagnostics comparison fact/filter rendering from typed projection
+    fields.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-workflow-service/tests/contract.rs`,
+    `crates/pantograph-workflow-service/tests/fixtures/run_projection_contract.json`,
+    `src/services/diagnostics/types.ts`,
+    `src/services/diagnostics/README.md`,
+    `src/components/workbench/DiagnosticsPage.svelte`,
+    `src/components/workbench/diagnosticsPagePresenters.ts`,
+    `src/components/workbench/diagnosticsPagePresenters.test.ts`,
+    `src/components/workbench/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: the facet and comparison controls read
+    `selected_runtime_variant_id` directly from materialized projection rows.
+    They do not split runtime ids, infer from selected backend keys, derive
+    from device ids/classes, parse backend config strings, or inspect
+    scheduler payload JSON.
+  - Standards/blast-radius gate for diagnostics comparison: the backend change
+    is an additive serde facet enum value over an existing nullable projection
+    column; no schema version, generated file, lockfile, dependency, polling,
+    worker, runtime execution, or saved workflow files changed. Frontend
+    coverage remains in existing Node presenter tests with accessible Svelte
+    select labels.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+    `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+    `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: scheduler run-list query DTOs still do not accept
+    `selected_runtime_variant_id` as a backend-side filter; add that only as a
+    separate query/filter slice.
 
 **Verification:**
 

@@ -66,6 +66,9 @@ panel because no active TypeScript boundary consumes them.
 - Run-list facets include selected backend separately from selected runtime so
   consumers can compare backend placement without inferring backend choice from
   runtime ids.
+- Run-list facets include selected runtime variant separately from selected
+  runtime so consumers can compare backend-owned variants without splitting or
+  parsing runtime ids.
 - Run-list and run-detail DTOs carry scheduler-selected runtime, device class,
   runtime variant, device id, and network-node fields when the backend has
   placement facts. Consumers should use those typed fields and facets for
@@ -116,6 +119,9 @@ panel because no active TypeScript boundary consumes them.
 - Diagnostics comparison controls include selected backend as its own typed
   filter so backend placement can be compared without parsing scheduler
   payload JSON or runtime ids.
+- Diagnostics comparison controls include selected runtime variant as its own
+  typed filter so variant placement can be compared without parsing scheduler
+  payload JSON, runtime ids, backend keys, or device ids/classes.
 
 ## Revisit Triggers
 - Rust-to-TypeScript DTO generation replaces manual interface mirrors.

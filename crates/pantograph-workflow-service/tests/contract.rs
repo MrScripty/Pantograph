@@ -912,6 +912,11 @@ fn workflow_run_list_query_contract_snapshot() {
                 facet_value: "llama_cpp".to_string(),
                 run_count: 1,
             },
+            RunListFacetRecord {
+                facet_kind: RunListFacetKind::SelectedRuntimeVariant,
+                facet_value: "llama_cpp.cuda".to_string(),
+                run_count: 1,
+            },
         ],
         projection_state: ProjectionStateRecord {
             projection_name: "run_list".to_string(),
@@ -1008,6 +1013,10 @@ fn workflow_run_list_query_contract_snapshot() {
         }, {
             "facet_kind": "selected_runtime",
             "facet_value": "llama_cpp",
+            "run_count": 1
+        }, {
+            "facet_kind": "selected_runtime_variant",
+            "facet_value": "llama_cpp.cuda",
             "run_count": 1
         }],
         "projection_state": {

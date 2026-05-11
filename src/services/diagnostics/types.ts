@@ -155,6 +155,7 @@ export type RunListFacetKind =
   | 'scheduler_policy'
   | 'retention_policy'
   | 'selected_runtime'
+  | 'selected_runtime_variant'
   | 'selected_backend'
   | 'selected_device_class'
   | 'selected_device'

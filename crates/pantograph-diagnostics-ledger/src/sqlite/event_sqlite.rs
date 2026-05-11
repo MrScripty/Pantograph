@@ -623,6 +623,13 @@ pub(super) fn query_run_list_facets(
     query_run_list_facet(
         ledger,
         &query,
+        RunListFacetKind::SelectedRuntimeVariant,
+        "COALESCE(selected_runtime_variant_id, 'Unassigned')",
+        &mut facets,
+    )?;
+    query_run_list_facet(
+        ledger,
+        &query,
         RunListFacetKind::SelectedBackend,
         "COALESCE(selected_backend_key, 'Unassigned')",
         &mut facets,

@@ -15,6 +15,7 @@
         "scheduler_policy_id": "session_fifo_v1",
         "retention_policy_id": "standard-local-v1",
         "selected_runtime_id": "llama_cpp",
+        "selected_runtime_variant_id": "llama_cpp.cuda",
         "selected_backend_key": "llama_cpp",
         "selected_model_id": "pumas://models/tiny-gguf",
         "selected_task_id": "text_generation",
@@ -59,6 +60,11 @@
         "facet_kind": "selected_runtime",
         "facet_value": "llama_cpp",
         "run_count": 1
+      },
+      {
+        "facet_kind": "selected_runtime_variant",
+        "facet_value": "llama_cpp.cuda",
+        "run_count": 1
       }
     ],
     "projection_state": {
@@ -85,6 +91,7 @@
       "scheduler_policy_id": "session_fifo_v1",
       "retention_policy_id": "standard-local-v1",
       "selected_runtime_id": "llama_cpp",
+      "selected_runtime_variant_id": "llama_cpp.cuda",
       "selected_backend_key": "llama_cpp",
       "selected_model_id": "pumas://models/tiny-gguf",
       "selected_task_id": "text_generation",

@@ -885,6 +885,14 @@ fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
         run.selected_runtime_variant_id.as_deref(),
         Some("llama_cpp.cuda")
     );
+    let facets = ledger
+        .query_run_list_facets(RunListProjectionQuery::default())
+        .expect("run list facets load");
+    assert!(facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::SelectedRuntimeVariant
+            && facet.facet_value == "llama_cpp.cuda"
+            && facet.run_count == 1
+    }));
     assert_eq!(run.latest_error_severity, None);
     assert_eq!(run.latest_error_phase, None);
     assert_eq!(run.latest_error_code, None);

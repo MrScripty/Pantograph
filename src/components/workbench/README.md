@@ -180,9 +180,10 @@ transient UI state without becoming backend scheduler policy.
   run-list projections, preferring backend-owned run-list facet counts when
   present. They must not parse diagnostic event payloads or depend on sampled
   page rows for comparison totals.
-- Diagnostics comparison filters and facets use typed selected runtime, device,
-  and network-node projection fields when present. Components must not recover
-  placement context from scheduler payload JSON.
+- Diagnostics comparison filters and facets use typed selected runtime,
+  runtime variant, backend, device, and network-node projection fields when
+  present. Components must not recover placement context from scheduler payload
+  JSON.
 - Network local-node summaries must render only API-reported local facts and
   peer records. They must not synthesize future Iroh state.
 - Network selected-run placement rows must come from local status placement
