@@ -526,6 +526,20 @@ Update during implementation:
   `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
   `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by carrying backend-owned
+  `selected_runtime_variant_id` from workflow technical-fit decisions into
+  scheduler model lifecycle diagnostic payloads and post-preflight reservation
+  release payloads. Early admission/reservation-created events stay
+  variant-free until technical fit provides the selected variant; the slice
+  does not infer variants from runtime ids, backend keys, device facts, or raw
+  payload JSON. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+  `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+  and `git diff --check`. Discovered follow-up:
+  `cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution`
+  still fails at its Library usage projection assertion with zero assets; this
+  is recorded as a separate projection/test-fragility issue.
 
 ## Commit Cadence Notes
 

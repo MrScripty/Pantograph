@@ -1787,6 +1787,46 @@ typed diagnostic and the canonical design is fixed.
     backend-owned source-of-truth slice; diagnostics comparison can already use
     selected-backend facets, and scheduler/run-list queries now support
     server-side selected-backend filtering.
+- 2026-05-10 slice: scheduler lifecycle selected runtime variant payload.
+  - Smallest useful vertical slice: carry
+    `WorkflowTechnicalFitDecision.selected_runtime_variant_id` into scheduler
+    model lifecycle diagnostic payloads and post-preflight runtime-slot
+    reservation release payloads.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_runtime.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_runtime_load_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: selected runtime variant is copied only
+    from backend-owned technical-fit decisions after runtime preflight. The
+    slice does not derive variants from runtime ids, selected backend keys,
+    device ids/classes, runtime settings, or scheduler payload JSON. Early
+    admission/reservation-created events remain variant-free when technical fit
+    has not supplied a selected variant yet.
+  - Standards/blast-radius gate for ledger/workflow-service diagnostic
+    payloads: this is additive serde payload metadata with `None` omitted from
+    JSON, no projection schema, generated file, lockfile, dependency,
+    frontend, worker, polling, or workflow fixture changes; lifecycle ownership
+    stays in workflow-service runtime preflight/load composition.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+    `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+    and `git diff --check`.
+  - Discovered issue retained for follow-up: broader verification with
+    `cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution`
+    still fails at the existing Library usage projection assertion
+    (`library_usage.assets.len()` is `0` instead of `1`). The failure remained
+    after this slice's selected-variant assertions were moved out of that test,
+    so it is recorded as a separate Library usage projection/test fragility
+    investigation rather than folded into this runtime-variant payload slice.
+  - Remaining follow-up: diagnostics run-list/run-detail projections still
+    need a durable selected-runtime-variant column and frontend typed DTOs
+    before run inspection can filter or render selected runtime variant without
+    parsing event payload JSON.
 
 **Verification:**
 

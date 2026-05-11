@@ -11,6 +11,7 @@ pub(super) struct WorkflowRuntimeLoadLifecycleContext<'a> {
     pub(super) workflow_run_id: &'a str,
     pub(super) workflow_semantic_version: &'a str,
     pub(super) selected_runtime_id: Option<&'a str>,
+    pub(super) selected_runtime_variant_id: Option<&'a str>,
     pub(super) required_backends: &'a [String],
     pub(super) required_models: &'a [String],
 }
@@ -78,6 +79,7 @@ impl WorkflowService {
                 workflow_run_id: context.workflow_run_id,
                 workflow_semantic_version: context.workflow_semantic_version,
                 selected_runtime_id: context.selected_runtime_id,
+                selected_runtime_variant_id: context.selected_runtime_variant_id,
                 required_backends: context.required_backends,
                 required_models: context.required_models,
                 transition,

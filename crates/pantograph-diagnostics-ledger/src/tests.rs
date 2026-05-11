@@ -850,6 +850,7 @@ fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
         SchedulerModelLifecycleChangedPayload {
             transition: SchedulerModelLifecycleTransition::LoadFailed,
             cache_state: Some(SchedulerModelCacheState::Failed),
+            selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
             reason: Some("model load failed".to_string()),
             duration_ms: Some(42),
             error: Some("runtime model load failed after diagnostic error".to_string()),
@@ -4809,6 +4810,7 @@ fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEv
             SchedulerModelLifecycleChangedPayload {
                 transition: SchedulerModelLifecycleTransition::LoadRequested,
                 cache_state: Some(SchedulerModelCacheState::CacheMiss),
+                selected_runtime_variant_id: None,
                 reason: Some("cache miss before queued run".to_string()),
                 duration_ms: None,
                 error: None,
@@ -4929,6 +4931,7 @@ fn sample_scheduler_reservation_event(workflow_run_id: &str) -> DiagnosticEventA
                 reservation_id: format!("reservation_{workflow_run_id}"),
                 resource_kind: SchedulerReservationResourceKind::RuntimeSlot,
                 selected_runtime_id: Some("llama_cpp".to_string()),
+                selected_runtime_variant_id: None,
                 selected_device_id: None,
                 selected_network_node_id: None,
                 reserved_model_ids: vec!["model-alpha".to_string()],

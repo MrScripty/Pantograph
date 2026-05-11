@@ -59,6 +59,7 @@ pub(super) struct SchedulerModelLifecycleEventRequest<'a> {
     pub(super) workflow_run_id: &'a str,
     pub(super) workflow_semantic_version: &'a str,
     pub(super) selected_runtime_id: Option<&'a str>,
+    pub(super) selected_runtime_variant_id: Option<&'a str>,
     pub(super) required_backends: &'a [String],
     pub(super) required_models: &'a [String],
     pub(super) transition: SchedulerModelLifecycleTransition,
@@ -70,6 +71,7 @@ pub(super) struct SchedulerModelLifecycleEventRequest<'a> {
 
 struct SchedulerReservationContext {
     selected_runtime_id: Option<String>,
+    selected_runtime_variant_id: Option<String>,
     reserved_model_ids: Vec<String>,
 }
 
@@ -394,6 +396,7 @@ impl WorkflowService {
             workflow_run_id: &workflow_run_id,
             workflow_semantic_version: &queued_workflow_semantic_version,
             selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
+            selected_runtime_variant_id: reservation_context.selected_runtime_variant_id.as_deref(),
             required_backends: &required_backends,
             required_models: &required_models,
         };
@@ -587,6 +590,9 @@ impl WorkflowService {
                     workflow_run_id: &workflow_run_id,
                     workflow_semantic_version: &queued_workflow_semantic_version,
                     selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
+                    selected_runtime_variant_id: reservation_context
+                        .selected_runtime_variant_id
+                        .as_deref(),
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadScheduled,
@@ -604,6 +610,9 @@ impl WorkflowService {
                     workflow_run_id: &workflow_run_id,
                     workflow_semantic_version: &queued_workflow_semantic_version,
                     selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
+                    selected_runtime_variant_id: reservation_context
+                        .selected_runtime_variant_id
+                        .as_deref(),
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadStarted,
@@ -630,6 +639,9 @@ impl WorkflowService {
                         workflow_run_id: &workflow_run_id,
                         workflow_semantic_version: &queued_workflow_semantic_version,
                         selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
+                        selected_runtime_variant_id: reservation_context
+                            .selected_runtime_variant_id
+                            .as_deref(),
                         required_backends: &required_backends,
                         required_models: &required_models,
                         transition: SchedulerModelLifecycleTransition::UnloadCompleted,
@@ -650,6 +662,9 @@ impl WorkflowService {
                                 workflow_semantic_version: &queued_workflow_semantic_version,
                                 selected_runtime_id: reservation_context
                                     .selected_runtime_id
+                                    .as_deref(),
+                                selected_runtime_variant_id: reservation_context
+                                    .selected_runtime_variant_id
                                     .as_deref(),
                                 required_backends: &required_backends,
                                 required_models: &required_models,
@@ -1260,6 +1275,9 @@ impl WorkflowService {
                             cache_state: Some(SchedulerModelCacheState::for_lifecycle_transition(
                                 request.transition,
                             )),
+                            selected_runtime_variant_id: request
+                                .selected_runtime_variant_id
+                                .map(str::to_string),
                             reason: request.reason.map(str::to_string),
                             duration_ms: request.duration_ms,
                             error: request.error.map(str::to_string),
@@ -1399,6 +1417,9 @@ impl WorkflowService {
                         reservation_id: scheduler_runtime_slot_reservation_id(&workflow_run_id),
                         resource_kind: SchedulerReservationResourceKind::RuntimeSlot,
                         selected_runtime_id: reservation_context.selected_runtime_id.clone(),
+                        selected_runtime_variant_id: reservation_context
+                            .selected_runtime_variant_id
+                            .clone(),
                         selected_device_id: None,
                         selected_network_node_id: None,
                         reserved_model_ids: reservation_context.reserved_model_ids.clone(),
@@ -1961,6 +1982,7 @@ fn scheduler_reservation_context(
 
     Ok(SchedulerReservationContext {
         selected_runtime_id,
+        selected_runtime_variant_id: None,
         reserved_model_ids,
     })
 }
@@ -1969,15 +1991,21 @@ fn apply_technical_fit_to_reservation_context(
     context: &mut SchedulerReservationContext,
     technical_fit_decision: Option<&WorkflowTechnicalFitDecision>,
 ) {
-    let Some(selected_runtime_id) = technical_fit_decision
+    if let Some(selected_runtime_id) = technical_fit_decision
         .and_then(|decision| decision.selected_runtime_id.as_deref())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-    else {
-        return;
-    };
+    {
+        context.selected_runtime_id = Some(selected_runtime_id.to_string());
+    }
 
-    context.selected_runtime_id = Some(selected_runtime_id.to_string());
+    if let Some(selected_runtime_variant_id) = technical_fit_decision
+        .and_then(|decision| decision.selected_runtime_variant_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        context.selected_runtime_variant_id = Some(selected_runtime_variant_id.to_string());
+    }
 }
 
 fn scheduler_runtime_slot_reservation_id(workflow_run_id: &WorkflowRunId) -> String {

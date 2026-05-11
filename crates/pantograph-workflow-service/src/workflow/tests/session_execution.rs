@@ -952,7 +952,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
 
 #[tokio::test]
 async fn workflow_execution_session_records_load_completed_only_with_runtime_proof() {
-    let host = MockWorkflowHost::with_runtime_load_proof(
+    let mut host = MockWorkflowHost::with_runtime_load_proof(
         8,
         1024,
         WorkflowSessionRuntimeLoadProof {
@@ -963,6 +963,26 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
             requested_model_active: true,
         },
     );
+    host.technical_fit_decision = Some(WorkflowTechnicalFitDecision {
+        selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+        selected_candidate_id: Some("candidate-managed-llama".to_string()),
+        selected_runtime_id: Some("managed-llama-slot".to_string()),
+        selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
+        selected_backend_key: Some("llama_cpp".to_string()),
+        selected_model_id: Some("model-a".to_string()),
+        selected_device_class: None,
+        selected_device_id: None,
+        resource_estimate: None,
+        observed_throughput_hint: None,
+        device_diagnostics: Vec::new(),
+        reasons: vec![WorkflowTechnicalFitReason::new(
+            WorkflowTechnicalFitReasonCode::RuntimeRequirements,
+            Some("candidate-managed-llama"),
+        )],
+        compatibility_report: None,
+        compatibility_issue_count: 0,
+        compatibility_issues: Vec::new(),
+    });
     let service = WorkflowService::with_max_sessions(2)
         .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
 
@@ -1053,6 +1073,30 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
     assert!(load_completed
         .payload_json
         .contains("\"reason\":\"runtime admission proved requested model active\""));
+    assert!(lifecycle_events.iter().all(|event| event
+        .payload_json
+        .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\"")));
+    let reservation_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerReservationChanged
+                && event.workflow_run_id.as_ref().map(|id| id.as_str())
+                    == Some(response.workflow_run_id.as_str())
+        })
+        .collect::<Vec<_>>();
+    assert!(reservation_events[0]
+        .payload_json
+        .contains("\"transition\":\"created\""));
+    assert!(!reservation_events[0]
+        .payload_json
+        .contains("\"selected_runtime_variant_id\""));
+    assert!(reservation_events[1]
+        .payload_json
+        .contains("\"transition\":\"released\""));
+    assert!(reservation_events[1]
+        .payload_json
+        .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\""));
 }
 
 #[tokio::test]

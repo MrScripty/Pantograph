@@ -548,6 +548,8 @@ pub struct SchedulerReservationChangedPayload {
     pub resource_kind: SchedulerReservationResourceKind,
     #[serde(default)]
     pub selected_runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_runtime_variant_id: Option<String>,
     #[serde(default)]
     pub selected_device_id: Option<String>,
     #[serde(default)]
@@ -563,6 +565,11 @@ impl SchedulerReservationChangedPayload {
         validate_optional_text(
             "selected_runtime_id",
             self.selected_runtime_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_runtime_variant_id",
+            self.selected_runtime_variant_id.as_deref(),
             MAX_ID_LEN,
         )?;
         validate_optional_text(
@@ -685,6 +692,8 @@ pub struct SchedulerModelLifecycleChangedPayload {
     pub transition: SchedulerModelLifecycleTransition,
     #[serde(default)]
     pub cache_state: Option<SchedulerModelCacheState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_runtime_variant_id: Option<String>,
     pub reason: Option<String>,
     pub duration_ms: Option<u64>,
     pub error: Option<String>,
@@ -695,6 +704,11 @@ pub struct SchedulerModelLifecycleChangedPayload {
 impl SchedulerModelLifecycleChangedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_optional_text("model_lifecycle_reason", self.reason.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "selected_runtime_variant_id",
+            self.selected_runtime_variant_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text("model_lifecycle_error", self.error.as_deref(), MAX_JSON_LEN)?;
         validate_optional_text(
             "canonical_error_event_id",
