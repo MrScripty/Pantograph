@@ -1744,6 +1744,55 @@ Worker rules:
   Deviation: this was a plan reconciliation slice because previous Milestone 5
   slices had already added `BackendCapabilityFacts.runtime_variants`,
   llama.cpp/PyTorch/Candle adapter facts, and vLLM/MLX roadmap facts.
+- 2026-05-11 shared allowed-root command path validation slice: smallest
+  useful vertical slice was limited to extracting the existing node-engine path
+  validator into `pantograph-path-security`, routing node-engine/workflow
+  callers through it, and validating managed-runtime selected install roots,
+  executable paths, and working directories before command handoff. Allowed
+  write set: workspace Cargo manifests/lockfile,
+  `crates/pantograph-path-security/`, `crates/node-engine/src/path_validation.rs`,
+  managed-runtime command/path tests, and Milestone 5 plan notes.
+- The slice preserves the no-fallback/no-legacy rule because escaped selected
+  install roots now fail with typed path diagnostics instead of being treated
+  as trusted executable state. Verification passed:
+  `cargo test -p pantograph-path-security`,
+  `cargo test -p node-engine path_validation`,
+  `cargo test -p inference resolve_binary_command`,
+  `cargo test -p inference managed_runtime_snapshot`,
+  `cargo test -p pantograph-workflow-service persistence`,
+  `cargo test -p workflow-nodes storage`,
+  `cargo test -p inference managed_runtime::operations`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Deviations: initial
+  parallel Cargo test commands serialized on Cargo locks; an initial projection
+  compile needed `app_data_dir` threaded into installed-version projection.
+- 2026-05-11 managed runtime dynamic-library path validation slice: smallest
+  useful vertical slice was limited to removing inherited host library-search
+  tails from managed llama.cpp command env overrides and validating owned
+  dynamic-library path values before handoff. The slice preserves the
+  no-fallback/no-legacy rule because unvalidated `LD_LIBRARY_PATH`,
+  `DYLD_LIBRARY_PATH`, and Windows `PATH` tails are no longer retained as
+  alternate runtime library search locations. Verification passed:
+  `cargo test -p inference managed_runtime::paths`,
+  `cargo test -p inference managed_runtime::llama_cpp_platform::linux::tests`,
+  `cargo test -p inference resolve_binary_command`, and
+  `cargo test -p inference runtime_sidecar_command_projection_preserves_resolved_command_facts`.
+  Deviation: the broader neutral-contract check exposed a stale fixture that
+  still used the retired `app_data/runtimes` root; the fixture was corrected in
+  a focused follow-up commit.
+- 2026-05-11 managed runtime pid-file path validation slice: smallest useful
+  vertical slice was limited to validating extracted managed-runtime
+  `--pid-file` paths against `app_data_dir`, resolving relative paths under
+  that root, and rejecting escaped absolute pid-file paths with typed path
+  diagnostics. Allowed write set: managed-runtime command contracts,
+  operations, neutral projection tests, and Milestone 5 plan notes. The slice
+  preserves the no-fallback/no-legacy rule because it does not synthesize an
+  alternate pid-file location when validation fails.
+- Verification passed:
+  `cargo test -p inference resolve_binary_command`,
+  `cargo test -p inference runtime_sidecar_command_projection_preserves_resolved_command_facts`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Remaining follow-up:
+  Pumas package paths, artifact paths, and worker-visible paths still need
+  shared allowed-root validation before filesystem or subprocess access.
 
 ### Traceability Links
 
