@@ -744,6 +744,19 @@ Update during implementation:
   `cargo test -p inference device_contracts`,
   `cargo test -p inference --features backend-pytorch test_pytorch_worker_load_envelope_rejects_auto_device_field`,
   `cargo fmt --all -- --check`, and `git diff --check`.
+- 2026-05-11: Continued Milestone 5 by replacing the PyTorch audio
+  transcription worker request's raw `device: "auto"` field with omitted
+  canonical device intent. Rust now types the optional audio worker device as
+  `Option<InferenceDeviceId>`, the audio fixture omits the field, and the
+  Python worker contract maps omission to backend-local `auto` while rejecting
+  explicit `"auto"` or legacy ids such as `CUDA0` when a device field is
+  present. Verification passed:
+  `cargo test -p inference --features backend-pytorch audio_transcription`,
+  `cargo test -p inference --features backend-pytorch test_python_worker_contract_projects_task_profile_loader`,
+  `cargo test -p inference --features backend-pytorch test_python_worker_contract_tolerates_additive_load_fields`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Verification
+  deviation fixed during the slice: one attempted cargo command used two test
+  filters and was rerun as separate commands.
 
 ## Commit Cadence Notes
 
@@ -1070,6 +1083,10 @@ Worker rules:
 - Device-contract parser tests now prove `auto` is a reserved scheduler policy
   keyword, not a concrete `InferenceDeviceId`; the PyTorch worker load contract
   also rejects explicit `"auto"` in `payload.device`.
+- PyTorch audio transcription worker tests now prove the Rust envelope omits
+  auto device intent, rejects legacy/explicit-auto device fields, and the
+  Python worker contract applies the same rule before mapping omission to
+  backend-local `auto`.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

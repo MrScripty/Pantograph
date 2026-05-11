@@ -248,7 +248,8 @@ pub(super) struct PyTorchTruncateKvCacheResult {
 pub(super) struct PyTorchAudioTranscriptionRequest {
     pub model_path: String,
     pub audio_base64: String,
-    pub device: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<InferenceDeviceId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

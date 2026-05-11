@@ -1999,7 +1999,7 @@ impl PyTorchBackend {
             PyTorchAudioTranscriptionRequest {
                 model_path,
                 audio_base64,
-                device: "auto".to_string(),
+                device: None,
                 language: request
                     .language
                     .and_then(|value| (!value.trim().is_empty()).then_some(value)),

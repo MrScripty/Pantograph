@@ -2002,7 +2002,7 @@ fn test_pytorch_worker_audio_transcription_envelope_decodes_fixture() {
     assert_eq!(envelope.operation, PyTorchWorkerOperation::TranscribeAudio);
     assert_eq!(envelope.payload.model_path, "asr/example/tiny-whisper");
     assert_eq!(envelope.payload.audio_base64, "UklGRg==");
-    assert_eq!(envelope.payload.device, "auto");
+    assert!(envelope.payload.device.is_none());
     assert_eq!(envelope.payload.language.as_deref(), Some("en"));
     assert_eq!(envelope.payload.prompt.as_deref(), Some("Meeting notes"));
     assert_eq!(envelope.payload.task.as_deref(), Some("transcribe"));
@@ -2011,6 +2011,34 @@ fn test_pytorch_worker_audio_transcription_envelope_decodes_fixture() {
 
     PyTorchBackend::validate_audio_transcription_envelope(&envelope)
         .expect("audio transcription fixture should validate");
+}
+
+#[test]
+fn test_pytorch_worker_audio_transcription_envelope_rejects_legacy_device_id() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+    ))
+    .expect("decode worker audio transcription fixture");
+    value["payload"]["device"] = serde_json::json!("CUDA0");
+
+    let error =
+        serde_json::from_value::<PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>>(value)
+            .expect_err("legacy audio device id should fail contract decoding");
+    assert!(error.to_string().contains("invalid identifier shape"));
+}
+
+#[test]
+fn test_pytorch_worker_audio_transcription_envelope_rejects_auto_device_field() {
+    let mut value: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+    ))
+    .expect("decode worker audio transcription fixture");
+    value["payload"]["device"] = serde_json::json!("auto");
+
+    let error =
+        serde_json::from_value::<PyTorchWorkerEnvelope<PyTorchAudioTranscriptionRequest>>(value)
+            .expect_err("auto audio device should be omitted, not sent as a device id");
+    assert!(error.to_string().contains("reserved identifier"));
 }
 
 #[test]
@@ -2072,6 +2100,14 @@ fn test_python_worker_contract_projects_audio_transcription_fields() {
         );
         assert_eq!(
             kwargs
+                .get_item("device")
+                .expect("device key should exist")
+                .extract::<String>()
+                .expect("device should be a string"),
+            "auto"
+        );
+        assert_eq!(
+            kwargs
                 .get_item("language")
                 .expect("language key should exist")
                 .extract::<String>()
@@ -2101,7 +2137,6 @@ fn test_python_worker_contract_tolerates_additive_audio_transcription_fields() {
             "payload": {
                 "model_path": "/models/asr",
                 "audio_base64": " UklGRg== ",
-                "device": "auto",
                 "language": "en",
                 "future_payload_field": "ignored"
             }
@@ -2122,6 +2157,50 @@ fn test_python_worker_contract_tolerates_additive_audio_transcription_fields() {
                 .expect("audio payload should be a string"),
             "UklGRg=="
         );
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_audio_transcription_legacy_device() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+        ))
+        .expect("decode worker audio transcription fixture");
+        value["payload"]["device"] = serde_json::json!("CUDA0");
+
+        let error = module
+            .call_method1(
+                "transcribe_audio_kwargs_from_envelope",
+                (value.to_string(),),
+            )
+            .expect_err("legacy device should fail Python worker validation");
+        assert!(error
+            .to_string()
+            .contains("payload.device must be a canonical device id"));
+    });
+}
+
+#[test]
+fn test_python_worker_contract_rejects_audio_transcription_auto_device_field() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
+        ))
+        .expect("decode worker audio transcription fixture");
+        value["payload"]["device"] = serde_json::json!("auto");
+
+        let error = module
+            .call_method1(
+                "transcribe_audio_kwargs_from_envelope",
+                (value.to_string(),),
+            )
+            .expect_err("auto device should be omitted for Python worker validation");
+        assert!(error
+            .to_string()
+            .contains("payload.device must omit auto device intent"));
     });
 }
 
@@ -2708,7 +2787,7 @@ fn test_pytorch_audio_transcription_envelope_from_request_trims_audio_and_filter
     assert_eq!(envelope.operation, PyTorchWorkerOperation::TranscribeAudio);
     assert_eq!(envelope.payload.model_path, "openai/whisper-tiny");
     assert_eq!(envelope.payload.audio_base64, "UklGRg==");
-    assert_eq!(envelope.payload.device, "auto");
+    assert!(envelope.payload.device.is_none());
     assert!(envelope.payload.language.is_none());
     assert_eq!(envelope.payload.prompt.as_deref(), Some("Meeting notes"));
     assert_eq!(envelope.payload.task.as_deref(), Some("transcribe"));

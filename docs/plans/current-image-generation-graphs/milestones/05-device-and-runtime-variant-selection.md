@@ -2368,6 +2368,37 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: audio transcription worker requests still need their
     raw `"auto"` device field replaced with omitted/canonical device intent at
     the worker boundary.
+- 2026-05-11 slice: typed PyTorch audio transcription worker device contract.
+  - Smallest useful vertical slice: replace the audio transcription worker
+    request's raw `device: "auto"` field with `Option<InferenceDeviceId>` in
+    Rust, omit the device from the fixture and adapter-built envelope, and make
+    the Python worker contract reject explicit `"auto"` or legacy device ids
+    when a device field is present.
+  - Allowed write set:
+    `crates/inference/src/backend/pytorch_worker_contract.rs`,
+    `crates/inference/src/backend/pytorch.rs`,
+    `crates/inference/src/backend/pytorch_tests.rs`,
+    `crates/inference/tests/fixtures/pytorch_worker_contract/audio_transcription_request.json`,
+    `crates/inference/torch/worker_contract.py`, and this plan directory.
+  - No-fallback/no-legacy confirmation: canonical audio worker envelopes now
+    represent automatic placement by omitting `payload.device`; the Python
+    worker maps omission to backend-local `auto` only inside the worker adapter
+    and rejects explicit `"auto"`/`CUDA0` instead of normalizing them.
+  - Standards/blast-radius gate: PyTorch worker audio contract, fixture, and
+    worker-contract validation only; no generated DTOs, lockfiles, workflow
+    fixtures, frontend code, runtime startup policy, scheduler ranking, or ASR
+    runtime loading behavior changed.
+  - Verification passed:
+    `cargo test -p inference --features backend-pytorch audio_transcription`,
+    `cargo test -p inference --features backend-pytorch test_python_worker_contract_projects_task_profile_loader`,
+    `cargo test -p inference --features backend-pytorch test_python_worker_contract_tolerates_additive_load_fields`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation fixed during the slice: an attempted cargo command
+    passed two test filters and was rerun as separate commands.
+  - Remaining follow-up: Python mirrors the Rust device-id identifier shape in
+    worker-contract validation because no generated cross-language worker DTO
+    validator exists; the current slice covers the mirrored rule with focused
+    Rust/Python contract tests.
 
 **Verification:**
 
@@ -2462,6 +2493,10 @@ typed diagnostic and the canonical design is fixed.
 - Device-contract tests prove `auto` is reserved for scheduler policy and is
   rejected as a concrete `InferenceDeviceId`; PyTorch worker load tests reject
   explicit `"auto"` device fields.
+- PyTorch audio transcription worker tests prove auto device intent is omitted
+  in Rust envelopes, explicit `"auto"` and legacy ids fail contract decoding or
+  Python worker validation, and omission maps to backend-local `auto` only
+  inside the worker adapter.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

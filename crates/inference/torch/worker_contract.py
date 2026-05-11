@@ -24,6 +24,42 @@ SUPPORTED_TRANSFORMERS_LOADERS = {
 }
 
 
+def _is_canonical_device_id(value):
+    if not value or not value[0].isascii() or not value[0].islower():
+        return False
+    previous_was_separator = False
+    for ch in value[1:]:
+        allowed_separator = ch in "_-:"
+        if ch.isascii() and (ch.islower() or ch.isdigit()):
+            previous_was_separator = False
+            continue
+        if allowed_separator and not previous_was_separator:
+            previous_was_separator = True
+            continue
+        return False
+    return not previous_was_separator
+
+
+def _worker_device_or_auto(payload, context):
+    device = payload.get("device")
+    if device is None:
+        return "auto"
+    if not isinstance(device, str) or not device.strip():
+        raise ValueError(
+            f"PyTorch worker {context} payload.device must be a non-empty string"
+        )
+    device = device.strip()
+    if device == "auto":
+        raise ValueError(
+            f"PyTorch worker {context} payload.device must omit auto device intent"
+        )
+    if not _is_canonical_device_id(device):
+        raise ValueError(
+            f"PyTorch worker {context} payload.device must be a canonical device id"
+        )
+    return device
+
+
 def init_worker_kwargs_from_envelope(envelope):
     """Validate a Rust worker envelope and project it to init kwargs."""
     if isinstance(envelope, str):
@@ -101,7 +137,7 @@ def load_transformers_model_kwargs_from_envelope(envelope):
 
     return {
         "model_path": entry_path,
-        "device": payload.get("device") or "auto",
+        "device": _worker_device_or_auto(payload, "load"),
         "model_type": payload.get("model_type_hint"),
         "loader": loader,
         "trust_remote_code": bool(trust_policy.get("allow_remote_code", False)),
@@ -321,11 +357,7 @@ def transcribe_audio_kwargs_from_envelope(envelope):
             "PyTorch worker audio_transcription payload.audio_base64 must be a non-empty string"
         )
 
-    device = payload.get("device") or "auto"
-    if not isinstance(device, str) or not device.strip():
-        raise ValueError(
-            "PyTorch worker audio_transcription payload.device must be a non-empty string"
-        )
+    device = _worker_device_or_auto(payload, "audio_transcription")
 
     extra_options = payload.get("extra_options")
     if extra_options is not None:

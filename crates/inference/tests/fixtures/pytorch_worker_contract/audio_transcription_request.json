@@ -8,7 +8,6 @@
   "payload": {
     "model_path": "asr/example/tiny-whisper",
     "audio_base64": "UklGRg==",
-    "device": "auto",
     "language": "en",
     "prompt": "Meeting notes",
     "task": "transcribe",
