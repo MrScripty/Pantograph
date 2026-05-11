@@ -797,6 +797,41 @@ typed diagnostic and the canonical design is fixed.
     `cargo test -p pantograph-embedded-runtime workflow_graph_embedding_helpers_detect_embedding_and_llamacpp_nodes`,
     no-match search for `runtime_hint`/`runtimeHint` in
     `embedding_workflow.rs`, and `git diff --check`.
+- 2026-05-10 slice: node-engine dependency-preflight `runtime_hint` backend
+  preference removal.
+  - Smallest useful vertical slice: remove `runtime_hint`/`runtimeHint` from
+    node-engine dependency-preflight backend preference selection, update the
+    focused dependency request test, and update retired-node guidance to name
+    `backend_key`.
+  - Allowed write set:
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/core_executor.rs`,
+    `crates/node-engine/src/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: dependency preflight no longer treats
+    legacy runtime hints as backend preference input. Current backend keys,
+    package facts, or typed task/model inference drive preflight routing until
+    typed backend preference intent is wired.
+  - Standards/blast-radius gate: node-engine remains the host-agnostic node
+    execution owner; public inference request DTO shape is unchanged in this
+    slice; runtime lifecycle, persisted schema, frontend behavior, generated
+    files, feature flags, dependencies, lockfiles, path/resource access, and
+    worker execution are unchanged; test isolation uses focused node-engine
+    dependency-preflight tests.
+  - Discovered follow-up: `InferenceExecutionRequest.runtime_hint` remains a
+    public request field and multiple inference-node builders still parse it.
+    Removing that field is a broader contract replacement slice touching
+    inference DTO fixtures and node-engine request builders.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p node-engine --features inference-nodes test_build_model_dependency_request_ignores_legacy_runtime_hint`,
+    `cargo test -p node-engine --features inference-nodes test_build_model_dependency_request_uses_canonical_backend_key`,
+    `cargo test -p node-engine --features inference-nodes test_build_model_dependency_request_uses_canonical_llamacpp_hint`,
+    no-match search for `runtime_hint`/`runtimeHint` in
+    `core_executor/dependency_preflight.rs`, and `git diff --check`.
+  - Deviation: the first node-engine test commands omitted
+    `--features inference-nodes` and matched zero feature-gated tests. They
+    were rerun with the feature enabled.
 
 **Verification:**
 

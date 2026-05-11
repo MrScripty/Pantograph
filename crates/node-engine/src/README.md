@@ -191,9 +191,9 @@ use node_engine::core_executor::CoreNodeExecutor;
   not derive those summaries locally.
 - Canonical `llm-inference` routing may use resolved Pumas backend hints to
   choose the PyTorch/Transformers dependency preflight path when no explicit
-  `runtime_hint` or `backend_key` input is wired. This is factual preflight
-  routing only; runtime scheduling and admission policy remain outside
-  node-engine and inference.
+  `backend_key` input is wired. Legacy `runtime_hint` fields are not backend
+  preference inputs. This is factual preflight routing only; runtime scheduling
+  and admission policy remain outside node-engine and inference.
 - Workflow dependency input resolution carries package-facts context from
   `puma-lib` model-reference edges into canonical inference inputs, so existing
   Pumas model-ref connections can benefit from package-facts diagnostics without

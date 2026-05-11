@@ -302,8 +302,6 @@ pub(crate) fn preferred_backend_key(
         &[
             "backend_key",
             "backendKey",
-            "runtime_hint",
-            "runtimeHint",
             "recommended_backend",
             "recommendedBackend",
         ],
@@ -315,8 +313,6 @@ pub(crate) fn preferred_backend_key(
                 &[
                     "backend_key",
                     "backendKey",
-                    "runtime_hint",
-                    "runtimeHint",
                     "recommended_backend",
                     "recommendedBackend",
                 ],

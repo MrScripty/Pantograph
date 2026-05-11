@@ -269,6 +269,10 @@ Update during implementation:
 - 2026-05-10: Continued Milestone 5 by removing `runtime_hint` from
   embedded-runtime embedding workflow llama.cpp detection. Non-embedding
   llama.cpp inference detection now uses current backend/package facts.
+- 2026-05-10: Continued Milestone 5 by removing `runtime_hint` from node-engine
+  dependency-preflight backend preference selection. Node-engine preflight now
+  uses `backend_key`, package facts, or inferred task/model facts, and retired
+  inference node guidance points to `backend_key`.
 
 ## Commit Cadence Notes
 

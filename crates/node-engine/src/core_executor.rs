@@ -154,7 +154,7 @@ impl Default for CoreTaskExecutor {
 #[cfg(any(feature = "inference-nodes", feature = "pytorch-nodes"))]
 fn retired_inference_node_error(node_type: &str) -> Result<HashMap<String, serde_json::Value>> {
     Err(NodeEngineError::ExecutionFailed(format!(
-        "Retired inference node type '{node_type}' is no longer executable. Migrate this workflow to canonical llm-inference with task_kind, runtime_hint, and a Pumas model reference."
+        "Retired inference node type '{node_type}' is no longer executable. Migrate this workflow to canonical llm-inference with task_kind, backend_key, and a Pumas model reference."
     )))
 }
 

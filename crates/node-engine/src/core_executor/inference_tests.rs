@@ -3226,12 +3226,10 @@ fn test_build_model_dependency_request_uses_canonical_llamacpp_hint() {
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[test]
-fn test_build_model_dependency_request_uses_canonical_pytorch_hint() {
+fn test_build_model_dependency_request_ignores_legacy_runtime_hint() {
     let mut inputs = HashMap::new();
-    inputs.insert(
-        "runtime_hint".to_string(),
-        serde_json::json!("transformers_pytorch"),
-    );
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
 
     let request = build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
