@@ -45,6 +45,8 @@ pub enum ArtifactStoreError {
         expected: u64,
         actual: u64,
     },
+    #[error("artifact accounting overflow for {field}")]
+    ArtifactAccountingOverflow { field: &'static str },
     #[error("invalid byte range")]
     InvalidByteRange,
     #[error("artifact store io error: {0}")]
@@ -201,7 +203,7 @@ impl ArtifactStore {
             body_file_name(&artifact_id),
             unix_now_ms(),
         ));
-        self.cache_body_if_allowed(&artifact_id, request.body);
+        self.cache_body_if_allowed(&artifact_id, request.body)?;
         self.save()?;
         Ok(descriptor)
     }
@@ -508,6 +510,68 @@ mod tests {
         );
     }
 
+    #[test]
+    fn memory_cache_capacity_check_rejects_overflow() {
+        let temp = tempfile::tempdir().expect("temp artifact store");
+        let mut store = ArtifactStore::open(temp.path(), policy_with_large_cache())
+            .expect("open artifact store");
+        store.memory_cache_bytes = u64::MAX - 1;
+
+        store
+            .cache_body_if_allowed("artifact-cache-overflow", vec![1, 2])
+            .expect("overflowing cache capacity check skips cache insert");
+
+        assert!(!store.memory_cache.contains_key("artifact-cache-overflow"));
+        assert_eq!(store.memory_cache_bytes, u64::MAX - 1);
+    }
+
+    #[test]
+    fn stream_chunk_rejects_byte_length_overflow() {
+        let temp = tempfile::tempdir().expect("temp artifact store");
+        let mut store = ArtifactStore::open(temp.path(), policy_without_size_limits())
+            .expect("open artifact store");
+        store
+            .open_stream(ArtifactStreamOpenRequest {
+                artifact_id: Some("artifact-stream-overflow".to_string()),
+                payload_kind: ArtifactPayloadKind::GenericBinary,
+                media_type: "application/octet-stream".to_string(),
+                format: None,
+                attribution: ArtifactAttribution {
+                    workflow_run_id: "run-overflow".to_string(),
+                    workflow_id: None,
+                    workflow_version_id: None,
+                    node_id: None,
+                    port_id: None,
+                    model_id: None,
+                    runtime_id: None,
+                },
+                artifact_role: None,
+                parent_artifact_id: None,
+                revision_index: None,
+            })
+            .expect("open stream");
+        let entry = store
+            .entry_mut("artifact-stream-overflow")
+            .expect("stream entry");
+        let stream = entry.pending_stream.as_mut().expect("pending stream");
+        stream.byte_length = u64::MAX;
+
+        let error = store
+            .append_stream_chunk(ArtifactStreamChunkWriteRequest {
+                artifact_id: "artifact-stream-overflow".to_string(),
+                sequence: 0,
+                body: vec![1],
+            })
+            .expect_err("stream byte length overflow should fail");
+
+        assert!(matches!(
+            error,
+            ArtifactStoreError::ArtifactAccountingOverflow {
+                field: "stream.byte_length"
+            }
+        ));
+    }
+
     fn policy_with_delete_on_consume() -> ArtifactPolicy {
         ArtifactPolicy {
             policy_id: "test-policy".to_string(),
@@ -518,6 +582,32 @@ mod tests {
             max_single_artifact_bytes: Some(1024 * 1024),
             spill_threshold_bytes: Some(1024),
             delete_on_consume: true,
+        }
+    }
+
+    fn policy_with_large_cache() -> ArtifactPolicy {
+        ArtifactPolicy {
+            policy_id: "test-policy".to_string(),
+            policy_version: 1,
+            ttl_seconds: None,
+            max_disk_bytes: None,
+            max_memory_bytes: Some(u64::MAX),
+            max_single_artifact_bytes: Some(u64::MAX),
+            spill_threshold_bytes: Some(u64::MAX),
+            delete_on_consume: false,
+        }
+    }
+
+    fn policy_without_size_limits() -> ArtifactPolicy {
+        ArtifactPolicy {
+            policy_id: "test-policy".to_string(),
+            policy_version: 1,
+            ttl_seconds: None,
+            max_disk_bytes: None,
+            max_memory_bytes: None,
+            max_single_artifact_bytes: None,
+            spill_threshold_bytes: None,
+            delete_on_consume: false,
         }
     }
 

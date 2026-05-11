@@ -89,7 +89,11 @@ impl ArtifactStore {
             });
         }
         let chunk_len = request.body.len() as u64;
-        let total_len = current_length.saturating_add(chunk_len);
+        let total_len = current_length.checked_add(chunk_len).ok_or(
+            ArtifactStoreError::ArtifactAccountingOverflow {
+                field: "stream.byte_length",
+            },
+        )?;
         enforce_single_artifact_limit(&self.manifest.policy, total_len)?;
         self.enforce_disk_limit_for(&request.artifact_id, total_len)?;
 
@@ -109,7 +113,11 @@ impl ArtifactStore {
                     artifact_id: request.artifact_id.clone(),
                 })?;
         stream.byte_length = total_len;
-        stream.next_sequence += 1;
+        stream.next_sequence = stream.next_sequence.checked_add(1).ok_or(
+            ArtifactStoreError::ArtifactAccountingOverflow {
+                field: "stream.next_sequence",
+            },
+        )?;
         entry.descriptor.byte_length = Some(total_len);
         entry.descriptor.lifecycle_state = ArtifactLifecycleState::Streaming;
         let content_hash = format!("blake3:{}", blake3::hash(&request.body).to_hex());

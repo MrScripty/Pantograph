@@ -183,6 +183,14 @@ typed diagnostic and the canonical design is fixed.
   lengths, token limits, batch sizes, memory estimates, output-size
   calculations, and byte ranges that cross IPC, persisted, worker, or runtime
   boundaries.
+  - 2026-05-11 partial: artifact-store memory-cache accounting and streaming
+    chunk byte-length updates now use checked arithmetic. Cache capacity
+    overflow skips insertion without mutating counters, and stream byte-length
+    overflow returns typed `ArtifactStoreError::ArtifactAccountingOverflow`
+    projected through the workflow artifact API. Remaining numeric boundaries
+    include image dimensions, context/token/batch limits, memory estimates,
+    disk budget summation, artifact stats summation, byte-range projections,
+    and worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3038,6 +3046,38 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: Pumas package paths, artifact paths, and
     worker-visible paths still need shared allowed-root validation before
     filesystem or subprocess access.
+- 2026-05-11 slice: artifact-store checked byte accounting.
+  - Smallest useful vertical slice: replace unchecked or saturating
+    artifact-store memory-cache and streaming chunk byte accounting with
+    checked arithmetic and a typed `ArtifactStoreError::ArtifactAccountingOverflow`.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`,
+    `crates/pantograph-workflow-service/src/workflow/artifact_store/cache.rs`,
+    `crates/pantograph-workflow-service/src/workflow/artifact_store/stream.rs`,
+    `crates/pantograph-workflow-service/src/workflow/artifact_api.rs`, and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: overflow is rejected or skipped before
+    mutating artifact accounting. The slice does not clamp overflowed stream
+    byte lengths, preserve saturating totals as executable state, or infer
+    alternate artifact sizes.
+  - Standards/blast-radius gate: workflow artifact-store accounting and API
+    error projection only; no generated DTOs, frontend code, saved workflow
+    files, lockfiles, path roots, Pumas contracts, worker contracts, or runtime
+    scheduler policy changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service memory_cache_capacity_check_rejects_overflow`,
+    `cargo test -p pantograph-workflow-service stream_chunk_rejects_byte_length_overflow`,
+    `cargo test -p pantograph-workflow-service --test artifact_store`, and
+    `cargo test -p pantograph-workflow-service workflow::artifact_store`.
+  - Verification deviations fixed during the slice: the first focused compile
+    exposed that `artifact_api.rs` needed to project the new typed store error;
+    `ArtifactAccountingOverflow` now maps to `WorkflowServiceError::InvalidRequest`.
+    Focused Cargo tests were started in parallel and serialized on Cargo locks
+    before passing.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    dimensions, context/token/batch limits, memory estimates, disk budget
+    summation, artifact stats summation, byte-range projections, and
+    worker/runtime request fields.
 
 **Verification:**
 

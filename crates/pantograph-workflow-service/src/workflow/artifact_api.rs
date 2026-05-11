@@ -225,6 +225,7 @@ fn artifact_store_error(error: ArtifactStoreError) -> WorkflowServiceError {
         | ArtifactStoreError::DiskLimitExceeded { .. }
         | ArtifactStoreError::StreamNotWritable { .. }
         | ArtifactStoreError::InvalidStreamSequence { .. }
+        | ArtifactStoreError::ArtifactAccountingOverflow { .. }
         | ArtifactStoreError::InvalidByteRange => {
             WorkflowServiceError::InvalidRequest(error.to_string())
         }

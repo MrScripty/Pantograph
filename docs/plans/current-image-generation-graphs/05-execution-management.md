@@ -1793,6 +1793,31 @@ Worker rules:
   `cargo fmt --all -- --check`, and `git diff --check`. Remaining follow-up:
   Pumas package paths, artifact paths, and worker-visible paths still need
   shared allowed-root validation before filesystem or subprocess access.
+- 2026-05-11 artifact-store checked byte accounting slice: smallest useful
+  vertical slice was limited to memory-cache byte counters, streaming chunk
+  byte-length updates, the artifact-store typed error enum, API error
+  projection, focused unit tests, and Milestone 5 plan notes. Allowed write
+  set:
+  `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`,
+  `crates/pantograph-workflow-service/src/workflow/artifact_store/cache.rs`,
+  `crates/pantograph-workflow-service/src/workflow/artifact_store/stream.rs`,
+  `crates/pantograph-workflow-service/src/workflow/artifact_api.rs`, and this
+  plan directory.
+- The slice preserves the no-fallback/no-legacy rule because artifact byte
+  accounting overflow is rejected or skipped before mutating counters instead
+  of preserving saturating totals or clamping stream byte length as retained
+  artifact state. Verification passed:
+  `cargo test -p pantograph-workflow-service memory_cache_capacity_check_rejects_overflow`,
+  `cargo test -p pantograph-workflow-service stream_chunk_rejects_byte_length_overflow`,
+  `cargo test -p pantograph-workflow-service --test artifact_store`,
+  and `cargo test -p pantograph-workflow-service workflow::artifact_store`.
+  Deviations: the first focused compile exposed a missing API projection arm
+  for `ArtifactAccountingOverflow`, which now maps to
+  `WorkflowServiceError::InvalidRequest`; parallel focused Cargo tests
+  serialized on Cargo locks before passing. Remaining numeric-boundary
+  follow-up: image dimensions, context/token/batch limits, memory estimates,
+  disk budget summation, artifact stats summation, byte-range projections, and
+  worker/runtime request fields.
 
 ### Traceability Links
 
