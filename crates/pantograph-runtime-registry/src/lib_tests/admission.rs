@@ -205,3 +205,57 @@ fn admission_budget_uses_peak_ram_claim_and_release_restores_capacity() {
         })
         .expect("released capacity should admit a new reservation");
 }
+
+#[test]
+fn reserved_resource_accounting_overflow_returns_typed_error() {
+    let mut reservations = BTreeMap::new();
+    reservations.insert(
+        1,
+        RuntimeReservationRecord {
+            reservation_id: 1,
+            runtime_id: "pytorch".to_string(),
+            workflow_id: "wf-overflow-1".to_string(),
+            reservation_owner_id: None,
+            usage_profile: None,
+            model_id: None,
+            pin_runtime: false,
+            retention_hint: RuntimeRetentionHint::Ephemeral,
+            created_at_ms: 0,
+            claim: RuntimeReservationClaim {
+                ram_mb: Some(u64::MAX),
+                vram_mb: None,
+            },
+        },
+    );
+    reservations.insert(
+        2,
+        RuntimeReservationRecord {
+            reservation_id: 2,
+            runtime_id: "pytorch".to_string(),
+            workflow_id: "wf-overflow-2".to_string(),
+            reservation_owner_id: None,
+            usage_profile: None,
+            model_id: None,
+            pin_runtime: false,
+            retention_hint: RuntimeRetentionHint::Ephemeral,
+            created_at_ms: 0,
+            claim: RuntimeReservationClaim {
+                ram_mb: Some(1),
+                vram_mb: None,
+            },
+        },
+    );
+
+    let err = total_reserved_resource_mb("pytorch", "ram_mb", &reservations, None, |reservation| {
+        reservation.claim.ram_mb
+    })
+    .expect_err("reserved resource accounting should reject overflow");
+
+    assert_eq!(
+        err,
+        RuntimeRegistryError::ResourceAccountingOverflow {
+            runtime_id: "pytorch".to_string(),
+            resource_kind: "ram_mb",
+        }
+    );
+}

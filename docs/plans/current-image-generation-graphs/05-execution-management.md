@@ -2013,6 +2013,26 @@ Worker rules:
   Remaining numeric-boundary follow-up: image request limits,
   context/token/batch limits outside this capacity setter validation boundary,
   memory estimates, byte-range projections, and worker/runtime request fields.
+- 2026-05-11 runtime-registry reserved resource accounting slice: smallest
+  useful vertical slice was limited to replacing raw `sum()` aggregation for
+  runtime admission reserved RAM/VRAM claims with checked addition and a typed
+  registry accounting error. Allowed write set:
+  `crates/pantograph-runtime-registry/src/lib.rs`,
+  `crates/pantograph-runtime-registry/src/lib_tests/admission.rs`, and this
+  plan directory.
+- The slice preserves the no-fallback/no-legacy rule because
+  reserved-resource overflow no longer depends on debug panic or release
+  wrapping. Valid arithmetic still produces existing insufficient RAM/VRAM
+  admission diagnostics. Verification passed:
+  `cargo test -p pantograph-runtime-registry reserved_resource_accounting_overflow_returns_typed_error`
+  and `cargo test -p pantograph-runtime-registry admission`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Deviation: the first
+  `cargo fmt --all -- --check` found rustfmt-only wrapping in the touched
+  runtime-registry files; `cargo fmt --all` was applied and focused tests plus
+  final format verification were rerun successfully. Remaining
+  numeric-boundary follow-up: image request limits, context/token/batch limits
+  outside this reservation accounting boundary, memory estimates, byte-range
+  projections, and worker/runtime request fields.
 
 ### Traceability Links
 

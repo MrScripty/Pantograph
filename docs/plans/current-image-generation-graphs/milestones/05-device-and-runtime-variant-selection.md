@@ -247,6 +247,13 @@ typed diagnostic and the canonical design is fixed.
     limit. Remaining numeric boundaries include broader image request limits,
     context/token/batch limits, memory estimates, byte-range projections, and
     worker/runtime request fields.
+  - 2026-05-11 partial: runtime-registry admission now uses checked summation
+    for reserved RAM/VRAM accounting and returns typed
+    `RuntimeRegistryError::ResourceAccountingOverflow` if existing reservation
+    claims exceed `u64` capacity instead of relying on raw `sum()` overflow
+    behavior. Remaining numeric boundaries include broader image request
+    limits, context/token/batch limits, memory estimates, byte-range
+    projections, and worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3384,6 +3391,32 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: broader checked arithmetic remains needed for image
     request limits, context/token/batch limits outside this capacity setter
     validation boundary, memory estimates, byte-range projections, and
+    worker/runtime request fields.
+- 2026-05-11 slice: runtime-registry reserved resource accounting.
+  - Smallest useful vertical slice: replace raw `sum()` aggregation for
+    runtime admission reserved RAM/VRAM claims with checked addition and a
+    typed registry accounting error.
+  - Allowed write set: `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/lib_tests/admission.rs`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: reserved-resource overflow no longer
+    depends on debug panic or release wrapping. Valid arithmetic still produces
+    existing insufficient RAM/VRAM admission diagnostics.
+  - Standards/blast-radius gate: runtime-registry admission accounting only;
+    no generated files, frontend code, saved workflow fixtures, lockfiles,
+    path roots, Pumas contracts, worker contracts, runtime scheduler policy,
+    or backend lifecycle behavior changed.
+  - Verification passed:
+    `cargo test -p pantograph-runtime-registry reserved_resource_accounting_overflow_returns_typed_error`
+    and `cargo test -p pantograph-runtime-registry admission`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` found
+    rustfmt-only wrapping in the touched runtime-registry files;
+    `cargo fmt --all` was applied and focused tests plus final format
+    verification were rerun successfully.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    request limits, context/token/batch limits outside this reservation
+    accounting boundary, memory estimates, byte-range projections, and
     worker/runtime request fields.
 
 **Verification:**
