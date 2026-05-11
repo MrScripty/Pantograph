@@ -111,7 +111,7 @@ pub struct LoadedModelInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PyTorchTransformersLoadArgs {
     model_path: String,
-    device: String,
+    device: Option<InferenceDeviceId>,
     model_type: Option<String>,
     trust_policy: PyTorchTransformersTrustPolicy,
 }
@@ -2109,11 +2109,7 @@ impl PyTorchBackend {
     ) -> PyTorchTransformersLoadArgs {
         PyTorchTransformersLoadArgs {
             model_path: request.entry_path.clone(),
-            device: request
-                .device
-                .as_ref()
-                .map(|device_id| device_id.as_str().to_string())
-                .unwrap_or_else(|| "auto".to_string()),
+            device: request.device.clone(),
             model_type: request.model_type_hint.clone(),
             trust_policy: request.trust_policy.clone(),
         }

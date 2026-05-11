@@ -4902,7 +4902,7 @@ fn test_pytorch_transformers_load_args_use_worker_envelope_payload() {
     let args = PyTorchBackend::transformers_load_args_from_request(&envelope.payload);
 
     assert_eq!(args.model_path, "llm/example/tiny-transformers");
-    assert_eq!(args.device, "cuda:0");
+    assert_eq!(args.device.as_ref().map(|id| id.as_str()), Some("cuda:0"));
     assert_eq!(args.model_type.as_deref(), Some("llama"));
     assert!(args.trust_policy.allow_remote_code);
     assert!(!args.trust_policy.local_files_only);
@@ -5013,7 +5013,7 @@ fn test_pytorch_transformers_load_args_default_device_auto() {
 
     let args = PyTorchBackend::transformers_load_args_from_request(&envelope.payload);
 
-    assert_eq!(args.device, "auto");
+    assert_eq!(args.device, None);
 }
 
 #[test]

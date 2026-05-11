@@ -845,6 +845,13 @@ Update during implementation:
   `cargo fmt --all -- --check`, and `git diff --check`. Verification
   deviation: an attempted node-engine command used two Cargo filters and
   failed before tests ran; the filters were rerun separately and passed.
+- 2026-05-11: Continued Milestone 5 by typing the PyTorch test-only
+  Transformers load-args helper device field as `Option<InferenceDeviceId>`.
+  Omitted auto intent now remains omitted in the helper instead of becoming the
+  raw string `"auto"`, matching the worker envelope contract. Verification
+  passed:
+  `cargo test -p inference --features backend-pytorch test_pytorch_transformers_load_args`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1195,6 +1202,9 @@ Worker rules:
   `BackendStartupDeviceIntent`, with llama.cpp/PyTorch adapters validating
   their accepted namespace before startup and node-engine projecting workflow
   llama.cpp settings into backend-local selector intent.
+- PyTorch helper tests now prove the test-only Transformers load args keep
+  device as `Option<InferenceDeviceId>` and model auto policy by omission
+  rather than a raw `"auto"` device string.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

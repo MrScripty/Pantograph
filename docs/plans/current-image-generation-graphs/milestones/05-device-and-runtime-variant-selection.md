@@ -2595,6 +2595,26 @@ typed diagnostic and the canonical design is fixed.
     load helper raw-device arguments and continue removing node-engine
     independent backend-routing choices in favor of canonical scheduler
     decisions.
+- 2026-05-11 slice: typed PyTorch test load helper device.
+  - Smallest useful vertical slice: change the test-only
+    `PyTorchTransformersLoadArgs.device` helper from `String` to
+    `Option<InferenceDeviceId>` so tests model omitted auto intent the same
+    way as worker envelopes.
+  - Allowed write set: `crates/inference/src/backend/pytorch.rs`,
+    `crates/inference/src/backend/pytorch_tests.rs`, and this plan directory.
+  - No-fallback/no-legacy confirmation: omitted auto intent remains `None`;
+    explicit devices remain canonical `InferenceDeviceId`; no helper converts
+    auto into a trusted raw device string.
+  - Standards/blast-radius gate: test-only helper typing and focused
+    feature-gated tests only; no generated DTOs, lockfiles, workflow fixtures,
+    frontend code, runtime startup behavior, scheduler ranking, or worker
+    execution behavior changed.
+  - Verification passed:
+    `cargo test -p inference --features backend-pytorch test_pytorch_transformers_load_args`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: continue removing backend-local PyTorch runtime load
+    raw `"auto"` arguments as the executable startup adapter moves from direct
+    worker strings to typed load intent.
 
 **Verification:**
 
@@ -2711,6 +2731,8 @@ typed diagnostic and the canonical design is fixed.
 - Backend config and node-engine tests prove shared backend startup config
   carries typed device intent and adapter-local llama.cpp workflow settings are
   parsed before backend config construction.
+- PyTorch helper tests prove omitted auto intent remains absent and explicit
+  devices remain canonical `InferenceDeviceId` in test-only load args.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.
