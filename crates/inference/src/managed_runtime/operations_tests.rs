@@ -1,3 +1,4 @@
+use super::super::paths::{managed_install_dir, managed_version_install_dir};
 use super::{
     binary_capability, cancel_binary_download, definition, download_response_mode,
     ensure_runtime_state_entry, existing_download_artifact, finish_requested_cancellation,
@@ -11,8 +12,8 @@ use super::{
 use crate::managed_runtime::managed_runtime_dir;
 use crate::managed_runtime::{
     load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeCatalogVersion,
-    ManagedRuntimeHistoryEventKind, ManagedRuntimePersistedJobArtifact,
-    ManagedRuntimePersistedVersion,
+    ManagedRuntimeCommandResolutionError, ManagedRuntimeHistoryEventKind, ManagedRuntimePathKind,
+    ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedVersion,
 };
 use crate::RuntimeVariantId;
 use reqwest::StatusCode;
@@ -776,7 +777,8 @@ fn select_managed_runtime_version_rejects_missing_runtime_variant_id() {
 #[test]
 fn resolve_runtime_install_dir_uses_selected_version_install_root() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
-    let install_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+    let install_dir =
+        managed_version_install_dir(temp_dir.path(), ManagedBinaryId::LlamaCpp, "b8248");
 
     persist_install_success(
         temp_dir.path(),
@@ -1245,11 +1247,57 @@ fn resolve_binary_command_rejects_missing_selected_runtime_variant() {
         .contains("does not have managed runtime state"));
 }
 
+#[test]
+fn resolve_binary_command_rejects_install_root_outside_managed_runtime_root() {
+    let app_data_dir = tempfile::tempdir().expect("app data dir");
+    let outside_dir = tempfile::tempdir().expect("outside dir");
+    let outside_install_dir = outside_dir.path().join("llama-cpp-b8248");
+    install_fake_runtime_files(&outside_install_dir, ManagedBinaryId::LlamaCpp);
+    std::fs::create_dir_all(managed_install_dir(
+        app_data_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+    ))
+    .expect("canonical managed runtime root");
+
+    let mut state = load_managed_runtime_state(app_data_dir.path()).expect("load runtime state");
+    let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+    runtime.versions.push(ManagedRuntimePersistedVersion {
+        version: "b8248".to_string(),
+        runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        runtime_variant_id: Some(llama_cpu_variant_id()),
+        platform_key: Some(
+            definition(ManagedBinaryId::LlamaCpp)
+                .platform_key()
+                .to_string(),
+        ),
+        readiness_state: ManagedRuntimeReadinessState::Ready,
+        install_root: Some(outside_install_dir.display().to_string()),
+        last_ready_at_ms: Some(42),
+        last_error: None,
+    });
+    runtime.selection.selected_version = Some("b8248".to_string());
+    runtime.selection.selected_runtime_variant_id = Some(llama_cpu_variant_id());
+    save_managed_runtime_state(app_data_dir.path(), &state).expect("save runtime state");
+
+    let error = resolve_binary_command(app_data_dir.path(), ManagedBinaryId::LlamaCpp, &[])
+        .expect_err("escaped install root should fail before command construction");
+
+    assert!(matches!(
+        error,
+        ManagedRuntimeCommandResolutionError::PathValidation {
+            path_kind: ManagedRuntimePathKind::InstallRoot,
+            ..
+        }
+    ));
+    assert!(error.to_string().contains("outside allowed root"));
+}
+
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
 fn resolve_binary_command_uses_selected_cuda_runtime_variant() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
-    let install_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+    let install_dir =
+        managed_version_install_dir(temp_dir.path(), ManagedBinaryId::LlamaCpp, "b8248");
     install_fake_runtime_files(&install_dir, ManagedBinaryId::LlamaCpp);
     let cuda_dir = install_dir.join("cuda");
     std::fs::create_dir_all(&cuda_dir).expect("create cuda dir");

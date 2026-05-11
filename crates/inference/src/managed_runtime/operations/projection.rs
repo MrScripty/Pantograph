@@ -170,6 +170,7 @@ fn projected_version_statuses(
 
     for catalog_version in &runtime.catalog_versions {
         projected_versions.push(projected_catalog_version_status(
+            app_data_dir,
             capability,
             runtime,
             selection,
@@ -188,6 +189,7 @@ fn projected_version_statuses(
         }
 
         projected_versions.push(projected_installed_version_status(
+            app_data_dir,
             capability,
             selection,
             definition,
@@ -203,6 +205,7 @@ fn projected_version_statuses(
 }
 
 fn projected_catalog_version_status(
+    app_data_dir: &Path,
     capability: &ManagedBinaryCapability,
     runtime: &ManagedRuntimePersistedRuntime,
     selection: &ManagedRuntimeSelectionState,
@@ -216,6 +219,7 @@ fn projected_catalog_version_status(
 
     if let Some(installed_version) = installed_version {
         return projected_installed_version_status(
+            app_data_dir,
             capability,
             selection,
             definition,
@@ -254,6 +258,7 @@ fn projected_catalog_version_status(
 }
 
 fn projected_installed_version_status(
+    app_data_dir: &Path,
     capability: &ManagedBinaryCapability,
     selection: &ManagedRuntimeSelectionState,
     definition: &'static dyn ManagedBinaryDefinition,
@@ -281,8 +286,15 @@ fn projected_installed_version_status(
             .install_root
             .as_deref()
             .map(|install_root| {
+                let allowed_root = managed_install_dir(app_data_dir, capability.id);
+                let Ok(validated_install_root) = pantograph_path_security::resolve_path_within_root(
+                    Path::new(install_root),
+                    &allowed_root,
+                ) else {
+                    return false;
+                };
                 definition
-                    .validate_installation(Path::new(install_root), &runtime_variant_id)
+                    .validate_installation(&validated_install_root, &runtime_variant_id)
                     .is_empty()
             })
             .unwrap_or(false),

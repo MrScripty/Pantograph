@@ -1,0 +1,17 @@
+[package]
+name = "pantograph-path-security"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Shared allowed-root path validation for Pantograph filesystem boundaries"
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+tempfile.workspace = true

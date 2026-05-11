@@ -13,8 +13,8 @@ pub use contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
     ManagedBinaryInstallState, ManagedRuntimeCatalogVersion, ManagedRuntimeCommandResolutionError,
     ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
-    ManagedRuntimeReadinessState, ManagedRuntimeSelectionState, ManagedRuntimeSnapshot,
-    ManagedRuntimeVersionStatus, ResolvedCommand,
+    ManagedRuntimePathKind, ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
+    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus, ResolvedCommand,
 };
 pub use neutral_contracts::{
     list_managed_runtime_dependency_statuses, managed_runtime_dependency_status,

@@ -2,8 +2,8 @@ use super::archive::extract_archive;
 use super::catalog::fetch_managed_runtime_catalog;
 use super::contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
-    ManagedBinaryInstallState, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
-    ManagedRuntimeSnapshot, ResolvedCommand,
+    ManagedBinaryInstallState, ManagedRuntimeCommandResolutionError, ManagedRuntimeJobState,
+    ManagedRuntimeJobStatus, ManagedRuntimePathKind, ManagedRuntimeSnapshot, ResolvedCommand,
 };
 use super::definitions::definition;
 use super::paths::{
@@ -44,7 +44,6 @@ use self::state_transitions::{
     persist_remove_success, persist_remove_version_success, resolve_runtime_install_target,
     runtime_install_dir_for_projection,
 };
-use super::contracts::ManagedRuntimeCommandResolutionError;
 #[cfg(test)]
 use super::contracts::ManagedRuntimeReadinessState;
 #[cfg(test)]
@@ -926,7 +925,13 @@ pub fn resolve_binary_command(
 
     let target = resolve_runtime_install_target(app_data_dir, id)
         .map_err(ManagedRuntimeCommandResolutionError::state)?;
-    let missing = definition.validate_installation(&target.install_dir, &target.runtime_variant_id);
+    let install_dir = validate_managed_runtime_path(
+        id,
+        ManagedRuntimePathKind::InstallRoot,
+        &target.install_dir,
+        &managed_install_dir(app_data_dir, id),
+    )?;
+    let missing = definition.validate_installation(&install_dir, &target.runtime_variant_id);
     if let Some(first_missing) = missing.first() {
         return Err(ManagedRuntimeCommandResolutionError::MissingRuntimeFiles {
             runtime_id: id,
@@ -935,7 +940,44 @@ pub fn resolve_binary_command(
         });
     }
 
-    definition.resolve_command(&target.install_dir, &target.runtime_variant_id, args)
+    let command = definition.resolve_command(&install_dir, &target.runtime_variant_id, args)?;
+    validate_resolved_command_paths(id, &install_dir, command)
+}
+
+fn validate_resolved_command_paths(
+    id: ManagedBinaryId,
+    install_dir: &Path,
+    command: ResolvedCommand,
+) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
+    let executable_path = validate_managed_runtime_path(
+        id,
+        ManagedRuntimePathKind::ExecutablePath,
+        &command.executable_path,
+        install_dir,
+    )?;
+    let working_directory = validate_managed_runtime_path(
+        id,
+        ManagedRuntimePathKind::WorkingDirectory,
+        &command.working_directory,
+        install_dir,
+    )?;
+
+    Ok(ResolvedCommand {
+        executable_path,
+        working_directory,
+        ..command
+    })
+}
+
+fn validate_managed_runtime_path(
+    id: ManagedBinaryId,
+    path_kind: ManagedRuntimePathKind,
+    path: &Path,
+    allowed_root: &Path,
+) -> Result<PathBuf, ManagedRuntimeCommandResolutionError> {
+    pantograph_path_security::resolve_path_within_root(path, allowed_root).map_err(|error| {
+        ManagedRuntimeCommandResolutionError::path_validation(id, path_kind, error.to_string())
+    })
 }
 
 #[cfg(test)]

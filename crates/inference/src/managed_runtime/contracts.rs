@@ -218,6 +218,14 @@ pub struct ResolvedCommand {
     pub pid_file: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedRuntimePathKind {
+    InstallRoot,
+    ExecutablePath,
+    WorkingDirectory,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum ManagedRuntimeCommandResolutionError {
@@ -237,6 +245,11 @@ pub enum ManagedRuntimeCommandResolutionError {
     State {
         message: String,
     },
+    PathValidation {
+        runtime_id: ManagedBinaryId,
+        path_kind: ManagedRuntimePathKind,
+        message: String,
+    },
     Platform {
         message: String,
     },
@@ -251,6 +264,18 @@ impl ManagedRuntimeCommandResolutionError {
 
     pub(crate) fn state(message: impl Into<String>) -> Self {
         Self::State {
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn path_validation(
+        runtime_id: ManagedBinaryId,
+        path_kind: ManagedRuntimePathKind,
+        message: impl Into<String>,
+    ) -> Self {
+        Self::PathValidation {
+            runtime_id,
+            path_kind,
             message: message.into(),
         }
     }
@@ -308,6 +333,17 @@ impl fmt::Display for ManagedRuntimeCommandResolutionError {
                 formatter.write_str(&diagnostic.message)
             }
             Self::State { message } => formatter.write_str(message),
+            Self::PathValidation {
+                runtime_id,
+                path_kind,
+                message,
+            } => write!(
+                formatter,
+                "{} {:?} failed allowed-root validation: {}",
+                runtime_id.display_name(),
+                path_kind,
+                message
+            ),
             Self::Platform { message } => formatter.write_str(message),
         }
     }

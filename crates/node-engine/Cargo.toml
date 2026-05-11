@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
+pantograph-path-security = { path = "../pantograph-path-security" }
 # Core graph execution
 graph-flow.workspace = true
 

@@ -4938,6 +4938,7 @@ dependencies = [
  "once_cell",
  "pantograph-managed-dependencies",
  "pantograph-media-conversion",
+ "pantograph-path-security",
  "pantograph-runtime-identity",
  "parking_lot",
  "pyo3",
@@ -6473,6 +6474,7 @@ dependencies = [
  "inference",
  "inventory",
  "log",
+ "pantograph-path-security",
  "pantograph-runtime-identity",
  "pyo3",
  "reqwest",
@@ -7336,6 +7338,13 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "uuid",
+]
+
+[[package]]
+name = "pantograph-path-security"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
 ]
 
 [[package]]

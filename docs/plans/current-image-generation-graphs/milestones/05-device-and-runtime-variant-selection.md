@@ -160,6 +160,14 @@ typed diagnostic and the canonical design is fixed.
     `third-party/runtimes` tree. Shared allowed-root validation for executable,
     dynamic-library, Pumas package, artifact, and worker-visible paths remains
     pending.
+  - 2026-05-11 partial: added the shared `pantograph-path-security`
+    allowed-root validator and routed node-engine file IO/workflow persistence
+    callers plus managed-runtime command resolution through it. Managed-runtime
+    command resolution now validates selected install roots against the
+    canonical managed runtime root before installation checks, and validates
+    resolved executable and working-directory paths before command handoff.
+    Dynamic-library environment path entries, pid files, Pumas package paths,
+    artifact paths, and worker-visible paths remain pending.
 - [ ] Use checked arithmetic and typed diagnostics for image dimensions, context
   lengths, token limits, batch sizes, memory estimates, output-size
   calculations, and byte ranges that cross IPC, persisted, worker, or runtime
@@ -2915,6 +2923,48 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: include runtime variant id on managed install jobs,
     retained artifacts, progress snapshots, install history, selected variant
     state, command resolution, and variant-specific CUDA/Metal readiness.
+- 2026-05-11 slice: shared allowed-root command path validation.
+  - Smallest useful vertical slice: extract the existing node-engine
+    allowed-root path validator into a shared `pantograph-path-security` crate,
+    keep node-engine/workflow callers on that shared helper, and validate
+    managed-runtime selected install roots plus resolved executable and
+    working-directory paths before command handoff.
+  - Allowed write set: workspace Cargo manifests/lockfile,
+    `crates/pantograph-path-security/`, `crates/node-engine/src/path_validation.rs`,
+    `crates/inference/src/managed_runtime/contracts.rs`,
+    `crates/inference/src/managed_runtime/mod.rs`,
+    `crates/inference/src/managed_runtime/operations.rs`,
+    `crates/inference/src/managed_runtime/operations/projection.rs`,
+    `crates/inference/src/managed_runtime/operations_tests.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: selected persisted managed-runtime
+    install roots that escape the canonical managed runtime root now fail with
+    `ManagedRuntimeCommandResolutionError::PathValidation` instead of being
+    treated as trusted executable state. The slice did not add legacy root
+    probing, compatibility aliases, raw path fallback, or duplicate validation
+    logic.
+  - Standards/blast-radius gate: security/path-boundary helper extraction and
+    managed-runtime command validation only; no generated DTOs, frontend code,
+    saved workflow files, runtime feature flags, external dependencies,
+    subprocess lifecycle behavior, or scheduler policy changed. The new crate
+    has no third-party runtime dependencies.
+  - Verification passed:
+    `cargo test -p pantograph-path-security`,
+    `cargo test -p node-engine path_validation`,
+    `cargo test -p inference resolve_binary_command`,
+    `cargo test -p inference managed_runtime_snapshot`,
+    `cargo test -p pantograph-workflow-service persistence`,
+    `cargo test -p workflow-nodes storage`, and
+    `cargo test -p inference managed_runtime::operations`.
+  - Verification deviations fixed during the slice: initially started several
+    Cargo test commands in parallel, which serialized on the Cargo package and
+    build-directory locks; the completed results above passed after the locks
+    cleared. The first managed-runtime projection compile failed because the
+    allowed-root projection helper needed `app_data_dir`; the projection
+    call chain now passes that parameter explicitly.
+  - Remaining follow-up: validate dynamic-library environment path entries,
+    pid files, Pumas package paths, artifact paths, and worker-visible paths
+    through the same shared validator before filesystem or subprocess access.
 
 **Verification:**
 
