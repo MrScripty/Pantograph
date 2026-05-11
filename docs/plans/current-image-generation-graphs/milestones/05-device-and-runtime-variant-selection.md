@@ -195,6 +195,13 @@ typed diagnostic and the canonical design is fixed.
     boundaries include image dimensions, context/token/batch limits, memory
     estimates, artifact stats summation, byte-range projections, and
     worker/runtime request fields.
+  - 2026-05-11 partial: artifact-store stats projection now returns `Result`
+    and uses checked arithmetic for retained body bytes, streaming body bytes,
+    and per-state counters. Overflow returns typed
+    `ArtifactStoreError::ArtifactAccountingOverflow` through the workflow
+    service API. Remaining numeric boundaries include image dimensions,
+    context/token/batch limits, memory estimates, byte-range projections, and
+    worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3113,6 +3120,44 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: broader checked arithmetic remains needed for image
     dimensions, context/token/batch limits, memory estimates, artifact stats
     summation, byte-range projections, and worker/runtime request fields.
+- 2026-05-11 slice: artifact-store stats checked summation.
+  - Smallest useful vertical slice: make `ArtifactStore::stats()` fallible and
+    replace unchecked stats counter/body-byte additions with checked arithmetic.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`,
+    `crates/pantograph-workflow-service/src/workflow/artifact_api.rs`,
+    `crates/pantograph-workflow-service/tests/artifact_store.rs`,
+    `crates/pantograph-workflow-service/tests/artifact_store_policy.rs`, and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: overflow now returns typed
+    `ArtifactStoreError::ArtifactAccountingOverflow` instead of wrapping,
+    saturating, or silently returning partial stats. The workflow service stats
+    facade projects that typed store error through its existing `Result`
+    boundary.
+  - Standards/blast-radius gate: artifact stats accounting only; no generated
+    files, frontend code, saved workflow fixtures, lockfiles, path roots, Pumas
+    contracts, worker contracts, runtime scheduler policy, or backend startup
+    behavior changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service stats_rejects_retained_body_byte_overflow`,
+    `cargo test -p pantograph-workflow-service workflow::artifact_store`,
+    `cargo test -p pantograph-workflow-service --test artifact_store`,
+    `cargo test -p pantograph-workflow-service --test artifact_store_policy`,
+    `cargo test -p pantograph-embedded-runtime workflow_artifact_store_stats`,
+    and `cargo test -p pantograph-uniffi workflow_artifact_store_stats`.
+  - Verification deviations/discovered issues: the embedded-runtime and UniFFI
+    focused filters matched zero tests but still compiled their public stats
+    facades successfully. The UniFFI compile surfaced pre-existing unused
+    imports in `crates/pantograph-embedded-runtime/src/technical_fit.rs`
+    (`WorkflowBackendCapabilityFacts` and
+    `WorkflowRuntimeVariantCapability`); cleanup is deferred because it is
+    unrelated to artifact stats accounting.
+  - Discovered issue/deferred follow-up: `artifact_store.rs` remains over the
+    500-line coding-standards decomposition-review trigger. The split remains
+    deferred to avoid broadening this stats-accounting slice.
+  - Remaining follow-up: broader checked arithmetic remains needed for image
+    dimensions, context/token/batch limits, memory estimates, byte-range
+    projections, and worker/runtime request fields.
 
 **Verification:**
 

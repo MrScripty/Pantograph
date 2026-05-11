@@ -112,5 +112,5 @@ fn artifact_store_enforces_global_disk_budget_for_stream_growth() {
             max_bytes: 8
         }
     ));
-    assert_eq!(store.stats().streaming_body_bytes, 5);
+    assert_eq!(store.stats().expect("stats").streaming_body_bytes, 5);
 }

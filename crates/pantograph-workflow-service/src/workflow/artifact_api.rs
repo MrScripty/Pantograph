@@ -191,7 +191,9 @@ impl WorkflowService {
     }
 
     pub fn artifact_store_stats(&self) -> Result<ArtifactStoreStats, WorkflowServiceError> {
-        Ok(self.artifact_store_guard()?.stats())
+        self.artifact_store_guard()?
+            .stats()
+            .map_err(artifact_store_error)
     }
 }
 

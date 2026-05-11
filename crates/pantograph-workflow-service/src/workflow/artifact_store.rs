@@ -311,31 +311,40 @@ impl ArtifactStore {
         Ok(expired_count)
     }
 
-    pub fn stats(&self) -> ArtifactStoreStats {
-        self.manifest.artifacts.iter().fold(
-            ArtifactStoreStats {
-                artifact_count: self.manifest.artifacts.len(),
-                retained_body_count: 0,
-                retained_body_bytes: 0,
-                memory_cache_body_count: self.memory_cache.len(),
-                memory_cache_body_bytes: self.memory_cache_bytes,
-                streaming_body_count: 0,
-                streaming_body_bytes: 0,
-                metadata_only_count: 0,
-            },
-            |mut stats, entry| {
-                if let Some(stream) = &entry.pending_stream {
-                    stats.streaming_body_count += 1;
-                    stats.streaming_body_bytes += stream.byte_length;
-                } else if entry.body_file.is_some() {
-                    stats.retained_body_count += 1;
-                    stats.retained_body_bytes += entry.descriptor.byte_length.unwrap_or_default();
-                } else {
-                    stats.metadata_only_count += 1;
-                }
-                stats
-            },
-        )
+    pub fn stats(&self) -> Result<ArtifactStoreStats, ArtifactStoreError> {
+        let mut stats = ArtifactStoreStats {
+            artifact_count: self.manifest.artifacts.len(),
+            retained_body_count: 0,
+            retained_body_bytes: 0,
+            memory_cache_body_count: self.memory_cache.len(),
+            memory_cache_body_bytes: self.memory_cache_bytes,
+            streaming_body_count: 0,
+            streaming_body_bytes: 0,
+            metadata_only_count: 0,
+        };
+        for entry in &self.manifest.artifacts {
+            if let Some(stream) = &entry.pending_stream {
+                stats.streaming_body_count =
+                    checked_stat_count(stats.streaming_body_count, "stats.streaming_body_count")?;
+                stats.streaming_body_bytes = checked_stat_bytes(
+                    stats.streaming_body_bytes,
+                    stream.byte_length,
+                    "stats.streaming_body_bytes",
+                )?;
+            } else if entry.body_file.is_some() {
+                stats.retained_body_count =
+                    checked_stat_count(stats.retained_body_count, "stats.retained_body_count")?;
+                stats.retained_body_bytes = checked_stat_bytes(
+                    stats.retained_body_bytes,
+                    entry.descriptor.byte_length.unwrap_or_default(),
+                    "stats.retained_body_bytes",
+                )?;
+            } else {
+                stats.metadata_only_count =
+                    checked_stat_count(stats.metadata_only_count, "stats.metadata_only_count")?;
+            }
+        }
+        Ok(stats)
     }
 
     fn entry(&self, artifact_id: &str) -> Result<&ArtifactStoreEntry, ArtifactStoreError> {
@@ -439,6 +448,22 @@ impl ArtifactStore {
         }
         Ok(())
     }
+}
+
+fn checked_stat_count(count: usize, field: &'static str) -> Result<usize, ArtifactStoreError> {
+    count
+        .checked_add(1)
+        .ok_or(ArtifactStoreError::ArtifactAccountingOverflow { field })
+}
+
+fn checked_stat_bytes(
+    current: u64,
+    added: u64,
+    field: &'static str,
+) -> Result<u64, ArtifactStoreError> {
+    current
+        .checked_add(added)
+        .ok_or(ArtifactStoreError::ArtifactAccountingOverflow { field })
 }
 
 #[cfg(test)]
@@ -639,6 +664,57 @@ mod tests {
             }
         ));
         assert!(store.entry("artifact-new").is_err());
+    }
+
+    #[test]
+    fn stats_rejects_retained_body_byte_overflow() {
+        let temp = tempfile::tempdir().expect("temp artifact store");
+        let mut store = ArtifactStore::open(temp.path(), policy_without_size_limits())
+            .expect("open artifact store");
+        for artifact_id in ["artifact-stats-max", "artifact-stats-one"] {
+            store
+                .write_artifact(ArtifactWriteRequest {
+                    artifact_id: Some(artifact_id.to_string()),
+                    payload_kind: ArtifactPayloadKind::GenericBinary,
+                    media_type: "application/octet-stream".to_string(),
+                    format: None,
+                    attribution: ArtifactAttribution {
+                        workflow_run_id: "run-overflow".to_string(),
+                        workflow_id: None,
+                        workflow_version_id: None,
+                        node_id: None,
+                        port_id: None,
+                        model_id: None,
+                        runtime_id: None,
+                    },
+                    artifact_role: None,
+                    parent_artifact_id: None,
+                    revision_index: None,
+                    body: Vec::new(),
+                })
+                .expect("write artifact");
+        }
+        store
+            .entry_mut("artifact-stats-max")
+            .expect("max entry")
+            .descriptor
+            .byte_length = Some(u64::MAX);
+        store
+            .entry_mut("artifact-stats-one")
+            .expect("one entry")
+            .descriptor
+            .byte_length = Some(1);
+
+        let error = store
+            .stats()
+            .expect_err("stats retained bytes overflow should fail");
+
+        assert!(matches!(
+            error,
+            ArtifactStoreError::ArtifactAccountingOverflow {
+                field: "stats.retained_body_bytes"
+            }
+        ));
     }
 
     fn policy_with_delete_on_consume() -> ArtifactPolicy {

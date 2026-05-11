@@ -267,7 +267,7 @@ fn artifact_store_consume_and_retention_delete_body_but_keep_metadata() {
             .retention_state,
         IoArtifactRetentionState::Deleted
     );
-    assert_eq!(store.stats().metadata_only_count, 1);
+    assert_eq!(store.stats().expect("stats").metadata_only_count, 1);
 
     let mut retain_policy = policy(false);
     retain_policy.ttl_seconds = Some(1);
@@ -344,7 +344,7 @@ fn artifact_store_retention_deletion_preserves_audit_descriptor_and_fails_body_r
         descriptor.retention_reason.as_deref(),
         Some("body_deleted_by_policy")
     );
-    assert_eq!(store.stats().metadata_only_count, 1);
+    assert_eq!(store.stats().expect("stats").metadata_only_count, 1);
     assert!(matches!(
         store.read_body(ArtifactReadRequest {
             artifact_id: "retention_audit".to_string(),
@@ -529,7 +529,7 @@ fn artifact_store_streams_chunks_and_finalizes_descriptor_without_serialized_bod
     assert!(!serde_json::to_string(&first_chunk)
         .expect("serialize chunk metadata")
         .contains("chunk-one"));
-    assert_eq!(store.stats().streaming_body_bytes, 19);
+    assert_eq!(store.stats().expect("stats").streaming_body_bytes, 19);
     let stream_read = store
         .read_stream_body(ArtifactStreamReadRequest {
             artifact_id: "artifact_stream_1".to_string(),
@@ -591,8 +591,8 @@ fn artifact_store_streams_chunks_and_finalizes_descriptor_without_serialized_bod
     assert!(!serde_json::to_string(&read.response)
         .expect("serialize read metadata")
         .contains("chunk-one"));
-    assert_eq!(store.stats().streaming_body_count, 0);
-    assert_eq!(store.stats().retained_body_count, 1);
+    assert_eq!(store.stats().expect("stats").streaming_body_count, 0);
+    assert_eq!(store.stats().expect("stats").retained_body_count, 1);
 }
 
 #[test]
@@ -683,7 +683,7 @@ fn artifact_store_accounts_for_memory_cache_and_enforces_budget() {
             .expect("write artifact");
     }
 
-    let stats = store.stats();
+    let stats = store.stats().expect("stats");
     assert_eq!(stats.retained_body_count, 3);
     assert_eq!(stats.memory_cache_body_count, 2);
     assert_eq!(stats.memory_cache_body_bytes, 10);
@@ -701,13 +701,13 @@ fn artifact_store_accounts_for_memory_cache_and_enforces_budget() {
             body: b"xx".to_vec(),
         })
         .expect("write uncached small artifact when budget is full");
-    let stats = store.stats();
+    let stats = store.stats().expect("stats");
     assert_eq!(stats.retained_body_count, 4);
     assert_eq!(stats.memory_cache_body_count, 2);
     assert_eq!(stats.memory_cache_body_bytes, 10);
 
     let reopened = ArtifactStore::open(temp.path(), store.policy().clone()).expect("reopen store");
-    let reopened_stats = reopened.stats();
+    let reopened_stats = reopened.stats().expect("reopened stats");
     assert_eq!(reopened_stats.memory_cache_body_count, 2);
     assert_eq!(reopened_stats.memory_cache_body_bytes, 10);
 }
@@ -734,10 +734,10 @@ fn artifact_store_cleanup_evicts_memory_cache_and_read_handle_body() {
             body: b"cached-body".to_vec(),
         })
         .expect("write artifact");
-    assert_eq!(store.stats().memory_cache_body_count, 1);
+    assert_eq!(store.stats().expect("stats").memory_cache_body_count, 1);
 
     assert_eq!(store.apply_retention_cleanup(u64::MAX).expect("cleanup"), 1);
-    let stats = store.stats();
+    let stats = store.stats().expect("stats");
     assert_eq!(stats.metadata_only_count, 1);
     assert_eq!(stats.memory_cache_body_count, 0);
     assert!(matches!(

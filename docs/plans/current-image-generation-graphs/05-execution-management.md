@@ -1843,6 +1843,37 @@ Worker rules:
   follow-up: image dimensions, context/token/batch limits, memory estimates,
   artifact stats summation, byte-range projections, and worker/runtime request
   fields.
+- 2026-05-11 artifact-store stats checked summation slice: smallest useful
+  vertical slice was limited to making `ArtifactStore::stats()` fallible and
+  replacing unchecked retained-body byte, streaming-body byte, and per-state
+  counter additions with checked arithmetic. Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`,
+  `crates/pantograph-workflow-service/src/workflow/artifact_api.rs`,
+  `crates/pantograph-workflow-service/tests/artifact_store.rs`,
+  `crates/pantograph-workflow-service/tests/artifact_store_policy.rs`, and
+  this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because stats overflow
+  now returns typed `ArtifactStoreError::ArtifactAccountingOverflow` instead
+  of wrapping, saturating, or returning partial stats. The workflow service
+  stats facade projects the typed store error through its existing `Result`
+  boundary. Verification passed:
+  `cargo test -p pantograph-workflow-service stats_rejects_retained_body_byte_overflow`,
+  `cargo test -p pantograph-workflow-service workflow::artifact_store`,
+  `cargo test -p pantograph-workflow-service --test artifact_store`,
+  `cargo test -p pantograph-workflow-service --test artifact_store_policy`,
+  `cargo test -p pantograph-embedded-runtime workflow_artifact_store_stats`,
+  and `cargo test -p pantograph-uniffi workflow_artifact_store_stats`.
+  Deviations/discovered issues: the embedded-runtime and UniFFI focused filters
+  matched zero tests but compiled their public stats facades successfully. The
+  UniFFI compile surfaced pre-existing unused imports in
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs`
+  (`WorkflowBackendCapabilityFacts` and
+  `WorkflowRuntimeVariantCapability`); cleanup is deferred because it is
+  unrelated to artifact stats accounting. `artifact_store.rs` remains over the
+  500-line coding-standards decomposition-review trigger; splitting remains
+  deferred to avoid broadening this slice. Remaining numeric-boundary
+  follow-up: image dimensions, context/token/batch limits, memory estimates,
+  byte-range projections, and worker/runtime request fields.
 
 ### Traceability Links
 
