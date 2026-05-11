@@ -225,6 +225,8 @@ mod tests {
     }
 
     fn save_ready_runtime_state(app_data_dir: &Path, install_dir: &Path) {
+        let runtime_variant_id =
+            RuntimeVariantId::parse("llama_cpp.cpu").expect("valid runtime variant");
         let state = ManagedRuntimePersistedState {
             schema_version: 1,
             runtimes: vec![ManagedRuntimePersistedRuntime {
@@ -234,9 +236,7 @@ mod tests {
                 versions: vec![ManagedRuntimePersistedVersion {
                     version: "b8248".to_string(),
                     runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
-                    runtime_variant_id: Some(
-                        RuntimeVariantId::parse("llama_cpp.cpu").expect("valid runtime variant"),
-                    ),
+                    runtime_variant_id: Some(runtime_variant_id.clone()),
                     platform_key: Some(
                         definition(ManagedBinaryId::LlamaCpp)
                             .platform_key()
@@ -249,8 +249,11 @@ mod tests {
                 }],
                 selection: ManagedRuntimeSelectionState {
                     selected_version: Some("b8248".to_string()),
+                    selected_runtime_variant_id: Some(runtime_variant_id.clone()),
                     active_version: Some("b8248".to_string()),
+                    active_runtime_variant_id: Some(runtime_variant_id),
                     default_version: None,
+                    default_runtime_variant_id: None,
                 },
                 active_job: None,
                 active_job_artifact: None,

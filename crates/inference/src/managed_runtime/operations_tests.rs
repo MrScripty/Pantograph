@@ -266,7 +266,9 @@ async fn remove_binary_version_removes_one_installed_version_and_clears_selectio
     assert_eq!(runtime.versions.len(), 1);
     assert_eq!(runtime.versions[0].version, "b8248");
     assert_eq!(runtime.selection.selected_version, None);
+    assert_eq!(runtime.selection.selected_runtime_variant_id, None);
     assert_eq!(runtime.selection.active_version, None);
+    assert_eq!(runtime.selection.active_runtime_variant_id, None);
     assert!(runtime.install_history.iter().any(|entry| entry.event
         == ManagedRuntimeHistoryEventKind::Removed
         && entry.version.as_deref() == Some("b9000")));
@@ -310,7 +312,15 @@ fn persist_install_success_records_ready_version_and_selection() {
     );
     assert!(runtime.versions[0].platform_key.is_some());
     assert_eq!(runtime.selection.selected_version.as_deref(), Some("b8248"));
+    assert_eq!(
+        runtime.selection.selected_runtime_variant_id,
+        Some(llama_cpu_variant_id())
+    );
     assert_eq!(runtime.selection.active_version.as_deref(), Some("b8248"));
+    assert_eq!(
+        runtime.selection.active_runtime_variant_id,
+        Some(llama_cpu_variant_id())
+    );
 }
 
 #[test]
@@ -340,7 +350,9 @@ fn persist_remove_success_clears_versions_and_selection() {
 
     assert!(runtime.versions.is_empty());
     assert_eq!(runtime.selection.selected_version, None);
+    assert_eq!(runtime.selection.selected_runtime_variant_id, None);
     assert_eq!(runtime.selection.active_version, None);
+    assert_eq!(runtime.selection.active_runtime_variant_id, None);
 }
 
 #[test]
@@ -371,7 +383,15 @@ fn select_managed_runtime_version_updates_persisted_selection() {
         .expect("llama runtime state");
 
     assert_eq!(runtime.selection.selected_version.as_deref(), Some("b8248"));
+    assert_eq!(
+        runtime.selection.selected_runtime_variant_id,
+        Some(llama_cpu_variant_id())
+    );
     assert_eq!(runtime.selection.default_version.as_deref(), Some("b8248"));
+    assert_eq!(
+        runtime.selection.default_runtime_variant_id,
+        Some(llama_cpu_variant_id())
+    );
     let last_history = runtime
         .install_history
         .last()
@@ -497,6 +517,7 @@ fn resolve_runtime_install_dir_rejects_missing_selected_version() {
         .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
         .expect("llama runtime state");
     runtime.selection.selected_version = Some("other".to_string());
+    runtime.selection.selected_runtime_variant_id = Some(llama_cpu_variant_id());
     runtime.versions = vec![ManagedRuntimePersistedVersion {
         version: "b8248".to_string(),
         runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
@@ -512,7 +533,7 @@ fn resolve_runtime_install_dir_rejects_missing_selected_version() {
     let error = resolve_runtime_install_dir(temp_dir.path(), ManagedBinaryId::LlamaCpp)
         .expect_err("missing selected version should fail");
 
-    assert!(error.contains("selected version 'other' is not installed"));
+    assert!(error.contains("selected version 'other' variant 'llama_cpp.cpu' is not installed"));
 }
 
 #[test]
@@ -590,7 +611,9 @@ fn managed_runtime_snapshot_uses_selected_version_failed_readiness() {
     let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
     let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
     runtime.selection.selected_version = Some("b8248".to_string());
+    runtime.selection.selected_runtime_variant_id = Some(llama_cpu_variant_id());
     runtime.selection.default_version = Some("b8248".to_string());
+    runtime.selection.default_runtime_variant_id = Some(llama_cpu_variant_id());
     runtime.versions.push(ManagedRuntimePersistedVersion {
         version: "b8248".to_string(),
         runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),

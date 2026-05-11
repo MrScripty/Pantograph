@@ -1511,8 +1511,20 @@ mod tests {
                 versions: Vec::new(),
                 selection: inference::ManagedRuntimeSelectionState {
                     selected_version: Some("b8248".to_string()),
+                    selected_runtime_variant_id: Some(
+                        inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                            .expect("valid runtime variant"),
+                    ),
                     active_version: Some("b8248".to_string()),
+                    active_runtime_variant_id: Some(
+                        inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                            .expect("valid runtime variant"),
+                    ),
                     default_version: Some("b8248".to_string()),
+                    default_runtime_variant_id: Some(
+                        inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                            .expect("valid runtime variant"),
+                    ),
                 },
                 active_job: None,
                 job_artifact: None,
@@ -1619,8 +1631,20 @@ mod tests {
                 versions: Vec::new(),
                 selection: inference::ManagedRuntimeSelectionState {
                     selected_version: Some("b8248".to_string()),
+                    selected_runtime_variant_id: Some(
+                        inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                            .expect("valid runtime variant"),
+                    ),
                     active_version: Some("b8248".to_string()),
+                    active_runtime_variant_id: Some(
+                        inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                            .expect("valid runtime variant"),
+                    ),
                     default_version: Some("b8248".to_string()),
+                    default_runtime_variant_id: Some(
+                        inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                            .expect("valid runtime variant"),
+                    ),
                 },
                 active_job: None,
                 job_artifact: None,
@@ -1728,8 +1752,17 @@ mod tests {
                 versions: Vec::new(),
                 selection: inference::ManagedRuntimeSelectionState {
                     selected_version: Some("b8248".to_string()),
+                    selected_runtime_variant_id: Some(
+                        inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                            .expect("valid runtime variant"),
+                    ),
                     active_version: None,
+                    active_runtime_variant_id: None,
                     default_version: Some("b8248".to_string()),
+                    default_runtime_variant_id: Some(
+                        inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                            .expect("valid runtime variant"),
+                    ),
                 },
                 active_job: Some(inference::ManagedRuntimeJobStatus {
                     runtime_variant_id: inference::RuntimeVariantId::parse("llama_cpp.cpu")

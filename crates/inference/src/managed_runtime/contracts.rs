@@ -100,8 +100,14 @@ pub enum ManagedRuntimeJobState {
 #[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimeSelectionState {
     pub selected_version: Option<String>,
+    #[serde(default)]
+    pub selected_runtime_variant_id: Option<RuntimeVariantId>,
     pub active_version: Option<String>,
+    #[serde(default)]
+    pub active_runtime_variant_id: Option<RuntimeVariantId>,
     pub default_version: Option<String>,
+    #[serde(default)]
+    pub default_runtime_variant_id: Option<RuntimeVariantId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

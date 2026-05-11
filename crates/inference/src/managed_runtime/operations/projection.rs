@@ -6,6 +6,7 @@ use super::super::contracts::{
 use super::super::definitions::{definition, ManagedBinaryDefinition};
 use super::super::paths::managed_install_dir;
 use super::super::state::{ManagedRuntimePersistedRuntime, ManagedRuntimePersistedVersion};
+use crate::RuntimeVariantId;
 use std::path::Path;
 
 pub(super) fn snapshot_from_capability(
@@ -70,11 +71,15 @@ fn projected_snapshot_readiness_state(
     };
 
     if let Some(selected_version) = runtime.selection.selected_version.as_deref() {
-        if let Some(version) = runtime
-            .versions
-            .iter()
-            .find(|version| version.version == selected_version)
-        {
+        let Some(selected_runtime_variant_id) =
+            runtime.selection.selected_runtime_variant_id.as_ref()
+        else {
+            return ManagedRuntimeReadinessState::Missing;
+        };
+        if let Some(version) = runtime.versions.iter().find(|version| {
+            version.version == selected_version
+                && version.runtime_variant_id.as_ref() == Some(selected_runtime_variant_id)
+        }) {
             return version.readiness_state;
         }
 
@@ -112,10 +117,14 @@ fn projected_snapshot_unavailable_reason(
 
     let runtime = persisted_runtime?;
     let selected_version = runtime.selection.selected_version.as_deref()?;
+    let selected_runtime_variant_id = runtime.selection.selected_runtime_variant_id.as_ref()?;
     runtime
         .versions
         .iter()
-        .find(|version| version.version == selected_version)
+        .find(|version| {
+            version.version == selected_version
+                && version.runtime_variant_id.as_ref() == Some(selected_runtime_variant_id)
+        })
         .and_then(|version| version.last_error.clone())
         .filter(|reason| !reason.trim().is_empty())
 }
@@ -215,6 +224,7 @@ fn projected_catalog_version_status(
     }
 
     let version = catalog_version.version.as_str();
+    let runtime_variant_id = &catalog_version.runtime_variant_id;
     ManagedRuntimeVersionStatus {
         version: Some(catalog_version.version.clone()),
         display_label: catalog_version.display_label.clone(),
@@ -228,8 +238,18 @@ fn projected_catalog_version_status(
         readiness_state: ManagedRuntimeReadinessState::Missing,
         catalog_available: true,
         installable: capability.install_state != ManagedBinaryInstallState::Unsupported,
-        selected: selection.selected_version.as_deref() == Some(version),
-        active: selection.active_version.as_deref() == Some(version),
+        selected: selection_matches(
+            selection.selected_version.as_deref(),
+            selection.selected_runtime_variant_id.as_ref(),
+            version,
+            runtime_variant_id,
+        ),
+        active: selection_matches(
+            selection.active_version.as_deref(),
+            selection.active_runtime_variant_id.as_ref(),
+            version,
+            runtime_variant_id,
+        ),
     }
 }
 
@@ -239,6 +259,10 @@ fn projected_installed_version_status(
     definition: &'static dyn ManagedBinaryDefinition,
     version: &ManagedRuntimePersistedVersion,
 ) -> ManagedRuntimeVersionStatus {
+    let runtime_variant_id = version
+        .runtime_variant_id
+        .clone()
+        .unwrap_or_else(|| definition.default_runtime_variant_id());
     ManagedRuntimeVersionStatus {
         version: Some(version.version.clone()),
         display_label: version.version.clone(),
@@ -246,10 +270,7 @@ fn projected_installed_version_status(
             .runtime_key
             .clone()
             .unwrap_or_else(|| capability.id.key().to_string()),
-        runtime_variant_id: version
-            .runtime_variant_id
-            .clone()
-            .unwrap_or_else(|| definition.default_runtime_variant_id()),
+        runtime_variant_id: runtime_variant_id.clone(),
         platform_key: version
             .platform_key
             .clone()
@@ -273,8 +294,18 @@ fn projected_installed_version_status(
         readiness_state: version.readiness_state,
         catalog_available: true,
         installable: false,
-        selected: selection.selected_version.as_deref() == Some(version.version.as_str()),
-        active: selection.active_version.as_deref() == Some(version.version.as_str()),
+        selected: selection_matches(
+            selection.selected_version.as_deref(),
+            selection.selected_runtime_variant_id.as_ref(),
+            version.version.as_str(),
+            &runtime_variant_id,
+        ),
+        active: selection_matches(
+            selection.active_version.as_deref(),
+            selection.active_runtime_variant_id.as_ref(),
+            version.version.as_str(),
+            &runtime_variant_id,
+        ),
     }
 }
 
@@ -307,4 +338,13 @@ fn version_status_for_capability(
         selected: false,
         active: capability.available,
     }
+}
+
+fn selection_matches(
+    selected_version: Option<&str>,
+    selected_runtime_variant_id: Option<&RuntimeVariantId>,
+    version: &str,
+    runtime_variant_id: &RuntimeVariantId,
+) -> bool {
+    selected_version == Some(version) && selected_runtime_variant_id == Some(runtime_variant_id)
 }

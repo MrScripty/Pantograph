@@ -433,8 +433,17 @@ fn persist_failed_selected_runtime_version(app_data_dir: &Path, version: &str, e
             }],
             selection: inference::ManagedRuntimeSelectionState {
                 selected_version: Some(version.to_string()),
+                selected_runtime_variant_id: Some(
+                    inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                        .expect("valid runtime variant"),
+                ),
                 active_version: None,
+                active_runtime_variant_id: None,
                 default_version: Some(version.to_string()),
+                default_runtime_variant_id: Some(
+                    inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                        .expect("valid runtime variant"),
+                ),
             },
             active_job: None,
             active_job_artifact: None,

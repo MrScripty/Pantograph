@@ -1499,6 +1499,17 @@ Worker rules:
   path; it was moved to the download/install path and then tightened to use the
   selected `ManagedRuntimeDownloadSource` rather than definition-level
   inference.
+- `cargo test -p inference managed_runtime::operations`,
+  `cargo test -p inference managed_runtime::state`,
+  `cargo test -p inference managed_runtime::neutral_contracts`,
+  `cargo test -p inference runtime_load`,
+  `cargo test -p pantograph-embedded-runtime managed_runtime`,
+  `npm run typecheck`, `cargo fmt --all -- --check`, and `git diff --check`
+  passed after managed runtime selection state began carrying
+  selected/active/default runtime variant ids. The first focused inference run
+  failed because two tests still constructed stale selected-version-only state;
+  updating those fixtures to include the selected variant exercised the new
+  no-version-only selection rule.
 
 ### Traceability Links
 

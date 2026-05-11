@@ -1,5 +1,6 @@
 use super::super::contracts::{
     ManagedBinaryId, ManagedRuntimeJobState, ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
+    ManagedRuntimeSelectionState,
 };
 use super::super::definitions::definition;
 use super::super::paths::managed_install_dir;
@@ -213,11 +214,14 @@ pub(super) fn persist_install_success(
     );
     if runtime.selection.selected_version.is_none() {
         runtime.selection.selected_version = Some(version.to_string());
+        runtime.selection.selected_runtime_variant_id = Some(runtime_variant_id.clone());
     }
     if runtime.selection.default_version.is_none() {
         runtime.selection.default_version = Some(version.to_string());
+        runtime.selection.default_runtime_variant_id = Some(runtime_variant_id.clone());
     }
     runtime.selection.active_version = Some(version.to_string());
+    runtime.selection.active_runtime_variant_id = Some(runtime_variant_id.clone());
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
@@ -255,6 +259,7 @@ pub(super) fn persist_remove_success(
         .is_some_and(|selected| removed_versions.contains(selected))
     {
         runtime.selection.selected_version = None;
+        runtime.selection.selected_runtime_variant_id = None;
     }
     if runtime
         .selection
@@ -263,8 +268,10 @@ pub(super) fn persist_remove_success(
         .is_some_and(|default| removed_versions.contains(default))
     {
         runtime.selection.default_version = None;
+        runtime.selection.default_runtime_variant_id = None;
     }
     runtime.selection.active_version = None;
+    runtime.selection.active_runtime_variant_id = None;
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
@@ -293,9 +300,21 @@ pub(super) fn persist_remove_version_success(
         .retain(|installed_version| installed_version.version != version);
     runtime.active_job = None;
     runtime.active_job_artifact = None;
-    clear_selection_version(&mut runtime.selection.selected_version, version);
-    clear_selection_version(&mut runtime.selection.default_version, version);
-    clear_selection_version(&mut runtime.selection.active_version, version);
+    clear_selection_version(
+        &mut runtime.selection.selected_version,
+        &mut runtime.selection.selected_runtime_variant_id,
+        version,
+    );
+    clear_selection_version(
+        &mut runtime.selection.default_version,
+        &mut runtime.selection.default_runtime_variant_id,
+        version,
+    );
+    clear_selection_version(
+        &mut runtime.selection.active_version,
+        &mut runtime.selection.active_runtime_variant_id,
+        version,
+    );
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
@@ -427,9 +446,13 @@ pub(super) fn update_runtime_selection(
     match target {
         SelectionTarget::Selected => {
             runtime.selection.selected_version = version.clone();
+            runtime.selection.selected_runtime_variant_id =
+                version.as_ref().map(|_| runtime_variant_id.clone());
         }
         SelectionTarget::Default => {
             runtime.selection.default_version = version.clone();
+            runtime.selection.default_runtime_variant_id =
+                version.as_ref().map(|_| runtime_variant_id.clone());
         }
     }
 
@@ -476,27 +499,21 @@ fn resolve_runtime_install_dir_with_mode(
         return Ok(fallback_install_dir);
     };
 
-    let preferred_version = runtime
-        .selection
-        .selected_version
-        .as_deref()
-        .or(runtime.selection.active_version.as_deref())
-        .or(runtime.selection.default_version.as_deref());
+    let preferred_selection = preferred_runtime_selection(&runtime.selection);
 
-    let Some(version) = preferred_version else {
+    let Some((version, runtime_variant_id)) = preferred_selection else {
         return Ok(fallback_install_dir);
     };
 
-    let Some(persisted_version) = runtime
-        .versions
-        .iter()
-        .find(|entry| entry.version == version)
-    else {
+    let Some(persisted_version) = runtime.versions.iter().find(|entry| {
+        entry.version == version && entry.runtime_variant_id.as_ref() == Some(runtime_variant_id)
+    }) else {
         return match mode {
             InstallDirResolutionMode::Strict => Err(format!(
-                "{} selected version '{}' is not installed",
+                "{} selected version '{}' variant '{}' is not installed",
                 id.display_name(),
-                version
+                version,
+                runtime_variant_id
             )),
             InstallDirResolutionMode::BestEffort => Ok(fallback_install_dir),
         };
@@ -507,6 +524,27 @@ fn resolve_runtime_install_dir_with_mode(
         .as_deref()
         .map(PathBuf::from)
         .unwrap_or(fallback_install_dir))
+}
+
+fn preferred_runtime_selection(
+    selection: &ManagedRuntimeSelectionState,
+) -> Option<(&str, &RuntimeVariantId)> {
+    selection
+        .selected_version
+        .as_deref()
+        .zip(selection.selected_runtime_variant_id.as_ref())
+        .or_else(|| {
+            selection
+                .active_version
+                .as_deref()
+                .zip(selection.active_runtime_variant_id.as_ref())
+        })
+        .or_else(|| {
+            selection
+                .default_version
+                .as_deref()
+                .zip(selection.default_runtime_variant_id.as_ref())
+        })
 }
 
 fn selection_target_label(target: SelectionTarget) -> &'static str {
@@ -520,8 +558,13 @@ fn default_runtime_variant_id(id: ManagedBinaryId) -> RuntimeVariantId {
     definition(id).default_runtime_variant_id()
 }
 
-fn clear_selection_version(selection: &mut Option<String>, removed_version: &str) {
+fn clear_selection_version(
+    selection: &mut Option<String>,
+    runtime_variant_id: &mut Option<RuntimeVariantId>,
+    removed_version: &str,
+) {
     if selection.as_deref() == Some(removed_version) {
         *selection = None;
+        *runtime_variant_id = None;
     }
 }

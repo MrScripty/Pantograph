@@ -213,6 +213,10 @@ mod tests {
         ManagedRuntimeSelectionState, ManagedRuntimeVersionStatus, RuntimeVariantId,
     };
 
+    fn runtime_variant_id() -> RuntimeVariantId {
+        RuntimeVariantId::parse("llama_cpp.cpu").expect("valid runtime variant")
+    }
+
     #[test]
     fn runtime_load_facts_reject_missing_runtime() {
         let snapshot = snapshot_with_readiness(ManagedRuntimeReadinessState::Missing, false);
@@ -375,8 +379,11 @@ mod tests {
             }],
             selection: ManagedRuntimeSelectionState {
                 selected_version: Some("b5920".to_string()),
+                selected_runtime_variant_id: Some(runtime_variant_id()),
                 active_version: available.then(|| "b5920".to_string()),
+                active_runtime_variant_id: available.then(runtime_variant_id),
                 default_version: Some("b5920".to_string()),
+                default_runtime_variant_id: Some(runtime_variant_id()),
             },
             active_job: None,
             job_artifact: None,

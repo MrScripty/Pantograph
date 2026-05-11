@@ -311,8 +311,11 @@ mod tests {
                 versions: Vec::new(),
                 selection: ManagedRuntimeSelectionState {
                     selected_version: Some("b8248".to_string()),
+                    selected_runtime_variant_id: None,
                     active_version: None,
+                    active_runtime_variant_id: None,
                     default_version: None,
+                    default_runtime_variant_id: None,
                 },
                 active_job: None,
                 active_job_artifact: None,

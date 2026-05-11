@@ -51,8 +51,11 @@ export type ManagedRuntimeHistoryEventKind =
 
 export interface ManagedRuntimeSelectionState {
   selected_version: string | null;
+  selected_runtime_variant_id: string | null;
   active_version: string | null;
+  active_runtime_variant_id: string | null;
   default_version: string | null;
+  default_runtime_variant_id: string | null;
 }
 
 export interface ManagedRuntimeVersionStatus {

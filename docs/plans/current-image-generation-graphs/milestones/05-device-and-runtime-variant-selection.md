@@ -78,9 +78,15 @@ typed diagnostic and the canonical design is fixed.
     history entries now carry typed `RuntimeVariantId`. Selection rejects ready
     persisted versions that do not have a canonical runtime variant id instead
     of inferring one.
-- [ ] Update selected version, selected variant, active job, retained artifact,
+- [x] Update selected version, selected variant, active job, retained artifact,
   and readiness through one durable state-transition path. Do not split related
   state across independent locks or cancellation points.
+  - 2026-05-11: managed runtime selection state now persists
+    selected/active/default runtime variant ids next to the selected versions.
+    Install, remove, remove-version, and selection update transitions mutate
+    version and variant together, snapshot readiness/status matching uses
+    `(version, runtime_variant_id)`, and strict install-dir resolution rejects
+    missing selected version+variant pairs instead of resolving by version only.
 - [ ] Model llama.cpp CPU and CUDA builds on Linux/Windows as runtime variants
   for the same release version where artifacts or local installs expose those
   variants.
