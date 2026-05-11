@@ -421,6 +421,17 @@ Update during implementation:
   `cargo test -p pantograph-embedded-runtime technical_fit`,
   `cargo test -p pantograph-workflow-service technical_fit`, and
   `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by retiring the
+  `deterministic_tie_break` technical-fit reason from runtime-registry,
+  embedded-runtime projection, workflow-service, and the TypeScript workflow
+  mirror. Auto ambiguity now has one canonical representation:
+  `ambiguous_auto_resolution` diagnostics. Verification passed:
+  `rg -n "DeterministicTieBreak|deterministic_tie_break" crates/pantograph-runtime-registry crates/pantograph-workflow-service crates/pantograph-embedded-runtime src/services/workflow`,
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 

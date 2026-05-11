@@ -1437,6 +1437,32 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: remaining old raw-device/default-backend execution
     paths still need removal before the broad auto-mode checklist item can be
     closed.
+- 2026-05-10 slice: retire deterministic tie-break reason contract.
+  - Smallest useful vertical slice: remove the now-dead
+    `deterministic_tie_break` technical-fit reason from runtime-registry,
+    workflow-service, embedded-runtime projection, and the TypeScript workflow
+    mirror after auto ambiguity began returning typed diagnostics.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `src/services/workflow/types.ts`, and this plan directory.
+  - No-fallback/no-legacy confirmation: the retired wire value is no longer
+    accepted or projected as a current technical-fit reason; ambiguous auto
+    resolution must use `ambiguous_auto_resolution` diagnostics instead.
+  - Standards/blast-radius gate for shared technical-fit DTO cleanup:
+    runtime-registry remains selector-policy owner; workflow-service and
+    frontend mirrors stay transport DTOs only; embedded-runtime only projects
+    canonical reason codes; runtime lifecycle ownership, persisted schemas,
+    generated files, feature flags, dependencies, lockfiles, workers, and
+    workflow fixtures are untouched.
+  - Verification passed:
+    `rg -n "DeterministicTieBreak|deterministic_tie_break" crates/pantograph-runtime-registry crates/pantograph-workflow-service crates/pantograph-embedded-runtime src/services/workflow`,
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`,
+    `npm run typecheck`, and `git diff --check`.
 
 **Verification:**
 

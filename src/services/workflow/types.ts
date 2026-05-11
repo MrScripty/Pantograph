@@ -829,8 +829,7 @@ export type WorkflowTechnicalFitReasonCode =
   | 'budget_pressure'
   | 'queue_pressure'
   | 'missing_candidate_data'
-  | 'missing_runtime_state'
-  | 'deterministic_tie_break';
+  | 'missing_runtime_state';
 
 export interface WorkflowTechnicalFitReason {
   code: WorkflowTechnicalFitReasonCode;

@@ -961,9 +961,6 @@ fn project_reason_code(
         RuntimeTechnicalFitReasonCode::MissingRuntimeState => {
             WorkflowTechnicalFitReasonCode::MissingRuntimeState
         }
-        RuntimeTechnicalFitReasonCode::DeterministicTieBreak => {
-            WorkflowTechnicalFitReasonCode::DeterministicTieBreak
-        }
     }
 }
 

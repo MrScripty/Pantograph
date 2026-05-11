@@ -482,7 +482,6 @@ pub enum RuntimeTechnicalFitReasonCode {
     QueuePressure,
     MissingCandidateData,
     MissingRuntimeState,
-    DeterministicTieBreak,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

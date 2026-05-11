@@ -307,7 +307,6 @@ pub enum WorkflowTechnicalFitReasonCode {
     QueuePressure,
     MissingCandidateData,
     MissingRuntimeState,
-    DeterministicTieBreak,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
