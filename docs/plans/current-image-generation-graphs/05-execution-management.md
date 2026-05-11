@@ -770,6 +770,16 @@ Update during implementation:
   deviations fixed during the slice: the first load/save negative tests used
   shorthand canonical-code expectations; they were corrected to the existing
   worker error codes and the focused tests passed.
+- 2026-05-11: Re-plan trigger reached before replacing the remaining raw
+  device fields found by code search. The remaining `device: Option<String>` /
+  `device: String` fields are shared gateway/startup config and backend-local
+  llama.cpp runtime settings, not isolated worker DTOs. Directly typing them
+  as `InferenceDeviceId` would be wrong because llama.cpp still requires
+  adapter-local selectors such as `CUDA0`, while PyTorch worker boundaries now
+  require canonical selected device ids or omitted auto intent. The next slice
+  needs an explicit typed startup/device-intent design that separates
+  scheduler-facing canonical policy from backend-local adapter selectors
+  before implementation continues.
 
 ## Commit Cadence Notes
 

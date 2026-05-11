@@ -2423,6 +2423,26 @@ typed diagnostic and the canonical design is fixed.
   - Verification deviations fixed during the slice: the first negative
     load/save tests used shorthand canonical-code expectations; they were
     updated to the existing worker error codes and rerun successfully.
+- 2026-05-11 re-plan trigger: remaining raw device fields are shared
+  gateway/startup config and backend-local llama.cpp runtime settings.
+  - Code search after the PyTorch worker response slice found remaining
+    `device: Option<String>` / `device: String` fields in
+    `crates/inference/src/gateway.rs`, `crates/inference/src/config.rs`,
+    `crates/inference/src/backend/mod.rs`, and a test-only PyTorch load-args
+    helper.
+  - Directly replacing the shared startup fields with `InferenceDeviceId` would
+    violate the adapter-boundary rule because llama.cpp startup still consumes
+    backend-local selectors such as `CUDA0`, while PyTorch worker contracts now
+    consume canonical selected ids or omitted auto intent.
+  - Required re-plan decision: introduce a typed startup/device-intent design
+    that distinguishes scheduler-facing canonical `InferenceDevicePolicy` /
+    selected `InferenceDeviceId` facts from backend-local adapter selectors
+    before changing `BackendConfig.device`, `InferenceStartRequest.device`,
+    `EmbeddingStartRequest.device`, or legacy `DeviceConfig.device`.
+  - Deferred until that design is explicit: replacing shared startup raw device
+    fields, updating gateway callers, and deciding whether llama.cpp
+    backend-local selector types live beside `DeviceBackend` or in a new
+    backend-adapter intent DTO.
 
 **Verification:**
 
