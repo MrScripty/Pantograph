@@ -589,7 +589,7 @@ pub fn select_runtime_technical_fit(
         if let Some(candidate) = candidates
             .iter()
             .filter(|candidate| candidate_matches_override(candidate, override_selection))
-            .filter(|candidate| candidate_matches_device_policy(candidate, &normalized))
+            .filter(|candidate| candidate_is_eligible(candidate, &normalized))
             .min_by(|left, right| compare_candidate_ids(left, right))
         {
             if override_selection.runtime_id.is_some() {

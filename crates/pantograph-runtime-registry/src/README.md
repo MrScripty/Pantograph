@@ -113,6 +113,9 @@ process ownership and app composition stay outside this crate.
   and backend key intent. Runtime and variant overrides are matched against
   explicit candidate facts only; missing matches do not synthesize candidates
   or infer variants from backend strings.
+- Explicit overrides still have to satisfy candidate eligibility. A matching
+  backend/runtime/model/variant candidate with unsupported task/model facts is
+  rejected instead of selected as an executable override.
 - Technical-fit resource-pressure interpretation is also computed here so queue
   depth, loaded-runtime saturation, and reservation headroom affect candidate
   ordering through one backend-owned selector instead of adapter-local tie

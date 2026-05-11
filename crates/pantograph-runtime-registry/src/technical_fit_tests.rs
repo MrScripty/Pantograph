@@ -458,6 +458,83 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
 }
 
 #[test]
+fn selector_rejects_ineligible_explicit_backend_override_without_selection() {
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: Vec::new(),
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: Some(RuntimeTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
+            model_id: None,
+            backend_key: Some("llama_cpp".to_string()),
+        }),
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![RuntimeTechnicalFitCandidate {
+            candidate_id: "llama-image".to_string(),
+            runtime_id: Some("llama_cpp".to_string()),
+            runtime_variant_id: Some("llama_cpp/linux-x64/cpu".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            model_id: Some("image-model".to_string()),
+            device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
+            selected_device_id: Some("cpu".to_string()),
+            resource_estimate: None,
+            observed_throughput_hint: None,
+            device_diagnostics: vec![RuntimeTechnicalFitDeviceDiagnostic {
+                code: RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible,
+                severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+                message: "llama.cpp cannot execute diffusion image generation".to_string(),
+                device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
+                device_id: Some("cpu".to_string()),
+                runtime_variant_id: Some("llama_cpp/linux-x64/cpu".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+            }],
+            source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
+            context_window_tokens: Some(8192),
+            residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
+            warmup_state: Some(RuntimeTechnicalFitWarmupState::Warm),
+            supports_runtime_requirements: false,
+            compatibility_report: Some(RuntimeTechnicalFitCompatibilityReport {
+                status: "rejected".to_string(),
+                compatible: false,
+                task: "unsupported".to_string(),
+                model_source: "supported".to_string(),
+                preprocessing: "supported".to_string(),
+                postprocessing: "supported".to_string(),
+            }),
+            compatibility_issue_count: 1,
+            compatibility_issues: vec![RuntimeTechnicalFitCompatibilityIssue {
+                kind: "unsupported_task".to_string(),
+                phase: "task_validation".to_string(),
+                message: "backend cannot execute image generation".to_string(),
+                model_id: Some("image-model".to_string()),
+                path: None,
+            }],
+        }],
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selection_mode,
+        RuntimeTechnicalFitSelectionMode::ExplicitOverride
+    );
+    assert_eq!(decision.selected_candidate_id, None);
+    assert_eq!(decision.selected_backend_key, None);
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::ExplicitBackendOverride
+            && reason.candidate_id.is_none()
+    }));
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
+            && reason.candidate_id.is_none()
+    }));
+}
+
+#[test]
 fn selector_honors_explicit_runtime_variant_override() {
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: empty_snapshot(),

@@ -380,6 +380,13 @@ Update during implementation:
   attempt hit unrelated Pumas temporary SQLite readonly failures in two
   embedded-runtime technical-fit tests; rerunning that suite immediately
   passed.
+- 2026-05-10: Continued Milestone 5 by making runtime-registry explicit
+  overrides respect canonical candidate eligibility. A backend/runtime/model
+  match with unsupported task/model facts now returns an unselected explicit
+  override decision instead of bypassing compatibility as an executable
+  selection. Verification passed: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`, and
+  `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -823,6 +830,10 @@ Worker rules:
   overrides began carrying runtime id and runtime variant id intent. The first
   chained embedded-runtime run hit unrelated Pumas temporary SQLite readonly
   failures, and the immediate rerun passed.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`, and
+  `git diff --check` passed after explicit overrides started reusing canonical
+  candidate eligibility instead of bypassing incompatible task/model facts.
 
 ### Traceability Links
 

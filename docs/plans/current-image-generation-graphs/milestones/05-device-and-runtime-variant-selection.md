@@ -1296,6 +1296,33 @@ typed diagnostic and the canonical design is fixed.
     failures in two embedded-runtime technical-fit tests. Rerunning
     `cargo test -p pantograph-embedded-runtime technical_fit` immediately
     passed.
+- 2026-05-10 slice: explicit override eligibility gate.
+  - Smallest useful vertical slice: make runtime-registry technical-fit
+    explicit overrides reuse the canonical candidate eligibility predicate so
+    matching backend/runtime/model/variant candidates are still rejected when
+    task/model/runtime requirements say they cannot execute.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: explicit backend/runtime overrides no
+    longer bypass compatibility facts. An ineligible matching candidate returns
+    an unselected decision with explicit override and missing-candidate reasons
+    rather than becoming an executable fallback selection.
+  - Standards/blast-radius gate: this slice changes selector filtering,
+    focused runtime-registry tests, and local documentation only. Cross-crate
+    DTO shapes, workflow admission, embedded-runtime projection, frontend,
+    managed runtime state, persisted schemas, workflow fixtures, subprocess
+    behavior, workers, dependencies, generated files, and lockfiles are
+    unchanged.
+  - Discovered follow-up: broader backend/runtime preference rejection still
+    needs end-to-end admission coverage for concrete task/model/platform cases
+    after backend adapters publish complete candidate facts.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`, and
+    `git diff --check`.
 
 **Verification:**
 
