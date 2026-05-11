@@ -376,6 +376,10 @@ from current backend/package facts, not from legacy runtime hints.
   scoring and final policy ownership remain outside this crate.
 - Producer-specific runtime capability mapping must stay in backend Rust so
   adapters do not drift on runtime ids, install state, or backend-key aliases.
+- Backend capability projection must preserve runtime variant capability
+  diagnostics verbatim from inference facts into workflow DTOs. The projection
+  may mirror ids and typed diagnostic fields, but it must not infer readiness
+  from backend names, raw device strings, or frontend state.
 - Managed-runtime, host-runtime, and Python-sidecar capability shaping must
   stay in the shared backend capability helper module rather than being
   rebuilt inside `EmbeddedWorkflowHost` or Tauri adapters.

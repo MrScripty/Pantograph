@@ -551,6 +551,51 @@ export interface WorkflowBackendTaskCapability {
   request_contract?: WorkflowTaskRequestContract;
 }
 
+export type WorkflowInferenceDeviceClass =
+  | 'unknown'
+  | 'cpu'
+  | 'cuda'
+  | 'metal'
+  | 'mps';
+
+export type WorkflowDeviceResolutionDiagnosticSeverity =
+  | 'unknown'
+  | 'advisory'
+  | 'warning'
+  | 'error';
+
+export type WorkflowDeviceResolutionDiagnosticCode =
+  | 'unknown'
+  | 'invalid_device_policy'
+  | 'invalid_device_id'
+  | 'invalid_runtime_variant_id'
+  | 'invalid_backend_id'
+  | 'candidate_unavailable'
+  | 'explicit_device_unavailable'
+  | 'no_valid_candidate'
+  | 'ambiguous_auto_resolution'
+  | 'backend_incompatible'
+  | 'unsupported_device_class'
+  | 'missing_runtime_variant'
+  | 'legacy_device_rejected';
+
+export interface WorkflowDeviceResolutionDiagnostic {
+  code: WorkflowDeviceResolutionDiagnosticCode;
+  severity: WorkflowDeviceResolutionDiagnosticSeverity;
+  message: string;
+  device_class?: WorkflowInferenceDeviceClass | null;
+  device_id?: string | null;
+  runtime_variant_id?: string | null;
+  backend_id?: string | null;
+}
+
+export interface WorkflowRuntimeVariantCapability {
+  runtime_variant_id: string;
+  device_class: WorkflowInferenceDeviceClass;
+  available: boolean;
+  diagnostics: WorkflowDeviceResolutionDiagnostic[];
+}
+
 export interface WorkflowTaskRequestContract {
   task_id: WorkflowInferenceTaskId;
   input_kind: WorkflowInferenceExecutionInputKind;
@@ -635,6 +680,7 @@ export interface WorkflowBackendRequestLifecycleFacts {
 
 export interface WorkflowBackendCapabilityFacts {
   tasks: WorkflowBackendTaskCapability[];
+  runtime_variants?: WorkflowRuntimeVariantCapability[];
   preprocessing: WorkflowBackendComponentCapability;
   postprocessing: WorkflowBackendComponentCapability;
   model_sources: WorkflowBackendModelSourceCapabilityFacts;

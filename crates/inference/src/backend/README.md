@@ -62,6 +62,10 @@ the llama.cpp adapter can switch into a dedicated reranking mode when needed.
 - `BackendCapabilities` fields describe actual runtime support.
 - `BackendCapabilityFacts` names canonical task ids and modality signatures; it
   must not encode scheduler admission, runtime placement, or queue policy.
+- `BackendCapabilityFacts.runtime_variants` reports backend-owned variant
+  availability and typed diagnostics. It is not a fallback path: unavailable
+  CUDA, Metal/MPS, or staged Candle variants stay unavailable until backend or
+  managed-runtime readiness facts prove otherwise.
 - Registry entries and backend implementations must stay in sync.
 - If a backend needs a distinct process mode for reranking, that requirement
   must surface through config and readiness checks instead of hidden fallback.

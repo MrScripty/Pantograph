@@ -310,6 +310,23 @@ Update during implementation:
   from raw `BackendConfig.device`. Runtime fact snapshots now carry
   `active_resolved_device` only when the active llama.cpp runtime descriptor
   exposes a canonical selected device id.
+- 2026-05-10: Continued Milestone 5 by adding runtime-variant capability facts
+  to the backend capability contract and projecting them through workflow
+  service, embedded runtime, and TypeScript workflow mirrors. llama.cpp and
+  PyTorch now publish CPU plus typed unavailable accelerator variant facts, and
+  Candle publishes unavailable CPU/CUDA/macOS Metal placeholders while keeping
+  image generation unavailable. vLLM and MLX capability providers remain a
+  follow-up because they are not registered backends yet. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p inference backend::capability_tests`,
+  `cargo test -p inference --all-features test_capabilities`,
+  `cargo check -p inference --no-default-features`,
+  `cargo test -p pantograph-embedded-runtime runtime_capabilities`,
+  `cargo test -p pantograph-workflow-service --test contract workflow_capabilities_contract_snapshot`,
+  `npm run typecheck`, and `git diff --check`. The obsolete
+  `npm run -w frontend check:types` command failed because the root no longer
+  has a `frontend` workspace; root `npm run typecheck` is the current
+  equivalent and passed.
 
 ## Commit Cadence Notes
 

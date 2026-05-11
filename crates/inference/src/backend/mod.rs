@@ -24,6 +24,17 @@ use async_trait::async_trait;
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 
+use crate::device_contracts::RuntimeVariantCapability;
+#[cfg(any(
+    test,
+    feature = "backend-llamacpp",
+    feature = "backend-candle",
+    feature = "backend-pytorch",
+))]
+use crate::device_contracts::{
+    BackendId, DeviceResolutionDiagnostic, DeviceResolutionDiagnosticCode,
+    DeviceResolutionDiagnosticSeverity, InferenceDeviceClass, RuntimeVariantId,
+};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::managed_runtime::ManagedBinaryId;
 use crate::model_contracts::{
@@ -132,6 +143,10 @@ pub struct BackendCapabilityFacts {
     /// Static support facts for cross-cutting execution features.
     #[serde(default)]
     pub features: BackendFeatureCapabilityFacts,
+    /// Backend-owned runtime variant facts exposed to scheduler/admission
+    /// without ranking policy.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runtime_variants: Vec<RuntimeVariantCapability>,
 }
 
 impl BackendCapabilityFacts {
@@ -144,6 +159,7 @@ impl BackendCapabilityFacts {
             postprocessing: BackendComponentCapability::Unknown,
             model_sources: BackendModelSourceCapabilityFacts::default(),
             features: BackendFeatureCapabilityFacts::default(),
+            runtime_variants: Vec::new(),
         }
     }
 
@@ -219,6 +235,78 @@ impl BackendCapabilityFacts {
             },
         }
     }
+}
+
+#[cfg(any(
+    test,
+    feature = "backend-llamacpp",
+    feature = "backend-candle",
+    feature = "backend-pytorch",
+))]
+pub(crate) fn available_runtime_variant_capability(
+    backend_id: &'static str,
+    runtime_variant_id: &'static str,
+    device_class: InferenceDeviceClass,
+) -> RuntimeVariantCapability {
+    let _ = backend_id_from_static(backend_id);
+    RuntimeVariantCapability {
+        runtime_variant_id: runtime_variant_id_from_static(runtime_variant_id),
+        device_class,
+        available: true,
+        diagnostics: Vec::new(),
+    }
+}
+
+#[cfg(any(
+    test,
+    feature = "backend-llamacpp",
+    feature = "backend-candle",
+    feature = "backend-pytorch",
+))]
+pub(crate) fn unavailable_runtime_variant_capability(
+    backend_id: &'static str,
+    runtime_variant_id: &'static str,
+    device_class: InferenceDeviceClass,
+    code: DeviceResolutionDiagnosticCode,
+    message: &'static str,
+) -> RuntimeVariantCapability {
+    let backend_id = backend_id_from_static(backend_id);
+    let runtime_variant_id = runtime_variant_id_from_static(runtime_variant_id);
+    RuntimeVariantCapability {
+        runtime_variant_id: runtime_variant_id.clone(),
+        device_class,
+        available: false,
+        diagnostics: vec![DeviceResolutionDiagnostic {
+            code,
+            severity: DeviceResolutionDiagnosticSeverity::Error,
+            message: message.to_string(),
+            device_class: Some(device_class),
+            device_id: None,
+            runtime_variant_id: Some(runtime_variant_id),
+            backend_id: Some(backend_id),
+        }],
+    }
+}
+
+#[cfg(any(
+    test,
+    feature = "backend-llamacpp",
+    feature = "backend-candle",
+    feature = "backend-pytorch",
+))]
+fn backend_id_from_static(value: &'static str) -> BackendId {
+    BackendId::parse(value).expect("static backend id must satisfy device contract validation")
+}
+
+#[cfg(any(
+    test,
+    feature = "backend-llamacpp",
+    feature = "backend-candle",
+    feature = "backend-pytorch",
+))]
+fn runtime_variant_id_from_static(value: &'static str) -> RuntimeVariantId {
+    RuntimeVariantId::parse(value)
+        .expect("static runtime variant id must satisfy device contract validation")
 }
 
 /// Static request lifecycle semantics derived from backend capability facts.
@@ -491,6 +579,7 @@ mod capability_tests {
             capabilities.facts.features.streaming,
             BackendFeatureSupport::Unknown
         );
+        assert!(capabilities.facts.runtime_variants.is_empty());
         assert!(!capabilities.supports_task(InferenceTaskId::Embedding));
     }
 
@@ -507,6 +596,50 @@ mod capability_tests {
 
         assert!(capabilities.supports_task(InferenceTaskId::Embedding));
         assert!(!capabilities.supports_task(InferenceTaskId::Rerank));
+    }
+
+    #[test]
+    fn backend_capability_facts_preserve_runtime_variant_facts() {
+        let facts = BackendCapabilityFacts {
+            runtime_variants: vec![
+                available_runtime_variant_capability(
+                    "pytorch",
+                    "pytorch.cpu",
+                    InferenceDeviceClass::Cpu,
+                ),
+                unavailable_runtime_variant_capability(
+                    "pytorch",
+                    "pytorch.cuda",
+                    InferenceDeviceClass::Cuda,
+                    DeviceResolutionDiagnosticCode::MissingRuntimeVariant,
+                    "PyTorch CUDA runtime variant readiness is not reported",
+                ),
+            ],
+            ..BackendCapabilityFacts::default()
+        };
+
+        let encoded = serde_json::to_value(&facts).expect("runtime variant facts encode");
+        assert_eq!(
+            encoded["runtime_variants"][0]["runtime_variant_id"],
+            "pytorch.cpu"
+        );
+        assert_eq!(encoded["runtime_variants"][0]["device_class"], "cpu");
+        assert_eq!(encoded["runtime_variants"][0]["available"], true);
+        assert_eq!(
+            encoded["runtime_variants"][1]["diagnostics"][0]["code"],
+            "missing_runtime_variant"
+        );
+
+        let decoded: BackendCapabilityFacts =
+            serde_json::from_value(encoded).expect("runtime variant facts decode");
+        assert_eq!(decoded.runtime_variants.len(), 2);
+        assert_eq!(
+            decoded.runtime_variants[1].diagnostics[0]
+                .backend_id
+                .as_ref()
+                .map(BackendId::as_str),
+            Some("pytorch")
+        );
     }
 
     #[test]

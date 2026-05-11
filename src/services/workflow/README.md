@@ -390,3 +390,7 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   the same slice as Rust DTO changes. Roadmap tasks such as `depth_estimation`
   remain valid capability metadata even when no typed gateway execution path is
   available yet.
+- TypeScript mirrors for runtime variant capability facts carry backend-owned
+  availability and typed diagnostics only. Frontend consumers may render these
+  facts, but executable device/runtime selection remains a backend/scheduler
+  decision and must not be inferred from these strings.

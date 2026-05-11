@@ -204,6 +204,8 @@ pub struct WorkflowRuntimeCapability {
 pub struct WorkflowBackendCapabilityFacts {
     #[serde(default)]
     pub tasks: Vec<WorkflowBackendTaskCapability>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runtime_variants: Vec<WorkflowRuntimeVariantCapability>,
     #[serde(default)]
     pub preprocessing: WorkflowBackendComponentCapability,
     #[serde(default)]
@@ -214,6 +216,69 @@ pub struct WorkflowBackendCapabilityFacts {
     pub features: WorkflowBackendFeatureCapabilityFacts,
     #[serde(default)]
     pub request_lifecycle: WorkflowBackendRequestLifecycleFacts,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRuntimeVariantCapability {
+    pub runtime_variant_id: String,
+    pub device_class: WorkflowInferenceDeviceClass,
+    pub available: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<WorkflowDeviceResolutionDiagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowInferenceDeviceClass {
+    Unknown,
+    Cpu,
+    Cuda,
+    Metal,
+    Mps,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowDeviceResolutionDiagnostic {
+    pub code: WorkflowDeviceResolutionDiagnosticCode,
+    pub severity: WorkflowDeviceResolutionDiagnosticSeverity,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_class: Option<WorkflowInferenceDeviceClass>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowDeviceResolutionDiagnosticSeverity {
+    Unknown,
+    Advisory,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowDeviceResolutionDiagnosticCode {
+    Unknown,
+    InvalidDevicePolicy,
+    InvalidDeviceId,
+    InvalidRuntimeVariantId,
+    InvalidBackendId,
+    CandidateUnavailable,
+    ExplicitDeviceUnavailable,
+    NoValidCandidate,
+    AmbiguousAutoResolution,
+    BackendIncompatible,
+    UnsupportedDeviceClass,
+    MissingRuntimeVariant,
+    LegacyDeviceRejected,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

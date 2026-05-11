@@ -15,12 +15,14 @@ use pantograph_workflow_service::{
     WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendRequestCancellationSemantics,
     WorkflowBackendRequestCleanupSemantics, WorkflowBackendRequestLifecycleFacts,
     WorkflowBackendRequestLifecyclePhaseFacts, WorkflowBackendTaskCapability,
-    WorkflowCapabilitiesResponse, WorkflowInferenceExecutionInputKind,
+    WorkflowCapabilitiesResponse, WorkflowDeviceResolutionDiagnostic,
+    WorkflowDeviceResolutionDiagnosticCode, WorkflowDeviceResolutionDiagnosticSeverity,
+    WorkflowInferenceDeviceClass, WorkflowInferenceExecutionInputKind,
     WorkflowInferenceExecutionResultKind, WorkflowInferenceLifecyclePhase,
     WorkflowInferenceModality, WorkflowInferenceTaskId, WorkflowModelArtifactKind,
     WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeReadinessState,
-    WorkflowRuntimeSourceKind, WorkflowSupportTier, WorkflowTaskModalitySignature,
-    WorkflowTaskRequestContract, WorkflowTaskStreamingSupport,
+    WorkflowRuntimeSourceKind, WorkflowRuntimeVariantCapability, WorkflowSupportTier,
+    WorkflowTaskModalitySignature, WorkflowTaskRequestContract, WorkflowTaskStreamingSupport,
 };
 
 const PYTHON_SIDECAR_RUNTIME_IDS: &[&str] =
@@ -298,6 +300,11 @@ fn project_backend_capability_facts(
                     .map(|contract| workflow_task_request_contract(&contract)),
             })
             .collect(),
+        runtime_variants: facts
+            .runtime_variants
+            .iter()
+            .map(workflow_runtime_variant_capability)
+            .collect(),
         preprocessing: workflow_component_capability(facts.preprocessing),
         postprocessing: workflow_component_capability(facts.postprocessing),
         model_sources: WorkflowBackendModelSourceCapabilityFacts {
@@ -322,6 +329,117 @@ fn project_backend_capability_facts(
             kv_cache: workflow_feature_support(facts.features.kv_cache),
         },
         request_lifecycle: workflow_request_lifecycle_facts(&facts.request_lifecycle_facts()),
+    }
+}
+
+fn workflow_runtime_variant_capability(
+    capability: &inference::RuntimeVariantCapability,
+) -> WorkflowRuntimeVariantCapability {
+    WorkflowRuntimeVariantCapability {
+        runtime_variant_id: capability.runtime_variant_id.as_str().to_string(),
+        device_class: workflow_device_class(capability.device_class),
+        available: capability.available,
+        diagnostics: capability
+            .diagnostics
+            .iter()
+            .map(workflow_device_resolution_diagnostic)
+            .collect(),
+    }
+}
+
+fn workflow_device_resolution_diagnostic(
+    diagnostic: &inference::DeviceResolutionDiagnostic,
+) -> WorkflowDeviceResolutionDiagnostic {
+    WorkflowDeviceResolutionDiagnostic {
+        code: workflow_device_resolution_diagnostic_code(diagnostic.code),
+        severity: workflow_device_resolution_diagnostic_severity(diagnostic.severity),
+        message: diagnostic.message.clone(),
+        device_class: diagnostic.device_class.map(workflow_device_class),
+        device_id: diagnostic
+            .device_id
+            .as_ref()
+            .map(|device_id| device_id.as_str().to_string()),
+        runtime_variant_id: diagnostic
+            .runtime_variant_id
+            .as_ref()
+            .map(|runtime_variant_id| runtime_variant_id.as_str().to_string()),
+        backend_id: diagnostic
+            .backend_id
+            .as_ref()
+            .map(|backend_id| backend_id.as_str().to_string()),
+    }
+}
+
+fn workflow_device_class(
+    device_class: inference::InferenceDeviceClass,
+) -> WorkflowInferenceDeviceClass {
+    match device_class {
+        inference::InferenceDeviceClass::Cpu => WorkflowInferenceDeviceClass::Cpu,
+        inference::InferenceDeviceClass::Cuda => WorkflowInferenceDeviceClass::Cuda,
+        inference::InferenceDeviceClass::Metal => WorkflowInferenceDeviceClass::Metal,
+        inference::InferenceDeviceClass::Mps => WorkflowInferenceDeviceClass::Mps,
+        _ => WorkflowInferenceDeviceClass::Unknown,
+    }
+}
+
+fn workflow_device_resolution_diagnostic_severity(
+    severity: inference::DeviceResolutionDiagnosticSeverity,
+) -> WorkflowDeviceResolutionDiagnosticSeverity {
+    match severity {
+        inference::DeviceResolutionDiagnosticSeverity::Advisory => {
+            WorkflowDeviceResolutionDiagnosticSeverity::Advisory
+        }
+        inference::DeviceResolutionDiagnosticSeverity::Warning => {
+            WorkflowDeviceResolutionDiagnosticSeverity::Warning
+        }
+        inference::DeviceResolutionDiagnosticSeverity::Error => {
+            WorkflowDeviceResolutionDiagnosticSeverity::Error
+        }
+        _ => WorkflowDeviceResolutionDiagnosticSeverity::Unknown,
+    }
+}
+
+fn workflow_device_resolution_diagnostic_code(
+    code: inference::DeviceResolutionDiagnosticCode,
+) -> WorkflowDeviceResolutionDiagnosticCode {
+    match code {
+        inference::DeviceResolutionDiagnosticCode::InvalidDevicePolicy => {
+            WorkflowDeviceResolutionDiagnosticCode::InvalidDevicePolicy
+        }
+        inference::DeviceResolutionDiagnosticCode::InvalidDeviceId => {
+            WorkflowDeviceResolutionDiagnosticCode::InvalidDeviceId
+        }
+        inference::DeviceResolutionDiagnosticCode::InvalidRuntimeVariantId => {
+            WorkflowDeviceResolutionDiagnosticCode::InvalidRuntimeVariantId
+        }
+        inference::DeviceResolutionDiagnosticCode::InvalidBackendId => {
+            WorkflowDeviceResolutionDiagnosticCode::InvalidBackendId
+        }
+        inference::DeviceResolutionDiagnosticCode::CandidateUnavailable => {
+            WorkflowDeviceResolutionDiagnosticCode::CandidateUnavailable
+        }
+        inference::DeviceResolutionDiagnosticCode::ExplicitDeviceUnavailable => {
+            WorkflowDeviceResolutionDiagnosticCode::ExplicitDeviceUnavailable
+        }
+        inference::DeviceResolutionDiagnosticCode::NoValidCandidate => {
+            WorkflowDeviceResolutionDiagnosticCode::NoValidCandidate
+        }
+        inference::DeviceResolutionDiagnosticCode::AmbiguousAutoResolution => {
+            WorkflowDeviceResolutionDiagnosticCode::AmbiguousAutoResolution
+        }
+        inference::DeviceResolutionDiagnosticCode::BackendIncompatible => {
+            WorkflowDeviceResolutionDiagnosticCode::BackendIncompatible
+        }
+        inference::DeviceResolutionDiagnosticCode::UnsupportedDeviceClass => {
+            WorkflowDeviceResolutionDiagnosticCode::UnsupportedDeviceClass
+        }
+        inference::DeviceResolutionDiagnosticCode::MissingRuntimeVariant => {
+            WorkflowDeviceResolutionDiagnosticCode::MissingRuntimeVariant
+        }
+        inference::DeviceResolutionDiagnosticCode::LegacyDeviceRejected => {
+            WorkflowDeviceResolutionDiagnosticCode::LegacyDeviceRejected
+        }
+        _ => WorkflowDeviceResolutionDiagnosticCode::Unknown,
     }
 }
 
@@ -966,6 +1084,29 @@ mod tests {
                             external_connection: inference::BackendFeatureSupport::Unsupported,
                             kv_cache: inference::BackendFeatureSupport::Unsupported,
                         },
+                        runtime_variants: vec![inference::RuntimeVariantCapability {
+                            runtime_variant_id: inference::RuntimeVariantId::parse("candle.cpu")
+                                .expect("valid test runtime variant id"),
+                            device_class: inference::InferenceDeviceClass::Cpu,
+                            available: false,
+                            diagnostics: vec![inference::DeviceResolutionDiagnostic {
+                                code:
+                                    inference::DeviceResolutionDiagnosticCode::CandidateUnavailable,
+                                severity: inference::DeviceResolutionDiagnosticSeverity::Error,
+                                message: "Candle executable model loading is not implemented"
+                                    .to_string(),
+                                device_class: Some(inference::InferenceDeviceClass::Cpu),
+                                device_id: None,
+                                runtime_variant_id: Some(
+                                    inference::RuntimeVariantId::parse("candle.cpu")
+                                        .expect("valid test runtime variant id"),
+                                ),
+                                backend_id: Some(
+                                    inference::BackendId::parse("candle")
+                                        .expect("valid test backend id"),
+                                ),
+                            }],
+                        }],
                     },
                     ..BackendCapabilities::default()
                 },
@@ -1021,6 +1162,17 @@ mod tests {
         assert_eq!(
             facts.features.kv_cache,
             WorkflowBackendFeatureSupport::Unsupported
+        );
+        assert_eq!(facts.runtime_variants.len(), 1);
+        assert_eq!(facts.runtime_variants[0].runtime_variant_id, "candle.cpu");
+        assert_eq!(
+            facts.runtime_variants[0].device_class,
+            WorkflowInferenceDeviceClass::Cpu
+        );
+        assert!(!facts.runtime_variants[0].available);
+        assert_eq!(
+            facts.runtime_variants[0].diagnostics[0].code,
+            WorkflowDeviceResolutionDiagnosticCode::CandidateUnavailable
         );
         assert_eq!(
             facts.model_sources.artifact_kinds,
@@ -1165,6 +1317,7 @@ mod tests {
                             external_connection: inference::BackendFeatureSupport::Supported,
                             kv_cache: inference::BackendFeatureSupport::Supported,
                         },
+                        runtime_variants: Vec::new(),
                     },
                     ..BackendCapabilities::default()
                 },

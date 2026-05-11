@@ -101,7 +101,7 @@ typed diagnostic and the canonical design is fixed.
   plus `mps` on macOS.
 - [ ] Add vLLM device capability placeholder facts for CPU and CUDA only. Do
   not implement vLLM execution in this slice.
-- [ ] Add Candle capability placeholder facts for CPU, CUDA, and macOS Metal.
+- [x] Add Candle capability placeholder facts for CPU, CUDA, and macOS Metal.
   Do not expose Candle image generation until executable Candle support exists.
 - [ ] Add future MLX capability facts as macOS-only roadmap facts. MLX must be
   rejected on Linux/Windows if explicitly requested.
@@ -1093,6 +1093,48 @@ typed diagnostic and the canonical design is fixed.
   - Verification deviation: the first `cargo fmt --all -- --check` reported a
     rustfmt wrapping difference in `gateway.rs`; `cargo fmt --all` was run,
     and the format check then passed.
+- 2026-05-10 slice: backend capability runtime-variant facts.
+  - Smallest useful vertical slice: extend the existing backend capability
+    facts with runtime variant facts and project those facts through
+    workflow-service, embedded-runtime, and TypeScript workflow mirrors.
+  - Allowed write set:
+    `crates/inference/src/backend/`,
+    `crates/pantograph-workflow-service/src/workflow/contracts.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/tests/contract.rs`,
+    `crates/pantograph-embedded-runtime/src/runtime_capabilities.rs`,
+    `src/services/workflow/types.ts`, relevant module READMEs, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: runtime variant facts report explicit
+    availability or typed unavailability diagnostics only. CUDA, Metal/MPS, and
+    staged Candle facts are not converted into executable CPU/auto selections,
+    and the projection does not infer readiness from backend names or raw
+    device strings.
+  - Standards/blast-radius gate: the slice changes append-only serde DTOs and
+    static adapter facts. Runtime lifecycle ownership, scheduler ranking,
+    managed runtime state, persisted schemas, lockfiles, workflow fixtures,
+    worker execution, subprocess startup, and frontend executable-device state
+    are unchanged. Test isolation uses Rust unit/contract tests plus root
+    TypeScript typechecking with no external services.
+  - Implemented facts: llama.cpp now reports CPU plus unavailable CUDA and
+    macOS Metal variant facts; PyTorch reports CPU plus unavailable CUDA and
+    macOS MPS variant facts; Candle reports unavailable CPU/CUDA and macOS
+    Metal placeholder facts while keeping image generation unavailable.
+  - Discovered follow-up: vLLM and MLX do not yet have registered backend
+    capability providers in this crate, so their placeholder/runtime variant
+    facts remain a later provider-registration slice rather than a hidden
+    frontend or scheduler assumption.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference backend::capability_tests`,
+    `cargo test -p inference --all-features test_capabilities`,
+    `cargo check -p inference --no-default-features`,
+    `cargo test -p pantograph-embedded-runtime runtime_capabilities`,
+    `cargo test -p pantograph-workflow-service --test contract workflow_capabilities_contract_snapshot`,
+    `npm run typecheck`, and `git diff --check`.
+  - Verification deviation: `npm run -w frontend check:types` failed because
+    this repository root has no `frontend` workspace. The equivalent current
+    script is the root `npm run typecheck`, which passed.
 
 **Verification:**
 

@@ -725,6 +725,7 @@ mod tests {
                         external_connection: inference::BackendFeatureSupport::Unsupported,
                         kv_cache: inference::BackendFeatureSupport::Supported,
                     },
+                    runtime_variants: Vec::new(),
                 },
                 ..inference::BackendCapabilities::default()
             },

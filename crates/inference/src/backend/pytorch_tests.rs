@@ -146,6 +146,16 @@ fn test_capabilities() {
     assert!(caps.supports_task(InferenceTaskId::TextGeneration));
     assert!(caps.supports_task(InferenceTaskId::AudioTranscription));
     assert!(!caps.supports_task(InferenceTaskId::Embedding));
+    assert!(caps.facts.runtime_variants.iter().any(|variant| {
+        variant.runtime_variant_id.as_str() == "pytorch.cpu"
+            && variant.device_class == InferenceDeviceClass::Cpu
+            && variant.available
+    }));
+    assert!(caps.facts.runtime_variants.iter().any(|variant| {
+        variant.runtime_variant_id.as_str() == "pytorch.cuda"
+            && variant.device_class == InferenceDeviceClass::Cuda
+            && !variant.available
+    }));
     assert_eq!(
         caps.facts.features.kv_cache,
         BackendFeatureSupport::Supported

@@ -11,11 +11,13 @@ use async_trait::async_trait;
 use futures_util::Stream;
 
 use super::{
-    openai_embedding_token_count_for_single_result, BackendCapabilities, BackendCapabilityFacts,
+    available_runtime_variant_capability, openai_embedding_token_count_for_single_result,
+    unavailable_runtime_variant_capability, BackendCapabilities, BackendCapabilityFacts,
     BackendComponentCapability, BackendConfig, BackendError, BackendFeatureCapabilityFacts,
     BackendFeatureSupport, BackendModelSourceCapabilityFacts, BackendStartOutcome,
     BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend, LlamaCppRuntimeSettings,
 };
+use crate::device_contracts::{DeviceResolutionDiagnosticCode, InferenceDeviceClass};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
@@ -59,7 +61,7 @@ impl LlamaCppBackend {
             image_generation: false,
             embeddings: true,       // Via --embedding mode
             reranking: true,        // Via --reranking mode
-            gpu: true,              // CUDA, Vulkan, Metal
+            gpu: true,              // CUDA and Metal are runtime-variant gated
             device_selection: true, // Manual device choice
             streaming: true,        // SSE streaming
             tool_calling: true,     // Via OpenAI-compatible API
@@ -95,6 +97,28 @@ impl LlamaCppBackend {
                     external_connection: BackendFeatureSupport::Supported,
                     kv_cache: BackendFeatureSupport::Supported,
                 },
+                runtime_variants: vec![
+                    available_runtime_variant_capability(
+                        "llama_cpp",
+                        "llama_cpp.cpu",
+                        InferenceDeviceClass::Cpu,
+                    ),
+                    unavailable_runtime_variant_capability(
+                        "llama_cpp",
+                        "llama_cpp.cuda",
+                        InferenceDeviceClass::Cuda,
+                        DeviceResolutionDiagnosticCode::MissingRuntimeVariant,
+                        "llama.cpp CUDA runtime variant readiness is not reported",
+                    ),
+                    #[cfg(target_os = "macos")]
+                    unavailable_runtime_variant_capability(
+                        "llama_cpp",
+                        "llama_cpp.metal",
+                        InferenceDeviceClass::Metal,
+                        DeviceResolutionDiagnosticCode::MissingRuntimeVariant,
+                        "llama.cpp Metal runtime variant readiness is not reported",
+                    ),
+                ],
             },
         }
     }
@@ -558,6 +582,16 @@ mod tests {
         assert!(caps.supports_task(InferenceTaskId::ChatCompletion));
         assert!(caps.supports_task(InferenceTaskId::Embedding));
         assert!(caps.supports_task(InferenceTaskId::Rerank));
+        assert!(caps.facts.runtime_variants.iter().any(|variant| {
+            variant.runtime_variant_id.as_str() == "llama_cpp.cpu"
+                && variant.device_class == InferenceDeviceClass::Cpu
+                && variant.available
+        }));
+        assert!(caps.facts.runtime_variants.iter().any(|variant| {
+            variant.runtime_variant_id.as_str() == "llama_cpp.cuda"
+                && variant.device_class == InferenceDeviceClass::Cuda
+                && !variant.available
+        }));
         assert_eq!(
             caps.facts.features.kv_cache,
             BackendFeatureSupport::Supported

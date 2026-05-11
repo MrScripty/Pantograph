@@ -121,6 +121,10 @@ normalizing them to executable defaults.
   decisions. Backend-specific strings such as llama.cpp `CUDA0` values remain
   adapter-local translation details and must not cross scheduler-facing
   boundaries as trusted internal state.
+- `BackendCapabilityFacts.runtime_variants` is the backend-owned capability
+  surface for runtime variant readiness facts. It reports support and typed
+  unavailability diagnostics only; it must not rank variants or silently turn
+  unavailable explicit device requests into CPU/auto execution.
 - Auto device policy is a first-class scheduler intent. Invalid explicit
   identifiers, missing candidates, or ambiguous selected candidates must return
   typed diagnostics/errors and must not be converted into `auto`, CPU, or

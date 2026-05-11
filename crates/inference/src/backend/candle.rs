@@ -11,11 +11,13 @@ use async_trait::async_trait;
 use futures_util::Stream;
 
 use super::{
-    openai_embedding_token_count_for_single_result, BackendCapabilities, BackendCapabilityFacts,
-    BackendComponentCapability, BackendConfig, BackendError, BackendFeatureCapabilityFacts,
-    BackendFeatureSupport, BackendModelSourceCapabilityFacts, BackendStartOutcome,
-    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
+    openai_embedding_token_count_for_single_result, unavailable_runtime_variant_capability,
+    BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
+    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
+    BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
+    EmbeddingResult, InferenceBackend,
 };
+use crate::device_contracts::{DeviceResolutionDiagnosticCode, InferenceDeviceClass};
 use crate::model_contracts::{
     resolve_task_registry_entry_from_evidence, InferenceModality, InferenceTaskId,
     ModelValidationState, PackageFactStatus, ProcessorComponentKind, ResolvedModelPackageFacts,
@@ -126,6 +128,30 @@ impl CandleBackend {
                     external_connection: BackendFeatureSupport::Unsupported,
                     kv_cache: BackendFeatureSupport::Unsupported,
                 },
+                runtime_variants: vec![
+                    unavailable_runtime_variant_capability(
+                        "candle",
+                        "candle.cpu",
+                        InferenceDeviceClass::Cpu,
+                        DeviceResolutionDiagnosticCode::CandidateUnavailable,
+                        "Candle executable model loading is not implemented",
+                    ),
+                    unavailable_runtime_variant_capability(
+                        "candle",
+                        "candle.cuda",
+                        InferenceDeviceClass::Cuda,
+                        DeviceResolutionDiagnosticCode::MissingRuntimeVariant,
+                        "Candle CUDA runtime variant readiness is not reported",
+                    ),
+                    #[cfg(target_os = "macos")]
+                    unavailable_runtime_variant_capability(
+                        "candle",
+                        "candle.metal",
+                        InferenceDeviceClass::Metal,
+                        DeviceResolutionDiagnosticCode::MissingRuntimeVariant,
+                        "Candle Metal runtime variant readiness is not reported",
+                    ),
+                ],
             },
         }
     }
@@ -703,6 +729,16 @@ mod tests {
         assert!(!caps.streaming);
         assert!(caps.supports_task(InferenceTaskId::Embedding));
         assert!(!caps.supports_task(InferenceTaskId::TextGeneration));
+        assert!(caps.facts.runtime_variants.iter().any(|variant| {
+            variant.runtime_variant_id.as_str() == "candle.cpu"
+                && variant.device_class == InferenceDeviceClass::Cpu
+                && !variant.available
+        }));
+        assert!(caps.facts.runtime_variants.iter().any(|variant| {
+            variant.runtime_variant_id.as_str() == "candle.cuda"
+                && variant.device_class == InferenceDeviceClass::Cuda
+                && !variant.available
+        }));
         assert_eq!(
             caps.facts.features.kv_cache,
             BackendFeatureSupport::Unsupported

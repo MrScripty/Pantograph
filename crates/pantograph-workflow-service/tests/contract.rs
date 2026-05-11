@@ -23,14 +23,16 @@ use pantograph_workflow_service::{
     WorkflowBackendModelSourceCapabilityFacts, WorkflowBackendRequestCancellationSemantics,
     WorkflowBackendRequestCleanupSemantics, WorkflowBackendRequestLifecycleFacts,
     WorkflowBackendRequestLifecyclePhaseFacts, WorkflowBackendTaskCapability,
-    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowDiagnosticsProjectionAdvance,
-    WorkflowDiagnosticsProjectionFailure, WorkflowDiagnosticsProjectionInvalidation,
-    WorkflowDiagnosticsProjectionKind, WorkflowDiagnosticsProjectionRefreshReason,
-    WorkflowDiagnosticsProjectionRefreshRequest, WorkflowDiagnosticsProjectionRefreshResponse,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary, WorkflowHost,
-    WorkflowHostCapabilities, WorkflowInferenceExecutionInputKind,
+    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowDeviceResolutionDiagnostic,
+    WorkflowDeviceResolutionDiagnosticCode, WorkflowDeviceResolutionDiagnosticSeverity,
+    WorkflowDiagnosticsProjectionAdvance, WorkflowDiagnosticsProjectionFailure,
+    WorkflowDiagnosticsProjectionInvalidation, WorkflowDiagnosticsProjectionKind,
+    WorkflowDiagnosticsProjectionRefreshReason, WorkflowDiagnosticsProjectionRefreshRequest,
+    WorkflowDiagnosticsProjectionRefreshResponse, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
+    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
+    WorkflowInferenceDeviceClass, WorkflowInferenceExecutionInputKind,
     WorkflowInferenceExecutionResultKind, WorkflowInferenceLifecyclePhase,
     WorkflowInferenceModality, WorkflowInferenceTaskId, WorkflowIoArtifactQueryRequest,
     WorkflowIoArtifactQueryResponse, WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest,
@@ -45,13 +47,13 @@ use pantograph_workflow_service::{
     WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse,
     WorkflowRunInspectionQueryRequest, WorkflowRunInspectionQueryResponse,
     WorkflowRunListQueryResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotResponse,
-    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
-    WorkflowServiceError, WorkflowSupportTier, WorkflowTaskModalitySignature,
-    WorkflowTaskRequestContract, WorkflowTaskStreamingSupport, WorkflowTraceNodeRecord,
-    WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
-    WorkflowTraceSummary,
+    WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowRuntimeVariantCapability,
+    WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
+    WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
+    WorkflowSupportTier, WorkflowTaskModalitySignature, WorkflowTaskRequestContract,
+    WorkflowTaskStreamingSupport, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
+    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -143,6 +145,29 @@ impl WorkflowHost for ContractHost {
                                     WorkflowInferenceModality::PointCloud,
                                 ],
                             }),
+                        },
+                    ],
+                    runtime_variants: vec![
+                        WorkflowRuntimeVariantCapability {
+                            runtime_variant_id: "llama_cpp.cpu".to_string(),
+                            device_class: WorkflowInferenceDeviceClass::Cpu,
+                            available: true,
+                            diagnostics: Vec::new(),
+                        },
+                        WorkflowRuntimeVariantCapability {
+                            runtime_variant_id: "llama_cpp.cuda".to_string(),
+                            device_class: WorkflowInferenceDeviceClass::Cuda,
+                            available: false,
+                            diagnostics: vec![WorkflowDeviceResolutionDiagnostic {
+                                code: WorkflowDeviceResolutionDiagnosticCode::MissingRuntimeVariant,
+                                severity: WorkflowDeviceResolutionDiagnosticSeverity::Error,
+                                message: "llama.cpp CUDA runtime variant readiness is not reported"
+                                    .to_string(),
+                                device_class: Some(WorkflowInferenceDeviceClass::Cuda),
+                                device_id: None,
+                                runtime_variant_id: Some("llama_cpp.cuda".to_string()),
+                                backend_id: Some("llama_cpp".to_string()),
+                            }],
                         },
                     ],
                     preprocessing: WorkflowBackendComponentCapability::RequiresPackageComponent,
@@ -386,6 +411,23 @@ async fn workflow_capabilities_contract_snapshot() {
                         "required_input_modalities": ["image"],
                         "output_modalities": ["image", "point_cloud"]
                     }
+                }],
+                "runtime_variants": [{
+                    "runtime_variant_id": "llama_cpp.cpu",
+                    "device_class": "cpu",
+                    "available": true
+                }, {
+                    "runtime_variant_id": "llama_cpp.cuda",
+                    "device_class": "cuda",
+                    "available": false,
+                    "diagnostics": [{
+                        "code": "missing_runtime_variant",
+                        "severity": "error",
+                        "message": "llama.cpp CUDA runtime variant readiness is not reported",
+                        "device_class": "cuda",
+                        "runtime_variant_id": "llama_cpp.cuda",
+                        "backend_id": "llama_cpp"
+                    }]
                 }],
                 "preprocessing": "requires_package_component",
                 "postprocessing": "not_required",

@@ -32,11 +32,13 @@ use self::pytorch_worker_contract::{
     PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
+    available_runtime_variant_capability, unavailable_runtime_variant_capability,
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
     BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
     BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
     EmbeddingResult, InferenceBackend,
 };
+use crate::device_contracts::{DeviceResolutionDiagnosticCode, InferenceDeviceClass};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry_from_evidence, GenerationOptions, InferenceModality,
@@ -989,6 +991,28 @@ impl PyTorchBackend {
                     external_connection: BackendFeatureSupport::Unsupported,
                     kv_cache: BackendFeatureSupport::Supported,
                 },
+                runtime_variants: vec![
+                    available_runtime_variant_capability(
+                        "pytorch",
+                        "pytorch.cpu",
+                        InferenceDeviceClass::Cpu,
+                    ),
+                    unavailable_runtime_variant_capability(
+                        "pytorch",
+                        "pytorch.cuda",
+                        InferenceDeviceClass::Cuda,
+                        DeviceResolutionDiagnosticCode::MissingRuntimeVariant,
+                        "PyTorch CUDA runtime variant readiness is not reported",
+                    ),
+                    #[cfg(target_os = "macos")]
+                    unavailable_runtime_variant_capability(
+                        "pytorch",
+                        "pytorch.mps",
+                        InferenceDeviceClass::Mps,
+                        DeviceResolutionDiagnosticCode::MissingRuntimeVariant,
+                        "PyTorch MPS runtime variant readiness is not reported",
+                    ),
+                ],
             },
         }
     }

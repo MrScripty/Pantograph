@@ -707,6 +707,7 @@ mod tests {
                     external_connection: BackendFeatureSupport::Unsupported,
                     kv_cache: BackendFeatureSupport::Supported,
                 },
+                runtime_variants: Vec::new(),
             },
             ..BackendCapabilities::default()
         }
@@ -731,6 +732,7 @@ mod tests {
                     custom_code: BackendFeatureSupport::Unsupported,
                 },
                 features: BackendFeatureCapabilityFacts::default(),
+                runtime_variants: Vec::new(),
             },
             ..BackendCapabilities::default()
         }
@@ -755,6 +757,7 @@ mod tests {
                     custom_code: BackendFeatureSupport::Unsupported,
                 },
                 features: BackendFeatureCapabilityFacts::default(),
+                runtime_variants: Vec::new(),
             },
             ..BackendCapabilities::default()
         }

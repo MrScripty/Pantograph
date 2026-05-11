@@ -121,6 +121,10 @@ Workflow backend task capability DTOs now carry optional
 The contract describes task input/result families and executable versus
 contract-only status without encoding runtime selection, scheduler admission, or
 backend residency policy.
+Workflow backend capability DTOs now also carry runtime variant capability
+facts and typed device diagnostics projected from inference. Workflow-service
+stores and transports these backend-owned facts; it does not derive runtime
+readiness, choose devices, or translate raw backend device strings.
 Artifact format metadata now includes optional typed conversion status,
 conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through
