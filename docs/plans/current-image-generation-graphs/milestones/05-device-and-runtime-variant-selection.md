@@ -2465,10 +2465,9 @@ typed diagnostic and the canonical design is fixed.
   - Verification passed:
     `cargo test -p inference startup_device`,
     `cargo fmt --all -- --check`, and `git diff --check`.
-  - Remaining follow-up: migrate `InferenceStartRequest.device`,
-    `EmbeddingStartRequest.device`, `BackendConfig.device`, and legacy
-    `DeviceConfig.device` through this explicit intent boundary in later
-    slices without preserving raw-string compatibility shims.
+  - Remaining follow-up: migrate startup request DTOs, `BackendConfig.device`,
+    and legacy `DeviceConfig.device` through this explicit intent boundary in
+    later slices without preserving raw-string compatibility shims.
 - 2026-05-11 slice: typed llama.cpp effective runtime device.
   - Smallest useful vertical slice: change normalized
     `LlamaCppRuntimeSettings.device` from `String` to backend-local
@@ -2528,6 +2527,33 @@ typed diagnostic and the canonical design is fixed.
     `InferenceStartRequest.device`, `EmbeddingStartRequest.device`, and the
     test-only PyTorch load args helper through explicit startup/device intent
     contracts without accepting raw strings as trusted internal state.
+- 2026-05-11 slice: typed gateway startup request device intent.
+  - Smallest useful vertical slice: change `InferenceStartRequest.device` and
+    `EmbeddingStartRequest.device` from raw strings to
+    `BackendStartupDeviceIntent`, then validate the active backend namespace
+    while building backend startup config.
+  - Allowed write set: `crates/inference/src/gateway.rs`,
+    `crates/inference/src/gateway_tests/start_config.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: PyTorch accepts canonical device ids
+    or explicit auto policy omission only; llama.cpp accepts backend-local
+    selectors only; unresolved explicit policies, wrong backend namespaces,
+    external-runtime device intents, and Candle embedding device intents return
+    typed `BackendError::Config` diagnostics instead of being preserved,
+    inferred, or silently ignored.
+  - Standards/blast-radius gate: gateway request DTO and focused tests only;
+    no `BackendConfig.device` migration, generated DTOs, lockfiles, workflow
+    fixtures, frontend code, managed-runtime install state, scheduler ranking,
+    or worker execution behavior changed.
+  - Verification passed:
+    `cargo test -p inference gateway::tests::start_config`,
+    `cargo test -p inference startup_device`,
+    `cargo test -p pantograph-embedded-runtime edit_session_execution`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: migrate shared `BackendConfig.device`, node-engine
+    llama.cpp runtime settings, and the test-only PyTorch load args helper
+    through explicit device-intent adapters without accepting raw strings as
+    trusted internal execution state.
 
 **Verification:**
 
@@ -2638,6 +2664,9 @@ typed diagnostic and the canonical design is fixed.
 - Sidecar device config tests prove legacy llama.cpp selector JSON decodes into
   typed `DeviceBackend`, rejects invalid selectors and canonical ids, and
   command/runtime projections cannot carry invalid raw device strings.
+- Gateway start-config tests prove typed startup request device intent is
+  namespace-checked before backend startup config construction and explicit
+  device intent is not silently ignored by external or unsupported backends.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

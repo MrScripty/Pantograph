@@ -814,6 +814,18 @@ Update during implementation:
   `cargo fmt --all -- --check`, and `git diff --check`. Discovered issue fixed
   in-slice: model fingerprint hashing was using the display label for typed
   devices; it now hashes the stable backend selector id.
+- 2026-05-11: Continued Milestone 5 by typing gateway startup request device
+  intent with `BackendStartupDeviceIntent` for inference and embedding start
+  requests. Gateway startup config construction now rejects llama.cpp-local
+  selectors for PyTorch, canonical device ids for llama.cpp, unresolved
+  explicit PyTorch policies without a concrete device id, external attachment
+  device intents, and Candle embedding device intents instead of silently
+  preserving or ignoring raw startup strings. `BackendConfig.device` remains
+  the next shared migration target. Verification passed:
+  `cargo test -p inference gateway::tests::start_config`,
+  `cargo test -p inference startup_device`,
+  `cargo test -p pantograph-embedded-runtime edit_session_execution`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1061,9 +1073,8 @@ Worker rules:
   verified without pretending to test browser focus.
 - Continue Milestone 5 by replacing remaining legacy raw device-string
   execution paths with these contracts. The remaining work includes migrating
-  shared `BackendConfig.device` and startup request fields, managed runtime
-  command variant selection, frontend device options, and node-engine backend
-  routing.
+  shared `BackendConfig.device`, managed runtime command variant selection,
+  frontend device options, and node-engine backend routing.
 - Continue Milestone 5 by wiring selected device class into frontend
   run-inspection presentation only from typed backend projection records, not
   by parsing raw diagnostic payload JSON.
@@ -1157,6 +1168,10 @@ Worker rules:
   backend-local `DeviceBackend` internally, serde preserves the existing
   llama.cpp selector string shape, and invalid selectors or canonical ids fail
   before sidecar runtime state exists.
+- Gateway start-config tests now prove startup requests carry typed
+  `BackendStartupDeviceIntent`, reject wrong backend/device namespaces, and do
+  not silently ignore explicit device intent for external runtime attachment or
+  Candle embedding startup.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

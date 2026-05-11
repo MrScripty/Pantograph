@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::backend::{BackendConfig, BackendError};
+use crate::backend::{BackendConfig, BackendError, BackendStartupDeviceIntent};
+use crate::device_contracts::{InferenceDeviceClass, InferenceDevicePolicy};
 
 use super::super::{EmbeddingStartRequest, GatewayError, InferenceGateway, InferenceStartRequest};
 use super::{MockHttpBackend, MockImageBackend, MockProcessSpawner, MockReusedBackend};
@@ -24,6 +25,29 @@ async fn test_build_inference_start_config_for_external_llamacpp_uses_external_u
     );
     assert_eq!(config.model_path, None);
     assert!(!config.embedding_mode);
+}
+
+#[tokio::test]
+async fn test_build_inference_start_config_rejects_device_intent_for_external_runtime() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "llama.cpp");
+
+    let error = gateway
+        .build_inference_start_config(InferenceStartRequest {
+            external_url: Some("http://127.0.0.1:1234".to_string()),
+            device: Some(
+                BackendStartupDeviceIntent::llama_cpp_selector("Vulkan0")
+                    .expect("valid llama.cpp selector"),
+            ),
+            ..InferenceStartRequest::default()
+        })
+        .await
+        .expect_err("external attachment should reject device intent");
+
+    assert!(matches!(
+        error,
+        GatewayError::Backend(BackendError::Config(message))
+        if message.contains("External runtime attachment does not accept startup device intent")
+    ));
 }
 
 #[tokio::test]
@@ -53,7 +77,10 @@ async fn test_build_inference_start_config_for_pytorch_uses_model_path_without_m
         .build_inference_start_config(InferenceStartRequest {
             file_model_path: Some(PathBuf::from("/models/qwen2.5-7b-instruct")),
             mmproj_path: None,
-            device: Some("cuda:0".to_string()),
+            device: Some(
+                BackendStartupDeviceIntent::canonical_device_id("cuda:0")
+                    .expect("valid canonical device id"),
+            ),
             ..InferenceStartRequest::default()
         })
         .await
@@ -69,6 +96,116 @@ async fn test_build_inference_start_config_for_pytorch_uses_model_path_without_m
     assert_eq!(config.mmproj_path, None);
     assert_eq!(config.device.as_deref(), Some("cuda:0"));
     assert!(!config.embedding_mode);
+}
+
+#[tokio::test]
+async fn test_build_inference_start_config_for_pytorch_accepts_auto_policy_by_omission() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "PyTorch");
+
+    let config = gateway
+        .build_inference_start_config(InferenceStartRequest {
+            file_model_path: Some(PathBuf::from("/models/qwen2.5-7b-instruct")),
+            device: Some(BackendStartupDeviceIntent::scheduler_policy(
+                InferenceDevicePolicy::Auto,
+            )),
+            ..InferenceStartRequest::default()
+        })
+        .await
+        .expect("config should build");
+
+    assert_eq!(config.device, None);
+}
+
+#[tokio::test]
+async fn test_build_inference_start_config_rejects_llamacpp_selector_for_pytorch() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "PyTorch");
+
+    let error = gateway
+        .build_inference_start_config(InferenceStartRequest {
+            file_model_path: Some(PathBuf::from("/models/qwen2.5-7b-instruct")),
+            device: Some(
+                BackendStartupDeviceIntent::llama_cpp_selector("CUDA0")
+                    .expect("valid llama.cpp selector"),
+            ),
+            ..InferenceStartRequest::default()
+        })
+        .await
+        .expect_err("pytorch should reject llama.cpp device selector");
+
+    assert!(matches!(
+        error,
+        GatewayError::Backend(BackendError::Config(message))
+        if message.contains("does not accept llama.cpp device selector 'CUDA0'")
+    ));
+}
+
+#[tokio::test]
+async fn test_build_inference_start_config_for_llamacpp_uses_backend_local_selector() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "llama.cpp");
+
+    let config = gateway
+        .build_inference_start_config(InferenceStartRequest {
+            file_model_path: Some(PathBuf::from("/models/vision.gguf")),
+            mmproj_path: Some(PathBuf::from("/models/mmproj.gguf")),
+            device: Some(
+                BackendStartupDeviceIntent::llama_cpp_selector("Vulkan0")
+                    .expect("valid llama.cpp selector"),
+            ),
+            ..InferenceStartRequest::default()
+        })
+        .await
+        .expect("config should build");
+
+    assert_eq!(config.device.as_deref(), Some("Vulkan0"));
+}
+
+#[tokio::test]
+async fn test_build_inference_start_config_rejects_canonical_device_for_llamacpp() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "llama.cpp");
+
+    let error = gateway
+        .build_inference_start_config(InferenceStartRequest {
+            file_model_path: Some(PathBuf::from("/models/vision.gguf")),
+            mmproj_path: Some(PathBuf::from("/models/mmproj.gguf")),
+            device: Some(
+                BackendStartupDeviceIntent::canonical_device_id("cuda:0")
+                    .expect("valid canonical device id"),
+            ),
+            ..InferenceStartRequest::default()
+        })
+        .await
+        .expect_err("llama.cpp should reject canonical device id");
+
+    assert!(matches!(
+        error,
+        GatewayError::Backend(BackendError::Config(message))
+        if message.contains("does not accept canonical device id 'cuda:0'")
+    ));
+}
+
+#[tokio::test]
+async fn test_build_inference_start_config_rejects_unresolved_explicit_policy_for_pytorch() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "PyTorch");
+
+    let error = gateway
+        .build_inference_start_config(InferenceStartRequest {
+            file_model_path: Some(PathBuf::from("/models/qwen2.5-7b-instruct")),
+            device: Some(BackendStartupDeviceIntent::scheduler_policy(
+                InferenceDevicePolicy::Explicit {
+                    device_class: InferenceDeviceClass::Cuda,
+                    device_id: None,
+                },
+            )),
+            ..InferenceStartRequest::default()
+        })
+        .await
+        .expect_err("pytorch should reject unresolved explicit policy");
+
+    assert!(matches!(
+        error,
+        GatewayError::Backend(BackendError::Config(message))
+        if message.contains("requires a concrete canonical device id")
+    ));
 }
 
 #[tokio::test]
@@ -110,6 +247,29 @@ async fn test_build_embedding_start_config_for_candle_uses_candle_model_path() {
         Some("/models/bge-small-en-v1.5".to_string())
     );
     assert!(config.embedding_mode);
+}
+
+#[tokio::test]
+async fn test_build_embedding_start_config_rejects_device_intent_for_candle() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Candle");
+
+    let error = gateway
+        .build_embedding_start_config(EmbeddingStartRequest {
+            candle_model_path: Some(PathBuf::from("/models/bge-small-en-v1.5")),
+            device: Some(
+                BackendStartupDeviceIntent::canonical_device_id("cpu")
+                    .expect("valid canonical device id"),
+            ),
+            ..EmbeddingStartRequest::default()
+        })
+        .await
+        .expect_err("candle should reject device intent until adapter support exists");
+
+    assert!(matches!(
+        error,
+        GatewayError::Backend(BackendError::Config(message))
+        if message.contains("Candle embedding startup does not accept device intent")
+    ));
 }
 
 #[tokio::test]

@@ -17,10 +17,10 @@ use tokio::sync::RwLock;
 use crate::backend::{
     canonical_backend_key, BackendCapabilities, BackendCompatibilityOptions,
     BackendCompatibilityRequest, BackendConfig, BackendDefaultStartMode, BackendError, BackendInfo,
-    BackendRegistry, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendRegistry, BackendStartupDeviceIntent, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
-use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId};
+use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase, ModelArtifactKind,
@@ -69,7 +69,7 @@ pub struct InferenceStartRequest {
     pub external_url: Option<String>,
     pub file_model_path: Option<PathBuf>,
     pub mmproj_path: Option<PathBuf>,
-    pub device: Option<String>,
+    pub device: Option<BackendStartupDeviceIntent>,
     pub gpu_layers: Option<i32>,
 }
 
@@ -78,7 +78,7 @@ pub struct InferenceStartRequest {
 pub struct EmbeddingStartRequest {
     pub gguf_model_path: Option<PathBuf>,
     pub candle_model_path: Option<PathBuf>,
-    pub device: Option<String>,
+    pub device: Option<BackendStartupDeviceIntent>,
     pub gpu_layers: Option<i32>,
 }
 
@@ -133,6 +133,56 @@ fn config_model_target(config: &BackendConfig) -> Option<String> {
 
 fn runtime_id_for_backend_name(backend_name: &str) -> String {
     canonical_runtime_id(backend_name)
+}
+
+fn backend_config_device_for_start_request(
+    backend_name: &str,
+    device: Option<BackendStartupDeviceIntent>,
+) -> Result<Option<String>, GatewayError> {
+    let Some(device) = device else {
+        return Ok(None);
+    };
+
+    match backend_name {
+        "PyTorch" => match device {
+            BackendStartupDeviceIntent::CanonicalDevice(device_id) => {
+                Ok(Some(device_id.as_str().to_string()))
+            }
+            BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Auto) => Ok(None),
+            BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit {
+                device_id: Some(device_id),
+                ..
+            }) => Ok(Some(device_id.as_str().to_string())),
+            BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit {
+                device_id: None,
+                ..
+            }) => Err(GatewayError::Backend(BackendError::Config(
+                "PyTorch startup requires a concrete canonical device id for explicit device policy"
+                    .to_string(),
+            ))),
+            BackendStartupDeviceIntent::LlamaCppSelector(selector) => {
+                Err(GatewayError::Backend(BackendError::Config(format!(
+                    "PyTorch startup does not accept llama.cpp device selector '{}'",
+                    selector.to_id()
+                ))))
+            }
+        },
+        _ => match device {
+            BackendStartupDeviceIntent::LlamaCppSelector(selector) => Ok(Some(selector.to_id())),
+            BackendStartupDeviceIntent::CanonicalDevice(device_id) => {
+                Err(GatewayError::Backend(BackendError::Config(format!(
+                    "llama.cpp startup does not accept canonical device id '{}'",
+                    device_id.as_str()
+                ))))
+            }
+            BackendStartupDeviceIntent::SchedulerPolicy(_) => {
+                Err(GatewayError::Backend(BackendError::Config(
+                    "llama.cpp startup requires an explicit backend-local device selector"
+                        .to_string(),
+                )))
+            }
+        },
+    }
 }
 
 impl InferenceGateway {
@@ -276,6 +326,11 @@ impl InferenceGateway {
     ) -> Result<BackendConfig, GatewayError> {
         let backend_name = self.current_backend_name().await;
         if let Some(external_url) = request.external_url {
+            if request.device.is_some() {
+                return Err(GatewayError::Backend(BackendError::Config(
+                    "External runtime attachment does not accept startup device intent".to_string(),
+                )));
+            }
             let supports_external_connection =
                 self.backend.read().await.capabilities().external_connection;
             if !supports_external_connection {
@@ -302,7 +357,7 @@ impl InferenceGateway {
 
                 Ok(BackendConfig {
                     model_path: Some(model_path),
-                    device: request.device,
+                    device: backend_config_device_for_start_request(&backend_name, request.device)?,
                     embedding_mode: false,
                     ..BackendConfig::default()
                 })
@@ -325,7 +380,7 @@ impl InferenceGateway {
                 Ok(BackendConfig {
                     model_path: Some(model_path),
                     mmproj_path: Some(mmproj_path),
-                    device: request.device,
+                    device: backend_config_device_for_start_request(&backend_name, request.device)?,
                     gpu_layers: request.gpu_layers,
                     embedding_mode: false,
                     ..BackendConfig::default()
@@ -342,6 +397,11 @@ impl InferenceGateway {
         let backend_name = self.current_backend_name().await;
         match backend_name.as_str() {
             "Candle" => {
+                if request.device.is_some() {
+                    return Err(GatewayError::Backend(BackendError::Config(
+                        "Candle embedding startup does not accept device intent".to_string(),
+                    )));
+                }
                 let model_path = request.candle_model_path.ok_or_else(|| {
                     GatewayError::Backend(BackendError::Config(
                         "Candle embedding model path not configured. Download a SafeTensors model from HuggingFace (e.g., BAAI/bge-small-en-v1.5) and set the path in Settings.".to_string(),
@@ -365,7 +425,7 @@ impl InferenceGateway {
                 })?;
                 Ok(BackendConfig {
                     model_path: Some(model_path),
-                    device: request.device,
+                    device: backend_config_device_for_start_request(&backend_name, request.device)?,
                     gpu_layers: request.gpu_layers,
                     embedding_mode: true,
                     ..BackendConfig::default()
