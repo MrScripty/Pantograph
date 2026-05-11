@@ -99,6 +99,11 @@ typed diagnostic and the canonical design is fixed.
 - [ ] Remove hidden llama.cpp CPU fallback when CUDA is requested but CUDA
   runtime files are missing. Return a typed device/runtime-variant diagnostic
   instead.
+  - 2026-05-11 partial: Linux llama.cpp command resolution now rejects
+    explicit `CUDA*` device requests when `cuda/llama-server` is missing
+    instead of using the CPU executable. The broader managed-runtime command
+    error type still needs to be migrated from string errors to typed
+    runtime-variant diagnostics before this task is complete.
 - [x] Add backend device inventory facts for llama.cpp `--list-devices` and
   preserve existing parsing while moving it behind the canonical device
   contracts.
@@ -2673,6 +2678,36 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: implement shared allowed-root validation for runtime
     roots, executable paths, dynamic-library paths, Pumas package paths,
     artifact paths, and worker-visible paths.
+- 2026-05-11 slice: Linux llama.cpp CUDA fallback removal.
+  - Smallest useful vertical slice: update Linux llama.cpp command resolution
+    so `--device CUDA*` requires the CUDA runtime executable at
+    `cuda/llama-server`, and add focused tests for missing and present CUDA
+    runtime executables.
+  - Allowed write set:
+    `crates/inference/src/managed_runtime/llama_cpp_platform/linux.rs` and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: explicit CUDA runtime requests no
+    longer fall through to the CPU executable when CUDA files are absent.
+    Missing CUDA runtime files stop command resolution with a bounded error
+    instead of constructing a CPU command.
+  - Standards/blast-radius gate: Linux platform command selection and
+    crate-local tests only; no generated DTOs, frontend code, lockfiles,
+    workflow fixtures, managed runtime persisted schema, install jobs, or
+    runtime catalog state changed.
+  - Verification passed:
+    `cargo test -p inference managed_runtime::llama_cpp_platform::linux::tests`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first focused test run failed because the test
+    asserted the full `LD_LIBRARY_PATH` value even though existing environment
+    entries are preserved; the test was narrowed to assert the prepended CUDA
+    path entry and then passed. The first format check also reported
+    rustfmt-only wrapping, then passed after `cargo fmt --all`.
+  - Discovered issue fixed in-slice: Linux `resolve_command` treated explicit
+    CUDA as a preference rather than a requirement and silently used the CPU
+    executable if `cuda/llama-server` was absent.
+  - Remaining follow-up: replace the managed-runtime command-resolution
+    `String` error surface with typed runtime-variant diagnostics so missing
+    CUDA variants can be reported through the canonical diagnostic DTO.
 
 **Verification:**
 
@@ -2689,6 +2724,9 @@ typed diagnostic and the canonical design is fixed.
   path/resource, frontend, or test-isolation gaps.
 - llama.cpp tests prove CPU, CUDA, macOS Metal if available, and `none` command
   resolution select the intended runtime variant without hidden fallback.
+- Linux llama.cpp platform tests prove explicit CUDA command resolution fails
+  when the CUDA runtime executable is missing instead of using the CPU
+  executable.
 - Managed runtime tests prove one llama.cpp release can expose more than one
   installed/readiness variant under one `ManagedBinaryId::LlamaCpp` identity.
 - Managed runtime path tests prove the retired `app_data/runtimes` tree is not

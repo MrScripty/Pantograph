@@ -875,6 +875,17 @@ Update during implementation:
   follow-up: shared allowed-root validation for runtime roots, executables,
   dynamic libraries, Pumas package paths, artifact paths, and worker-visible
   paths.
+- 2026-05-11: Continued Milestone 5 by removing the Linux llama.cpp hidden CPU
+  executable fallback for explicit CUDA device requests. `--device CUDA*` now
+  requires `cuda/llama-server` and fails command resolution when that runtime
+  variant is missing, instead of using the CPU executable. Verification passed:
+  `cargo test -p inference managed_runtime::llama_cpp_platform::linux::tests`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Verification
+  deviation: the first focused test run used an overly strict
+  `LD_LIBRARY_PATH` assertion and the first format check found rustfmt-only
+  wrapping; both were corrected and rerun successfully. Remaining follow-up:
+  migrate managed-runtime command-resolution errors from `String` to typed
+  runtime-variant diagnostics.
 
 ## Commit Cadence Notes
 

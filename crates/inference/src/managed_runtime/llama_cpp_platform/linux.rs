@@ -43,18 +43,22 @@ impl LlamaPlatform for LinuxPlatform {
         let device = find_option_value(args, "--device").unwrap_or_default();
         let use_cuda = device.starts_with("CUDA");
 
-        let (executable_path, library_dir) =
-            if use_cuda && binaries_dir.join("cuda/llama-server").exists() {
-                (
-                    binaries_dir.join("cuda/llama-server"),
-                    binaries_dir.join("cuda"),
-                )
-            } else {
-                (
-                    binaries_dir.join(self.installed_server_name()),
-                    binaries_dir.to_path_buf(),
-                )
-            };
+        let (executable_path, library_dir) = if use_cuda {
+            let cuda_executable = binaries_dir.join("cuda/llama-server");
+            if !cuda_executable.exists() {
+                return Err(format!(
+                    "llama.cpp CUDA runtime variant requested for device '{}' but CUDA server binary is missing at {}",
+                    device,
+                    cuda_executable.display()
+                ));
+            }
+            (cuda_executable, binaries_dir.join("cuda"))
+        } else {
+            (
+                binaries_dir.join(self.installed_server_name()),
+                binaries_dir.to_path_buf(),
+            )
+        };
 
         if !executable_path.exists() {
             return Err(format!(
@@ -93,5 +97,48 @@ impl LlamaPlatform for LinuxPlatform {
 
     fn is_runtime_library(&self, file_name: &str) -> bool {
         file_name.starts_with("lib") && (file_name.contains(".so") || file_name.ends_with(".so"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LlamaPlatform, PLATFORM};
+
+    #[test]
+    fn resolve_command_rejects_cuda_device_without_cuda_runtime_variant() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let cpu_server = temp_dir.path().join(PLATFORM.installed_server_name());
+        std::fs::write(&cpu_server, []).expect("write cpu server");
+
+        let error = PLATFORM
+            .resolve_command(temp_dir.path(), &["--device", "CUDA0"])
+            .expect_err("missing CUDA runtime variant should fail");
+
+        assert!(error.contains("CUDA runtime variant requested"));
+        assert!(error.contains("CUDA0"));
+        assert!(error.contains("cuda/llama-server"));
+    }
+
+    #[test]
+    fn resolve_command_uses_cuda_runtime_variant_when_requested() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let cuda_dir = temp_dir.path().join("cuda");
+        std::fs::create_dir_all(&cuda_dir).expect("create cuda dir");
+        let cuda_server = cuda_dir.join("llama-server");
+        std::fs::write(&cuda_server, []).expect("write cuda server");
+
+        let resolved = PLATFORM
+            .resolve_command(temp_dir.path(), &["--device=CUDA0"])
+            .expect("resolve CUDA runtime command");
+
+        assert_eq!(resolved.executable_path, cuda_server);
+        let cuda_library_path = cuda_dir.to_string_lossy();
+        assert!(resolved
+            .env_overrides
+            .iter()
+            .any(|(key, value)| key == "LD_LIBRARY_PATH"
+                && value
+                    .to_string_lossy()
+                    .starts_with(cuda_library_path.as_ref())));
     }
 }
