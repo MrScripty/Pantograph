@@ -7,9 +7,10 @@ use async_trait::async_trait;
 use futures_util::{stream, StreamExt};
 use tokio::sync::mpsc;
 
-use crate::backend::BackendStartOutcome;
+use crate::backend::{BackendStartOutcome, BackendStartupDeviceIntent};
 use crate::config::DeviceConfig;
 use crate::device::DeviceBackend;
+use crate::device_contracts::InferenceDevicePolicy;
 use crate::model_contracts::{
     CacheGenerationOptions, GenerationOptions, InferenceLifecyclePhase, InferenceTaskId,
     LengthGenerationOptions, OptionSupportState, ResolvedModelPackageFacts,
@@ -1825,7 +1826,10 @@ async fn test_lifecycle_events_do_not_report_config_only_device_as_selected() {
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
     gateway
         .start(&BackendConfig {
-            device: Some("cuda:0".to_string()),
+            device: Some(
+                BackendStartupDeviceIntent::canonical_device_id("cuda:0")
+                    .expect("valid canonical device id"),
+            ),
             ..BackendConfig::default()
         })
         .await
@@ -1858,7 +1862,9 @@ async fn test_lifecycle_events_do_not_report_auto_as_selected_device() {
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
     gateway
         .start(&BackendConfig {
-            device: Some("auto".to_string()),
+            device: Some(BackendStartupDeviceIntent::scheduler_policy(
+                InferenceDevicePolicy::Auto,
+            )),
             ..BackendConfig::default()
         })
         .await
@@ -1948,7 +1954,10 @@ async fn test_mode_info_runtime_facts_do_not_report_config_only_device() {
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
     gateway
         .start(&BackendConfig {
-            device: Some("cuda:0".to_string()),
+            device: Some(
+                BackendStartupDeviceIntent::canonical_device_id("cuda:0")
+                    .expect("valid canonical device id"),
+            ),
             ..BackendConfig::default()
         })
         .await
@@ -1966,7 +1975,9 @@ async fn test_mode_info_runtime_facts_do_not_report_auto_as_resolved_device() {
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
     gateway
         .start(&BackendConfig {
-            device: Some("auto".to_string()),
+            device: Some(BackendStartupDeviceIntent::scheduler_policy(
+                InferenceDevicePolicy::Auto,
+            )),
             ..BackendConfig::default()
         })
         .await

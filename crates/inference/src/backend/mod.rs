@@ -25,6 +25,7 @@ use async_trait::async_trait;
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 
+use crate::device_contracts::InferenceDevicePolicy;
 use crate::device_contracts::RuntimeVariantCapability;
 #[cfg(any(
     test,
@@ -840,8 +841,8 @@ pub struct BackendConfig {
     pub model_name: Option<String>,
     /// HuggingFace model ID (for Candle)
     pub model_id: Option<String>,
-    /// Device configuration
-    pub device: Option<String>,
+    /// Typed startup device intent.
+    pub device: Option<BackendStartupDeviceIntent>,
     /// Number of GPU layers (-1 for all)
     pub gpu_layers: Option<i32>,
     /// Context size
@@ -870,7 +871,9 @@ impl Default for BackendConfig {
             mmproj_path: None,
             model_name: None,
             model_id: None,
-            device: Some(defaults::DEVICE.to_string()),
+            device: Some(BackendStartupDeviceIntent::scheduler_policy(
+                InferenceDevicePolicy::Auto,
+            )),
             gpu_layers: None,
             context_size: None,
             cpu_threads: None,
@@ -910,7 +913,7 @@ impl LlamaCppRuntimeSettings {
         validate_optional_positive_u32(config.cpu_threads, "cpu_threads")?;
         validate_optional_positive_u32(config.batch_size, "batch_size")?;
         validate_optional_positive_u32(config.ubatch_size, "ubatch_size")?;
-        let device = validate_llamacpp_device(config.device.as_deref())?;
+        let device = validate_llamacpp_device(config.device.as_ref())?;
         Ok(Self {
             device,
             gpu_layers: config.gpu_layers.unwrap_or(defaults::GPU_LAYERS),
@@ -931,19 +934,33 @@ impl LlamaCppRuntimeSettings {
     }
 }
 
-fn validate_llamacpp_device(device: Option<&str>) -> Result<DeviceBackend, BackendError> {
-    let Some(device) = device.map(str::trim).filter(|value| !value.is_empty()) else {
+fn validate_llamacpp_device(
+    device: Option<&BackendStartupDeviceIntent>,
+) -> Result<DeviceBackend, BackendError> {
+    let Some(device) = device else {
         return Err(BackendError::Config(
             "llama.cpp device setting is required; use explicit auto policy when scheduler-owned selection is intended"
                 .to_string(),
         ));
     };
-    let backend = DeviceBackend::try_from_id(device).map_err(|error| {
-        BackendError::Config(format!(
-            "invalid llama.cpp device setting '{device}': {error}"
-        ))
-    })?;
-    Ok(backend)
+    match device {
+        BackendStartupDeviceIntent::LlamaCppSelector(selector) => Ok(selector.clone()),
+        BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Auto) => {
+            Ok(DeviceBackend::Auto)
+        }
+        BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit { .. }) => {
+            Err(BackendError::Config(
+                "llama.cpp startup requires a resolved backend-local device selector, not an unresolved explicit scheduler policy"
+                    .to_string(),
+            ))
+        }
+        BackendStartupDeviceIntent::CanonicalDevice(device_id) => Err(BackendError::Config(
+            format!(
+                "llama.cpp startup does not accept canonical device id '{}'",
+                device_id.as_str()
+            ),
+        )),
+    }
 }
 
 fn validate_optional_positive_u32(
@@ -1176,10 +1193,12 @@ mod tests {
 
     #[test]
     fn backend_config_default_uses_explicit_auto_device() {
-        assert_eq!(
-            BackendConfig::default().device.as_deref(),
-            Some(defaults::DEVICE)
-        );
+        assert!(matches!(
+            BackendConfig::default().device,
+            Some(BackendStartupDeviceIntent::SchedulerPolicy(
+                InferenceDevicePolicy::Auto
+            ))
+        ));
     }
 
     #[test]
@@ -1209,7 +1228,10 @@ mod tests {
     #[test]
     fn llamacpp_runtime_settings_preserve_explicit_backend_config() {
         let settings = LlamaCppRuntimeSettings::try_from_backend_config(&BackendConfig {
-            device: Some("Vulkan0".to_string()),
+            device: Some(
+                BackendStartupDeviceIntent::llama_cpp_selector("Vulkan0")
+                    .expect("valid llama.cpp selector"),
+            ),
             gpu_layers: Some(42),
             context_size: Some(8192),
             cpu_threads: Some(8),
@@ -1235,7 +1257,10 @@ mod tests {
     #[test]
     fn gpu_layers_remain_llamacpp_runtime_setting_not_device_policy() {
         let settings = LlamaCppRuntimeSettings::try_from_backend_config(&BackendConfig {
-            device: Some("CUDA0".to_string()),
+            device: Some(
+                BackendStartupDeviceIntent::llama_cpp_selector("CUDA0")
+                    .expect("valid llama.cpp selector"),
+            ),
             gpu_layers: Some(42),
             ..BackendConfig::default()
         })
@@ -1296,13 +1321,25 @@ mod tests {
     fn llamacpp_runtime_settings_reject_invalid_device_selectors() {
         for (device, expected) in [
             (None, "device setting is required"),
-            (Some("  "), "device setting is required"),
-            (Some("unknown"), "unknown llama.cpp device selector"),
-            (Some("CUDAx"), "invalid ordinal"),
-            (Some("cuda:0"), "unknown llama.cpp device selector"),
+            (
+                Some(
+                    BackendStartupDeviceIntent::canonical_device_id("cuda:0")
+                        .expect("valid canonical device id"),
+                ),
+                "does not accept canonical device id",
+            ),
+            (
+                Some(BackendStartupDeviceIntent::scheduler_policy(
+                    InferenceDevicePolicy::Explicit {
+                        device_class: InferenceDeviceClass::Cuda,
+                        device_id: None,
+                    },
+                )),
+                "unresolved explicit scheduler policy",
+            ),
         ] {
             let error = LlamaCppRuntimeSettings::try_from_backend_config(&BackendConfig {
-                device: device.map(str::to_string),
+                device,
                 ..BackendConfig::default()
             })
             .expect_err("invalid device selector should fail closed");

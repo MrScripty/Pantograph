@@ -139,9 +139,10 @@ normalizing them to executable defaults.
 - llama.cpp `--list-devices` output may be parsed into backend-local
   `DeviceInfo` for existing callers or projected into canonical inventory
   facts with typed diagnostics for unsupported backend-local selectors.
-- `BackendConfig::default()` carries explicit `auto` device intent. Blank,
-  missing, unknown, or malformed llama.cpp device selectors fail before sidecar
-  startup instead of being normalized to an executable default.
+- `BackendConfig::default()` carries explicit typed `auto` device policy
+  intent. `BackendConfig.device` is a `BackendStartupDeviceIntent`, not a raw
+  string; wrong backend namespaces and unresolved explicit policies fail before
+  backend startup instead of being normalized to an executable default.
 - Runtime-load phase records require a `DeviceResolutionDecision`, so
   dependency resolution cannot emit command facts without the selected runtime
   variant, device class, and selected device id facts.
@@ -154,8 +155,9 @@ normalizing them to executable defaults.
   canonical device facts, not by inferring scheduler decisions from raw backend
   config strings.
 - Gateway request lifecycle events source selected device class/id from the
-  active llama.cpp runtime descriptor when it carries canonical facts. A raw
-  `BackendConfig.device` value by itself is not emitted as a selected device.
+  active llama.cpp runtime descriptor when it carries canonical facts.
+  `BackendConfig.device` startup intent by itself is not emitted as a selected
+  device.
 - Gateway mode-info runtime facts follow the same rule: active resolved device
   fields are populated only from canonical active runtime descriptors, not raw
   backend config strings.

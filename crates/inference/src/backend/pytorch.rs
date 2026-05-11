@@ -35,11 +35,11 @@ use super::{
     available_runtime_variant_capability, unavailable_runtime_variant_capability,
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
     BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
-    BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
-    EmbeddingResult, InferenceBackend,
+    BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendStartupDeviceIntent,
+    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::device_contracts::{
-    DeviceResolutionDiagnosticCode, InferenceDeviceClass, InferenceDeviceId,
+    DeviceResolutionDiagnosticCode, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
     RuntimeVariantCapability,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
@@ -786,6 +786,36 @@ fn task_join_error_message(error: impl std::fmt::Display) -> String {
         &format!("Task join error: {error}"),
         "PyTorch worker task join failed",
     )
+}
+
+fn pytorch_startup_device(
+    device: Option<&BackendStartupDeviceIntent>,
+) -> Result<String, BackendError> {
+    match device {
+        None | Some(BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Auto)) => {
+            Ok("auto".to_string())
+        }
+        Some(BackendStartupDeviceIntent::CanonicalDevice(device_id)) => {
+            Ok(device_id.as_str().to_string())
+        }
+        Some(BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit {
+            device_id: Some(device_id),
+            ..
+        })) => Ok(device_id.as_str().to_string()),
+        Some(BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit {
+            device_id: None,
+            ..
+        })) => Err(BackendError::Config(
+            "PyTorch startup requires a concrete canonical device id for explicit device policy"
+                .to_string(),
+        )),
+        Some(BackendStartupDeviceIntent::LlamaCppSelector(selector)) => {
+            Err(BackendError::Config(format!(
+                "PyTorch startup does not accept llama.cpp device selector '{}'",
+                selector.to_id()
+            )))
+        }
+    }
 }
 
 pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError> {
@@ -2728,11 +2758,11 @@ impl InferenceBackend for PyTorchBackend {
 
         // If config includes a model_path, load it immediately
         if let Some(ref model_path) = config.model_path {
-            let device = config.device.as_deref().unwrap_or("auto");
+            let device = pytorch_startup_device(config.device.as_ref())?;
             let model_type = config.model_type.as_deref();
             let model_path = model_path.to_string_lossy().to_string();
 
-            if self.can_reuse_loaded_model(&model_path, device, model_type) {
+            if self.can_reuse_loaded_model(&model_path, &device, model_type) {
                 self.ready = true;
                 log::info!("PyTorch backend: reusing loaded model {}", model_path);
                 return Ok(BackendStartOutcome {
@@ -2741,7 +2771,7 @@ impl InferenceBackend for PyTorchBackend {
                 });
             }
 
-            self.load_model(&model_path, device, model_type).await?;
+            self.load_model(&model_path, &device, model_type).await?;
 
             return Ok(BackendStartOutcome {
                 runtime_reused: Some(false),

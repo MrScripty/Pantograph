@@ -13,7 +13,7 @@ isolated here.
 | ----------- | ----------- |
 | `mod.rs` | The backend trait, capability model, shared config, and backend error contract. |
 | `registry.rs` | Compile-time backend registration and backend discovery helpers. |
-| `startup_device.rs` | Typed startup device intent contract that separates scheduler-facing device policy/canonical ids from backend-local llama.cpp selectors before shared startup fields are migrated. |
+| `startup_device.rs` | Typed startup device intent contract that separates scheduler-facing device policy/canonical ids from backend-local llama.cpp selectors in shared startup config. |
 | `llamacpp.rs` | llama.cpp backend adapter for chat, embeddings, and sidecar reranking. |
 | `llamacpp_support.rs` | Shared llama.cpp request parsing, SSE usage parsing, rerank response normalization, sidecar start helpers, and KV-cache fingerprint helpers used by `llamacpp.rs`. |
 | `candle.rs` | Feature-gated Candle backend staging for embedding-only HF-compatible safetensors package facts, including capability declaration, package-source mapping, and local load-plan validation while executable model loading remains disabled. |
@@ -121,8 +121,10 @@ fn create_backend() {
 ## Structured Producer Contract
 
 - `BackendCapabilities` is a machine-consumed contract used for runtime gating.
-- `BackendConfig` fields have additive semantics; absent values mean backend
-  defaults or backend-specific auto-detection.
+- `BackendConfig` fields have additive semantics; absent non-device values
+  mean backend defaults or backend-specific auto-detection. `BackendConfig`
+  device intent is typed as `BackendStartupDeviceIntent` and must be validated
+  by the active backend before command or worker-load translation.
 - `InferenceBackend` method additions must preserve compatibility expectations
   for existing callers or be versioned through coordinated contract changes.
 - `reranking_mode` is backend-consumed lifecycle metadata, not a UI hint; host

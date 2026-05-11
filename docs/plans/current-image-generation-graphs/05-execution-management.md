@@ -826,6 +826,25 @@ Update during implementation:
   `cargo test -p inference startup_device`,
   `cargo test -p pantograph-embedded-runtime edit_session_execution`,
   `cargo fmt --all -- --check`, and `git diff --check`.
+- 2026-05-11: Continued Milestone 5 by migrating shared
+  `BackendConfig.device` from `Option<String>` to
+  `Option<BackendStartupDeviceIntent>`. llama.cpp runtime settings now accept
+  backend-local selectors or explicit scheduler auto policy and reject
+  canonical ids/unresolved explicit policies; PyTorch startup accepts canonical
+  ids or auto policy and rejects llama.cpp-local selectors; node-engine
+  llama.cpp settings parse workflow device values into typed backend-local
+  selector intent before building backend config. Verification passed:
+  `cargo test -p inference backend::tests`,
+  `cargo test -p inference gateway::tests::start_config`,
+  `cargo test -p inference backend::llamacpp::tests`,
+  `cargo test -p node-engine --features inference-nodes backend_config_applies_llamacpp_runtime_settings`,
+  `cargo test -p node-engine --features inference-nodes runtime_settings_match_compares_reload_required_performance_settings`,
+  `cargo test -p node-engine --features inference-nodes gateway_match_rejects_different_runtime_settings`,
+  `cargo test -p inference --features backend-pytorch test_pytorch_worker_load_envelope`,
+  `cargo test -p pantograph-embedded-runtime edit_session_execution`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Verification
+  deviation: an attempted node-engine command used two Cargo filters and
+  failed before tests ran; the filters were rerun separately and passed.
 
 ## Commit Cadence Notes
 
@@ -1073,8 +1092,8 @@ Worker rules:
   verified without pretending to test browser focus.
 - Continue Milestone 5 by replacing remaining legacy raw device-string
   execution paths with these contracts. The remaining work includes migrating
-  shared `BackendConfig.device`, managed runtime command variant selection,
-  frontend device options, and node-engine backend routing.
+  managed runtime command variant selection, frontend device options, and
+  node-engine backend routing.
 - Continue Milestone 5 by wiring selected device class into frontend
   run-inspection presentation only from typed backend projection records, not
   by parsing raw diagnostic payload JSON.
@@ -1172,6 +1191,10 @@ Worker rules:
   `BackendStartupDeviceIntent`, reject wrong backend/device namespaces, and do
   not silently ignore explicit device intent for external runtime attachment or
   Candle embedding startup.
+- Backend config tests now prove shared startup config stores typed
+  `BackendStartupDeviceIntent`, with llama.cpp/PyTorch adapters validating
+  their accepted namespace before startup and node-engine projecting workflow
+  llama.cpp settings into backend-local selector intent.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

@@ -538,6 +538,7 @@ mod tests {
     use std::path::PathBuf;
     use tokio::sync::mpsc;
 
+    use crate::backend::BackendStartupDeviceIntent;
     use crate::config::DeviceConfig;
     use crate::constants::defaults;
     use crate::device::DeviceBackend;
@@ -697,7 +698,10 @@ mod tests {
                 &BackendConfig {
                     model_path: Some(PathBuf::from("/models/main.gguf")),
                     mmproj_path: Some(PathBuf::from("/models/vision.mmproj")),
-                    device: Some("Vulkan0".to_string()),
+                    device: Some(
+                        BackendStartupDeviceIntent::llama_cpp_selector("Vulkan0")
+                            .expect("valid llama.cpp selector"),
+                    ),
                     gpu_layers: Some(40),
                     context_size: Some(16384),
                     cpu_threads: Some(8),
@@ -742,7 +746,10 @@ mod tests {
             .start(
                 &BackendConfig {
                     model_path: Some(PathBuf::from("/models/main.gguf")),
-                    device: Some("Vulkan1".to_string()),
+                    device: Some(
+                        BackendStartupDeviceIntent::llama_cpp_selector("Vulkan1")
+                            .expect("valid llama.cpp selector"),
+                    ),
                     gpu_layers: Some(40),
                     ..BackendConfig::default()
                 },
@@ -781,7 +788,10 @@ mod tests {
             .start(
                 &BackendConfig {
                     model_path: Some(PathBuf::from("/models/main.gguf")),
-                    device: Some("Vulkan0".to_string()),
+                    device: Some(
+                        BackendStartupDeviceIntent::llama_cpp_selector("Vulkan0")
+                            .expect("valid llama.cpp selector"),
+                    ),
                     gpu_layers: Some(40),
                     port_override: Some(18080),
                     ..BackendConfig::default()
@@ -821,7 +831,10 @@ mod tests {
             .start(
                 &BackendConfig {
                     model_path: Some(PathBuf::from("/models/main.gguf")),
-                    device: Some("Vulkan0".to_string()),
+                    device: Some(
+                        BackendStartupDeviceIntent::llama_cpp_selector("Vulkan0")
+                            .expect("valid llama.cpp selector"),
+                    ),
                     gpu_layers: Some(40),
                     context_size: Some(8192),
                     ..BackendConfig::default()

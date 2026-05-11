@@ -2554,6 +2554,47 @@ typed diagnostic and the canonical design is fixed.
     llama.cpp runtime settings, and the test-only PyTorch load args helper
     through explicit device-intent adapters without accepting raw strings as
     trusted internal execution state.
+- 2026-05-11 slice: typed shared backend config device intent.
+  - Smallest useful vertical slice: change `BackendConfig.device` from
+    `Option<String>` to `Option<BackendStartupDeviceIntent>`, then update
+    llama.cpp, PyTorch, gateway, node-engine llama.cpp config construction,
+    and focused tests to validate backend/device namespaces at adapter
+    boundaries.
+  - Allowed write set: `crates/inference/src/backend/mod.rs`,
+    `crates/inference/src/backend/llamacpp.rs`,
+    `crates/inference/src/backend/pytorch.rs`,
+    `crates/inference/src/gateway.rs`,
+    `crates/inference/src/gateway_tests.rs`,
+    `crates/inference/src/gateway_tests/start_config.rs`,
+    `crates/node-engine/src/core_executor/llamacpp_nodes.rs`,
+    `crates/inference/src/README.md`,
+    `crates/inference/src/backend/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: shared backend config no longer stores
+    trusted raw device strings; llama.cpp accepts typed backend-local selectors
+    or explicit auto policy only, PyTorch accepts canonical ids or auto policy
+    only, wrong namespaces return `BackendError::Config`, and node-engine
+    invalid llama.cpp device strings cannot become executable raw config.
+  - Standards/blast-radius gate: public Rust startup config contract and
+    focused node-engine adapter projection only; no generated DTOs, lockfiles,
+    workflow fixtures, frontend code, managed-runtime install state, scheduler
+    ranking, persisted state schema, or worker execution behavior changed.
+  - Verification passed:
+    `cargo test -p inference backend::tests`,
+    `cargo test -p inference gateway::tests::start_config`,
+    `cargo test -p inference backend::llamacpp::tests`,
+    `cargo test -p node-engine --features inference-nodes backend_config_applies_llamacpp_runtime_settings`,
+    `cargo test -p node-engine --features inference-nodes runtime_settings_match_compares_reload_required_performance_settings`,
+    `cargo test -p node-engine --features inference-nodes gateway_match_rejects_different_runtime_settings`,
+    `cargo test -p inference --features backend-pytorch test_pytorch_worker_load_envelope`,
+    `cargo test -p pantograph-embedded-runtime edit_session_execution`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: one node-engine command attempted two Cargo test
+    filters and failed before tests ran; both filters were rerun individually
+    and passed.
+  - Remaining follow-up: replace remaining test-only or backend-local worker
+    load helper raw-device arguments and continue removing node-engine
+    independent backend-routing choices in favor of canonical scheduler
+    decisions.
 
 **Verification:**
 
@@ -2667,6 +2708,9 @@ typed diagnostic and the canonical design is fixed.
 - Gateway start-config tests prove typed startup request device intent is
   namespace-checked before backend startup config construction and explicit
   device intent is not silently ignored by external or unsupported backends.
+- Backend config and node-engine tests prove shared backend startup config
+  carries typed device intent and adapter-local llama.cpp workflow settings are
+  parsed before backend config construction.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

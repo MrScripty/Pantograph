@@ -299,7 +299,8 @@ fn llama_cpp_backend_config_with_diagnostics(
         "auto",
     );
 
-    let device = device_setting.value.clone();
+    let device =
+        inference::BackendStartupDeviceIntent::llama_cpp_selector(&device_setting.value).ok();
     let gpu_layers = gpu_layers_setting
         .value
         .parse::<i64>()
@@ -331,7 +332,7 @@ fn llama_cpp_backend_config_with_diagnostics(
         inference::BackendConfig {
             model_path: Some(PathBuf::from(model_path)),
             mmproj_path: mmproj_path.map(PathBuf::from),
-            device: Some(device),
+            device,
             gpu_layers: Some(gpu_layers),
             context_size,
             cpu_threads,
@@ -505,8 +506,13 @@ fn llamacpp_runtime_settings_match(
     active: &inference::BackendConfig,
     requested: &inference::BackendConfig,
 ) -> bool {
-    let active_device = active.device.as_deref().unwrap_or("auto");
-    let requested_device = requested.device.as_deref().unwrap_or("auto");
+    let Some(active_device) = llamacpp_startup_device_match_key(active.device.as_ref()) else {
+        return false;
+    };
+    let Some(requested_device) = llamacpp_startup_device_match_key(requested.device.as_ref())
+    else {
+        return false;
+    };
     let active_gpu_layers = active.gpu_layers.unwrap_or(-1);
     let requested_gpu_layers = requested.gpu_layers.unwrap_or(-1);
     let active_context_size = active
@@ -522,6 +528,25 @@ fn llamacpp_runtime_settings_match(
         && active.cpu_threads == requested.cpu_threads
         && active.batch_size == requested.batch_size
         && active.ubatch_size == requested.ubatch_size
+}
+
+fn llamacpp_startup_device_match_key(
+    device: Option<&inference::BackendStartupDeviceIntent>,
+) -> Option<String> {
+    match device {
+        None => None,
+        Some(inference::BackendStartupDeviceIntent::LlamaCppSelector(selector)) => {
+            Some(selector.to_id())
+        }
+        Some(inference::BackendStartupDeviceIntent::SchedulerPolicy(
+            inference::InferenceDevicePolicy::Auto,
+        )) => Some(inference::constants::defaults::DEVICE.to_string()),
+        Some(inference::BackendStartupDeviceIntent::SchedulerPolicy(
+            inference::InferenceDevicePolicy::Explicit { .. },
+        ))
+        | Some(inference::BackendStartupDeviceIntent::CanonicalDevice(_))
+        | Some(_) => None,
+    }
 }
 
 fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
@@ -780,7 +805,10 @@ mod tests {
             config.mmproj_path.as_deref(),
             Some(Path::new("/models/mmproj.gguf"))
         );
-        assert_eq!(config.device.as_deref(), Some("Metal0"));
+        assert_eq!(
+            llamacpp_startup_device_match_key(config.device.as_ref()).as_deref(),
+            Some("Metal0")
+        );
         assert_eq!(config.gpu_layers, Some(12));
         assert_eq!(config.context_size, Some(32768));
         assert_eq!(config.cpu_threads, Some(6));
@@ -809,7 +837,9 @@ mod tests {
     #[test]
     fn runtime_settings_match_compares_reload_required_performance_settings() {
         let active = BackendConfig {
-            device: Some("auto".to_string()),
+            device: Some(inference::BackendStartupDeviceIntent::scheduler_policy(
+                inference::InferenceDevicePolicy::Auto,
+            )),
             gpu_layers: Some(-1),
             context_size: Some(4096),
             cpu_threads: Some(8),
@@ -976,7 +1006,10 @@ mod tests {
         gateway
             .start(&BackendConfig {
                 model_path: Some(model.clone()),
-                device: Some("Vulkan0".to_string()),
+                device: Some(
+                    inference::BackendStartupDeviceIntent::llama_cpp_selector("Vulkan0")
+                        .expect("valid llama.cpp selector"),
+                ),
                 gpu_layers: Some(24),
                 context_size: Some(4096),
                 ..BackendConfig::default()
@@ -986,7 +1019,10 @@ mod tests {
 
         let requested_config = BackendConfig {
             model_path: Some(model.clone()),
-            device: Some("Vulkan0".to_string()),
+            device: Some(
+                inference::BackendStartupDeviceIntent::llama_cpp_selector("Vulkan0")
+                    .expect("valid llama.cpp selector"),
+            ),
             gpu_layers: Some(24),
             context_size: Some(8192),
             ..BackendConfig::default()

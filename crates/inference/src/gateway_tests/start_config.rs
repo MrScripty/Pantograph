@@ -7,6 +7,19 @@ use crate::device_contracts::{InferenceDeviceClass, InferenceDevicePolicy};
 use super::super::{EmbeddingStartRequest, GatewayError, InferenceGateway, InferenceStartRequest};
 use super::{MockHttpBackend, MockImageBackend, MockProcessSpawner, MockReusedBackend};
 
+fn backend_config_device_id(config: &BackendConfig) -> Option<String> {
+    config.device.as_ref().and_then(|device| {
+        device
+            .as_canonical_device_id()
+            .map(|device_id| device_id.as_str().to_string())
+            .or_else(|| {
+                device
+                    .as_llama_cpp_selector()
+                    .map(|selector| selector.to_id())
+            })
+    })
+}
+
 #[tokio::test]
 async fn test_build_inference_start_config_for_external_llamacpp_uses_external_url() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "llama.cpp");
@@ -94,7 +107,7 @@ async fn test_build_inference_start_config_for_pytorch_uses_model_path_without_m
         Some("/models/qwen2.5-7b-instruct".to_string())
     );
     assert_eq!(config.mmproj_path, None);
-    assert_eq!(config.device.as_deref(), Some("cuda:0"));
+    assert_eq!(backend_config_device_id(&config).as_deref(), Some("cuda:0"));
     assert!(!config.embedding_mode);
 }
 
@@ -113,7 +126,12 @@ async fn test_build_inference_start_config_for_pytorch_accepts_auto_policy_by_om
         .await
         .expect("config should build");
 
-    assert_eq!(config.device, None);
+    assert!(matches!(
+        config.device,
+        Some(BackendStartupDeviceIntent::SchedulerPolicy(
+            InferenceDevicePolicy::Auto
+        ))
+    ));
 }
 
 #[tokio::test]
@@ -156,7 +174,10 @@ async fn test_build_inference_start_config_for_llamacpp_uses_backend_local_selec
         .await
         .expect("config should build");
 
-    assert_eq!(config.device.as_deref(), Some("Vulkan0"));
+    assert_eq!(
+        backend_config_device_id(&config).as_deref(),
+        Some("Vulkan0")
+    );
 }
 
 #[tokio::test]

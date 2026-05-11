@@ -138,21 +138,19 @@ fn runtime_id_for_backend_name(backend_name: &str) -> String {
 fn backend_config_device_for_start_request(
     backend_name: &str,
     device: Option<BackendStartupDeviceIntent>,
-) -> Result<Option<String>, GatewayError> {
+) -> Result<Option<BackendStartupDeviceIntent>, GatewayError> {
     let Some(device) = device else {
         return Ok(None);
     };
 
     match backend_name {
         "PyTorch" => match device {
-            BackendStartupDeviceIntent::CanonicalDevice(device_id) => {
-                Ok(Some(device_id.as_str().to_string()))
-            }
-            BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Auto) => Ok(None),
-            BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit {
-                device_id: Some(device_id),
+            BackendStartupDeviceIntent::CanonicalDevice(_)
+            | BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Auto)
+            | BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit {
+                device_id: Some(_),
                 ..
-            }) => Ok(Some(device_id.as_str().to_string())),
+            }) => Ok(Some(device)),
             BackendStartupDeviceIntent::SchedulerPolicy(InferenceDevicePolicy::Explicit {
                 device_id: None,
                 ..
@@ -168,7 +166,7 @@ fn backend_config_device_for_start_request(
             }
         },
         _ => match device {
-            BackendStartupDeviceIntent::LlamaCppSelector(selector) => Ok(Some(selector.to_id())),
+            BackendStartupDeviceIntent::LlamaCppSelector(_) => Ok(Some(device)),
             BackendStartupDeviceIntent::CanonicalDevice(device_id) => {
                 Err(GatewayError::Backend(BackendError::Config(format!(
                     "llama.cpp startup does not accept canonical device id '{}'",
