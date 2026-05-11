@@ -117,6 +117,10 @@ process ownership and app composition stay outside this crate.
   receive `auto` or explicit CPU/CUDA/Metal/MPS intent, but this crate must not
   translate that intent into backend device strings, synthesize CPU fallback, or
   hide unavailable explicit-device decisions.
+- Explicit technical-fit device policy is matched against candidate device
+  facts. If no candidate reports the requested class/id, the decision is
+  unselected with an `explicit_device_unavailable` diagnostic rather than
+  selecting another candidate as a fallback.
 - Technical-fit candidate and decision DTOs carry runtime variant id, typed
   selected device class/id, resource estimates, observed-throughput hints, and
   bounded device diagnostics when producers provide those facts. The selector

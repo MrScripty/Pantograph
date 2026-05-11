@@ -575,6 +575,7 @@ pub fn select_runtime_technical_fit(
         if let Some(candidate) = candidates
             .iter()
             .filter(|candidate| candidate_matches_override(candidate, override_selection))
+            .filter(|candidate| candidate_matches_device_policy(candidate, &normalized))
             .min_by(|left, right| compare_candidate_ids(left, right))
         {
             if override_selection.model_id.is_some() {
@@ -612,7 +613,11 @@ pub fn select_runtime_technical_fit(
             RuntimeTechnicalFitReasonCode::MissingCandidateData,
             None,
         ));
-        return unselected_decision(RuntimeTechnicalFitSelectionMode::ExplicitOverride, reasons);
+        return unselected_decision_with_device_diagnostics(
+            RuntimeTechnicalFitSelectionMode::ExplicitOverride,
+            reasons,
+            explicit_device_unavailable_diagnostics(&normalized),
+        );
     }
 
     let mut eligible_candidates = candidates
@@ -707,7 +712,11 @@ pub fn select_runtime_technical_fit(
         ));
     }
 
-    unselected_decision(RuntimeTechnicalFitSelectionMode::Automatic, reasons)
+    unselected_decision_with_device_diagnostics(
+        RuntimeTechnicalFitSelectionMode::Automatic,
+        reasons,
+        explicit_device_unavailable_diagnostics(&normalized),
+    )
 }
 
 fn diagnostic_candidate<'a>(
@@ -824,9 +833,10 @@ fn decision_from_candidate(
     .normalized()
 }
 
-fn unselected_decision(
+fn unselected_decision_with_device_diagnostics(
     selection_mode: RuntimeTechnicalFitSelectionMode,
     reasons: Vec<RuntimeTechnicalFitReason>,
+    device_diagnostics: Vec<RuntimeTechnicalFitDeviceDiagnostic>,
 ) -> RuntimeTechnicalFitDecision {
     RuntimeTechnicalFitDecision {
         selection_mode,
@@ -839,13 +849,43 @@ fn unselected_decision(
         selected_device_id: None,
         resource_estimate: None,
         observed_throughput_hint: None,
-        device_diagnostics: Vec::new(),
+        device_diagnostics,
         reasons,
         compatibility_report: None,
         compatibility_issue_count: 0,
         compatibility_issues: Vec::new(),
     }
     .normalized()
+}
+
+fn explicit_device_unavailable_diagnostics(
+    request: &RuntimeTechnicalFitRequest,
+) -> Vec<RuntimeTechnicalFitDeviceDiagnostic> {
+    let Some(RuntimeTechnicalFitDevicePolicy::Explicit {
+        device_class,
+        device_id,
+    }) = request.device_policy.as_ref()
+    else {
+        return Vec::new();
+    };
+
+    if request
+        .candidates
+        .iter()
+        .any(|candidate| candidate_matches_device_policy(candidate, request))
+    {
+        return Vec::new();
+    }
+
+    vec![RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: "technical-fit could not satisfy the explicit device policy".to_string(),
+        device_class: Some(*device_class),
+        device_id: device_id.clone(),
+        runtime_variant_id: None,
+        backend_key: None,
+    }]
 }
 
 fn candidate_matches_override(
@@ -910,7 +950,31 @@ fn candidate_is_eligible(
         || candidate.supports_runtime_requirements)
         && candidate_matches_required_models(candidate, runtime_snapshot, request)
         && candidate_matches_required_backends(candidate, runtime_snapshot, request)
+        && candidate_matches_device_policy(candidate, request)
         && candidate_meets_context_length(candidate, request)
+}
+
+fn candidate_matches_device_policy(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> bool {
+    let Some(RuntimeTechnicalFitDevicePolicy::Explicit {
+        device_class,
+        device_id,
+    }) = request.device_policy.as_ref()
+    else {
+        return true;
+    };
+
+    if candidate.device_class != Some(*device_class) {
+        return false;
+    }
+
+    let Some(device_id) = device_id.as_deref() else {
+        return true;
+    };
+
+    candidate.selected_device_id.as_deref() == Some(device_id)
 }
 
 fn candidate_matches_required_models(

@@ -359,6 +359,14 @@ Update during implementation:
   `cargo test -p pantograph-workflow-service technical_fit`,
   `cargo test -p pantograph-embedded-runtime technical_fit`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by enforcing explicit device policy inside
+  runtime-registry technical-fit selection. Explicit CPU/CUDA/Metal/MPS
+  requests now filter candidates by typed device class/id and return an
+  unselected `ExplicitDeviceUnavailable` diagnostic when no candidate matches
+  instead of choosing CPU, auto, or another candidate. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`, and
+  `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -786,6 +794,11 @@ Worker rules:
   candidates and selected decisions began carrying runtime variant, typed
   device, resource-estimate, observed-throughput hint, and device diagnostic
   facts without inferring missing executable choices.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`, and
+  `git diff --check` passed after runtime-registry technical-fit selection
+  began rejecting unavailable explicit device policies from typed candidate
+  device facts.
 
 ### Traceability Links
 

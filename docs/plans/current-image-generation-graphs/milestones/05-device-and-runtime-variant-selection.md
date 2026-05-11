@@ -1224,6 +1224,34 @@ typed diagnostic and the canonical design is fixed.
     `cargo test -p pantograph-workflow-service technical_fit`,
     `cargo test -p pantograph-embedded-runtime technical_fit`,
     `npm run typecheck`, and `git diff --check`.
+- 2026-05-10 slice: runtime-registry explicit-device technical-fit rejection.
+  - Smallest useful vertical slice: make runtime-registry technical-fit
+    selection compare explicit device policy intent against candidate
+    device-class/id facts and return an unselected decision with a bounded
+    `ExplicitDeviceUnavailable` diagnostic when no candidate matches.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: explicit CUDA/Metal/MPS/CPU requests
+    are not satisfied by another candidate, auto mode, CPU fallback, backend
+    key inference, runtime id inference, or raw backend config strings. The
+    selector uses only typed candidate device facts.
+  - Standards/blast-radius gate: this slice changes synchronous selector
+    filtering, typed diagnostics, focused unit tests, and local documentation
+    only. Workflow-service admission, embedded-runtime projection, frontend,
+    managed runtime state, persisted schemas, workflow fixtures, subprocess
+    behavior, workers, dependencies, generated files, and lockfiles are
+    unchanged.
+  - Discovered follow-up: workflow admission still needs an end-to-end test
+    proving explicit unavailable device diagnostics block run/session admission
+    after host projection. That remains before marking the broader explicit
+    device admission task complete.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`, and
+    `git diff --check`.
 
 **Verification:**
 
