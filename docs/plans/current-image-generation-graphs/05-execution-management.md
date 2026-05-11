@@ -611,6 +611,16 @@ Update during implementation:
   `cargo test -p inference device::tests`, and `git diff --check`. The first
   format check reported rustfmt wrapping; `cargo fmt --all` was run and the
   check passed.
+- 2026-05-10: Continued Milestone 5 by adding the PyTorch device probe
+  contract. `PyTorchDeviceProbeSnapshot` now projects host-observed CPU/CUDA
+  and macOS MPS probe facts into canonical runtime variant readiness facts,
+  leaving live probe execution and scheduler admission to later owners.
+  Verification passed: `cargo fmt --all -- --check`,
+  `cargo test -p inference --features backend-pytorch pytorch_device_probe`,
+  `cargo test -p inference --features backend-pytorch test_capabilities`, and
+  `git diff --check`. Initial plain test filters matched no PyTorch tests
+  because the PyTorch backend is feature-gated; the commands were rerun with
+  `--features backend-pytorch`.
 
 ## Commit Cadence Notes
 
@@ -1094,6 +1104,12 @@ Worker rules:
   llama.cpp `--list-devices` output gained canonical inventory fact projection
   while preserving existing backend-local parsing. The first format check
   reported rustfmt wrapping; `cargo fmt --all` was run and the check passed.
+- `cargo fmt --all -- --check`,
+  `cargo test -p inference --features backend-pytorch pytorch_device_probe`,
+  `cargo test -p inference --features backend-pytorch test_capabilities`, and
+  `git diff --check` passed after PyTorch probe facts gained canonical
+  CPU/CUDA/macOS-MPS runtime variant projection. Initial plain test filters
+  matched no PyTorch tests because the backend is feature-gated.
 
 ### Traceability Links
 

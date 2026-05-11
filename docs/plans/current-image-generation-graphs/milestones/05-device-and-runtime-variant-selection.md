@@ -97,7 +97,7 @@ typed diagnostic and the canonical design is fixed.
 - [x] Add backend device inventory facts for llama.cpp `--list-devices` and
   preserve existing parsing while moving it behind the canonical device
   contracts.
-- [ ] Add PyTorch device probe contract for `cpu` and `cuda` on Linux/Windows,
+- [x] Add PyTorch device probe contract for `cpu` and `cuda` on Linux/Windows,
   plus `mps` on macOS.
 - [x] Add vLLM device capability placeholder facts for CPU and CUDA only. Do
   not implement vLLM execution in this slice.
@@ -2040,6 +2040,33 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: future slices still need to feed inventory facts into
     managed-runtime/runtime-capability refresh flows before scheduler admission
     can consume live host device inventory.
+- 2026-05-10 slice: PyTorch device probe contract.
+  - Smallest useful vertical slice: add `PyTorchDeviceProbeSnapshot` and a
+    pure projection from host-observed CPU/CUDA/macOS MPS probe facts into
+    canonical PyTorch runtime variant readiness facts.
+  - Allowed write set:
+    `crates/inference/src/backend/pytorch.rs`,
+    `crates/inference/src/backend/pytorch_tests.rs`,
+    `crates/inference/src/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: unavailable CUDA/MPS probe facts emit
+    typed `CandidateUnavailable` runtime-variant diagnostics; no Python probe
+    execution, worker path, runtime startup, scheduler selection, auto/CPU
+    fallback, generated DTO, fixture, lockfile, or frontend path changed.
+  - Standards/blast-radius gate: the probe contract is pure data projection in
+    the PyTorch backend boundary; the caller remains responsible for probe
+    lifecycle and scheduler admission remains outside the inference crate.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference --features backend-pytorch pytorch_device_probe`,
+    `cargo test -p inference --features backend-pytorch test_capabilities`, and
+    `git diff --check`.
+  - Verification deviation: initial plain `cargo test -p inference
+    pytorch_device_probe` and `cargo test -p inference test_capabilities`
+    commands did not compile the PyTorch feature-gated tests; they were rerun
+    with `--features backend-pytorch`.
+  - Remaining follow-up: a later lifecycle-owned probe runner still needs to
+    collect live PyTorch CUDA/MPS facts and feed this contract into runtime
+    capabilities before scheduler admission consumes it.
 
 **Verification:**
 
@@ -2109,6 +2136,9 @@ typed diagnostic and the canonical design is fixed.
   parsed as backend-local `DeviceInfo` and can also project CPU/CUDA into
   canonical inventory facts while unsupported backend-local selectors emit
   typed diagnostics.
+- Feature-gated PyTorch tests prove CPU/CUDA and macOS-gated MPS probe facts
+  project into canonical runtime variant readiness without executing Python or
+  selecting fallback devices.
 - Feature/dependency verification proves affected public crates still build
   with default, no-default-features, and all-features modes when runtime
   feature flags or optional dependencies change.

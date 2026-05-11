@@ -38,7 +38,9 @@ use super::{
     BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
     EmbeddingResult, InferenceBackend,
 };
-use crate::device_contracts::{DeviceResolutionDiagnosticCode, InferenceDeviceClass};
+use crate::device_contracts::{
+    DeviceResolutionDiagnosticCode, InferenceDeviceClass, RuntimeVariantCapability,
+};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry_from_evidence, GenerationOptions, InferenceModality,
@@ -61,6 +63,30 @@ mod pytorch_worker;
 mod pytorch_worker_contract;
 
 const ALLOWED_TRANSFORMERS_GENERATE_KWARGS: &[&str] = &["top_k"];
+
+/// Host-observed PyTorch device probe facts.
+///
+/// This contract is intentionally pure data. The caller owns how and when
+/// Python/PyTorch probes run; this backend owns projection into canonical
+/// runtime variant readiness facts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PyTorchDeviceProbeSnapshot {
+    /// Whether `torch.cuda.is_available()` was true.
+    pub cuda_available: bool,
+    /// Whether `torch.backends.mps.is_available()` was true on macOS.
+    pub mps_available: bool,
+}
+
+impl PyTorchDeviceProbeSnapshot {
+    /// CPU-only probe facts.
+    #[must_use]
+    pub const fn cpu_only() -> Self {
+        Self {
+            cuda_available: false,
+            mps_available: false,
+        }
+    }
+}
 
 /// PyTorch backend using in-process PyO3 embedded Python.
 ///
@@ -1026,6 +1052,50 @@ impl PyTorchBackend {
                 Some("python3 not found in PATH. Install Python 3 with PyTorch.".to_string()),
             ),
         }
+    }
+
+    /// Project host-observed PyTorch device facts into runtime variant facts.
+    #[must_use]
+    pub fn runtime_variants_from_device_probe(
+        probe: PyTorchDeviceProbeSnapshot,
+    ) -> Vec<RuntimeVariantCapability> {
+        let mut variants = vec![available_runtime_variant_capability(
+            "pytorch",
+            "pytorch.cpu",
+            InferenceDeviceClass::Cpu,
+        )];
+        variants.push(if probe.cuda_available {
+            available_runtime_variant_capability(
+                "pytorch",
+                "pytorch.cuda",
+                InferenceDeviceClass::Cuda,
+            )
+        } else {
+            unavailable_runtime_variant_capability(
+                "pytorch",
+                "pytorch.cuda",
+                InferenceDeviceClass::Cuda,
+                DeviceResolutionDiagnosticCode::CandidateUnavailable,
+                "PyTorch CUDA device probe reported CUDA unavailable",
+            )
+        });
+        #[cfg(target_os = "macos")]
+        variants.push(if probe.mps_available {
+            available_runtime_variant_capability(
+                "pytorch",
+                "pytorch.mps",
+                InferenceDeviceClass::Mps,
+            )
+        } else {
+            unavailable_runtime_variant_capability(
+                "pytorch",
+                "pytorch.mps",
+                InferenceDeviceClass::Mps,
+                DeviceResolutionDiagnosticCode::CandidateUnavailable,
+                "PyTorch MPS device probe reported MPS unavailable",
+            )
+        });
+        variants
     }
 
     fn can_reuse_loaded_model(

@@ -163,6 +163,67 @@ fn test_capabilities() {
 }
 
 #[test]
+fn pytorch_device_probe_projects_cpu_and_cuda_runtime_variants() {
+    let cpu_only_variants =
+        PyTorchBackend::runtime_variants_from_device_probe(PyTorchDeviceProbeSnapshot::cpu_only());
+    assert!(cpu_only_variants.iter().any(|variant| {
+        variant.runtime_variant_id.as_str() == "pytorch.cpu"
+            && variant.device_class == InferenceDeviceClass::Cpu
+            && variant.available
+    }));
+    let unavailable_cuda = cpu_only_variants
+        .iter()
+        .find(|variant| variant.runtime_variant_id.as_str() == "pytorch.cuda")
+        .expect("cuda variant");
+    assert_eq!(unavailable_cuda.device_class, InferenceDeviceClass::Cuda);
+    assert!(!unavailable_cuda.available);
+    assert_eq!(
+        unavailable_cuda.diagnostics[0].code,
+        DeviceResolutionDiagnosticCode::CandidateUnavailable
+    );
+
+    let cuda_variants =
+        PyTorchBackend::runtime_variants_from_device_probe(PyTorchDeviceProbeSnapshot {
+            cuda_available: true,
+            mps_available: false,
+        });
+    assert!(cuda_variants.iter().any(|variant| {
+        variant.runtime_variant_id.as_str() == "pytorch.cuda"
+            && variant.device_class == InferenceDeviceClass::Cuda
+            && variant.available
+            && variant.diagnostics.is_empty()
+    }));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn pytorch_device_probe_projects_macos_mps_runtime_variant() {
+    let variants = PyTorchBackend::runtime_variants_from_device_probe(PyTorchDeviceProbeSnapshot {
+        cuda_available: false,
+        mps_available: true,
+    });
+
+    assert!(variants.iter().any(|variant| {
+        variant.runtime_variant_id.as_str() == "pytorch.mps"
+            && variant.device_class == InferenceDeviceClass::Mps
+            && variant.available
+    }));
+}
+
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn pytorch_device_probe_excludes_mps_on_non_macos() {
+    let variants = PyTorchBackend::runtime_variants_from_device_probe(PyTorchDeviceProbeSnapshot {
+        cuda_available: false,
+        mps_available: true,
+    });
+
+    assert!(!variants
+        .iter()
+        .any(|variant| variant.runtime_variant_id.as_str() == "pytorch.mps"));
+}
+
+#[test]
 fn test_not_ready_initially() {
     let backend = PyTorchBackend::new();
     assert!(!backend.is_ready());

@@ -199,6 +199,9 @@ normalizing them to executable defaults.
   from this contract instead of inventing independent policy fields.
 - Remote MLX/vLLM search tags are discovery hints only; installed-model
   compatibility must use resolved local package facts plus backend checks.
+- PyTorch device probes are host-observed data projected through
+  `PyTorchDeviceProbeSnapshot`; CPU/CUDA and macOS MPS readiness facts must be
+  reported as runtime variants before scheduler admission consumes them.
 - Embeddings are normal task evidence in `model_contracts.rs`; dedicated
   embedding runtime state remains a backend-local residency strategy.
 - Candle embedding support is staged behind the optional `backend-candle`
