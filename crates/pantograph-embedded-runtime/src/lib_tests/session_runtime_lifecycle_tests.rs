@@ -186,7 +186,7 @@ fn write_llamacpp_puma_workflow(root: &Path, workflow_id: &str, model_path: &Pat
 }
 
 #[tokio::test]
-async fn session_runtime_load_starts_llamacpp_model_from_puma_lib_graph() {
+async fn session_runtime_load_blocks_llamacpp_model_without_device_decision() {
     let temp = TempDir::new().expect("temp dir");
     let model_path = temp.path().join("maid-model.gguf");
     std::fs::write(&model_path, b"gguf").expect("write model");
@@ -220,7 +220,7 @@ async fn session_runtime_load_starts_llamacpp_model_from_puma_lib_graph() {
     )
     .with_additional_runtime_capabilities(vec![llama_runtime_capability()]);
 
-    runtime
+    let error = runtime
         .host()
         .load_session_runtime(
             "session-llama",
@@ -229,13 +229,15 @@ async fn session_runtime_load_starts_llamacpp_model_from_puma_lib_graph() {
             WorkflowExecutionSessionRetentionHint::Ephemeral,
         )
         .await
-        .expect("load session runtime");
+        .expect_err("load session runtime should require a canonical device decision");
+
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
+    assert!(error
+        .to_string()
+        .contains("no canonical runtime/device decision"));
 
     let starts = starts.lock().expect("starts lock");
-    assert_eq!(starts.len(), 1);
-    assert_eq!(starts[0].model_path.as_deref(), Some(model_path.as_path()));
-    assert!(!starts[0].embedding_mode);
-    assert!(!starts[0].reranking_mode);
+    assert!(starts.is_empty());
 }
 
 #[tokio::test]

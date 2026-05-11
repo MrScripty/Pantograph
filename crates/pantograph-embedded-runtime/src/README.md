@@ -158,6 +158,10 @@ Runtime-setting diagnostic details remain sanitized metadata. They do not
 promote raw backend settings such as `device` into selected device facts;
 selected device class/id fields come only from canonical inference lifecycle or
 device-decision contracts.
+Workflow session load no longer starts llama.cpp from this crate with a raw
+`auto` device when the requested model is inactive. Until the canonical
+runtime/device decision path supplies a selected runtime, the helper fails
+closed with a runtime diagnostic instead of launching a backend-owned fallback.
 
 ## Alternatives Rejected
 - Resolve executable paths directly from `ModelRecord.metadata`.

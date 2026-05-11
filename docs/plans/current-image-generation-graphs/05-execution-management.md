@@ -249,6 +249,11 @@ Update during implementation:
   settings still retain bounded sanitized metadata, but selected device
   class/id fields now remain absent unless canonical lifecycle/device-decision
   facts provide them.
+- 2026-05-10: Continued Milestone 5 by removing the embedded host helper's
+  llama.cpp raw-auto model start path. When a requested llama.cpp model is not
+  already active, session load now fails closed with a runtime diagnostic until
+  the canonical runtime/device decision path supplies a selected runtime and
+  device.
 
 ## Commit Cadence Notes
 

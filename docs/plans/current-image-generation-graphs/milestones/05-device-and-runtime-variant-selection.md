@@ -656,6 +656,42 @@ typed diagnostic and the canonical design is fixed.
     `fn runtime_setting_value`, and
     `selected_device_id.as_deref(), Some("CUDA0")` in the embedded-runtime
     node-execution-ledger files, and `git diff --check`.
+- 2026-05-10 slice: embedded host llama.cpp raw-auto start removal.
+  - Smallest useful vertical slice: remove the session-load helper path that
+    switched the gateway to llama.cpp and started the requested model with raw
+    `device: "auto"` when the model was not already active.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/embedded_workflow_host_helpers.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/host_helper_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/session_runtime_lifecycle_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the helper now accepts only an already
+    active matching llama.cpp runtime as proof. It does not synthesize a
+    backend switch, raw auto device config, or GPU-layer default; absent a
+    canonical runtime/device decision it fails closed with a runtime diagnostic.
+  - Standards/blast-radius gate: embedded-runtime remains the composition-root
+    owner; public DTO shape, persisted schema, frontend behavior, generated
+    files, feature flags, dependencies, lockfiles, path validation, and worker
+    execution are unchanged; test isolation uses a focused helper error test
+    without starting a local service.
+  - Discovered follow-up: this intentionally disables host-owned implicit
+    llama.cpp model loading for inactive requested models until managed runtime
+    variant state and selected device decisions are wired end to end.
+  - Discovered issue fixed in-slice: an existing session-runtime lifecycle test
+    asserted the retired implicit llama.cpp auto-start behavior. The test now
+    asserts the runtime diagnostic and proves no backend start request is
+    issued.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-embedded-runtime unresolved_llamacpp_device_decision_blocks_host_owned_auto_start`,
+    `cargo test -p pantograph-embedded-runtime session_runtime_lifecycle`,
+    no-match search for raw-auto llama.cpp start/switch patterns in
+    `embedded_workflow_host_helpers.rs`, and `git diff --check`.
+  - Deviation: the first verification pass failed on formatting, a missing
+    helper-test import, and the old lifecycle test expectation that the helper
+    starts llama.cpp automatically. Formatting, the import, and the test
+    expectation were fixed before rerunning verification.
 
 **Verification:**
 

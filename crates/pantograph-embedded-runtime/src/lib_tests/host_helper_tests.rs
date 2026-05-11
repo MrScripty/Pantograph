@@ -1,4 +1,5 @@
 use super::*;
+use crate::embedded_workflow_host_helpers::unresolved_llamacpp_device_decision_error;
 
 #[test]
 fn reservation_requirements_returns_none_when_workflow_estimate_is_unknown() {
@@ -66,4 +67,17 @@ fn runtime_registry_owner_conflicts_map_to_invalid_request() {
         error.code(),
         pantograph_workflow_service::WorkflowErrorCode::InvalidRequest
     );
+}
+
+#[test]
+fn unresolved_llamacpp_device_decision_blocks_host_owned_auto_start() {
+    let error = unresolved_llamacpp_device_decision_error(Path::new("/models/model.gguf"));
+
+    assert_eq!(
+        error.code(),
+        pantograph_workflow_service::WorkflowErrorCode::RuntimeNotReady
+    );
+    assert!(error
+        .to_string()
+        .contains("no canonical runtime/device decision"));
 }

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use inference::{runtime_load::LlamaCppRuntimeMode, BackendConfig};
+use inference::runtime_load::LlamaCppRuntimeMode;
 use node_engine::WorkflowGraph;
 use pantograph_runtime_identity::canonical_engine_backend_key;
 use pantograph_runtime_registry::{RuntimeReservationRequirements, RuntimeRetentionHint};
@@ -125,39 +125,7 @@ impl EmbeddedWorkflowHost {
             .llamacpp_gateway_matches_requested_model(&model_path)
             .await
         {
-            let backend_key = canonical_engine_backend_key(Some(
-                self.gateway.current_backend_name().await.as_str(),
-            ));
-            if backend_key.as_deref() != Some("llamacpp") {
-                self.gateway
-                    .switch_backend("llama.cpp")
-                    .await
-                    .map_err(|error| {
-                        WorkflowServiceError::RuntimeNotReady(error.to_string())
-                            .with_runtime_diagnostic_phase(
-                                WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch,
-                            )
-                    })?;
-            }
-
-            self.gateway
-                .start(&BackendConfig {
-                    model_path: Some(model_path.clone()),
-                    device: Some("auto".to_string()),
-                    gpu_layers: Some(-1),
-                    embedding_mode: false,
-                    reranking_mode: false,
-                    ..BackendConfig::default()
-                })
-                .await
-                .map_err(|error| {
-                    let phase = runtime_start_diagnostic_phase(&error);
-                    WorkflowServiceError::RuntimeNotReady(format!(
-                        "failed to load llama.cpp model '{}': {error}",
-                        model_path.display()
-                    ))
-                    .with_runtime_diagnostic_phase(phase)
-                })?;
+            return Err(unresolved_llamacpp_device_decision_error(&model_path));
         }
 
         if self
@@ -813,15 +781,12 @@ fn resolve_gguf_path(path: &str) -> Result<PathBuf, WorkflowServiceError> {
         })
 }
 
-fn runtime_start_diagnostic_phase(
-    error: &inference::GatewayError,
-) -> WorkflowRuntimeDiagnosticPhaseHint {
-    match error {
-        inference::GatewayError::Backend(inference::BackendError::ManagedBinary(_)) => {
-            WorkflowRuntimeDiagnosticPhaseHint::ManagedBinary
-        }
-        _ => WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch,
-    }
+pub(crate) fn unresolved_llamacpp_device_decision_error(model_path: &Path) -> WorkflowServiceError {
+    WorkflowServiceError::RuntimeNotReady(format!(
+        "llama.cpp model '{}' is not active and no canonical runtime/device decision was provided",
+        model_path.display()
+    ))
+    .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch)
 }
 
 fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
