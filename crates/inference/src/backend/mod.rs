@@ -1231,6 +1231,32 @@ mod tests {
     }
 
     #[test]
+    fn gpu_layers_remain_llamacpp_runtime_setting_not_device_policy() {
+        let settings = LlamaCppRuntimeSettings::try_from_backend_config(&BackendConfig {
+            device: Some("CUDA0".to_string()),
+            gpu_layers: Some(42),
+            ..BackendConfig::default()
+        })
+        .expect("explicit backend config should be valid");
+        assert_eq!(settings.device_config().gpu_layers, 42);
+
+        let policy = crate::device_contracts::InferenceDevicePolicy::Explicit {
+            device_class: InferenceDeviceClass::Cuda,
+            device_id: Some(
+                crate::device_contracts::InferenceDeviceId::parse("cuda:0")
+                    .expect("valid device id"),
+            ),
+        };
+        let encoded = serde_json::to_value(policy).expect("device policy should serialize");
+        for backend_local_field in ["gpu_layers", "offload", "hybrid", "split"] {
+            assert!(
+                encoded.get(backend_local_field).is_none(),
+                "canonical device policy must not expose backend-local {backend_local_field}"
+            );
+        }
+    }
+
+    #[test]
     fn llamacpp_runtime_settings_reject_zero_sized_performance_knobs() {
         for (field_name, config) in [
             (

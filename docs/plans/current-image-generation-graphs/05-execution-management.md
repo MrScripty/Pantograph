@@ -640,6 +640,14 @@ Update during implementation:
   `cargo test -p inference device::tests::parse_llamacpp_inventory_facts`, and
   `git diff --check`. The first fixture run failed because diagnostics lacked
   a serde default; the DTO was fixed and the suite passed.
+- 2026-05-10: Continued Milestone 5 by adding a llama.cpp `gpu_layers`
+  guardrail test. The test keeps `gpu_layers` in
+  `LlamaCppRuntimeSettings`/`DeviceConfig` while asserting canonical
+  `InferenceDevicePolicy` does not expose backend-local `gpu_layers`,
+  hybrid, offload, or split fields. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p inference gpu_layers_remain_llamacpp_runtime_setting_not_device_policy`,
+  and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -938,6 +946,9 @@ Worker rules:
   for the saved graph inspection projection and service facade replay path.
 - `cargo test -p pantograph-workflow-service graph::session_contract` passed
   for edit-session graph snapshot stale diagnostic projection.
+- `cargo test -p inference gpu_layers_remain_llamacpp_runtime_setting_not_device_policy`
+  passed for preserving llama.cpp `gpu_layers` as a backend-local runtime
+  setting outside canonical cross-backend device policy.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

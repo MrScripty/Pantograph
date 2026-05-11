@@ -146,7 +146,7 @@ typed diagnostic and the canonical design is fixed.
 - [ ] Ensure auto mode is a first-class policy, not a fallback. If auto cannot
   resolve exactly one valid backend/runtime/device decision, fail with typed
   diagnostics instead of reusing raw-device defaults or old backend behavior.
-- [ ] Keep existing llama.cpp `gpu_layers` as a llama.cpp runtime setting, but
+- [x] Keep existing llama.cpp `gpu_layers` as a llama.cpp runtime setting, but
   do not expose a cross-backend hybrid/offload policy in this milestone.
 - [ ] Treat hybrid placement, CPU/GPU split, and offload as backend-specific
   adapter capabilities. The scheduler can choose only from typed candidate
@@ -2121,6 +2121,25 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: the broad fixture checklist item stays open until all
     device/runtime DTOs crossing Rust, frontend, diagnostics-ledger, worker,
     and persisted-state boundaries have explicit fixtures.
+- 2026-05-10 slice: llama.cpp `gpu_layers` device-policy guardrail.
+  - Smallest useful vertical slice: add a regression test proving
+    `gpu_layers` remains in `LlamaCppRuntimeSettings`/`DeviceConfig` and is
+    absent from the canonical cross-backend `InferenceDevicePolicy` payload.
+  - Allowed write set: `crates/inference/src/backend/mod.rs` and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: this does not add hybrid/offload
+    policy, does not synthesize backend flags from scheduler policy, and does
+    not change command resolution, runtime startup, generated DTOs, lockfiles,
+    frontend paths, or workflow fixtures.
+  - Standards/blast-radius gate: crate-local unit test only; backend-specific
+    llama.cpp runtime settings remain inside the inference backend boundary and
+    scheduler-facing device policy stays generic.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference gpu_layers_remain_llamacpp_runtime_setting_not_device_policy`,
+    and `git diff --check`.
+  - Remaining follow-up: hybrid placement, CPU/GPU split, and offload
+    capability reporting still need a separate backend-capability design slice.
 
 **Verification:**
 
@@ -2186,6 +2205,9 @@ typed diagnostic and the canonical design is fixed.
 - Inference serde fixture tests prove llama.cpp canonical device inventory
   facts round-trip with backend-local selector attribution, canonical device
   id/class, VRAM facts, and default-empty diagnostics.
+- Inference backend tests prove llama.cpp `gpu_layers` stays a backend-local
+  runtime setting and is not serialized into canonical cross-backend device
+  policy.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.
