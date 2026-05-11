@@ -154,6 +154,10 @@ Node execution ledger adaptation emits retained node input/output evidence
 through diagnostics-ledger `IoArtifactObserved` events. Small text/JSON values
 may be materialized into ArtifactStore bodies; large, binary, unavailable, or
 policy-limited values remain descriptor metadata with retention reasons.
+Runtime-setting diagnostic details remain sanitized metadata. They do not
+promote raw backend settings such as `device` into selected device facts;
+selected device class/id fields come only from canonical inference lifecycle or
+device-decision contracts.
 
 ## Alternatives Rejected
 - Resolve executable paths directly from `ModelRecord.metadata`.

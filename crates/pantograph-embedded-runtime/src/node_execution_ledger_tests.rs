@@ -1404,7 +1404,7 @@ fn runtime_settings_progress_detail_maps_to_bounded_inference_diagnostic_summary
             assert_eq!(payload.lifecycle_phase.as_deref(), Some("runtime_settings"));
             assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("resolved"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("llama_cpp"));
-            assert_eq!(payload.selected_device_id.as_deref(), Some("CUDA0"));
+            assert_eq!(payload.selected_device_id, None);
             let runtime_settings = payload.runtime_settings.expect("runtime settings");
             assert_eq!(runtime_settings.backend_key, "llama_cpp");
             assert_eq!(runtime_settings.settings.len(), 2);

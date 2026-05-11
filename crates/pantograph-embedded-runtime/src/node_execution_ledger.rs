@@ -1051,7 +1051,7 @@ fn build_runtime_settings_diagnostic_event_ledger_append_request(
                 selected_backend_key: backend_key.clone(),
                 selected_backend_family,
                 selected_device_class: None,
-                selected_device_id: runtime_setting_value(&settings, "device"),
+                selected_device_id: None,
                 selected_network_node_id: None,
                 resolved_artifact_kind: None,
                 usage: None,
@@ -1414,16 +1414,6 @@ fn runtime_setting_diagnostic_summary(
         value: bounded_diagnostic_metadata(Some(&setting.value))?,
         source: bounded_diagnostic_metadata(Some(&setting.source))?,
     })
-}
-
-fn runtime_setting_value(
-    settings: &[InferenceRuntimeSettingDiagnosticSummary],
-    name: &str,
-) -> Option<String> {
-    settings
-        .iter()
-        .find(|setting| setting.name == name)
-        .map(|setting| setting.value.clone())
 }
 
 fn option_support_counts(

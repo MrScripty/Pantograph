@@ -625,6 +625,37 @@ typed diagnostic and the canonical design is fixed.
   - Deviation: `jq empty .pantograph/workflows/juggernaut-x-v10-sdxl.json`
     could not run because `jq` is not installed in the environment. The JSON
     syntax check was rerun with Node.
+- 2026-05-10 slice: runtime-setting selected-device raw value removal.
+  - Smallest useful vertical slice: stop the embedded-runtime diagnostics
+    ledger adapter from copying the raw runtime setting named `device` into
+    `InferenceExecutionDiagnosticObservedPayload.selected_device_id`.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger.rs`,
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: runtime-setting diagnostics remain
+    bounded metadata only. They no longer create selected device facts from raw
+    backend strings such as `CUDA0`; canonical selected device fields stay
+    reserved for lifecycle/device-decision contracts.
+  - Standards/blast-radius gate: embedded-runtime remains the ledger adapter
+    owner; public DTO shape and SQLite schema are unchanged; runtime lifecycle,
+    frontend behavior, generated files, feature flags, dependencies, lockfiles,
+    path/resource access, and worker execution are untouched; test isolation
+    uses the focused node-execution-ledger adapter test.
+  - Discovered follow-up: diagnostics-ledger unit tests can still construct
+    synthetic runtime-settings payloads with selected device ids. That is
+    ledger contract coverage for externally supplied payloads, not a producer
+    path; revisit when the ledger contract is tightened around producer
+    provenance.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-embedded-runtime runtime_settings_progress_detail_maps_to_bounded_inference_diagnostic_summary`,
+    no-match search for
+    `selected_device_id: runtime_setting_value`,
+    `fn runtime_setting_value`, and
+    `selected_device_id.as_deref(), Some("CUDA0")` in the embedded-runtime
+    node-execution-ledger files, and `git diff --check`.
 
 **Verification:**
 

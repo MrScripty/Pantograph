@@ -244,6 +244,11 @@ Update during implementation:
   pytorch` on the image-generation node, and legacy `runtime_hint` values are
   ignored by capability extraction instead of being canonicalized into backend
   requirements.
+- 2026-05-10: Continued Milestone 5 by stopping runtime-setting diagnostics
+  from promoting raw `device` settings into selected device ids. Runtime
+  settings still retain bounded sanitized metadata, but selected device
+  class/id fields now remain absent unless canonical lifecycle/device-decision
+  facts provide them.
 
 ## Commit Cadence Notes
 
