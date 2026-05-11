@@ -643,7 +643,9 @@ fn workflow_runtime_preflight_from_decision(
     let mut runtime_warnings = Vec::new();
     let mut blocking_runtime_issues = Vec::new();
 
-    if decision_has_incomplete_runtime_state(&decision) {
+    if decision_has_blocking_device_diagnostic(&decision)
+        || decision_has_incomplete_runtime_state(&decision)
+    {
         let issue = WorkflowRuntimeIssue {
             runtime_id,
             display_name,
@@ -705,6 +707,18 @@ fn decision_has_incomplete_runtime_state(decision: &WorkflowTechnicalFitDecision
             WorkflowTechnicalFitReasonCode::MissingCandidateData
                 | WorkflowTechnicalFitReasonCode::MissingRuntimeState
         )
+    })
+}
+
+fn decision_has_blocking_device_diagnostic(decision: &WorkflowTechnicalFitDecision) -> bool {
+    blocking_device_diagnostic(decision).is_some()
+}
+
+fn blocking_device_diagnostic(
+    decision: &WorkflowTechnicalFitDecision,
+) -> Option<&WorkflowTechnicalFitDeviceDiagnostic> {
+    decision.device_diagnostics.iter().find(|diagnostic| {
+        diagnostic.severity == WorkflowTechnicalFitDeviceDiagnosticSeverity::Error
     })
 }
 
@@ -792,6 +806,34 @@ fn describe_technical_fit_blocking_issue(decision: &WorkflowTechnicalFitDecision
         .or(decision.selected_runtime_id.as_deref())
         .or(decision.selected_candidate_id.as_deref())
         .unwrap_or("runtime");
+
+    if let Some(diagnostic) = blocking_device_diagnostic(decision) {
+        let diagnostic_target = diagnostic
+            .device_id
+            .as_deref()
+            .or(diagnostic.runtime_variant_id.as_deref())
+            .or(diagnostic.backend_key.as_deref())
+            .or(decision.selected_device_id.as_deref())
+            .unwrap_or(target);
+        if diagnostic.code == WorkflowTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable {
+            return format!(
+                "technical-fit could not satisfy the explicit device policy for '{}'",
+                diagnostic_target
+            );
+        }
+
+        if diagnostic.message.is_empty() {
+            return format!(
+                "technical-fit reported a blocking device diagnostic for '{}'",
+                diagnostic_target
+            );
+        }
+
+        return format!(
+            "technical-fit reported a blocking device diagnostic for '{}': {}",
+            diagnostic_target, diagnostic.message
+        );
+    }
 
     if decision.reasons.iter().any(|reason| {
         matches!(
@@ -1164,6 +1206,51 @@ mod tests {
         assert!(assessment.blocking_runtime_issues[0]
             .message
             .contains("candidate state is incomplete"));
+    }
+
+    #[test]
+    fn technical_fit_preflight_blocks_explicit_device_unavailable_diagnostic() {
+        let decision = WorkflowTechnicalFitDecision {
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+            selected_candidate_id: None,
+            selected_runtime_id: None,
+            selected_runtime_variant_id: None,
+            selected_backend_key: Some("pytorch".to_string()),
+            selected_model_id: Some("image/model".to_string()),
+            selected_device_class: None,
+            selected_device_id: None,
+            resource_estimate: None,
+            observed_throughput_hint: None,
+            device_diagnostics: vec![WorkflowTechnicalFitDeviceDiagnostic {
+                code: WorkflowTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable,
+                severity: WorkflowTechnicalFitDeviceDiagnosticSeverity::Error,
+                message: "CUDA device is not available".to_string(),
+                device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+                device_id: Some(" cuda:0 ".to_string()),
+                runtime_variant_id: Some("pytorch/linux-x64/cuda".to_string()),
+                backend_key: Some("pytorch".to_string()),
+            }],
+            reasons: Vec::new(),
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        };
+
+        let assessment = workflow_runtime_preflight_from_decision(
+            &decision,
+            &[],
+            &["image/model".to_string()],
+            &[],
+        );
+
+        assert_eq!(assessment.runtime_warnings.len(), 1);
+        assert_eq!(assessment.blocking_runtime_issues.len(), 1);
+        assert!(assessment.blocking_runtime_issues[0]
+            .message
+            .contains("explicit device policy"));
+        assert!(assessment.blocking_runtime_issues[0]
+            .message
+            .contains("cuda:0"));
     }
 
     #[test]

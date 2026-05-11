@@ -1323,6 +1323,31 @@ typed diagnostic and the canonical design is fixed.
     `cargo fmt --all -- --check`,
     `cargo test -p pantograph-runtime-registry technical_fit`, and
     `git diff --check`.
+- 2026-05-10 slice: workflow preflight explicit-device diagnostic block.
+  - Smallest useful vertical slice: make workflow-service runtime preflight
+    treat error-severity technical-fit device diagnostics as blocking runtime
+    issues, even when the selector decision has no legacy missing-candidate or
+    missing-runtime-state reason.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: explicit unavailable device decisions
+    remain typed diagnostics and are not converted into CPU, auto, selected
+    runtime, selected backend, or warning-only admission behavior.
+  - Standards/blast-radius gate for workflow-service technical-fit preflight:
+    crate role remains admission/runtime-preflight orchestration; public DTO
+    shape, runtime lifecycle ownership, persisted schemas, frontend behavior,
+    generated files, feature flags, dependencies, lockfiles, worker execution,
+    and workflow fixtures are untouched; test isolation uses focused
+    workflow-service unit coverage with no external services.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service technical_fit`, and
+    `git diff --check`.
+  - Remaining follow-up: broader explicit backend/runtime incompatibility
+    cases still need concrete task/model/platform candidate facts before their
+    end-to-end admission tests can be marked complete.
 
 **Verification:**
 

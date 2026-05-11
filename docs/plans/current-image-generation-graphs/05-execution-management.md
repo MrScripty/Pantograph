@@ -387,6 +387,13 @@ Update during implementation:
   selection. Verification passed: `cargo fmt --all -- --check`,
   `cargo test -p pantograph-runtime-registry technical_fit`, and
   `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by blocking workflow-service admission on
+  error-severity technical-fit device diagnostics. Explicit unavailable device
+  decisions now become blocking `WorkflowRuntimeIssue` diagnostics even when
+  they do not also carry missing-candidate or missing-runtime-state reasons.
+  Verification passed: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-workflow-service technical_fit`, and
+  `git diff --check`.
 
 ## Commit Cadence Notes
 

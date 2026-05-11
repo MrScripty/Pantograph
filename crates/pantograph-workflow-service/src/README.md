@@ -175,6 +175,9 @@ executor, the service fails closed.
 - Technical-fit decisions with fallback selection or missing candidate/runtime
   state are blocking runtime diagnostics; workflow execution must not proceed
   from those selected-runtime facts.
+- Technical-fit decisions with error-severity device diagnostics are blocking
+  runtime diagnostics, including explicit device requests that canonical
+  planning cannot satisfy.
 - Workflow capability extraction does not treat legacy `runtime_hint` values
   as backend requirements. Current workflow backend requirements must come from
   explicit backend/package facts until typed backend preference intent replaces
