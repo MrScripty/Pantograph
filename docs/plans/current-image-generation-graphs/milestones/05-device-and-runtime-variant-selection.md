@@ -1068,6 +1068,31 @@ typed diagnostic and the canonical design is fixed.
     `npm run typecheck`,
     `rg -n "Provide fallback options|CPU Only|let llama-server choose|buildBackendConfirmedDeviceOptions|deviceLoadError" src/components/DeviceConfig.svelte src/components/deviceConfigPresenters.ts src/components/deviceConfigPresenters.test.ts`,
     and `git diff --check`.
+- 2026-05-10 slice: gateway mode-info selected-device projection.
+  - Smallest useful vertical slice: stop gateway `mode_info()` runtime facts
+    from promoting raw `BackendConfig.device` strings into
+    `active_resolved_device` and instead source the field from the active
+    llama.cpp runtime descriptor's canonical selected device id.
+  - Allowed write set:
+    `crates/inference/src/gateway.rs`,
+    `crates/inference/src/gateway_tests.rs`,
+    `crates/inference/src/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: config-only explicit device strings no
+    longer appear as selected runtime facts. If the active backend does not
+    expose canonical selected-device facts, `mode_info()` leaves the resolved
+    device unset instead of inferring a scheduler decision.
+  - Standards/blast-radius gate: this stays inside the inference gateway
+    projection path. Public DTO shape, backend startup, managed runtime state,
+    frontend files, generated files, lockfiles, persisted schema, sqlite state,
+    feature flags, dependencies, and worker execution are unchanged.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference test_mode_info_runtime_facts`,
+    `cargo test -p inference test_lifecycle_events_do_not_report_config_only_device_as_selected`,
+    and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` reported a
+    rustfmt wrapping difference in `gateway.rs`; `cargo fmt --all` was run,
+    and the format check then passed.
 
 **Verification:**
 

@@ -306,6 +306,10 @@ Update during implementation:
   options after backend discovery failure. `DeviceConfig.svelte` now renders
   only backend-confirmed device options and keeps the selector unavailable when
   discovery returns no usable facts.
+- 2026-05-10: Continued Milestone 5 by removing gateway mode-info projection
+  from raw `BackendConfig.device`. Runtime fact snapshots now carry
+  `active_resolved_device` only when the active llama.cpp runtime descriptor
+  exposes a canonical selected device id.
 
 ## Commit Cadence Notes
 
@@ -715,6 +719,13 @@ Worker rules:
   `rg -n "Provide fallback options|CPU Only|let llama-server choose|buildBackendConfirmedDeviceOptions|deviceLoadError" src/components/DeviceConfig.svelte src/components/deviceConfigPresenters.ts src/components/deviceConfigPresenters.test.ts`,
   and `git diff --check` passed after frontend device options stopped
   synthesizing CPU-only or auto choices when backend discovery fails.
+- `cargo fmt --all -- --check`,
+  `cargo test -p inference test_mode_info_runtime_facts`,
+  `cargo test -p inference test_lifecycle_events_do_not_report_config_only_device_as_selected`,
+  and `git diff --check` passed after gateway mode-info runtime facts stopped
+  deriving selected devices from raw backend config strings. The first format
+  check failed on a wrapping-only rustfmt diff; `cargo fmt --all` was run and
+  the check passed afterward.
 
 ### Traceability Links
 

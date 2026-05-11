@@ -148,6 +148,9 @@ normalizing them to executable defaults.
 - Gateway request lifecycle events source selected device class/id from the
   active llama.cpp runtime descriptor when it carries canonical facts. A raw
   `BackendConfig.device` value by itself is not emitted as a selected device.
+- Gateway mode-info runtime facts follow the same rule: active resolved device
+  fields are populated only from canonical active runtime descriptors, not raw
+  backend config strings.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,

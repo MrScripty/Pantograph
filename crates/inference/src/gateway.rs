@@ -20,7 +20,6 @@ use crate::backend::{
     BackendRegistry, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
-use crate::constants::device_types;
 use crate::device_contracts::InferenceDeviceClass;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
@@ -130,15 +129,6 @@ fn config_model_target(config: &BackendConfig) -> Option<String> {
         .map(|path| path.display().to_string())
         .or_else(|| config.model_name.clone())
         .or_else(|| config.model_id.clone())
-}
-
-fn selected_device_id_from_config(config: Option<&BackendConfig>) -> Option<String> {
-    let device = config?.device.as_deref()?.trim();
-    if device.is_empty() || device.eq_ignore_ascii_case(device_types::AUTO) {
-        None
-    } else {
-        Some(device.to_string())
-    }
 }
 
 fn runtime_id_for_backend_name(backend_name: &str) -> String {
@@ -708,15 +698,17 @@ impl InferenceGateway {
         let is_reranking = self.is_reranking_mode().await;
         let is_external = self.is_external_mode().await;
         let url = self.base_url().await;
-        let (active_model_target, active_resolved_device) = {
+        let active_model_target = {
             let current_runtime_config = self.current_runtime_config.read().await;
-            (
-                current_runtime_config
-                    .as_ref()
-                    .and_then(config_model_target),
-                selected_device_id_from_config(current_runtime_config.as_ref()),
-            )
+            current_runtime_config
+                .as_ref()
+                .and_then(config_model_target)
         };
+        let active_resolved_device = self
+            .active_llamacpp_runtime_descriptor()
+            .await
+            .and_then(|descriptor| descriptor.selected_device_id)
+            .map(|device_id| device_id.as_str().to_string());
         let backend_key = canonical_backend_key(&backend_name);
 
         ServerModeInfo {

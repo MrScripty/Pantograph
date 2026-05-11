@@ -1924,7 +1924,22 @@ async fn test_embeddings_with_lifecycle_records_token_usage_without_payloads() {
 }
 
 #[tokio::test]
-async fn test_mode_info_runtime_facts_report_explicit_resolved_device() {
+async fn test_mode_info_runtime_facts_report_active_runtime_selected_device() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockActiveLlamaBackend), "llama.cpp");
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+    gateway
+        .start(&BackendConfig::default())
+        .await
+        .expect("gateway should start with active llama runtime");
+
+    let facts = gateway.mode_info().await.runtime_fact_snapshots();
+
+    assert_eq!(facts.len(), 1);
+    assert_eq!(facts[0].resolved_device.as_deref(), Some("cuda:0"));
+}
+
+#[tokio::test]
+async fn test_mode_info_runtime_facts_do_not_report_config_only_device() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
     gateway
@@ -1938,7 +1953,7 @@ async fn test_mode_info_runtime_facts_report_explicit_resolved_device() {
     let facts = gateway.mode_info().await.runtime_fact_snapshots();
 
     assert_eq!(facts.len(), 1);
-    assert_eq!(facts[0].resolved_device.as_deref(), Some("cuda:0"));
+    assert_eq!(facts[0].resolved_device, None);
 }
 
 #[tokio::test]
