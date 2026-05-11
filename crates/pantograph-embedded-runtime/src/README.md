@@ -378,6 +378,11 @@ from current backend/package facts, not from legacy runtime hints.
   backend device strings or selecting fallback devices. Unsupported future
   device families must fail contract decoding or later selector validation
   rather than being mapped to CPU, auto, Metal, MPS, or PyTorch.
+- Technical-fit bridging preserves runtime variant ids, typed device class/id
+  facts, resource estimates, observed-throughput hints, and bounded device
+  diagnostics from runtime-registry candidates and decisions. The bridge may
+  project closed enum values between crates, but it must not convert unknown
+  backend-local device strings into selected facts.
 - Producer-specific runtime capability mapping must stay in backend Rust so
   adapters do not drift on runtime ids, install state, or backend-key aliases.
 - Backend capability projection must preserve runtime variant capability

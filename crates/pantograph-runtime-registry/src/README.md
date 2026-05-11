@@ -117,6 +117,11 @@ process ownership and app composition stay outside this crate.
   receive `auto` or explicit CPU/CUDA/Metal/MPS intent, but this crate must not
   translate that intent into backend device strings, synthesize CPU fallback, or
   hide unavailable explicit-device decisions.
+- Technical-fit candidate and decision DTOs carry runtime variant id, typed
+  selected device class/id, resource estimates, observed-throughput hints, and
+  bounded device diagnostics when producers provide those facts. The selector
+  copies selected candidate facts into the decision, but does not infer missing
+  device facts from backend keys or raw runtime strings.
 - Technical-fit normalization, override, residency, queue-pressure,
   budget-pressure, and selector rejection tests stay in
   `technical_fit_tests.rs` so selector contracts stay separate from production

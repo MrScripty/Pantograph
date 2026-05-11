@@ -80,6 +80,29 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
             runtime_id: Some("llama.cpp".to_string()),
             backend_key: Some("llama.cpp".to_string()),
             model_id: Some(" model-a ".to_string()),
+            runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
+            device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+            selected_device_id: Some(" cuda:0 ".to_string()),
+            resource_estimate: Some(RuntimeTechnicalFitResourceEstimate {
+                estimated_peak_vram_mb: Some(4096),
+                estimated_peak_ram_mb: Some(8192),
+                estimated_min_vram_mb: Some(2048),
+                estimated_min_ram_mb: Some(4096),
+            }),
+            observed_throughput_hint: Some(RuntimeTechnicalFitObservedThroughputHint {
+                tokens_per_second_milli: None,
+                images_per_second_milli: Some(125),
+                sample_count: Some(3),
+            }),
+            device_diagnostics: vec![RuntimeTechnicalFitDeviceDiagnostic {
+                code: RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
+                severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning,
+                message: " cuda runtime warmup pending ".to_string(),
+                device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+                device_id: Some(" cuda:0 ".to_string()),
+                runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
+                backend_key: Some("llama.cpp".to_string()),
+            }],
             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
             context_window_tokens: Some(8192),
             residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
@@ -148,6 +171,40 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
         Some("llama_cpp")
     );
     assert_eq!(
+        normalized.candidates[0].runtime_variant_id.as_deref(),
+        Some("llama-cpp/linux-x64/cuda")
+    );
+    assert_eq!(
+        normalized.candidates[0].selected_device_id.as_deref(),
+        Some("cuda:0")
+    );
+    assert_eq!(
+        normalized.candidates[0]
+            .resource_estimate
+            .as_ref()
+            .and_then(|estimate| estimate.estimated_peak_vram_mb),
+        Some(4096)
+    );
+    assert_eq!(
+        normalized.candidates[0]
+            .observed_throughput_hint
+            .as_ref()
+            .and_then(|hint| hint.images_per_second_milli),
+        Some(125)
+    );
+    assert_eq!(
+        normalized.candidates[0].device_diagnostics[0]
+            .runtime_variant_id
+            .as_deref(),
+        Some("llama-cpp/linux-x64/cuda")
+    );
+    assert_eq!(
+        normalized.candidates[0].device_diagnostics[0]
+            .backend_key
+            .as_deref(),
+        Some("llama_cpp")
+    );
+    assert_eq!(
         normalized.candidates[0]
             .compatibility_report
             .as_ref()
@@ -183,8 +240,31 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
         selection_mode: RuntimeTechnicalFitSelectionMode::ExplicitOverride,
         selected_candidate_id: Some(" candidate-1 ".to_string()),
         selected_runtime_id: Some("llama.cpp".to_string()),
+        selected_runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
         selected_backend_key: Some("llama.cpp".to_string()),
         selected_model_id: Some(" model-a ".to_string()),
+        selected_device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+        selected_device_id: Some(" cuda:0 ".to_string()),
+        resource_estimate: Some(RuntimeTechnicalFitResourceEstimate {
+            estimated_peak_vram_mb: Some(4096),
+            estimated_peak_ram_mb: Some(8192),
+            estimated_min_vram_mb: None,
+            estimated_min_ram_mb: None,
+        }),
+        observed_throughput_hint: Some(RuntimeTechnicalFitObservedThroughputHint {
+            tokens_per_second_milli: Some(33000),
+            images_per_second_milli: None,
+            sample_count: Some(5),
+        }),
+        device_diagnostics: vec![RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning,
+            message: " cuda runtime warmup pending ".to_string(),
+            device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+            device_id: Some(" cuda:0 ".to_string()),
+            runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
+            backend_key: Some("llama.cpp".to_string()),
+        }],
         reasons: vec![RuntimeTechnicalFitReason::new(
             RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
             Some(" candidate-1 "),
@@ -219,6 +299,29 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
         Some("llama_cpp")
     );
     assert_eq!(normalized.selected_model_id.as_deref(), Some("model-a"));
+    assert_eq!(
+        normalized.selected_runtime_variant_id.as_deref(),
+        Some("llama-cpp/linux-x64/cuda")
+    );
+    assert_eq!(normalized.selected_device_id.as_deref(), Some("cuda:0"));
+    assert_eq!(
+        normalized
+            .resource_estimate
+            .as_ref()
+            .and_then(|estimate| estimate.estimated_peak_vram_mb),
+        Some(4096)
+    );
+    assert_eq!(
+        normalized
+            .observed_throughput_hint
+            .as_ref()
+            .and_then(|hint| hint.tokens_per_second_milli),
+        Some(33000)
+    );
+    assert_eq!(
+        normalized.device_diagnostics[0].backend_key.as_deref(),
+        Some("llama_cpp")
+    );
     assert_eq!(
         normalized.reasons,
         vec![RuntimeTechnicalFitReason {
@@ -282,6 +385,12 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 runtime_id: Some("runtime-a".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
@@ -296,6 +405,12 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 runtime_id: Some("runtime-b".to_string()),
                 backend_key: Some("pytorch".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
@@ -315,8 +430,14 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
             selection_mode: RuntimeTechnicalFitSelectionMode::ExplicitOverride,
             selected_candidate_id: Some("runtime-b".to_string()),
             selected_runtime_id: Some("runtime-b".to_string()),
+            selected_runtime_variant_id: None,
             selected_backend_key: Some("pytorch".to_string()),
             selected_model_id: None,
+            selected_device_class: None,
+            selected_device_id: None,
+            resource_estimate: None,
+            observed_throughput_hint: None,
+            device_diagnostics: Vec::new(),
             reasons: vec![RuntimeTechnicalFitReason {
                 code: RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
                 candidate_id: Some("runtime-b".to_string()),
@@ -348,6 +469,12 @@ fn selector_rejects_unmatched_override_without_synthetic_candidate() {
             runtime_id: Some("runtime-a".to_string()),
             backend_key: Some("llama_cpp".to_string()),
             model_id: Some("model-a".to_string()),
+            runtime_variant_id: None,
+            device_class: None,
+            selected_device_id: None,
+            resource_estimate: None,
+            observed_throughput_hint: None,
+            device_diagnostics: Vec::new(),
             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
             context_window_tokens: Some(8192),
             residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
@@ -416,6 +543,12 @@ fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
                 runtime_id: Some("runtime-b".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -430,6 +563,12 @@ fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
                 runtime_id: Some("runtime-a".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -472,6 +611,12 @@ fn selector_rejects_when_required_context_is_missing() {
             runtime_id: Some("runtime-a".to_string()),
             backend_key: Some("llama_cpp".to_string()),
             model_id: None,
+            runtime_variant_id: None,
+            device_class: None,
+            selected_device_id: None,
+            resource_estimate: None,
+            observed_throughput_hint: None,
+            device_diagnostics: Vec::new(),
             source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
             context_window_tokens: None,
             residency_state: None,
@@ -519,6 +664,12 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
                 runtime_id: Some("candle".to_string()),
                 backend_key: Some("candle".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
@@ -533,6 +684,12 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
                 runtime_id: Some("llama_cpp".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Unloaded),
@@ -594,6 +751,12 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 runtime_id: Some("runtime-hot".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -608,6 +771,12 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 runtime_id: Some("runtime-cool".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -672,6 +841,12 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 runtime_id: Some("runtime-tight".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -686,6 +861,12 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 runtime_id: Some("runtime-roomy".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
                 model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,

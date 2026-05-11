@@ -397,3 +397,8 @@ const preview = await workflowService.previewNodeInsertOnEdge(
 - TypeScript mirrors for technical-fit device policy are user intent shapes
   only. Frontend code may send `auto` or explicit CPU/CUDA/Metal/MPS intent, but
   must not submit backend-local device syntax as trusted executable state.
+- TypeScript mirrors for technical-fit decisions carry selected runtime
+  variant, selected device class/id, resource estimate, observed-throughput
+  hint, and device diagnostic fields from backend DTOs. Frontend code may
+  render those facts, but must not infer executable device choices from missing
+  values, backend names, or runtime ids.

@@ -107,7 +107,7 @@ typed diagnostic and the canonical design is fixed.
   rejected on Linux/Windows if explicitly requested.
 - [x] Add future-support notes for ROCm/HIP, Vulkan, XPU/iGPU, OpenVINO,
   hybrid/offload, remote hardware plugins, and MLX without implementing them.
-- [ ] Update runtime registry technical-fit input/output so candidates can
+- [x] Update runtime registry technical-fit input/output so candidates can
   carry backend id, task/model support, runtime variant, device class,
   selected device id, resource estimates where known, optional observed
   throughput hints, and device diagnostics.
@@ -1179,6 +1179,45 @@ typed diagnostic and the canonical design is fixed.
     selector candidate facts. That remains blocked on the next technical-fit
     candidate/decision slice that carries runtime variant, device class/id, and
     device diagnostics.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `npm run typecheck`, and `git diff --check`.
+- 2026-05-10 slice: technical-fit selected runtime/device facts.
+  - Smallest useful vertical slice: extend runtime-registry technical-fit
+    candidates and decisions with runtime variant id, typed device class,
+    selected device id, resource estimate, observed-throughput hint, and
+    bounded device diagnostic fields, then project those fields through
+    workflow-service and embedded-runtime DTOs plus the TypeScript workflow
+    mirror.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `src/services/workflow/types.ts`, relevant module READMEs, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the selector only copies explicit
+    candidate facts into the selected decision. It does not derive device class
+    or selected device id from backend keys, runtime ids, raw backend config
+    strings, or unknown runtime variant facts. Unknown workflow runtime variant
+    device classes become typed diagnostics instead of CPU/auto mappings.
+  - Standards/blast-radius gate: this slice changes append-only DTO fields,
+    synchronous normalization/projection helpers, focused Rust tests, and
+    handwritten TypeScript mirrors only. Runtime ranking, backend startup/load,
+    managed runtime installation state, persisted schemas, workflow fixtures,
+    subprocess behavior, worker execution, generated files, dependencies, and
+    lockfiles are unchanged.
+  - Discovered follow-up: explicit-device rejection is still admission policy
+    work. The selector can now carry the necessary runtime/device facts and
+    diagnostics, but the next slices still need to compare explicit device
+    policy intent against candidate facts and block unavailable devices before
+    backend load.
   - Verification passed:
     `cargo fmt --all -- --check`,
     `cargo test -p pantograph-runtime-registry technical_fit`,

@@ -129,6 +129,11 @@ Workflow technical-fit requests may carry typed device policy intent. That
 intent is normalized and forwarded to backend/runtime selectors, but this crate
 must not turn explicit device requests into executable defaults or infer
 backend-local device syntax.
+Workflow technical-fit decisions now also mirror selected runtime variant,
+device class/id, resource estimates, observed-throughput hints, and bounded
+device diagnostics from backend/runtime selectors. These fields are transport
+facts only; workflow-service does not rank devices or infer missing values from
+backend ids, runtime ids, or raw device strings.
 Artifact format metadata now includes optional typed conversion status,
 conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through

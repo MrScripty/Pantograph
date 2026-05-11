@@ -103,8 +103,14 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
             selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: None,
             selected_runtime_id: None,
+            selected_runtime_variant_id: None,
             selected_backend_key: Some("llama_cpp".to_string()),
             selected_model_id: None,
+            selected_device_class: None,
+            selected_device_id: None,
+            resource_estimate: None,
+            observed_throughput_hint: None,
+            device_diagnostics: Vec::new(),
             reasons: vec![
                 WorkflowTechnicalFitReason::new(
                     WorkflowTechnicalFitReasonCode::MissingRuntimeState,

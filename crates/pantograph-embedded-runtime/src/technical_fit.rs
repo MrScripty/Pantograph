@@ -4,19 +4,28 @@ use pantograph_runtime_registry::{
     select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
     RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitCompatibilityIssue,
     RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision,
-    RuntimeTechnicalFitDeviceClass, RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor,
-    RuntimeTechnicalFitOverride, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
-    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
+    RuntimeTechnicalFitDeviceClass, RuntimeTechnicalFitDeviceDiagnostic,
+    RuntimeTechnicalFitDeviceDiagnosticCode, RuntimeTechnicalFitDeviceDiagnosticSeverity,
+    RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitObservedThroughputHint, RuntimeTechnicalFitOverride,
+    RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
+    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourceEstimate,
     RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
     RuntimeTechnicalFitWarmupState,
 };
 use pantograph_workflow_service::{
-    WorkflowHost, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind, WorkflowServiceError, WorkflowTechnicalFitCompatibilityIssue,
+    WorkflowBackendCapabilityFacts, WorkflowDeviceResolutionDiagnostic,
+    WorkflowDeviceResolutionDiagnosticCode, WorkflowDeviceResolutionDiagnosticSeverity,
+    WorkflowHost, WorkflowInferenceDeviceClass, WorkflowRuntimeCapability,
+    WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind, WorkflowRuntimeVariantCapability,
+    WorkflowServiceError, WorkflowTechnicalFitCompatibilityIssue,
     WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
-    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDevicePolicy,
+    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDeviceDiagnostic,
+    WorkflowTechnicalFitDeviceDiagnosticCode, WorkflowTechnicalFitDeviceDiagnosticSeverity,
+    WorkflowTechnicalFitDevicePolicy, WorkflowTechnicalFitObservedThroughputHint,
     WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
-    WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
+    WorkflowTechnicalFitRequest, WorkflowTechnicalFitResourceEstimate,
+    WorkflowTechnicalFitSelectionMode,
 };
 use workflow_nodes::setup::PumasSelectorAccess;
 
@@ -106,7 +115,10 @@ pub fn build_runtime_technical_fit_request(
             .and_then(project_override),
         device_policy: request.device_policy.as_ref().map(project_device_policy),
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
-        candidates: runtime_capability_candidates(runtime_capabilities),
+        candidates: runtime_capability_candidates(
+            runtime_capabilities,
+            runtime_requirements_resource_estimate(&request.runtime_requirements),
+        ),
         resource_pressure: project_resource_pressure(
             request.queue_pressure.as_ref(),
             request.runtime_requirements.estimated_peak_vram_mb,
@@ -123,8 +135,26 @@ pub fn project_workflow_technical_fit_decision(
         selection_mode: project_selection_mode(decision.selection_mode),
         selected_candidate_id: decision.selected_candidate_id.clone(),
         selected_runtime_id: decision.selected_runtime_id.clone(),
+        selected_runtime_variant_id: decision.selected_runtime_variant_id.clone(),
         selected_backend_key: decision.selected_backend_key.clone(),
         selected_model_id: decision.selected_model_id.clone(),
+        selected_device_class: decision
+            .selected_device_class
+            .map(project_runtime_device_class),
+        selected_device_id: decision.selected_device_id.clone(),
+        resource_estimate: decision
+            .resource_estimate
+            .as_ref()
+            .map(project_resource_estimate),
+        observed_throughput_hint: decision
+            .observed_throughput_hint
+            .as_ref()
+            .map(project_observed_throughput_hint),
+        device_diagnostics: decision
+            .device_diagnostics
+            .iter()
+            .map(project_device_diagnostic)
+            .collect(),
         reasons: decision
             .reasons
             .iter()
@@ -171,32 +201,94 @@ fn project_compatibility_issue(
 
 fn runtime_capability_candidates(
     runtime_capabilities: &[WorkflowRuntimeCapability],
+    resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
 ) -> Vec<RuntimeTechnicalFitCandidate> {
     runtime_capabilities
         .iter()
-        .map(|capability| RuntimeTechnicalFitCandidate {
-            candidate_id: capability
+        .map(|capability| {
+            let backend_key = capability
                 .backend_keys
                 .first()
                 .cloned()
-                .unwrap_or_else(|| capability.runtime_id.clone()),
-            runtime_id: Some(capability.runtime_id.clone()),
-            backend_key: capability
-                .backend_keys
-                .first()
-                .cloned()
-                .or_else(|| Some(capability.runtime_id.clone())),
-            model_id: None,
-            source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
-            context_window_tokens: None,
-            residency_state: Some(runtime_capability_residency_state(capability)),
-            warmup_state: runtime_capability_warmup_state(capability),
-            supports_runtime_requirements: runtime_capability_is_ready(capability),
-            compatibility_report: None,
-            compatibility_issue_count: 0,
-            compatibility_issues: Vec::new(),
+                .or_else(|| Some(capability.runtime_id.clone()));
+            let runtime_variant_facts = runtime_capability_variant_facts(capability);
+            RuntimeTechnicalFitCandidate {
+                candidate_id: capability
+                    .backend_keys
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| capability.runtime_id.clone()),
+                runtime_id: Some(capability.runtime_id.clone()),
+                runtime_variant_id: runtime_variant_facts.runtime_variant_id,
+                backend_key,
+                model_id: None,
+                device_class: runtime_variant_facts.device_class,
+                selected_device_id: None,
+                resource_estimate: resource_estimate.clone(),
+                observed_throughput_hint: None,
+                device_diagnostics: runtime_variant_facts.device_diagnostics,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
+                context_window_tokens: None,
+                residency_state: Some(runtime_capability_residency_state(capability)),
+                warmup_state: runtime_capability_warmup_state(capability),
+                supports_runtime_requirements: runtime_capability_is_ready(capability),
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
+            }
         })
         .collect()
+}
+
+struct RuntimeCapabilityVariantFacts {
+    runtime_variant_id: Option<String>,
+    device_class: Option<RuntimeTechnicalFitDeviceClass>,
+    device_diagnostics: Vec<RuntimeTechnicalFitDeviceDiagnostic>,
+}
+
+fn runtime_capability_variant_facts(
+    capability: &WorkflowRuntimeCapability,
+) -> RuntimeCapabilityVariantFacts {
+    let variants = capability
+        .backend_capability_facts
+        .as_ref()
+        .map(|facts| facts.runtime_variants.as_slice())
+        .unwrap_or_default();
+    let selected_variant = variants
+        .iter()
+        .find(|variant| variant.available)
+        .or_else(|| variants.first());
+
+    let mut device_diagnostics = selected_variant
+        .map(|variant| {
+            variant
+                .diagnostics
+                .iter()
+                .map(project_workflow_device_diagnostic)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let device_class = selected_variant
+        .and_then(|variant| project_workflow_runtime_variant_device_class(variant.device_class));
+
+    if selected_variant.is_some() && device_class.is_none() {
+        device_diagnostics.push(RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "runtime variant reported an unsupported device class".to_string(),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: selected_variant.map(|variant| variant.runtime_variant_id.clone()),
+            backend_key: capability.backend_keys.first().cloned(),
+        });
+    }
+
+    RuntimeCapabilityVariantFacts {
+        runtime_variant_id: selected_variant.map(|variant| variant.runtime_variant_id.clone()),
+        device_class,
+        device_diagnostics,
+    }
 }
 
 pub fn runtime_candidates_from_pumas_package_facts(
@@ -213,8 +305,14 @@ pub fn runtime_candidates_from_pumas_package_facts(
                 .map(|backend_key| RuntimeTechnicalFitCandidate {
                     candidate_id: format!("{}|{}", backend_key, facts.model_ref.model_id),
                     runtime_id: None,
+                    runtime_variant_id: None,
                     backend_key: Some(backend_key),
                     model_id: Some(facts.model_ref.model_id.clone()),
+                    device_class: None,
+                    selected_device_id: None,
+                    resource_estimate: None,
+                    observed_throughput_hint: None,
+                    device_diagnostics: Vec::new(),
                     source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                     context_window_tokens: None,
                     residency_state: None,
@@ -247,8 +345,14 @@ pub fn runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
                 RuntimeTechnicalFitCandidate {
                     candidate_id: format!("{}|{}", backend.backend_key, facts.model_ref.model_id),
                     runtime_id: None,
+                    runtime_variant_id: None,
                     backend_key: Some(backend.backend_key.clone()),
                     model_id: Some(facts.model_ref.model_id.clone()),
+                    device_class: None,
+                    selected_device_id: None,
+                    resource_estimate: None,
+                    observed_throughput_hint: None,
+                    device_diagnostics: Vec::new(),
                     source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                     context_window_tokens: None,
                     residency_state: None,
@@ -567,6 +671,200 @@ fn project_device_class(
     }
 }
 
+fn project_runtime_device_class(
+    device_class: RuntimeTechnicalFitDeviceClass,
+) -> WorkflowTechnicalFitDeviceClass {
+    match device_class {
+        RuntimeTechnicalFitDeviceClass::Cpu => WorkflowTechnicalFitDeviceClass::Cpu,
+        RuntimeTechnicalFitDeviceClass::Cuda => WorkflowTechnicalFitDeviceClass::Cuda,
+        RuntimeTechnicalFitDeviceClass::Metal => WorkflowTechnicalFitDeviceClass::Metal,
+        RuntimeTechnicalFitDeviceClass::Mps => WorkflowTechnicalFitDeviceClass::Mps,
+    }
+}
+
+fn project_workflow_runtime_variant_device_class(
+    device_class: WorkflowInferenceDeviceClass,
+) -> Option<RuntimeTechnicalFitDeviceClass> {
+    match device_class {
+        WorkflowInferenceDeviceClass::Cpu => Some(RuntimeTechnicalFitDeviceClass::Cpu),
+        WorkflowInferenceDeviceClass::Cuda => Some(RuntimeTechnicalFitDeviceClass::Cuda),
+        WorkflowInferenceDeviceClass::Metal => Some(RuntimeTechnicalFitDeviceClass::Metal),
+        WorkflowInferenceDeviceClass::Mps => Some(RuntimeTechnicalFitDeviceClass::Mps),
+        WorkflowInferenceDeviceClass::Unknown => None,
+    }
+}
+
+fn project_resource_estimate(
+    estimate: &RuntimeTechnicalFitResourceEstimate,
+) -> WorkflowTechnicalFitResourceEstimate {
+    WorkflowTechnicalFitResourceEstimate {
+        estimated_peak_vram_mb: estimate.estimated_peak_vram_mb,
+        estimated_peak_ram_mb: estimate.estimated_peak_ram_mb,
+        estimated_min_vram_mb: estimate.estimated_min_vram_mb,
+        estimated_min_ram_mb: estimate.estimated_min_ram_mb,
+    }
+}
+
+fn project_observed_throughput_hint(
+    hint: &RuntimeTechnicalFitObservedThroughputHint,
+) -> WorkflowTechnicalFitObservedThroughputHint {
+    WorkflowTechnicalFitObservedThroughputHint {
+        tokens_per_second_milli: hint.tokens_per_second_milli,
+        images_per_second_milli: hint.images_per_second_milli,
+        sample_count: hint.sample_count,
+    }
+}
+
+fn project_device_diagnostic(
+    diagnostic: &RuntimeTechnicalFitDeviceDiagnostic,
+) -> WorkflowTechnicalFitDeviceDiagnostic {
+    WorkflowTechnicalFitDeviceDiagnostic {
+        code: project_device_diagnostic_code(diagnostic.code),
+        severity: project_device_diagnostic_severity(diagnostic.severity),
+        message: diagnostic.message.clone(),
+        device_class: diagnostic.device_class.map(project_runtime_device_class),
+        device_id: diagnostic.device_id.clone(),
+        runtime_variant_id: diagnostic.runtime_variant_id.clone(),
+        backend_key: diagnostic.backend_key.clone(),
+    }
+}
+
+fn project_device_diagnostic_code(
+    code: RuntimeTechnicalFitDeviceDiagnosticCode,
+) -> WorkflowTechnicalFitDeviceDiagnosticCode {
+    match code {
+        RuntimeTechnicalFitDeviceDiagnosticCode::InvalidDevicePolicy => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::InvalidDevicePolicy
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::InvalidDeviceId => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::InvalidDeviceId
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::InvalidRuntimeVariantId => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::InvalidRuntimeVariantId
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::InvalidBackendId => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::InvalidBackendId
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::CandidateUnavailable
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::NoValidCandidate
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::BackendIncompatible
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected
+        }
+    }
+}
+
+fn project_device_diagnostic_severity(
+    severity: RuntimeTechnicalFitDeviceDiagnosticSeverity,
+) -> WorkflowTechnicalFitDeviceDiagnosticSeverity {
+    match severity {
+        RuntimeTechnicalFitDeviceDiagnosticSeverity::Advisory => {
+            WorkflowTechnicalFitDeviceDiagnosticSeverity::Advisory
+        }
+        RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning => {
+            WorkflowTechnicalFitDeviceDiagnosticSeverity::Warning
+        }
+        RuntimeTechnicalFitDeviceDiagnosticSeverity::Error => {
+            WorkflowTechnicalFitDeviceDiagnosticSeverity::Error
+        }
+    }
+}
+
+fn project_workflow_device_diagnostic(
+    diagnostic: &WorkflowDeviceResolutionDiagnostic,
+) -> RuntimeTechnicalFitDeviceDiagnostic {
+    RuntimeTechnicalFitDeviceDiagnostic {
+        code: project_workflow_device_diagnostic_code(diagnostic.code),
+        severity: project_workflow_device_diagnostic_severity(diagnostic.severity),
+        message: diagnostic.message.clone(),
+        device_class: diagnostic
+            .device_class
+            .and_then(project_workflow_runtime_variant_device_class),
+        device_id: diagnostic.device_id.clone(),
+        runtime_variant_id: diagnostic.runtime_variant_id.clone(),
+        backend_key: diagnostic.backend_id.clone(),
+    }
+}
+
+fn project_workflow_device_diagnostic_code(
+    code: WorkflowDeviceResolutionDiagnosticCode,
+) -> RuntimeTechnicalFitDeviceDiagnosticCode {
+    match code {
+        WorkflowDeviceResolutionDiagnosticCode::Unknown
+        | WorkflowDeviceResolutionDiagnosticCode::NoValidCandidate => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate
+        }
+        WorkflowDeviceResolutionDiagnosticCode::InvalidDevicePolicy => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::InvalidDevicePolicy
+        }
+        WorkflowDeviceResolutionDiagnosticCode::InvalidDeviceId => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::InvalidDeviceId
+        }
+        WorkflowDeviceResolutionDiagnosticCode::InvalidRuntimeVariantId => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::InvalidRuntimeVariantId
+        }
+        WorkflowDeviceResolutionDiagnosticCode::InvalidBackendId => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::InvalidBackendId
+        }
+        WorkflowDeviceResolutionDiagnosticCode::CandidateUnavailable => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable
+        }
+        WorkflowDeviceResolutionDiagnosticCode::ExplicitDeviceUnavailable => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable
+        }
+        WorkflowDeviceResolutionDiagnosticCode::AmbiguousAutoResolution => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution
+        }
+        WorkflowDeviceResolutionDiagnosticCode::BackendIncompatible => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible
+        }
+        WorkflowDeviceResolutionDiagnosticCode::UnsupportedDeviceClass => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass
+        }
+        WorkflowDeviceResolutionDiagnosticCode::MissingRuntimeVariant => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant
+        }
+        WorkflowDeviceResolutionDiagnosticCode::LegacyDeviceRejected => {
+            RuntimeTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected
+        }
+    }
+}
+
+fn project_workflow_device_diagnostic_severity(
+    severity: WorkflowDeviceResolutionDiagnosticSeverity,
+) -> RuntimeTechnicalFitDeviceDiagnosticSeverity {
+    match severity {
+        WorkflowDeviceResolutionDiagnosticSeverity::Unknown
+        | WorkflowDeviceResolutionDiagnosticSeverity::Error => {
+            RuntimeTechnicalFitDeviceDiagnosticSeverity::Error
+        }
+        WorkflowDeviceResolutionDiagnosticSeverity::Advisory => {
+            RuntimeTechnicalFitDeviceDiagnosticSeverity::Advisory
+        }
+        WorkflowDeviceResolutionDiagnosticSeverity::Warning => {
+            RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning
+        }
+    }
+}
+
 fn project_resource_pressure(
     queue_pressure: Option<&WorkflowTechnicalFitQueuePressure>,
     estimated_peak_vram_mb: Option<u64>,
@@ -591,6 +889,18 @@ fn project_resource_pressure(
     } else {
         Some(pressure)
     }
+}
+
+fn runtime_requirements_resource_estimate(
+    requirements: &pantograph_workflow_service::WorkflowRuntimeRequirements,
+) -> Option<RuntimeTechnicalFitResourceEstimate> {
+    RuntimeTechnicalFitResourceEstimate {
+        estimated_peak_vram_mb: requirements.estimated_peak_vram_mb,
+        estimated_peak_ram_mb: requirements.estimated_peak_ram_mb,
+        estimated_min_vram_mb: requirements.estimated_min_vram_mb,
+        estimated_min_ram_mb: requirements.estimated_min_ram_mb,
+    }
+    .normalized()
 }
 
 fn project_selection_mode(
@@ -719,7 +1029,28 @@ mod tests {
             readiness_state: Some(WorkflowRuntimeReadinessState::Ready),
             selected_version: None,
             supports_external_connection: false,
-            backend_capability_facts: None,
+            backend_capability_facts: Some(WorkflowBackendCapabilityFacts {
+                tasks: Vec::new(),
+                runtime_variants: vec![WorkflowRuntimeVariantCapability {
+                    runtime_variant_id: "llama_cpp/linux-x64/cuda".to_string(),
+                    device_class: WorkflowInferenceDeviceClass::Cuda,
+                    available: true,
+                    diagnostics: vec![WorkflowDeviceResolutionDiagnostic {
+                        code: WorkflowDeviceResolutionDiagnosticCode::CandidateUnavailable,
+                        severity: WorkflowDeviceResolutionDiagnosticSeverity::Warning,
+                        message: "cuda runtime warmup pending".to_string(),
+                        device_class: Some(WorkflowInferenceDeviceClass::Cuda),
+                        device_id: Some("cuda:0".to_string()),
+                        runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                        backend_id: Some("llama_cpp".to_string()),
+                    }],
+                }],
+                preprocessing: Default::default(),
+                postprocessing: Default::default(),
+                model_sources: Default::default(),
+                features: Default::default(),
+                request_lifecycle: Default::default(),
+            }),
             backend_keys: vec!["llama_cpp".to_string(), "llama.cpp".to_string()],
             missing_files: Vec::new(),
             unavailable_reason: None,
@@ -824,6 +1155,25 @@ mod tests {
         assert_eq!(runtime_request.candidates.len(), 1);
         assert_eq!(runtime_request.candidates[0].candidate_id, "llama_cpp");
         assert_eq!(
+            runtime_request.candidates[0].runtime_variant_id.as_deref(),
+            Some("llama_cpp/linux-x64/cuda")
+        );
+        assert_eq!(
+            runtime_request.candidates[0].device_class,
+            Some(RuntimeTechnicalFitDeviceClass::Cuda)
+        );
+        assert_eq!(
+            runtime_request.candidates[0]
+                .resource_estimate
+                .as_ref()
+                .and_then(|estimate| estimate.estimated_peak_vram_mb),
+            Some(4096)
+        );
+        assert_eq!(
+            runtime_request.candidates[0].device_diagnostics[0].code,
+            RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable
+        );
+        assert_eq!(
             runtime_request.candidates[0].residency_state,
             Some(RuntimeTechnicalFitResidencyState::Active)
         );
@@ -845,8 +1195,31 @@ mod tests {
             selection_mode: RuntimeTechnicalFitSelectionMode::Automatic,
             selected_candidate_id: Some("candidate-a".to_string()),
             selected_runtime_id: Some("llama_cpp".to_string()),
+            selected_runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
             selected_backend_key: Some("llama_cpp".to_string()),
             selected_model_id: Some("model-a".to_string()),
+            selected_device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+            selected_device_id: Some("cuda:0".to_string()),
+            resource_estimate: Some(RuntimeTechnicalFitResourceEstimate {
+                estimated_peak_vram_mb: Some(4096),
+                estimated_peak_ram_mb: Some(8192),
+                estimated_min_vram_mb: Some(2048),
+                estimated_min_ram_mb: Some(4096),
+            }),
+            observed_throughput_hint: Some(RuntimeTechnicalFitObservedThroughputHint {
+                tokens_per_second_milli: None,
+                images_per_second_milli: Some(125),
+                sample_count: Some(3),
+            }),
+            device_diagnostics: vec![RuntimeTechnicalFitDeviceDiagnostic {
+                code: RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
+                severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning,
+                message: "cuda runtime warmup pending".to_string(),
+                device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+                device_id: Some("cuda:0".to_string()),
+                runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+            }],
             reasons: vec![RuntimeTechnicalFitReason::new(
                 RuntimeTechnicalFitReasonCode::QueuePressure,
                 Some("candidate-a"),
@@ -877,8 +1250,31 @@ mod tests {
                 selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
                 selected_candidate_id: Some("candidate-a".to_string()),
                 selected_runtime_id: Some("llama_cpp".to_string()),
+                selected_runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
                 selected_backend_key: Some("llama_cpp".to_string()),
                 selected_model_id: Some("model-a".to_string()),
+                selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+                selected_device_id: Some("cuda:0".to_string()),
+                resource_estimate: Some(WorkflowTechnicalFitResourceEstimate {
+                    estimated_peak_vram_mb: Some(4096),
+                    estimated_peak_ram_mb: Some(8192),
+                    estimated_min_vram_mb: Some(2048),
+                    estimated_min_ram_mb: Some(4096),
+                }),
+                observed_throughput_hint: Some(WorkflowTechnicalFitObservedThroughputHint {
+                    tokens_per_second_milli: None,
+                    images_per_second_milli: Some(125),
+                    sample_count: Some(3),
+                }),
+                device_diagnostics: vec![WorkflowTechnicalFitDeviceDiagnostic {
+                    code: WorkflowTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
+                    severity: WorkflowTechnicalFitDeviceDiagnosticSeverity::Warning,
+                    message: "cuda runtime warmup pending".to_string(),
+                    device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+                    device_id: Some("cuda:0".to_string()),
+                    runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                }],
                 reasons: vec![WorkflowTechnicalFitReason {
                     code: WorkflowTechnicalFitReasonCode::QueuePressure,
                     candidate_id: Some("candidate-a".to_string()),
@@ -942,8 +1338,27 @@ mod tests {
                 selection_mode: WorkflowTechnicalFitSelectionMode::ExplicitOverride,
                 selected_candidate_id: Some("llama_cpp".to_string()),
                 selected_runtime_id: Some("llama_cpp".to_string()),
+                selected_runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
                 selected_backend_key: Some("llama_cpp".to_string()),
                 selected_model_id: None,
+                selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+                selected_device_id: None,
+                resource_estimate: Some(WorkflowTechnicalFitResourceEstimate {
+                    estimated_peak_vram_mb: Some(4096),
+                    estimated_peak_ram_mb: Some(8192),
+                    estimated_min_vram_mb: Some(2048),
+                    estimated_min_ram_mb: Some(4096),
+                }),
+                observed_throughput_hint: None,
+                device_diagnostics: vec![WorkflowTechnicalFitDeviceDiagnostic {
+                    code: WorkflowTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
+                    severity: WorkflowTechnicalFitDeviceDiagnosticSeverity::Warning,
+                    message: "cuda runtime warmup pending".to_string(),
+                    device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+                    device_id: Some("cuda:0".to_string()),
+                    runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                }],
                 reasons: vec![WorkflowTechnicalFitReason {
                     code: WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,
                     candidate_id: Some("llama_cpp".to_string()),

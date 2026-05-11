@@ -771,6 +771,103 @@ export type WorkflowTechnicalFitDevicePolicy =
       device_id?: string | null;
     };
 
+export interface WorkflowTechnicalFitResourceEstimate {
+  estimated_peak_vram_mb?: number | null;
+  estimated_peak_ram_mb?: number | null;
+  estimated_min_vram_mb?: number | null;
+  estimated_min_ram_mb?: number | null;
+}
+
+export interface WorkflowTechnicalFitObservedThroughputHint {
+  tokens_per_second_milli?: number | null;
+  images_per_second_milli?: number | null;
+  sample_count?: number | null;
+}
+
+export type WorkflowTechnicalFitDeviceDiagnosticSeverity =
+  | 'advisory'
+  | 'warning'
+  | 'error';
+
+export type WorkflowTechnicalFitDeviceDiagnosticCode =
+  | 'invalid_device_policy'
+  | 'invalid_device_id'
+  | 'invalid_runtime_variant_id'
+  | 'invalid_backend_id'
+  | 'candidate_unavailable'
+  | 'explicit_device_unavailable'
+  | 'no_valid_candidate'
+  | 'ambiguous_auto_resolution'
+  | 'backend_incompatible'
+  | 'unsupported_device_class'
+  | 'missing_runtime_variant'
+  | 'legacy_device_rejected';
+
+export interface WorkflowTechnicalFitDeviceDiagnostic {
+  code: WorkflowTechnicalFitDeviceDiagnosticCode;
+  severity: WorkflowTechnicalFitDeviceDiagnosticSeverity;
+  message: string;
+  device_class?: WorkflowTechnicalFitDeviceClass | null;
+  device_id?: string | null;
+  runtime_variant_id?: string | null;
+  backend_key?: string | null;
+}
+
+export type WorkflowTechnicalFitSelectionMode = 'automatic' | 'explicit_override';
+
+export type WorkflowTechnicalFitReasonCode =
+  | 'explicit_model_override'
+  | 'explicit_backend_override'
+  | 'required_context_length'
+  | 'runtime_requirements'
+  | 'residency_reuse'
+  | 'warmup_cost'
+  | 'budget_pressure'
+  | 'queue_pressure'
+  | 'missing_candidate_data'
+  | 'missing_runtime_state'
+  | 'deterministic_tie_break';
+
+export interface WorkflowTechnicalFitReason {
+  code: WorkflowTechnicalFitReasonCode;
+  candidate_id?: string | null;
+}
+
+export interface WorkflowTechnicalFitCompatibilityReport {
+  status: string;
+  compatible: boolean;
+  task: string;
+  model_source: string;
+  preprocessing: string;
+  postprocessing: string;
+}
+
+export interface WorkflowTechnicalFitCompatibilityIssue {
+  kind: string;
+  phase: string;
+  message: string;
+  model_id?: string | null;
+  path?: string | null;
+}
+
+export interface WorkflowTechnicalFitDecision {
+  selection_mode?: WorkflowTechnicalFitSelectionMode;
+  selected_candidate_id?: string | null;
+  selected_runtime_id?: string | null;
+  selected_runtime_variant_id?: string | null;
+  selected_backend_key?: string | null;
+  selected_model_id?: string | null;
+  selected_device_class?: WorkflowTechnicalFitDeviceClass | null;
+  selected_device_id?: string | null;
+  resource_estimate?: WorkflowTechnicalFitResourceEstimate | null;
+  observed_throughput_hint?: WorkflowTechnicalFitObservedThroughputHint | null;
+  device_diagnostics?: WorkflowTechnicalFitDeviceDiagnostic[];
+  reasons?: WorkflowTechnicalFitReason[];
+  compatibility_report?: WorkflowTechnicalFitCompatibilityReport | null;
+  compatibility_issue_count?: number;
+  compatibility_issues?: WorkflowTechnicalFitCompatibilityIssue[];
+}
+
 export interface WorkflowTechnicalFitQueuePressure {
   current_session_queue_depth?: number | null;
   total_queued_run_count?: number | null;

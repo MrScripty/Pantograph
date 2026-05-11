@@ -60,9 +60,12 @@ pub use scheduler::{
 pub use technical_fit::{
     build_workflow_technical_fit_request, WorkflowTechnicalFitCompatibilityIssue,
     WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
-    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDevicePolicy,
+    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDeviceDiagnostic,
+    WorkflowTechnicalFitDeviceDiagnosticCode, WorkflowTechnicalFitDeviceDiagnosticSeverity,
+    WorkflowTechnicalFitDevicePolicy, WorkflowTechnicalFitObservedThroughputHint,
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
-    WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
+    WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest,
+    WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitSelectionMode,
 };
 pub use trace::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,

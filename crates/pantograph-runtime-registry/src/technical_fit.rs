@@ -120,6 +120,112 @@ impl RuntimeTechnicalFitDevicePolicy {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
+pub struct RuntimeTechnicalFitResourceEstimate {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_peak_vram_mb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_peak_ram_mb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_min_vram_mb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_min_ram_mb: Option<u64>,
+}
+
+impl RuntimeTechnicalFitResourceEstimate {
+    pub fn normalized(&self) -> Option<Self> {
+        if self.estimated_peak_vram_mb.is_none()
+            && self.estimated_peak_ram_mb.is_none()
+            && self.estimated_min_vram_mb.is_none()
+            && self.estimated_min_ram_mb.is_none()
+        {
+            None
+        } else {
+            Some(self.clone())
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeTechnicalFitObservedThroughputHint {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_per_second_milli: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images_per_second_milli: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample_count: Option<u64>,
+}
+
+impl RuntimeTechnicalFitObservedThroughputHint {
+    pub fn normalized(&self) -> Option<Self> {
+        if self.tokens_per_second_milli.is_none()
+            && self.images_per_second_milli.is_none()
+            && self.sample_count.is_none()
+        {
+            None
+        } else {
+            Some(self.clone())
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeTechnicalFitDeviceDiagnosticSeverity {
+    Advisory,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeTechnicalFitDeviceDiagnosticCode {
+    InvalidDevicePolicy,
+    InvalidDeviceId,
+    InvalidRuntimeVariantId,
+    InvalidBackendId,
+    CandidateUnavailable,
+    ExplicitDeviceUnavailable,
+    NoValidCandidate,
+    AmbiguousAutoResolution,
+    BackendIncompatible,
+    UnsupportedDeviceClass,
+    MissingRuntimeVariant,
+    LegacyDeviceRejected,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeTechnicalFitDeviceDiagnostic {
+    pub code: RuntimeTechnicalFitDeviceDiagnosticCode,
+    pub severity: RuntimeTechnicalFitDeviceDiagnosticSeverity,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_class: Option<RuntimeTechnicalFitDeviceClass>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_key: Option<String>,
+}
+
+impl RuntimeTechnicalFitDeviceDiagnostic {
+    pub fn normalized(&self) -> Self {
+        Self {
+            code: self.code,
+            severity: self.severity,
+            message: normalize_trimmed_string(Some(self.message.as_str())).unwrap_or_default(),
+            device_class: self.device_class,
+            device_id: normalize_trimmed_string(self.device_id.as_deref()),
+            runtime_variant_id: normalize_trimmed_string(self.runtime_variant_id.as_deref()),
+            backend_key: normalize_backend_key(self.backend_key.as_deref()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
 pub struct RuntimeTechnicalFitResourcePressure {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queued_run_count: Option<u64>,
@@ -140,9 +246,21 @@ pub struct RuntimeTechnicalFitCandidate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_class: Option<RuntimeTechnicalFitDeviceClass>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_device_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_throughput_hint: Option<RuntimeTechnicalFitObservedThroughputHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub device_diagnostics: Vec<RuntimeTechnicalFitDeviceDiagnostic>,
     #[serde(default)]
     pub source_kind: RuntimeTechnicalFitCandidateSourceKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -164,6 +282,7 @@ pub struct RuntimeTechnicalFitCandidate {
 impl RuntimeTechnicalFitCandidate {
     pub fn normalized(&self) -> Self {
         let runtime_id = normalize_runtime_id(self.runtime_id.as_deref());
+        let runtime_variant_id = normalize_trimmed_string(self.runtime_variant_id.as_deref());
         let backend_key = normalize_backend_key(self.backend_key.as_deref());
         let model_id = normalize_trimmed_string(self.model_id.as_deref());
         let candidate_id = normalize_trimmed_string(Some(self.candidate_id.as_str()))
@@ -178,8 +297,24 @@ impl RuntimeTechnicalFitCandidate {
         Self {
             candidate_id,
             runtime_id,
+            runtime_variant_id,
             backend_key,
             model_id,
+            device_class: self.device_class,
+            selected_device_id: normalize_trimmed_string(self.selected_device_id.as_deref()),
+            resource_estimate: self
+                .resource_estimate
+                .as_ref()
+                .and_then(RuntimeTechnicalFitResourceEstimate::normalized),
+            observed_throughput_hint: self
+                .observed_throughput_hint
+                .as_ref()
+                .and_then(RuntimeTechnicalFitObservedThroughputHint::normalized),
+            device_diagnostics: self
+                .device_diagnostics
+                .iter()
+                .map(RuntimeTechnicalFitDeviceDiagnostic::normalized)
+                .collect(),
             source_kind: self.source_kind,
             context_window_tokens: self.context_window_tokens,
             residency_state: self.residency_state,
@@ -363,9 +498,21 @@ pub struct RuntimeTechnicalFitDecision {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_backend_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_device_class: Option<RuntimeTechnicalFitDeviceClass>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_device_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_throughput_hint: Option<RuntimeTechnicalFitObservedThroughputHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub device_diagnostics: Vec<RuntimeTechnicalFitDeviceDiagnostic>,
     #[serde(default)]
     pub reasons: Vec<RuntimeTechnicalFitReason>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -382,8 +529,26 @@ impl RuntimeTechnicalFitDecision {
             selection_mode: self.selection_mode,
             selected_candidate_id: normalize_trimmed_string(self.selected_candidate_id.as_deref()),
             selected_runtime_id: normalize_runtime_id(self.selected_runtime_id.as_deref()),
+            selected_runtime_variant_id: normalize_trimmed_string(
+                self.selected_runtime_variant_id.as_deref(),
+            ),
             selected_backend_key: normalize_backend_key(self.selected_backend_key.as_deref()),
             selected_model_id: normalize_trimmed_string(self.selected_model_id.as_deref()),
+            selected_device_class: self.selected_device_class,
+            selected_device_id: normalize_trimmed_string(self.selected_device_id.as_deref()),
+            resource_estimate: self
+                .resource_estimate
+                .as_ref()
+                .and_then(RuntimeTechnicalFitResourceEstimate::normalized),
+            observed_throughput_hint: self
+                .observed_throughput_hint
+                .as_ref()
+                .and_then(RuntimeTechnicalFitObservedThroughputHint::normalized),
+            device_diagnostics: self
+                .device_diagnostics
+                .iter()
+                .map(RuntimeTechnicalFitDeviceDiagnostic::normalized)
+                .collect(),
             reasons: self.reasons.clone(),
             compatibility_report: self
                 .compatibility_report
@@ -643,8 +808,14 @@ fn decision_from_candidate(
         selection_mode,
         selected_candidate_id: Some(candidate.candidate_id.clone()),
         selected_runtime_id: candidate.runtime_id.clone(),
+        selected_runtime_variant_id: candidate.runtime_variant_id.clone(),
         selected_backend_key: candidate.backend_key.clone(),
         selected_model_id: candidate.model_id.clone(),
+        selected_device_class: candidate.device_class,
+        selected_device_id: candidate.selected_device_id.clone(),
+        resource_estimate: candidate.resource_estimate.clone(),
+        observed_throughput_hint: candidate.observed_throughput_hint.clone(),
+        device_diagnostics: candidate.device_diagnostics.clone(),
         reasons,
         compatibility_report: candidate.compatibility_report.clone(),
         compatibility_issue_count: candidate.compatibility_issue_count,
@@ -661,8 +832,14 @@ fn unselected_decision(
         selection_mode,
         selected_candidate_id: None,
         selected_runtime_id: None,
+        selected_runtime_variant_id: None,
         selected_backend_key: None,
         selected_model_id: None,
+        selected_device_class: None,
+        selected_device_id: None,
+        resource_estimate: None,
+        observed_throughput_hint: None,
+        device_diagnostics: Vec::new(),
         reasons,
         compatibility_report: None,
         compatibility_issue_count: 0,

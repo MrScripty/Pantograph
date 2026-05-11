@@ -347,6 +347,18 @@ Update during implementation:
   candidates and decisions still need runtime variant, selected device, and
   device diagnostics before explicit unavailable devices can be rejected by
   scheduler admission.
+- 2026-05-10: Continued Milestone 5 by extending technical-fit candidates and
+  selected decisions with runtime variant id, typed selected device class/id,
+  resource estimate, optional observed-throughput hint, and bounded device
+  diagnostics. Runtime-registry now copies those candidate facts into selected
+  decisions, embedded-runtime projects backend runtime-variant capability
+  diagnostics into candidates and decisions, and workflow-service/TypeScript
+  mirrors carry the fields without inferring executable device choices.
+  Verification passed: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -604,6 +616,9 @@ Worker rules:
   execution paths and frontend synthetic device choices. Technical-fit fallback
   selection is no longer executable or contract-shaped in the canonical Rust
   path.
+- Continue Milestone 5 by comparing technical-fit device policy intent against
+  candidate runtime/device facts and returning typed blocking diagnostics for
+  unavailable explicit devices before backend load.
 
 ### Verification Summary
 
@@ -763,6 +778,14 @@ Worker rules:
   deriving selected devices from raw backend config strings. The first format
   check failed on a wrapping-only rustfmt diff; `cargo fmt --all` was run and
   the check passed afterward.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `npm run typecheck`, and `git diff --check` passed after technical-fit
+  candidates and selected decisions began carrying runtime variant, typed
+  device, resource-estimate, observed-throughput hint, and device diagnostic
+  facts without inferring missing executable choices.
 
 ### Traceability Links
 
