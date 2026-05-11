@@ -992,6 +992,24 @@ typed diagnostic and the canonical design is fixed.
   - Verification deviation: the first format check failed after the new test
     because one assertion needed rustfmt compaction; `cargo fmt --all` was run
     and the format check passed afterward.
+- 2026-05-10 slice: dedicated embedding sidecar device-selector validation.
+  - Smallest useful vertical slice: validate backend-local llama.cpp
+    `DeviceConfig.device` values before the dedicated embedding sidecar builds
+    command arguments or calls the process spawner.
+  - Allowed write set:
+    `crates/inference/src/embedding_runtime.rs` and this plan directory.
+  - No-fallback/no-legacy confirmation: malformed selectors now fail before
+    process spawn in the dedicated embedding runtime path. No unknown-to-auto,
+    ordinal-to-zero, or compatibility parser path was added.
+  - Standards/blast-radius gate: this stays inside the inference crate's
+    dedicated embedding sidecar lifecycle owner. Public DTOs, managed runtime
+    catalog state, frontend behavior, generated files, lockfiles, feature
+    flags, dependencies, sqlite state, and worker execution are unchanged.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p inference embedding_runtime::tests::start_server_rejects_invalid_device_before_spawning`,
+    `cargo test -p inference embedding_runtime::tests`, and
+    `git diff --check`.
 
 **Verification:**
 

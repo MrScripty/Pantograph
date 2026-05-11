@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::{DeviceConfig, DeviceInfo, EmbeddingMemoryMode};
 use crate::constants::{device_types, hosts};
+use crate::device::DeviceBackend;
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::RuntimeLifecycleSnapshot;
 
@@ -129,6 +130,8 @@ impl LlamaCppEmbeddingRuntime {
         spawner: &Arc<dyn ProcessSpawner>,
         device: &DeviceConfig,
     ) -> Result<(), String> {
+        validate_llamacpp_device_config(device)?;
+
         let port_str = self.port.to_string();
         let gpu_layers_str = device.gpu_layers.to_string();
 
@@ -469,6 +472,12 @@ fn unix_timestamp_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn validate_llamacpp_device_config(device: &DeviceConfig) -> Result<(), String> {
+    DeviceBackend::try_from_id(&device.device)
+        .map(|_| ())
+        .map_err(|error| format!("Invalid llama.cpp embedding device selector: {}", error))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -580,6 +589,26 @@ mod tests {
         );
         assert!(!snapshot.active);
         assert_eq!(snapshot.last_error.as_deref(), Some("boom"));
+    }
+
+    #[tokio::test]
+    async fn start_server_rejects_invalid_device_before_spawning() {
+        let mut runtime = LlamaCppEmbeddingRuntime::new(EmbeddingMemoryMode::CpuParallel);
+        let spawner: Arc<dyn ProcessSpawner> = Arc::new(MockProcessSpawner);
+        let invalid_device = DeviceConfig {
+            device: "CUDAx".to_string(),
+            gpu_layers: 40,
+        };
+
+        let error = runtime
+            .start_server("/models/embed.gguf", &spawner, &invalid_device)
+            .await
+            .expect_err("invalid device selector should fail before spawning");
+
+        assert!(error.contains("Invalid llama.cpp embedding device selector"));
+        assert!(error.contains("CUDAx"));
+        assert!(!runtime.is_ready());
+        assert!(runtime.base_url().ends_with(":8081"));
     }
 
     #[test]

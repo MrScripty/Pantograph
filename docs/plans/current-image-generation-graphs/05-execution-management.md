@@ -294,6 +294,9 @@ Update during implementation:
   startup stops an existing runtime or spawns `llama-server`. Malformed
   selectors now fail locally instead of being passed through or hidden from
   selected-device facts.
+- 2026-05-10: Continued Milestone 5 by applying the same backend-local device
+  selector validation to the dedicated llama.cpp embedding sidecar startup
+  path before it builds command arguments or calls the process spawner.
 
 ## Commit Cadence Notes
 
