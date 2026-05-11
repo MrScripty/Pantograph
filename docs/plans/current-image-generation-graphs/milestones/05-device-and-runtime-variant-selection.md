@@ -194,7 +194,7 @@ typed diagnostic and the canonical design is fixed.
 - [x] Add optional workflow backend/runtime preference intent to technical-fit
   requests. The scheduler may honor it only when the selected backend can
   execute the model/task on the requested platform/device.
-- [ ] Reject impossible explicit backend/runtime preferences with bounded
+- [x] Reject impossible explicit backend/runtime preferences with bounded
   diagnostics. Examples: llama.cpp for diffusion image generation, MLX on
   Linux/Windows, Candle image generation before executable Candle support, or
   vLLM for unsupported model/task artifacts.
@@ -202,9 +202,12 @@ typed diagnostic and the canonical design is fixed.
     image-generation package facts now remain unselected and project the
     candidate compatibility issue as a typed `backend_incompatible`
     diagnostic. No Candle executable candidate, CPU/auto fallback, or alternate
-    backend selection is synthesized. Remaining follow-up: add the vLLM
-    unsupported model/task artifact case against canonical backend facts before
-    closing this broad checklist item.
+    backend selection is synthesized.
+  - 2026-05-11: explicit vLLM backend overrides for Diffusers image-generation
+    package facts now reject through the same backend compatibility projection
+    with a typed `backend_incompatible` diagnostic. This closes the listed
+    impossible-preference examples together with the existing llama.cpp
+    diffusion, MLX roadmap/platform, and Candle image-generation coverage.
 - [ ] Update runtime-load contracts so load readiness consumes a resolved
   device decision rather than inferring from command-line arguments or raw
   backend config strings.

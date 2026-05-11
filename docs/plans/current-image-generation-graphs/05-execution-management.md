@@ -1635,6 +1635,19 @@ Worker rules:
   follow-up: vLLM unsupported model/task artifact preference rejection still
   needs canonical backend-fact coverage before the broad impossible-preference
   checklist item closes.
+- 2026-05-11 vLLM explicit image-generation override rejection slice: smallest
+  useful vertical slice was limited to embedded-runtime technical-fit coverage
+  for a Diffusers image-generation package, vLLM backend compatibility facts,
+  and plan notes. Allowed write set:
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs` and this plan
+  directory. The slice preserves the no-fallback/no-legacy rule by keeping
+  explicit vLLM backend preference unselected for unsupported image-generation
+  package facts and projecting `backend_incompatible` diagnostics instead of
+  selecting vLLM, roadmap facts, CPU/auto, or another backend.
+- `cargo test -p pantograph-embedded-runtime vllm_image_generation_override_rejects_unsupported_package_without_selection`
+  and `cargo test -p pantograph-embedded-runtime technical_fit` passed. This
+  closes the broad impossible-preference checklist item with existing llama.cpp
+  diffusion, MLX roadmap/platform, and Candle image-generation coverage.
 
 ### Traceability Links
 
