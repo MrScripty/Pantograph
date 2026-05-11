@@ -3,7 +3,9 @@ use crate::managed_runtime::llama_cpp_platform::{
     install_distribution as install_llama_distribution,
 };
 
-use super::contracts::{ManagedBinaryId, ReleaseAsset, ResolvedCommand};
+use super::contracts::{
+    ManagedBinaryId, ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
+};
 use std::path::{Path, PathBuf};
 
 pub(crate) trait ManagedBinaryDefinition: Sync {
@@ -16,8 +18,11 @@ pub(crate) trait ManagedBinaryDefinition: Sync {
     fn executable_name(&self) -> &'static str;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
     fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String>;
-    fn resolve_command(&self, install_dir: &Path, args: &[&str])
-        -> Result<ResolvedCommand, String>;
+    fn resolve_command(
+        &self,
+        install_dir: &Path,
+        args: &[&str],
+    ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError>;
 
     fn system_command(&self) -> Option<PathBuf> {
         None
@@ -70,7 +75,7 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
         &self,
         install_dir: &Path,
         args: &[&str],
-    ) -> Result<ResolvedCommand, String> {
+    ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
         current_llama_platform().resolve_command(install_dir, args)
     }
 }

@@ -1,6 +1,6 @@
 use crate::managed_runtime::{
     extract_pid_file as extract_pid_file_impl, prepend_env_path as prepend_env_path_impl,
-    ArchiveKind, ReleaseAsset, ResolvedCommand,
+    ArchiveKind, ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
 };
 use std::ffi::OsString;
 use std::fs;
@@ -16,7 +16,7 @@ pub(crate) trait LlamaPlatform: Sync {
         &self,
         binaries_dir: &Path,
         args: &[&str],
-    ) -> Result<ResolvedCommand, String>;
+    ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError>;
     fn finalize_installation(&self, binaries_dir: &Path) -> Result<(), String>;
     fn is_runtime_library(&self, file_name: &str) -> bool;
 }

@@ -11,10 +11,10 @@ mod state;
 
 pub use contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
-    ManagedBinaryInstallState, ManagedRuntimeCatalogVersion, ManagedRuntimeJobArtifactStatus,
-    ManagedRuntimeJobState, ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
-    ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
-    ResolvedCommand,
+    ManagedBinaryInstallState, ManagedRuntimeCatalogVersion, ManagedRuntimeCommandResolutionError,
+    ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
+    ManagedRuntimeReadinessState, ManagedRuntimeSelectionState, ManagedRuntimeSnapshot,
+    ManagedRuntimeVersionStatus, ResolvedCommand,
 };
 pub use neutral_contracts::{
     list_managed_runtime_dependency_statuses, managed_runtime_dependency_status,

@@ -41,6 +41,7 @@ use self::state_transitions::{
     persist_remove_success, persist_remove_version_success, resolve_runtime_install_dir,
     runtime_install_dir_for_projection,
 };
+use super::contracts::ManagedRuntimeCommandResolutionError;
 #[cfg(test)]
 use super::contracts::ManagedRuntimeReadinessState;
 #[cfg(test)]
@@ -851,8 +852,9 @@ pub fn resolve_binary_command(
     app_data_dir: &Path,
     id: ManagedBinaryId,
     args: &[&str],
-) -> Result<ResolvedCommand, String> {
-    ensure_first_party_runtime(id)?;
+) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
+    ensure_first_party_runtime(id)
+        .map_err(|_| ManagedRuntimeCommandResolutionError::UnsupportedRuntime { runtime_id: id })?;
     let definition = definition(id);
 
     if let Some(executable_path) = definition.system_command() {
@@ -871,14 +873,15 @@ pub fn resolve_binary_command(
         });
     }
 
-    let install_dir = resolve_runtime_install_dir(app_data_dir, id)?;
+    let install_dir = resolve_runtime_install_dir(app_data_dir, id)
+        .map_err(ManagedRuntimeCommandResolutionError::state)?;
     let missing = definition.validate_installation(&install_dir);
     if let Some(first_missing) = missing.first() {
-        return Err(format!(
-            "{} binaries are not installed for the current platform (missing {})",
-            definition.display_name(),
-            first_missing
-        ));
+        return Err(ManagedRuntimeCommandResolutionError::MissingRuntimeFiles {
+            runtime_id: id,
+            display_name: definition.display_name().to_string(),
+            missing_file: first_missing.clone(),
+        });
     }
 
     definition.resolve_command(&install_dir, args)

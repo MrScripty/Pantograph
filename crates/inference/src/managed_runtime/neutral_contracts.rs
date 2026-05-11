@@ -48,7 +48,8 @@ pub fn resolve_runtime_sidecar_dependency_command(
             id.display_name()
         )
     })?;
-    let command = resolve_binary_command(app_data_dir, id, args)?;
+    let command =
+        resolve_binary_command(app_data_dir, id, args).map_err(|error| error.to_string())?;
     Ok(resolved_managed_dependency_command(key, command))
 }
 

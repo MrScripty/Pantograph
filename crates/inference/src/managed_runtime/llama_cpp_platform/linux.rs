@@ -2,7 +2,8 @@ use std::path::Path;
 
 use super::{
     ensure_unix_library_aliases, extract_pid_file, find_option_value, prepend_env_path,
-    ArchiveKind, LlamaPlatform, ReleaseAsset, ResolvedCommand,
+    ArchiveKind, LlamaPlatform, ManagedRuntimeCommandResolutionError, ReleaseAsset,
+    ResolvedCommand,
 };
 
 pub(crate) struct LinuxPlatform;
@@ -39,18 +40,19 @@ impl LlamaPlatform for LinuxPlatform {
         &self,
         binaries_dir: &Path,
         args: &[&str],
-    ) -> Result<ResolvedCommand, String> {
+    ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
         let device = find_option_value(args, "--device").unwrap_or_default();
         let use_cuda = device.starts_with("CUDA");
 
         let (executable_path, library_dir) = if use_cuda {
             let cuda_executable = binaries_dir.join("cuda/llama-server");
             if !cuda_executable.exists() {
-                return Err(format!(
-                    "llama.cpp CUDA runtime variant requested for device '{}' but CUDA server binary is missing at {}",
-                    device,
-                    cuda_executable.display()
-                ));
+                return Err(
+                    ManagedRuntimeCommandResolutionError::missing_llamacpp_cuda_variant(
+                        device,
+                        cuda_executable,
+                    ),
+                );
             }
             (cuda_executable, binaries_dir.join("cuda"))
         } else {
@@ -61,10 +63,10 @@ impl LlamaPlatform for LinuxPlatform {
         };
 
         if !executable_path.exists() {
-            return Err(format!(
+            return Err(ManagedRuntimeCommandResolutionError::platform(format!(
                 "llama.cpp server binary not found at {}",
                 executable_path.display()
-            ));
+            )));
         }
 
         let (args, pid_file) = extract_pid_file(args);
@@ -102,7 +104,10 @@ impl LlamaPlatform for LinuxPlatform {
 
 #[cfg(test)]
 mod tests {
+    use crate::DeviceResolutionDiagnosticCode;
+
     use super::{LlamaPlatform, PLATFORM};
+    use crate::managed_runtime::ManagedRuntimeCommandResolutionError;
 
     #[test]
     fn resolve_command_rejects_cuda_device_without_cuda_runtime_variant() {
@@ -114,9 +119,21 @@ mod tests {
             .resolve_command(temp_dir.path(), &["--device", "CUDA0"])
             .expect_err("missing CUDA runtime variant should fail");
 
-        assert!(error.contains("CUDA runtime variant requested"));
-        assert!(error.contains("CUDA0"));
-        assert!(error.contains("cuda/llama-server"));
+        let ManagedRuntimeCommandResolutionError::MissingRuntimeVariant {
+            diagnostic,
+            requested_device,
+            missing_path,
+        } = error
+        else {
+            panic!("unexpected error: {error}");
+        };
+
+        assert_eq!(
+            diagnostic.code,
+            DeviceResolutionDiagnosticCode::MissingRuntimeVariant
+        );
+        assert_eq!(requested_device.as_deref(), Some("CUDA0"));
+        assert!(missing_path.ends_with("cuda/llama-server"));
     }
 
     #[test]

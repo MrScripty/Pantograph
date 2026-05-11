@@ -2,7 +2,7 @@ use std::path::Path;
 
 use super::{
     ensure_unix_library_aliases, extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform,
-    ReleaseAsset, ResolvedCommand,
+    ManagedRuntimeCommandResolutionError, ReleaseAsset, ResolvedCommand,
 };
 
 pub(crate) struct MacOsArm64Platform;
@@ -36,13 +36,13 @@ impl LlamaPlatform for MacOsArm64Platform {
         &self,
         binaries_dir: &Path,
         args: &[&str],
-    ) -> Result<ResolvedCommand, String> {
+    ) -> Result<ResolvedCommand, ManagedRuntimeCommandResolutionError> {
         let executable_path = binaries_dir.join(self.installed_server_name());
         if !executable_path.exists() {
-            return Err(format!(
+            return Err(ManagedRuntimeCommandResolutionError::platform(format!(
                 "llama.cpp server binary not found at {}",
                 executable_path.display()
-            ));
+            )));
         }
 
         let (args, pid_file) = extract_pid_file(args);

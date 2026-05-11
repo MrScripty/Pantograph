@@ -355,7 +355,8 @@ pub async fn list_llamacpp_devices(app_data_dir: &Path) -> Result<Vec<DeviceInfo
         app_data_dir,
         ManagedBinaryId::LlamaCpp,
         &["--device", "CUDA0", "--list-devices"],
-    )?;
+    )
+    .map_err(|error| error.to_string())?;
 
     let mut command = Command::new(&resolved.executable_path);
     command

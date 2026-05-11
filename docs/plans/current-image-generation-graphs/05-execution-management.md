@@ -886,6 +886,20 @@ Update during implementation:
   wrapping; both were corrected and rerun successfully. Remaining follow-up:
   migrate managed-runtime command-resolution errors from `String` to typed
   runtime-variant diagnostics.
+- 2026-05-11: Continued Milestone 5 by typing managed-runtime command
+  resolution errors. `resolve_binary_command` now returns
+  `ManagedRuntimeCommandResolutionError`, Linux missing-CUDA command resolution
+  emits a typed `MissingRuntimeVariant` error containing the canonical
+  `missing_runtime_variant` diagnostic for `llama_cpp.cuda`, and existing
+  string-returning facades stringify that error only at their boundary.
+  Verification passed:
+  `cargo test -p inference managed_runtime::contracts::tests`,
+  `cargo test -p inference managed_runtime::llama_cpp_platform::linux::tests`,
+  `cargo test -p inference managed_runtime::operations`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Verification
+  deviation: the first compile found one remaining state-resolution `String`
+  error inside command resolution, which was converted into a typed `State`
+  variant; rustfmt-only wrapping was also corrected.
 
 ## Commit Cadence Notes
 

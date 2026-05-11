@@ -96,14 +96,14 @@ typed diagnostic and the canonical design is fixed.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
-- [ ] Remove hidden llama.cpp CPU fallback when CUDA is requested but CUDA
+- [x] Remove hidden llama.cpp CPU fallback when CUDA is requested but CUDA
   runtime files are missing. Return a typed device/runtime-variant diagnostic
   instead.
-  - 2026-05-11 partial: Linux llama.cpp command resolution now rejects
-    explicit `CUDA*` device requests when `cuda/llama-server` is missing
-    instead of using the CPU executable. The broader managed-runtime command
-    error type still needs to be migrated from string errors to typed
-    runtime-variant diagnostics before this task is complete.
+  - 2026-05-11: Linux llama.cpp command resolution now rejects explicit
+    `CUDA*` device requests when `cuda/llama-server` is missing instead of
+    using the CPU executable. The resolver returns
+    `ManagedRuntimeCommandResolutionError::MissingRuntimeVariant` carrying the
+    canonical `missing_runtime_variant` diagnostic for `llama_cpp.cuda`.
 - [x] Add backend device inventory facts for llama.cpp `--list-devices` and
   preserve existing parsing while moving it behind the canonical device
   contracts.
@@ -2708,6 +2708,39 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: replace the managed-runtime command-resolution
     `String` error surface with typed runtime-variant diagnostics so missing
     CUDA variants can be reported through the canonical diagnostic DTO.
+- 2026-05-11 slice: typed managed runtime command diagnostics.
+  - Smallest useful vertical slice: replace the core managed-runtime
+    `resolve_binary_command` `String` error surface with
+    `ManagedRuntimeCommandResolutionError`, thread that typed error through the
+    llama.cpp platform/definition boundary, and stringify it only at existing
+    string-returning facades.
+  - Allowed write set: `crates/inference/src/managed_runtime/contracts.rs`,
+    `crates/inference/src/managed_runtime/operations.rs`,
+    `crates/inference/src/managed_runtime/definitions.rs`,
+    `crates/inference/src/managed_runtime/mod.rs`,
+    `crates/inference/src/managed_runtime/neutral_contracts.rs`,
+    `crates/inference/src/managed_runtime/llama_cpp_platform/`,
+    `crates/inference/src/device.rs`, `crates/inference/src/lib.rs`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: explicit missing CUDA runtime variants
+    now produce a typed `MissingRuntimeVariant` command-resolution error with
+    the canonical `DeviceResolutionDiagnosticCode::MissingRuntimeVariant`
+    payload. No broad `From<String>` conversion was added; legacy
+    string-returning facades convert explicitly at their boundary.
+  - Standards/blast-radius gate: managed-runtime command contract and focused
+    adapter boundary conversions only; no generated DTOs, frontend code,
+    lockfiles, workflow fixtures, managed runtime persisted schema, install
+    jobs, runtime catalog state, or subprocess lifecycle changed.
+  - Verification passed:
+    `cargo test -p inference managed_runtime::contracts::tests`,
+    `cargo test -p inference managed_runtime::llama_cpp_platform::linux::tests`,
+    `cargo test -p inference managed_runtime::operations`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: initial compile failed on one remaining
+    `resolve_runtime_install_dir` string error in command resolution; it was
+    converted into an explicit typed `State` variant instead of a broad
+    string-to-error conversion. The first format check reported rustfmt-only
+    wrapping and passed after `cargo fmt --all`.
 
 **Verification:**
 
@@ -2727,6 +2760,9 @@ typed diagnostic and the canonical design is fixed.
 - Linux llama.cpp platform tests prove explicit CUDA command resolution fails
   when the CUDA runtime executable is missing instead of using the CPU
   executable.
+- Managed runtime contract tests prove missing CUDA command resolution
+  serializes as a typed `missing_runtime_variant` diagnostic for
+  `llama_cpp.cuda`.
 - Managed runtime tests prove one llama.cpp release can expose more than one
   installed/readiness variant under one `ManagedBinaryId::LlamaCpp` identity.
 - Managed runtime path tests prove the retired `app_data/runtimes` tree is not
