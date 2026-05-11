@@ -7,6 +7,7 @@
   import {
     buildBackendConfirmedDeviceOptions,
     formatDeviceDisplayName,
+    isBackendConfirmedDeviceSelection,
     resolveSelectedDeviceName,
   } from './deviceConfigPresenters';
 
@@ -23,7 +24,7 @@
   let lastOomAt = 0;
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
-  // Available devices from llama-server
+  // Available devices confirmed by the backend.
   let availableDevices: DeviceInfo[] = $state([]);
 
   // Local form state
@@ -133,11 +134,17 @@
   const saveConfig = async () => {
     isSaving = true;
     try {
-      const device: DeviceConfig = {
-        device: selectedDevice,
-        gpu_layers: gpuLayers,
-      };
-      await ConfigService.setDeviceConfig(device);
+      if (deviceConfigChanged) {
+        if (!isBackendConfirmedDeviceSelection(selectedDevice, deviceOptions)) {
+          deviceLoadError = 'Selected device is not backend-confirmed. Refresh devices before saving.';
+          return;
+        }
+        const device: DeviceConfig = {
+          device: selectedDevice,
+          gpu_layers: gpuLayers,
+        };
+        await ConfigService.setDeviceConfig(device);
+      }
 
       // Save embedding memory mode if changed
       if (embeddingMemoryMode !== initialEmbeddingMode) {
@@ -174,11 +181,11 @@
     return resolveSelectedDeviceName(selectedDevice, availableDevices);
   };
 
-  let hasChanges = $derived(
+  let deviceConfigChanged = $derived(
     selectedDevice !== state.config.device.device ||
-    gpuLayers !== state.config.device.gpu_layers ||
-    embeddingMemoryMode !== initialEmbeddingMode
+    gpuLayers !== state.config.device.gpu_layers
   );
+  let hasChanges = $derived(deviceConfigChanged || embeddingMemoryMode !== initialEmbeddingMode);
 
   let selectedDeviceInfo = $derived(availableDevices.find(d => d.id === selectedDevice) || null);
   let vramUsage = $derived(selectedDeviceInfo && selectedDeviceInfo.total_vram_mb > 0
@@ -302,7 +309,7 @@
             </div>
           {:else}
             <div class="text-[10px] text-neutral-600">
-              Select your GPU for inference. Use dGPU for better performance.
+              Select a backend-confirmed device for inference.
             </div>
           {/if}
         </div>

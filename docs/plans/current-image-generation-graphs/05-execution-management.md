@@ -621,6 +621,15 @@ Update during implementation:
   `git diff --check`. Initial plain test filters matched no PyTorch tests
   because the PyTorch backend is feature-gated; the commands were rerun with
   `--features backend-pytorch`.
+- 2026-05-10: Continued Milestone 5 by adding a frontend backend-confirmed
+  device submit guard. Device Configuration now writes device config only when
+  the selected device is still present in backend-confirmed options, while
+  embedding-only saves remain possible. User-visible copy no longer implies
+  llama-server owns final auto/GPU choice. Verification passed:
+  `node --experimental-strip-types --test src/components/deviceConfigPresenters.test.ts`,
+  `npm run typecheck`,
+  `rg -n "llama-server owns|let llama-server choose|Select your GPU|frontend-owned auto|CPU Only|Provide fallback options" src/components/DeviceConfig.svelte src/components/deviceConfigPresenters.ts src/components/deviceConfigPresenters.test.ts`,
+  and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1110,6 +1119,11 @@ Worker rules:
   `git diff --check` passed after PyTorch probe facts gained canonical
   CPU/CUDA/macOS-MPS runtime variant projection. Initial plain test filters
   matched no PyTorch tests because the backend is feature-gated.
+- `node --experimental-strip-types --test src/components/deviceConfigPresenters.test.ts`,
+  `npm run typecheck`,
+  `rg -n "llama-server owns|let llama-server choose|Select your GPU|frontend-owned auto|CPU Only|Provide fallback options" src/components/DeviceConfig.svelte src/components/deviceConfigPresenters.ts src/components/deviceConfigPresenters.test.ts`,
+  and `git diff --check` passed after the Device Configuration save path
+  began rejecting stale non-backend-confirmed executable-device values.
 
 ### Traceability Links
 

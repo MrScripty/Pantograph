@@ -4,6 +4,10 @@ export function buildBackendConfirmedDeviceOptions(devices: DeviceInfo[]): Devic
   return devices.slice();
 }
 
+export function isBackendConfirmedDeviceSelection(selectedDevice: string, devices: DeviceInfo[]): boolean {
+  return devices.some((device) => device.id === selectedDevice);
+}
+
 export function formatDeviceDisplayName(device: DeviceInfo): string {
   if (device.id === 'auto') return 'Auto';
   if (device.id === 'none') return device.name;

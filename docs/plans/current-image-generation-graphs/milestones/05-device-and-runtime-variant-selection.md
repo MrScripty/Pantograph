@@ -157,10 +157,10 @@ typed diagnostic and the canonical design is fixed.
 - [ ] Verify new or changed frontend runtime/device controls with accessible
   selectors, accessible names, focus-visible behavior, keyboard interaction
   where interactive, and deterministic subscription or scoped-poll cleanup.
-- [ ] Replace frontend copy and submit paths that imply `llama-server` owns
+- [x] Replace frontend copy and submit paths that imply `llama-server` owns
   final auto device choice. Frontend may render backend facts and submit user
   intent only.
-- [ ] Remove optimistic frontend executable-device state. Frontend may keep
+- [x] Remove optimistic frontend executable-device state. Frontend may keep
   transient form intent, but displayed runtime/device readiness must come from
   backend-confirmed snapshots.
 - [x] Remove frontend fallback device options such as synthetic CPU-only lists
@@ -2067,6 +2067,31 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: a later lifecycle-owned probe runner still needs to
     collect live PyTorch CUDA/MPS facts and feed this contract into runtime
     capabilities before scheduler admission consumes it.
+- 2026-05-10 slice: frontend backend-confirmed device submit guard.
+  - Smallest useful vertical slice: make the Device Configuration panel submit
+    device config only when the selected device remains present in
+    backend-confirmed device options, and update visible copy away from
+    llama-server-owned auto/GPU selection.
+  - Allowed write set: `src/components/DeviceConfig.svelte`,
+    `src/components/deviceConfigPresenters.ts`,
+    `src/components/deviceConfigPresenters.test.ts`, and this plan directory.
+  - No-fallback/no-legacy confirmation: stale local `selectedDevice` values now
+    fail closed with an unavailable-state message before `setDeviceConfig`;
+    the frontend does not synthesize auto/CPU choices, does not submit stale
+    executable devices, and does not infer runtime readiness from local form
+    state.
+  - Standards/blast-radius gate: this stays inside existing frontend presenter
+    and component state, uses the existing Node test harness, adds no polling,
+    subscriptions, dependencies, generated files, lockfiles, backend DTOs, or
+    workflow fixtures.
+  - Verification passed:
+    `node --experimental-strip-types --test src/components/deviceConfigPresenters.test.ts`,
+    `npm run typecheck`,
+    `rg -n "llama-server owns|let llama-server choose|Select your GPU|frontend-owned auto|CPU Only|Provide fallback options" src/components/DeviceConfig.svelte src/components/deviceConfigPresenters.ts src/components/deviceConfigPresenters.test.ts`,
+    and `git diff --check`.
+  - Remaining follow-up: broader workbench model/runtime/device selectors
+    still need to render backend-owned capability facts and submit canonical
+    scheduler device policy intent.
 
 **Verification:**
 
@@ -2126,6 +2151,9 @@ typed diagnostic and the canonical design is fixed.
   and device options come from backend capability facts, with accessible
   selectors, keyboard interaction where interactive, and deterministic cleanup
   for subscriptions or scoped polls.
+- Frontend Device Configuration tests prove device config submit validation
+  requires a backend-confirmed device and no longer creates synthetic fallback
+  choices or stale executable-device submissions.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

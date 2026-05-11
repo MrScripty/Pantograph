@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildBackendConfirmedDeviceOptions,
   formatDeviceDisplayName,
+  isBackendConfirmedDeviceSelection,
   resolveSelectedDeviceName,
 } from './deviceConfigPresenters.ts';
 import type { DeviceInfo } from '../services/ConfigService.ts';
@@ -14,6 +15,16 @@ test('device options preserve only backend-confirmed devices', () => {
 
   assert.deepEqual(buildBackendConfirmedDeviceOptions(backendDevices), backendDevices);
   assert.deepEqual(buildBackendConfirmedDeviceOptions([]), []);
+});
+
+test('device selection validation requires backend-confirmed devices', () => {
+  const backendDevices: DeviceInfo[] = [
+    { id: 'CUDA0', name: 'NVIDIA GPU', total_vram_mb: 12_288, free_vram_mb: 8192 },
+  ];
+
+  assert.equal(isBackendConfirmedDeviceSelection('CUDA0', backendDevices), true);
+  assert.equal(isBackendConfirmedDeviceSelection('auto', backendDevices), false);
+  assert.equal(isBackendConfirmedDeviceSelection('CUDA0', []), false);
 });
 
 test('device labels do not imply frontend-owned auto selection', () => {
