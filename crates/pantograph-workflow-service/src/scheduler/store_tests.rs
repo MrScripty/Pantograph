@@ -36,6 +36,8 @@ fn admission_input_marks_loaded_runtime_reuse_as_incompatible_when_override_dive
 
     let mut request = empty_run_request();
     request.override_selection = Some(WorkflowTechnicalFitOverride {
+        runtime_id: None,
+        runtime_variant_id: None,
         model_id: Some("model-b".to_string()),
         backend_key: Some("pytorch".to_string()),
     });

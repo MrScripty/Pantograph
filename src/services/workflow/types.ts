@@ -757,6 +757,8 @@ export interface WorkflowOutputTarget {
 }
 
 export interface WorkflowTechnicalFitOverride {
+  runtime_id?: string | null;
+  runtime_variant_id?: string | null;
   model_id?: string | null;
   backend_key?: string | null;
 }
@@ -816,6 +818,8 @@ export interface WorkflowTechnicalFitDeviceDiagnostic {
 export type WorkflowTechnicalFitSelectionMode = 'automatic' | 'explicit_override';
 
 export type WorkflowTechnicalFitReasonCode =
+  | 'explicit_runtime_override'
+  | 'explicit_runtime_variant_override'
   | 'explicit_model_override'
   | 'explicit_backend_override'
   | 'required_context_length'

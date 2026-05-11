@@ -638,6 +638,8 @@ fn project_override(
     override_selection: &pantograph_workflow_service::WorkflowTechnicalFitOverride,
 ) -> Option<RuntimeTechnicalFitOverride> {
     RuntimeTechnicalFitOverride {
+        runtime_id: override_selection.runtime_id.clone(),
+        runtime_variant_id: override_selection.runtime_variant_id.clone(),
         model_id: override_selection.model_id.clone(),
         backend_key: override_selection.backend_key.clone(),
     }
@@ -925,6 +927,12 @@ fn project_reason_code(
     reason_code: RuntimeTechnicalFitReasonCode,
 ) -> WorkflowTechnicalFitReasonCode {
     match reason_code {
+        RuntimeTechnicalFitReasonCode::ExplicitRuntimeOverride => {
+            WorkflowTechnicalFitReasonCode::ExplicitRuntimeOverride
+        }
+        RuntimeTechnicalFitReasonCode::ExplicitRuntimeVariantOverride => {
+            WorkflowTechnicalFitReasonCode::ExplicitRuntimeVariantOverride
+        }
         RuntimeTechnicalFitReasonCode::ExplicitModelOverride => {
             WorkflowTechnicalFitReasonCode::ExplicitModelOverride
         }
@@ -1114,6 +1122,8 @@ mod tests {
                 required_extensions: vec!["kv_cache".to_string()],
             },
             Some(pantograph_workflow_service::WorkflowTechnicalFitOverride {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
                 model_id: Some("model-a".to_string()),
                 backend_key: Some("llama.cpp".to_string()),
             }),
@@ -1141,6 +1151,8 @@ mod tests {
         assert_eq!(
             runtime_request.override_selection,
             Some(RuntimeTechnicalFitOverride {
+                runtime_id: Some("llama_cpp".to_string()),
+                runtime_variant_id: Some("llama_cpp/linux-x64/cuda".to_string()),
                 model_id: Some("model-a".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
             })
@@ -1314,6 +1326,8 @@ mod tests {
                 required_extensions: Vec::new(),
             },
             Some(pantograph_workflow_service::WorkflowTechnicalFitOverride {
+                runtime_id: None,
+                runtime_variant_id: None,
                 model_id: None,
                 backend_key: Some("llama.cpp".to_string()),
             }),

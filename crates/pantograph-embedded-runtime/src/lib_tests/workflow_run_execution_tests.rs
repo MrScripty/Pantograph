@@ -508,6 +508,8 @@ async fn test_runtime_routes_onnx_audio_workflow_through_python_adapter() {
             port_id: "audio".to_string(),
         }]),
         Some(WorkflowTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
             model_id: None,
             backend_key: Some("onnx-runtime".to_string()),
         }),
@@ -585,6 +587,8 @@ async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input
             port_id: "audio".to_string(),
         }]),
         Some(WorkflowTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
             model_id: None,
             backend_key: Some("onnx-runtime".to_string()),
         }),
@@ -642,6 +646,8 @@ async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
             port_id: "audio".to_string(),
         }]),
         Some(WorkflowTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
             model_id: None,
             backend_key: Some("onnx-runtime".to_string()),
         }),

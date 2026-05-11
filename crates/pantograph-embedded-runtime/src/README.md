@@ -378,6 +378,9 @@ from current backend/package facts, not from legacy runtime hints.
   backend device strings or selecting fallback devices. Unsupported future
   device families must fail contract decoding or later selector validation
   rather than being mapped to CPU, auto, Metal, MPS, or PyTorch.
+- Technical-fit bridging forwards runtime id and runtime variant override
+  intent as typed selector input. It must not translate backend aliases or raw
+  settings into variant preferences locally.
 - Technical-fit bridging preserves runtime variant ids, typed device class/id
   facts, resource estimates, observed-throughput hints, and bounded device
   diagnostics from runtime-registry candidates and decisions. The bridge may

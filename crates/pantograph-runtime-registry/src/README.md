@@ -109,6 +109,10 @@ process ownership and app composition stay outside this crate.
   Incomplete runtime/candidate state and unmatched overrides produce
   unselected typed diagnostics instead of synthetic or conservative fallback
   executable decisions.
+- Technical-fit overrides may carry runtime id, runtime variant id, model id,
+  and backend key intent. Runtime and variant overrides are matched against
+  explicit candidate facts only; missing matches do not synthesize candidates
+  or infer variants from backend strings.
 - Technical-fit resource-pressure interpretation is also computed here so queue
   depth, loaded-runtime saturation, and reservation headroom affect candidate
   ordering through one backend-owned selector instead of adapter-local tie

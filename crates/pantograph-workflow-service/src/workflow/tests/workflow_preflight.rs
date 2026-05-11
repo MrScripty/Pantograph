@@ -319,6 +319,8 @@ async fn workflow_preflight_normalizes_override_selection_into_technical_fit_req
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: Some(WorkflowTechnicalFitOverride {
+                    runtime_id: None,
+                    runtime_variant_id: None,
                     model_id: Some(" model-a ".to_string()),
                     backend_key: Some("llama.cpp".to_string()),
                 }),
@@ -336,6 +338,8 @@ async fn workflow_preflight_normalizes_override_selection_into_technical_fit_req
     assert_eq!(
         requests[0].override_selection,
         Some(WorkflowTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
             model_id: Some("model-a".to_string()),
             backend_key: Some("llama_cpp".to_string()),
         })

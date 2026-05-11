@@ -932,6 +932,8 @@ async fn workflow_execution_session_queue_prefers_bounded_warm_reuse_over_same_p
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: Some(WorkflowTechnicalFitOverride {
+                        runtime_id: None,
+                        runtime_variant_id: None,
                         model_id: Some("model-b".to_string()),
                         backend_key: Some("pytorch".to_string()),
                     }),

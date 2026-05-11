@@ -367,6 +367,19 @@ Update during implementation:
   `cargo fmt --all -- --check`,
   `cargo test -p pantograph-runtime-registry technical_fit`, and
   `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding runtime id and runtime variant id
+  to technical-fit override intent. Workflow-service normalizes the new intent,
+  embedded-runtime projects it into runtime-registry selector input, and
+  runtime-registry matches it against candidate facts with typed explicit
+  runtime/variant override reasons instead of synthesizing fallback candidates.
+  Verification passed: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `npm run typecheck`, and `git diff --check`. The first chained verification
+  attempt hit unrelated Pumas temporary SQLite readonly failures in two
+  embedded-runtime technical-fit tests; rerunning that suite immediately
+  passed.
 
 ## Commit Cadence Notes
 
@@ -627,6 +640,9 @@ Worker rules:
 - Continue Milestone 5 by comparing technical-fit device policy intent against
   candidate runtime/device facts and returning typed blocking diagnostics for
   unavailable explicit devices before backend load.
+- Continue Milestone 5 by rejecting explicit backend/runtime preferences that
+  are task/model/platform incompatible, such as llama.cpp for diffusion image
+  generation or MLX on Linux/Windows.
 
 ### Verification Summary
 
@@ -799,6 +815,14 @@ Worker rules:
   `git diff --check` passed after runtime-registry technical-fit selection
   began rejecting unavailable explicit device policies from typed candidate
   device facts.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `npm run typecheck`, and `git diff --check` passed after technical-fit
+  overrides began carrying runtime id and runtime variant id intent. The first
+  chained embedded-runtime run hit unrelated Pumas temporary SQLite readonly
+  failures, and the immediate rerun passed.
 
 ### Traceability Links
 

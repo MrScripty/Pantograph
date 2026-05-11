@@ -67,6 +67,8 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
         required_extensions: vec![" kv_cache ".to_string(), "kv_cache".to_string()],
         required_context_window_tokens: Some(8192),
         override_selection: Some(RuntimeTechnicalFitOverride {
+            runtime_id: Some("llama.cpp".to_string()),
+            runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
             model_id: Some(" model-a ".to_string()),
             backend_key: Some("llama.cpp".to_string()),
         }),
@@ -146,6 +148,8 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
     assert_eq!(
         normalized.override_selection,
         Some(RuntimeTechnicalFitOverride {
+            runtime_id: Some("llama_cpp".to_string()),
+            runtime_variant_id: Some("llama-cpp/linux-x64/cuda".to_string()),
             model_id: Some("model-a".to_string()),
             backend_key: Some("llama_cpp".to_string()),
         })
@@ -227,6 +231,8 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
 #[test]
 fn technical_fit_override_drops_empty_fields() {
     let override_selection = RuntimeTechnicalFitOverride {
+        runtime_id: None,
+        runtime_variant_id: None,
         model_id: Some("  ".to_string()),
         backend_key: Some(" ".to_string()),
     };
@@ -374,6 +380,8 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
         required_extensions: Vec::new(),
         required_context_window_tokens: None,
         override_selection: Some(RuntimeTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
             model_id: None,
             backend_key: Some("pytorch".to_string()),
         }),
@@ -447,6 +455,141 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
             compatibility_issues: Vec::new(),
         }
     );
+}
+
+#[test]
+fn selector_honors_explicit_runtime_variant_override() {
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["pytorch".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: Some(RuntimeTechnicalFitOverride {
+            runtime_id: Some("pytorch".to_string()),
+            runtime_variant_id: Some("pytorch/linux-x64/cuda".to_string()),
+            model_id: None,
+            backend_key: Some("pytorch".to_string()),
+        }),
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![
+            RuntimeTechnicalFitCandidate {
+                candidate_id: "pytorch-cpu".to_string(),
+                runtime_id: Some("pytorch".to_string()),
+                runtime_variant_id: Some("pytorch/linux-x64/cpu".to_string()),
+                backend_key: Some("pytorch".to_string()),
+                model_id: None,
+                device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
+                selected_device_id: Some("cpu".to_string()),
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
+                context_window_tokens: Some(8192),
+                residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
+                warmup_state: Some(RuntimeTechnicalFitWarmupState::Ready),
+                supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
+            },
+            RuntimeTechnicalFitCandidate {
+                candidate_id: "pytorch-cuda".to_string(),
+                runtime_id: Some("pytorch".to_string()),
+                runtime_variant_id: Some("pytorch/linux-x64/cuda".to_string()),
+                backend_key: Some("pytorch".to_string()),
+                model_id: None,
+                device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+                selected_device_id: Some("cuda:0".to_string()),
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
+                context_window_tokens: Some(8192),
+                residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
+                warmup_state: Some(RuntimeTechnicalFitWarmupState::Warm),
+                supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
+            },
+        ],
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selected_candidate_id.as_deref(),
+        Some("pytorch-cuda")
+    );
+    assert_eq!(
+        decision.selected_runtime_variant_id.as_deref(),
+        Some("pytorch/linux-x64/cuda")
+    );
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::ExplicitRuntimeOverride
+            && reason.candidate_id.as_deref() == Some("pytorch-cuda")
+    }));
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::ExplicitRuntimeVariantOverride
+            && reason.candidate_id.as_deref() == Some("pytorch-cuda")
+    }));
+}
+
+#[test]
+fn selector_rejects_unmatched_runtime_variant_override_without_synthetic_candidate() {
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["pytorch".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: Some(RuntimeTechnicalFitOverride {
+            runtime_id: Some("pytorch".to_string()),
+            runtime_variant_id: Some("pytorch/linux-x64/cuda".to_string()),
+            model_id: None,
+            backend_key: Some("pytorch".to_string()),
+        }),
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![RuntimeTechnicalFitCandidate {
+            candidate_id: "pytorch-cpu".to_string(),
+            runtime_id: Some("pytorch".to_string()),
+            runtime_variant_id: Some("pytorch/linux-x64/cpu".to_string()),
+            backend_key: Some("pytorch".to_string()),
+            model_id: None,
+            device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
+            selected_device_id: Some("cpu".to_string()),
+            resource_estimate: None,
+            observed_throughput_hint: None,
+            device_diagnostics: Vec::new(),
+            source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
+            context_window_tokens: Some(8192),
+            residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
+            warmup_state: Some(RuntimeTechnicalFitWarmupState::Ready),
+            supports_runtime_requirements: true,
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        }],
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selection_mode,
+        RuntimeTechnicalFitSelectionMode::ExplicitOverride
+    );
+    assert_eq!(decision.selected_candidate_id, None);
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::ExplicitRuntimeVariantOverride
+            && reason.candidate_id.is_none()
+    }));
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
+            && reason.candidate_id.is_none()
+    }));
 }
 
 #[test]
@@ -597,6 +740,8 @@ fn selector_rejects_unmatched_override_without_synthetic_candidate() {
         required_extensions: Vec::new(),
         required_context_window_tokens: None,
         override_selection: Some(RuntimeTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
             model_id: Some("model-b".to_string()),
             backend_key: Some("pytorch".to_string()),
         }),

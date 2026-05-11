@@ -22,6 +22,8 @@ fn request_roundtrip_uses_snake_case() {
             port_id: "text".to_string(),
         }]),
         override_selection: Some(WorkflowTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
             model_id: Some("model-a".to_string()),
             backend_key: Some("llama.cpp".to_string()),
         }),

@@ -11,6 +11,10 @@ use crate::workflow::{
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowTechnicalFitOverride {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_key: Option<String>,
@@ -18,12 +22,20 @@ pub struct WorkflowTechnicalFitOverride {
 
 impl WorkflowTechnicalFitOverride {
     pub fn normalized(&self) -> Option<Self> {
+        let runtime_id = normalize_trimmed_string(self.runtime_id.as_deref());
+        let runtime_variant_id = normalize_trimmed_string(self.runtime_variant_id.as_deref());
         let model_id = normalize_trimmed_string(self.model_id.as_deref());
         let backend_key = normalize_backend_key(self.backend_key.as_deref());
-        if model_id.is_none() && backend_key.is_none() {
+        if runtime_id.is_none()
+            && runtime_variant_id.is_none()
+            && model_id.is_none()
+            && backend_key.is_none()
+        {
             None
         } else {
             Some(Self {
+                runtime_id,
+                runtime_variant_id,
                 model_id,
                 backend_key,
             })
@@ -283,6 +295,8 @@ pub enum WorkflowTechnicalFitSelectionMode {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowTechnicalFitReasonCode {
+    ExplicitRuntimeOverride,
+    ExplicitRuntimeVariantOverride,
     ExplicitModelOverride,
     ExplicitBackendOverride,
     RequiredContextLength,
@@ -737,6 +751,8 @@ fn decision_enforces_runtime_readiness(
             reason.code,
             WorkflowTechnicalFitReasonCode::ExplicitBackendOverride
                 | WorkflowTechnicalFitReasonCode::ExplicitModelOverride
+                | WorkflowTechnicalFitReasonCode::ExplicitRuntimeOverride
+                | WorkflowTechnicalFitReasonCode::ExplicitRuntimeVariantOverride
         )
     }) {
         return true;
@@ -776,6 +792,19 @@ fn describe_technical_fit_blocking_issue(decision: &WorkflowTechnicalFitDecision
         .or(decision.selected_runtime_id.as_deref())
         .or(decision.selected_candidate_id.as_deref())
         .unwrap_or("runtime");
+
+    if decision.reasons.iter().any(|reason| {
+        matches!(
+            reason.code,
+            WorkflowTechnicalFitReasonCode::ExplicitRuntimeOverride
+                | WorkflowTechnicalFitReasonCode::ExplicitRuntimeVariantOverride
+        )
+    }) {
+        return format!(
+            "technical-fit could not satisfy the explicit runtime override for '{}'",
+            target
+        );
+    }
 
     if decision.reasons.iter().any(|reason| {
         matches!(
@@ -959,6 +988,8 @@ mod tests {
             " workflow-a ",
             &runtime_requirements(),
             Some(WorkflowTechnicalFitOverride {
+                runtime_id: Some(" runtime-a ".to_string()),
+                runtime_variant_id: Some(" pytorch/linux-x64/cuda ".to_string()),
                 model_id: Some(" model-a ".to_string()),
                 backend_key: Some("llama.cpp".to_string()),
             }),
@@ -990,6 +1021,8 @@ mod tests {
         assert_eq!(
             request.override_selection,
             Some(WorkflowTechnicalFitOverride {
+                runtime_id: Some("runtime-a".to_string()),
+                runtime_variant_id: Some("pytorch/linux-x64/cuda".to_string()),
                 model_id: Some("model-a".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
             })

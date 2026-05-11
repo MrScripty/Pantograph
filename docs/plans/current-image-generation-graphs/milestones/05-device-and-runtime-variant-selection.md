@@ -118,7 +118,7 @@ typed diagnostic and the canonical design is fixed.
 - [x] Add device policy intent to workflow/runtime technical-fit requests so
   scheduler admission can reject unavailable explicit devices before backend
   load.
-- [ ] Add optional workflow backend/runtime preference intent to technical-fit
+- [x] Add optional workflow backend/runtime preference intent to technical-fit
   requests. The scheduler may honor it only when the selected backend can
   execute the model/task on the requested platform/device.
 - [ ] Reject impossible explicit backend/runtime preferences with bounded
@@ -1252,6 +1252,50 @@ typed diagnostic and the canonical design is fixed.
     `cargo fmt --all -- --check`,
     `cargo test -p pantograph-runtime-registry technical_fit`, and
     `git diff --check`.
+- 2026-05-10 slice: technical-fit runtime preference intent.
+  - Smallest useful vertical slice: extend workflow-service and
+    runtime-registry technical-fit override intent with runtime id and runtime
+    variant id, project those fields through embedded-runtime, and have the
+    runtime-registry selector match the fields against candidate facts.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/`,
+    `crates/pantograph-workflow-service/src/scheduler/store_tests.rs`,
+    `crates/pantograph-workflow-service/src/README.md`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `src/services/workflow/types.ts`, `src/services/workflow/README.md`, and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: unmatched runtime or runtime-variant
+    intent returns an unselected technical-fit decision with explicit override
+    and missing-candidate reasons. The selector does not synthesize runtime
+    candidates, infer variants from backend keys, or preserve override-fallback
+    behavior.
+  - Standards/blast-radius gate: this slice changes append-only DTO fields,
+    selector matching, projection helpers, focused Rust tests, TypeScript type
+    mirrors, and documentation only. Runtime ranking policy, backend
+    startup/load, managed runtime state, persisted schemas, workflow fixtures,
+    subprocess behavior, workers, dependencies, generated files, and lockfiles
+    are unchanged.
+  - Discovered follow-up: task/model/platform incompatibility for explicit
+    backend/runtime preferences remains broader admission policy work. This
+    slice only makes runtime and variant intent representable and rejects
+    unmatched selector candidates.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `npm run typecheck`, and `git diff --check`.
+  - Verification deviation: the first chained verification attempt hit
+    unrelated Pumas temporary SQLite `attempt to write a readonly database`
+    failures in two embedded-runtime technical-fit tests. Rerunning
+    `cargo test -p pantograph-embedded-runtime technical_fit` immediately
+    passed.
 
 **Verification:**
 

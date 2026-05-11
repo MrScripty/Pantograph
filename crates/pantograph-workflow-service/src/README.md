@@ -129,6 +129,10 @@ Workflow technical-fit requests may carry typed device policy intent. That
 intent is normalized and forwarded to backend/runtime selectors, but this crate
 must not turn explicit device requests into executable defaults or infer
 backend-local device syntax.
+Workflow technical-fit override intent may name runtime id, runtime variant id,
+model id, or backend key. Workflow-service normalizes and transports that
+intent, while runtime-registry owns candidate matching and rejection
+diagnostics.
 Workflow technical-fit decisions now also mirror selected runtime variant,
 device class/id, resource estimates, observed-throughput hints, and bounded
 device diagnostics from backend/runtime selectors. These fields are transport

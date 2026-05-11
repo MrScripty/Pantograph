@@ -126,6 +126,8 @@ async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_overr
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: Some(WorkflowTechnicalFitOverride {
+                    runtime_id: None,
+                    runtime_variant_id: None,
                     model_id: None,
                     backend_key: Some("llama.cpp".to_string()),
                 }),
@@ -145,6 +147,8 @@ async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_overr
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: Some(WorkflowTechnicalFitOverride {
+                    runtime_id: None,
+                    runtime_variant_id: None,
                     model_id: Some("model-a".to_string()),
                     backend_key: Some("llama.cpp".to_string()),
                 }),
@@ -162,6 +166,8 @@ async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_overr
     assert_eq!(
         requests[0].override_selection,
         Some(WorkflowTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
             model_id: None,
             backend_key: Some("llama_cpp".to_string()),
         })
@@ -169,6 +175,8 @@ async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_overr
     assert_eq!(
         requests[1].override_selection,
         Some(WorkflowTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
             model_id: Some("model-a".to_string()),
             backend_key: Some("llama_cpp".to_string()),
         })

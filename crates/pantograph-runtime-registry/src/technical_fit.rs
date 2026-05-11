@@ -63,6 +63,10 @@ pub enum RuntimeTechnicalFitWarmupState {
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeTechnicalFitOverride {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_key: Option<String>,
@@ -70,12 +74,20 @@ pub struct RuntimeTechnicalFitOverride {
 
 impl RuntimeTechnicalFitOverride {
     pub fn normalized(&self) -> Option<Self> {
+        let runtime_id = normalize_runtime_id(self.runtime_id.as_deref());
+        let runtime_variant_id = normalize_trimmed_string(self.runtime_variant_id.as_deref());
         let model_id = normalize_trimmed_string(self.model_id.as_deref());
         let backend_key = normalize_backend_key(self.backend_key.as_deref());
-        if model_id.is_none() && backend_key.is_none() {
+        if runtime_id.is_none()
+            && runtime_variant_id.is_none()
+            && model_id.is_none()
+            && backend_key.is_none()
+        {
             None
         } else {
             Some(Self {
+                runtime_id,
+                runtime_variant_id,
                 model_id,
                 backend_key,
             })
@@ -458,6 +470,8 @@ pub enum RuntimeTechnicalFitSelectionMode {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeTechnicalFitReasonCode {
+    ExplicitRuntimeOverride,
+    ExplicitRuntimeVariantOverride,
     ExplicitModelOverride,
     ExplicitBackendOverride,
     RequiredContextLength,
@@ -578,6 +592,18 @@ pub fn select_runtime_technical_fit(
             .filter(|candidate| candidate_matches_device_policy(candidate, &normalized))
             .min_by(|left, right| compare_candidate_ids(left, right))
         {
+            if override_selection.runtime_id.is_some() {
+                reasons.push(RuntimeTechnicalFitReason::new(
+                    RuntimeTechnicalFitReasonCode::ExplicitRuntimeOverride,
+                    Some(candidate.candidate_id.as_str()),
+                ));
+            }
+            if override_selection.runtime_variant_id.is_some() {
+                reasons.push(RuntimeTechnicalFitReason::new(
+                    RuntimeTechnicalFitReasonCode::ExplicitRuntimeVariantOverride,
+                    Some(candidate.candidate_id.as_str()),
+                ));
+            }
             if override_selection.model_id.is_some() {
                 reasons.push(RuntimeTechnicalFitReason::new(
                     RuntimeTechnicalFitReasonCode::ExplicitModelOverride,
@@ -597,6 +623,18 @@ pub fn select_runtime_technical_fit(
             );
         }
 
+        if override_selection.runtime_id.is_some() {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::ExplicitRuntimeOverride,
+                None,
+            ));
+        }
+        if override_selection.runtime_variant_id.is_some() {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::ExplicitRuntimeVariantOverride,
+                None,
+            ));
+        }
         if override_selection.model_id.is_some() {
             reasons.push(RuntimeTechnicalFitReason::new(
                 RuntimeTechnicalFitReasonCode::ExplicitModelOverride,
@@ -892,11 +930,15 @@ fn candidate_matches_override(
     candidate: &RuntimeTechnicalFitCandidate,
     override_selection: &RuntimeTechnicalFitOverride,
 ) -> bool {
+    let runtime_matches = override_selection.runtime_id.is_none()
+        || candidate.runtime_id == override_selection.runtime_id;
+    let runtime_variant_matches = override_selection.runtime_variant_id.is_none()
+        || candidate.runtime_variant_id == override_selection.runtime_variant_id;
     let model_matches =
         override_selection.model_id.is_none() || candidate.model_id == override_selection.model_id;
     let backend_matches = override_selection.backend_key.is_none()
         || candidate.backend_key == override_selection.backend_key;
-    model_matches && backend_matches
+    runtime_matches && runtime_variant_matches && model_matches && backend_matches
 }
 
 fn compare_candidates(
