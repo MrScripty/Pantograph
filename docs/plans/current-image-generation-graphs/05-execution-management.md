@@ -266,6 +266,9 @@ Update during implementation:
   host llama.cpp model-path detection. The helper now recognizes current
   backend/package facts only when deciding whether an inference node targets
   llama.cpp.
+- 2026-05-10: Continued Milestone 5 by removing `runtime_hint` from
+  embedded-runtime embedding workflow llama.cpp detection. Non-embedding
+  llama.cpp inference detection now uses current backend/package facts.
 
 ## Commit Cadence Notes
 

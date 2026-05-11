@@ -774,6 +774,29 @@ typed diagnostic and the canonical design is fixed.
     `cargo test -p pantograph-embedded-runtime session_runtime_lifecycle`,
     no-match search for `runtime_hint`/`runtimeHint` in
     `embedded_workflow_host_helpers.rs`, and `git diff --check`.
+- 2026-05-10 slice: embedding workflow `runtime_hint` detection removal.
+  - Smallest useful vertical slice: remove `runtime_hint`/`runtimeHint` from
+    embedded-runtime embedding workflow non-embedding llama.cpp detection and
+    update focused helper fixtures to use `backend_key`.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/embedding_workflow.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: embedding workflow helpers no longer
+    treat legacy runtime hints as evidence of llama.cpp targeting. They use
+    current backend/package facts only.
+  - Standards/blast-radius gate: embedded-runtime remains the embedding
+    workflow helper owner; public DTO shape, runtime lifecycle, persisted
+    schema, frontend behavior, generated files, feature flags, dependencies,
+    lockfiles, path/resource access, and worker execution are unchanged; test
+    isolation uses focused helper unit tests.
+  - Discovered follow-up: node-engine inference request DTOs still expose and
+    parse `runtime_hint`, which is a broader contract replacement slice.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-embedded-runtime workflow_graph_embedding_helpers_detect_embedding_and_llamacpp_nodes`,
+    no-match search for `runtime_hint`/`runtimeHint` in
+    `embedding_workflow.rs`, and `git diff --check`.
 
 **Verification:**
 

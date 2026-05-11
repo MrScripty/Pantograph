@@ -33,8 +33,29 @@ fn node_task_kind(data: &serde_json::Value) -> Option<String> {
     node_data_string(data, &["task_kind", "taskKind"])
 }
 
-fn node_runtime_hint(data: &serde_json::Value) -> Option<String> {
-    node_data_string(data, &["runtime_hint", "runtimeHint"])
+fn node_backend_key(data: &serde_json::Value) -> Option<String> {
+    node_data_string(
+        data,
+        &[
+            "backend_key",
+            "backendKey",
+            "recommended_backend",
+            "recommendedBackend",
+        ],
+    )
+    .or_else(|| {
+        data.get("pumas_model_ref").and_then(|model_ref| {
+            node_data_string(
+                model_ref,
+                &[
+                    "backend_key",
+                    "backendKey",
+                    "recommended_backend",
+                    "recommendedBackend",
+                ],
+            )
+        })
+    })
 }
 
 fn is_canonical_embedding_inference_node(node: &pantograph_workflow_service::GraphNode) -> bool {
@@ -202,8 +223,8 @@ pub fn workflow_graph_has_llamacpp_inference_node(
     graph.nodes.iter().any(|node| {
         node.node_type == "llm-inference"
             && !is_canonical_embedding_inference_node(node)
-            && node_runtime_hint(&node.data).is_some_and(|runtime_hint| {
-                canonical_runtime_backend_key(&runtime_hint) == "llama_cpp"
+            && node_backend_key(&node.data).is_some_and(|backend_key| {
+                canonical_runtime_backend_key(&backend_key) == "llama_cpp"
             })
     })
 }
@@ -394,12 +415,12 @@ mod tests {
                 node(
                     "embed",
                     "llm-inference",
-                    serde_json::json!({"task_kind": "embedding", "runtime_hint": "llamacpp"}),
+                    serde_json::json!({"task_kind": "embedding", "backend_key": "llama_cpp"}),
                 ),
                 node(
                     "infer",
                     "llm-inference",
-                    serde_json::json!({"task_kind": "text_generation", "runtime_hint": "llamacpp"}),
+                    serde_json::json!({"task_kind": "text_generation", "backend_key": "llama_cpp"}),
                 ),
             ],
             Vec::new(),

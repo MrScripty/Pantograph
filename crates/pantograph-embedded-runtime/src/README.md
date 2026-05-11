@@ -167,6 +167,8 @@ preference input. Backend requirements must come from current backend/package
 facts until typed backend preference intent is wired end to end.
 Embedded host llama.cpp model-path detection follows the same rule and does
 not accept `runtime_hint` as evidence that an inference node targets llama.cpp.
+Embedding workflow helpers also detect non-embedding llama.cpp inference nodes
+from current backend/package facts, not from legacy runtime hints.
 
 ## Alternatives Rejected
 - Resolve executable paths directly from `ModelRecord.metadata`.
