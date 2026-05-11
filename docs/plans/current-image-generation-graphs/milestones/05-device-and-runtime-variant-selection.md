@@ -2399,6 +2399,30 @@ typed diagnostic and the canonical design is fixed.
     worker-contract validation because no generated cross-language worker DTO
     validator exists; the current slice covers the mirrored rule with focused
     Rust/Python contract tests.
+- 2026-05-11 slice: typed PyTorch worker response selected-device facts.
+  - Smallest useful vertical slice: change `LoadedModelInfo.device` and
+    `PyTorchLiveKvInfo.device` from raw strings to `InferenceDeviceId` so
+    PyTorch worker load/get-loaded/live-KV responses cannot report selected
+    devices as `"auto"` or legacy backend-local ids.
+  - Allowed write set: `crates/inference/src/backend/pytorch.rs`,
+    `crates/inference/src/backend/pytorch_tests.rs`, and this plan directory.
+  - No-fallback/no-legacy confirmation: worker response decode now fails for
+    selected-device `"auto"` and `CUDA0`; selected runtime facts must be
+    concrete canonical device ids before reuse checks, KV fingerprints, or
+    runtime facts can consume them.
+  - Standards/blast-radius gate: PyTorch worker response DTO typing and tests
+    only; no Python worker code, generated DTOs, lockfiles, workflow fixtures,
+    frontend code, runtime startup policy, scheduler ranking, or worker
+    execution behavior changed.
+  - Verification passed:
+    `cargo test -p inference --features backend-pytorch worker_load_response`,
+    `cargo test -p inference --features backend-pytorch save_kv_cache_response`,
+    `cargo test -p inference --features backend-pytorch get_loaded_info_response`,
+    `cargo test -p inference --features backend-pytorch restore_kv_cache_response`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviations fixed during the slice: the first negative
+    load/save tests used shorthand canonical-code expectations; they were
+    updated to the existing worker error codes and rerun successfully.
 
 **Verification:**
 
@@ -2497,6 +2521,9 @@ typed diagnostic and the canonical design is fixed.
   in Rust envelopes, explicit `"auto"` and legacy ids fail contract decoding or
   Python worker validation, and omission maps to backend-local `auto` only
   inside the worker adapter.
+- PyTorch worker response tests prove selected device facts in loaded-model and
+  live-KV responses are canonical `InferenceDeviceId` values and reject
+  explicit auto or legacy ids.
 - Embedded-runtime tests prove vLLM CPU/CUDA and MLX Metal roadmap capability
   facts are reported as unavailable typed diagnostics only and do not expose
   execution.

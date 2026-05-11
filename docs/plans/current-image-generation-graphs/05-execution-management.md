@@ -757,6 +757,19 @@ Update during implementation:
   `cargo fmt --all -- --check`, and `git diff --check`. Verification
   deviation fixed during the slice: one attempted cargo command used two test
   filters and was rerun as separate commands.
+- 2026-05-11: Continued Milestone 5 by typing PyTorch worker response device
+  facts as `InferenceDeviceId` for loaded-model and live-KV responses. Worker
+  responses that report selected device `"auto"` or legacy ids such as `CUDA0`
+  now fail decode instead of becoming trusted selected runtime facts.
+  Verification passed:
+  `cargo test -p inference --features backend-pytorch worker_load_response`,
+  `cargo test -p inference --features backend-pytorch save_kv_cache_response`,
+  `cargo test -p inference --features backend-pytorch get_loaded_info_response`,
+  `cargo test -p inference --features backend-pytorch restore_kv_cache_response`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Verification
+  deviations fixed during the slice: the first load/save negative tests used
+  shorthand canonical-code expectations; they were corrected to the existing
+  worker error codes and the focused tests passed.
 
 ## Commit Cadence Notes
 
@@ -1087,6 +1100,9 @@ Worker rules:
   auto device intent, rejects legacy/explicit-auto device fields, and the
   Python worker contract applies the same rule before mapping omission to
   backend-local `auto`.
+- PyTorch worker response tests now prove loaded-model and live-KV selected
+  device facts decode as canonical `InferenceDeviceId` values and reject
+  explicit auto or legacy ids.
 - `cargo test -p pantograph-workflow-service run_graph`,
   `cargo test -p pantograph-workflow-service workflow_run_inspection_query_returns_factual_run_snapshot_parts`,
   and `npm run typecheck` passed for historic run graph stale diagnostics and

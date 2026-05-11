@@ -104,7 +104,7 @@ pub struct PyTorchBackend {
 pub struct LoadedModelInfo {
     pub model_path: String,
     pub model_type: String,
-    pub device: String,
+    pub device: InferenceDeviceId,
 }
 
 #[cfg(test)]
@@ -121,7 +121,7 @@ pub struct PyTorchLiveKvInfo {
     pub token_count: usize,
     pub model_path: String,
     pub model_type: String,
-    pub device: String,
+    pub device: InferenceDeviceId,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1127,7 +1127,7 @@ impl PyTorchBackend {
     ) -> bool {
         self.loaded_model.as_ref().is_some_and(|loaded| {
             loaded.model_path == model_path
-                && loaded.device == device
+                && loaded.device.as_str() == device
                 && model_type.is_none_or(|requested| loaded.model_type == requested)
         })
     }
@@ -1148,7 +1148,7 @@ impl PyTorchBackend {
             backend_key: canonical_runtime_backend_key("pytorch"),
             tokenizer_fingerprint: format!("pytorch:{}:{}", loaded.model_path, loaded.model_type),
             prompt_format_fingerprint: Some(format!("pytorch_{}", loaded.model_type)),
-            runtime_build_fingerprint: Some(loaded.device.clone()),
+            runtime_build_fingerprint: Some(loaded.device.as_str().to_string()),
         }
     }
 

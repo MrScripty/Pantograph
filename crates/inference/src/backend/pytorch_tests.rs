@@ -27,6 +27,22 @@ fn load_worker_contract_module<'py>(py: Python<'py>) -> Bound<'py, pyo3::types::
         .expect("worker_contract module should load")
 }
 
+fn inference_device_id(value: &str) -> InferenceDeviceId {
+    InferenceDeviceId::parse(value).expect("valid inference device id")
+}
+
+fn assert_backend_error_contains(error: &BackendError, canonical_code: &str, detail: &str) {
+    let message = error.to_string();
+    assert!(
+        message.contains(canonical_code),
+        "{message:?} should contain {canonical_code:?}"
+    );
+    assert!(
+        message.contains(detail),
+        "{message:?} should contain {detail:?}"
+    );
+}
+
 fn load_worker_module_with_stubbed_dependencies<'py>(
     py: Python<'py>,
 ) -> Bound<'py, pyo3::types::PyModule> {
@@ -260,7 +276,7 @@ fn test_can_reuse_loaded_model_requires_matching_request() {
     backend.loaded_model = Some(LoadedModelInfo {
         model_path: "/models/demo".to_string(),
         model_type: "text-generation".to_string(),
-        device: "cuda".to_string(),
+        device: inference_device_id("cuda"),
     });
 
     assert!(backend.can_reuse_loaded_model("/models/demo", "cuda", None));
@@ -275,7 +291,7 @@ fn test_kv_runtime_fingerprint_for_loaded_model_is_stable() {
     let loaded = LoadedModelInfo {
         model_path: "/models/demo".to_string(),
         model_type: "dllm".to_string(),
-        device: "cuda".to_string(),
+        device: inference_device_id("cuda"),
     };
 
     let fingerprint = PyTorchBackend::kv_cache_runtime_fingerprint_for_loaded_model(&loaded);
@@ -297,7 +313,7 @@ fn test_kv_model_fingerprint_for_loaded_model_tracks_model_identity() {
     let loaded = LoadedModelInfo {
         model_path: "/models/demo".to_string(),
         model_type: "dllm".to_string(),
-        device: "cuda".to_string(),
+        device: inference_device_id("cuda"),
     };
 
     let fingerprint = PyTorchBackend::kv_cache_model_fingerprint_for_loaded_model(&loaded);
@@ -322,7 +338,7 @@ fn test_live_kv_fingerprint_helpers_match_loaded_model_helpers() {
         token_count: 42,
         model_path: "/models/demo".to_string(),
         model_type: "dllm".to_string(),
-        device: "cuda".to_string(),
+        device: inference_device_id("cuda"),
     };
     let loaded = LoadedModelInfo {
         model_path: info.model_path.clone(),
@@ -3100,7 +3116,32 @@ fn test_pytorch_worker_load_response_decodes_loaded_model_info() {
 
     assert_eq!(info.model_path, "/models/tiny");
     assert_eq!(info.model_type, "text-generation");
-    assert_eq!(info.device, "cpu");
+    assert_eq!(info.device.as_str(), "cpu");
+}
+
+#[test]
+fn test_pytorch_worker_load_response_rejects_auto_device_id() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-load-auto-device",
+        "result": {
+            "model_path": "/models/tiny",
+            "model_type": "text-generation",
+            "device": "auto"
+        }
+    });
+
+    let error = PyTorchBackend::load_info_from_worker_response(
+        "req-load-auto-device",
+        &response.to_string(),
+    )
+    .expect_err("auto worker load response device should fail closed");
+
+    assert_backend_error_contains(
+        &error,
+        "pytorch_worker_model_load_failed",
+        "reserved identifier",
+    );
 }
 
 #[test]
@@ -4200,7 +4241,33 @@ fn test_pytorch_worker_save_kv_cache_response_decodes_live_info() {
     assert_eq!(info.token_count, 8);
     assert_eq!(info.model_path, "/models/tiny");
     assert_eq!(info.model_type, "dllm");
-    assert_eq!(info.device, "cpu");
+    assert_eq!(info.device.as_str(), "cpu");
+}
+
+#[test]
+fn test_pytorch_worker_save_kv_cache_response_rejects_legacy_device_id() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-save-kv-legacy-device",
+        "result": {
+            "token_count": 8,
+            "model_path": "/models/tiny",
+            "model_type": "dllm",
+            "device": "CUDA0"
+        }
+    });
+
+    let error = save_kv_cache_result_from_worker_response(
+        "req-save-kv-legacy-device",
+        &response.to_string(),
+    )
+    .expect_err("legacy live KV response device should fail closed");
+
+    assert_backend_error_contains(
+        &error,
+        "pytorch_worker_kv_save_failed",
+        "invalid identifier shape",
+    );
 }
 
 #[test]
@@ -4315,7 +4382,7 @@ fn test_pytorch_worker_restore_kv_cache_response_decodes_live_info() {
     assert_eq!(info.token_count, 8);
     assert_eq!(info.model_path, "/models/tiny");
     assert_eq!(info.model_type, "dllm");
-    assert_eq!(info.device, "cpu");
+    assert_eq!(info.device.as_str(), "cpu");
 }
 
 #[test]
@@ -4405,7 +4472,7 @@ fn test_pytorch_worker_get_loaded_info_response_decodes_loaded_model_info() {
 
     assert_eq!(info.model_path, "/models/tiny");
     assert_eq!(info.model_type, "dllm");
-    assert_eq!(info.device, "cpu");
+    assert_eq!(info.device.as_str(), "cpu");
 }
 
 #[test]
