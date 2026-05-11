@@ -70,6 +70,10 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
             model_id: Some(" model-a ".to_string()),
             backend_key: Some("llama.cpp".to_string()),
         }),
+        device_policy: Some(RuntimeTechnicalFitDevicePolicy::Explicit {
+            device_class: RuntimeTechnicalFitDeviceClass::Cuda,
+            device_id: Some(" cuda:0 ".to_string()),
+        }),
         legal_factors: Vec::new(),
         candidates: vec![RuntimeTechnicalFitCandidate {
             candidate_id: " ".to_string(),
@@ -121,6 +125,13 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
         Some(RuntimeTechnicalFitOverride {
             model_id: Some("model-a".to_string()),
             backend_key: Some("llama_cpp".to_string()),
+        })
+    );
+    assert_eq!(
+        normalized.device_policy,
+        Some(RuntimeTechnicalFitDevicePolicy::Explicit {
+            device_class: RuntimeTechnicalFitDeviceClass::Cuda,
+            device_id: Some("cuda:0".to_string()),
         })
     );
     assert_eq!(normalized.legal_factors, RuntimeTechnicalFitFactor::all());
@@ -263,6 +274,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
             model_id: None,
             backend_key: Some("pytorch".to_string()),
         }),
+        device_policy: None,
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: vec![
             RuntimeTechnicalFitCandidate {
@@ -329,6 +341,7 @@ fn selector_rejects_unmatched_override_without_synthetic_candidate() {
             model_id: Some("model-b".to_string()),
             backend_key: Some("pytorch".to_string()),
         }),
+        device_policy: None,
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: vec![RuntimeTechnicalFitCandidate {
             candidate_id: "runtime-a".to_string(),
@@ -395,6 +408,7 @@ fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
         required_extensions: Vec::new(),
         required_context_window_tokens: None,
         override_selection: None,
+        device_policy: None,
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: vec![
             RuntimeTechnicalFitCandidate {
@@ -451,6 +465,7 @@ fn selector_rejects_when_required_context_is_missing() {
         required_extensions: Vec::new(),
         required_context_window_tokens: Some(8192),
         override_selection: None,
+        device_policy: None,
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: vec![RuntimeTechnicalFitCandidate {
             candidate_id: "runtime-a".to_string(),
@@ -496,6 +511,7 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
         required_extensions: Vec::new(),
         required_context_window_tokens: None,
         override_selection: None,
+        device_policy: None,
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: vec![
             RuntimeTechnicalFitCandidate {
@@ -570,6 +586,7 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
         required_extensions: Vec::new(),
         required_context_window_tokens: None,
         override_selection: None,
+        device_policy: None,
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: vec![
             RuntimeTechnicalFitCandidate {
@@ -647,6 +664,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
         required_extensions: Vec::new(),
         required_context_window_tokens: None,
         override_selection: None,
+        device_policy: None,
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: vec![
             RuntimeTechnicalFitCandidate {

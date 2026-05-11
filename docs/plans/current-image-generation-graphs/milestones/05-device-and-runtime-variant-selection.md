@@ -115,7 +115,7 @@ typed diagnostic and the canonical design is fixed.
   and any fallback-named executable technical-fit selection with typed
   rejection diagnostics. Missing candidate/runtime state may be reported as
   advisory diagnostics, but it must not select an executable backend.
-- [ ] Add device policy intent to workflow/runtime technical-fit requests so
+- [x] Add device policy intent to workflow/runtime technical-fit requests so
   scheduler admission can reject unavailable explicit devices before backend
   load.
 - [ ] Add optional workflow backend/runtime preference intent to technical-fit
@@ -1151,6 +1151,40 @@ typed diagnostic and the canonical design is fixed.
     subprocess behavior, frontend behavior, or dependencies changed.
   - Verification passed: `rg -n "Future Support Reservation Notes|ROCm/HIP|Remote hardware plugins|MLX" docs/plans/current-image-generation-graphs/06-device-runtime-selection.md`
     and `git diff --check`.
+- 2026-05-10 slice: technical-fit device policy intent.
+  - Smallest useful vertical slice: add typed `auto`/explicit
+    CPU/CUDA/Metal/MPS device policy intent to workflow-service and
+    runtime-registry technical-fit requests, then project it through
+    embedded-runtime without changing selector ranking.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `src/services/workflow/types.ts`, relevant module READMEs, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the new DTO carries user intent only.
+    It does not translate to backend-local device strings, choose a fallback
+    runtime, or map unsupported future device families to CPU/auto/MPS/Metal.
+    The device policy enums are intentionally closed for this slice so unknown
+    wire values fail decoding until a later typed contract adds them.
+  - Standards/blast-radius gate: this slice changes append-only technical-fit
+    request DTOs and sync projection helpers only. Runtime selection ranking,
+    backend startup/load, managed runtime state, persisted schemas, workflow
+    fixtures, subprocess behavior, lockfiles, generated files, and worker
+    execution are unchanged.
+  - Discovered follow-up: explicit-device rejection is still not enforced by
+    selector candidate facts. That remains blocked on the next technical-fit
+    candidate/decision slice that carries runtime variant, device class/id, and
+    device diagnostics.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `npm run typecheck`, and `git diff --check`.
 
 **Verification:**
 

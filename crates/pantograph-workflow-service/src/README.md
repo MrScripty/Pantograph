@@ -125,6 +125,10 @@ Workflow backend capability DTOs now also carry runtime variant capability
 facts and typed device diagnostics projected from inference. Workflow-service
 stores and transports these backend-owned facts; it does not derive runtime
 readiness, choose devices, or translate raw backend device strings.
+Workflow technical-fit requests may carry typed device policy intent. That
+intent is normalized and forwarded to backend/runtime selectors, but this crate
+must not turn explicit device requests into executable defaults or infer
+backend-local device syntax.
 Artifact format metadata now includes optional typed conversion status,
 conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through

@@ -394,3 +394,6 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   availability and typed diagnostics only. Frontend consumers may render these
   facts, but executable device/runtime selection remains a backend/scheduler
   decision and must not be inferred from these strings.
+- TypeScript mirrors for technical-fit device policy are user intent shapes
+  only. Frontend code may send `auto` or explicit CPU/CUDA/Metal/MPS intent, but
+  must not submit backend-local device syntax as trusted executable state.

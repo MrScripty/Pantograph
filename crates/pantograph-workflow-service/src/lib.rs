@@ -60,6 +60,7 @@ pub use scheduler::{
 pub use technical_fit::{
     build_workflow_technical_fit_request, WorkflowTechnicalFitCompatibilityIssue,
     WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
+    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDevicePolicy,
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
     WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
 };

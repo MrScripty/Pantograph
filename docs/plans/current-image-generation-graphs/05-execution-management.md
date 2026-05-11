@@ -334,6 +334,19 @@ Update during implementation:
   probe, and admission facts exist. Verification passed:
   `rg -n "Future Support Reservation Notes|ROCm/HIP|Remote hardware plugins|MLX" docs/plans/current-image-generation-graphs/06-device-runtime-selection.md`
   and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding typed device policy intent to
+  workflow-service and runtime-registry technical-fit requests and projecting
+  it through embedded-runtime. The slice carries `auto` or explicit
+  CPU/CUDA/Metal/MPS intent without changing selector ranking or translating
+  backend-local device strings. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `npm run typecheck`, and `git diff --check`. Follow-up remains: technical-fit
+  candidates and decisions still need runtime variant, selected device, and
+  device diagnostics before explicit unavailable devices can be rejected by
+  scheduler admission.
 
 ## Commit Cadence Notes
 

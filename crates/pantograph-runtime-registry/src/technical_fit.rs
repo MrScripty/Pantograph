@@ -83,6 +83,41 @@ impl RuntimeTechnicalFitOverride {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeTechnicalFitDeviceClass {
+    Cpu,
+    Cuda,
+    Metal,
+    Mps,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "policy", rename_all = "snake_case")]
+pub enum RuntimeTechnicalFitDevicePolicy {
+    Auto,
+    Explicit {
+        device_class: RuntimeTechnicalFitDeviceClass,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        device_id: Option<String>,
+    },
+}
+
+impl RuntimeTechnicalFitDevicePolicy {
+    pub fn normalized(&self) -> Self {
+        match self {
+            Self::Auto => Self::Auto,
+            Self::Explicit {
+                device_class,
+                device_id,
+            } => Self::Explicit {
+                device_class: *device_class,
+                device_id: normalize_trimmed_string(device_id.as_deref()),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeTechnicalFitResourcePressure {
@@ -231,6 +266,8 @@ pub struct RuntimeTechnicalFitRequest {
     pub required_context_window_tokens: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub override_selection: Option<RuntimeTechnicalFitOverride>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_policy: Option<RuntimeTechnicalFitDevicePolicy>,
     #[serde(default)]
     pub legal_factors: Vec<RuntimeTechnicalFitFactor>,
     #[serde(default)]
@@ -260,6 +297,10 @@ impl RuntimeTechnicalFitRequest {
                 .override_selection
                 .as_ref()
                 .and_then(RuntimeTechnicalFitOverride::normalized),
+            device_policy: self
+                .device_policy
+                .as_ref()
+                .map(RuntimeTechnicalFitDevicePolicy::normalized),
             legal_factors,
             candidates: self
                 .candidates

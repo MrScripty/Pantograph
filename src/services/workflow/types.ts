@@ -756,7 +756,37 @@ export interface WorkflowOutputTarget {
   port_id: string;
 }
 
-export type WorkflowTechnicalFitOverride = Record<string, unknown>;
+export interface WorkflowTechnicalFitOverride {
+  model_id?: string | null;
+  backend_key?: string | null;
+}
+
+export type WorkflowTechnicalFitDeviceClass = 'cpu' | 'cuda' | 'metal' | 'mps';
+
+export type WorkflowTechnicalFitDevicePolicy =
+  | { policy: 'auto' }
+  | {
+      policy: 'explicit';
+      device_class: WorkflowTechnicalFitDeviceClass;
+      device_id?: string | null;
+    };
+
+export interface WorkflowTechnicalFitQueuePressure {
+  current_session_queue_depth?: number | null;
+  total_queued_run_count?: number | null;
+  loaded_runtime_count?: number | null;
+  loaded_runtime_capacity?: number | null;
+}
+
+export interface WorkflowTechnicalFitRequest {
+  workflow_id: string;
+  runtime_requirements: WorkflowRuntimeRequirements;
+  override_selection?: WorkflowTechnicalFitOverride | null;
+  device_policy?: WorkflowTechnicalFitDevicePolicy | null;
+  session_id?: string | null;
+  usage_profile?: string | null;
+  queue_pressure?: WorkflowTechnicalFitQueuePressure | null;
+}
 
 export interface WorkflowExecutionSessionCreateRequest {
   workflow_id: string;

@@ -374,6 +374,10 @@ from current backend/package facts, not from legacy runtime hints.
 - Technical-fit bridging in this crate must stay a translation layer from
   workflow-service request context into runtime-registry selector input; factor
   scoring and final policy ownership remain outside this crate.
+- Technical-fit bridging forwards typed device policy intent without deriving
+  backend device strings or selecting fallback devices. Unsupported future
+  device families must fail contract decoding or later selector validation
+  rather than being mapped to CPU, auto, Metal, MPS, or PyTorch.
 - Producer-specific runtime capability mapping must stay in backend Rust so
   adapters do not drift on runtime ids, install state, or backend-key aliases.
 - Backend capability projection must preserve runtime variant capability

@@ -44,6 +44,41 @@ pub struct WorkflowTechnicalFitQueuePressure {
     pub loaded_runtime_capacity: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowTechnicalFitDeviceClass {
+    Cpu,
+    Cuda,
+    Metal,
+    Mps,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "policy", rename_all = "snake_case")]
+pub enum WorkflowTechnicalFitDevicePolicy {
+    Auto,
+    Explicit {
+        device_class: WorkflowTechnicalFitDeviceClass,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        device_id: Option<String>,
+    },
+}
+
+impl WorkflowTechnicalFitDevicePolicy {
+    pub fn normalized(&self) -> Self {
+        match self {
+            Self::Auto => Self::Auto,
+            Self::Explicit {
+                device_class,
+                device_id,
+            } => Self::Explicit {
+                device_class: *device_class,
+                device_id: normalize_trimmed_string(device_id.as_deref()),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkflowTechnicalFitSessionContext {
     pub workflow_id: String,
@@ -80,6 +115,8 @@ pub struct WorkflowTechnicalFitRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub override_selection: Option<WorkflowTechnicalFitOverride>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_policy: Option<WorkflowTechnicalFitDevicePolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage_profile: Option<String>,
@@ -96,6 +133,10 @@ impl WorkflowTechnicalFitRequest {
                 .override_selection
                 .as_ref()
                 .and_then(WorkflowTechnicalFitOverride::normalized),
+            device_policy: self
+                .device_policy
+                .as_ref()
+                .map(WorkflowTechnicalFitDevicePolicy::normalized),
             session_id: normalize_trimmed_string(self.session_id.as_deref()),
             usage_profile: normalize_trimmed_string(self.usage_profile.as_deref()),
             queue_pressure: self
@@ -118,6 +159,7 @@ pub fn build_workflow_technical_fit_request(
         workflow_id: workflow_id.trim().to_string(),
         runtime_requirements: normalize_runtime_requirements(runtime_requirements),
         override_selection: override_selection.and_then(|value| value.normalized()),
+        device_policy: None,
         session_id: normalize_trimmed_string(session_id),
         usage_profile: normalize_trimmed_string(usage_profile),
         queue_pressure: queue_pressure.and_then(|value| value.normalized()),
@@ -814,6 +856,33 @@ mod tests {
             Some(WorkflowTechnicalFitOverride {
                 model_id: Some("model-a".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
+            })
+        );
+    }
+
+    #[test]
+    fn workflow_technical_fit_request_normalizes_device_policy_intent() {
+        let request = WorkflowTechnicalFitRequest {
+            workflow_id: " workflow-a ".to_string(),
+            runtime_requirements: runtime_requirements(),
+            override_selection: None,
+            device_policy: Some(WorkflowTechnicalFitDevicePolicy::Explicit {
+                device_class: WorkflowTechnicalFitDeviceClass::Cuda,
+                device_id: Some(" cuda:0 ".to_string()),
+            }),
+            session_id: None,
+            usage_profile: None,
+            queue_pressure: None,
+        };
+
+        let normalized = request.normalized();
+
+        assert_eq!(normalized.workflow_id, "workflow-a");
+        assert_eq!(
+            normalized.device_policy,
+            Some(WorkflowTechnicalFitDevicePolicy::Explicit {
+                device_class: WorkflowTechnicalFitDeviceClass::Cuda,
+                device_id: Some("cuda:0".to_string()),
             })
         );
     }

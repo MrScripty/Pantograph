@@ -113,6 +113,10 @@ process ownership and app composition stay outside this crate.
   depth, loaded-runtime saturation, and reservation headroom affect candidate
   ordering through one backend-owned selector instead of adapter-local tie
   breakers.
+- Technical-fit request device policy is typed intent only. The selector may
+  receive `auto` or explicit CPU/CUDA/Metal/MPS intent, but this crate must not
+  translate that intent into backend device strings, synthesize CPU fallback, or
+  hide unavailable explicit-device decisions.
 - Technical-fit normalization, override, residency, queue-pressure,
   budget-pressure, and selector rejection tests stay in
   `technical_fit_tests.rs` so selector contracts stay separate from production

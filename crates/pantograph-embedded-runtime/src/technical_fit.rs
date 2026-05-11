@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use pantograph_runtime_registry::{
     select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
     RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitCompatibilityIssue,
-    RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision,
+    RuntimeTechnicalFitDeviceClass, RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor,
     RuntimeTechnicalFitOverride, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
     RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
     RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
@@ -13,6 +14,7 @@ use pantograph_workflow_service::{
     WorkflowHost, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
     WorkflowRuntimeSourceKind, WorkflowServiceError, WorkflowTechnicalFitCompatibilityIssue,
     WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
+    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDevicePolicy,
     WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
     WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
 };
@@ -102,6 +104,7 @@ pub fn build_runtime_technical_fit_request(
             .override_selection
             .as_ref()
             .and_then(project_override),
+        device_policy: request.device_policy.as_ref().map(project_device_policy),
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: runtime_capability_candidates(runtime_capabilities),
         resource_pressure: project_resource_pressure(
@@ -537,6 +540,33 @@ fn project_override(
     .normalized()
 }
 
+fn project_device_policy(
+    device_policy: &WorkflowTechnicalFitDevicePolicy,
+) -> RuntimeTechnicalFitDevicePolicy {
+    match device_policy {
+        WorkflowTechnicalFitDevicePolicy::Auto => RuntimeTechnicalFitDevicePolicy::Auto,
+        WorkflowTechnicalFitDevicePolicy::Explicit {
+            device_class,
+            device_id,
+        } => RuntimeTechnicalFitDevicePolicy::Explicit {
+            device_class: project_device_class(*device_class),
+            device_id: device_id.clone(),
+        },
+    }
+    .normalized()
+}
+
+fn project_device_class(
+    device_class: WorkflowTechnicalFitDeviceClass,
+) -> RuntimeTechnicalFitDeviceClass {
+    match device_class {
+        WorkflowTechnicalFitDeviceClass::Cpu => RuntimeTechnicalFitDeviceClass::Cpu,
+        WorkflowTechnicalFitDeviceClass::Cuda => RuntimeTechnicalFitDeviceClass::Cuda,
+        WorkflowTechnicalFitDeviceClass::Metal => RuntimeTechnicalFitDeviceClass::Metal,
+        WorkflowTechnicalFitDeviceClass::Mps => RuntimeTechnicalFitDeviceClass::Mps,
+    }
+}
+
 fn project_resource_pressure(
     queue_pressure: Option<&WorkflowTechnicalFitQueuePressure>,
     estimated_peak_vram_mb: Option<u64>,
@@ -740,7 +770,7 @@ mod tests {
 
     #[test]
     fn runtime_request_projection_maps_service_request_into_registry_contract() {
-        let workflow_request = build_workflow_technical_fit_request(
+        let mut workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
                 estimated_peak_vram_mb: Some(4096),
@@ -765,6 +795,10 @@ mod tests {
                 loaded_runtime_capacity: Some(4),
             }),
         );
+        workflow_request.device_policy = Some(WorkflowTechnicalFitDevicePolicy::Explicit {
+            device_class: WorkflowTechnicalFitDeviceClass::Cuda,
+            device_id: Some("cuda:0".to_string()),
+        });
 
         let runtime_request =
             build_runtime_technical_fit_request(&workflow_request, None, &[runtime_capability()]);
@@ -778,6 +812,13 @@ mod tests {
             Some(RuntimeTechnicalFitOverride {
                 model_id: Some("model-a".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
+            })
+        );
+        assert_eq!(
+            runtime_request.device_policy,
+            Some(RuntimeTechnicalFitDevicePolicy::Explicit {
+                device_class: RuntimeTechnicalFitDeviceClass::Cuda,
+                device_id: Some("cuda:0".to_string()),
             })
         );
         assert_eq!(runtime_request.candidates.len(), 1);

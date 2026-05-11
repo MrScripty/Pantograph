@@ -35,7 +35,8 @@ pub use state::{
 pub use technical_fit::{
     select_runtime_technical_fit, RuntimeTechnicalFitCandidate,
     RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitCompatibilityIssue,
-    RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision,
+    RuntimeTechnicalFitDeviceClass, RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor,
     RuntimeTechnicalFitOverride, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
     RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
     RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
