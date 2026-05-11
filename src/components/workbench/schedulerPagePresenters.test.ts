@@ -45,6 +45,7 @@ import {
   schedulerSelectedDeviceFilterOptions,
   schedulerSelectedNetworkNodeFilterOptions,
   schedulerSelectedRuntimeFilterOptions,
+  schedulerSelectedRuntimeVariantFilterOptions,
   schedulerTimelinePayloadLabel,
   schedulerTimelineKindFilterOptions,
   schedulerTimelineSourceFilterOptions,
@@ -278,6 +279,7 @@ test('filterAndSortSchedulerRuns filters by status and search text', () => {
     clientSession: 'all',
     bucket: 'all',
     selectedRuntime: 'all',
+    selectedRuntimeVariant: 'all',
     selectedBackend: 'all',
     selectedDeviceClass: 'all',
     selectedDevice: 'all',
@@ -310,6 +312,7 @@ test('filterAndSortSchedulerRuns searches client scope facts', () => {
       clientSession: 'all',
       bucket: 'all',
       selectedRuntime: 'all',
+      selectedRuntimeVariant: 'all',
       selectedBackend: 'all',
       selectedDeviceClass: 'all',
       selectedDevice: 'all',
@@ -337,6 +340,7 @@ test('filterAndSortSchedulerRuns searches selected runtime variant facts', () =>
       clientSession: 'all',
       bucket: 'all',
       selectedRuntime: 'all',
+      selectedRuntimeVariant: 'all',
       selectedBackend: 'all',
       selectedDeviceClass: 'all',
       selectedDevice: 'all',
@@ -365,6 +369,7 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
       clientSession: 'all',
       bucket: 'all',
       selectedRuntime: 'all',
+      selectedRuntimeVariant: 'all',
       selectedBackend: 'all',
       selectedDeviceClass: 'all',
       selectedDevice: 'all',
@@ -384,6 +389,7 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
       clientSession: 'all',
       bucket: 'all',
       selectedRuntime: 'all',
+      selectedRuntimeVariant: 'all',
       selectedBackend: 'all',
       selectedDeviceClass: 'all',
       selectedDevice: 'all',
@@ -411,6 +417,7 @@ test('scheduler policy filters use explicit projection labels', () => {
       client_session_id: 'session-b',
       bucket_id: 'bucket-b',
       selected_runtime_id: 'runtime-b',
+      selected_runtime_variant_id: 'runtime-b/metal',
       selected_backend_key: 'pytorch',
       selected_device_class: 'metal',
       selected_device_id: 'device-b',
@@ -425,6 +432,7 @@ test('scheduler policy filters use explicit projection labels', () => {
       client_session_id: null,
       bucket_id: null,
       selected_runtime_id: null,
+      selected_runtime_variant_id: null,
       selected_backend_key: null,
       selected_device_class: null,
       selected_device_id: null,
@@ -439,6 +447,11 @@ test('scheduler policy filters use explicit projection labels', () => {
   assert.deepEqual(schedulerClientSessionFilterOptions(runs), ['Unassigned', 'session-a', 'session-b']);
   assert.deepEqual(schedulerBucketFilterOptions(runs), ['Unassigned', 'bucket-a', 'bucket-b']);
   assert.deepEqual(schedulerSelectedRuntimeFilterOptions(runs), ['Unassigned', 'runtime-a', 'runtime-b']);
+  assert.deepEqual(schedulerSelectedRuntimeVariantFilterOptions(runs), [
+    'Unassigned',
+    'runtime-a/cuda',
+    'runtime-b/metal',
+  ]);
   assert.deepEqual(schedulerSelectedBackendFilterOptions(runs), ['Unassigned', 'llama_cpp', 'pytorch']);
   assert.deepEqual(schedulerSelectedDeviceClassFilterOptions(runs), ['Unassigned', 'cuda', 'metal']);
   assert.deepEqual(schedulerSelectedDeviceFilterOptions(runs), ['Unassigned', 'device-a', 'device-b']);
@@ -458,6 +471,7 @@ test('scheduler policy filters use explicit projection labels', () => {
       clientSession: 'session-b',
       bucket: 'bucket-b',
       selectedRuntime: 'runtime-b',
+      selectedRuntimeVariant: 'runtime-b/metal',
       selectedBackend: 'pytorch',
       selectedDeviceClass: 'metal',
       selectedDevice: 'device-b',
@@ -535,6 +549,7 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
         clientSession: 'session-a',
         bucket: 'bucket-a',
         selectedRuntime: 'runtime-a',
+        selectedRuntimeVariant: 'runtime-a/cuda',
         selectedBackend: 'llama_cpp',
         selectedDeviceClass: 'cuda',
         selectedDevice: 'device-a',
@@ -553,6 +568,7 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
       client_session_id: 'session-a',
       bucket_id: 'bucket-a',
       selected_runtime_id: 'runtime-a',
+      selected_runtime_variant_id: 'runtime-a/cuda',
       selected_backend_key: 'llama_cpp',
       selected_device_class: 'cuda',
       selected_device_id: 'device-a',
@@ -572,6 +588,7 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
         clientSession: 'all',
         bucket: 'all',
         selectedRuntime: 'Unassigned',
+        selectedRuntimeVariant: 'Unassigned',
         selectedBackend: 'Unassigned',
         selectedDeviceClass: 'Unassigned',
         selectedDevice: 'all',

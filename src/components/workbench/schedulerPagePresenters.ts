@@ -304,6 +304,10 @@ export function schedulerSelectedRuntimeFilterOptions(runs: RunListProjectionRec
   return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_runtime_id)));
 }
 
+export function schedulerSelectedRuntimeVariantFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_runtime_variant_id)));
+}
+
 export function schedulerSelectedBackendFilterOptions(runs: RunListProjectionRecord[]): string[] {
   return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_backend_key)));
 }
@@ -421,6 +425,11 @@ export function filterAndSortSchedulerRuns(
     )
     .filter(
       (run) =>
+        filters.selectedRuntimeVariant === 'all' ||
+        formatSchedulerPlacementLabel(run.selected_runtime_variant_id) === filters.selectedRuntimeVariant,
+    )
+    .filter(
+      (run) =>
         filters.selectedBackend === 'all' ||
         formatSchedulerPlacementLabel(run.selected_backend_key) === filters.selectedBackend,
     )
@@ -473,6 +482,9 @@ export function buildSchedulerRunListQuery(
   }
   if (isAssignedFilterValue(filters.selectedRuntime)) {
     request.selected_runtime_id = filters.selectedRuntime;
+  }
+  if (isAssignedFilterValue(filters.selectedRuntimeVariant)) {
+    request.selected_runtime_variant_id = filters.selectedRuntimeVariant;
   }
   if (isAssignedFilterValue(filters.selectedBackend)) {
     request.selected_backend_key = filters.selectedBackend;

@@ -1924,6 +1924,44 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: scheduler run-list query DTOs still do not accept
     `selected_runtime_variant_id` as a backend-side filter; add that only as a
     separate query/filter slice.
+- 2026-05-10 slice: scheduler selected runtime variant query filter.
+  - Smallest useful vertical slice: add `selected_runtime_variant_id` to
+    run-list query DTOs, SQLite run-list/facet filters, workflow-service
+    query mapping, frontend diagnostics request types, and the Scheduler page
+    variant filter.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+    `crates/pantograph-workflow-service/tests/contract.rs`,
+    `src/services/diagnostics/types.ts`,
+    `src/services/diagnostics/README.md`,
+    `src/stores/schedulerRunListStore.ts`,
+    `src/stores/schedulerRunListStore.test.ts`,
+    `src/components/workbench/SchedulerPage.svelte`,
+    `src/components/workbench/schedulerPagePresenters.ts`,
+    `src/components/workbench/schedulerPagePresenters.test.ts`,
+    `src/components/workbench/README.md`, and this plan directory.
+  - No-fallback/no-legacy confirmation: the filter matches the typed
+    `selected_runtime_variant_id` projection column directly. It does not
+    infer variants from selected runtime ids, selected backend keys, device
+    ids/classes, backend config strings, or scheduler payload JSON.
+  - Standards/blast-radius gate for scheduler query filtering: this is an
+    additive optional query field over an existing nullable projection column;
+    no schema version, generated file, lockfile, dependency, worker, runtime
+    execution, polling loop, or saved workflow fixture changed. Frontend uses
+    existing Node store/presenter tests and declarative Svelte select wiring.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+    `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+    `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: diagnostics comparison can use the same backend query
+    field only if that page starts requesting backend-filtered comparison
+    pages; current diagnostics comparison filtering remains projection-row
+    based.
 
 **Verification:**
 

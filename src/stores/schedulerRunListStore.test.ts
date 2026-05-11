@@ -36,6 +36,7 @@ test('normalizeSchedulerRunFilters rejects unknown enum values', () => {
       clientSession: 'all',
       bucket: 'all',
       selectedRuntime: 'all',
+      selectedRuntimeVariant: 'all',
       selectedBackend: 'all',
       selectedDeviceClass: 'all',
       selectedDevice: 'all',
@@ -52,6 +53,7 @@ test('withSchedulerRunFilters applies partial updates without losing existing fi
     status: 'scheduled',
     client: 'client-a',
     selectedRuntime: 'runtime-a',
+    selectedRuntimeVariant: 'runtime-a/cuda',
     selectedBackend: 'llama_cpp',
     selectedDeviceClass: 'cuda',
   });
@@ -65,6 +67,7 @@ test('withSchedulerRunFilters applies partial updates without losing existing fi
     clientSession: 'all',
     bucket: 'all',
     selectedRuntime: 'runtime-a',
+    selectedRuntimeVariant: 'runtime-a/cuda',
     selectedBackend: 'llama_cpp',
     selectedDeviceClass: 'cuda',
     selectedDevice: 'all',

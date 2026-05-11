@@ -532,20 +532,21 @@ pub(super) fn query_run_list_projection(
            AND (?5 IS NULL OR scheduler_policy_id = ?5)
            AND (?6 IS NULL OR retention_policy_id = ?6)
            AND (?7 IS NULL OR selected_runtime_id = ?7)
-           AND (?8 IS NULL OR selected_backend_key = ?8)
-           AND (?9 IS NULL OR selected_device_class = ?9)
-           AND (?10 IS NULL OR selected_device_id = ?10)
-           AND (?11 IS NULL OR selected_network_node_id = ?11)
-           AND (?12 IS NULL OR client_id = ?12)
-           AND (?13 IS NULL OR client_session_id = ?13)
-           AND (?14 IS NULL OR bucket_id = ?14)
-           AND (?15 IS NULL OR accepted_at_ms >= ?15)
-           AND (?16 IS NULL OR accepted_at_ms <= ?16)
-           AND (?17 IS NULL OR latest_error_severity = ?17)
-           AND (?18 IS NULL OR latest_error_phase = ?18)
-           AND last_event_seq > ?19
+           AND (?8 IS NULL OR selected_runtime_variant_id = ?8)
+           AND (?9 IS NULL OR selected_backend_key = ?9)
+           AND (?10 IS NULL OR selected_device_class = ?10)
+           AND (?11 IS NULL OR selected_device_id = ?11)
+           AND (?12 IS NULL OR selected_network_node_id = ?12)
+           AND (?13 IS NULL OR client_id = ?13)
+           AND (?14 IS NULL OR client_session_id = ?14)
+           AND (?15 IS NULL OR bucket_id = ?15)
+           AND (?16 IS NULL OR accepted_at_ms >= ?16)
+           AND (?17 IS NULL OR accepted_at_ms <= ?17)
+           AND (?18 IS NULL OR latest_error_severity = ?18)
+           AND (?19 IS NULL OR latest_error_phase = ?19)
+           AND last_event_seq > ?20
          ORDER BY last_updated_at_ms DESC, last_event_seq DESC
-         LIMIT ?20",
+         LIMIT ?21",
     )?;
     let rows = stmt.query_map(
         params![
@@ -559,6 +560,7 @@ pub(super) fn query_run_list_projection(
             query.scheduler_policy_id.as_deref(),
             query.retention_policy_id.as_deref(),
             query.selected_runtime_id.as_deref(),
+            query.selected_runtime_variant_id.as_deref(),
             query.selected_backend_key.as_deref(),
             query.selected_device_class.as_deref(),
             query.selected_device_id.as_deref(),
@@ -675,15 +677,16 @@ fn query_run_list_facet(
            AND (?5 IS NULL OR scheduler_policy_id = ?5)
            AND (?6 IS NULL OR retention_policy_id = ?6)
            AND (?7 IS NULL OR selected_runtime_id = ?7)
-           AND (?8 IS NULL OR selected_backend_key = ?8)
-           AND (?9 IS NULL OR selected_device_class = ?9)
-           AND (?10 IS NULL OR selected_device_id = ?10)
-           AND (?11 IS NULL OR selected_network_node_id = ?11)
-           AND (?12 IS NULL OR client_id = ?12)
-           AND (?13 IS NULL OR client_session_id = ?13)
-           AND (?14 IS NULL OR bucket_id = ?14)
-           AND (?15 IS NULL OR accepted_at_ms >= ?15)
-           AND (?16 IS NULL OR accepted_at_ms <= ?16)
+           AND (?8 IS NULL OR selected_runtime_variant_id = ?8)
+           AND (?9 IS NULL OR selected_backend_key = ?9)
+           AND (?10 IS NULL OR selected_device_class = ?10)
+           AND (?11 IS NULL OR selected_device_id = ?11)
+           AND (?12 IS NULL OR selected_network_node_id = ?12)
+           AND (?13 IS NULL OR client_id = ?13)
+           AND (?14 IS NULL OR client_session_id = ?14)
+           AND (?15 IS NULL OR bucket_id = ?15)
+           AND (?16 IS NULL OR accepted_at_ms >= ?16)
+           AND (?17 IS NULL OR accepted_at_ms <= ?17)
          GROUP BY {expression}
          ORDER BY COUNT(*) DESC, {expression}"
     );
@@ -700,6 +703,7 @@ fn query_run_list_facet(
             query.scheduler_policy_id.as_deref(),
             query.retention_policy_id.as_deref(),
             query.selected_runtime_id.as_deref(),
+            query.selected_runtime_variant_id.as_deref(),
             query.selected_backend_key.as_deref(),
             query.selected_device_class.as_deref(),
             query.selected_device_id.as_deref(),

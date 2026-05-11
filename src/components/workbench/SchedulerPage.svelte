@@ -57,6 +57,7 @@
     schedulerSelectedDeviceFilterOptions,
     schedulerSelectedNetworkNodeFilterOptions,
     schedulerSelectedRuntimeFilterOptions,
+    schedulerSelectedRuntimeVariantFilterOptions,
     formatSchedulerScopeLabel,
     schedulerRunSupportsAdminQueueControls,
     schedulerRunSupportsQueueControls,
@@ -116,6 +117,7 @@
   let clientSessionOptions = $derived(schedulerClientSessionFilterOptions(runs));
   let bucketOptions = $derived(schedulerBucketFilterOptions(runs));
   let selectedRuntimeOptions = $derived(schedulerSelectedRuntimeFilterOptions(runs));
+  let selectedRuntimeVariantOptions = $derived(schedulerSelectedRuntimeVariantFilterOptions(runs));
   let selectedBackendOptions = $derived(schedulerSelectedBackendFilterOptions(runs));
   let selectedDeviceClassOptions = $derived(schedulerSelectedDeviceClassFilterOptions(runs));
   let selectedDeviceOptions = $derived(schedulerSelectedDeviceFilterOptions(runs));
@@ -692,6 +694,22 @@
         <option value="all">all</option>
         {#each selectedRuntimeOptions as selectedRuntime (selectedRuntime)}
           <option value={selectedRuntime}>{selectedRuntime}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-runtime-variant-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Variant
+      </label>
+      <select
+        id="scheduler-runtime-variant-filter"
+        value={$schedulerRunFilters.selectedRuntimeVariant}
+        onchange={(event) => setSchedulerRunFilters({ selectedRuntimeVariant: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each selectedRuntimeVariantOptions as selectedRuntimeVariant (selectedRuntimeVariant)}
+          <option value={selectedRuntimeVariant}>{selectedRuntimeVariant}</option>
         {/each}
       </select>
     </div>

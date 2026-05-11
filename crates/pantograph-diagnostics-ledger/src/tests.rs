@@ -713,6 +713,7 @@ fn diagnostic_event_ledger_projects_fatal_error_as_failed_run() {
             scheduler_policy_id: None,
             retention_policy_id: None,
             selected_runtime_id: None,
+            selected_runtime_variant_id: None,
             selected_backend_key: None,
             selected_device_class: None,
             selected_device_id: None,
@@ -884,6 +885,17 @@ fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
     assert_eq!(
         run.selected_runtime_variant_id.as_deref(),
         Some("llama_cpp.cuda")
+    );
+    let variant_scoped_runs = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list projection filters by selected runtime variant");
+    assert_eq!(variant_scoped_runs.len(), 1);
+    assert_eq!(
+        variant_scoped_runs[0].workflow_run_id.as_str(),
+        "workflow_run_alpha"
     );
     let facets = ledger
         .query_run_list_facets(RunListProjectionQuery::default())

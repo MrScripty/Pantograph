@@ -19,6 +19,7 @@ export interface SchedulerRunFilters {
   clientSession: string;
   bucket: string;
   selectedRuntime: string;
+  selectedRuntimeVariant: string;
   selectedBackend: string;
   selectedDeviceClass: string;
   selectedDevice: string;
@@ -84,6 +85,7 @@ export const DEFAULT_SCHEDULER_RUN_FILTERS: SchedulerRunFilters = {
   clientSession: 'all',
   bucket: 'all',
   selectedRuntime: 'all',
+  selectedRuntimeVariant: 'all',
   selectedBackend: 'all',
   selectedDeviceClass: 'all',
   selectedDevice: 'all',
@@ -133,6 +135,7 @@ export function normalizeSchedulerRunFilters(
     clientSession: normalizeOption(filters?.clientSession),
     bucket: normalizeOption(filters?.bucket),
     selectedRuntime: normalizeOption(filters?.selectedRuntime),
+    selectedRuntimeVariant: normalizeOption(filters?.selectedRuntimeVariant),
     selectedBackend: normalizeOption(filters?.selectedBackend),
     selectedDeviceClass: normalizeOption(filters?.selectedDeviceClass),
     selectedDevice: normalizeOption(filters?.selectedDevice),

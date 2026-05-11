@@ -130,9 +130,9 @@ transient UI state without becoming backend scheduler policy.
 - Scheduler client, session, bucket, and workflow execution-session facts come
   from run-list projection fields. Components must not recover those scope
   facts from raw events.
-- Scheduler selected runtime, selected device, and selected network-node facts
-  come from run-list projection fields. Components must not recover those
-  placement facts from scheduler payload JSON.
+- Scheduler selected runtime, runtime variant, backend, device, and
+  network-node facts come from run-list projection fields. Components must not
+  recover those placement facts from scheduler payload JSON.
 - Scheduler session-scoped queue action buttons must be gated by projected
   workflow execution-session ids and backend run status. Session priority
   changes use `workflowService.reprioritizeSessionQueueItem`; GUI-admin queue
@@ -236,10 +236,10 @@ transient UI state without becoming backend scheduler policy.
 - App root mounts `WorkbenchShell.svelte` once per GUI runtime.
 - Page selection is controlled through `workbenchStore.ts` actions.
 - Scheduler refreshes the typed run-list projection on mount and workflow
-  events. Supported status, assigned policy, assigned scope, and accepted-date
-  filters are sent to the backend run-list query; search, sort, and
-  `Unassigned` labels stay local presentation filters. Callers should not add
-  independent polling loops around it.
+  events. Supported status, assigned policy, assigned scope, typed placement,
+  and accepted-date filters are sent to the backend run-list query; search,
+  sort, and `Unassigned` labels stay local presentation filters. Callers should
+  not add independent polling loops around it.
 - Active-run selection contains identity and summary fields only. Consumers must
   query detail, timeline, graph, I/O, or Library projections for durable data.
 - `GraphPage.svelte` renders only the editable workflow graph and never loads

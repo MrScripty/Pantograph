@@ -572,6 +572,16 @@ Update during implementation:
   `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
   `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`,
   `npm run typecheck`, and `git diff --check`.
+- 2026-05-10: Continued Milestone 5 by adding
+  `selected_runtime_variant_id` as a typed run-list query filter and Scheduler
+  page filter. The ledger query, facets query, workflow-service request DTO,
+  TypeScript request DTO, scheduler store, and presenter all use the typed
+  variant field directly. Verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+  `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+  `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts`,
+  `npm run typecheck`, and `git diff --check`.
 
 ## Commit Cadence Notes
 
@@ -1030,6 +1040,12 @@ Worker rules:
   `npm run typecheck`, and `git diff --check` passed after run-list facets and
   diagnostics comparison controls began exposing typed
   `selected_runtime_variant_id`.
+- `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-diagnostics-ledger model_lifecycle_projects_canonical_error_link_without_counting_new_error`,
+  `cargo test -p pantograph-workflow-service workflow_run_list_query_contract_snapshot`,
+  `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts src/stores/schedulerRunListStore.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after Scheduler run-list
+  queries began forwarding typed `selected_runtime_variant_id` filters.
 
 ### Traceability Links
 

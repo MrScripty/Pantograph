@@ -2218,6 +2218,7 @@ pub struct RunListProjectionQuery {
     pub scheduler_policy_id: Option<String>,
     pub retention_policy_id: Option<String>,
     pub selected_runtime_id: Option<String>,
+    pub selected_runtime_variant_id: Option<String>,
     pub selected_backend_key: Option<String>,
     pub selected_device_class: Option<String>,
     pub selected_device_id: Option<String>,
@@ -2243,6 +2244,7 @@ impl Default for RunListProjectionQuery {
             scheduler_policy_id: None,
             retention_policy_id: None,
             selected_runtime_id: None,
+            selected_runtime_variant_id: None,
             selected_backend_key: None,
             selected_device_class: None,
             selected_device_id: None,
@@ -2308,6 +2310,11 @@ impl RunListProjectionQuery {
         validate_optional_text(
             "selected_runtime_id",
             self.selected_runtime_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_runtime_variant_id",
+            self.selected_runtime_variant_id.as_deref(),
             MAX_ID_LEN,
         )?;
         validate_optional_text(
