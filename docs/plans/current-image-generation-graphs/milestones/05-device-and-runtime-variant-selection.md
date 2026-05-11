@@ -105,7 +105,7 @@ typed diagnostic and the canonical design is fixed.
   Do not expose Candle image generation until executable Candle support exists.
 - [ ] Add future MLX capability facts as macOS-only roadmap facts. MLX must be
   rejected on Linux/Windows if explicitly requested.
-- [ ] Add future-support notes for ROCm/HIP, Vulkan, XPU/iGPU, OpenVINO,
+- [x] Add future-support notes for ROCm/HIP, Vulkan, XPU/iGPU, OpenVINO,
   hybrid/offload, remote hardware plugins, and MLX without implementing them.
 - [ ] Update runtime registry technical-fit input/output so candidates can
   carry backend id, task/model support, runtime variant, device class,
@@ -1135,6 +1135,22 @@ typed diagnostic and the canonical design is fixed.
   - Verification deviation: `npm run -w frontend check:types` failed because
     this repository root has no `frontend` workspace. The equivalent current
     script is the root `npm run typecheck`, which passed.
+- 2026-05-10 slice: future hardware/offload reservation notes.
+  - Smallest useful vertical slice: document the unsupported hardware and
+    offload families that must remain reserved contract space until a later
+    provider/probe/admission plan implements them.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/06-device-runtime-selection.md`,
+    this milestone file, and `05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the notes explicitly forbid exposing
+    ROCm/HIP, Vulkan, XPU/iGPU, OpenVINO, hybrid/offload, remote plugins, or
+    MLX as executable options, synthetic frontend choices, or implicit
+    CPU/auto/MPS/Metal/PyTorch fallbacks before typed backend facts exist.
+  - Standards/blast-radius gate: documentation-only slice; no source,
+    generated files, lockfiles, workflow fixtures, schemas, runtime state,
+    subprocess behavior, frontend behavior, or dependencies changed.
+  - Verification passed: `rg -n "Future Support Reservation Notes|ROCm/HIP|Remote hardware plugins|MLX" docs/plans/current-image-generation-graphs/06-device-runtime-selection.md`
+    and `git diff --check`.
 
 **Verification:**
 

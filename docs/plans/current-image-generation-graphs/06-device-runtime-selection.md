@@ -459,6 +459,33 @@ translation inside backend adapters:
 Future-reserved classes: `Rocm`, `Xpu`, `Vulkan`, `OpenVino`, `Remote`, and
 `Hybrid`.
 
+## Future Support Reservation Notes
+
+These device/runtime families are reserved contract space only. Milestone 5
+must not expose them as executable choices, synthetic frontend options, or
+implicit scheduler fallbacks:
+
+- **ROCm/HIP:** future PyTorch and vLLM support must be capability-driven.
+  PyTorch HIP may reuse CUDA-shaped Python APIs, so Pantograph must not infer
+  ROCm availability from raw `cuda` strings or package names.
+- **Vulkan:** llama.cpp Vulkan support remains backend-specific runtime
+  metadata. Pantograph must not map unsupported Vulkan selectors into `auto`,
+  CPU, CUDA, or Metal device facts.
+- **XPU/iGPU:** Intel XPU and integrated GPU support require explicit backend
+  probe facts and typed device classes before admission may select them.
+- **OpenVINO:** OpenVINO remains a future execution-provider/runtime family.
+  It must enter through backend adapter facts, not through generic CPU fallback
+  or ONNX metadata alone.
+- **Hybrid/offload:** CPU/GPU split, layer offload, and memory tiering remain
+  backend-specific placement capabilities. The scheduler may choose them only
+  from typed candidate facts after a later plan defines the policy.
+- **Remote hardware plugins:** remote acceleration requires trust,
+  authentication, resource, and lifecycle contracts. It must not reuse local
+  device ids or local runtime readiness fields.
+- **MLX:** MLX is macOS-focused roadmap support. Until an MLX capability
+  provider exists, explicit MLX requests on any platform must be rejected with
+  typed diagnostics rather than mapped to MPS, Metal, CPU, or PyTorch.
+
 ## Verification
 
 - Unit tests parse and reject invalid `InferenceDevicePolicy`,

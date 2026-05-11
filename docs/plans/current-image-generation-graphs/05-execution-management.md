@@ -327,6 +327,13 @@ Update during implementation:
   `npm run -w frontend check:types` command failed because the root no longer
   has a `frontend` workspace; root `npm run typecheck` is the current
   equivalent and passed.
+- 2026-05-10: Continued Milestone 5 with a documentation-only hardware/offload
+  reservation slice. `06-device-runtime-selection.md` now states that
+  ROCm/HIP, Vulkan, XPU/iGPU, OpenVINO, hybrid/offload, remote hardware
+  plugins, and MLX are reserved contract space only until typed provider,
+  probe, and admission facts exist. Verification passed:
+  `rg -n "Future Support Reservation Notes|ROCm/HIP|Remote hardware plugins|MLX" docs/plans/current-image-generation-graphs/06-device-runtime-selection.md`
+  and `git diff --check`.
 
 ## Commit Cadence Notes
 
