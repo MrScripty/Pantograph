@@ -1226,6 +1226,113 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
 }
 
 #[test]
+fn selector_rejects_unrankable_headroom_under_queue_pressure() {
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: RuntimeRegistrySnapshot {
+            generated_at_ms: 123,
+            runtimes: vec![
+                runtime_snapshot(
+                    "runtime-overflow",
+                    vec!["llama_cpp"],
+                    RuntimeRegistryStatus::Ready,
+                    u16::MAX as usize + 1,
+                ),
+                runtime_snapshot(
+                    "runtime-roomy",
+                    vec!["llama_cpp"],
+                    RuntimeRegistryStatus::Ready,
+                    0,
+                ),
+            ],
+            reservations: Vec::new(),
+        },
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["llama_cpp".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![
+            RuntimeTechnicalFitCandidate {
+                candidate_id: "runtime-overflow".to_string(),
+                runtime_id: Some("runtime-overflow".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
+                context_window_tokens: Some(8192),
+                residency_state: None,
+                warmup_state: None,
+                supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
+            },
+            RuntimeTechnicalFitCandidate {
+                candidate_id: "runtime-roomy".to_string(),
+                runtime_id: Some("runtime-roomy".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                model_id: None,
+                runtime_variant_id: None,
+                device_class: None,
+                selected_device_id: None,
+                resource_estimate: None,
+                observed_throughput_hint: None,
+                device_diagnostics: Vec::new(),
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
+                context_window_tokens: Some(8192),
+                residency_state: None,
+                warmup_state: None,
+                supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
+            },
+        ],
+        resource_pressure: Some(RuntimeTechnicalFitResourcePressure {
+            queued_run_count: Some(4),
+            loaded_runtime_count: Some(2),
+            loaded_runtime_capacity: Some(4),
+            estimated_peak_vram_mb: None,
+            estimated_peak_ram_mb: None,
+        }),
+    });
+
+    assert_eq!(
+        decision.selection_mode,
+        RuntimeTechnicalFitSelectionMode::Automatic
+    );
+    assert_eq!(decision.selected_candidate_id, None);
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::QueuePressure
+            && reason.candidate_id.as_deref() == Some("runtime-overflow")
+    }));
+    assert_eq!(decision.device_diagnostics.len(), 1);
+    assert_eq!(
+        decision.device_diagnostics[0].code,
+        RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate
+    );
+    assert_eq!(
+        decision.device_diagnostics[0].severity,
+        RuntimeTechnicalFitDeviceDiagnosticSeverity::Error
+    );
+    assert!(decision.device_diagnostics[0]
+        .message
+        .contains("active reservation count exceeds the supported range"));
+    assert_eq!(
+        decision.device_diagnostics[0].backend_key.as_deref(),
+        Some("llama_cpp")
+    );
+}
+
+#[test]
 fn selector_prefers_more_headroom_under_budget_pressure() {
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: RuntimeRegistrySnapshot {

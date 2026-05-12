@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
 use crate::state::RuntimeRegistryStatus;
 
+const MAX_HEADROOM_RANKABLE_ACTIVE_RESERVATIONS: usize = u16::MAX as usize;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeTechnicalFitFactor {
@@ -661,6 +663,33 @@ pub fn select_runtime_technical_fit(
         .iter()
         .filter(|candidate| candidate_is_eligible(candidate, &normalized))
         .collect::<Vec<_>>();
+    if headroom_ranking_applies(&normalized) {
+        if let Some(unrankable_candidate) = eligible_candidates.iter().find(|candidate| {
+            candidate_active_reservation_count_exceeds_rankable_range(candidate, &normalized)
+        }) {
+            let mut unrankable_reasons = Vec::new();
+            if queue_pressure_applies(&normalized) {
+                unrankable_reasons.push(RuntimeTechnicalFitReason::new(
+                    RuntimeTechnicalFitReasonCode::QueuePressure,
+                    Some(unrankable_candidate.candidate_id.as_str()),
+                ));
+            }
+            if budget_pressure_applies(&normalized) {
+                unrankable_reasons.push(RuntimeTechnicalFitReason::new(
+                    RuntimeTechnicalFitReasonCode::BudgetPressure,
+                    Some(unrankable_candidate.candidate_id.as_str()),
+                ));
+            }
+
+            return unselected_decision_with_device_diagnostics(
+                RuntimeTechnicalFitSelectionMode::Automatic,
+                unrankable_reasons,
+                vec![unrankable_headroom_candidate_diagnostic(
+                    unrankable_candidate,
+                )],
+            );
+        }
+    }
     eligible_candidates.sort_by(|left, right| compare_candidates(left, right, &normalized));
 
     if let Some(selected_candidate) = eligible_candidates.first().copied() {
@@ -1055,6 +1084,22 @@ fn ambiguous_auto_resolution_diagnostic() -> RuntimeTechnicalFitDeviceDiagnostic
     }
 }
 
+fn unrankable_headroom_candidate_diagnostic(
+    candidate: &RuntimeTechnicalFitCandidate,
+) -> RuntimeTechnicalFitDeviceDiagnostic {
+    RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message:
+            "technical-fit cannot rank candidate headroom because active reservation count exceeds the supported range"
+                .to_string(),
+        device_class: candidate.device_class,
+        device_id: candidate.selected_device_id.clone(),
+        runtime_variant_id: candidate.runtime_variant_id.clone(),
+        backend_key: candidate.backend_key.clone(),
+    }
+}
+
 fn candidate_matches_override(
     candidate: &RuntimeTechnicalFitCandidate,
     override_selection: &RuntimeTechnicalFitOverride,
@@ -1291,6 +1336,21 @@ fn candidate_budget_pressure_rank(
     runtime_headroom_rank(candidate, request)
 }
 
+fn headroom_ranking_applies(request: &RuntimeTechnicalFitRequest) -> bool {
+    queue_pressure_applies(request) || budget_pressure_applies(request)
+}
+
+fn candidate_active_reservation_count_exceeds_rankable_range(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> bool {
+    candidate_runtime_snapshot(candidate, request)
+        .map(|runtime| {
+            runtime.active_reservation_ids.len() > MAX_HEADROOM_RANKABLE_ACTIVE_RESERVATIONS
+        })
+        .unwrap_or(false)
+}
+
 fn runtime_headroom_rank(
     candidate: &RuntimeTechnicalFitCandidate,
     request: &RuntimeTechnicalFitRequest,
@@ -1298,7 +1358,7 @@ fn runtime_headroom_rank(
     let active_reservation_count = candidate_runtime_snapshot(candidate, request)
         .map(|runtime| runtime.active_reservation_ids.len())
         .unwrap_or(usize::MAX);
-    u16::MAX.saturating_sub(active_reservation_count.min(u16::MAX as usize) as u16)
+    u16::MAX - active_reservation_count.min(MAX_HEADROOM_RANKABLE_ACTIVE_RESERVATIONS) as u16
 }
 
 fn candidate_runtime_snapshot<'a>(

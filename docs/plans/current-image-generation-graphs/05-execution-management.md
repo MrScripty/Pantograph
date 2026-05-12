@@ -2176,6 +2176,27 @@ Worker rules:
   numeric-boundary follow-up: duration/timing diagnostics, runtime
   technical-fit rank overflow, broader image request limits, context/batch
   limits, byte-range projections, and worker/runtime request fields.
+- 2026-05-12 runtime technical-fit headroom rank validation slice: smallest
+  useful vertical slice was limited to rejecting automatic queue/budget-pressure
+  candidate selection when an eligible runtime snapshot reports more active
+  reservations than the selector can rank exactly. Allowed write set:
+  `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+  `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+  `crates/pantograph-runtime-registry/src/README.md`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because impossible
+  reservation headroom data no longer gets capped into the lowest rank or
+  hidden by selecting another candidate; it returns an unselected automatic
+  decision with an error diagnostic for upstream diagnostics-ledger
+  projection. Verification passed:
+  `cargo test -p pantograph-runtime-registry selector_rejects_unrankable_headroom_under_queue_pressure`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Deviation: the first
+  final `cargo fmt --all -- --check` found rustfmt-only wrapping in the touched
+  selector/test code; `cargo fmt --all` was applied and focused tests plus
+  final format verification were rerun successfully. Remaining
+  numeric-boundary follow-up: duration/timing diagnostics, broader image
+  request limits, context/batch limits, byte-range projections, and
+  worker/runtime request fields.
 
 ### Traceability Links
 

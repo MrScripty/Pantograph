@@ -310,6 +310,18 @@ typed diagnostic and the canonical design is fixed.
     duration/timing diagnostics, runtime technical-fit rank overflow, broader
     image request limits, context/batch limits, byte-range projections, and
     worker/runtime request fields.
+  - 2026-05-12 decision: runtime technical-fit pressure ranking must not cap
+    active reservation counts. If reservation headroom cannot be ranked within
+    the selector contract, candidate selection fails and emits an error
+    diagnostic for upstream diagnostics-ledger projection.
+  - 2026-05-12 partial: runtime-registry technical-fit auto selection now
+    rejects queue/budget-pressure headroom ranking when an eligible
+    candidate's active reservation count exceeds the rankable range. The
+    selector returns an unselected `no_valid_candidate` error diagnostic
+    instead of capping the count before comparison. Remaining numeric
+    boundaries include duration/timing diagnostics, broader image request
+    limits, context/batch limits, byte-range projections, and worker/runtime
+    request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3667,6 +3679,36 @@ typed diagnostic and the canonical design is fixed.
     for duration/timing diagnostics, runtime technical-fit rank overflow,
     broader image request limits, context/batch limits, byte-range projections,
     and worker/runtime request fields.
+- 2026-05-12 slice: runtime technical-fit headroom rank validation.
+  - Smallest useful vertical slice: reject automatic queue/budget-pressure
+    candidate selection when an eligible runtime snapshot reports more active
+    reservations than the selector can rank exactly.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: unrankable reservation counts no
+    longer get capped to the lowest headroom rank. The selector returns an
+    unselected automatic decision with an error diagnostic instead of selecting
+    another candidate or preserving capped ranking behavior.
+  - Standards/blast-radius gate: runtime-registry remains the selector-policy
+    owner; existing workflow-service and embedded-runtime DTOs already
+    transport `no_valid_candidate` diagnostics, so no generated files,
+    frontend code, saved workflow fixtures, lockfiles, path roots, Pumas
+    contracts, worker contracts, or backend lifecycle ownership changed.
+  - Verification passed:
+    `cargo test -p pantograph-runtime-registry selector_rejects_unrankable_headroom_under_queue_pressure`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first final `cargo fmt --all -- --check`
+    found rustfmt-only wrapping in the touched selector/test code;
+    `cargo fmt --all` was applied and focused tests plus final format
+    verification were rerun successfully.
+  - Remaining follow-up: checked arithmetic policy still needs implementation
+    for duration/timing diagnostics, broader image request limits,
+    context/batch limits, byte-range projections, and worker/runtime request
+    fields.
 
 **Verification:**
 

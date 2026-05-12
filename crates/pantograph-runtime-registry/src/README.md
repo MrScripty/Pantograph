@@ -124,7 +124,9 @@ process ownership and app composition stay outside this crate.
 - Technical-fit resource-pressure interpretation is also computed here so queue
   depth, loaded-runtime saturation, and reservation headroom affect candidate
   ordering through one backend-owned selector instead of adapter-local tie
-  breakers.
+  breakers. Reservation headroom must remain exactly rankable; counts outside
+  the selector rank range fail automatic selection with a typed diagnostic
+  instead of being capped.
 - Technical-fit request device policy is typed intent only. The selector may
   receive `auto` or explicit CPU/CUDA/Metal/MPS intent, but this crate must not
   translate that intent into backend device strings, synthesize CPU fallback, or
