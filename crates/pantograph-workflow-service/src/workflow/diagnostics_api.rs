@@ -618,10 +618,8 @@ impl WorkflowService {
                 .map_err(WorkflowServiceError::from)?;
 
             for run in runs {
-                let duration_ms = run
-                    .started_at_ms
-                    .map(|started_at_ms| now_ms.saturating_sub(started_at_ms))
-                    .and_then(|duration| u64::try_from(duration).ok());
+                let duration_ms =
+                    startup_repair_duration_ms(now_ms, run.started_at_ms, &run.workflow_run_id)?;
                 self.append_diagnostic_event_and_request_projection_refresh(
                     &mut *ledger,
                     DiagnosticEventAppendRequest {
@@ -656,7 +654,7 @@ impl WorkflowService {
                     },
                 )
                 .map_err(WorkflowServiceError::from)?;
-                repaired = repaired.saturating_add(1);
+                repaired = increment_startup_repair_count(repaired)?;
             }
         }
 
@@ -1563,6 +1561,45 @@ impl WorkflowDiagnosticsUsageQueryRequest {
         query.validate().map_err(WorkflowServiceError::from)?;
         Ok(query)
     }
+}
+
+pub(super) fn startup_repair_duration_ms(
+    now_ms: i64,
+    started_at_ms: Option<i64>,
+    workflow_run_id: &WorkflowRunId,
+) -> Result<Option<u64>, WorkflowServiceError> {
+    let Some(started_at_ms) = started_at_ms else {
+        return Ok(None);
+    };
+    let duration_ms = now_ms.checked_sub(started_at_ms).ok_or_else(|| {
+        WorkflowServiceError::Internal(format!(
+            "startup repair duration overflow for workflow run {}",
+            workflow_run_id
+        ))
+    })?;
+    if duration_ms < 0 {
+        return Err(WorkflowServiceError::Internal(format!(
+            "startup repair duration underflow for workflow run {}: started_at_ms {} is after now_ms {}",
+            workflow_run_id, started_at_ms, now_ms
+        )));
+    }
+
+    u64::try_from(duration_ms).map(Some).map_err(|_| {
+        WorkflowServiceError::Internal(format!(
+            "startup repair duration overflow for workflow run {}",
+            workflow_run_id
+        ))
+    })
+}
+
+pub(super) fn increment_startup_repair_count(
+    repaired: usize,
+) -> Result<usize, WorkflowServiceError> {
+    repaired.checked_add(1).ok_or_else(|| {
+        WorkflowServiceError::Internal(
+            "startup repair count overflow while marking abandoned runs".to_string(),
+        )
+    })
 }
 
 fn drain_run_list_projection_until_idle(

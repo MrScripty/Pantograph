@@ -27,7 +27,10 @@ use super::super::diagnostic_errors::{
     WorkflowDiagnosticRunContext, WorkflowDiagnosticRuntimeModelScope,
     WorkflowDiagnosticTransportScope,
 };
-use super::super::diagnostics_api::{ResolvedNodeIoDirection, ResolvedNodeIoProvenanceKind};
+use super::super::diagnostics_api::{
+    increment_startup_repair_count, startup_repair_duration_ms, ResolvedNodeIoDirection,
+    ResolvedNodeIoProvenanceKind,
+};
 use super::*;
 
 #[derive(Default)]
@@ -685,6 +688,32 @@ fn workflow_marks_abandoned_nonterminal_runs_failed() {
         .expect("run list query");
     assert_eq!(response.runs.len(), 1);
     assert_eq!(response.runs[0].status, RunListProjectionStatus::Failed);
+}
+
+#[test]
+fn startup_repair_duration_rejects_future_start_time() {
+    let workflow_run_id = WorkflowRunId::try_from("run-a".to_string()).unwrap();
+    let error = startup_repair_duration_ms(10, Some(11), &workflow_run_id)
+        .expect_err("future start time must fail");
+
+    assert!(matches!(
+        error,
+        WorkflowServiceError::Internal(message)
+            if message.contains("startup repair duration underflow")
+                && message.contains("run-a")
+    ));
+}
+
+#[test]
+fn startup_repair_count_rejects_overflow() {
+    let error =
+        increment_startup_repair_count(usize::MAX).expect_err("repair count overflow must fail");
+
+    assert!(matches!(
+        error,
+        WorkflowServiceError::Internal(message)
+            if message.contains("startup repair count overflow")
+    ));
 }
 
 #[test]

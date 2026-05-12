@@ -322,6 +322,14 @@ typed diagnostic and the canonical design is fixed.
     boundaries include duration/timing diagnostics, broader image request
     limits, context/batch limits, byte-range projections, and worker/runtime
     request fields.
+  - 2026-05-12 partial: workflow startup-repair diagnostics now use checked
+    duration subtraction and checked repaired-run counting. Future
+    `started_at_ms` values, timestamp overflow, or repair-count overflow return
+    `WorkflowServiceError::Internal` instead of saturating duration to zero or
+    the repaired count to `usize::MAX`. Remaining numeric boundaries include
+    model/runtime load and unload duration diagnostics, broader image request
+    limits, context/batch limits, byte-range projections, and worker/runtime
+    request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3709,6 +3717,31 @@ typed diagnostic and the canonical design is fixed.
     for duration/timing diagnostics, broader image request limits,
     context/batch limits, byte-range projections, and worker/runtime request
     fields.
+- 2026-05-12 slice: workflow startup-repair diagnostics arithmetic.
+  - Smallest useful vertical slice: replace startup-repair run-duration
+    `saturating_sub` and repaired-count `saturating_add` with checked helpers
+    and focused diagnostics tests.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/diagnostics.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: impossible repair timing or count
+    state no longer becomes a successful repair with zero duration or a capped
+    count. The service fails with a typed internal diagnostic error so startup
+    repair does not hide corrupt projection state.
+  - Standards/blast-radius gate: workflow-service remains the owner of startup
+    repair and diagnostics-ledger projection refresh; no generated files,
+    frontend code, saved workflow fixtures, lockfiles, path roots, Pumas
+    contracts, worker contracts, runtime selector policy, or backend lifecycle
+    ownership changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service startup_repair`,
+    `cargo test -p pantograph-workflow-service diagnostics`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: model/runtime load and unload duration diagnostics
+    still need the broader timing identity/history policy before they can be
+    changed safely; broader image request limits, context/batch limits,
+    byte-range projections, and worker/runtime request fields remain open.
 
 **Verification:**
 

@@ -2197,6 +2197,25 @@ Worker rules:
   numeric-boundary follow-up: duration/timing diagnostics, broader image
   request limits, context/batch limits, byte-range projections, and
   worker/runtime request fields.
+- 2026-05-12 workflow startup-repair diagnostics arithmetic slice: smallest
+  useful vertical slice was limited to replacing startup-repair run-duration
+  `saturating_sub` and repaired-count `saturating_add` with checked helpers.
+  Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/diagnostics.rs`, and
+  this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because impossible repair
+  timing or count state no longer becomes a successful repair with zero
+  duration or a capped count; the service returns
+  `WorkflowServiceError::Internal` so corrupt projection state is visible.
+  Verification passed:
+  `cargo test -p pantograph-workflow-service startup_repair`,
+  `cargo test -p pantograph-workflow-service diagnostics`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Remaining
+  numeric-boundary follow-up: model/runtime load and unload duration
+  diagnostics need the broader timing identity/history policy before they can
+  be changed safely; broader image request limits, context/batch limits,
+  byte-range projections, and worker/runtime request fields remain open.
 
 ### Traceability Links
 
