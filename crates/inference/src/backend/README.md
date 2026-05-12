@@ -20,7 +20,9 @@ isolated here.
 | `pytorch.rs` | PyTorch backend implementation used for HuggingFace-style runtimes. |
 | `pytorch_worker.rs` | Embedded PyTorch worker loader, sibling-module registration, and Python result extraction helpers used by `pytorch.rs`. |
 | `pytorch_worker_contract.rs` | Backend-local Rust/Python worker envelope, Transformers load request, trust policy, and response/error DTOs used to migrate PyTorch behind the canonical inference contracts. |
+| `pytorch_worker_image_contract.rs` | Backend-local Rust/Python image-generation request and response DTOs consumed after Rust planner validation. |
 | `pytorch_tests.rs` | PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt extraction, and system prompt tests extracted from the production adapter. |
+| `pytorch_worker_image_contract_tests.rs` | Focused PyTorch image-generation worker envelope fixture and validation tests. |
 
 ## Problem
 

@@ -232,3 +232,31 @@ PyTorch/diffusers and produce a retained image artifact.
   `git diff --check`.
 - Remaining follow-up: wire the planner into PyTorch image generation and add
   broader family/default/dependency/path diagnostics before worker execution.
+
+2026-05-12 worker image-envelope contract slice:
+
+- Smallest useful vertical slice: add the Rust-side PyTorch worker
+  image-generation request/response envelope DTOs, operation tag, JSON
+  fixtures, and focused validation tests before wiring any worker execution.
+- Allowed write set: `crates/inference/src/backend/pytorch_worker_contract.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`,
+  `crates/inference/src/backend/pytorch.rs`,
+  `crates/inference/src/backend/README.md`,
+  `crates/inference/tests/fixtures/pytorch_worker_contract/`, and this plan
+  directory.
+- No-fallback/no-legacy confirmation: the image worker request requires the
+  Rust planner's selected Diffusers family, component roles, pipeline class,
+  artifact entry path, and validated device id. The DTO rejects unknown payload
+  fields such as `trust_remote_code`, so the Python worker cannot receive
+  unplanned custom-code or fallback controls through this envelope.
+- Verification passed: `cargo test -p inference --features backend-pytorch
+  pytorch_worker_generate_image`, `cargo check -p inference --features
+  backend-pytorch`, `cargo check -p inference`, `cargo fmt --all -- --check`,
+  and `git diff --check`.
+- Discovered standards debt: `backend/pytorch.rs` and `backend/pytorch_tests.rs`
+  are already over the decomposition threshold. This slice kept new image
+  request/response DTOs and tests in focused files; later execution wiring
+  should avoid adding more policy or test bulk to those oversized files.
+- Remaining follow-up: translate `ImageGenerationExecutionPlan` into the worker
+  envelope and add Python-side shape validation before actual generation.

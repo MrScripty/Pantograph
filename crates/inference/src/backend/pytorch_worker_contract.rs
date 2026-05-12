@@ -52,6 +52,7 @@ pub(super) enum PyTorchWorkerOperation {
     UnloadModel,
     GenerateText,
     GenerateTextStream,
+    GenerateImage,
     TranscribeAudio,
     SaveKvCache,
     RestoreKvCache,

@@ -1,0 +1,18 @@
+{
+  "status": "ok",
+  "request_id": "req-image-001",
+  "result": {
+    "images": [
+      {
+        "mime_type": "image/png",
+        "data_base64": "iVBORw0KGgo=",
+        "width": 512,
+        "height": 512
+      }
+    ],
+    "seed_used": 42,
+    "metadata": {
+      "scheduler": "euler"
+    }
+  }
+}
