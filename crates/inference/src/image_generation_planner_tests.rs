@@ -53,6 +53,7 @@ fn backend_decision(backend_id: &str) -> BackendExecutionDecision {
         selected_task_id: Some(InferenceTaskId::ImageGeneration),
         selected_model_ref: None,
         diagnostics: Vec::new(),
+        selection_policy_trace: None,
     }
 }
 

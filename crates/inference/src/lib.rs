@@ -71,7 +71,8 @@ pub use device::{
     DeviceBackend, DeviceBackendParseError, LlamaCppDeviceInventoryFact,
 };
 pub use device_contracts::{
-    BackendExecutionCandidate, BackendExecutionDecision, BackendId, BackendObservedThroughputHint,
+    BackendExecutionCandidate, BackendExecutionCandidateSetSummary, BackendExecutionDecision,
+    BackendExecutionSelectionPolicyTrace, BackendId, BackendObservedThroughputHint,
     BackendResourceEstimate, DeviceContractError, DeviceResolutionDecision,
     DeviceResolutionDiagnostic, DeviceResolutionDiagnosticCode, DeviceResolutionDiagnosticSeverity,
     DeviceResolutionRequest, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,

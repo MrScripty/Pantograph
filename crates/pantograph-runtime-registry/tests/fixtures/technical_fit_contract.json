@@ -135,5 +135,35 @@
       "postprocessing": "supported"
     },
     "compatibility_issue_count": 0
+  },
+  "decision_with_selection_policy_trace": {
+    "selection_mode": "automatic",
+    "selected_candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0",
+    "selected_runtime_id": "pytorch",
+    "selected_runtime_variant_id": "pytorch/linux-x64/cuda",
+    "selected_backend_key": "pytorch",
+    "selected_model_id": "pumas://models/juggernaut-x-v10-sdxl",
+    "selected_device_class": "cuda",
+    "selected_device_id": "cuda:0",
+    "reasons": [
+      {
+        "code": "automatic_ranking",
+        "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+      }
+    ],
+    "selection_policy_trace": {
+      "policy_version": 1,
+      "candidate_set_summary": {
+        "total_candidate_count": 2,
+        "eligible_candidate_count": 1,
+        "rejected_candidate_count": 1,
+        "eligible_candidate_ids": [
+          "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+        ]
+      },
+      "ranking_reason": "readiness_history_preferred",
+      "seed_basis": "workflow:wf-image:pytorch"
+    },
+    "compatibility_issue_count": 0
   }
 }

@@ -1470,6 +1470,14 @@ fn workflow_technical_fit_cross_layer_fixture_deserializes() {
         Some("pytorch.cuda")
     );
     assert_eq!(decision.selected_device_id.as_deref(), Some("cuda:0"));
+    assert_eq!(
+        decision
+            .selection_policy_trace
+            .as_ref()
+            .and_then(|trace| trace.candidate_set_summary.as_ref())
+            .map(|summary| summary.eligible_candidate_count),
+        Some(1)
+    );
 }
 
 #[test]

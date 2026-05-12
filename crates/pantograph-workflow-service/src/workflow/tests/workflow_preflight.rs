@@ -107,6 +107,7 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
                 WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 Some("llama_cpp"),
             )],
+            selection_policy_trace: None,
             compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {
                 status: "accepted".to_string(),
                 compatible: true,
@@ -160,6 +161,7 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
                 code: WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 candidate_id: Some("llama_cpp".to_string()),
             }],
+            selection_policy_trace: None,
             compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {
                 status: "accepted".to_string(),
                 compatible: true,
@@ -231,6 +233,7 @@ async fn workflow_preflight_blocks_selected_technical_fit_runtime_when_capabilit
                 WorkflowTechnicalFitReasonCode::RuntimeRequirements,
                 Some("llama_cpp"),
             )],
+            selection_policy_trace: None,
             compatibility_report: None,
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),

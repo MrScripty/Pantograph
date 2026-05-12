@@ -822,6 +822,8 @@ export type WorkflowTechnicalFitReasonCode =
   | 'explicit_runtime_variant_override'
   | 'explicit_model_override'
   | 'explicit_backend_override'
+  | 'automatic_ranking'
+  | 'controlled_exploration'
   | 'required_context_length'
   | 'runtime_requirements'
   | 'residency_reuse'
@@ -834,6 +836,21 @@ export type WorkflowTechnicalFitReasonCode =
 export interface WorkflowTechnicalFitReason {
   code: WorkflowTechnicalFitReasonCode;
   candidate_id?: string | null;
+}
+
+export interface WorkflowTechnicalFitCandidateSetSummary {
+  total_candidate_count?: number;
+  eligible_candidate_count?: number;
+  rejected_candidate_count?: number;
+  eligible_candidate_ids?: string[];
+}
+
+export interface WorkflowTechnicalFitSelectionPolicyTrace {
+  policy_version: number;
+  candidate_set_summary?: WorkflowTechnicalFitCandidateSetSummary | null;
+  ranking_reason?: string | null;
+  exploration_reason?: string | null;
+  seed_basis?: string | null;
 }
 
 export interface WorkflowTechnicalFitCompatibilityReport {
@@ -866,6 +883,7 @@ export interface WorkflowTechnicalFitDecision {
   observed_throughput_hint?: WorkflowTechnicalFitObservedThroughputHint | null;
   device_diagnostics?: WorkflowTechnicalFitDeviceDiagnostic[];
   reasons?: WorkflowTechnicalFitReason[];
+  selection_policy_trace?: WorkflowTechnicalFitSelectionPolicyTrace | null;
   compatibility_report?: WorkflowTechnicalFitCompatibilityReport | null;
   compatibility_issue_count?: number;
   compatibility_issues?: WorkflowTechnicalFitCompatibilityIssue[];

@@ -40,6 +40,26 @@ fn backend_execution_decision_fixture_decodes_through_public_contract() {
             .map(|model| model.model_id.as_str()),
         Some("pumas://model/juggernaut-xl")
     );
+    let trace = decision
+        .selection_policy_trace
+        .as_ref()
+        .expect("fixture should carry scheduler policy trace");
+    assert_eq!(trace.policy_version, 1);
+    assert_eq!(
+        trace
+            .candidate_set_summary
+            .as_ref()
+            .map(|summary| summary.eligible_candidate_count),
+        Some(1)
+    );
+    assert_eq!(
+        trace.ranking_reason.as_deref(),
+        Some("readiness_history_preferred")
+    );
+    assert_eq!(
+        trace.seed_basis.as_deref(),
+        Some("workflow:image-generation:juggernaut-xl")
+    );
 
     let encoded = serde_json::to_string(&decision).expect("encode decision");
     let decoded: BackendExecutionDecision =

@@ -75,8 +75,25 @@
       {
         "code": "queue_pressure",
         "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+      },
+      {
+        "code": "automatic_ranking",
+        "candidate_id": "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
       }
     ],
+    "selection_policy_trace": {
+      "policy_version": 1,
+      "candidate_set_summary": {
+        "total_candidate_count": 2,
+        "eligible_candidate_count": 1,
+        "rejected_candidate_count": 1,
+        "eligible_candidate_ids": [
+          "pytorch|pumas://models/juggernaut-x-v10-sdxl|cuda:0"
+        ]
+      },
+      "ranking_reason": "readiness_history_preferred",
+      "seed_basis": "workflow:wf-image:pytorch"
+    },
     "compatibility_report": {
       "status": "accepted",
       "compatible": true,

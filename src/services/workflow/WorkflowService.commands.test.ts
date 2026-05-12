@@ -217,6 +217,20 @@ test('technical-fit contract fixture preserves runtime variant and device facts'
   assert.equal(decision.device_diagnostics?.[0]?.code, 'candidate_unavailable');
   assert.equal(decision.device_diagnostics?.[0]?.severity, 'warning');
   assert.equal(decision.reasons?.[0]?.code, 'runtime_requirements');
+  assert.equal(decision.reasons?.[2]?.code, 'automatic_ranking');
+  assert.equal(decision.selection_policy_trace?.policy_version, 1);
+  assert.equal(
+    decision.selection_policy_trace?.candidate_set_summary?.eligible_candidate_count,
+    1,
+  );
+  assert.equal(
+    decision.selection_policy_trace?.ranking_reason,
+    'readiness_history_preferred',
+  );
+  assert.equal(
+    decision.selection_policy_trace?.seed_basis,
+    'workflow:wf-image:pytorch',
+  );
 });
 
 test('frontend inference payload contract accepts roadmap depth execution kinds', () => {

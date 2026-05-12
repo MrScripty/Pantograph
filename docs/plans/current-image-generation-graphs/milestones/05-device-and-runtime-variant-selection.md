@@ -4076,6 +4076,56 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: full baseline/deviation enforcement, scheduler
     reschedule policy, retry exhaustion, and terminal workflow failure
     semantics remain the later required policy-completion path.
+- 2026-05-12 slice: scheduler policy trace contract fields.
+  - Smallest useful vertical slice: add append-only scheduler policy evidence
+    fields and reason codes to backend execution, runtime technical-fit,
+    workflow technical-fit, embedded-runtime projection, and TypeScript
+    workflow DTOs before changing automatic selection behavior.
+  - Allowed write set: `crates/inference/src/device_contracts/*`,
+    `crates/inference/tests/device_contracts.rs`,
+    `crates/inference/tests/fixtures/device_contracts/backend_execution_decision.json`,
+    `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/tests/technical_fit_contract.rs`,
+    `crates/pantograph-runtime-registry/tests/fixtures/technical_fit_contract.json`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    focused workflow-service tests, `crates/pantograph-workflow-service/tests/contract.rs`,
+    `crates/pantograph-workflow-service/tests/fixtures/technical_fit_contract.json`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `src/services/workflow/types.ts`,
+    `src/services/workflow/WorkflowService.commands.test.ts`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the slice adds optional policy trace
+    DTO fields, `automatic_ranking`, and `controlled_exploration` reason
+    codes only. It does not make the selector rank equal candidates, explore,
+    synthesize candidates, read ledger history, or preserve ambiguity as a
+    compatibility shim.
+  - Verification passed: `cargo test -p inference --test device_contracts`,
+    `cargo test -p pantograph-runtime-registry --test technical_fit_contract`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-workflow-service --test contract workflow_technical_fit_cross_layer_fixture_deserializes`,
+    `cargo test -p pantograph-workflow-service technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo check -p inference --features backend-pytorch`,
+    `cargo test -p inference --features backend-pytorch image_generation_planner`,
+    `cargo check -p pantograph-runtime-registry -p pantograph-workflow-service -p pantograph-embedded-runtime -p inference`,
+    `node --experimental-strip-types --test src/services/workflow/WorkflowService.commands.test.ts`,
+    `npm run typecheck`, `cargo fmt --all -- --check`, and
+    `git diff --check`.
+  - Verification deviations fixed during the slice: the first workflow-service
+    compile exposed the missing local normalization helper for policy trace
+    candidate ids; the first embedded-runtime compile exposed missing public
+    re-exports for the new trace DTOs; the first runtime/workflow fixture runs
+    showed that `None` trace fields serialize by omission rather than JSON
+    `null`; the first broader workflow-service test compile found remaining
+    test literals that needed `selection_policy_trace: None`.
+  - Remaining follow-up: graph-boundary cleanup must remove graph-visible full
+    Pumas package-fact wiring before scheduler integration. Runtime selector
+    still needs joined executable candidate synthesis, bounded ledger
+    summaries, and a pure policy replacement for the temporary
+    `ambiguous_auto_resolution` result.
 
 **Verification:**
 
@@ -4147,6 +4197,10 @@ typed diagnostic and the canonical design is fixed.
   `BackendExecutionDecision` and scheduler lifecycle diagnostics deserialize
   through Rust and TypeScript mirrors without frontend ranking or candidate
   fabrication.
+- Cross-layer fixture tests prove append-only scheduler policy trace fields
+  deserialize through backend execution, runtime technical-fit, workflow
+  technical-fit, embedded-runtime projection, and TypeScript workflow mirrors
+  without changing selector behavior.
 - Workflow template/contract tests prove inference nodes no longer require
   full resolved Pumas package facts as graph-visible edges. Tests should cover
   model reference plus optional runtime/device intent and verify package facts

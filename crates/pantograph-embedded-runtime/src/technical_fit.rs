@@ -11,7 +11,7 @@ use pantograph_runtime_registry::{
     RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
     RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourceEstimate,
     RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
-    RuntimeTechnicalFitWarmupState,
+    RuntimeTechnicalFitSelectionPolicyTrace, RuntimeTechnicalFitWarmupState,
 };
 use pantograph_workflow_service::{
     WorkflowDeviceResolutionDiagnostic, WorkflowDeviceResolutionDiagnosticCode,
@@ -24,7 +24,7 @@ use pantograph_workflow_service::{
     WorkflowTechnicalFitDevicePolicy, WorkflowTechnicalFitObservedThroughputHint,
     WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
     WorkflowTechnicalFitRequest, WorkflowTechnicalFitResourceEstimate,
-    WorkflowTechnicalFitSelectionMode,
+    WorkflowTechnicalFitSelectionMode, WorkflowTechnicalFitSelectionPolicyTrace,
 };
 use workflow_nodes::setup::PumasSelectorAccess;
 
@@ -159,6 +159,10 @@ pub fn project_workflow_technical_fit_decision(
             .iter()
             .map(project_reason)
             .collect::<Vec<_>>(),
+        selection_policy_trace: decision
+            .selection_policy_trace
+            .as_ref()
+            .map(project_selection_policy_trace),
         compatibility_report: decision
             .compatibility_report
             .as_ref()
@@ -169,6 +173,26 @@ pub fn project_workflow_technical_fit_decision(
             .iter()
             .map(project_compatibility_issue)
             .collect(),
+    }
+    .normalized()
+}
+
+fn project_selection_policy_trace(
+    trace: &RuntimeTechnicalFitSelectionPolicyTrace,
+) -> WorkflowTechnicalFitSelectionPolicyTrace {
+    WorkflowTechnicalFitSelectionPolicyTrace {
+        policy_version: trace.policy_version,
+        candidate_set_summary: trace.candidate_set_summary.as_ref().map(|summary| {
+            pantograph_workflow_service::WorkflowTechnicalFitCandidateSetSummary {
+                total_candidate_count: summary.total_candidate_count,
+                eligible_candidate_count: summary.eligible_candidate_count,
+                rejected_candidate_count: summary.rejected_candidate_count,
+                eligible_candidate_ids: summary.eligible_candidate_ids.clone(),
+            }
+        }),
+        ranking_reason: trace.ranking_reason.clone(),
+        exploration_reason: trace.exploration_reason.clone(),
+        seed_basis: trace.seed_basis.clone(),
     }
     .normalized()
 }
@@ -938,6 +962,12 @@ fn project_reason_code(
         RuntimeTechnicalFitReasonCode::ExplicitBackendOverride => {
             WorkflowTechnicalFitReasonCode::ExplicitBackendOverride
         }
+        RuntimeTechnicalFitReasonCode::AutomaticRanking => {
+            WorkflowTechnicalFitReasonCode::AutomaticRanking
+        }
+        RuntimeTechnicalFitReasonCode::ControlledExploration => {
+            WorkflowTechnicalFitReasonCode::ControlledExploration
+        }
         RuntimeTechnicalFitReasonCode::RequiredContextLength => {
             WorkflowTechnicalFitReasonCode::RequiredContextLength
         }
@@ -1233,6 +1263,20 @@ mod tests {
                 RuntimeTechnicalFitReasonCode::QueuePressure,
                 Some("candidate-a"),
             )],
+            selection_policy_trace: Some(RuntimeTechnicalFitSelectionPolicyTrace {
+                policy_version: 1,
+                candidate_set_summary: Some(
+                    pantograph_runtime_registry::RuntimeTechnicalFitCandidateSetSummary {
+                        total_candidate_count: 2,
+                        eligible_candidate_count: 1,
+                        rejected_candidate_count: 1,
+                        eligible_candidate_ids: vec!["candidate-a".to_string()],
+                    },
+                ),
+                ranking_reason: Some("queue_pressure".to_string()),
+                exploration_reason: None,
+                seed_basis: Some("workflow-a:node-a".to_string()),
+            }),
             compatibility_report: Some(RuntimeTechnicalFitCompatibilityReport {
                 status: "rejected".to_string(),
                 compatible: false,
@@ -1288,6 +1332,20 @@ mod tests {
                     code: WorkflowTechnicalFitReasonCode::QueuePressure,
                     candidate_id: Some("candidate-a".to_string()),
                 }],
+                selection_policy_trace: Some(WorkflowTechnicalFitSelectionPolicyTrace {
+                    policy_version: 1,
+                    candidate_set_summary: Some(
+                        pantograph_workflow_service::WorkflowTechnicalFitCandidateSetSummary {
+                            total_candidate_count: 2,
+                            eligible_candidate_count: 1,
+                            rejected_candidate_count: 1,
+                            eligible_candidate_ids: vec!["candidate-a".to_string()],
+                        },
+                    ),
+                    ranking_reason: Some("queue_pressure".to_string()),
+                    exploration_reason: None,
+                    seed_basis: Some("workflow-a:node-a".to_string()),
+                }),
                 compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {
                     status: "rejected".to_string(),
                     compatible: false,
@@ -1374,6 +1432,7 @@ mod tests {
                     code: WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,
                     candidate_id: Some("llama_cpp".to_string()),
                 }],
+                selection_policy_trace: None,
                 compatibility_report: None,
                 compatibility_issue_count: 0,
                 compatibility_issues: Vec::new(),

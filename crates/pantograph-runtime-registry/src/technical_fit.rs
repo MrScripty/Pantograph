@@ -476,6 +476,8 @@ pub enum RuntimeTechnicalFitReasonCode {
     ExplicitRuntimeVariantOverride,
     ExplicitModelOverride,
     ExplicitBackendOverride,
+    AutomaticRanking,
+    ControlledExploration,
     RequiredContextLength,
     RuntimeRequirements,
     ResidencyReuse,
@@ -499,6 +501,59 @@ impl RuntimeTechnicalFitReason {
         Self {
             code,
             candidate_id: normalize_trimmed_string(candidate_id),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeTechnicalFitCandidateSetSummary {
+    #[serde(default)]
+    pub total_candidate_count: u32,
+    #[serde(default)]
+    pub eligible_candidate_count: u32,
+    #[serde(default)]
+    pub rejected_candidate_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub eligible_candidate_ids: Vec<String>,
+}
+
+impl RuntimeTechnicalFitCandidateSetSummary {
+    pub fn normalized(&self) -> Self {
+        Self {
+            total_candidate_count: self.total_candidate_count,
+            eligible_candidate_count: self.eligible_candidate_count,
+            rejected_candidate_count: self.rejected_candidate_count,
+            eligible_candidate_ids: normalize_string_list(&self.eligible_candidate_ids),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeTechnicalFitSelectionPolicyTrace {
+    pub policy_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_set_summary: Option<RuntimeTechnicalFitCandidateSetSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ranking_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exploration_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_basis: Option<String>,
+}
+
+impl RuntimeTechnicalFitSelectionPolicyTrace {
+    pub fn normalized(&self) -> Self {
+        Self {
+            policy_version: self.policy_version,
+            candidate_set_summary: self
+                .candidate_set_summary
+                .as_ref()
+                .map(RuntimeTechnicalFitCandidateSetSummary::normalized),
+            ranking_reason: normalize_trimmed_string(self.ranking_reason.as_deref()),
+            exploration_reason: normalize_trimmed_string(self.exploration_reason.as_deref()),
+            seed_basis: normalize_trimmed_string(self.seed_basis.as_deref()),
         }
     }
 }
@@ -530,6 +585,8 @@ pub struct RuntimeTechnicalFitDecision {
     pub device_diagnostics: Vec<RuntimeTechnicalFitDeviceDiagnostic>,
     #[serde(default)]
     pub reasons: Vec<RuntimeTechnicalFitReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_policy_trace: Option<RuntimeTechnicalFitSelectionPolicyTrace>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility_report: Option<RuntimeTechnicalFitCompatibilityReport>,
     #[serde(default)]
@@ -565,6 +622,10 @@ impl RuntimeTechnicalFitDecision {
                 .map(RuntimeTechnicalFitDeviceDiagnostic::normalized)
                 .collect(),
             reasons: self.reasons.clone(),
+            selection_policy_trace: self
+                .selection_policy_trace
+                .as_ref()
+                .map(RuntimeTechnicalFitSelectionPolicyTrace::normalized),
             compatibility_report: self
                 .compatibility_report
                 .as_ref()
@@ -893,6 +954,7 @@ fn decision_from_candidate(
         observed_throughput_hint: candidate.observed_throughput_hint.clone(),
         device_diagnostics: candidate.device_diagnostics.clone(),
         reasons,
+        selection_policy_trace: None,
         compatibility_report: candidate.compatibility_report.clone(),
         compatibility_issue_count: candidate.compatibility_issue_count,
         compatibility_issues: candidate.compatibility_issues.clone(),
@@ -918,6 +980,7 @@ fn unselected_decision_with_device_diagnostics(
         observed_throughput_hint: None,
         device_diagnostics,
         reasons,
+        selection_policy_trace: None,
         compatibility_report: None,
         compatibility_issue_count: 0,
         compatibility_issues: Vec::new(),

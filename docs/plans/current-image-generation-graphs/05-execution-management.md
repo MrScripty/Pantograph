@@ -2701,6 +2701,30 @@ Worker rules:
   gateway still has a request-only dispatch path that must be replaced by a
   planned execution context. Decision: defer source edits until these slices
   are taken in order so the no-fallback/no-legacy rule is preserved.
+- 2026-05-12 scheduler policy trace contract slice: added append-only policy
+  trace DTOs to backend execution, runtime technical-fit, workflow
+  technical-fit, embedded-runtime projection, and TypeScript workflow mirrors.
+  Added `automatic_ranking` and `controlled_exploration` reason codes plus
+  fixture coverage for policy version, candidate-set summary, ranking reason,
+  optional exploration reason, and seed basis. This was contract-only: selector
+  behavior, candidate synthesis, ledger reads, and image gateway dispatch are
+  unchanged.
+- Verification passed: `cargo test -p inference --test device_contracts`,
+  `cargo test -p pantograph-runtime-registry --test technical_fit_contract`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-workflow-service --test contract workflow_technical_fit_cross_layer_fixture_deserializes`,
+  `cargo test -p pantograph-workflow-service technical_fit`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `cargo check -p inference --features backend-pytorch`,
+  `cargo test -p inference --features backend-pytorch image_generation_planner`,
+  `cargo check -p pantograph-runtime-registry -p pantograph-workflow-service -p pantograph-embedded-runtime -p inference`,
+  `node --experimental-strip-types --test src/services/workflow/WorkflowService.commands.test.ts`,
+  `npm run typecheck`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- Verification deviations fixed: added the missing workflow-service list
+  normalization helper, re-exported the new trace DTOs from public crates,
+  removed JSON `null` fields that serde omits, and updated remaining
+  workflow-service test literals with explicit empty trace fields.
 
 ### Traceability Links
 

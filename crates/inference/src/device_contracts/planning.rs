@@ -231,6 +231,44 @@ pub struct BackendExecutionCandidate {
     pub diagnostics: Vec<DeviceResolutionDiagnostic>,
 }
 
+/// Bounded summary of the scheduler candidate set used for a decision.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendExecutionCandidateSetSummary {
+    /// Number of candidates considered before hard filters.
+    #[serde(default)]
+    pub total_candidate_count: u32,
+    /// Number of candidates still eligible after hard filters.
+    #[serde(default)]
+    pub eligible_candidate_count: u32,
+    /// Number of candidates rejected by hard filters.
+    #[serde(default)]
+    pub rejected_candidate_count: u32,
+    /// Bounded eligible candidate ids recorded for diagnostics/replay.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub eligible_candidate_ids: Vec<String>,
+}
+
+/// Scheduler policy evidence retained with a selected backend decision.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendExecutionSelectionPolicyTrace {
+    /// Version of the scheduler policy that produced the decision.
+    pub policy_version: u32,
+    /// Candidate-set facts known at selection time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_set_summary: Option<BackendExecutionCandidateSetSummary>,
+    /// Machine-readable ranking reason, when policy ranked candidates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ranking_reason: Option<String>,
+    /// Machine-readable exploration reason, when policy explored candidates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exploration_reason: Option<String>,
+    /// Recorded seed basis for deterministic exploration/replay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_basis: Option<String>,
+}
+
 /// Scheduler-selected execution choice.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -256,6 +294,9 @@ pub struct BackendExecutionDecision {
     /// Diagnostics retained with the decision.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<DeviceResolutionDiagnostic>,
+    /// Scheduler policy evidence retained for diagnostics and replay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_policy_trace: Option<BackendExecutionSelectionPolicyTrace>,
 }
 
 impl BackendExecutionDecision {
@@ -293,6 +334,7 @@ impl BackendExecutionDecision {
             selected_task_id,
             selected_model_ref: candidate.model_ref,
             diagnostics: candidate.diagnostics,
+            selection_policy_trace: None,
         })
     }
 }

@@ -34,15 +34,16 @@ pub use state::{
 };
 pub use technical_fit::{
     select_runtime_technical_fit, RuntimeTechnicalFitCandidate,
-    RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitCompatibilityIssue,
-    RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision,
-    RuntimeTechnicalFitDeviceClass, RuntimeTechnicalFitDeviceDiagnostic,
-    RuntimeTechnicalFitDeviceDiagnosticCode, RuntimeTechnicalFitDeviceDiagnosticSeverity,
-    RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor,
-    RuntimeTechnicalFitObservedThroughputHint, RuntimeTechnicalFitOverride,
-    RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
-    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourceEstimate,
-    RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
+    RuntimeTechnicalFitCandidateSetSummary, RuntimeTechnicalFitCandidateSourceKind,
+    RuntimeTechnicalFitCompatibilityIssue, RuntimeTechnicalFitCompatibilityReport,
+    RuntimeTechnicalFitDecision, RuntimeTechnicalFitDeviceClass,
+    RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
+    RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitDevicePolicy,
+    RuntimeTechnicalFitFactor, RuntimeTechnicalFitObservedThroughputHint,
+    RuntimeTechnicalFitOverride, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
+    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
+    RuntimeTechnicalFitResourceEstimate, RuntimeTechnicalFitResourcePressure,
+    RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitSelectionPolicyTrace,
     RuntimeTechnicalFitWarmupState,
 };
 pub use warmup::{RuntimeWarmupDecision, RuntimeWarmupDisposition, RuntimeWarmupReason};

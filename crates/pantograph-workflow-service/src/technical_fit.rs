@@ -299,6 +299,8 @@ pub enum WorkflowTechnicalFitReasonCode {
     ExplicitRuntimeVariantOverride,
     ExplicitModelOverride,
     ExplicitBackendOverride,
+    AutomaticRanking,
+    ControlledExploration,
     RequiredContextLength,
     RuntimeRequirements,
     ResidencyReuse,
@@ -322,6 +324,59 @@ impl WorkflowTechnicalFitReason {
         Self {
             code,
             candidate_id: normalize_trimmed_string(candidate_id),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowTechnicalFitCandidateSetSummary {
+    #[serde(default)]
+    pub total_candidate_count: u32,
+    #[serde(default)]
+    pub eligible_candidate_count: u32,
+    #[serde(default)]
+    pub rejected_candidate_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub eligible_candidate_ids: Vec<String>,
+}
+
+impl WorkflowTechnicalFitCandidateSetSummary {
+    pub fn normalized(&self) -> Self {
+        Self {
+            total_candidate_count: self.total_candidate_count,
+            eligible_candidate_count: self.eligible_candidate_count,
+            rejected_candidate_count: self.rejected_candidate_count,
+            eligible_candidate_ids: normalize_string_list(&self.eligible_candidate_ids),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowTechnicalFitSelectionPolicyTrace {
+    pub policy_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_set_summary: Option<WorkflowTechnicalFitCandidateSetSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ranking_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exploration_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_basis: Option<String>,
+}
+
+impl WorkflowTechnicalFitSelectionPolicyTrace {
+    pub fn normalized(&self) -> Self {
+        Self {
+            policy_version: self.policy_version,
+            candidate_set_summary: self
+                .candidate_set_summary
+                .as_ref()
+                .map(WorkflowTechnicalFitCandidateSetSummary::normalized),
+            ranking_reason: normalize_trimmed_string(self.ranking_reason.as_deref()),
+            exploration_reason: normalize_trimmed_string(self.exploration_reason.as_deref()),
+            seed_basis: normalize_trimmed_string(self.seed_basis.as_deref()),
         }
     }
 }
@@ -405,6 +460,8 @@ pub struct WorkflowTechnicalFitDecision {
     #[serde(default)]
     pub reasons: Vec<WorkflowTechnicalFitReason>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_policy_trace: Option<WorkflowTechnicalFitSelectionPolicyTrace>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility_report: Option<WorkflowTechnicalFitCompatibilityReport>,
     #[serde(default)]
     pub compatibility_issue_count: u32,
@@ -439,6 +496,10 @@ impl WorkflowTechnicalFitDecision {
                 .map(WorkflowTechnicalFitDeviceDiagnostic::normalized)
                 .collect(),
             reasons: self.reasons.clone(),
+            selection_policy_trace: self
+                .selection_policy_trace
+                .as_ref()
+                .map(WorkflowTechnicalFitSelectionPolicyTrace::normalized),
             compatibility_report: self
                 .compatibility_report
                 .as_ref()
@@ -951,6 +1012,16 @@ fn normalize_backend_key(value: Option<&str>) -> Option<String> {
     }
 }
 
+fn normalize_string_list(values: &[String]) -> Vec<String> {
+    let mut normalized = values
+        .iter()
+        .filter_map(|value| normalize_trimmed_string(Some(value)))
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
 fn normalize_trimmed_string(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -1115,6 +1186,18 @@ mod tests {
                 WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,
                 Some(" candidate-a "),
             )],
+            selection_policy_trace: Some(WorkflowTechnicalFitSelectionPolicyTrace {
+                policy_version: 1,
+                candidate_set_summary: Some(WorkflowTechnicalFitCandidateSetSummary {
+                    total_candidate_count: 2,
+                    eligible_candidate_count: 1,
+                    rejected_candidate_count: 1,
+                    eligible_candidate_ids: vec![" candidate-a ".to_string()],
+                }),
+                ranking_reason: Some(" explicit_backend_override ".to_string()),
+                exploration_reason: None,
+                seed_basis: Some(" workflow-a:node-a ".to_string()),
+            }),
             compatibility_report: Some(WorkflowTechnicalFitCompatibilityReport {
                 status: " rejected ".to_string(),
                 compatible: false,
@@ -1152,6 +1235,23 @@ mod tests {
                 candidate_id: Some("candidate-a".to_string()),
             }]
         );
+        let trace = normalized
+            .selection_policy_trace
+            .as_ref()
+            .expect("selection policy trace should normalize");
+        assert_eq!(trace.policy_version, 1);
+        assert_eq!(
+            trace.ranking_reason.as_deref(),
+            Some("explicit_backend_override")
+        );
+        assert_eq!(trace.seed_basis.as_deref(), Some("workflow-a:node-a"));
+        assert_eq!(
+            trace
+                .candidate_set_summary
+                .as_ref()
+                .map(|summary| summary.eligible_candidate_ids.as_slice()),
+            Some(["candidate-a".to_string()].as_slice())
+        );
         assert_eq!(
             normalized
                 .compatibility_report
@@ -1188,6 +1288,7 @@ mod tests {
                 WorkflowTechnicalFitReasonCode::MissingCandidateData,
                 Some("candle"),
             )],
+            selection_policy_trace: None,
             compatibility_report: None,
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),
@@ -1230,6 +1331,7 @@ mod tests {
                 backend_key: Some("pytorch".to_string()),
             }],
             reasons: Vec::new(),
+            selection_policy_trace: None,
             compatibility_report: None,
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),
@@ -1270,6 +1372,7 @@ mod tests {
                 WorkflowTechnicalFitReasonCode::RuntimeRequirements,
                 Some("candle|llm/model"),
             )],
+            selection_policy_trace: None,
             compatibility_report: None,
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),
@@ -1306,6 +1409,7 @@ mod tests {
                 WorkflowTechnicalFitReasonCode::RuntimeRequirements,
                 Some("candle|vlm/qwen"),
             )],
+            selection_policy_trace: None,
             compatibility_report: None,
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),

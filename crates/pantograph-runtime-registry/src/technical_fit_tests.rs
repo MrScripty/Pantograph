@@ -275,6 +275,18 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
             RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
             Some(" candidate-1 "),
         )],
+        selection_policy_trace: Some(RuntimeTechnicalFitSelectionPolicyTrace {
+            policy_version: 1,
+            candidate_set_summary: Some(RuntimeTechnicalFitCandidateSetSummary {
+                total_candidate_count: 2,
+                eligible_candidate_count: 1,
+                rejected_candidate_count: 1,
+                eligible_candidate_ids: vec![" candidate-1 ".to_string()],
+            }),
+            ranking_reason: Some(" explicit_backend_override ".to_string()),
+            exploration_reason: None,
+            seed_basis: Some(" workflow-a:node-a ".to_string()),
+        }),
         compatibility_report: Some(RuntimeTechnicalFitCompatibilityReport {
             status: " rejected ".to_string(),
             compatible: false,
@@ -334,6 +346,23 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
             code: RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
             candidate_id: Some("candidate-1".to_string()),
         }]
+    );
+    let trace = normalized
+        .selection_policy_trace
+        .as_ref()
+        .expect("selection policy trace should normalize");
+    assert_eq!(trace.policy_version, 1);
+    assert_eq!(
+        trace.ranking_reason.as_deref(),
+        Some("explicit_backend_override")
+    );
+    assert_eq!(trace.seed_basis.as_deref(), Some("workflow-a:node-a"));
+    assert_eq!(
+        trace
+            .candidate_set_summary
+            .as_ref()
+            .map(|summary| summary.eligible_candidate_ids.clone()),
+        Some(vec!["candidate-1".to_string()])
     );
     assert_eq!(
         normalized
@@ -450,6 +479,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 code: RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
                 candidate_id: Some("runtime-b".to_string()),
             }],
+            selection_policy_trace: None,
             compatibility_report: None,
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),

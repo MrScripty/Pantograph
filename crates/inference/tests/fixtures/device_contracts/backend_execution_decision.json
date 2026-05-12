@@ -20,5 +20,18 @@
     "revision": "snapshot-2026-05-10",
     "selected_artifact_id": "diffusers"
   },
-  "diagnostics": []
+  "diagnostics": [],
+  "selection_policy_trace": {
+    "policy_version": 1,
+    "candidate_set_summary": {
+      "total_candidate_count": 2,
+      "eligible_candidate_count": 1,
+      "rejected_candidate_count": 1,
+      "eligible_candidate_ids": [
+        "pytorch.cuda|pumas://model/juggernaut-xl|cuda:0"
+      ]
+    },
+    "ranking_reason": "readiness_history_preferred",
+    "seed_basis": "workflow:image-generation:juggernaut-xl"
+  }
 }

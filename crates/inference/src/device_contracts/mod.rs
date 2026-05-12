@@ -13,10 +13,11 @@ mod tests;
 
 pub use ids::{BackendId, InferenceDeviceId, RuntimeVariantId};
 pub use planning::{
-    BackendExecutionCandidate, BackendExecutionDecision, BackendObservedThroughputHint,
-    BackendResourceEstimate, DeviceResolutionDecision, DeviceResolutionDiagnostic,
-    DeviceResolutionDiagnosticCode, DeviceResolutionDiagnosticSeverity, DeviceResolutionRequest,
-    InferenceDeviceClass, InferenceDevicePolicy, RuntimeVariantCapability,
+    BackendExecutionCandidate, BackendExecutionCandidateSetSummary, BackendExecutionDecision,
+    BackendExecutionSelectionPolicyTrace, BackendObservedThroughputHint, BackendResourceEstimate,
+    DeviceResolutionDecision, DeviceResolutionDiagnostic, DeviceResolutionDiagnosticCode,
+    DeviceResolutionDiagnosticSeverity, DeviceResolutionRequest, InferenceDeviceClass,
+    InferenceDevicePolicy, RuntimeVariantCapability,
 };
 use thiserror::Error;
 

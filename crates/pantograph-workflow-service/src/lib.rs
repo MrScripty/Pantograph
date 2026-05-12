@@ -58,14 +58,15 @@ pub use scheduler::{
     WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotDiagnostics,
 };
 pub use technical_fit::{
-    build_workflow_technical_fit_request, WorkflowTechnicalFitCompatibilityIssue,
-    WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
-    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDeviceDiagnostic,
-    WorkflowTechnicalFitDeviceDiagnosticCode, WorkflowTechnicalFitDeviceDiagnosticSeverity,
-    WorkflowTechnicalFitDevicePolicy, WorkflowTechnicalFitObservedThroughputHint,
-    WorkflowTechnicalFitOverride, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
-    WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest,
-    WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitSelectionMode,
+    build_workflow_technical_fit_request, WorkflowTechnicalFitCandidateSetSummary,
+    WorkflowTechnicalFitCompatibilityIssue, WorkflowTechnicalFitCompatibilityReport,
+    WorkflowTechnicalFitDecision, WorkflowTechnicalFitDeviceClass,
+    WorkflowTechnicalFitDeviceDiagnostic, WorkflowTechnicalFitDeviceDiagnosticCode,
+    WorkflowTechnicalFitDeviceDiagnosticSeverity, WorkflowTechnicalFitDevicePolicy,
+    WorkflowTechnicalFitObservedThroughputHint, WorkflowTechnicalFitOverride,
+    WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
+    WorkflowTechnicalFitRequest, WorkflowTechnicalFitResourceEstimate,
+    WorkflowTechnicalFitSelectionMode, WorkflowTechnicalFitSelectionPolicyTrace,
 };
 pub use trace::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,
