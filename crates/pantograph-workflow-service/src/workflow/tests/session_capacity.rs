@@ -328,6 +328,19 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
     assert!(capacity_rebalance_events[0]
         .payload_json
         .contains("\"transition\":\"unload_scheduled\""));
+    let unload_scheduled_payload: serde_json::Value =
+        serde_json::from_str(&capacity_rebalance_events[0].payload_json)
+            .expect("capacity unload scheduled payload json");
+    let unload_started_payload: serde_json::Value =
+        serde_json::from_str(&capacity_rebalance_events[1].payload_json)
+            .expect("capacity unload started payload json");
+    let unload_completed_payload: serde_json::Value =
+        serde_json::from_str(&capacity_rebalance_events[2].payload_json)
+            .expect("capacity unload completed payload json");
+    let timing_attempt_id = unload_scheduled_payload["timing_attempt_id"]
+        .as_str()
+        .expect("capacity unload timing attempt id");
+    assert!(timing_attempt_id.starts_with("timing_attempt_"));
     assert!(capacity_rebalance_events[0]
         .payload_json
         .contains("\"cache_state\":\"unload_requested\""));
@@ -338,6 +351,10 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
     assert!(capacity_rebalance_events[1]
         .payload_json
         .contains("\"transition\":\"unload_started\""));
+    assert_eq!(
+        unload_started_payload["timing_attempt_id"].as_str(),
+        Some(timing_attempt_id)
+    );
     assert!(capacity_rebalance_events[1]
         .payload_json
         .contains("\"cache_state\":\"unload_requested\""));
@@ -345,6 +362,10 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
     assert!(capacity_rebalance_events[2]
         .payload_json
         .contains("\"transition\":\"unload_completed\""));
+    assert_eq!(
+        unload_completed_payload["timing_attempt_id"].as_str(),
+        Some(timing_attempt_id)
+    );
     assert!(capacity_rebalance_events[2]
         .payload_json
         .contains("\"cache_state\":\"unloaded\""));

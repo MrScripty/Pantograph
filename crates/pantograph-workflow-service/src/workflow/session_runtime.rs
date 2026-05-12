@@ -11,10 +11,10 @@ use crate::scheduler::WorkflowExecutionSessionPreflightCache;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::{
-    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
-    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionSummary,
-    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowRuntimeCapability, WorkflowService,
-    WorkflowServiceError,
+    checked_timing_duration_ms, WorkflowExecutionSessionRetentionHint,
+    WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
+    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
+    WorkflowRuntimeCapability, WorkflowService, WorkflowServiceError, WorkflowTimingAttemptId,
 };
 
 fn compute_runtime_capability_fingerprint(
@@ -36,6 +36,15 @@ fn compute_runtime_capability_fingerprint(
     format!("{:016x}", hash)
 }
 
+fn workflow_timing_duration_ms(
+    attempt_id: &WorkflowTimingAttemptId,
+    started_at_ms: u64,
+    completed_at_ms: u64,
+) -> Result<u64, WorkflowServiceError> {
+    checked_timing_duration_ms(attempt_id, started_at_ms, completed_at_ms)
+        .map_err(|error| WorkflowServiceError::Internal(error.to_string()))
+}
+
 pub(super) struct WorkflowSessionRuntimeAdmissionDiagnosticContext<'a> {
     pub(super) session: &'a WorkflowExecutionSessionSummary,
     pub(super) snapshot: Option<&'a WorkflowRunSnapshotRecord>,
@@ -47,6 +56,7 @@ struct CapacityRebalanceModelLifecycleEventRequest<'a> {
     context: &'a WorkflowSessionRuntimeAdmissionDiagnosticContext<'a>,
     candidate: &'a WorkflowExecutionSessionRuntimeUnloadCandidate,
     transition: SchedulerModelLifecycleTransition,
+    timing_attempt_id: Option<&'a str>,
     reason: &'a str,
     duration_ms: Option<u64>,
     error: Option<&'a str>,
@@ -139,12 +149,14 @@ impl WorkflowService {
                             candidates.len(),
                         ));
                     };
+                    let unload_timing_attempt_id = WorkflowTimingAttemptId::generate();
                     if let Some(context) = diagnostics_context.as_ref() {
                         self.record_capacity_rebalance_model_lifecycle_events_if_configured(
                             CapacityRebalanceModelLifecycleEventRequest {
                                 context,
                                 candidate: &candidate,
                                 transition: SchedulerModelLifecycleTransition::UnloadScheduled,
+                                timing_attempt_id: Some(unload_timing_attempt_id.as_str()),
                                 reason: "capacity rebalance selected loaded session",
                                 duration_ms: None,
                                 error: None,
@@ -155,6 +167,7 @@ impl WorkflowService {
                                 context,
                                 candidate: &candidate,
                                 transition: SchedulerModelLifecycleTransition::UnloadStarted,
+                                timing_attempt_id: Some(unload_timing_attempt_id.as_str()),
                                 reason: "capacity rebalance unloading selected session",
                                 duration_ms: None,
                                 error: None,
@@ -169,8 +182,11 @@ impl WorkflowService {
                             WorkflowExecutionSessionUnloadReason::CapacityRebalance,
                         )
                         .await;
-                    let unload_duration_ms =
-                        crate::scheduler::unix_timestamp_ms().saturating_sub(unload_started_at_ms);
+                    let unload_duration_ms = workflow_timing_duration_ms(
+                        &unload_timing_attempt_id,
+                        unload_started_at_ms,
+                        crate::scheduler::unix_timestamp_ms(),
+                    )?;
                     if let Some(context) = diagnostics_context.as_ref() {
                         match &unload_result {
                             Ok(()) => {
@@ -180,6 +196,7 @@ impl WorkflowService {
                                         candidate: &candidate,
                                         transition:
                                             SchedulerModelLifecycleTransition::UnloadCompleted,
+                                        timing_attempt_id: Some(unload_timing_attempt_id.as_str()),
                                         reason: "capacity rebalance unloaded selected session",
                                         duration_ms: Some(unload_duration_ms),
                                         error: None,
@@ -194,6 +211,7 @@ impl WorkflowService {
                                         context,
                                         candidate: &candidate,
                                         transition: SchedulerModelLifecycleTransition::UnloadFailed,
+                                        timing_attempt_id: Some(unload_timing_attempt_id.as_str()),
                                         reason:
                                             "capacity rebalance failed to unload selected session",
                                         duration_ms: Some(unload_duration_ms),
@@ -305,7 +323,7 @@ impl WorkflowService {
                             cache_state: Some(SchedulerModelCacheState::for_lifecycle_transition(
                                 request.transition,
                             )),
-                            timing_attempt_id: None,
+                            timing_attempt_id: request.timing_attempt_id.map(str::to_string),
                             selected_runtime_variant_id: None,
                             reason: Some(request.reason.to_string()),
                             duration_ms: request.duration_ms,

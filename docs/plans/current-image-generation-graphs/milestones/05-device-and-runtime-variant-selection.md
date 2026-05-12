@@ -3887,6 +3887,31 @@ typed diagnostic and the canonical design is fixed.
     ids and checked duration math. Full baseline/deviation enforcement and
     scheduler retry/termination policy remain the later required
     policy-completion path.
+- 2026-05-12 slice: capacity-rebalance unload timing attempt producer.
+  - Smallest useful vertical slice: migrate workflow-session capacity
+    rebalance unload lifecycle diagnostics onto timing attempt ids and checked
+    duration math.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/session_runtime.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_capacity.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: capacity-rebalance unload no longer
+    reports an anonymous saturated duration. Scheduled, started, completed,
+    and failed rebalance lifecycle events share one `timing_attempt_` id, and
+    impossible timestamp state returns a typed workflow-service internal error
+    through the timing contract.
+  - Standards/blast-radius gate: session runtime capacity-rebalance unload
+    only; no diagnostics-ledger schema, generated files, frontend code, saved
+    workflow fixtures, lockfiles, Pumas contracts, worker contracts,
+    keep-alive unload policy, inference warmup policy, embedding warmup
+    policy, scheduler trace policy, or retry/termination policy changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service session_capacity`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: migrate inference gateway warmup, embedding warmup,
+    and scheduler trace producers to timing attempt ids and checked duration
+    math. Full baseline/deviation enforcement and scheduler retry/termination
+    policy remain the later required policy-completion path.
 
 **Verification:**
 
