@@ -66,6 +66,16 @@ typed diagnostic and the canonical design is fixed.
   `BackendExecutionCandidate` values. Incomplete candidate fragments must fail
   candidate selection with ledger diagnostics instead of becoming fallback
   execution decisions.
+  - 2026-05-12 partial: embedded-runtime technical-fit candidate synthesis now
+    enriches Pumas-derived candidates with matching runtime capability facts,
+    runtime variant id, device class, readiness/warmup state, resource
+    estimate, and backend compatibility reports. Pumas candidates without
+    matching runtime capability facts are non-selectable and carry typed
+    `missing_runtime_variant` diagnostics unless backend compatibility already
+    supplies a more specific blocking diagnostic. Remaining follow-up: promote
+    these candidate facts into the scheduler policy trace/ledger summary path
+    and replace the temporary equal-priority `ambiguous_auto_resolution`
+    selector behavior with the planned ranking/exploration policy.
 - [x] Add a common backend-adapter capability contract for llama.cpp, PyTorch,
   vLLM, Candle, and future MLX. The contract reports facts and performs
   backend-specific translation; it must not rank candidates across backends or

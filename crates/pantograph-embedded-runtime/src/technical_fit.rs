@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use pantograph_runtime_identity::canonical_runtime_backend_key;
 use pantograph_runtime_registry::{
     select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
     RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitCompatibilityIssue,
@@ -17,7 +18,7 @@ use pantograph_workflow_service::{
     WorkflowDeviceResolutionDiagnostic, WorkflowDeviceResolutionDiagnosticCode,
     WorkflowDeviceResolutionDiagnosticSeverity, WorkflowHost, WorkflowInferenceDeviceClass,
     WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind,
-    WorkflowServiceError, WorkflowTechnicalFitCompatibilityIssue,
+    WorkflowRuntimeVariantCapability, WorkflowServiceError, WorkflowTechnicalFitCompatibilityIssue,
     WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
     WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDeviceDiagnostic,
     WorkflowTechnicalFitDeviceDiagnosticCode, WorkflowTechnicalFitDeviceDiagnosticSeverity,
@@ -57,11 +58,17 @@ pub fn build_runtime_technical_fit_request_with_backend_package_facts(
     let mut runtime_request =
         build_runtime_technical_fit_request(request, runtime_snapshot, runtime_capabilities);
     let package_fact_candidates = if available_backends.is_empty() {
-        runtime_candidates_from_pumas_package_facts(package_facts)
+        runtime_candidates_from_pumas_package_facts_with_runtime_capabilities(
+            package_facts,
+            runtime_capabilities,
+            runtime_requirements_resource_estimate(&request.runtime_requirements),
+        )
     } else {
         runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
             package_facts,
             available_backends,
+            runtime_capabilities,
+            runtime_requirements_resource_estimate(&request.runtime_requirements),
         )
     };
     runtime_request.candidates.extend(package_fact_candidates);
@@ -266,6 +273,7 @@ fn runtime_capability_candidates(
 struct RuntimeCapabilityVariantFacts {
     runtime_variant_id: Option<String>,
     device_class: Option<RuntimeTechnicalFitDeviceClass>,
+    available: bool,
     device_diagnostics: Vec<RuntimeTechnicalFitDeviceDiagnostic>,
 }
 
@@ -310,6 +318,7 @@ fn runtime_capability_variant_facts(
     RuntimeCapabilityVariantFacts {
         runtime_variant_id: selected_variant.map(|variant| variant.runtime_variant_id.clone()),
         device_class,
+        available: selected_variant.is_some_and(|variant| variant.available),
         device_diagnostics,
     }
 }
@@ -329,21 +338,21 @@ pub fn runtime_candidates_from_pumas_package_facts(
                     candidate_id: format!("{}|{}", backend_key, facts.model_ref.model_id),
                     runtime_id: None,
                     runtime_variant_id: None,
-                    backend_key: Some(backend_key),
+                    backend_key: Some(backend_key.clone()),
                     model_id: Some(facts.model_ref.model_id.clone()),
                     device_class: None,
                     selected_device_id: None,
                     resource_estimate: None,
                     observed_throughput_hint: None,
-                    device_diagnostics: Vec::new(),
+                    device_diagnostics: vec![missing_runtime_capability_diagnostic(
+                        &backend_key,
+                        &facts.model_ref.model_id,
+                    )],
                     source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                     context_window_tokens: None,
                     residency_state: None,
                     warmup_state: None,
-                    supports_runtime_requirements: matches!(
-                        facts.artifact.validation_state,
-                        inference::ModelValidationState::Valid
-                    ),
+                    supports_runtime_requirements: false,
                     compatibility_report: None,
                     compatibility_issue_count: 0,
                     compatibility_issues: Vec::new(),
@@ -352,46 +361,320 @@ pub fn runtime_candidates_from_pumas_package_facts(
         .collect()
 }
 
+pub fn runtime_candidates_from_pumas_package_facts_with_runtime_capabilities(
+    package_facts: &[inference::ResolvedModelPackageFacts],
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+    resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
+) -> Vec<RuntimeTechnicalFitCandidate> {
+    package_facts
+        .iter()
+        .flat_map(|facts| {
+            facts
+                .backend_hints
+                .accepted
+                .iter()
+                .filter_map(|hint| pumas_backend_hint_label_to_backend_key(*hint))
+                .flat_map(|backend_key| {
+                    runtime_capability_for_backend(runtime_capabilities, &backend_key)
+                        .map(|capability| {
+                            runtime_capability_variant_fact_entries(capability)
+                                .into_iter()
+                                .map(|variant_facts| {
+                                    pumas_runtime_candidate_from_parts(
+                                        facts,
+                                        &backend_key,
+                                        None,
+                                        Some(capability),
+                                        variant_facts,
+                                        resource_estimate.clone(),
+                                        matches!(
+                                            facts.artifact.validation_state,
+                                            inference::ModelValidationState::Valid
+                                        ),
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_else(|| {
+                            vec![pumas_runtime_candidate_without_capability(
+                                facts,
+                                &backend_key,
+                                None,
+                            )]
+                        })
+                })
+        })
+        .collect()
+}
+
 pub fn runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
     package_facts: &[inference::ResolvedModelPackageFacts],
     available_backends: &[inference::BackendInfo],
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+    resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
 ) -> Vec<RuntimeTechnicalFitCandidate> {
     package_facts
         .iter()
         .filter_map(|facts| task_registry_entry_from_package_facts(facts).map(|task| (facts, task)))
         .flat_map(|(facts, task)| {
-            available_backends.iter().map(move |backend| {
+            let resource_estimate = resource_estimate.clone();
+            available_backends.iter().flat_map(move |backend| {
                 let compatibility = backend.capabilities.check_model_compatibility(
                     Some(&backend.backend_key),
                     inference::BackendCompatibilityRequest::new(&task, facts),
                 );
-                RuntimeTechnicalFitCandidate {
-                    candidate_id: format!("{}|{}", backend.backend_key, facts.model_ref.model_id),
-                    runtime_id: None,
-                    runtime_variant_id: None,
-                    backend_key: Some(backend.backend_key.clone()),
-                    model_id: Some(facts.model_ref.model_id.clone()),
-                    device_class: None,
-                    selected_device_id: None,
-                    resource_estimate: None,
-                    observed_throughput_hint: None,
-                    device_diagnostics: Vec::new(),
-                    source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
-                    context_window_tokens: None,
-                    residency_state: None,
-                    warmup_state: None,
-                    supports_runtime_requirements: compatibility.compatible,
-                    compatibility_report: Some(runtime_compatibility_report(&compatibility)),
-                    compatibility_issue_count: compatibility.issues.len().min(u32::MAX as usize)
-                        as u32,
-                    compatibility_issues: runtime_compatibility_issues(
-                        &compatibility,
-                        MAX_RUNTIME_TECHNICAL_FIT_COMPATIBILITY_ISSUES,
-                    ),
-                }
+                let compatibility_report = Some(runtime_compatibility_report(&compatibility));
+                let compatibility_issue_count =
+                    compatibility.issues.len().min(u32::MAX as usize) as u32;
+                let compatibility_issues = runtime_compatibility_issues(
+                    &compatibility,
+                    MAX_RUNTIME_TECHNICAL_FIT_COMPATIBILITY_ISSUES,
+                );
+                runtime_capability_for_backend(runtime_capabilities, &backend.backend_key)
+                    .map(|capability| {
+                        runtime_capability_variant_fact_entries(capability)
+                            .into_iter()
+                            .map(|variant_facts| {
+                                pumas_runtime_candidate_from_parts(
+                                    facts,
+                                    &backend.backend_key,
+                                    Some((
+                                        compatibility_report.clone(),
+                                        compatibility_issue_count,
+                                        compatibility_issues.clone(),
+                                    )),
+                                    Some(capability),
+                                    variant_facts,
+                                    resource_estimate.clone(),
+                                    compatibility.compatible,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| {
+                        vec![pumas_runtime_candidate_without_capability(
+                            facts,
+                            &backend.backend_key,
+                            Some((
+                                compatibility_report,
+                                compatibility_issue_count,
+                                compatibility_issues,
+                            )),
+                        )]
+                    })
             })
         })
         .collect()
+}
+
+fn pumas_runtime_candidate_from_parts(
+    facts: &inference::ResolvedModelPackageFacts,
+    backend_key: &str,
+    compatibility: Option<(
+        Option<RuntimeTechnicalFitCompatibilityReport>,
+        u32,
+        Vec<RuntimeTechnicalFitCompatibilityIssue>,
+    )>,
+    capability: Option<&WorkflowRuntimeCapability>,
+    variant_facts: RuntimeCapabilityVariantFacts,
+    resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
+    supports_model: bool,
+) -> RuntimeTechnicalFitCandidate {
+    let (compatibility_report, compatibility_issue_count, compatibility_issues) =
+        compatibility.unwrap_or((None, 0, Vec::new()));
+    let runtime_id = capability.map(|capability| capability.runtime_id.clone());
+    let runtime_ready = capability.is_some_and(runtime_capability_is_ready);
+    let variant_ready = variant_facts.available
+        && variant_facts.runtime_variant_id.is_some()
+        && variant_facts.device_class.is_some();
+    let candidate_id = pumas_candidate_id(
+        backend_key,
+        &facts.model_ref.model_id,
+        runtime_id.as_deref(),
+        variant_facts.runtime_variant_id.as_deref(),
+    );
+
+    RuntimeTechnicalFitCandidate {
+        candidate_id,
+        runtime_id,
+        runtime_variant_id: variant_facts.runtime_variant_id,
+        backend_key: Some(backend_key.to_string()),
+        model_id: Some(facts.model_ref.model_id.clone()),
+        device_class: variant_facts.device_class,
+        selected_device_id: None,
+        resource_estimate,
+        observed_throughput_hint: None,
+        device_diagnostics: variant_facts.device_diagnostics,
+        source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
+        context_window_tokens: None,
+        residency_state: capability.map(runtime_capability_residency_state),
+        warmup_state: capability.and_then(runtime_capability_warmup_state),
+        supports_runtime_requirements: supports_model && runtime_ready && variant_ready,
+        compatibility_report,
+        compatibility_issue_count,
+        compatibility_issues,
+    }
+}
+
+fn pumas_runtime_candidate_without_capability(
+    facts: &inference::ResolvedModelPackageFacts,
+    backend_key: &str,
+    compatibility: Option<(
+        Option<RuntimeTechnicalFitCompatibilityReport>,
+        u32,
+        Vec<RuntimeTechnicalFitCompatibilityIssue>,
+    )>,
+) -> RuntimeTechnicalFitCandidate {
+    let (compatibility_report, compatibility_issue_count, compatibility_issues) =
+        compatibility.unwrap_or((None, 0, Vec::new()));
+    let compatibility_rejected = compatibility_report
+        .as_ref()
+        .is_some_and(|report| !report.compatible)
+        || compatibility_issue_count > 0
+        || !compatibility_issues.is_empty();
+    RuntimeTechnicalFitCandidate {
+        candidate_id: pumas_candidate_id(backend_key, &facts.model_ref.model_id, None, None),
+        runtime_id: None,
+        runtime_variant_id: None,
+        backend_key: Some(backend_key.to_string()),
+        model_id: Some(facts.model_ref.model_id.clone()),
+        device_class: None,
+        selected_device_id: None,
+        resource_estimate: None,
+        observed_throughput_hint: None,
+        device_diagnostics: if compatibility_rejected {
+            Vec::new()
+        } else {
+            vec![missing_runtime_capability_diagnostic(
+                backend_key,
+                &facts.model_ref.model_id,
+            )]
+        },
+        source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
+        context_window_tokens: None,
+        residency_state: None,
+        warmup_state: None,
+        supports_runtime_requirements: false,
+        compatibility_report,
+        compatibility_issue_count,
+        compatibility_issues,
+    }
+}
+
+fn pumas_candidate_id(
+    backend_key: &str,
+    model_id: &str,
+    runtime_id: Option<&str>,
+    runtime_variant_id: Option<&str>,
+) -> String {
+    let mut parts = vec![backend_key.to_string(), model_id.to_string()];
+    if let Some(runtime_id) = runtime_id {
+        parts.push(runtime_id.to_string());
+    }
+    if let Some(runtime_variant_id) = runtime_variant_id {
+        parts.push(runtime_variant_id.to_string());
+    }
+    parts.join("|")
+}
+
+fn runtime_capability_for_backend<'a>(
+    runtime_capabilities: &'a [WorkflowRuntimeCapability],
+    backend_key: &str,
+) -> Option<&'a WorkflowRuntimeCapability> {
+    let normalized_backend_key = canonical_runtime_backend_key(backend_key);
+    runtime_capabilities.iter().find(|capability| {
+        canonical_runtime_backend_key(&capability.runtime_id) == normalized_backend_key
+            || capability
+                .backend_keys
+                .iter()
+                .any(|candidate| canonical_runtime_backend_key(candidate) == normalized_backend_key)
+    })
+}
+
+fn runtime_capability_variant_fact_entries(
+    capability: &WorkflowRuntimeCapability,
+) -> Vec<RuntimeCapabilityVariantFacts> {
+    let variants = capability
+        .backend_capability_facts
+        .as_ref()
+        .map(|facts| facts.runtime_variants.as_slice())
+        .unwrap_or_default();
+
+    if variants.is_empty() {
+        return vec![RuntimeCapabilityVariantFacts {
+            runtime_variant_id: None,
+            device_class: None,
+            available: false,
+            device_diagnostics: vec![missing_runtime_variant_diagnostic(capability)],
+        }];
+    }
+
+    variants
+        .iter()
+        .map(|variant| runtime_capability_variant_facts_from_variant(capability, variant))
+        .collect()
+}
+
+fn runtime_capability_variant_facts_from_variant(
+    capability: &WorkflowRuntimeCapability,
+    variant: &WorkflowRuntimeVariantCapability,
+) -> RuntimeCapabilityVariantFacts {
+    let mut device_diagnostics = variant
+        .diagnostics
+        .iter()
+        .map(project_workflow_device_diagnostic)
+        .collect::<Vec<_>>();
+    let device_class = project_workflow_runtime_variant_device_class(variant.device_class);
+    if device_class.is_none() {
+        device_diagnostics.push(RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "runtime variant reported an unsupported device class".to_string(),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: Some(variant.runtime_variant_id.clone()),
+            backend_key: capability.backend_keys.first().cloned(),
+        });
+    }
+
+    RuntimeCapabilityVariantFacts {
+        runtime_variant_id: Some(variant.runtime_variant_id.clone()),
+        device_class,
+        available: variant.available,
+        device_diagnostics,
+    }
+}
+
+fn missing_runtime_capability_diagnostic(
+    backend_key: &str,
+    model_id: &str,
+) -> RuntimeTechnicalFitDeviceDiagnostic {
+    RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: format!(
+            "no runtime capability facts are available for backend '{}' while planning model '{}'",
+            backend_key, model_id
+        ),
+        device_class: None,
+        device_id: None,
+        runtime_variant_id: None,
+        backend_key: Some(backend_key.to_string()),
+    }
+}
+
+fn missing_runtime_variant_diagnostic(
+    capability: &WorkflowRuntimeCapability,
+) -> RuntimeTechnicalFitDeviceDiagnostic {
+    RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: "runtime capability did not report a runtime variant".to_string(),
+        device_class: None,
+        device_id: None,
+        runtime_variant_id: None,
+        backend_key: capability.backend_keys.first().cloned(),
+    }
 }
 
 fn runtime_compatibility_report(
@@ -1510,7 +1793,7 @@ mod tests {
     }
 
     #[test]
-    fn pumas_package_facts_project_to_advisory_runtime_candidates() {
+    fn pumas_package_facts_without_runtime_capability_are_not_selectable() {
         let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
             include_str!(
                 "../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
@@ -1533,7 +1816,11 @@ mod tests {
         assert_eq!(candidates[0].runtime_id, None);
         assert_eq!(candidates[0].residency_state, None);
         assert_eq!(candidates[0].warmup_state, None);
-        assert!(candidates[0].supports_runtime_requirements);
+        assert!(!candidates[0].supports_runtime_requirements);
+        assert!(candidates[0].device_diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant
+                && diagnostic.severity == RuntimeTechnicalFitDeviceDiagnosticSeverity::Error
+        }));
     }
 
     #[test]
@@ -1560,6 +1847,8 @@ mod tests {
         let candidates = runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
             &[package_facts],
             &backends,
+            &[runtime_capability()],
+            None,
         );
 
         let llama = candidates
@@ -1572,6 +1861,20 @@ mod tests {
             .expect("pytorch candidate");
 
         assert!(llama.supports_runtime_requirements);
+        assert_eq!(llama.runtime_id.as_deref(), Some("llama.cpp"));
+        assert_eq!(llama.runtime_variant_id.as_deref(), Some("llama_cpp.cuda"));
+        assert_eq!(
+            llama.device_class,
+            Some(RuntimeTechnicalFitDeviceClass::Cuda)
+        );
+        assert_eq!(
+            llama.residency_state,
+            Some(RuntimeTechnicalFitResidencyState::Active)
+        );
+        assert_eq!(
+            llama.warmup_state,
+            Some(RuntimeTechnicalFitWarmupState::Ready)
+        );
         assert_eq!(
             llama
                 .compatibility_report
@@ -1611,11 +1914,14 @@ mod tests {
         let candidates = runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
             &[package_facts],
             &backends,
+            &[],
+            None,
         );
 
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].backend_key.as_deref(), Some("pytorch"));
         assert!(!candidates[0].supports_runtime_requirements);
+        assert!(candidates[0].device_diagnostics.is_empty());
         assert_eq!(
             candidates[0]
                 .compatibility_report
@@ -1779,15 +2085,16 @@ mod tests {
         let runtime_request = build_runtime_technical_fit_request_with_package_facts(
             &workflow_request,
             None,
-            &[],
+            &[runtime_capability()],
             &[package_facts],
         );
 
-        assert_eq!(runtime_request.candidates.len(), 1);
-        assert_eq!(
-            runtime_request.candidates[0].source_kind,
-            RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts
-        );
+        assert_eq!(runtime_request.candidates.len(), 2);
+        assert!(runtime_request.candidates.iter().any(|candidate| {
+            candidate.source_kind == RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts
+                && candidate.model_id.as_deref() == Some("llm/llama/tiny-gguf")
+                && candidate.runtime_variant_id.as_deref() == Some("llama_cpp.cuda")
+        }));
 
         let decision = select_runtime_technical_fit(&runtime_request);
         assert_eq!(
@@ -1795,6 +2102,15 @@ mod tests {
             Some("llm/llama/tiny-gguf")
         );
         assert_eq!(decision.selected_backend_key.as_deref(), Some("llama_cpp"));
+        assert_eq!(decision.selected_runtime_id.as_deref(), Some("llama_cpp"));
+        assert_eq!(
+            decision.selected_runtime_variant_id.as_deref(),
+            Some("llama_cpp.cuda")
+        );
+        assert_eq!(
+            decision.selected_device_class,
+            Some(RuntimeTechnicalFitDeviceClass::Cuda)
+        );
     }
 
     #[test]
@@ -1838,18 +2154,23 @@ mod tests {
         let runtime_request = build_runtime_technical_fit_request_with_backend_package_facts(
             &workflow_request,
             None,
-            &[],
+            &[runtime_capability()],
             &backends,
             &[package_facts],
         );
 
-        assert_eq!(runtime_request.candidates.len(), 2);
+        assert_eq!(runtime_request.candidates.len(), 3);
         let decision = select_runtime_technical_fit(&runtime_request);
         assert_eq!(
             decision.selected_model_id.as_deref(),
             Some("llm/llama/tiny-gguf")
         );
         assert_eq!(decision.selected_backend_key.as_deref(), Some("llama_cpp"));
+        assert_eq!(decision.selected_runtime_id.as_deref(), Some("llama_cpp"));
+        assert_eq!(
+            decision.selected_runtime_variant_id.as_deref(),
+            Some("llama_cpp.cuda")
+        );
         assert_eq!(
             decision
                 .compatibility_report

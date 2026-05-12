@@ -1115,6 +1115,10 @@ Worker rules:
   removed from canonical inference descriptors, frontend definitions, bundled
   templates, tracked current image-generation saved workflows, and node-engine
   dependency input repair.
+- Milestone 5 embedded-runtime technical-fit candidate synthesis now joins
+  Pumas package facts with runtime capability/runtime-variant/device facts
+  before selection, and incomplete Pumas candidate fragments are no longer
+  selectable.
 
 ### Deviations
 
@@ -2773,6 +2777,33 @@ Worker rules:
   `.pantograph/workflows/Maid-Qwen3.6-27b-heritic.json` containing old
   resolved-model port metadata; it was not committed because it is outside the
   tracked workflow fixture set and remains local stale data.
+- 2026-05-12 embedded-runtime executable candidate synthesis slice: smallest
+  useful vertical slice was to join Pumas package facts with runtime
+  capability facts during embedded-runtime technical-fit request construction.
+  Allowed write set:
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs` and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because Pumas-derived
+  candidates without matching runtime capability/runtime-variant facts are now
+  non-selectable and emit typed `missing_runtime_variant` diagnostics instead
+  of becoming executable decisions with empty runtime/device fields. When
+  backend compatibility already rejects the model/task, that more specific
+  backend diagnostic remains the rejection reason. Selector ranking, ledger
+  summaries, and image gateway dispatch are unchanged.
+- Verification passed:
+  `cargo test -p pantograph-embedded-runtime pumas_package_facts_candidates`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo check -p pantograph-embedded-runtime -p pantograph-runtime-registry`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Verification deviations fixed: the first focused compile exposed moved-value
+  issues in the new candidate builders; the first focused test run showed that
+  base runtime capability candidates are still included alongside Pumas
+  candidates, so counts were updated to assert the synthesized Pumas candidate
+  directly. The broader technical-fit run also caught diagnostic-priority
+  regressions for explicit Candle/vLLM image-generation overrides; missing
+  runtime capability diagnostics are now suppressed when backend compatibility
+  already supplies the blocking reason.
 
 ### Traceability Links
 
