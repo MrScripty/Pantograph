@@ -2577,6 +2577,32 @@ Worker rules:
 - Remaining follow-up: add Python worker-side image envelope shape validation,
   then wire PyTorch backend image generation through the validated plan and
   envelope.
+- 2026-05-12 Python image-envelope validation slice: smallest useful vertical
+  slice was to add torch-free Python validation/projection for the
+  Rust-planned `generate_image` worker envelope without loading Diffusers or
+  wiring backend execution. Allowed write set:
+  `crates/inference/torch/worker_image_contract.py`,
+  `crates/inference/torch/README.md`,
+  `crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`, and
+  this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because Python now rejects
+  unknown image payload fields, including `trust_remote_code`, requires a
+  Rust-selected canonical device id, and only projects the already-planned
+  generation kwargs. It does not choose pipeline family, scheduler,
+  custom-code trust, or device fallback. Verification passed:
+  `cargo test -p inference --features backend-pytorch
+  python_worker_generate_image_contract` and `cargo test -p inference
+  --features backend-pytorch pytorch_worker_generate_image`,
+  `cargo check -p inference --features backend-pytorch`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Verification deviation/discovered issue: the first implementation put the
+  image helper in `worker_contract.py`, pushing it past the decomposition
+  target. The slice was corrected by moving image-specific validation into
+  `worker_image_contract.py` and updating the torch README. The first
+  `cargo fmt --all -- --check` reported formatting changes in the new
+  Rust/PyO3 tests; ran `cargo fmt --all` and reran successfully. Remaining
+  follow-up: import the helper from `worker.py` and wire
+  `PyTorchBackend::generate_image` through the validated planner and envelope.
 
 ### Traceability Links
 

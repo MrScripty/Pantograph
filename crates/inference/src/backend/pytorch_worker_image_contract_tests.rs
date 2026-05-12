@@ -15,6 +15,35 @@ use crate::image_generation_planner::{
 };
 use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel};
 use crate::{ImageGenerationRequest, InferenceTaskId, ResolvedModelPackageFacts};
+use pyo3::prelude::*;
+use std::ffi::CString;
+
+fn load_worker_image_contract_module<'py>(py: Python<'py>) -> Bound<'py, pyo3::types::PyModule> {
+    let worker_contract_source = CString::new(include_str!("../../torch/worker_contract.py"))
+        .expect("worker contract source should not contain nul bytes");
+    let worker_contract = pyo3::types::PyModule::from_code(
+        py,
+        &worker_contract_source,
+        c"worker_contract.py",
+        c"worker_contract",
+    )
+    .expect("worker_contract module should load");
+    let sys = py.import("sys").expect("sys should import");
+    sys.getattr("modules")
+        .expect("sys.modules should exist")
+        .set_item("worker_contract", worker_contract)
+        .expect("worker_contract should register in sys.modules");
+
+    let image_contract_source = CString::new(include_str!("../../torch/worker_image_contract.py"))
+        .expect("worker image contract source should not contain nul bytes");
+    pyo3::types::PyModule::from_code(
+        py,
+        &image_contract_source,
+        c"worker_image_contract.py",
+        c"worker_image_contract",
+    )
+    .expect("worker_image_contract module should load")
+}
 
 #[test]
 fn test_pytorch_worker_generate_image_request_fixture_decodes() {
@@ -169,6 +198,95 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
         worker_request,
     ))
     .expect("planned worker request should validate");
+}
+
+#[test]
+fn test_python_worker_generate_image_contract_projects_planned_kwargs() {
+    Python::with_gil(|py| {
+        let module = load_worker_image_contract_module(py);
+        let envelope = include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
+        );
+
+        let projected = module
+            .call_method1("generate_image_kwargs_from_envelope", (envelope,))
+            .expect("image envelope should validate");
+        let device = projected
+            .get_item("device")
+            .expect("device key should exist")
+            .extract::<String>()
+            .expect("device should be a string");
+        let generation_kwargs = projected
+            .get_item("generation_kwargs")
+            .expect("generation kwargs should exist");
+
+        assert_eq!(device, "cpu");
+        assert_eq!(
+            generation_kwargs
+                .get_item("prompt")
+                .expect("prompt key should exist")
+                .extract::<String>()
+                .expect("prompt should be a string"),
+            "a compact test image"
+        );
+        assert_eq!(
+            generation_kwargs
+                .get_item("num_inference_steps")
+                .expect("steps key should exist")
+                .extract::<u32>()
+                .expect("steps should be an integer"),
+            8
+        );
+    });
+}
+
+#[test]
+fn test_python_worker_generate_image_contract_rejects_unknown_payload_fields() {
+    Python::with_gil(|py| {
+        let module = load_worker_image_contract_module(py);
+        let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
+        ))
+        .expect("decode image request fixture");
+        envelope["payload"]["trust_remote_code"] = serde_json::json!(true);
+
+        let error = module
+            .call_method1(
+                "generate_image_kwargs_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect_err("unknown image payload fields should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("unsupported key(s): trust_remote_code"));
+    });
+}
+
+#[test]
+fn test_python_worker_generate_image_contract_requires_rust_selected_device() {
+    Python::with_gil(|py| {
+        let module = load_worker_image_contract_module(py);
+        let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
+        ))
+        .expect("decode image request fixture");
+        envelope["payload"]
+            .as_object_mut()
+            .expect("payload should be an object")
+            .remove("device");
+
+        let error = module
+            .call_method1(
+                "generate_image_kwargs_from_envelope",
+                (envelope.to_string(),),
+            )
+            .expect_err("missing planned device should fail validation");
+
+        assert!(error
+            .to_string()
+            .contains("payload.device must be selected by Rust"));
+    });
 }
 
 fn backend_decision() -> BackendExecutionDecision {

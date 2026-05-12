@@ -157,7 +157,8 @@ PyTorch/diffusers and produce a retained image artifact.
 - Artifact test verifies generated image retention stores one media body and
   projects only descriptors/metadata instead of duplicate base64 payloads.
 
-**Status:** Dependency boundary resolved; planner implementation not started.
+**Status:** In progress. Planner contract, Rust worker envelope, planner-to-worker
+translation, and Python image-envelope shape validation are implemented.
 
 2026-05-12 boundary check:
 
@@ -283,3 +284,33 @@ PyTorch/diffusers and produce a retained image artifact.
 - Remaining follow-up: add Python worker-side image envelope shape validation,
   then wire PyTorch backend image generation through the validated plan and
   envelope.
+
+2026-05-12 Python image-envelope validation slice:
+
+- Smallest useful vertical slice: add torch-free Python worker validation for
+  the already-planned image-generation worker envelope without invoking
+  Diffusers generation or wiring the Rust backend call path.
+- Allowed write set: `crates/inference/torch/worker_image_contract.py`,
+  `crates/inference/torch/README.md`,
+  `crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`, and
+  this plan directory.
+- No-fallback/no-legacy confirmation: Python accepts only the Rust-planned
+  `generate_image` envelope shape, rejects unknown payload fields such as
+  `trust_remote_code`, requires Rust-selected canonical `device`, and projects
+  generation kwargs without choosing family, scheduler, custom-code trust, or
+  device fallback.
+- Verification passed: `cargo test -p inference --features backend-pytorch
+  python_worker_generate_image_contract`, `cargo test -p inference
+  --features backend-pytorch pytorch_worker_generate_image`,
+  `cargo check -p inference --features backend-pytorch`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Deviation/discovered standards issue: an initial implementation placed the
+  image validation in `worker_contract.py`, which pushed that file above the
+  decomposition target. The slice was corrected by moving image-specific
+  validation into focused `worker_image_contract.py` and documenting the new
+  helper in the torch README. The first `cargo fmt --all -- --check` reported
+  formatting changes in the new Rust/PyO3 tests; ran `cargo fmt --all` and
+  reran the check successfully.
+- Remaining follow-up: wire `worker_image_contract.py` into `worker.py` and
+  the Rust `PyTorchBackend::generate_image` path through the validated planner
+  and worker envelope.

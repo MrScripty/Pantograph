@@ -13,6 +13,7 @@ process/runtime lifecycle and public inference contracts.
 | ----------- | ----------- |
 | `worker.py` | PyO3-facing worker entrypoints, loaded-model state, and dispatch into generation helpers. |
 | `worker_contract.py` | Torch-free worker envelope validation and projection helpers shared by Rust-facing entrypoints and lightweight Python checks. |
+| `worker_image_contract.py` | Torch-free image-generation envelope validation and projection helpers for Rust-planned Diffusers execution. |
 | `worker_runtime.py` | Shared device, model-type, dtype, diffusion-load, and base64 image payload helpers used by the worker facade. |
 | `worker_transformers.py` | Cross-version transformers compatibility shims used before trusted model loading. |
 | `autoregressive.py` | Autoregressive HuggingFace generation and streaming helpers. |
@@ -55,6 +56,9 @@ worker names.
   allowlisted. New kwargs must first be represented in Rust typed generation
   options and diagnostics before the Python worker forwards them to
   Transformers.
+- Image-generation envelopes must be Rust-planned, versioned, and
+  shape-checked before worker execution. The Python worker must reject unknown
+  image payload fields and must not choose device fallback or custom-code trust.
 - Sibling helper modules must not own process lifecycle or backend selection.
 - Private helper modules must be added to both Rust embedded-loader paths when
   `worker.py` imports them.
