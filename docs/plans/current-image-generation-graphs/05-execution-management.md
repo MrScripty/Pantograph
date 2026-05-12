@@ -2804,6 +2804,34 @@ Worker rules:
   regressions for explicit Candle/vLLM image-generation overrides; missing
   runtime capability diagnostics are now suppressed when backend compatibility
   already supplies the blocking reason.
+- 2026-05-12 runtime-registry controlled exploration policy slice: smallest
+  useful vertical slice was to replace the temporary equal-priority automatic
+  ambiguity failure with recorded automatic policy evidence and deterministic
+  controlled exploration in the pure runtime-registry selector. Allowed write
+  set: `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+  `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`, and this
+  plan directory.
+- The slice preserves the no-fallback/no-legacy rule because automatic
+  selection still hard-filters invalid candidates and returns typed diagnostics
+  for no valid candidate, explicit incompatibility, or unrankable policy state.
+  Equal-ranked valid candidates are selected by recorded scheduler policy,
+  carrying `automatic_ranking` and `controlled_exploration` reasons plus
+  policy version, candidate-set summary, ranking reason, and seed basis. No
+  workflow graph facts, Pumas facts, ledger state, runtime lifecycle behavior,
+  image gateway dispatch, frontend behavior, generated files, lockfiles, or
+  workflow fixtures changed.
+- Verification passed:
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo check -p pantograph-runtime-registry`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Verification deviation fixed: the first `cargo fmt --all -- --check`
+  reported local rustfmt changes in the selector helper block; ran
+  `cargo fmt --all` and reran formatting successfully.
+- Remaining follow-up: ledger-history ranking inputs, scheduler retry/
+  termination integration, diagnostics-ledger policy projection, and planned
+  image gateway dispatch remain later slices. The public
+  `ambiguous_auto_resolution` wire value remains append-only DTO history, but
+  equal-ranked valid automatic selection no longer produces it.
 
 ### Traceability Links
 

@@ -73,9 +73,13 @@ typed diagnostic and the canonical design is fixed.
     matching runtime capability facts are non-selectable and carry typed
     `missing_runtime_variant` diagnostics unless backend compatibility already
     supplies a more specific blocking diagnostic. Remaining follow-up: promote
-    these candidate facts into the scheduler policy trace/ledger summary path
-    and replace the temporary equal-priority `ambiguous_auto_resolution`
-    selector behavior with the planned ranking/exploration policy.
+    these candidate facts into the scheduler policy trace/ledger summary path.
+  - 2026-05-12 partial: runtime-registry automatic technical-fit selection now
+    records policy version, candidate-set summary, ranking reason, seed basis,
+    and selected candidate reasons. Equal-priority eligible candidates are
+    selected through deterministic controlled exploration instead of terminal
+    `ambiguous_auto_resolution`. Genuine no-candidate, invalid-candidate, and
+    unrankable-policy states still fail with typed diagnostics.
 - [x] Add a common backend-adapter capability contract for llama.cpp, PyTorch,
   vLLM, Candle, and future MLX. The contract reports facts and performs
   backend-specific translation; it must not rank candidates across backends or
@@ -1718,6 +1722,39 @@ typed diagnostic and the canonical design is fixed.
     missing-candidate/runtime-state reasons, and remaining old raw-device
     execution paths still need removal before the broad auto-mode checklist item
     can be closed.
+- 2026-05-12 slice: runtime-registry controlled exploration policy.
+  - Smallest useful vertical slice: replace the temporary equal-priority
+    `ambiguous_auto_resolution` terminal automatic result with first-class
+    selector policy evidence and deterministic controlled exploration for
+    equal-ranked eligible candidates.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: automatic selection still hard-filters
+    invalid candidates and returns typed diagnostics for no valid candidate,
+    explicit incompatibility, or unrankable policy state. Equal-ranked valid
+    candidates are selected by recorded scheduler policy; no old raw-device,
+    backend-default, candidate-id tie-break, or compatibility shim is used.
+  - Standards/blast-radius gate for runtime-registry selector policy:
+    runtime-registry remains the pure synchronous selector owner; workflow
+    graphs, Pumas facts, diagnostics-ledger persistence, runtime lifecycle,
+    frontend behavior, generated files, lockfiles, workers, and workflow
+    fixtures are untouched. The new trace is built from already-normalized
+    candidate facts and uses checked count conversion before projecting summary
+    counts into the public DTO.
+  - Verification passed:
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo check -p pantograph-runtime-registry`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation fixed: the first formatting check reported local
+    rustfmt changes in the selector helper block; ran `cargo fmt --all` and
+    reran formatting successfully.
+  - Remaining follow-up: ledger-history ranking inputs, scheduler retry/
+    termination integration, and diagnostics-ledger policy projection remain
+    later slices. The public `ambiguous_auto_resolution` enum value remains
+    append-only DTO history but is no longer produced by equal-ranked valid
+    automatic selection.
 - 2026-05-10 slice: runtime-registry no-valid-auto diagnostic.
   - Smallest useful vertical slice: add a `no_valid_candidate` error
     diagnostic to automatic technical-fit decisions when candidate facts exist

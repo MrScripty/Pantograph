@@ -8,6 +8,9 @@ use crate::snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
 use crate::state::RuntimeRegistryStatus;
 
 const MAX_HEADROOM_RANKABLE_ACTIVE_RESERVATIONS: usize = u16::MAX as usize;
+const TECHNICAL_FIT_SELECTION_POLICY_VERSION: u32 = 1;
+const FNV_OFFSET_BASIS_64: u64 = 0xcbf29ce484222325;
+const FNV_PRIME_64: u64 = 0x100000001b3;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -754,14 +757,47 @@ pub fn select_runtime_technical_fit(
     eligible_candidates.sort_by(|left, right| compare_candidates(left, right, &normalized));
 
     if let Some(selected_candidate) = eligible_candidates.first().copied() {
-        if eligible_candidates.iter().skip(1).any(|candidate| {
-            compare_candidate_priority(selected_candidate, candidate, &normalized).is_eq()
-        }) {
-            return unselected_decision_with_device_diagnostics(
-                RuntimeTechnicalFitSelectionMode::Automatic,
-                Vec::new(),
-                vec![ambiguous_auto_resolution_diagnostic()],
-            );
+        let tied_candidates = eligible_candidates
+            .iter()
+            .copied()
+            .filter(|candidate| {
+                compare_candidate_priority(selected_candidate, candidate, &normalized).is_eq()
+            })
+            .collect::<Vec<_>>();
+        let (selected_candidate, controlled_exploration_seed_basis) = if tied_candidates.len() > 1 {
+            let seed_basis = controlled_exploration_seed_basis(&normalized, &tied_candidates);
+            let selected_candidate =
+                controlled_exploration_candidate(&tied_candidates, &seed_basis);
+            (selected_candidate, Some(seed_basis))
+        } else {
+            (selected_candidate, None)
+        };
+
+        let selection_policy_trace = match automatic_selection_policy_trace(
+            &normalized,
+            &eligible_candidates,
+            selected_candidate,
+            controlled_exploration_seed_basis.as_deref(),
+        ) {
+            Ok(trace) => trace,
+            Err(diagnostic) => {
+                return unselected_decision_with_device_diagnostics(
+                    RuntimeTechnicalFitSelectionMode::Automatic,
+                    Vec::new(),
+                    vec![diagnostic],
+                );
+            }
+        };
+
+        reasons.push(RuntimeTechnicalFitReason::new(
+            RuntimeTechnicalFitReasonCode::AutomaticRanking,
+            Some(selected_candidate.candidate_id.as_str()),
+        ));
+        if controlled_exploration_seed_basis.is_some() {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::ControlledExploration,
+                Some(selected_candidate.candidate_id.as_str()),
+            ));
         }
 
         reasons.push(RuntimeTechnicalFitReason::new(
@@ -811,10 +847,11 @@ pub fn select_runtime_technical_fit(
             ));
         }
 
-        return decision_from_candidate(
+        return decision_from_candidate_with_trace(
             RuntimeTechnicalFitSelectionMode::Automatic,
             selected_candidate,
             reasons,
+            Some(selection_policy_trace),
         );
     }
 
@@ -845,6 +882,105 @@ pub fn select_runtime_technical_fit(
         reasons,
         automatic_no_valid_candidate_diagnostics(&normalized),
     )
+}
+
+fn automatic_selection_policy_trace(
+    request: &RuntimeTechnicalFitRequest,
+    eligible_candidates: &[&RuntimeTechnicalFitCandidate],
+    selected_candidate: &RuntimeTechnicalFitCandidate,
+    controlled_exploration_seed_basis: Option<&str>,
+) -> Result<RuntimeTechnicalFitSelectionPolicyTrace, RuntimeTechnicalFitDeviceDiagnostic> {
+    let candidate_set_summary = automatic_candidate_set_summary(request, eligible_candidates)?;
+    Ok(RuntimeTechnicalFitSelectionPolicyTrace {
+        policy_version: TECHNICAL_FIT_SELECTION_POLICY_VERSION,
+        candidate_set_summary: Some(candidate_set_summary),
+        ranking_reason: Some("candidate_priority".to_string()),
+        exploration_reason: controlled_exploration_seed_basis
+            .map(|_| "equal_priority_seeded_choice".to_string()),
+        seed_basis: controlled_exploration_seed_basis
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                Some(format!(
+                    "workflow:{}|snapshot:{}|candidate:{}",
+                    request.workflow_id.as_deref().unwrap_or("unknown"),
+                    request.runtime_snapshot.generated_at_ms,
+                    selected_candidate.candidate_id
+                ))
+            }),
+    }
+    .normalized())
+}
+
+fn automatic_candidate_set_summary(
+    request: &RuntimeTechnicalFitRequest,
+    eligible_candidates: &[&RuntimeTechnicalFitCandidate],
+) -> Result<RuntimeTechnicalFitCandidateSetSummary, RuntimeTechnicalFitDeviceDiagnostic> {
+    let total_candidate_count = checked_candidate_count(request.candidates.len())?;
+    let eligible_candidate_count = checked_candidate_count(eligible_candidates.len())?;
+    let rejected_candidate_count = total_candidate_count
+        .checked_sub(eligible_candidate_count)
+        .ok_or_else(candidate_summary_count_diagnostic)?;
+
+    Ok(RuntimeTechnicalFitCandidateSetSummary {
+        total_candidate_count,
+        eligible_candidate_count,
+        rejected_candidate_count,
+        eligible_candidate_ids: eligible_candidates
+            .iter()
+            .map(|candidate| candidate.candidate_id.clone())
+            .collect(),
+    }
+    .normalized())
+}
+
+fn checked_candidate_count(count: usize) -> Result<u32, RuntimeTechnicalFitDeviceDiagnostic> {
+    u32::try_from(count).map_err(|_| candidate_summary_count_diagnostic())
+}
+
+fn candidate_summary_count_diagnostic() -> RuntimeTechnicalFitDeviceDiagnostic {
+    RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: "technical-fit candidate set is too large to summarize exactly".to_string(),
+        device_class: None,
+        device_id: None,
+        runtime_variant_id: None,
+        backend_key: None,
+    }
+}
+
+fn controlled_exploration_seed_basis(
+    request: &RuntimeTechnicalFitRequest,
+    tied_candidates: &[&RuntimeTechnicalFitCandidate],
+) -> String {
+    let candidate_ids = tied_candidates
+        .iter()
+        .map(|candidate| candidate.candidate_id.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "workflow:{}|snapshot:{}|candidates:{}",
+        request.workflow_id.as_deref().unwrap_or("unknown"),
+        request.runtime_snapshot.generated_at_ms,
+        candidate_ids
+    )
+}
+
+fn controlled_exploration_candidate<'a>(
+    tied_candidates: &[&'a RuntimeTechnicalFitCandidate],
+    seed_basis: &str,
+) -> &'a RuntimeTechnicalFitCandidate {
+    let index = (stable_policy_hash(seed_basis) as usize) % tied_candidates.len();
+    tied_candidates[index]
+}
+
+fn stable_policy_hash(seed_basis: &str) -> u64 {
+    seed_basis
+        .as_bytes()
+        .iter()
+        .fold(FNV_OFFSET_BASIS_64, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(FNV_PRIME_64)
+        })
 }
 
 fn diagnostic_candidate<'a>(
@@ -941,6 +1077,15 @@ fn decision_from_candidate(
     candidate: &RuntimeTechnicalFitCandidate,
     reasons: Vec<RuntimeTechnicalFitReason>,
 ) -> RuntimeTechnicalFitDecision {
+    decision_from_candidate_with_trace(selection_mode, candidate, reasons, None)
+}
+
+fn decision_from_candidate_with_trace(
+    selection_mode: RuntimeTechnicalFitSelectionMode,
+    candidate: &RuntimeTechnicalFitCandidate,
+    reasons: Vec<RuntimeTechnicalFitReason>,
+    selection_policy_trace: Option<RuntimeTechnicalFitSelectionPolicyTrace>,
+) -> RuntimeTechnicalFitDecision {
     RuntimeTechnicalFitDecision {
         selection_mode,
         selected_candidate_id: Some(candidate.candidate_id.clone()),
@@ -954,7 +1099,7 @@ fn decision_from_candidate(
         observed_throughput_hint: candidate.observed_throughput_hint.clone(),
         device_diagnostics: candidate.device_diagnostics.clone(),
         reasons,
-        selection_policy_trace: None,
+        selection_policy_trace,
         compatibility_report: candidate.compatibility_report.clone(),
         compatibility_issue_count: candidate.compatibility_issue_count,
         compatibility_issues: candidate.compatibility_issues.clone(),
@@ -1133,18 +1278,6 @@ fn automatic_no_valid_candidate_diagnostics(
         runtime_variant_id: None,
         backend_key: None,
     }]
-}
-
-fn ambiguous_auto_resolution_diagnostic() -> RuntimeTechnicalFitDeviceDiagnostic {
-    RuntimeTechnicalFitDeviceDiagnostic {
-        code: RuntimeTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution,
-        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
-        message: "technical-fit auto policy matched multiple equally ranked candidates".to_string(),
-        device_class: None,
-        device_id: None,
-        runtime_variant_id: None,
-        backend_key: None,
-    }
 }
 
 fn unrankable_headroom_candidate_diagnostic(

@@ -924,7 +924,7 @@ fn selector_rejects_unmatched_override_without_synthetic_candidate() {
 }
 
 #[test]
-fn selector_rejects_ambiguous_auto_resolution_without_tie_break() {
+fn selector_uses_controlled_exploration_for_equal_ranked_auto_candidates() {
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: RuntimeRegistrySnapshot {
             generated_at_ms: 123,
@@ -1001,21 +1001,52 @@ fn selector_rejects_ambiguous_auto_resolution_without_tie_break() {
         decision.selection_mode,
         RuntimeTechnicalFitSelectionMode::Automatic
     );
-    assert_eq!(decision.selected_candidate_id, None);
-    assert_eq!(decision.selected_runtime_id, None);
-    assert!(decision.reasons.is_empty());
+    let selected_candidate_id = decision
+        .selected_candidate_id
+        .as_deref()
+        .expect("equal-ranked valid candidates should select through controlled exploration");
+    assert!(matches!(selected_candidate_id, "runtime-a" | "runtime-b"));
     assert_eq!(
-        decision.device_diagnostics,
-        vec![RuntimeTechnicalFitDeviceDiagnostic {
-            code: RuntimeTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution,
-            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
-            message: "technical-fit auto policy matched multiple equally ranked candidates"
-                .to_string(),
-            device_class: None,
-            device_id: None,
-            runtime_variant_id: None,
-            backend_key: None,
-        }]
+        decision.selected_runtime_id.as_deref(),
+        Some(selected_candidate_id)
+    );
+    assert!(decision.device_diagnostics.is_empty());
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::AutomaticRanking
+            && reason.candidate_id.as_deref() == Some(selected_candidate_id)
+    }));
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::ControlledExploration
+            && reason.candidate_id.as_deref() == Some(selected_candidate_id)
+    }));
+
+    let selection_policy_trace = decision
+        .selection_policy_trace
+        .as_ref()
+        .expect("automatic selection should record its policy trace");
+    assert_eq!(selection_policy_trace.policy_version, 1);
+    assert_eq!(
+        selection_policy_trace.ranking_reason.as_deref(),
+        Some("candidate_priority")
+    );
+    assert_eq!(
+        selection_policy_trace.exploration_reason.as_deref(),
+        Some("equal_priority_seeded_choice")
+    );
+    assert_eq!(
+        selection_policy_trace.seed_basis.as_deref(),
+        Some("workflow:workflow-a|snapshot:123|candidates:runtime-a,runtime-b")
+    );
+    let candidate_set_summary = selection_policy_trace
+        .candidate_set_summary
+        .as_ref()
+        .expect("automatic selection should summarize the candidate set");
+    assert_eq!(candidate_set_summary.total_candidate_count, 2);
+    assert_eq!(candidate_set_summary.eligible_candidate_count, 2);
+    assert_eq!(candidate_set_summary.rejected_candidate_count, 0);
+    assert_eq!(
+        candidate_set_summary.eligible_candidate_ids,
+        vec!["runtime-a".to_string(), "runtime-b".to_string()]
     );
 }
 
