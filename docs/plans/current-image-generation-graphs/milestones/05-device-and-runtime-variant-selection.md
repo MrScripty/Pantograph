@@ -303,6 +303,13 @@ typed diagnostic and the canonical design is fixed.
     include duration/timing diagnostics, runtime technical-fit rank overflow,
     cache counter drift, broader image request limits, context/batch limits,
     byte-range projections, and worker/runtime request fields.
+  - 2026-05-12 partial: artifact memory-cache removal now checks byte-counter
+    subtraction and returns `ArtifactStoreError::ArtifactAccountingOverflow`
+    if a cached body is larger than the recorded cache byte total instead of
+    saturating the counter to zero. Remaining numeric boundaries include
+    duration/timing diagnostics, runtime technical-fit rank overflow, broader
+    image request limits, context/batch limits, byte-range projections, and
+    worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3636,6 +3643,30 @@ typed diagnostic and the canonical design is fixed.
     for duration/timing diagnostics, runtime technical-fit rank overflow, cache
     counter drift, broader image request limits, context/batch limits,
     byte-range projections, and worker/runtime request fields.
+- 2026-05-12 slice: artifact memory-cache removal counter validation.
+  - Smallest useful vertical slice: replace memory-cache removal
+    `saturating_sub` with checked byte-counter subtraction and return the
+    existing artifact accounting overflow error on counter drift.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/artifact_store/cache.rs`,
+    `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`, and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: cache byte-counter underflow no longer
+    silently resets the counter to zero; removal fails with
+    `ArtifactStoreError::ArtifactAccountingOverflow` and leaves the cached body
+    intact for diagnosis.
+  - Standards/blast-radius gate: artifact memory-cache accounting only; no
+    generated files, frontend code, saved workflow fixtures, lockfiles, path
+    roots, Pumas contracts, worker contracts, runtime technical-fit ranking, or
+    backend lifecycle ownership changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service memory_cache_remove_rejects_counter_underflow`
+    and `cargo test -p pantograph-workflow-service artifact_store`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: checked arithmetic policy still needs implementation
+    for duration/timing diagnostics, runtime technical-fit rank overflow,
+    broader image request limits, context/batch limits, byte-range projections,
+    and worker/runtime request fields.
 
 **Verification:**
 

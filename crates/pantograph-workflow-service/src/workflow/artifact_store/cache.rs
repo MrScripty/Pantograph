@@ -56,10 +56,20 @@ impl ArtifactStore {
         Ok(())
     }
 
-    pub(super) fn memory_cache_remove(&mut self, artifact_id: &str) {
-        if let Some(body) = self.memory_cache.remove(artifact_id) {
-            self.memory_cache_bytes = self.memory_cache_bytes.saturating_sub(body.len() as u64);
+    pub(super) fn memory_cache_remove(
+        &mut self,
+        artifact_id: &str,
+    ) -> Result<(), ArtifactStoreError> {
+        if let Some(body) = self.memory_cache.get(artifact_id) {
+            self.memory_cache_bytes = self
+                .memory_cache_bytes
+                .checked_sub(body.len() as u64)
+                .ok_or(ArtifactStoreError::ArtifactAccountingOverflow {
+                    field: "memory_cache_bytes",
+                })?;
+            self.memory_cache.remove(artifact_id);
         }
+        Ok(())
     }
 
     fn has_memory_cache_capacity(&self, byte_length: u64) -> bool {
@@ -76,7 +86,7 @@ impl ArtifactStore {
         artifact_id: &str,
         body: Vec<u8>,
     ) -> Result<(), ArtifactStoreError> {
-        self.memory_cache_remove(artifact_id);
+        self.memory_cache_remove(artifact_id)?;
         self.memory_cache_bytes = self
             .memory_cache_bytes
             .checked_add(body.len() as u64)

@@ -274,7 +274,7 @@ impl ArtifactStore {
         let delete_on_consume = self.manifest.policy.delete_on_consume;
         let root_dir = self.root_dir.clone();
         if delete_on_consume {
-            self.memory_cache_remove(&request.artifact_id);
+            self.memory_cache_remove(&request.artifact_id)?;
         }
         let entry = self.entry_mut(&request.artifact_id)?;
         entry.consumed_by.insert(request.consumer_id);
@@ -315,7 +315,7 @@ impl ArtifactStore {
             }
         }
         for artifact_id in evict_cache_ids {
-            self.memory_cache_remove(&artifact_id);
+            self.memory_cache_remove(&artifact_id)?;
         }
         self.save()?;
         Ok(expired_count)
@@ -389,7 +389,7 @@ impl ArtifactStore {
     }
 
     fn remove_existing(&mut self, artifact_id: &str) -> Result<(), ArtifactStoreError> {
-        self.memory_cache_remove(artifact_id);
+        self.memory_cache_remove(artifact_id)?;
         let mut removed_files = Vec::new();
         self.manifest.artifacts.retain(|entry| {
             if entry.descriptor.artifact_id == artifact_id {
@@ -565,6 +565,30 @@ mod tests {
 
         assert!(!store.memory_cache.contains_key("artifact-cache-overflow"));
         assert_eq!(store.memory_cache_bytes, u64::MAX - 1);
+    }
+
+    #[test]
+    fn memory_cache_remove_rejects_counter_underflow() {
+        let temp = tempfile::tempdir().expect("temp artifact store");
+        let mut store = ArtifactStore::open(temp.path(), policy_with_large_cache())
+            .expect("open artifact store");
+        store
+            .memory_cache
+            .insert("artifact-cache-underflow".to_string(), vec![1, 2]);
+        store.memory_cache_bytes = 1;
+
+        let error = store
+            .memory_cache_remove("artifact-cache-underflow")
+            .expect_err("cache removal byte counter underflow should fail");
+
+        assert!(matches!(
+            error,
+            ArtifactStoreError::ArtifactAccountingOverflow {
+                field: "memory_cache_bytes"
+            }
+        ));
+        assert!(store.memory_cache.contains_key("artifact-cache-underflow"));
+        assert_eq!(store.memory_cache_bytes, 1);
     }
 
     #[test]

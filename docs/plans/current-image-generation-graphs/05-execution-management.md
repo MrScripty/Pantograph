@@ -2158,6 +2158,24 @@ Worker rules:
   technical-fit rank overflow, cache counter drift, broader image request
   limits, context/batch limits, byte-range projections, and worker/runtime
   request fields.
+- 2026-05-12 artifact memory-cache removal counter validation slice: smallest
+  useful vertical slice was limited to replacing memory-cache removal
+  `saturating_sub` with checked byte-counter subtraction and returning the
+  existing artifact accounting overflow error on counter drift. Allowed write
+  set:
+  `crates/pantograph-workflow-service/src/workflow/artifact_store/cache.rs`,
+  `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`, and this
+  plan directory.
+- The slice preserves the no-fallback/no-legacy rule because cache
+  byte-counter underflow no longer silently resets the counter to zero; removal
+  fails with `ArtifactStoreError::ArtifactAccountingOverflow` and leaves the
+  cached body intact for diagnosis. Verification passed:
+  `cargo test -p pantograph-workflow-service memory_cache_remove_rejects_counter_underflow`
+  and `cargo test -p pantograph-workflow-service artifact_store`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Remaining
+  numeric-boundary follow-up: duration/timing diagnostics, runtime
+  technical-fit rank overflow, broader image request limits, context/batch
+  limits, byte-range projections, and worker/runtime request fields.
 
 ### Traceability Links
 
