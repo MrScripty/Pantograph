@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::types::{NodeId, WorkflowGraph};
 
-const MODEL_CONTEXT_KEYS: [&str; 13] = [
+const MODEL_CONTEXT_KEYS: [&str; 12] = [
     "model_path",
     "mmproj_path",
     "pumas_model_ref",
@@ -11,7 +11,6 @@ const MODEL_CONTEXT_KEYS: [&str; 13] = [
     "task_type_primary",
     "backend_key",
     "recommended_backend",
-    "resolved_model_package_facts",
     "selected_binding_ids",
     "platform_context",
     "dependency_bindings",
@@ -31,17 +30,17 @@ pub(super) fn resolve_dependency_inputs(
         };
 
         let (source_handle, target_handle) = canonical_dependency_edge_handles(graph, edge);
+        if matches!(
+            target_handle,
+            "resolved_model_source" | "resolved_model_package_facts" | "model_package_facts"
+        ) {
+            continue;
+        }
         if let Some(value) = dep_outputs.get(source_handle) {
             inputs.insert(target_handle.to_string(), value.clone());
         }
 
-        if matches!(
-            target_handle,
-            "model_path"
-                | "pumas_model_ref"
-                | "resolved_model_package_facts"
-                | "model_package_facts"
-        ) {
+        if matches!(target_handle, "model_path" | "pumas_model_ref") {
             merge_model_context(&mut inputs, dep_outputs);
         }
     }
@@ -195,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_dependency_inputs_merges_pumas_model_ref_package_facts_context() {
+    fn resolve_dependency_inputs_keeps_pumas_model_ref_intent_only() {
         let graph = WorkflowGraph {
             id: "workflow".to_string(),
             name: "Workflow".to_string(),
@@ -238,6 +237,7 @@ mod tests {
                         "model_id": "family/model"
                     }),
                 ),
+                ("model_id".to_string(), serde_json::json!("family/model")),
                 (
                     "resolved_model_package_facts".to_string(),
                     package_facts.clone(),
@@ -253,9 +253,10 @@ mod tests {
                 "model_id": "family/model"
             }))
         );
+        assert_eq!(inputs.get("resolved_model_package_facts"), None);
         assert_eq!(
-            inputs.get("resolved_model_package_facts"),
-            Some(&package_facts)
+            inputs.get("model_id"),
+            Some(&serde_json::json!("family/model"))
         );
     }
 
@@ -368,7 +369,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_dependency_inputs_merges_package_facts_target_context() {
+    fn resolve_dependency_inputs_rejects_package_facts_target_context() {
         let graph = WorkflowGraph {
             id: "workflow".to_string(),
             name: "Workflow".to_string(),
@@ -435,32 +436,11 @@ mod tests {
 
         let inputs = resolve_dependency_inputs(&graph, &"runtime".to_string(), &dependency_outputs);
 
-        assert_eq!(
-            inputs.get("resolved_model_package_facts"),
-            Some(&package_facts)
-        );
-        assert_eq!(
-            inputs.get("pumas_model_ref"),
-            Some(&serde_json::json!({
-                "model_id": "family/model",
-                "selected_artifact_path": "family/model/model.gguf"
-            }))
-        );
-        assert_eq!(
-            inputs.get("model_id"),
-            Some(&serde_json::json!("family/model"))
-        );
-        assert_eq!(
-            inputs.get("selected_binding_ids"),
-            Some(&serde_json::json!(["q4"]))
-        );
-        assert_eq!(
-            inputs.get("platform_context"),
-            Some(&serde_json::json!({"os": "linux", "arch": "x86_64"}))
-        );
-        assert_eq!(
-            inputs.get("dependency_bindings"),
-            Some(&serde_json::json!([{"id": "llamacpp"}]))
-        );
+        assert_eq!(inputs.get("resolved_model_package_facts"), None);
+        assert_eq!(inputs.get("pumas_model_ref"), None);
+        assert_eq!(inputs.get("model_id"), None);
+        assert_eq!(inputs.get("selected_binding_ids"), None);
+        assert_eq!(inputs.get("platform_context"), None);
+        assert_eq!(inputs.get("dependency_bindings"), None);
     }
 }

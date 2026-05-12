@@ -81,7 +81,7 @@ test('built-in templates do not use retired direct inference nodes', () => {
   }
 });
 
-test('puma-lib to canonical inference template edges carry package facts', () => {
+test('puma-lib to canonical inference template edges remain intent-only', () => {
   const templates = builtInTemplatePaths.map(loadTemplate);
 
   for (const template of templates) {
@@ -104,13 +104,16 @@ test('puma-lib to canonical inference template edges carry package facts', () =>
         ),
         'puma-lib to llm-inference template edges must carry pumas_model_ref',
       );
-      assert.ok(
+      assert.equal(
         pumaToInferenceEdges.some(
           (edge) =>
-            edge.source_handle === 'resolved_model_package_facts' &&
-            edge.target_handle === 'resolved_model_package_facts',
+            edge.source_handle === 'resolved_model_package_facts' ||
+            edge.target_handle === 'resolved_model_package_facts' ||
+            edge.source_handle === 'resolved_model_source' ||
+            edge.target_handle === 'resolved_model_source',
         ),
-        'puma-lib to llm-inference template edges must carry resolved_model_package_facts',
+        false,
+        'puma-lib to llm-inference template edges must not carry resolved model facts',
       );
     }
   }
@@ -212,15 +215,18 @@ test('tracked image-generation workflows use canonical llm inference shape', () 
       ),
       `${workflow.metadata.name} must route pumas_model_ref into image generation`,
     );
-    assert.ok(
+    assert.equal(
       edges.some(
         (edge) =>
           nodeTypesById.get(edge.source) === 'puma-lib' &&
           nodeTypesById.get(edge.target) === 'llm-inference' &&
-          edge.source_handle === 'resolved_model_package_facts' &&
-          edge.target_handle === 'resolved_model_package_facts',
+          (edge.source_handle === 'resolved_model_package_facts' ||
+            edge.target_handle === 'resolved_model_package_facts' ||
+            edge.source_handle === 'resolved_model_source' ||
+            edge.target_handle === 'resolved_model_source'),
       ),
-      `${workflow.metadata.name} must route package facts into image generation`,
+      false,
+      `${workflow.metadata.name} must not route resolved model facts into image generation`,
     );
     assert.ok(
       edges.some(

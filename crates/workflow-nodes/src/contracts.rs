@@ -344,12 +344,10 @@ fn apply_inference_port_payloads(
 
 fn llm_input_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
     match port_id {
-        "pumas_model_ref" | "resolved_model_source" | "resolved_model_package_facts" => {
-            task_role_payloads(
-                &llm_supported_task_ids(),
-                InferencePortPayloadRole::ModelReference,
-            )
-        }
+        "pumas_model_ref" => task_role_payloads(
+            &llm_supported_task_ids(),
+            InferencePortPayloadRole::ModelReference,
+        ),
         "generation_options" => task_role_payloads(
             &[
                 ContractInferenceTaskId::TextGeneration,
@@ -776,20 +774,15 @@ mod tests {
                 && payload.role == InferencePortPayloadRole::ModelReference
         }));
 
-        let package_facts = llm
+        assert!(llm
+            .input(&port_id("resolved_model_source").expect("resolved model source port id"))
+            .is_none());
+        assert!(llm
             .input(
                 &port_id("resolved_model_package_facts")
                     .expect("resolved model package facts port id"),
             )
-            .unwrap();
-        assert!(package_facts.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::Embedding
-                && payload.role == InferencePortPayloadRole::ModelReference
-        }));
-        assert!(package_facts.inference_payloads.iter().any(|payload| {
-            payload.task_id == ContractInferenceTaskId::ImageGeneration
-                && payload.role == InferencePortPayloadRole::ModelReference
-        }));
+            .is_none());
 
         let results = llm
             .output(&port_id("results").expect("results port id"))

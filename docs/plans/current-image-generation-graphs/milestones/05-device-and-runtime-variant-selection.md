@@ -45,11 +45,20 @@ typed diagnostic and the canonical design is fixed.
   options, executable technical-fit conservative fallback, override-fallback
   candidate synthesis, gateway active-backend inference, and node-engine
   backend routing that chooses independently of the scheduler decision.
-- [ ] Remove or replace graph-visible full Pumas package-fact wiring from
+- [x] Remove or replace graph-visible full Pumas package-fact wiring from
   inference templates/contracts before scheduler integration. Inference graph
   nodes may carry model reference, task, task options, and optional explicit
   backend/runtime/device intent; package facts must be resolved at the
   host/planning boundary and reduced into candidate facts or execution plans.
+  - 2026-05-12: `puma-lib` and `llm-inference` descriptors, contract payload
+    metadata, frontend mocks, bundled workflow templates, tracked current
+    image-generation saved workflows, and node-engine dependency input repair
+    now route only `pumas_model_ref` into canonical inference. Retired
+    `resolved_model_source`, `resolved_model_package_facts`, and
+    `model_package_facts` target handles are rejected/ignored at dependency
+    input preparation instead of being merged as executable graph context.
+    Package facts remain a host/planning boundary concern for candidate
+    synthesis and image execution planning, not graph-visible inference ports.
 - [ ] Add executable candidate synthesis before automatic policy selection.
   Candidate synthesis must join Pumas model/package facts, backend
   compatibility, runtime variant capability, device facts, resource estimates,

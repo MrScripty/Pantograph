@@ -62,10 +62,6 @@ impl InferenceTask {
     pub const PORT_BACKEND_KEY: &'static str = "backend_key";
     /// Port ID for canonical Pumas model reference input
     pub const PORT_PUMAS_MODEL_REF: &'static str = "pumas_model_ref";
-    /// Port ID for resolved model-source facts input
-    pub const PORT_RESOLVED_MODEL_SOURCE: &'static str = "resolved_model_source";
-    /// Port ID for resolved Pumas package-facts input
-    pub const PORT_RESOLVED_MODEL_PACKAGE_FACTS: &'static str = "resolved_model_package_facts";
     /// Port ID for canonical generation option input
     pub const PORT_GENERATION_OPTIONS: &'static str = "generation_options";
     /// Port ID for canonical task option input
@@ -148,16 +144,6 @@ impl TaskDescriptor for InferenceTask {
                 PortMetadata::optional(
                     Self::PORT_PUMAS_MODEL_REF,
                     "Pumas Model Ref",
-                    PortDataType::Json,
-                ),
-                PortMetadata::optional(
-                    Self::PORT_RESOLVED_MODEL_SOURCE,
-                    "Resolved Model Source",
-                    PortDataType::Json,
-                ),
-                PortMetadata::optional(
-                    Self::PORT_RESOLVED_MODEL_PACKAGE_FACTS,
-                    "Resolved Model Package Facts",
                     PortDataType::Json,
                 ),
                 PortMetadata::optional(Self::PORT_TEXT, "Text", PortDataType::String),
@@ -319,17 +305,11 @@ mod tests {
             .inputs
             .iter()
             .any(|p| p.id == InferenceTask::PORT_AUDIO && p.data_type == PortDataType::Audio));
-        assert!(meta
+        assert!(!meta.inputs.iter().any(|p| p.id == "resolved_model_source"));
+        assert!(!meta
             .inputs
             .iter()
-            .any(|p| p.id == InferenceTask::PORT_RESOLVED_MODEL_SOURCE
-                && p.data_type == PortDataType::Json));
-        assert!(meta
-            .inputs
-            .iter()
-            .any(|p| p.id == InferenceTask::PORT_RESOLVED_MODEL_PACKAGE_FACTS
-                && p.data_type == PortDataType::Json
-                && !p.required));
+            .any(|p| p.id == "resolved_model_package_facts"));
         assert!(meta
             .inputs
             .iter()

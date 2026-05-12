@@ -1111,6 +1111,10 @@ Worker rules:
 - Milestone 5 runtime-registry technical-fit selection no longer emits
   executable fallback decisions, and fallback-named technical-fit DTO variants
   have been removed from runtime-registry/workflow-service contracts.
+- Milestone 5 graph-visible full Pumas package-fact/source ports have been
+  removed from canonical inference descriptors, frontend definitions, bundled
+  templates, tracked current image-generation saved workflows, and node-engine
+  dependency input repair.
 
 ### Deviations
 
@@ -2725,6 +2729,50 @@ Worker rules:
   normalization helper, re-exported the new trace DTOs from public crates,
   removed JSON `null` fields that serde omits, and updated remaining
   workflow-service test literals with explicit empty trace fields.
+- 2026-05-12 graph-boundary package-facts cleanup slice: smallest useful
+  vertical slice was to remove graph-visible full Pumas package fact/source
+  ports from canonical inference descriptors, frontend definitions, built-in
+  templates, tracked current image-generation saved workflows, and node-engine
+  dependency input repair. Allowed write set:
+  `.pantograph/workflows/juggernaut-x-v10-sdxl.json`,
+  `.pantograph/workflows/tiny-sd-turbo-diffusion.json`,
+  `crates/workflow-nodes/src/processing/inference.rs`,
+  `crates/workflow-nodes/src/input/puma_lib.rs`,
+  `crates/workflow-nodes/src/contracts.rs`,
+  `crates/node-engine/src/engine/dependency_inputs.rs`,
+  `src/services/workflow/mocks.ts`,
+  `src/services/workflow/WorkflowService.commands.test.ts`,
+  `src/services/workflow/templateService.test.ts`,
+  `src/templates/workflows/gguf-reranker-workflow.json`,
+  `src/templates/workflows/tiny-sd-turbo-text-to-image.json`, and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because workflow graphs
+  now route only intent-level `pumas_model_ref` into canonical inference.
+  Retired package-facts/source target handles are ignored during dependency
+  input preparation instead of merged forward as compatibility context, and no
+  descriptor alias or old port shim remains. Runtime planners and direct
+  executor package-facts parsing are unchanged for the planned candidate
+  synthesis and planned-context gateway slices.
+- Verification passed:
+  `cargo test -p workflow-nodes test_descriptor_has_canonical_inference_contract_ports`,
+  `cargo test -p workflow-nodes test_descriptor_has_correct_ports`,
+  `cargo test -p workflow-nodes llm_inference_contract_exposes_inference_task_payload_metadata`,
+  `cargo test -p node-engine dependency_inputs`,
+  `node --experimental-strip-types --test src/services/workflow/WorkflowService.commands.test.ts`,
+  `node --experimental-strip-types --test src/services/workflow/templateService.test.ts`,
+  `cargo check -p workflow-nodes -p node-engine`,
+  `npm run typecheck`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- Verification deviations/discovered issues: the first node-engine dependency
+  input run exposed a stale positive test that still expected package facts to
+  merge through a `pumas_model_ref` edge; the test was corrected to prove
+  intent-only model reference flow. The first template-service test rerun
+  exposed resolved package-facts edges in the tracked current Juggernaut and
+  Tiny SD saved workflow fixtures; those were removed as part of this slice.
+  Code search also found an ignored/untracked local
+  `.pantograph/workflows/Maid-Qwen3.6-27b-heritic.json` containing old
+  resolved-model port metadata; it was not committed because it is outside the
+  tracked workflow fixture set and remains local stale data.
 
 ### Traceability Links
 

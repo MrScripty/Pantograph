@@ -84,7 +84,7 @@ function standardRetentionSettings(retentionDays: number): DiagnosticsRetentionP
   };
 }
 
-test('mock node definitions expose canonical Pumas inference ports', () => {
+test('mock node definitions expose intent-only Pumas inference ports', () => {
   const pumaLib = MOCK_NODE_DEFINITIONS.find((definition) => definition.node_type === 'puma-lib');
   const llmInference = MOCK_NODE_DEFINITIONS.find(
     (definition) => definition.node_type === 'llm-inference',
@@ -93,13 +93,16 @@ test('mock node definitions expose canonical Pumas inference ports', () => {
   assert.ok(pumaLib);
   assert.ok(llmInference);
   assert.ok(pumaLib.outputs.some((port) => port.id === 'pumas_model_ref'));
-  assert.ok(pumaLib.outputs.some((port) => port.id === 'resolved_model_package_facts'));
+  assert.equal(pumaLib.outputs.some((port) => port.id === 'resolved_model_package_facts'), false);
   assert.ok(pumaLib.outputs.some((port) => port.id === 'dependency_requirements'));
   assert.ok(llmInference.inputs.some((port) => port.id === 'task_kind'));
   assert.ok(llmInference.inputs.some((port) => port.id === 'backend_key'));
   assert.ok(!llmInference.inputs.some((port) => port.id === 'runtime_hint'));
-  assert.ok(llmInference.inputs.some((port) => port.id === 'resolved_model_source'));
-  assert.ok(llmInference.inputs.some((port) => port.id === 'resolved_model_package_facts'));
+  assert.equal(llmInference.inputs.some((port) => port.id === 'resolved_model_source'), false);
+  assert.equal(
+    llmInference.inputs.some((port) => port.id === 'resolved_model_package_facts'),
+    false,
+  );
   assert.ok(llmInference.outputs.some((port) => port.id === 'diagnostics'));
   const prompt = llmInference.inputs.find((port) => port.id === 'prompt');
   const audio = llmInference.inputs.find((port) => port.id === 'audio');

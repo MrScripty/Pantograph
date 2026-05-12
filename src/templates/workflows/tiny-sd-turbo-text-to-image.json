@@ -168,13 +168,6 @@
           "target_handle": "pumas_model_ref"
         },
         {
-          "id": "e4",
-          "source": "model",
-          "source_handle": "resolved_model_package_facts",
-          "target": "diffusion",
-          "target_handle": "resolved_model_package_facts"
-        },
-        {
           "id": "e5",
           "source": "model",
           "source_handle": "inference_settings",
