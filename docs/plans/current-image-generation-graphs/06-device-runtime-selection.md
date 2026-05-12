@@ -130,6 +130,17 @@ vertical slices:
   as policy version, candidate set summary, ranking reason, exploration reason,
   and seed basis. These contracts must serde-round-trip through Rust fixtures
   and existing TypeScript mirrors before runtime behavior changes.
+- **Graph-boundary cleanup slice:** remove or replace graph-visible full Pumas
+  package-fact edges before scheduler-policy integration. Inference graph nodes
+  may carry model reference, task, task options, and optional explicit backend,
+  runtime, device, latency, or throughput intent; they must not require graph
+  authors or templates to wire full package facts through inference nodes.
+- **Executable candidate synthesis slice:** join Pumas model/package facts,
+  backend compatibility facts, runtime variant capability facts, device facts,
+  resource estimates, and bounded diagnostics into one executable
+  `BackendExecutionCandidate` set before policy ranking. Runtime candidates
+  without model facts and Pumas-derived candidates without runtime/device facts
+  are incomplete evidence, not selectable execution decisions.
 - **Pure policy slice:** implement candidate hard-filtering, ranking, and
   controlled exploration as synchronous pure functions over validated
   `BackendExecutionCandidate` facts and ledger summary inputs. The policy must
@@ -193,6 +204,41 @@ Required verification before replacing the temporary ambiguity behavior:
   candidate-id ordering.
 - Regression tests prove explicit unavailable backend/runtime/device requests
   still fail closed and do not explore alternate candidates.
+
+### Codebase Impact Review And Re-Plan Boundary
+
+The scheduler-policy review found one cross-cutting boundary conflict that must
+be resolved before production scheduler integration proceeds: current workflow
+node contracts and templates still expose resolved Pumas package facts as a
+graph-visible inference edge. That is incompatible with this plan's
+intent-first graph rule. The next implementation slices must either remove that
+edge from inference templates/contracts or stop for a focused re-plan if a
+graph-visible package-fact dependency is still considered required.
+
+Implementation order after this review:
+
+1. Append selection-policy fields and diagnostic codes to Rust and TypeScript
+   DTOs with serde/fixture coverage.
+2. Clean up the graph boundary so inference nodes no longer require full Pumas
+   package facts. Host planning resolves package facts once and reduces them
+   into candidate facts or an image execution plan.
+3. Add executable candidate synthesis that joins Pumas facts with backend,
+   runtime, device, resource, and readiness facts before policy selection.
+4. Replace the temporary equal-priority `ambiguous_auto_resolution` behavior
+   with recorded automatic selection policy. Candidate-id sorting may provide
+   stable display/order metadata, but it must not be the executable tie-break
+   when policy evidence is otherwise equal.
+5. Add bounded diagnostics-ledger summary reads keyed by typed
+   model/task/runtime/device facts. The async shell may read SQLite; the
+   ranking policy remains synchronous and lock-free.
+6. Integrate scheduler policy only after facts and ledger summaries are
+   assembled. Missing or stale Pumas facts must emit typed candidate
+   diagnostics and must not silently degrade into capability-only selection
+   unless another validated fact source is sufficient for the requested task.
+7. Wire image generation through a planned gateway context that carries the
+   scheduler-owned `BackendExecutionDecision` and reduced package facts into
+   `ImageGenerationExecutionPlan`. Gateway code must not reconstruct backend,
+   runtime, device, or package decisions from request-only fields.
 
 ## Transformers-Compatible Canonical Semantics
 

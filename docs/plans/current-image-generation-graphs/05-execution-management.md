@@ -2684,6 +2684,23 @@ Worker rules:
   fields. This standards pass confirms the intended blast radius is scheduler
   contracts/policy, diagnostics-ledger summaries, scheduler integration, and
   backend-owned projections only.
+- 2026-05-12 codebase impact review for scheduler-policy update: investigated
+  the touched code paths and recorded the agreed re-plan boundary before any
+  source implementation. Current graph contracts/templates still expose
+  resolved Pumas package facts as graph-visible inference edges, while the
+  updated architecture requires inference nodes to stay intent-first. The next
+  implementation sequence is therefore contract fields, graph-boundary cleanup,
+  executable candidate synthesis, pure scheduler policy, bounded ledger
+  summaries, scheduler integration, and planned image gateway wiring.
+- Discovered design debts now recorded in the plan: runtime-registry still has
+  temporary equal-priority `ambiguous_auto_resolution` behavior; embedded
+  runtime currently has Pumas-derived candidate fragments without complete
+  runtime/device facts; Pumas lookup failures can degrade into empty facts and
+  must become typed candidate diagnostics; `BackendExecutionDecision` needs
+  append-only policy evidence fields before behavior changes; and the image
+  gateway still has a request-only dispatch path that must be replaced by a
+  planned execution context. Decision: defer source edits until these slices
+  are taken in order so the no-fallback/no-legacy rule is preserved.
 
 ### Traceability Links
 

@@ -45,6 +45,18 @@ typed diagnostic and the canonical design is fixed.
   options, executable technical-fit conservative fallback, override-fallback
   candidate synthesis, gateway active-backend inference, and node-engine
   backend routing that chooses independently of the scheduler decision.
+- [ ] Remove or replace graph-visible full Pumas package-fact wiring from
+  inference templates/contracts before scheduler integration. Inference graph
+  nodes may carry model reference, task, task options, and optional explicit
+  backend/runtime/device intent; package facts must be resolved at the
+  host/planning boundary and reduced into candidate facts or execution plans.
+- [ ] Add executable candidate synthesis before automatic policy selection.
+  Candidate synthesis must join Pumas model/package facts, backend
+  compatibility, runtime variant capability, device facts, resource estimates,
+  readiness state, and typed diagnostics into selectable
+  `BackendExecutionCandidate` values. Incomplete candidate fragments must fail
+  candidate selection with ledger diagnostics instead of becoming fallback
+  execution decisions.
 - [x] Add a common backend-adapter capability contract for llama.cpp, PyTorch,
   vLLM, Candle, and future MLX. The contract reports facts and performs
   backend-specific translation; it must not rank candidates across backends or
@@ -4135,6 +4147,14 @@ typed diagnostic and the canonical design is fixed.
   `BackendExecutionDecision` and scheduler lifecycle diagnostics deserialize
   through Rust and TypeScript mirrors without frontend ranking or candidate
   fabrication.
+- Workflow template/contract tests prove inference nodes no longer require
+  full resolved Pumas package facts as graph-visible edges. Tests should cover
+  model reference plus optional runtime/device intent and verify package facts
+  are resolved only by the host/planning boundary.
+- Candidate synthesis tests prove selectable candidates include model/package,
+  backend, runtime variant, device, resource, readiness, and bounded diagnostic
+  facts. Missing or stale Pumas lookups must produce typed candidate
+  diagnostics and must not silently degrade into capability-only selection.
 - Admission tests prove explicit backend overrides fail when incompatible with
   the task/model/platform, including diffusion through llama.cpp and MLX on
   Linux/Windows.

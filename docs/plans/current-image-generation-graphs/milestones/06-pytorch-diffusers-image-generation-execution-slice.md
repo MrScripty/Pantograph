@@ -18,6 +18,11 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Keep planner parsing/validation synchronous and side-effect free. Async
   shells may gather Pumas facts, dependency readiness, and device facts before
   calling the planner.
+- [ ] Add a planned image-generation gateway boundary before end-to-end gateway
+  wiring. The gateway must carry reduced package facts and the scheduler-owned
+  `BackendExecutionDecision` into `ImageGenerationExecutionPlan`; it must not
+  dispatch image generation from `ImageGenerationRequest` alone or infer
+  backend/runtime/device/package decisions from request fields.
 - [ ] Verify backend runtime selection maps diffusion/image-generation package
   facts and graph hints to PyTorch execution, preserving `diffusers` as the
   dependency and package capability label.
@@ -372,11 +377,13 @@ translation, and Python image-envelope shape validation are implemented.
   they do not carry Pumas package facts or the scheduler-owned
   `BackendExecutionDecision` required by the no-fallback planner. Full
   end-to-end gateway wiring needs a planned-context boundary instead of
-  reconstructing facts from request fields. That planned-context boundary
-  should let the scheduler resolve omitted backend/runtime/device intent
-  automatically using the policy in `06-device-runtime-selection.md`, including
+  reconstructing facts from request fields. The planned-context boundary must
+  use the scheduler policy in `06-device-runtime-selection.md` to resolve
+  omitted backend/runtime/device intent automatically, including
   readiness/history ranking and controlled exploration among valid candidates.
-  Implementation must not add Pumas facts, ledger summaries, candidate lists,
-  or scheduler decisions to workflow graph nodes or worker envelopes; those
-  facts belong to the planning/scheduler boundary and must be reduced into the
-  validated `ImageGenerationExecutionPlan` before PyTorch execution.
+  It must also depend on the Milestone 5 graph-boundary cleanup and executable
+  candidate synthesis slices: full Pumas facts, ledger summaries, candidate
+  lists, and scheduler decisions must not be added to workflow graph nodes or
+  worker envelopes. Those facts belong to the planning/scheduler boundary and
+  must be reduced into the validated `ImageGenerationExecutionPlan` before
+  PyTorch execution.
