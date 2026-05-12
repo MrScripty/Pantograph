@@ -211,3 +211,24 @@ PyTorch/diffusers and produce a retained image artifact.
 - Remaining follow-up: begin the first Milestone 6 planner contract slice,
   consuming the pinned Pumas Diffusers facts and returning typed diagnostics
   for missing or ambiguous image-family facts.
+
+2026-05-12 planner contract slice:
+
+- Smallest useful vertical slice: add a side-effect-free inference planner
+  contract that consumes `ImageGenerationRequest`, pinned Pumas Diffusers
+  package facts, and a scheduler-owned backend/runtime/device decision, then
+  returns either one PyTorch/Diffusers execution plan or typed diagnostics.
+- Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`,
+  `crates/inference/src/lib.rs`, `crates/inference/src/README.md`, and this
+  plan directory.
+- No-fallback/no-legacy confirmation: the planner rejects non-PyTorch backend
+  decisions, missing Diffusers facts, ambiguous family evidence, unsupported
+  families, missing Stable Diffusion component roles, and invalid numeric
+  request options. It does not treat `diffusers` as an executable backend alias
+  and does not infer family from model names.
+- Verification passed: `cargo test -p inference image_generation_planner`,
+  `cargo check -p inference`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- Remaining follow-up: wire the planner into PyTorch image generation and add
+  broader family/default/dependency/path diagnostics before worker execution.

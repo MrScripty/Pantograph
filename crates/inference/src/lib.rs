@@ -30,6 +30,7 @@ pub mod device;
 pub mod device_contracts;
 pub mod embedding_runtime;
 pub mod gateway;
+pub mod image_generation_planner;
 pub mod kv_cache;
 pub mod managed_binaries;
 pub mod managed_dependencies;
@@ -80,6 +81,12 @@ pub use embedding_runtime::{DedicatedEmbeddingRuntimeManager, LlamaCppEmbeddingR
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,
     InferenceStartRequest, SharedGateway,
+};
+pub use image_generation_planner::{
+    plan_image_generation_execution, ImageGenerationExecutionPlan,
+    ImageGenerationPlannerDiagnostic, ImageGenerationPlannerDiagnosticCode,
+    ImageGenerationPlannerDiagnosticSeverity, ImageGenerationPlanningInput,
+    ImageGenerationPlanningOutcome,
 };
 pub use managed_binaries::{
     resolve_managed_binary_command, ManagedBinaryFacadeError, ManagedBinaryKey,
