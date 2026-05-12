@@ -3952,6 +3952,37 @@ typed diagnostic and the canonical design is fixed.
     warmup producers to timing attempt ids and checked duration math. Full
     baseline/deviation enforcement and scheduler retry/termination policy
     remain the later required policy-completion path.
+- 2026-05-12 re-plan trigger: remaining inference warmup timing producers
+  need shared timing-contract ownership outside workflow-service.
+  - Code inspection found the remaining production warmup `saturating_sub`
+    sites in `crates/inference/src/gateway.rs` and
+    `crates/inference/src/embedding_runtime.rs`. The existing timing attempt
+    contract lives in `pantograph-workflow-service`, while `inference` is a
+    lower-level runtime crate.
+  - Implementation boundary: making `inference` depend on
+    `pantograph-workflow-service` would invert the crate layering, and copying
+    the timing attempt id/diagnostic structs into `inference` would create a
+    second non-canonical contract. Either path violates the no-fallback,
+    no-legacy, no-contract-drift rule.
+  - Required re-plan decision: choose the shared owner for timing attempt ids,
+    checked duration semantics, and timing diagnostics before migrating
+    inference warmup producers.
+  - Viable option A: create a dedicated shared crate for timing attempts and
+    diagnostics, then migrate workflow-service trace/load/unload producers and
+    inference warmup producers to that crate.
+  - Viable option B: move the timing attempt contract into an existing shared
+    foundation crate such as `pantograph-runtime-attribution`, accepting that
+    the crate's ownership expands beyond identity/attribution.
+  - Rejected option: keep workflow-service as the owner and add an
+    `inference` dependency on it. This couples runtime execution to workflow
+    orchestration.
+  - Rejected option: duplicate the contract in `inference`. This preserves the
+    saturated producer migration mechanically but creates contract drift and is
+    not canonical.
+  - Recommendation: choose option A unless crate-count constraints are more
+    important than a crisp ownership boundary. Option A keeps timing policy
+    reusable for inference, workflow-service, scheduler diagnostics, and later
+    baseline/deviation enforcement without overloading runtime-attribution.
 
 **Verification:**
 

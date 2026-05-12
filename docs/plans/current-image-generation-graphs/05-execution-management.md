@@ -2363,6 +2363,22 @@ Worker rules:
   gateway warmup and embedding warmup producers onto timing attempt ids and
   checked duration math. Full baseline/deviation enforcement and scheduler
   retry/termination policy remain the later required policy-completion path.
+- 2026-05-12 re-plan trigger: remaining inference warmup timing producers
+  need shared timing-contract ownership outside workflow-service. Code
+  inspection found the remaining production warmup `saturating_sub` sites in
+  `crates/inference/src/gateway.rs` and
+  `crates/inference/src/embedding_runtime.rs`; `inference` cannot depend on
+  `pantograph-workflow-service` without reversing crate layering, and copying
+  timing attempt id/diagnostic structs into `inference` would create a second
+  non-canonical contract. Required re-plan: choose the shared owner for timing
+  attempt ids, checked duration semantics, and timing diagnostics before
+  migrating inference warmup producers. Viable options are a dedicated shared
+  timing-contract crate, or moving the contract into an existing shared
+  foundation crate such as `pantograph-runtime-attribution` with expanded
+  ownership. Rejected options are adding a workflow-service dependency to
+  `inference` or duplicating the contract locally. Recommendation: use a
+  dedicated shared timing-contract crate unless crate-count constraints are
+  more important than a crisp ownership boundary.
 
 ### Traceability Links
 
