@@ -284,8 +284,7 @@ impl WorkflowService {
                         );
                     }
                     if !runtime_admission_delay_recorded {
-                        let delayed_until_ms =
-                            unix_timestamp_ms().saturating_add(WORKFLOW_SESSION_QUEUE_POLL_MS);
+                        let delayed_until_ms = scheduler_delay_until_ms(unix_timestamp_ms())?;
                         self.record_scheduler_delay_event_if_configured(
                             &session,
                             run_snapshot.as_ref(),
@@ -1629,6 +1628,16 @@ impl WorkflowService {
     }
 }
 
+fn scheduler_delay_until_ms(now_ms: u64) -> Result<u64, WorkflowServiceError> {
+    now_ms
+        .checked_add(WORKFLOW_SESSION_QUEUE_POLL_MS)
+        .ok_or_else(|| {
+            WorkflowServiceError::Internal(format!(
+                "scheduler admission retry timestamp overflowed: now_ms={now_ms}, poll_ms={WORKFLOW_SESSION_QUEUE_POLL_MS}"
+            ))
+        })
+}
+
 fn queue_position_u32(
     queued_item: &WorkflowExecutionSessionQueueItem,
 ) -> Result<u32, WorkflowServiceError> {
@@ -2179,5 +2188,17 @@ mod tests {
 
         assert!(truncated.len() <= SCHEDULER_ESTIMATE_REASON_MAX_LEN);
         assert!(truncated.ends_with(SCHEDULER_ESTIMATE_REASON_TRUNCATION_SUFFIX));
+    }
+
+    #[test]
+    fn scheduler_delay_until_rejects_timestamp_overflow() {
+        let error = scheduler_delay_until_ms(u64::MAX)
+            .expect_err("scheduler retry timestamp overflow should fail");
+
+        assert!(matches!(
+            error,
+            WorkflowServiceError::Internal(message)
+                if message.contains("scheduler admission retry timestamp overflowed")
+        ));
     }
 }

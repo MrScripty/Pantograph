@@ -296,6 +296,13 @@ typed diagnostic and the canonical design is fixed.
     addition, runtime technical-fit rank overflow, cache counter drift, broader
     image request limits, context/batch limits, byte-range projections, and
     worker/runtime request fields.
+  - 2026-05-12 partial: workflow session runtime-admission retry timestamps now
+    use checked scheduler timestamp addition and return
+    `WorkflowServiceError::Internal` if `now_ms + poll_ms` overflows instead
+    of scheduling a saturated retry timestamp. Remaining numeric boundaries
+    include duration/timing diagnostics, runtime technical-fit rank overflow,
+    cache counter drift, broader image request limits, context/batch limits,
+    byte-range projections, and worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3601,6 +3608,34 @@ typed diagnostic and the canonical design is fixed.
     technical-fit rank overflow, cache counter drift, broader image request
     limits, context/batch limits, byte-range projections, and worker/runtime
     request fields.
+- 2026-05-12 slice: scheduler runtime-admission retry timestamp validation.
+  - Smallest useful vertical slice: replace the session runtime-admission retry
+    `now_ms + WORKFLOW_SESSION_QUEUE_POLL_MS` saturation with checked
+    arithmetic and a typed workflow-service error.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: impossible retry timestamp arithmetic
+    no longer schedules a saturated retry instant; it fails with
+    `WorkflowServiceError::Internal`. Normal runtime-admission delay events
+    still carry the scheduler retry timestamp.
+  - Standards/blast-radius gate: scheduler retry timestamp projection only; no
+    generated files, frontend code, saved workflow fixtures, lockfiles, path
+    roots, Pumas contracts, worker contracts, runtime technical-fit ranking, or
+    backend lifecycle ownership changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service scheduler_delay_until_rejects_timestamp_overflow`
+    and
+    `cargo test -p pantograph-workflow-service workflow_execution_session_run_waits_for_runtime_admission`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` found
+    rustfmt-only wrapping in the touched scheduler timestamp call;
+    `cargo fmt --all` was applied and focused tests plus final format
+    verification were rerun successfully.
+  - Remaining follow-up: checked arithmetic policy still needs implementation
+    for duration/timing diagnostics, runtime technical-fit rank overflow, cache
+    counter drift, broader image request limits, context/batch limits,
+    byte-range projections, and worker/runtime request fields.
 
 **Verification:**
 

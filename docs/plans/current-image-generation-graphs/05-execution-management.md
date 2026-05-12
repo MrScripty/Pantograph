@@ -2136,6 +2136,28 @@ Worker rules:
   addition, runtime technical-fit rank overflow, cache counter drift, broader
   image request limits, context/batch limits, byte-range projections, and
   worker/runtime request fields.
+- 2026-05-12 scheduler runtime-admission retry timestamp validation slice:
+  smallest useful vertical slice was limited to replacing the session
+  runtime-admission retry `now_ms + WORKFLOW_SESSION_QUEUE_POLL_MS` saturation
+  with checked arithmetic and a typed workflow-service error. Allowed write
+  set:
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because impossible retry
+  timestamp arithmetic no longer schedules a saturated retry instant; it fails
+  with `WorkflowServiceError::Internal`. Normal runtime-admission delay events
+  still carry the scheduler retry timestamp. Verification passed:
+  `cargo test -p pantograph-workflow-service scheduler_delay_until_rejects_timestamp_overflow`
+  and
+  `cargo test -p pantograph-workflow-service workflow_execution_session_run_waits_for_runtime_admission`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Deviation: the first
+  `cargo fmt --all -- --check` found rustfmt-only wrapping in the touched
+  scheduler timestamp call; `cargo fmt --all` was applied and focused tests
+  plus final format verification were rerun successfully. Remaining
+  numeric-boundary follow-up: duration/timing diagnostics, runtime
+  technical-fit rank overflow, cache counter drift, broader image request
+  limits, context/batch limits, byte-range projections, and worker/runtime
+  request fields.
 
 ### Traceability Links
 
