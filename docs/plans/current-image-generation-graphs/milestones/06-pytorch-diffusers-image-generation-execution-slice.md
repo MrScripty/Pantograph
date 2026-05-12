@@ -345,3 +345,31 @@ translation, and Python image-envelope shape validation are implemented.
   required by the existing Rust/PyO3 worker facade.
 - Remaining follow-up: wire `PyTorchBackend::generate_image` through the
   validated planner and Python worker envelope.
+
+2026-05-12 planned Rust image backend helper slice:
+
+- Smallest useful vertical slice: add a focused PyTorch image-generation Rust
+  helper that consumes `ImageGenerationExecutionPlan`, builds the validated
+  worker envelope, invokes `generate_image_from_envelope`, and maps typed worker
+  responses into `ImageGenerationResult`.
+- Allowed write set: `crates/inference/src/backend/pytorch.rs`,
+  `crates/inference/src/backend/pytorch_image_generation.rs`,
+  `crates/inference/src/backend/pytorch_image_generation_tests.rs`, and this
+  plan directory.
+- No-fallback/no-legacy confirmation: the helper accepts only the validated
+  Rust execution plan and never builds a request from raw graph backend hints,
+  raw device strings, model names, or request-only defaults. The existing
+  `InferenceBackend::generate_image(ImageGenerationRequest)` trait method
+  remains unwired rather than bypassing the planner.
+- Verification passed: `cargo test -p inference --features backend-pytorch
+  pytorch_image_generation`, `cargo check -p inference --features
+  backend-pytorch`, `cargo fmt --all -- --check`, and `git diff --check`.
+- Verification deviation: the first `cargo fmt --all -- --check` reported
+  formatting changes in the new module/test files; ran `cargo fmt --all` and
+  reran the check successfully.
+- Remaining follow-up/re-plan boundary: the public inference backend trait and
+  gateway image-generation path currently carry only `ImageGenerationRequest`;
+  they do not carry Pumas package facts or the scheduler-owned
+  `BackendExecutionDecision` required by the no-fallback planner. Full
+  end-to-end gateway wiring needs a planned-context boundary instead of
+  reconstructing facts from request fields.

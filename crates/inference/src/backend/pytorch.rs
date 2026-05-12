@@ -57,6 +57,8 @@ use crate::types::{
 use crate::{BackendHintLabel, ModelArtifactKind};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 
+#[path = "pytorch_image_generation.rs"]
+mod pytorch_image_generation;
 #[path = "pytorch_worker.rs"]
 mod pytorch_worker;
 #[allow(dead_code)]
