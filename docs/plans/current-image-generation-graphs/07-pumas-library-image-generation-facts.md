@@ -855,6 +855,13 @@ used by Pumas for the selector snapshot path.
   real planner/execution implementation until a Pumas release/tag or commit
   containing the version 2 producer facts and P6 fixture guarantees is selected
   and pinned in Pantograph.
+- 2026-05-12 P6 release-boundary resolution: Pantograph pins
+  `pumas-library` to Pumas commit `281a45a5bc604975ebd0d5e71d12adaa5a228382`,
+  which is on Pumas `origin/main`, documents the canonical
+  `diffusers_sd_text_to_image_package_facts.json` fixture handoff, and exposes
+  package-facts contract version 2. The next Pantograph slice can consume that
+  pinned producer contract for image-family planner diagnostics without a
+  local compatibility bridge.
 
 ## Implementation Sequencing
 
@@ -1186,7 +1193,7 @@ guesswork.
 - [x] Record deviations in this plan and the Pumas implementation plan.
 - [ ] Verify Pumas remains useful to non-Pantograph consumers by keeping fixture
       field names factual and standards-oriented rather than Pantograph-specific.
-- [ ] Record the Pumas release/version boundary that Pantograph should pin after
+- [x] Record the Pumas release/version boundary that Pantograph should pin after
       the contract is implemented.
 
 **Verification:**

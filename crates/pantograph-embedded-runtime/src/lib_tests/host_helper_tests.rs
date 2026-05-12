@@ -70,6 +70,36 @@ fn runtime_registry_owner_conflicts_map_to_invalid_request() {
 }
 
 #[test]
+fn runtime_registry_resource_accounting_errors_map_to_internal() {
+    let overflow = runtime_registry_errors::workflow_service_error_from_runtime_registry(
+        RuntimeRegistryError::ResourceAccountingOverflow {
+            runtime_id: "pytorch".to_string(),
+            resource_kind: "ram",
+        },
+    );
+    let underflow = runtime_registry_errors::workflow_service_error_from_runtime_registry(
+        RuntimeRegistryError::ResourceBudgetUnderflow {
+            runtime_id: "pytorch".to_string(),
+            resource_kind: "vram",
+            total_mb: 1,
+            safety_margin_mb: 2,
+            reserved_mb: 0,
+        },
+    );
+
+    assert!(matches!(overflow, WorkflowServiceError::Internal(_)));
+    assert!(matches!(underflow, WorkflowServiceError::Internal(_)));
+    assert_eq!(
+        overflow.code(),
+        pantograph_workflow_service::WorkflowErrorCode::InternalError
+    );
+    assert_eq!(
+        underflow.code(),
+        pantograph_workflow_service::WorkflowErrorCode::InternalError
+    );
+}
+
+#[test]
 fn unresolved_llamacpp_device_decision_blocks_host_owned_auto_start() {
     let error = unresolved_llamacpp_device_decision_error(Path::new("/models/model.gguf"));
 

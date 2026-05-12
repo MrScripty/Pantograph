@@ -2464,6 +2464,53 @@ Worker rules:
   `rg -n "pumas-library|v0\\.6\\.0|6d038ff|contract 2|contract-version" docs/plans/current-image-generation-graphs Cargo.toml Cargo.lock crates -g '!target'`,
   `rg -n "MODEL_PACKAGE_FACTS_CONTRACT_VERSION|package_facts_contract_version|diffusers_sd_text_to_image_package_facts" crates/inference crates/pantograph-embedded-runtime crates/workflow-nodes -g '!target'`,
   and `rg -n "MODEL_PACKAGE_FACTS_CONTRACT_VERSION|PACKAGE_FACTS_CONTRACT_VERSION" ~/.cargo/git/checkouts -g '*.rs'`.
+- 2026-05-12 dependency-boundary slice: smallest useful vertical slice was to
+  pin Pantograph's workspace `pumas-library` dependency to Pumas commit
+  `281a45a5bc604975ebd0d5e71d12adaa5a228382`, the contract-version-2 producer
+  revision recorded by the Pumas P6 fixture handoff, then verify direct
+  Pantograph consumers of the Pumas contract. Allowed write set: root
+  `Cargo.toml`, `Cargo.lock`, `crates/pantograph-embedded-runtime/**`,
+  `crates/pantograph-frontend-http-adapter/src/lib.rs`, and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because Pantograph now
+  consumes a pinned Pumas producer revision with package-facts contract version
+  2 instead of using a local fixture-only bridge or mapping old contract
+  version 1 facts forward. Verification passed:
+  `cargo check -p workflow-nodes --features model-library`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo test -p pantograph-embedded-runtime runtime_registry_resource_accounting_errors_map_to_internal`,
+  `cargo test -p inference --test model_contracts package_fact`,
+  `cargo test -p inference --test model_contracts pumas_image_generation_fixture_decodes_with_structured_diffusers_facts`,
+  `cargo test -p pantograph-embedded-runtime pumas_package_facts`,
+  `cargo check -p pantograph-uniffi`,
+  `cargo check -p pantograph_rustler`,
+  `cargo check -p pantograph-frontend-http-adapter`,
+  `cargo test -p pantograph-frontend-http-adapter map_workflow_error_envelope_ignores_graph_details_for_scheduler_busy`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Verification deviations/discovered issues: the first `cargo update -p
+  pumas-library` failed under the sandbox because GitHub DNS/network access was
+  unavailable, then succeeded with approved network escalation. An attempted
+  `cargo check -p pantograph-rustler` used the directory-style package name and
+  failed before checking code; reran as `cargo check -p pantograph_rustler`.
+  Direct consumer verification also exposed pre-existing compile gaps from
+  earlier contract changes: embedded-runtime snapshots and tests were missing
+  the new runtime warmup timing fields, embedded-runtime did not map the new
+  runtime-registry resource accounting errors, and the frontend HTTP adapter
+  did not explicitly ignore graph error details when reconstructing scheduler
+  errors. These were fixed with explicit field propagation and explicit match
+  arms, not wildcard fallbacks. A broader non-slice verification filter,
+  `cargo test -p pantograph-embedded-runtime runtime_registry`, still fails in
+  two session/runtime tests because current no-fallback technical-fit auto
+  selection reports `ambiguous_auto_resolution` for equal-ranked candidates:
+  `keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics_to_start_runtime`
+  and
+  `execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_diagnostics_ready`.
+  The fix is deferred to the Milestone 6 planner/test-fixture slice because it
+  needs explicit canonical workflow backend/device intent rather than
+  reintroducing implicit auto selection or fixture-only backend hints.
+- Remaining follow-up: begin Milestone 6 planner implementation with a focused
+  contract slice that consumes pinned Pumas Diffusers facts and returns typed
+  diagnostics for missing or ambiguous image-family evidence.
 
 ### Traceability Links
 

@@ -246,8 +246,9 @@ async fn workflow_error_from_http_response(
 }
 
 fn map_workflow_error_envelope(envelope: WorkflowErrorEnvelope) -> WorkflowServiceError {
-    let scheduler_details = envelope.details.map(|details| match details {
-        WorkflowErrorDetails::Scheduler(details) => details,
+    let scheduler_details = envelope.details.and_then(|details| match details {
+        WorkflowErrorDetails::Scheduler(details) => Some(details),
+        WorkflowErrorDetails::Graph(_) => None,
     });
     match envelope.code {
         WorkflowErrorCode::InvalidRequest => WorkflowServiceError::InvalidRequest(envelope.message),
@@ -356,8 +357,8 @@ mod tests {
     use super::*;
     use pantograph_workflow_service::{
         WorkflowErrorCode, WorkflowExecutionSessionCreateRequest,
-        WorkflowExecutionSessionRunRequest, WorkflowOutputTarget, WorkflowRunRequest,
-        WorkflowRunResponse, WorkflowService, WorkflowServiceError,
+        WorkflowExecutionSessionRunRequest, WorkflowGraphErrorDetails, WorkflowOutputTarget,
+        WorkflowRunRequest, WorkflowRunResponse, WorkflowService, WorkflowServiceError,
     };
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -871,9 +872,27 @@ mod tests {
                 code,
                 message: "x".to_string(),
                 details: None,
+                diagnostics: None,
             });
             assert_eq!(mapped.to_envelope(), expected.to_envelope());
         }
+    }
+
+    #[test]
+    fn map_workflow_error_envelope_ignores_graph_details_for_scheduler_busy() {
+        let mapped = map_workflow_error_envelope(WorkflowErrorEnvelope {
+            code: WorkflowErrorCode::SchedulerBusy,
+            message: "x".to_string(),
+            details: Some(WorkflowErrorDetails::Graph(WorkflowGraphErrorDetails {
+                graph_diagnostics: Vec::new(),
+            })),
+            diagnostics: None,
+        });
+
+        assert_eq!(
+            mapped.to_envelope(),
+            WorkflowServiceError::scheduler_busy("x").to_envelope()
+        );
     }
 
     #[tokio::test]

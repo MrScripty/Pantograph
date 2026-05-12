@@ -14,10 +14,9 @@ use pantograph_runtime_registry::{
     RuntimeTechnicalFitWarmupState,
 };
 use pantograph_workflow_service::{
-    WorkflowBackendCapabilityFacts, WorkflowDeviceResolutionDiagnostic,
-    WorkflowDeviceResolutionDiagnosticCode, WorkflowDeviceResolutionDiagnosticSeverity,
-    WorkflowHost, WorkflowInferenceDeviceClass, WorkflowRuntimeCapability,
-    WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind, WorkflowRuntimeVariantCapability,
+    WorkflowDeviceResolutionDiagnostic, WorkflowDeviceResolutionDiagnosticCode,
+    WorkflowDeviceResolutionDiagnosticSeverity, WorkflowHost, WorkflowInferenceDeviceClass,
+    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind,
     WorkflowServiceError, WorkflowTechnicalFitCompatibilityIssue,
     WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
     WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDeviceDiagnostic,
@@ -1015,8 +1014,9 @@ fn empty_runtime_snapshot() -> RuntimeRegistrySnapshot {
 mod tests {
     use super::*;
     use pantograph_workflow_service::{
-        build_workflow_technical_fit_request, WorkflowRuntimeReadinessState,
-        WorkflowRuntimeRequirements,
+        build_workflow_technical_fit_request, WorkflowBackendCapabilityFacts,
+        WorkflowRuntimeReadinessState, WorkflowRuntimeRequirements,
+        WorkflowRuntimeVariantCapability,
     };
     use std::sync::Arc;
 

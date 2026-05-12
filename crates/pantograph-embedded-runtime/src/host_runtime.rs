@@ -55,9 +55,11 @@ mod tests {
             active_runtime: Some(inference::RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama.cpp".to_string()),
                 runtime_instance_id: Some("llama-main-1".to_string()),
+                warmup_timing_attempt_id: None,
                 warmup_started_at_ms: Some(10),
                 warmup_completed_at_ms: Some(20),
                 warmup_duration_ms: Some(10),
+                timing_diagnostics: Vec::new(),
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
                 active: true,
@@ -66,9 +68,11 @@ mod tests {
             embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama.cpp.embedding".to_string()),
                 runtime_instance_id: Some("llama-cpp-embedding-2".to_string()),
+                warmup_timing_attempt_id: None,
                 warmup_started_at_ms: Some(11),
                 warmup_completed_at_ms: Some(19),
                 warmup_duration_ms: Some(8),
+                timing_diagnostics: Vec::new(),
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
                 active: true,

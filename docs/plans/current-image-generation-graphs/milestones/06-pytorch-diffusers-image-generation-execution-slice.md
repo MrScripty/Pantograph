@@ -157,8 +157,7 @@ PyTorch/diffusers and produce a retained image artifact.
 - Artifact test verifies generated image retention stores one media body and
   projects only descriptors/metadata instead of duplicate base64 payloads.
 
-**Status:** Blocked before implementation by the Pumas package-facts release
-boundary.
+**Status:** Dependency boundary resolved; planner implementation not started.
 
 2026-05-12 boundary check:
 
@@ -183,3 +182,32 @@ boundary.
   cross-repo fixture guarantees, then decide whether Pantograph advances the
   workspace `pumas-library` dependency in a dedicated dependency slice before
   planner implementation begins.
+
+2026-05-12 dependency-boundary slice:
+
+- Smallest useful vertical slice: pin Pantograph's workspace `pumas-library`
+  dependency to Pumas commit `281a45a5bc604975ebd0d5e71d12adaa5a228382`, the
+  producer revision recorded by the Pumas P6 fixture handoff and containing
+  `PACKAGE_FACTS_CONTRACT_VERSION = 2`.
+- Allowed write set: root `Cargo.toml`, `Cargo.lock`,
+  `crates/pantograph-embedded-runtime/**`,
+  `crates/pantograph-frontend-http-adapter/src/lib.rs`, and this plan
+  directory.
+- No-fallback/no-legacy confirmation: Pantograph now pins a concrete Pumas
+  producer revision instead of consuming only vendored local fixtures or adding
+  a compatibility bridge from package-facts contract version 1 to version 2.
+- Verification discovered three pre-existing compile gaps from prior contract
+  changes while validating direct Pumas consumers: embedded-runtime test
+  snapshots were missing the new runtime warmup timing fields,
+  embedded-runtime did not map the new runtime-registry resource accounting
+  errors, and the frontend HTTP adapter did not explicitly handle graph error
+  details in workflow error envelopes. These were fixed in this slice with
+  explicit fields and explicit match arms rather than wildcard fallbacks.
+- Broader verification note: `cargo test -p pantograph-embedded-runtime
+  runtime_registry` remains outside this dependency slice and currently fails
+  in two session/runtime tests because auto technical-fit correctly reports
+  ambiguous equal-ranked candidates. The planner/test-fixture slice must supply
+  canonical backend/device intent instead of restoring implicit selection.
+- Remaining follow-up: begin the first Milestone 6 planner contract slice,
+  consuming the pinned Pumas Diffusers facts and returning typed diagnostics
+  for missing or ambiguous image-family facts.

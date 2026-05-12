@@ -305,9 +305,11 @@ pub fn normalized_runtime_lifecycle_snapshot(
             .map(canonical_runtime_id)
             .filter(|runtime_id| !runtime_id.is_empty()),
         runtime_instance_id: snapshot.runtime_instance_id.clone(),
+        warmup_timing_attempt_id: snapshot.warmup_timing_attempt_id.clone(),
         warmup_started_at_ms: snapshot.warmup_started_at_ms,
         warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
         warmup_duration_ms: snapshot.warmup_duration_ms,
+        timing_diagnostics: snapshot.timing_diagnostics.clone(),
         runtime_reused: snapshot.runtime_reused,
         lifecycle_decision_reason: snapshot.normalized_lifecycle_decision_reason(),
         active: snapshot.active,

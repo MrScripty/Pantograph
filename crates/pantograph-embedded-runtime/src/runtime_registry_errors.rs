@@ -16,7 +16,9 @@ pub(crate) fn workflow_service_error_from_runtime_registry(
             WorkflowServiceError::InvalidRequest(error.to_string())
         }
         RuntimeRegistryError::ReservationNotFound(_)
-        | RuntimeRegistryError::InvalidTransition { .. } => {
+        | RuntimeRegistryError::InvalidTransition { .. }
+        | RuntimeRegistryError::ResourceAccountingOverflow { .. }
+        | RuntimeRegistryError::ResourceBudgetUnderflow { .. } => {
             WorkflowServiceError::Internal(error.to_string())
         }
     }
