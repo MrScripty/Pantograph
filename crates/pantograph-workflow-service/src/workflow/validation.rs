@@ -57,30 +57,45 @@ pub(super) fn validate_workflow_graph_submit_readiness(
     }
 
     Err(WorkflowServiceError::StaleWorkflowGraph {
-        message: stale_graph_submission_message(&blocking_diagnostics),
+        message: stale_graph_submission_message(&blocking_diagnostics)?,
         diagnostics: blocking_diagnostics,
     })
 }
 
-fn stale_graph_submission_message(diagnostics: &[WorkflowGraphDiagnostic]) -> String {
+fn stale_graph_submission_message(
+    diagnostics: &[WorkflowGraphDiagnostic],
+) -> Result<String, WorkflowServiceError> {
     let reasons = diagnostics
         .iter()
         .take(MAX_STALE_GRAPH_SUBMIT_REASONS)
         .map(stale_graph_submit_reason)
         .collect::<Vec<_>>();
-    let remaining = diagnostics.len().saturating_sub(reasons.len());
+    let remaining = remaining_stale_graph_diagnostic_count(diagnostics.len(), reasons.len())?;
     let suffix = if remaining == 0 {
         String::new()
     } else {
         format!("; {remaining} more")
     };
 
-    format!(
+    Ok(format!(
         "workflow graph has {} blocking stale diagnostic(s): {}{}",
         diagnostics.len(),
         reasons.join("; "),
         suffix
-    )
+    ))
+}
+
+fn remaining_stale_graph_diagnostic_count(
+    total_diagnostics: usize,
+    shown_diagnostics: usize,
+) -> Result<usize, WorkflowServiceError> {
+    total_diagnostics
+        .checked_sub(shown_diagnostics)
+        .ok_or_else(|| {
+            WorkflowServiceError::Internal(format!(
+                "stale graph diagnostic formatter showed {shown_diagnostics} reasons for {total_diagnostics} diagnostics"
+            ))
+        })
 }
 
 fn stale_graph_submit_reason(diagnostic: &WorkflowGraphDiagnostic) -> String {
@@ -137,6 +152,23 @@ pub(super) fn validate_bindings(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_graph_remaining_count_rejects_formatter_underflow() {
+        let error = remaining_stale_graph_diagnostic_count(1, 2)
+            .expect_err("shown diagnostics cannot exceed total diagnostics");
+
+        assert!(matches!(
+            error,
+            WorkflowServiceError::Internal(message)
+                if message.contains("formatter showed 2 reasons for 1 diagnostics")
+        ));
+    }
 }
 
 pub(super) fn validate_host_output_bindings(

@@ -2119,6 +2119,23 @@ Worker rules:
   numeric-boundary follow-up: image request limits, context/batch limits
   outside this retention cleanup boundary, byte-range projections, and
   worker/runtime request fields.
+- 2026-05-12 stale-graph diagnostic summary count validation slice: smallest
+  useful vertical slice was limited to replacing presentation-only
+  `saturating_sub` in stale-graph summary formatting with checked arithmetic
+  and a typed internal error for impossible formatter state. Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/validation.rs` and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because impossible
+  diagnostic formatter counts no longer become `0 more`; the formatter fails
+  with `WorkflowServiceError::Internal`. Normal stale-graph validation still
+  returns the existing structured stale-graph diagnostics. Verification passed:
+  `cargo test -p pantograph-workflow-service stale_graph_remaining_count_rejects_formatter_underflow`
+  and `cargo test -p pantograph-workflow-service stale_graph`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Remaining
+  numeric-boundary follow-up: duration/timing diagnostics, scheduler timestamp
+  addition, runtime technical-fit rank overflow, cache counter drift, broader
+  image request limits, context/batch limits, byte-range projections, and
+  worker/runtime request fields.
 
 ### Traceability Links
 

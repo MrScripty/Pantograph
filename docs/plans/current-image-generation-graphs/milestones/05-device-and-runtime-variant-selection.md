@@ -285,6 +285,17 @@ typed diagnostic and the canonical design is fixed.
     overflowing cleanup horizon. Remaining numeric boundaries include broader
     image request limits, context/batch limits, byte-range projections, and
     worker/runtime request fields.
+  - 2026-05-12 decision: stale-graph diagnostic summary counts are diagnostic
+    contract data, not cosmetic fallback text. If the formatter ever attempts
+    to show more diagnostic reasons than exist, it must return a typed internal
+    error instead of saturating the remaining count to zero.
+  - 2026-05-12 partial: stale-graph diagnostic summary formatting now uses
+    checked arithmetic for the displayed remaining diagnostic count and returns
+    `WorkflowServiceError::Internal` on impossible formatter state. Remaining
+    numeric boundaries include duration/timing diagnostics, scheduler timestamp
+    addition, runtime technical-fit rank overflow, cache counter drift, broader
+    image request limits, context/batch limits, byte-range projections, and
+    worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -3566,6 +3577,30 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: broader checked arithmetic remains needed for image
     request limits, context/batch limits outside this retention cleanup
     boundary, byte-range projections, and worker/runtime request fields.
+- 2026-05-12 slice: stale-graph diagnostic summary count validation.
+  - Smallest useful vertical slice: replace presentation-only
+    `saturating_sub` in stale-graph summary formatting with checked arithmetic
+    and a typed internal error for impossible formatter state.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/validation.rs` and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: impossible diagnostic formatter counts
+    no longer become `0 more`; the formatter fails with
+    `WorkflowServiceError::Internal`. Normal stale-graph validation still
+    returns the existing structured stale-graph diagnostics.
+  - Standards/blast-radius gate: stale-graph diagnostic message formatting
+    only; no generated files, frontend code, saved workflow fixtures,
+    lockfiles, path roots, Pumas contracts, worker contracts, runtime
+    scheduler policy, or backend lifecycle ownership changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service stale_graph_remaining_count_rejects_formatter_underflow`
+    and `cargo test -p pantograph-workflow-service stale_graph`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: checked arithmetic policy still needs implementation
+    for duration/timing diagnostics, scheduler timestamp addition, runtime
+    technical-fit rank overflow, cache counter drift, broader image request
+    limits, context/batch limits, byte-range projections, and worker/runtime
+    request fields.
 
 **Verification:**
 
