@@ -1595,6 +1595,20 @@ fn scheduler_timeline_record_from_event(
             if let Some(runtime_id) = payload.selected_runtime_id.as_deref() {
                 details.push(format!("selected runtime {runtime_id}"));
             }
+            if let Some(runtime_variant_id) = payload.selected_runtime_variant_id.as_deref() {
+                details.push(format!("selected runtime variant {runtime_variant_id}"));
+            }
+            if let Some(backend_key) = payload.selected_backend_key.as_deref() {
+                details.push(format!("selected backend {backend_key}"));
+            }
+            if let Some(trace) = payload.technical_fit_selection_policy_trace.as_ref() {
+                if let Some(ranking_reason) = trace.ranking_reason.as_deref() {
+                    details.push(format!("technical-fit ranking {ranking_reason}"));
+                }
+                if let Some(exploration_reason) = trace.exploration_reason.as_deref() {
+                    details.push(format!("technical-fit exploration {exploration_reason}"));
+                }
+            }
             if let Some(device_id) = payload.selected_device_id.as_deref() {
                 details.push(format!("selected device {device_id}"));
             }

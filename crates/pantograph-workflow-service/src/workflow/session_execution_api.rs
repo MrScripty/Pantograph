@@ -5,11 +5,12 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, IoArtifactObservedPayload,
     IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetOperation, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    SchedulerCandidateSetSummary, SchedulerEstimateBlockingCondition,
+    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
     SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
-    SchedulerRunDelayedPayload,
+    SchedulerRunDelayedPayload, SchedulerSelectionPolicyTrace,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
@@ -312,26 +313,11 @@ impl WorkflowService {
             }
             tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
         };
-        self.record_scheduler_run_admitted_event_if_configured(
-            &session,
-            run_snapshot.as_ref(),
-            &queued_run,
-        )?;
         let mut reservation_context = scheduler_reservation_context(
             run_snapshot.as_ref(),
             &queued_run.required_backends,
             &queued_run.required_models,
         )?;
-        self.record_scheduler_reservation_event_if_configured(
-            &session,
-            run_snapshot.as_ref(),
-            &workflow_run_id,
-            &queued_run.queued.workflow_semantic_version,
-            &reservation_context,
-            SchedulerReservationTransition::Created,
-            Some("local runtime slot admitted"),
-        )?;
-        self.record_run_started_event_if_configured(&session, run_snapshot.as_ref(), &queued_run)?;
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
         let queued_workflow_inputs = queued_run.queued.inputs.clone();
         let queued_graph_run_settings = decode_queued_graph_run_settings(run_snapshot.as_ref())?;
@@ -373,15 +359,6 @@ impl WorkflowService {
                     Some(&queued_workflow_semantic_version),
                     &terminal_result,
                 )?;
-                self.record_scheduler_reservation_event_if_configured(
-                    &session,
-                    run_snapshot.as_ref(),
-                    &workflow_run_id,
-                    &queued_workflow_semantic_version,
-                    &reservation_context,
-                    SchedulerReservationTransition::Released,
-                    Some("runtime preflight failed after admission"),
-                )?;
                 return terminal_result;
             }
         };
@@ -389,6 +366,23 @@ impl WorkflowService {
             &mut reservation_context,
             preflight_cache.technical_fit_decision.as_ref(),
         );
+        self.record_scheduler_run_admitted_event_if_configured(
+            &session,
+            run_snapshot.as_ref(),
+            &queued_run,
+            &reservation_context,
+            preflight_cache.technical_fit_decision.as_ref(),
+        )?;
+        self.record_scheduler_reservation_event_if_configured(
+            &session,
+            run_snapshot.as_ref(),
+            &workflow_run_id,
+            &queued_workflow_semantic_version,
+            &reservation_context,
+            SchedulerReservationTransition::Created,
+            Some("local runtime slot admitted"),
+        )?;
+        self.record_run_started_event_if_configured(&session, run_snapshot.as_ref(), &queued_run)?;
         let required_backends = preflight_cache.required_backends.clone();
         let required_models = preflight_cache.required_models.clone();
         let runtime_load_timing_attempt_id = WorkflowTimingAttemptId::generate();
@@ -1313,6 +1307,8 @@ impl WorkflowService {
         session: &WorkflowExecutionSessionSummary,
         snapshot: Option<&WorkflowRunSnapshotRecord>,
         queued_run: &crate::scheduler::WorkflowExecutionSessionDequeuedRun,
+        reservation_context: &SchedulerReservationContext,
+        technical_fit_decision: Option<&WorkflowTechnicalFitDecision>,
     ) -> Result<(), WorkflowServiceError> {
         let Some(ledger) = self.diagnostics_ledger.as_ref() else {
             return Ok(());
@@ -1323,11 +1319,6 @@ impl WorkflowService {
         let queue_wait_ms = queued_run
             .dequeued_at_ms
             .checked_sub(queued_run.enqueued_at_ms);
-        let reservation_context = scheduler_reservation_context(
-            snapshot,
-            &queued_run.required_backends,
-            &queued_run.required_models,
-        )?;
 
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
@@ -1365,10 +1356,17 @@ impl WorkflowService {
                     SchedulerRunAdmittedPayload {
                         queue_wait_ms,
                         decision_reason: queued_run.scheduler_decision_reason.as_str().to_string(),
-                        selected_runtime_id: reservation_context.selected_runtime_id,
+                        selected_runtime_id: reservation_context.selected_runtime_id.clone(),
+                        selected_runtime_variant_id: reservation_context
+                            .selected_runtime_variant_id
+                            .clone(),
+                        selected_backend_key: technical_fit_decision
+                            .and_then(|decision| decision.selected_backend_key.clone()),
                         selected_device_id: None,
                         selected_network_node_id: None,
-                        reserved_model_ids: reservation_context.reserved_model_ids,
+                        reserved_model_ids: reservation_context.reserved_model_ids.clone(),
+                        technical_fit_selection_policy_trace: technical_fit_decision
+                            .and_then(scheduler_selection_policy_trace),
                     },
                 ),
             },
@@ -2040,6 +2038,26 @@ fn apply_technical_fit_to_reservation_context(
     {
         context.selected_runtime_variant_id = Some(selected_runtime_variant_id.to_string());
     }
+}
+
+fn scheduler_selection_policy_trace(
+    decision: &WorkflowTechnicalFitDecision,
+) -> Option<SchedulerSelectionPolicyTrace> {
+    let trace = decision.selection_policy_trace.as_ref()?;
+    Some(SchedulerSelectionPolicyTrace {
+        policy_version: trace.policy_version,
+        candidate_set_summary: trace.candidate_set_summary.as_ref().map(|summary| {
+            SchedulerCandidateSetSummary {
+                total_candidate_count: summary.total_candidate_count,
+                eligible_candidate_count: summary.eligible_candidate_count,
+                rejected_candidate_count: summary.rejected_candidate_count,
+                eligible_candidate_ids: summary.eligible_candidate_ids.clone(),
+            }
+        }),
+        ranking_reason: trace.ranking_reason.clone(),
+        exploration_reason: trace.exploration_reason.clone(),
+        seed_basis: trace.seed_basis.clone(),
+    })
 }
 
 fn scheduler_runtime_slot_reservation_id(workflow_run_id: &WorkflowRunId) -> String {

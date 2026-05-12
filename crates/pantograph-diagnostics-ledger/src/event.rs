@@ -476,12 +476,63 @@ pub struct SchedulerRunAdmittedPayload {
     pub decision_reason: String,
     #[serde(default)]
     pub selected_runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_backend_key: Option<String>,
     #[serde(default)]
     pub selected_device_id: Option<String>,
     #[serde(default)]
     pub selected_network_node_id: Option<String>,
     #[serde(default)]
     pub reserved_model_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub technical_fit_selection_policy_trace: Option<SchedulerSelectionPolicyTrace>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SchedulerCandidateSetSummary {
+    pub total_candidate_count: u32,
+    pub eligible_candidate_count: u32,
+    pub rejected_candidate_count: u32,
+    #[serde(default)]
+    pub eligible_candidate_ids: Vec<String>,
+}
+
+impl SchedulerCandidateSetSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_text_list("eligible_candidate_ids", &self.eligible_candidate_ids)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SchedulerSelectionPolicyTrace {
+    pub policy_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_set_summary: Option<SchedulerCandidateSetSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ranking_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exploration_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_basis: Option<String>,
+}
+
+impl SchedulerSelectionPolicyTrace {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        if let Some(summary) = self.candidate_set_summary.as_ref() {
+            summary.validate()?;
+        }
+        validate_optional_text("ranking_reason", self.ranking_reason.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "exploration_reason",
+            self.exploration_reason.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text("seed_basis", self.seed_basis.as_deref(), MAX_JSON_LEN)
+    }
 }
 
 impl SchedulerRunAdmittedPayload {
@@ -497,6 +548,16 @@ impl SchedulerRunAdmittedPayload {
             MAX_ID_LEN,
         )?;
         validate_optional_text(
+            "selected_runtime_variant_id",
+            self.selected_runtime_variant_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_backend_key",
+            self.selected_backend_key.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
             "selected_device_id",
             self.selected_device_id.as_deref(),
             MAX_ID_LEN,
@@ -506,6 +567,9 @@ impl SchedulerRunAdmittedPayload {
             self.selected_network_node_id.as_deref(),
             MAX_ID_LEN,
         )?;
+        if let Some(trace) = self.technical_fit_selection_policy_trace.as_ref() {
+            trace.validate()?;
+        }
         validate_text_list("reserved_model_ids", &self.reserved_model_ids)
     }
 }

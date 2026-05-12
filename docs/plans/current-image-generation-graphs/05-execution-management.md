@@ -2843,6 +2843,46 @@ Worker rules:
   candidate, ranking/exploration reason, candidate summary, and future
   ledger-history inputs are recorded once without leaking policy facts into
   workflow graphs or runtime lifecycle events.
+- 2026-05-12 scheduler admission policy-ledger boundary slice: option 1 was
+  selected. Smallest useful vertical slice was to move
+  `scheduler.run_admitted`, reservation-created, and run-started diagnostic
+  ledger events until after runtime technical-fit preflight on the successful
+  queue-admission path, and to append technical-fit policy evidence to
+  `SchedulerRunAdmittedPayload`. Allowed write set:
+  `crates/pantograph-diagnostics-ledger/src/event.rs`,
+  `crates/pantograph-diagnostics-ledger/src/lib.rs`,
+  `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+  `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because it only changes
+  when already-canonical scheduler decisions are recorded. It does not change
+  candidate synthesis, technical-fit selection, queue admission selection,
+  workflow graph facts, Pumas fact visibility, runtime lifecycle selection,
+  frontend behavior, generated files, lockfiles, workers, or workflow
+  fixtures. The admission payload now records selected runtime variant,
+  selected backend key, and bounded technical-fit policy trace facts after the
+  `WorkflowTechnicalFitDecision` exists.
+- Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger scheduler_timeline`,
+  `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+  `cargo test -p pantograph-workflow-service session_execution`,
+  `cargo check -p pantograph-diagnostics-ledger -p pantograph-workflow-service`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Verification deviations fixed: the first workflow-service compile exposed
+  missing public re-exports for the new diagnostics-ledger policy trace DTOs
+  and missing focused test imports. The first broad `session_execution` run
+  exposed stale assertions that expected the admission event to keep using the
+  old required-backend placeholder runtime and expected reservation-created to
+  precede admission; those were updated to the option 1 event order and
+  technical-fit selected runtime facts.
+- Remaining follow-up: diagnostics-ledger run-list/run-detail projections still
+  persist selected backend/runtime variant primarily through existing
+  reservation, lifecycle, and node-status paths. A later projection slice can
+  promote admission policy trace summaries into queryable columns or compact
+  read-model fields if UI/history ranking requires that; ledger-history ranking
+  inputs and retry/termination policy remain later scheduler slices.
 
 ### Traceability Links
 

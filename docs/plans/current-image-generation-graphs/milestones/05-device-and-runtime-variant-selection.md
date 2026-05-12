@@ -1765,6 +1765,16 @@ typed diagnostic and the canonical design is fixed.
   technical fit, add a distinct scheduler technical-fit decision event, or
   define another bounded policy-summary projection that can be written after
   preflight without changing queue-admission semantics.
+- 2026-05-12 resolution/slice: option 1 was implemented for the successful
+  queue-admission path. `scheduler.run_admitted`, reservation-created, and
+  run-started diagnostic events are now recorded after runtime technical-fit
+  preflight, so admission payloads can carry selected runtime variant, selected
+  backend key, and bounded technical-fit policy trace facts from the canonical
+  `WorkflowTechnicalFitDecision`. No graph-visible Pumas facts, runtime
+  lifecycle selection behavior, or selector fallback paths were introduced.
+  Remaining follow-up: queryable run-list/run-detail policy-summary projection,
+  ledger-history ranking inputs, and retry/termination policy remain separate
+  scheduler slices.
 - 2026-05-10 slice: runtime-registry no-valid-auto diagnostic.
   - Smallest useful vertical slice: add a `no_valid_candidate` error
     diagnostic to automatic technical-fit decisions when candidate facts exist

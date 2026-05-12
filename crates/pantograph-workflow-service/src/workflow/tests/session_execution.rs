@@ -1,4 +1,5 @@
 use super::*;
+use crate::{WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitSelectionPolicyTrace};
 
 #[tokio::test]
 async fn workflow_execution_session_lifecycle_create_run_close() {
@@ -702,13 +703,19 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
             .map(|id| id.as_str()),
         Some(response.workflow_run_id.as_str())
     );
-    assert_eq!(admitted_event.runtime_id.as_deref(), Some("llama_cpp"));
+    assert_eq!(
+        admitted_event.runtime_id.as_deref(),
+        Some("managed-llama-slot")
+    );
     assert!(admitted_event.event_seq > queue_event.event_seq);
     assert!(admitted_event.payload_json.contains("\"decision_reason\":"));
     assert!(admitted_event.payload_json.contains("\"queue_wait_ms\":"));
     assert!(admitted_event
         .payload_json
-        .contains("\"selected_runtime_id\":\"llama_cpp\""));
+        .contains("\"selected_runtime_id\":\"managed-llama-slot\""));
+    assert!(admitted_event
+        .payload_json
+        .contains("\"selected_backend_key\":\"llama_cpp\""));
     assert!(admitted_event
         .payload_json
         .contains("\"reserved_model_ids\":[\"model-a\"]"));
@@ -730,7 +737,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         == Some(response.workflow_run_id.as_str())));
     assert_eq!(
         reservation_events[0].runtime_id.as_deref(),
-        Some("llama_cpp")
+        Some("managed-llama-slot")
     );
     assert_eq!(
         reservation_events[1].runtime_id.as_deref(),
@@ -1024,7 +1031,24 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
             WorkflowTechnicalFitReasonCode::RuntimeRequirements,
             Some("candidate-managed-llama"),
         )],
-        selection_policy_trace: None,
+        selection_policy_trace: Some(WorkflowTechnicalFitSelectionPolicyTrace {
+            policy_version: 1,
+            candidate_set_summary: Some(WorkflowTechnicalFitCandidateSetSummary {
+                total_candidate_count: 2,
+                eligible_candidate_count: 2,
+                rejected_candidate_count: 0,
+                eligible_candidate_ids: vec![
+                    "candidate-managed-llama".to_string(),
+                    "candidate-pytorch".to_string(),
+                ],
+            }),
+            ranking_reason: Some("candidate_priority".to_string()),
+            exploration_reason: Some("equal_priority_seeded_choice".to_string()),
+            seed_basis: Some(
+                "workflow:wf-runtime-proof|snapshot:123|candidates:candidate-managed-llama,candidate-pytorch"
+                    .to_string(),
+            ),
+        }),
         compatibility_report: None,
         compatibility_issue_count: 0,
         compatibility_issues: Vec::new(),
@@ -1073,6 +1097,31 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
         )
         .expect("diagnostic events")
     };
+    let admission_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerRunAdmitted
+                && event.workflow_run_id.as_ref().map(|id| id.as_str())
+                    == Some(response.workflow_run_id.as_str())
+        })
+        .expect("scheduler admission event");
+    assert!(admission_event
+        .payload_json
+        .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\""));
+    assert!(admission_event
+        .payload_json
+        .contains("\"selected_backend_key\":\"llama_cpp\""));
+    assert!(admission_event
+        .payload_json
+        .contains("\"technical_fit_selection_policy_trace\""));
+    assert!(admission_event
+        .payload_json
+        .contains("\"ranking_reason\":\"candidate_priority\""));
+    assert!(admission_event
+        .payload_json
+        .contains("\"exploration_reason\":\"equal_priority_seeded_choice\""));
+
     let lifecycle_events = diagnostic_events
         .iter()
         .filter(|event| {
@@ -1134,9 +1183,9 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
     assert!(reservation_events[0]
         .payload_json
         .contains("\"transition\":\"created\""));
-    assert!(!reservation_events[0]
+    assert!(reservation_events[0]
         .payload_json
-        .contains("\"selected_runtime_variant_id\""));
+        .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\""));
     assert!(reservation_events[1]
         .payload_json
         .contains("\"transition\":\"released\""));
