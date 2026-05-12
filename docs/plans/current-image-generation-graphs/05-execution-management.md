@@ -2908,6 +2908,25 @@ Worker rules:
 - Remaining follow-up: technical-fit policy trace itself remains payload-level
   evidence. A later read-model slice can add compact policy-summary columns or
   history aggregation once ledger-history ranking inputs are designed.
+- 2026-05-12 diagnostics-ledger admission policy-trace serde contract slice:
+  smallest useful vertical slice was to pin the scheduler admission policy
+  trace wire shape with an inline serde contract test in the existing
+  diagnostics-ledger test module. Allowed write set:
+  `crates/pantograph-diagnostics-ledger/src/tests.rs` and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because it adds only
+  contract coverage for already-recorded canonical scheduler admission facts.
+  It does not change selector policy, add compatibility aliases, infer facts
+  from graph-visible Pumas fields, alter schema/projections, touch frontend or
+  worker DTOs, change lockfiles, or update workflow fixtures.
+- Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger scheduler_run_admitted_payload_round_trips_policy_trace_contract`,
+  `cargo test -p pantograph-diagnostics-ledger scheduler_timeline`,
+  `cargo check -p pantograph-diagnostics-ledger`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Remaining follow-up: ledger-history ranking inputs, retry/termination
+  policy, and optional compact read-model policy summaries remain later
+  scheduler slices.
 
 ### Traceability Links
 

@@ -32,23 +32,25 @@ use crate::{
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
     RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    SchedulerCandidateSetSummary, SchedulerEstimateBlockingCondition,
+    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
     SchedulerQueueControlPayload, SchedulerQueuePlacementPayload,
     SchedulerReservationChangedPayload, SchedulerReservationResourceKind,
     SchedulerReservationTransition, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
-    SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand,
-    UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
-    WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
-    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
-    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
-    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    MAX_INFERENCE_COMPATIBILITY_ISSUES, MAX_INFERENCE_OPTION_DIAGNOSTICS, MILLIS_PER_DAY,
-    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
-    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
+    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
+    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MAX_INFERENCE_COMPATIBILITY_ISSUES,
+    MAX_INFERENCE_OPTION_DIAGNOSTICS, MILLIS_PER_DAY, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -71,6 +73,73 @@ fn run_list_projection_status_accepts_future_and_scheduled_contract_values() {
         serde_json::to_value(RunListProjectionStatus::Scheduled).expect("serialize scheduled"),
         serde_json::json!("scheduled"),
     );
+}
+
+#[test]
+fn scheduler_run_admitted_payload_round_trips_policy_trace_contract() {
+    let payload = DiagnosticEventPayload::SchedulerRunAdmitted(SchedulerRunAdmittedPayload {
+        queue_wait_ms: Some(12),
+        decision_reason: "automatic_ranking".to_string(),
+        selected_runtime_id: Some("pytorch".to_string()),
+        selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+        selected_backend_key: Some("pytorch".to_string()),
+        selected_device_id: Some("cuda:0".to_string()),
+        selected_network_node_id: Some("local-node-alpha".to_string()),
+        reserved_model_ids: vec!["pumas://models/image-alpha".to_string()],
+        technical_fit_selection_policy_trace: Some(SchedulerSelectionPolicyTrace {
+            policy_version: 1,
+            candidate_set_summary: Some(SchedulerCandidateSetSummary {
+                total_candidate_count: 2,
+                eligible_candidate_count: 2,
+                rejected_candidate_count: 0,
+                eligible_candidate_ids: vec![
+                    "candidate-pytorch-cuda".to_string(),
+                    "candidate-vllm-cuda".to_string(),
+                ],
+            }),
+            ranking_reason: Some("runtime_already_loaded".to_string()),
+            exploration_reason: Some("equal_rank_controlled_exploration".to_string()),
+            seed_basis: Some(
+                "workflow_run_alpha|image_generation|candidate-pytorch-cuda,candidate-vllm-cuda"
+                    .to_string(),
+            ),
+        }),
+    });
+
+    let value = serde_json::to_value(&payload).expect("scheduler admission payload serializes");
+    assert_eq!(
+        value,
+        serde_json::json!({
+            "payload_type": "scheduler_run_admitted",
+            "queue_wait_ms": 12,
+            "decision_reason": "automatic_ranking",
+            "selected_runtime_id": "pytorch",
+            "selected_runtime_variant_id": "pytorch.cuda",
+            "selected_backend_key": "pytorch",
+            "selected_device_id": "cuda:0",
+            "selected_network_node_id": "local-node-alpha",
+            "reserved_model_ids": ["pumas://models/image-alpha"],
+            "technical_fit_selection_policy_trace": {
+                "policy_version": 1,
+                "candidate_set_summary": {
+                    "total_candidate_count": 2,
+                    "eligible_candidate_count": 2,
+                    "rejected_candidate_count": 0,
+                    "eligible_candidate_ids": [
+                        "candidate-pytorch-cuda",
+                        "candidate-vllm-cuda"
+                    ]
+                },
+                "ranking_reason": "runtime_already_loaded",
+                "exploration_reason": "equal_rank_controlled_exploration",
+                "seed_basis": "workflow_run_alpha|image_generation|candidate-pytorch-cuda,candidate-vllm-cuda"
+            }
+        })
+    );
+
+    let round_tripped: DiagnosticEventPayload =
+        serde_json::from_value(value).expect("scheduler admission payload deserializes");
+    assert_eq!(round_tripped, payload);
 }
 
 #[test]
