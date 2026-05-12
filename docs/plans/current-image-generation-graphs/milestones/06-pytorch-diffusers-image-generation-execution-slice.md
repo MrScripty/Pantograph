@@ -157,4 +157,29 @@ PyTorch/diffusers and produce a retained image artifact.
 - Artifact test verifies generated image retention stores one media body and
   projects only descriptors/metadata instead of duplicate base64 payloads.
 
-**Status:** Not started
+**Status:** Blocked before implementation by the Pumas package-facts release
+boundary.
+
+2026-05-12 boundary check:
+
+- Smallest useful vertical slice considered: start the image-generation planner
+  contract with a Pumas Diffusers fixture and typed missing/ambiguous-facts
+  diagnostics.
+- Allowed write set considered for that future slice:
+  `crates/inference/**`, focused fixtures under
+  `crates/inference/tests/fixtures/inference_package_facts/`, affected
+  inference tests, and this plan directory.
+- No-fallback/no-legacy confirmation: the slice cannot start from name-derived
+  family inference, local bridge conversion, or the currently pinned Pumas
+  crate because Milestone 6 must consume the pinned Pumas producer contract.
+- Current blocker: root `Cargo.toml` pins `pumas-library` to tag `v0.6.0`, and
+  the locked source at commit `6d038ff8` exposes
+  `PACKAGE_FACTS_CONTRACT_VERSION = 1`. Pantograph inference fixtures and DTOs
+  now expect package-facts contract version 2 for Diffusers/image-generation
+  facts. Starting execution planning against the local fixture alone would
+  bypass the Pumas producer-fact completion gate in `04-milestones.md`.
+- Required re-plan before implementation: choose and pin the Pumas release/tag
+  or commit that contains package-facts contract version 2 plus the P6
+  cross-repo fixture guarantees, then decide whether Pantograph advances the
+  workspace `pumas-library` dependency in a dedicated dependency slice before
+  planner implementation begins.

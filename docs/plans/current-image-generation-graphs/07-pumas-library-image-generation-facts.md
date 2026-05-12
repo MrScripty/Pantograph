@@ -848,6 +848,13 @@ used by Pumas for the selector snapshot path.
 - 2026-05-10 P5 batch-path decision: no separate batch cache upsert/delete API was added because package-facts backfill intentionally reuses `resolve_model_package_facts` as the canonical selected-model hydration path. That resolver owns detail/summary cache writes, source-fingerprint recomputation, and update-feed semantics. Duplicating it in a migration-only batch writer would create a second cache-write policy owner. The backfill runner instead bounds work by checkpointed per-model selected-artifact work items and uses the selected-artifact-safe delete API for obsolete default-artifact rows.
 - 2026-05-10 P6 fixture handoff finding: Pumas commit `281a45a5` documents `diffusers_sd_text_to_image_package_facts.json` as the canonical producer fixture for host-side image-generation planning and extends its contract test to reject consumer/runtime internals such as workflow, runtime-registry, scheduler-policy, diagnostics-ledger, or Pantograph adapter fields.
 - 2026-05-10 P6 Pantograph fixture-consumption finding: Pantograph commit `7158ac39` vendors the canonical Pumas `diffusers_sd_text_to_image_package_facts.json` fixture and adds inference DTO/test coverage proving Pantograph can decode structured Diffusers evidence, resolve the image-generation task, preserve Stable Diffusion family evidence, and reject consumer/runtime policy fields. Deviation: Pantograph's broader inference fixture suite still pins `MODEL_PACKAGE_FACTS_CONTRACT_VERSION` to 1, so the final release/version boundary task must either advance the Pantograph contract constant and legacy fixtures to Pumas package-facts contract 2 or explicitly document a compatibility window.
+- 2026-05-12 P6 release-boundary finding: Pantograph now expects
+  `MODEL_PACKAGE_FACTS_CONTRACT_VERSION = 2`, but root `Cargo.toml` still pins
+  `pumas-library` to tag `v0.6.0`, whose locked source exposes
+  `PACKAGE_FACTS_CONTRACT_VERSION = 1`. Pantograph Milestone 6 must not begin
+  real planner/execution implementation until a Pumas release/tag or commit
+  containing the version 2 producer facts and P6 fixture guarantees is selected
+  and pinned in Pantograph.
 
 ## Implementation Sequencing
 

@@ -2444,6 +2444,26 @@ Worker rules:
   baseline/deviation enforcement, scheduler reschedule policy, retry
   exhaustion, and terminal workflow failure semantics remain the later
   required policy-completion path.
+- 2026-05-12 re-plan trigger reached before Milestone 6 implementation. Status
+  was inspected first and only the approved unrelated files were dirty:
+  `.pantograph/workflow-diagnostics.sqlite-shm`,
+  `.pantograph/workflow-diagnostics.sqlite-wal`, and
+  `PROPOSAL-pumas-library-fast-model-snapshot.md`. Smallest useful next slice
+  considered was the initial image-generation planner contract consuming
+  Pumas Diffusers facts, but the plan's Pumas gate is not satisfied:
+  Pantograph root `Cargo.toml` pins `pumas-library` to tag `v0.6.0`, the
+  locked source at commit `6d038ff8` exposes
+  `PACKAGE_FACTS_CONTRACT_VERSION = 1`, and Pantograph inference DTOs/fixtures
+  now expect package-facts contract version 2. No implementation slice was
+  started because using the local fixture alone would bypass the pinned Pumas
+  producer contract and create a non-canonical bridge. Required re-plan: select
+  the Pumas release/tag or commit that contains contract version 2 and the P6
+  cross-repo fixture guarantees, then decide whether the next Pantograph slice
+  is a dedicated dependency pin/update slice or the planner contract slice
+  after that dependency boundary is resolved. Verification for this boundary:
+  `rg -n "pumas-library|v0\\.6\\.0|6d038ff|contract 2|contract-version" docs/plans/current-image-generation-graphs Cargo.toml Cargo.lock crates -g '!target'`,
+  `rg -n "MODEL_PACKAGE_FACTS_CONTRACT_VERSION|package_facts_contract_version|diffusers_sd_text_to_image_package_facts" crates/inference crates/pantograph-embedded-runtime crates/workflow-nodes -g '!target'`,
+  and `rg -n "MODEL_PACKAGE_FACTS_CONTRACT_VERSION|PACKAGE_FACTS_CONTRACT_VERSION" ~/.cargo/git/checkouts -g '*.rs'`.
 
 ### Traceability Links
 
