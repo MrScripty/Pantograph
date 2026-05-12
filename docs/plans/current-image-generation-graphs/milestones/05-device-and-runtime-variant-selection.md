@@ -3912,6 +3912,46 @@ typed diagnostic and the canonical design is fixed.
     and scheduler trace producers to timing attempt ids and checked duration
     math. Full baseline/deviation enforcement and scheduler retry/termination
     policy remain the later required policy-completion path.
+- 2026-05-12 slice: scheduler trace-span timing attempt producer.
+  - Smallest useful vertical slice: migrate workflow trace run, node, and
+    scheduler queue-wait duration producers onto timing attempt ids and checked
+    duration math.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/trace/scheduler.rs`,
+    `crates/pantograph-workflow-service/src/trace/state.rs`,
+    `crates/pantograph-workflow-service/src/trace/store.rs`,
+    `crates/pantograph-workflow-service/src/trace/types.rs`,
+    `crates/pantograph-workflow-service/src/trace/README.md`,
+    `crates/pantograph-workflow-service/src/trace/tests.rs`,
+    `crates/pantograph-workflow-service/src/trace/tests/lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/trace/tests/scheduler_runtime.rs`,
+    `crates/pantograph-workflow-service/tests/contract.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: trace run, node, and queue-wait
+    durations no longer report saturated values. Timestamp underflow omits the
+    duration, attaches a `timing_attempt_` id to the affected trace contract,
+    and emits a typed `timestamp_underflow` timing diagnostic instead of
+    normalizing the impossible timestamp state.
+  - Standards/blast-radius gate: workflow-service trace contracts changed only
+    by adding optional timing attempt ids and timing diagnostic arrays to trace
+    run, node, and queue DTOs. No diagnostics-ledger schema, generated files,
+    frontend code, saved workflow fixtures, lockfiles, Pumas contracts, worker
+    contracts, inference gateway warmup policy, embedding warmup policy, or
+    retry/termination policy changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service workflow_trace_store_emits_timing_diagnostic`,
+    `cargo test -p pantograph-workflow-service trace::tests`, and
+    `cargo test -p pantograph-workflow-service workflow_trace_contract_snapshot`,
+    `cargo fmt --all -- --check`, `git diff --check`, and
+    `rg -n "saturating_sub" crates/pantograph-workflow-service/src/trace -g '*.rs' -g '!**/tests/**' -g '!**/tests.rs'`
+    returned no production trace matches.
+  - Verification deviation: one attempted focused test command used multiple
+    Cargo test filters and failed at argument parsing before running tests; it
+    was rerun with a valid shared filter.
+  - Remaining follow-up: migrate inference gateway warmup and embedding
+    warmup producers to timing attempt ids and checked duration math. Full
+    baseline/deviation enforcement and scheduler retry/termination policy
+    remain the later required policy-completion path.
 
 **Verification:**
 

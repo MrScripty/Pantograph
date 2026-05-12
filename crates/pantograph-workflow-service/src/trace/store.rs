@@ -9,7 +9,7 @@ use pantograph_diagnostics_ledger::{
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use parking_lot::Mutex;
 
-use crate::workflow::WorkflowServiceError;
+use crate::workflow::{WorkflowServiceError, WorkflowTimingAttemptId, WorkflowTimingDiagnostic};
 
 use super::query::{runtime_metrics_selection, snapshot_for_request};
 use super::state::{apply_trace_event, create_trace_run_state};
@@ -58,6 +58,8 @@ pub(super) struct WorkflowTraceRunState {
     pub(super) started_at_ms: u64,
     pub(super) ended_at_ms: Option<u64>,
     pub(super) duration_ms: Option<u64>,
+    pub(super) timing_attempt_id: WorkflowTimingAttemptId,
+    pub(super) timing_diagnostics: Vec<WorkflowTimingDiagnostic>,
     pub(super) queue: WorkflowTraceQueueMetrics,
     pub(super) runtime: WorkflowTraceRuntimeMetrics,
     pub(super) node_count_at_start: usize,
@@ -82,6 +84,8 @@ impl WorkflowTraceRunState {
             started_at_ms: self.started_at_ms,
             ended_at_ms: self.ended_at_ms,
             duration_ms: self.duration_ms,
+            timing_attempt_id: Some(self.timing_attempt_id.clone()),
+            timing_diagnostics: self.timing_diagnostics.clone(),
             queue: self.queue.clone(),
             runtime: self.runtime.clone(),
             node_count_at_start: self.node_count_at_start,

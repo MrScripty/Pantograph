@@ -524,10 +524,14 @@ fn workflow_trace_contract_snapshot() {
             started_at_ms: 100,
             ended_at_ms: Some(180),
             duration_ms: Some(80),
+            timing_attempt_id: None,
+            timing_diagnostics: Vec::new(),
             queue: WorkflowTraceQueueMetrics {
                 enqueued_at_ms: Some(90),
                 dequeued_at_ms: Some(100),
                 queue_wait_ms: Some(10),
+                queue_wait_timing_attempt_id: None,
+                timing_diagnostics: Vec::new(),
                 scheduler_admission_outcome: Some("admitted".to_string()),
                 scheduler_decision_reason: Some("dequeued_fifo".to_string()),
                 scheduler_snapshot_diagnostics: Some(
@@ -589,6 +593,8 @@ fn workflow_trace_contract_snapshot() {
                 started_at_ms: Some(101),
                 ended_at_ms: Some(170),
                 duration_ms: Some(69),
+                timing_attempt_id: None,
+                timing_diagnostics: Vec::new(),
                 event_count: 2,
                 stream_event_count: 1,
                 last_error: None,

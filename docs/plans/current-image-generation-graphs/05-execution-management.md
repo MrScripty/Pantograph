@@ -2332,6 +2332,37 @@ Worker rules:
   producers onto timing attempt ids and checked duration math. Full
   baseline/deviation enforcement and scheduler retry/termination policy remain
   the later required policy-completion path.
+- 2026-05-12 scheduler trace-span timing attempt producer slice: smallest
+  useful vertical slice was limited to workflow-service trace run, node, and
+  scheduler queue-wait duration producers. Allowed write set:
+  `crates/pantograph-workflow-service/src/trace/scheduler.rs`,
+  `crates/pantograph-workflow-service/src/trace/state.rs`,
+  `crates/pantograph-workflow-service/src/trace/store.rs`,
+  `crates/pantograph-workflow-service/src/trace/types.rs`,
+  `crates/pantograph-workflow-service/src/trace/README.md`,
+  `crates/pantograph-workflow-service/src/trace/tests.rs`,
+  `crates/pantograph-workflow-service/src/trace/tests/lifecycle.rs`,
+  `crates/pantograph-workflow-service/src/trace/tests/scheduler_runtime.rs`,
+  `crates/pantograph-workflow-service/tests/contract.rs`, and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because trace run, node,
+  and queue-wait duration producers no longer use saturated subtraction.
+  Timestamp underflow now omits the duration, carries the affected
+  `timing_attempt_` id, and emits a typed `timestamp_underflow` timing
+  diagnostic instead of normalizing the impossible timestamp state.
+  Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_trace_store_emits_timing_diagnostic`,
+  `cargo test -p pantograph-workflow-service trace::tests`, and
+  `cargo test -p pantograph-workflow-service workflow_trace_contract_snapshot`,
+  `cargo fmt --all -- --check`, `git diff --check`, and
+  `rg -n "saturating_sub" crates/pantograph-workflow-service/src/trace -g '*.rs' -g '!**/tests/**' -g '!**/tests.rs'`
+  returned no production trace matches.
+  Verification deviation: one attempted focused test command used multiple
+  Cargo test filters and failed at argument parsing before running tests; it
+  was rerun with a valid shared filter. Remaining follow-up: migrate inference
+  gateway warmup and embedding warmup producers onto timing attempt ids and
+  checked duration math. Full baseline/deviation enforcement and scheduler
+  retry/termination policy remain the later required policy-completion path.
 
 ### Traceability Links
 

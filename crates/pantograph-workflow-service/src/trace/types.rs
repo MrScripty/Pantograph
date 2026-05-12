@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::workflow::{
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionSummary, WorkflowServiceError,
+    WorkflowExecutionSessionSummary, WorkflowServiceError, WorkflowTimingAttemptId,
+    WorkflowTimingDiagnostic,
 };
 use crate::WorkflowSchedulerSnapshotDiagnostics;
 
@@ -41,6 +42,10 @@ pub struct WorkflowTraceQueueMetrics {
     pub dequeued_at_ms: Option<u64>,
     #[serde(default)]
     pub queue_wait_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_wait_timing_attempt_id: Option<WorkflowTimingAttemptId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timing_diagnostics: Vec<WorkflowTimingDiagnostic>,
     #[serde(default)]
     pub scheduler_admission_outcome: Option<String>,
     #[serde(default)]
@@ -85,6 +90,10 @@ pub struct WorkflowTraceNodeRecord {
     pub ended_at_ms: Option<u64>,
     #[serde(default)]
     pub duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_attempt_id: Option<WorkflowTimingAttemptId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timing_diagnostics: Vec<WorkflowTimingDiagnostic>,
     #[serde(default)]
     pub event_count: usize,
     #[serde(default)]
@@ -115,6 +124,10 @@ pub struct WorkflowTraceSummary {
     pub ended_at_ms: Option<u64>,
     #[serde(default)]
     pub duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_attempt_id: Option<WorkflowTimingAttemptId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timing_diagnostics: Vec<WorkflowTimingDiagnostic>,
     #[serde(default)]
     pub queue: WorkflowTraceQueueMetrics,
     #[serde(default)]

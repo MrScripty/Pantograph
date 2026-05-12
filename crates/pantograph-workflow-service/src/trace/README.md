@@ -165,6 +165,9 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
   default rather than adapter-specific filtering behavior.
 - Queue timing fields are authoritative-only: missing queue timestamps remain
   absent instead of being synthesized from scheduler snapshot capture time.
+- Trace run, node, and queue-wait durations are measured through workflow
+  timing attempt ids. Timestamp underflow must emit typed timing diagnostics
+  and omit the duration instead of saturating or normalizing the value.
 - `waiting_for_input` and the derived run status are backend-owned lifecycle
   facts: interactive pause transitions and incremental resume transitions must
   reconcile here before any adapter or diagnostics projection consumes them.

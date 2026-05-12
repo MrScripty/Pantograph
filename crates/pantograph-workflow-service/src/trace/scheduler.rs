@@ -1,7 +1,9 @@
 use crate::workflow::{
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
-    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary,
-    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
+    checked_timing_duration_ms, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState,
+    WorkflowExecutionSessionSummary, WorkflowSchedulerAdmissionOutcome,
+    WorkflowSchedulerDecisionReason, WorkflowTimingAttemptId, WorkflowTimingAttemptKind,
+    WorkflowTimingDiagnostic,
 };
 use crate::WorkflowSchedulerSnapshotDiagnostics;
 
@@ -54,6 +56,10 @@ pub(super) fn apply_scheduler_snapshot(
     if pending_visible {
         if let Some(enqueued_at_ms) = matched_item.and_then(|item| item.enqueued_at_ms) {
             trace.queue.enqueued_at_ms.get_or_insert(enqueued_at_ms);
+            trace
+                .queue
+                .queue_wait_timing_attempt_id
+                .get_or_insert_with(WorkflowTimingAttemptId::generate);
         }
         if !matches!(
             trace.status,
@@ -69,6 +75,10 @@ pub(super) fn apply_scheduler_snapshot(
     if running_visible {
         if let Some(enqueued_at_ms) = matched_item.and_then(|item| item.enqueued_at_ms) {
             trace.queue.enqueued_at_ms.get_or_insert(enqueued_at_ms);
+            trace
+                .queue
+                .queue_wait_timing_attempt_id
+                .get_or_insert_with(WorkflowTimingAttemptId::generate);
         }
         if let Some(dequeued_at_ms) = matched_item.and_then(|item| item.dequeued_at_ms) {
             trace.queue.dequeued_at_ms.get_or_insert(dequeued_at_ms);
@@ -85,9 +95,12 @@ pub(super) fn apply_scheduler_snapshot(
     }
 
     trace.queue.queue_wait_ms = match (trace.queue.enqueued_at_ms, trace.queue.dequeued_at_ms) {
-        (Some(enqueued_at_ms), Some(dequeued_at_ms)) => {
-            Some(dequeued_at_ms.saturating_sub(enqueued_at_ms))
-        }
+        (Some(enqueued_at_ms), Some(dequeued_at_ms)) => queue_wait_duration_ms(
+            &mut trace.queue.queue_wait_timing_attempt_id,
+            &mut trace.queue.timing_diagnostics,
+            enqueued_at_ms,
+            dequeued_at_ms,
+        ),
         _ => None,
     };
     trace.queue.scheduler_admission_outcome =
@@ -95,6 +108,27 @@ pub(super) fn apply_scheduler_snapshot(
     trace.queue.scheduler_decision_reason =
         scheduler_decision_reason(workflow_run_id, session, items);
     trace.queue.scheduler_snapshot_diagnostics = diagnostics.cloned();
+}
+
+fn queue_wait_duration_ms(
+    attempt_id: &mut Option<WorkflowTimingAttemptId>,
+    diagnostics: &mut Vec<WorkflowTimingDiagnostic>,
+    enqueued_at_ms: u64,
+    dequeued_at_ms: u64,
+) -> Option<u64> {
+    let attempt_id = attempt_id.get_or_insert_with(WorkflowTimingAttemptId::generate);
+    match checked_timing_duration_ms(attempt_id, enqueued_at_ms, dequeued_at_ms) {
+        Ok(duration_ms) => Some(duration_ms),
+        Err(error) => {
+            let diagnostic = WorkflowTimingDiagnostic::from_contract_error(
+                &error,
+                WorkflowTimingAttemptKind::SchedulerTraceSpan,
+            )
+            .expect("duration underflow must map to a timing diagnostic");
+            diagnostics.push(diagnostic);
+            None
+        }
+    }
 }
 
 fn scheduler_admission_outcome(

@@ -255,6 +255,59 @@ fn workflow_trace_store_preserves_enqueue_time_when_first_snapshot_is_running() 
 }
 
 #[test]
+fn workflow_trace_store_emits_timing_diagnostic_for_queue_wait_underflow() {
+    let store = WorkflowTraceStore::new(10);
+    let snapshot = store.record_event(
+        &WorkflowTraceEvent::SchedulerSnapshotCaptured {
+            workflow_run_id: "exec-1".to_string(),
+            workflow_id: Some("wf-1".to_string()),
+            session_id: "session-1".to_string(),
+            captured_at_ms: 200,
+            session: Some(crate::workflow::WorkflowExecutionSessionSummary {
+                session_id: "session-1".to_string(),
+                workflow_id: "wf-1".to_string(),
+                session_kind: crate::graph::WorkflowExecutionSessionKind::Workflow,
+                usage_profile: Some("interactive".to_string()),
+                attribution: None,
+                keep_alive: true,
+                state: crate::workflow::WorkflowExecutionSessionState::Running,
+                queued_runs: 0,
+                run_count: 1,
+            }),
+            items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
+                workflow_run_id: "exec-1".to_string(),
+                enqueued_at_ms: Some(150),
+                dequeued_at_ms: Some(120),
+                priority: 5,
+                queue_position: None,
+                scheduler_admission_outcome: None,
+                scheduler_decision_reason: None,
+                status: crate::workflow::WorkflowExecutionSessionQueueItemStatus::Running,
+            }],
+            diagnostics: None,
+            error: None,
+        },
+        200,
+    );
+
+    let trace = snapshot.traces.first().expect("trace summary");
+    let attempt_id = trace
+        .queue
+        .queue_wait_timing_attempt_id
+        .as_ref()
+        .expect("timing attempt");
+    assert_eq!(trace.queue.enqueued_at_ms, Some(150));
+    assert_eq!(trace.queue.dequeued_at_ms, Some(120));
+    assert_eq!(trace.queue.queue_wait_ms, None);
+    assert_eq!(trace.queue.timing_diagnostics.len(), 1);
+    assert_eq!(
+        trace.queue.timing_diagnostics[0].code,
+        crate::workflow::WorkflowTimingDiagnosticCode::TimestampUnderflow
+    );
+    assert_eq!(&trace.queue.timing_diagnostics[0].attempt_id, attempt_id);
+}
+
+#[test]
 fn workflow_trace_store_does_not_synthesize_queue_timing_from_snapshot_capture_time() {
     let store = WorkflowTraceStore::new(10);
     let snapshot = store.record_event(

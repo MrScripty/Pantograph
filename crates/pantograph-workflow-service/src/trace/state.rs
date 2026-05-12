@@ -7,6 +7,10 @@ use super::types::{
     WorkflowTraceEvent, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
     WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceStatus,
 };
+use crate::workflow::{
+    checked_timing_duration_ms, WorkflowTimingAttemptId, WorkflowTimingAttemptKind,
+    WorkflowTimingDiagnostic,
+};
 
 pub(super) fn create_trace_run_state(
     workflow_run_id: &str,
@@ -24,6 +28,8 @@ pub(super) fn create_trace_run_state(
         started_at_ms: timestamp_ms,
         ended_at_ms: None,
         duration_ms: None,
+        timing_attempt_id: WorkflowTimingAttemptId::generate(),
+        timing_diagnostics: Vec::new(),
         queue: WorkflowTraceQueueMetrics::default(),
         runtime: WorkflowTraceRuntimeMetrics::default(),
         node_count_at_start,
@@ -100,21 +106,25 @@ pub(super) fn apply_trace_event(
             trace.status = WorkflowTraceStatus::Completed;
             trace.waiting_for_input = false;
             trace.ended_at_ms = Some(timestamp_ms);
-            trace.duration_ms = Some(timestamp_ms.saturating_sub(trace.started_at_ms));
+            let diagnostics_before = trace.timing_diagnostics.len();
+            trace.duration_ms = trace_duration_ms(trace, timestamp_ms);
+            if trace.timing_diagnostics.len() > diagnostics_before {
+                trace.status = WorkflowTraceStatus::Failed;
+            }
         }
         WorkflowTraceEvent::RunFailed { error, .. } => {
             trace.status = WorkflowTraceStatus::Failed;
             trace.waiting_for_input = false;
             trace.last_error = Some(error.clone());
             trace.ended_at_ms = Some(timestamp_ms);
-            trace.duration_ms = Some(timestamp_ms.saturating_sub(trace.started_at_ms));
+            trace.duration_ms = trace_duration_ms(trace, timestamp_ms);
         }
         WorkflowTraceEvent::RunCancelled { error, .. } => {
             trace.status = WorkflowTraceStatus::Cancelled;
             trace.waiting_for_input = false;
             trace.last_error = Some(error.clone());
             trace.ended_at_ms = Some(timestamp_ms);
-            trace.duration_ms = Some(timestamp_ms.saturating_sub(trace.started_at_ms));
+            trace.duration_ms = trace_duration_ms(trace, timestamp_ms);
             cancel_active_trace_nodes(trace, error, timestamp_ms);
         }
         WorkflowTraceEvent::RuntimeSnapshotCaptured {
@@ -192,25 +202,28 @@ pub(super) fn apply_trace_event(
         WorkflowTraceEvent::NodeCompleted { .. } => {
             node.status = WorkflowTraceNodeStatus::Completed;
             node.ended_at_ms = Some(timestamp_ms);
-            node.duration_ms = node
-                .started_at_ms
-                .map(|started_at_ms| timestamp_ms.saturating_sub(started_at_ms));
-            node.last_error = None;
+            let diagnostics_before = node.timing_diagnostics.len();
+            node.duration_ms = node_duration_ms(node, timestamp_ms);
+            if node.timing_diagnostics.len() > diagnostics_before {
+                node.status = WorkflowTraceNodeStatus::Failed;
+            } else {
+                node.last_error = None;
+            }
         }
         WorkflowTraceEvent::NodeFailed { error, .. } => {
             node.status = WorkflowTraceNodeStatus::Failed;
             node.ended_at_ms = Some(timestamp_ms);
-            node.duration_ms = node
-                .started_at_ms
-                .map(|started_at_ms| timestamp_ms.saturating_sub(started_at_ms));
+            node.duration_ms = node_duration_ms(node, timestamp_ms);
             node.last_error = Some(error.clone());
         }
         WorkflowTraceEvent::WaitingForInput { .. } => {
             node.status = WorkflowTraceNodeStatus::Waiting;
             node.ended_at_ms = Some(timestamp_ms);
-            node.duration_ms = node
-                .started_at_ms
-                .map(|started_at_ms| timestamp_ms.saturating_sub(started_at_ms));
+            let diagnostics_before = node.timing_diagnostics.len();
+            node.duration_ms = node_duration_ms(node, timestamp_ms);
+            if node.timing_diagnostics.len() > diagnostics_before {
+                node.status = WorkflowTraceNodeStatus::Failed;
+            }
         }
         WorkflowTraceEvent::RunStarted { .. }
         | WorkflowTraceEvent::RunCompleted { .. }
@@ -265,9 +278,7 @@ fn cancel_active_trace_nodes(trace: &mut WorkflowTraceRunState, error: &str, tim
         ) {
             node.status = WorkflowTraceNodeStatus::Cancelled;
             node.ended_at_ms = Some(timestamp_ms);
-            node.duration_ms = node
-                .started_at_ms
-                .map(|started_at_ms| timestamp_ms.saturating_sub(started_at_ms));
+            node.duration_ms = node_duration_ms(node, timestamp_ms);
             if node.last_error.is_none() {
                 node.last_error = Some(error.to_string());
             }
@@ -296,6 +307,8 @@ fn reset_trace_for_restart(
     trace.started_at_ms = timestamp_ms;
     trace.ended_at_ms = None;
     trace.duration_ms = None;
+    trace.timing_attempt_id = WorkflowTimingAttemptId::generate();
+    trace.timing_diagnostics.clear();
     trace.queue = WorkflowTraceQueueMetrics::default();
     trace.runtime = WorkflowTraceRuntimeMetrics::default();
     trace.node_count_at_start = node_count_at_start;
@@ -317,10 +330,60 @@ fn create_trace_node_record(node_id: &str, node_type: Option<String>) -> Workflo
         started_at_ms: None,
         ended_at_ms: None,
         duration_ms: None,
+        timing_attempt_id: Some(WorkflowTimingAttemptId::generate()),
+        timing_diagnostics: Vec::new(),
         event_count: 0,
         stream_event_count: 0,
         last_error: None,
         last_progress_detail: None,
         timing_expectation: None,
+    }
+}
+
+fn trace_duration_ms(trace: &mut WorkflowTraceRunState, completed_at_ms: u64) -> Option<u64> {
+    let duration = checked_timing_duration_ms(
+        &trace.timing_attempt_id,
+        trace.started_at_ms,
+        completed_at_ms,
+    );
+    checked_trace_span_duration(
+        duration,
+        &mut trace.timing_diagnostics,
+        Some(&mut trace.last_error),
+    )
+}
+
+fn node_duration_ms(node: &mut WorkflowTraceNodeRecord, completed_at_ms: u64) -> Option<u64> {
+    let started_at_ms = node.started_at_ms?;
+    let attempt_id = node
+        .timing_attempt_id
+        .get_or_insert_with(WorkflowTimingAttemptId::generate);
+    let duration = checked_timing_duration_ms(attempt_id, started_at_ms, completed_at_ms);
+    checked_trace_span_duration(
+        duration,
+        &mut node.timing_diagnostics,
+        Some(&mut node.last_error),
+    )
+}
+
+fn checked_trace_span_duration(
+    duration: Result<u64, crate::workflow::WorkflowTimingContractError>,
+    diagnostics: &mut Vec<WorkflowTimingDiagnostic>,
+    last_error: Option<&mut Option<String>>,
+) -> Option<u64> {
+    match duration {
+        Ok(duration_ms) => Some(duration_ms),
+        Err(error) => {
+            let diagnostic = WorkflowTimingDiagnostic::from_contract_error(
+                &error,
+                WorkflowTimingAttemptKind::SchedulerTraceSpan,
+            )
+            .expect("duration underflow must map to a timing diagnostic");
+            if let Some(last_error) = last_error {
+                last_error.get_or_insert_with(|| diagnostic.message.clone());
+            }
+            diagnostics.push(diagnostic);
+            None
+        }
     }
 }

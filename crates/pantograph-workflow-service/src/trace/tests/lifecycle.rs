@@ -432,6 +432,86 @@ fn workflow_trace_store_ignores_duplicate_run_completed_events() {
 }
 
 #[test]
+fn workflow_trace_store_emits_timing_diagnostic_for_run_duration_underflow() {
+    let store = WorkflowTraceStore::new(10);
+
+    store.record_event(
+        &WorkflowTraceEvent::RunStarted {
+            workflow_run_id: "exec-1".to_string(),
+            workflow_id: Some("wf-1".to_string()),
+            node_count: 1,
+        },
+        100,
+    );
+    let snapshot = store.record_event(
+        &WorkflowTraceEvent::RunCompleted {
+            workflow_run_id: "exec-1".to_string(),
+            workflow_id: Some("wf-1".to_string()),
+        },
+        90,
+    );
+
+    let trace = snapshot.traces.first().expect("trace");
+    let attempt_id = trace.timing_attempt_id.as_ref().expect("timing attempt");
+    assert_eq!(trace.status, WorkflowTraceStatus::Failed);
+    assert_eq!(trace.duration_ms, None);
+    assert_eq!(trace.timing_diagnostics.len(), 1);
+    assert_eq!(
+        trace.timing_diagnostics[0].code,
+        crate::workflow::WorkflowTimingDiagnosticCode::TimestampUnderflow
+    );
+    assert_eq!(&trace.timing_diagnostics[0].attempt_id, attempt_id);
+    assert_eq!(
+        trace.last_error,
+        Some(trace.timing_diagnostics[0].message.clone())
+    );
+}
+
+#[test]
+fn workflow_trace_store_emits_timing_diagnostic_for_node_duration_underflow() {
+    let store = WorkflowTraceStore::new(10);
+
+    store.record_event(
+        &WorkflowTraceEvent::RunStarted {
+            workflow_run_id: "exec-1".to_string(),
+            workflow_id: Some("wf-1".to_string()),
+            node_count: 1,
+        },
+        100,
+    );
+    store.record_event(
+        &WorkflowTraceEvent::NodeStarted {
+            workflow_run_id: "exec-1".to_string(),
+            node_id: "node-1".to_string(),
+            node_type: Some("llm-inference".to_string()),
+        },
+        110,
+    );
+    let snapshot = store.record_event(
+        &WorkflowTraceEvent::NodeCompleted {
+            workflow_run_id: "exec-1".to_string(),
+            node_id: "node-1".to_string(),
+        },
+        105,
+    );
+
+    let node = snapshot.traces[0].nodes.first().expect("node");
+    let attempt_id = node.timing_attempt_id.as_ref().expect("timing attempt");
+    assert_eq!(node.status, WorkflowTraceNodeStatus::Failed);
+    assert_eq!(node.duration_ms, None);
+    assert_eq!(node.timing_diagnostics.len(), 1);
+    assert_eq!(
+        node.timing_diagnostics[0].code,
+        crate::workflow::WorkflowTimingDiagnosticCode::TimestampUnderflow
+    );
+    assert_eq!(&node.timing_diagnostics[0].attempt_id, attempt_id);
+    assert_eq!(
+        node.last_error,
+        Some(node.timing_diagnostics[0].message.clone())
+    );
+}
+
+#[test]
 fn workflow_trace_store_incremental_execution_started_resumes_waiting_runs() {
     let store = WorkflowTraceStore::new(10);
 
