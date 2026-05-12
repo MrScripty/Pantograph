@@ -3860,6 +3860,33 @@ typed diagnostic and the canonical design is fixed.
     to timing attempt ids and checked duration math. Full baseline/deviation
     enforcement and scheduler retry/termination policy remain the later
     required policy-completion path.
+- 2026-05-12 slice: workflow runtime-unload timing attempt producer.
+  - Smallest useful vertical slice: migrate the keep-alive-disabled
+    workflow-session runtime-unload lifecycle diagnostics onto timing attempt
+    ids and checked duration math.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: keep-alive-disabled runtime unload no
+    longer reports an anonymous saturated duration. Unload scheduled, started,
+    completed, and failed lifecycle events share one `timing_attempt_` id, and
+    impossible timestamp state returns a typed workflow-service internal error
+    through the timing contract.
+  - Standards/blast-radius gate: workflow-service session execution only; no
+    diagnostics-ledger schema, generated files, frontend code, saved workflow
+    fixtures, lockfiles, Pumas contracts, worker contracts, capacity-rebalance
+    unload policy, inference warmup policy, embedding warmup policy, scheduler
+    trace policy, or retry/termination policy changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution`,
+    `cargo test -p pantograph-workflow-service session_execution`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: migrate capacity-rebalance unload, inference gateway
+    warmup, embedding warmup, and scheduler trace producers to timing attempt
+    ids and checked duration math. Full baseline/deviation enforcement and
+    scheduler retry/termination policy remain the later required
+    policy-completion path.
 
 **Verification:**
 

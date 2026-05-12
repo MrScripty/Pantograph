@@ -589,6 +589,7 @@ impl WorkflowService {
             )?;
         }
         if finish_state.unload_runtime {
+            let runtime_unload_timing_attempt_id = WorkflowTimingAttemptId::generate();
             self.record_scheduler_model_lifecycle_events_if_configured(
                 SchedulerModelLifecycleEventRequest {
                     session: &session,
@@ -602,7 +603,7 @@ impl WorkflowService {
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadScheduled,
-                    timing_attempt_id: None,
+                    timing_attempt_id: Some(runtime_unload_timing_attempt_id.as_str()),
                     reason: Some("keep-alive disabled after run completion"),
                     duration_ms: None,
                     error: None,
@@ -623,7 +624,7 @@ impl WorkflowService {
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadStarted,
-                    timing_attempt_id: None,
+                    timing_attempt_id: Some(runtime_unload_timing_attempt_id.as_str()),
                     reason: Some("keep-alive disabled after run completion"),
                     duration_ms: None,
                     error: None,
@@ -637,8 +638,11 @@ impl WorkflowService {
                     WorkflowExecutionSessionUnloadReason::KeepAliveDisabled,
                 )
                 .await;
-            let runtime_unload_duration_ms =
-                unix_timestamp_ms().saturating_sub(runtime_unload_started_at_ms);
+            let runtime_unload_duration_ms = workflow_timing_duration_ms(
+                &runtime_unload_timing_attempt_id,
+                runtime_unload_started_at_ms,
+                unix_timestamp_ms(),
+            )?;
             match &runtime_unload_result {
                 Ok(()) => self.record_scheduler_model_lifecycle_events_if_configured(
                     SchedulerModelLifecycleEventRequest {
@@ -653,7 +657,7 @@ impl WorkflowService {
                         required_backends: &required_backends,
                         required_models: &required_models,
                         transition: SchedulerModelLifecycleTransition::UnloadCompleted,
-                        timing_attempt_id: None,
+                        timing_attempt_id: Some(runtime_unload_timing_attempt_id.as_str()),
                         reason: Some("keep-alive disabled after run completion"),
                         duration_ms: Some(runtime_unload_duration_ms),
                         error: None,
@@ -678,7 +682,7 @@ impl WorkflowService {
                                 required_backends: &required_backends,
                                 required_models: &required_models,
                                 transition: SchedulerModelLifecycleTransition::UnloadFailed,
-                                timing_attempt_id: None,
+                                timing_attempt_id: Some(runtime_unload_timing_attempt_id.as_str()),
                                 reason: Some("keep-alive disabled after run completion"),
                                 duration_ms: Some(runtime_unload_duration_ms),
                                 error: Some(error_text.as_str()),

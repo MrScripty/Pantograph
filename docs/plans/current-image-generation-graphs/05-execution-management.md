@@ -2293,6 +2293,26 @@ Worker rules:
   embedding warmup, and scheduler trace producers onto timing attempt ids and
   checked duration math. Full baseline/deviation enforcement and scheduler
   retry/termination policy remain the later required policy-completion path.
+- 2026-05-12 workflow runtime-unload timing attempt producer slice: smallest
+  useful vertical slice was limited to keep-alive-disabled workflow-session
+  runtime unload. Unload scheduled, started, completed, and failed lifecycle
+  events now carry one shared `timing_attempt_` id, and runtime-unload duration
+  uses checked timing contract arithmetic instead of `saturating_sub`. Allowed
+  write set:
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because
+  keep-alive-disabled unload duration no longer becomes an anonymous saturated
+  value; impossible timing state returns a typed workflow-service internal
+  error through the timing contract. Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_execution_session_run_records_snapshot_before_execution`,
+  `cargo test -p pantograph-workflow-service session_execution`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Remaining follow-up:
+  migrate capacity-rebalance unload, inference gateway warmup, embedding
+  warmup, and scheduler trace producers onto timing attempt ids and checked
+  duration math. Full baseline/deviation enforcement and scheduler
+  retry/termination policy remain the later required policy-completion path.
 
 ### Traceability Links
 

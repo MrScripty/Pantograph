@@ -901,6 +901,19 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(model_lifecycle_events[2]
         .payload_json
         .contains("\"transition\":\"unload_scheduled\""));
+    let unload_scheduled_payload: serde_json::Value =
+        serde_json::from_str(&model_lifecycle_events[2].payload_json)
+            .expect("unload scheduled payload json");
+    let unload_started_payload: serde_json::Value =
+        serde_json::from_str(&model_lifecycle_events[3].payload_json)
+            .expect("unload started payload json");
+    let unload_completed_payload: serde_json::Value =
+        serde_json::from_str(&model_lifecycle_events[4].payload_json)
+            .expect("unload completed payload json");
+    let unload_timing_attempt_id = unload_scheduled_payload["timing_attempt_id"]
+        .as_str()
+        .expect("unload scheduled timing attempt id");
+    assert!(unload_timing_attempt_id.starts_with("timing_attempt_"));
     assert!(model_lifecycle_events[2]
         .payload_json
         .contains("\"cache_state\":\"unload_requested\""));
@@ -911,6 +924,10 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(model_lifecycle_events[3]
         .payload_json
         .contains("\"transition\":\"unload_started\""));
+    assert_eq!(
+        unload_started_payload["timing_attempt_id"].as_str(),
+        Some(unload_timing_attempt_id)
+    );
     assert!(model_lifecycle_events[3]
         .payload_json
         .contains("\"cache_state\":\"unload_requested\""));
@@ -918,6 +935,10 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(model_lifecycle_events[4]
         .payload_json
         .contains("\"transition\":\"unload_completed\""));
+    assert_eq!(
+        unload_completed_payload["timing_attempt_id"].as_str(),
+        Some(unload_timing_attempt_id)
+    );
     assert!(model_lifecycle_events[4]
         .payload_json
         .contains("\"cache_state\":\"unloaded\""));
