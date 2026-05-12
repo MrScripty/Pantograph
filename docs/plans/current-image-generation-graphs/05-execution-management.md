@@ -2883,6 +2883,31 @@ Worker rules:
   promote admission policy trace summaries into queryable columns or compact
   read-model fields if UI/history ranking requires that; ledger-history ranking
   inputs and retry/termination policy remain later scheduler slices.
+- 2026-05-12 diagnostics-ledger admission selected-facts projection slice:
+  smallest useful vertical slice was to project the selected backend key and
+  selected runtime variant id from the now-canonical `scheduler.run_admitted`
+  payload into existing run-list and run-detail selected-fact columns. Allowed
+  write set: `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+  `crates/pantograph-diagnostics-ledger/src/tests.rs`, and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because it only projects
+  selected facts already recorded on the scheduler admission event. It does not
+  add schema columns, infer runtime/backend facts from graph fields, change
+  scheduler selection, read ledger history for ranking, touch workflow-service
+  admission behavior, or change frontend/worker/runtime paths.
+- Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger run_projections_capture_scheduler_admission_selected_policy_facts`,
+  `cargo test -p pantograph-diagnostics-ledger scheduler_timeline`,
+  `cargo check -p pantograph-diagnostics-ledger`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Verification deviation fixed: the first focused projection test exposed that
+  the helper patch had been inserted at the wrong projection boundary and was
+  updating the run-detail table during run-list projection. The helper was
+  split into explicit run-list and run-detail functions and the focused test
+  was rerun successfully.
+- Remaining follow-up: technical-fit policy trace itself remains payload-level
+  evidence. A later read-model slice can add compact policy-summary columns or
+  history aggregation once ledger-history ranking inputs are designed.
 
 ### Traceability Links
 

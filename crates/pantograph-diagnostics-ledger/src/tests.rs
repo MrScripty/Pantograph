@@ -2336,6 +2336,59 @@ fn run_list_projection_backfills_selected_runtime_from_node_status() {
 }
 
 #[test]
+fn run_projections_capture_scheduler_admission_selected_policy_facts() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event appends");
+    let admission_event = ledger
+        .append_diagnostic_event(sample_scheduler_admission_event("workflow_run_alpha"))
+        .expect("scheduler admission event appends");
+
+    let run_list_state = ledger
+        .drain_run_list_projection(10)
+        .expect("run list projection drains");
+    assert_eq!(
+        run_list_state.last_applied_event_seq,
+        admission_event.event_seq
+    );
+    let run_list_records = ledger
+        .query_run_list_projection(RunListProjectionQuery::default())
+        .expect("run list projection loads");
+    assert_eq!(run_list_records.len(), 1);
+    assert_eq!(
+        run_list_records[0].selected_runtime_variant_id.as_deref(),
+        Some("llama_cpp.cuda")
+    );
+    assert_eq!(
+        run_list_records[0].selected_backend_key.as_deref(),
+        Some("llama_cpp")
+    );
+
+    let run_detail_state = ledger
+        .drain_run_detail_projection(10)
+        .expect("run detail projection drains");
+    assert_eq!(
+        run_detail_state.last_applied_event_seq,
+        admission_event.event_seq
+    );
+    let run_detail = ledger
+        .query_run_detail_projection(RunDetailProjectionQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+        })
+        .expect("run detail projection loads")
+        .expect("run detail record exists");
+    assert_eq!(
+        run_detail.selected_runtime_variant_id.as_deref(),
+        Some("llama_cpp.cuda")
+    );
+    assert_eq!(
+        run_detail.selected_backend_key.as_deref(),
+        Some("llama_cpp")
+    );
+}
+
+#[test]
 fn run_detail_projection_drains_lifecycle_events_incrementally() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger

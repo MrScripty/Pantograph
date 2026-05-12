@@ -2535,6 +2535,35 @@ fn apply_run_list_projection_event(
             event.occurred_at_ms,
         ],
     )?;
+    if let DiagnosticEventPayload::SchedulerRunAdmitted(payload) = &payload {
+        apply_run_list_projection_scheduler_admission_facts(tx, event, payload)?;
+    }
+    Ok(())
+}
+
+fn apply_run_list_projection_scheduler_admission_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &crate::event::SchedulerRunAdmittedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    tx.execute(
+        "UPDATE run_list_projection
+         SET selected_backend_key = COALESCE(?1, selected_backend_key),
+             selected_runtime_variant_id = COALESCE(?2, selected_runtime_variant_id),
+             last_event_seq = ?3,
+             last_updated_at_ms = ?4
+         WHERE workflow_run_id = ?5",
+        params![
+            payload.selected_backend_key.as_deref(),
+            payload.selected_runtime_variant_id.as_deref(),
+            event.event_seq,
+            event.occurred_at_ms,
+            workflow_run_id.as_str(),
+        ],
+    )?;
     Ok(())
 }
 
@@ -3073,6 +3102,35 @@ fn apply_run_detail_projection_event(
             1_i64,
             event.event_seq,
             event.occurred_at_ms,
+        ],
+    )?;
+    if let DiagnosticEventPayload::SchedulerRunAdmitted(payload) = &payload {
+        apply_run_detail_projection_scheduler_admission_facts(tx, event, payload)?;
+    }
+    Ok(())
+}
+
+fn apply_run_detail_projection_scheduler_admission_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &crate::event::SchedulerRunAdmittedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    tx.execute(
+        "UPDATE run_detail_projection
+         SET selected_backend_key = COALESCE(?1, selected_backend_key),
+             selected_runtime_variant_id = COALESCE(?2, selected_runtime_variant_id),
+             last_event_seq = ?3,
+             last_updated_at_ms = ?4
+         WHERE workflow_run_id = ?5",
+        params![
+            payload.selected_backend_key.as_deref(),
+            payload.selected_runtime_variant_id.as_deref(),
+            event.event_seq,
+            event.occurred_at_ms,
+            workflow_run_id.as_str(),
         ],
     )?;
     Ok(())

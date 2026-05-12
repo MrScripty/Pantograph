@@ -1772,9 +1772,15 @@ typed diagnostic and the canonical design is fixed.
   backend key, and bounded technical-fit policy trace facts from the canonical
   `WorkflowTechnicalFitDecision`. No graph-visible Pumas facts, runtime
   lifecycle selection behavior, or selector fallback paths were introduced.
-  Remaining follow-up: queryable run-list/run-detail policy-summary projection,
-  ledger-history ranking inputs, and retry/termination policy remain separate
-  scheduler slices.
+  Remaining follow-up: queryable policy-summary projection, ledger-history
+  ranking inputs, and retry/termination policy remain separate scheduler
+  slices.
+- 2026-05-12 partial: diagnostics-ledger run-list and run-detail projections
+  now populate existing selected backend/runtime-variant columns from
+  `scheduler.run_admitted` payloads. This keeps admission-selected facts
+  queryable without adding schema columns or inferring them from graph fields.
+  Technical-fit policy trace remains payload-level evidence until a later
+  compact policy-summary read-model is designed.
 - 2026-05-10 slice: runtime-registry no-valid-auto diagnostic.
   - Smallest useful vertical slice: add a `no_valid_candidate` error
     diagnostic to automatic technical-fit decisions when candidate facts exist
