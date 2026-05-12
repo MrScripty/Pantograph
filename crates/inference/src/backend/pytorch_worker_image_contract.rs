@@ -6,6 +6,7 @@ use super::pytorch_worker_contract::{
 };
 use crate::backend::BackendError;
 use crate::device_contracts::InferenceDeviceId;
+use crate::image_generation_planner::ImageGenerationExecutionPlan;
 use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel, PumasModelRef};
 
 #[allow(dead_code)]
@@ -74,6 +75,28 @@ pub(super) struct PyTorchGenerateImageRequest {
     pub scheduler: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub num_images_per_prompt: Option<u32>,
+}
+
+impl From<&ImageGenerationExecutionPlan> for PyTorchGenerateImageRequest {
+    fn from(plan: &ImageGenerationExecutionPlan) -> Self {
+        Self {
+            model_ref: plan.model_ref.clone(),
+            artifact_entry_path: plan.artifact_entry_path.clone(),
+            family: plan.family,
+            pipeline_class: plan.pipeline_class.clone(),
+            required_components: plan.required_components.clone(),
+            device: plan.selected_device_id.clone(),
+            prompt: plan.prompt.clone(),
+            negative_prompt: plan.negative_prompt.clone(),
+            width: plan.width,
+            height: plan.height,
+            num_inference_steps: plan.num_inference_steps,
+            guidance_scale: plan.guidance_scale,
+            seed: plan.seed,
+            scheduler: plan.scheduler.clone(),
+            num_images_per_prompt: plan.num_images_per_prompt,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

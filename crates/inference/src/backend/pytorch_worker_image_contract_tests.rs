@@ -6,7 +6,15 @@ use super::pytorch_worker_image_contract::{
     validate_generate_image_envelope, PyTorchGenerateImageRequest, PyTorchGenerateImageResult,
 };
 use crate::backend::BackendError;
+use crate::device_contracts::{
+    BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDeviceClass,
+    InferenceDeviceId, InferenceDevicePolicy, RuntimeVariantId,
+};
+use crate::image_generation_planner::{
+    plan_image_generation_execution, ImageGenerationPlanningInput, ImageGenerationPlanningOutcome,
+};
 use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel};
+use crate::{ImageGenerationRequest, InferenceTaskId, ResolvedModelPackageFacts};
 
 #[test]
 fn test_pytorch_worker_generate_image_request_fixture_decodes() {
@@ -101,4 +109,88 @@ fn test_pytorch_worker_generate_image_request_rejects_unknown_fields() {
     let error = serde_json::from_value::<PyTorchWorkerEnvelope<PyTorchGenerateImageRequest>>(value)
         .expect_err("image request payload should reject unknown fields");
     assert!(error.to_string().contains("unknown field"));
+}
+
+#[test]
+fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
+    let facts: ResolvedModelPackageFacts = serde_json::from_str(include_str!(
+        "../../tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
+    ))
+    .expect("decode image package facts");
+    let request = ImageGenerationRequest {
+        model: "image/stable-diffusion/tiny-sd".to_string(),
+        prompt: "a compact test image".to_string(),
+        negative_prompt: Some("blur".to_string()),
+        width: Some(512),
+        height: Some(512),
+        num_inference_steps: Some(8),
+        guidance_scale: Some(7.5),
+        seed: Some(42),
+        scheduler: Some("euler".to_string()),
+        num_images_per_prompt: Some(1),
+        init_image: None,
+        mask_image: None,
+        strength: None,
+        extra_options: serde_json::Value::Null,
+    };
+    let decision = backend_decision();
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+    let ImageGenerationPlanningOutcome::Planned { plan } = outcome else {
+        panic!("expected validated image plan");
+    };
+
+    let worker_request = PyTorchGenerateImageRequest::from(&plan);
+
+    assert_eq!(
+        worker_request.model_ref.model_id,
+        "image/stable-diffusion/tiny-sd"
+    );
+    assert_eq!(
+        worker_request.artifact_entry_path,
+        "image/stable-diffusion/tiny-sd"
+    );
+    assert_eq!(
+        worker_request.family,
+        ImageGenerationFamilyLabel::StableDiffusion
+    );
+    assert_eq!(worker_request.pipeline_class, "StableDiffusionPipeline");
+    assert_eq!(
+        worker_request.device.as_ref().map(|device| device.as_str()),
+        Some("cpu")
+    );
+    assert_eq!(worker_request.prompt, "a compact test image");
+    validate_generate_image_envelope(&PyTorchWorkerEnvelope::new(
+        "req-image-plan",
+        PyTorchWorkerOperation::GenerateImage,
+        worker_request,
+    ))
+    .expect("planned worker request should validate");
+}
+
+fn backend_decision() -> BackendExecutionDecision {
+    let backend_id = BackendId::parse("pytorch").expect("valid backend id");
+    let runtime_variant_id =
+        RuntimeVariantId::parse("pytorch.diffusers").expect("valid runtime variant");
+    let selected_device_id = InferenceDeviceId::parse("cpu").expect("valid device id");
+    let device_decision = DeviceResolutionDecision {
+        policy: InferenceDevicePolicy::Auto,
+        runtime_variant_id: runtime_variant_id.clone(),
+        selected_device_class: InferenceDeviceClass::Cpu,
+        selected_device_id: Some(selected_device_id.clone()),
+        diagnostics: Vec::new(),
+    };
+    BackendExecutionDecision {
+        selected_backend_id: backend_id,
+        selected_runtime_variant_id: runtime_variant_id,
+        selected_device_class: InferenceDeviceClass::Cpu,
+        selected_device_id: Some(selected_device_id),
+        device_decision,
+        selected_task_id: Some(InferenceTaskId::ImageGeneration),
+        selected_model_ref: None,
+        diagnostics: Vec::new(),
+    }
 }

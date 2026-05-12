@@ -2557,6 +2557,26 @@ Worker rules:
   those files.
 - Remaining follow-up: translate `ImageGenerationExecutionPlan` into the worker
   envelope and add Python-side shape validation before generation.
+- 2026-05-12 planner-to-worker translation slice: smallest useful vertical
+  slice was to translate `ImageGenerationExecutionPlan` into
+  `PyTorchGenerateImageRequest` and prove the resulting worker envelope still
+  validates. Allowed write set:
+  `crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`, and
+  this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because translation copies
+  the planner-selected model ref, artifact path, family, component roles,
+  pipeline class, prompt options, and selected device id directly. It does not
+  reinterpret backend hints, parse raw device strings, choose defaults, or infer
+  family from model names. Verification passed: `cargo test -p inference
+  --features backend-pytorch
+  pytorch_worker_generate_image_request_maps_from_validated_plan`, `cargo test
+  -p inference --features backend-pytorch pytorch_worker_generate_image`,
+  `cargo check -p inference --features backend-pytorch`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Remaining follow-up: add Python worker-side image envelope shape validation,
+  then wire PyTorch backend image generation through the validated plan and
+  envelope.
 
 ### Traceability Links
 
