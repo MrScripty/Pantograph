@@ -3070,5 +3070,8 @@ fn extract_system_prompt(request: &serde_json::Value) -> Option<String> {
 #[path = "pytorch_worker_image_contract_tests.rs"]
 mod pytorch_worker_image_contract_tests;
 #[cfg(test)]
+#[path = "pytorch_worker_image_python_tests.rs"]
+mod pytorch_worker_image_python_tests;
+#[cfg(test)]
 #[path = "pytorch_tests.rs"]
 mod tests;

@@ -9,6 +9,7 @@ const AUTOREGRESSIVE_PY: &str = include_str!("../../torch/autoregressive.py");
 const WORKER_RUNTIME_PY: &str = include_str!("../../torch/worker_runtime.py");
 const WORKER_TRANSFORMERS_PY: &str = include_str!("../../torch/worker_transformers.py");
 const WORKER_CONTRACT_PY: &str = include_str!("../../torch/worker_contract.py");
+const WORKER_IMAGE_CONTRACT_PY: &str = include_str!("../../torch/worker_image_contract.py");
 
 static WORKER_INITIALISED: AtomicBool = AtomicBool::new(false);
 
@@ -50,6 +51,12 @@ pub(super) fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
             WORKER_CONTRACT_PY,
             c"worker_contract.py",
             c"worker_contract",
+        ),
+        (
+            "worker_image_contract",
+            WORKER_IMAGE_CONTRACT_PY,
+            c"worker_image_contract.py",
+            c"worker_image_contract",
         ),
     ] {
         let code = std::ffi::CString::new(source).map_err(|e| {

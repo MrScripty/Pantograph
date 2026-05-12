@@ -2603,6 +2603,33 @@ Worker rules:
   Rust/PyO3 tests; ran `cargo fmt --all` and reran successfully. Remaining
   follow-up: import the helper from `worker.py` and wire
   `PyTorchBackend::generate_image` through the validated planner and envelope.
+- 2026-05-12 Python image worker bridge slice: smallest useful vertical slice
+  was to register `worker_image_contract.py` in the embedded Python worker
+  loader, import it from `worker.py`, and expose `generate_image_from_envelope`
+  so Python validates the Rust-planned image worker envelope before calling the
+  existing loaded Diffusers pipeline helper. Allowed write set:
+  `crates/inference/src/backend/pytorch_worker.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_python_tests.rs`,
+  `crates/inference/src/backend/pytorch.rs`, `crates/inference/torch/worker.py`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because the worker
+  entrypoint uses the strict image envelope contract and returns typed worker
+  error responses for invalid requests. It does not choose pipeline family,
+  scheduler, custom-code trust, dependency environment, or device fallback in
+  Python. Verification passed: `cargo test -p inference --features
+  backend-pytorch python_worker_generate_image_from_envelope`, `cargo test -p
+  inference --features backend-pytorch python_worker_generate_image_contract`,
+  `cargo test -p inference --features backend-pytorch
+  pytorch_worker_generate_image`, `cargo check -p inference --features
+  backend-pytorch`, `cargo fmt --all -- --check`, and `git diff --check`.
+- Verification deviation/discovered issue: the first bridge test run exposed a
+  stub scoping bug (`_Image` was not visible inside the stub pipeline method),
+  which was corrected by using one Python globals/locals dictionary. Standards
+  debt: `crates/inference/torch/worker.py` is already above the decomposition
+  threshold; this slice kept validation and tests in focused files and only
+  added the minimal public bridge function required by the existing Rust/PyO3
+  facade. Remaining follow-up: wire `PyTorchBackend::generate_image` through
+  the validated planner and Python worker envelope.
 
 ### Traceability Links
 

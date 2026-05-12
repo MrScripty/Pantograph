@@ -11,6 +11,7 @@ Generation logic is split into sibling modules:
   - autoregressive: standard token-by-token HuggingFace generation
   - worker_runtime: shared device, model, dtype, and payload helpers
   - worker_transformers: cross-version transformers compatibility shims
+  - worker_image_contract: Rust-planned image-generation envelope validation
 """
 
 import base64
@@ -69,6 +70,7 @@ from worker_contract import (
     truncate_kv_cache_kwargs_from_envelope,
     unload_model_kwargs_from_envelope,
 )
+from worker_image_contract import generate_image_kwargs_from_envelope
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pantograph.pytorch")
@@ -1545,6 +1547,68 @@ def generate_image(
         "images": encoded_images,
         "seed_used": int(seed) if seed is not None else None,
     }
+
+
+def generate_image_from_envelope(envelope):
+    """Generate an image from the Rust-planned worker envelope contract."""
+    request_id = "unknown"
+    try:
+        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+        if isinstance(decoded, dict):
+            request_id = str(decoded.get("request_id") or request_id)
+        planned = generate_image_kwargs_from_envelope(decoded)
+        result = generate_image(**planned["generation_kwargs"])
+        return json.dumps({
+            "status": "ok",
+            "request_id": request_id,
+            "result": {
+                "images": result.get("images", []),
+                "seed_used": result.get("seed_used"),
+                "metadata": {
+                    "artifact_entry_path": planned["artifact_entry_path"],
+                    "family": planned["family"],
+                    "pipeline_class": planned["pipeline_class"],
+                    "scheduler": planned["generation_kwargs"].get("scheduler"),
+                    "device": planned["device"],
+                },
+            },
+        })
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "invalid_request",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_invalid_generate_image_request",
+            },
+        })
+    except RuntimeError as exc:
+        message = str(exc)
+        kind = (
+            "runtime_unavailable"
+            if "No diffusion pipeline loaded" in message
+            else "generation_failed"
+        )
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": kind,
+                "message": message,
+                "canonical_code": "pytorch_worker_generate_image_failed",
+            },
+        })
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "request_id": request_id,
+            "error": {
+                "kind": "internal",
+                "message": str(exc),
+                "canonical_code": "pytorch_worker_generate_image_internal",
+            },
+        })
 
 
 def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0,

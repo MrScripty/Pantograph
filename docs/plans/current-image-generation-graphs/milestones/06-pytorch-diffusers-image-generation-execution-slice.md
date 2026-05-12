@@ -314,3 +314,34 @@ translation, and Python image-envelope shape validation are implemented.
 - Remaining follow-up: wire `worker_image_contract.py` into `worker.py` and
   the Rust `PyTorchBackend::generate_image` path through the validated planner
   and worker envelope.
+
+2026-05-12 Python image worker bridge slice:
+
+- Smallest useful vertical slice: register `worker_image_contract.py` with the
+  embedded PyTorch worker loader, import it from `worker.py`, and expose a
+  `generate_image_from_envelope` entrypoint that validates the Rust-planned
+  envelope before calling the existing loaded Diffusers pipeline helper.
+- Allowed write set: `crates/inference/src/backend/pytorch_worker.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_python_tests.rs`,
+  `crates/inference/src/backend/pytorch.rs`, `crates/inference/torch/worker.py`,
+  and this plan directory.
+- No-fallback/no-legacy confirmation: the new worker entrypoint delegates
+  validation to the strict image envelope contract, returns typed worker error
+  responses for invalid requests, and does not choose pipeline family,
+  scheduler, custom-code trust, dependency environment, or device fallback in
+  Python.
+- Verification passed: `cargo test -p inference --features backend-pytorch
+  python_worker_generate_image_from_envelope`, `cargo test -p inference
+  --features backend-pytorch python_worker_generate_image_contract`,
+  `cargo test -p inference --features backend-pytorch
+  pytorch_worker_generate_image`, `cargo check -p inference --features
+  backend-pytorch`, `cargo fmt --all -- --check`, and `git diff --check`.
+- Discovered issue: the first bridge test run exposed a test stub scoping bug
+  (`_Image` not visible inside the stub pipeline method). The test setup was
+  corrected to use the same Python globals/locals dictionary and the bridge
+  tests then passed. Standards debt: `crates/inference/torch/worker.py` is
+  already above the decomposition threshold; this slice kept image validation
+  and tests in focused files and only added the minimal public bridge function
+  required by the existing Rust/PyO3 worker facade.
+- Remaining follow-up: wire `PyTorchBackend::generate_image` through the
+  validated planner and Python worker envelope.
