@@ -13,9 +13,10 @@ The design must support:
 - CPU-only inference on Linux, Windows, and macOS.
 - CUDA GPU selection on Linux and Windows.
 - Metal/MPS selection on macOS only.
-- Auto mode as a preference only. Auto may choose a device when the user did
-  not ask for a concrete device, but it must record the chosen device and must
-  not hide failures for explicit user choices.
+- Auto mode as a first-class scheduler policy. Auto may choose a backend,
+  runtime variant, and device when the workflow did not ask for a concrete
+  target. It must record the chosen decision and must not hide failures for
+  explicit user choices.
 
 ROCm/HIP, Vulkan, XPU/iGPU, OpenVINO, remote hardware plugins, and typed hybrid
 offload remain future extensions. The contracts should leave room for them,
@@ -88,6 +89,37 @@ queue ordering, fairness, learned throughput models, or residency decisions.
 Pumas remains the canonical model/package source, but it does not select
 Pantograph backends or devices.
 
+## Scheduler Automatic Selection Policy
+
+Workflow graphs should remain intent-first. Inference nodes should require the
+task, model reference, and task options, while backend, runtime variant, and
+device policy remain optional constraints. When those constraints are omitted,
+the scheduler must resolve a `BackendExecutionDecision` from typed candidate
+facts rather than requiring graph authors to know local runtime topology.
+
+Automatic selection proceeds in stages:
+
+1. Hard filters remove candidates that cannot legally execute the task/model:
+   unsupported task, incompatible artifact shape, missing dependencies,
+   unavailable device, insufficient resources, stale or missing package facts,
+   explicit workflow constraint mismatch, or prior terminal incompatibility.
+2. Scheduler ranking chooses among the remaining valid candidates using
+   current runtime readiness/residency, dependency health, queue and resource
+   pressure, model/runtime diagnostic history, warmup duration history,
+   execution duration history, memory/OOM history, workflow priority, and
+   task/model-family policy.
+3. If evidence is insufficient and more than one candidate remains valid, the
+   scheduler may use controlled exploration. Exploration must be seeded and
+   recorded so the decision is diagnosable: candidate set, selected candidate,
+   policy version, seed basis, and `insufficient_history` or similar reason.
+
+Multiple valid candidates are therefore a normal scheduler input, not an
+automatic failure. Failure occurs only when hard filters leave no valid
+candidate, an explicit workflow constraint is unavailable/incompatible, or the
+selection policy cannot legally produce one selected decision. Every selected
+or rejected automatic decision must be emitted as typed diagnostics/ledger
+facts so later runs can shift from exploration to history-backed preference.
+
 ## Transformers-Compatible Canonical Semantics
 
 Pantograph should follow Transformers ecosystem conventions until a backend
@@ -120,7 +152,7 @@ Add Pantograph-owned contracts before backend implementation:
 | `DeviceResolutionDecision` | Planner output: selected runtime variant, selected device id, selected device class, explicit/auto mode, and bounded reasons. |
 | `DeviceResolutionDiagnostic` | Typed failure for unavailable device, missing runtime variant, incompatible backend build, insufficient memory, unsupported precision, unsupported platform, or unsafe/unknown device id. |
 | `BackendExecutionCandidate` | Scheduler-facing fact package for one feasible or rejected backend/runtime/device/model/task combination. It includes backend id, task support, model artifact compatibility, runtime variant, device facts, static memory/resource estimates where known, optional observed-throughput hints, and bounded diagnostics. |
-| `BackendExecutionDecision` | Scheduler-selected execution choice. It references one candidate, records whether the user requested an explicit backend/device/runtime preference, and carries rejection diagnostics when no candidate can satisfy the request. |
+| `BackendExecutionDecision` | Scheduler-selected execution choice. It references one candidate, records whether the user requested an explicit backend/device/runtime preference, records the automatic-selection policy/reason when no explicit target was supplied, and carries rejection diagnostics when no candidate can satisfy the request or policy cannot legally select. |
 | `BackendStartupDeviceIntent` | Adapter-facing transition contract for startup wiring. It keeps scheduler-facing `InferenceDevicePolicy`, selected canonical `InferenceDeviceId`, and backend-local llama.cpp selectors in separate variants while old shared startup config is migrated. |
 
 The first implementation slice must add these contracts and tests before any
@@ -160,6 +192,11 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   Explicit workflow backend/device/runtime requests are allowed only when the
   chosen backend can actually execute the requested model and task on the
   requested platform/device.
+- More than one valid backend/runtime/device candidate is not itself an error.
+  Automatic selection must apply scheduler-owned policy to choose one
+  candidate when the workflow did not explicitly pin a target. The policy must
+  be explainable and must record the candidate set, selected decision, and
+  selection reason.
 - `ManagedBinaryId` must remain the single binary-management identity. Do not
   split it into device-specific ids such as separate CPU/CUDA llama.cpp
   binaries. Instead, llama.cpp managed runtime state must grow a nested
@@ -167,8 +204,9 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   installed/readiness states, and command resolution must select the variant
   explicitly.
 - Backend-specific device strings are generated only after validation.
-- Auto mode records the resolved device and runtime variant. Explicit mode
-  fails if the requested target is unavailable.
+- Auto mode records the resolved backend, runtime variant, device class, and
+  concrete device when available. Explicit mode fails if the requested target
+  is unavailable.
 - Explicit backend overrides fail when the backend cannot run the model/task.
   For example, diffusion image generation cannot route to llama.cpp, MLX cannot
   route on Linux/Windows, and Candle image generation remains unavailable until
@@ -179,8 +217,9 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
 - No hidden fallback is allowed anywhere in execution selection. If a user
   explicitly requests CUDA and the CUDA variant or CUDA device is unavailable,
   the run must fail with a typed device diagnostic rather than silently using
-  CPU. If auto selection cannot produce a valid candidate, auto also fails; it
-  does not reuse old raw-device behavior as a backup.
+  CPU. If auto selection has no valid candidate, or if the scheduler policy
+  cannot legally select from the candidate set, auto also fails with typed
+  diagnostics. It does not reuse old raw-device behavior as a backup.
 - Hybrid/offload is not implemented in this milestone. Existing llama.cpp
   `gpu_layers` may continue as a llama.cpp runtime setting, but it must not be
   presented as a general cross-backend hybrid policy until a later plan defines
@@ -195,6 +234,14 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   chosen, including the selected backend id, selected runtime variant, selected
   device class, selected concrete device when available, and bounded rejection
   reasons for stronger candidates or invalid explicit preferences.
+- Scheduler automatic selection should prefer already-ready compatible
+  runtimes, healthy runtime variants, lower queue/resource pressure, stronger
+  historical success rates, lower historical warmup/execution duration, lower
+  historical memory/OOM pressure, and task/model-family policy. When history is
+  insufficient and multiple candidates remain valid, the scheduler may use
+  controlled exploration among valid candidates. Exploration must be recorded
+  with a policy version, candidate set, seed basis, and reason such as
+  `insufficient_history`; it must not be opaque randomness.
 - Device probes must be bounded, non-blocking from async request paths, and
   cached through backend-owned snapshots with explicit refresh events.
 - Frontend selectors may submit user intent, but executable device strings,

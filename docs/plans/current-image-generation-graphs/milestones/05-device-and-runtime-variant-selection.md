@@ -4118,9 +4118,12 @@ typed diagnostic and the canonical design is fixed.
   device id, resource estimates where known, optional observed-throughput
   hints, device diagnostics, and bounded reasons.
 - Admission tests prove explicit unavailable devices block execution and auto
-  mode records the selected device.
-- Admission tests prove auto mode fails with bounded diagnostics when no
-  candidate is valid and does not invoke old raw-device/default-backend paths.
+  mode records the selected backend, runtime variant, device class, and device
+  when available.
+- Admission tests prove auto mode selects among multiple valid candidates
+  through scheduler policy rather than candidate-id tie breaks or terminal
+  ambiguity, records ranking/exploration reasons, and fails with bounded
+  diagnostics only when no candidate is valid or policy cannot legally select.
 - Admission tests prove explicit backend overrides fail when incompatible with
   the task/model/platform, including diffusion through llama.cpp and MLX on
   Linux/Windows.

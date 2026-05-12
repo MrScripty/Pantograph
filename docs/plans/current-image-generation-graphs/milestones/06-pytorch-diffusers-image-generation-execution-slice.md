@@ -372,4 +372,7 @@ translation, and Python image-envelope shape validation are implemented.
   they do not carry Pumas package facts or the scheduler-owned
   `BackendExecutionDecision` required by the no-fallback planner. Full
   end-to-end gateway wiring needs a planned-context boundary instead of
-  reconstructing facts from request fields.
+  reconstructing facts from request fields. That planned-context boundary
+  should let the scheduler resolve omitted backend/runtime/device intent
+  automatically using the policy in `06-device-runtime-selection.md`, including
+  readiness/history ranking and controlled exploration among valid candidates.

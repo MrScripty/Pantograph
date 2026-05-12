@@ -2656,6 +2656,21 @@ Worker rules:
   `BackendExecutionDecision` required by the no-fallback planner. Full
   end-to-end gateway wiring needs a planned-context boundary instead of
   reconstructing facts from request fields.
+- 2026-05-12 planning update after scheduler-policy review: automatic
+  backend/runtime/device selection must be treated as a scheduler policy, not
+  as an ambiguity failure whenever more than one valid candidate exists.
+  Workflow graphs remain intent-first and may optionally constrain backend,
+  runtime variant, or device, but they should not be required to specify local
+  runtime topology. The scheduler must hard-filter invalid candidates, rank
+  valid candidates using readiness/residency, resource pressure, workflow
+  priority, and diagnostics-ledger history, and may use controlled seeded
+  exploration when history is insufficient. Auto fails only when no valid
+  candidate remains, an explicit workflow constraint is incompatible, or the
+  policy cannot legally select one candidate. This supersedes the earlier
+  temporary `ambiguous_auto_resolution` direction for equal-ranked valid
+  candidates; the required implementation follow-up is to replace ambiguity as
+  a terminal auto result with recorded ranking/exploration policy while keeping
+  typed diagnostics for genuine no-decision cases.
 
 ### Traceability Links
 
