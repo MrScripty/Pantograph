@@ -28,6 +28,7 @@ mod session_queue;
 mod session_runtime_preflight;
 mod session_runtime_state;
 mod session_stale_cleanup;
+mod timing_contracts;
 mod workflow_capabilities;
 mod workflow_graph_inspection;
 mod workflow_io;

@@ -2241,6 +2241,29 @@ Worker rules:
   thin vertical slices. Full baseline/deviation enforcement, scheduler
   reschedule policy, retry exhaustion, and terminal workflow failure semantics
   remain required follow-up work after the timing history exists.
+- 2026-05-12 workflow timing attempt contract slice: smallest useful vertical
+  slice was limited to adding a workflow-service timing attempt contract and
+  focused serde/validation tests. Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/timing_contracts.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/timing_contracts.rs`,
+  `crates/pantograph-workflow-service/src/workflow.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests.rs`,
+  `crates/pantograph-workflow-service/src/workflow/README.md`, and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because it creates the
+  canonical attempt identity and typed diagnostic target needed to replace
+  saturated load/unload/warmup/trace timing producers; it does not treat the
+  current saturated producers as valid legacy behavior. Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_timing`,
+  `cargo test -p pantograph-workflow-service contracts`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Deviation: the first
+  `cargo fmt --all -- --check` found one rustfmt-only line wrap in the new
+  contract module; `cargo fmt --all` was applied and focused tests plus final
+  format verification were rerun successfully. Remaining follow-up: migrate
+  runtime load/unload, inference warmup, embedding warmup, and scheduler trace
+  producers onto timing attempt records and checked duration math. Full
+  baseline/deviation enforcement and scheduler retry/termination policy remain
+  the later required policy-completion path.
 
 ### Traceability Links
 

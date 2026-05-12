@@ -3784,6 +3784,42 @@ typed diagnostic and the canonical design is fixed.
     state must become typed diagnostics. They must not be silently normalized,
     capped, dropped from history, or converted into successful workflow
     execution without scheduler-owned retry/termination decisions.
+- 2026-05-12 slice: workflow timing attempt contract.
+  - Smallest useful vertical slice: add the workflow-service timing attempt
+    contract without wiring existing runtime execution paths yet. The contract
+    defines canonical `timing_attempt_` ids, runtime/model load, unload,
+    warmup, and scheduler trace attempt kinds, attribution fields, checked
+    start/end/duration semantics, and typed timing diagnostics.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/timing_contracts.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/timing_contracts.rs`,
+    `crates/pantograph-workflow-service/src/workflow.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/README.md`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: this is an additive canonical contract
+    gate only. It does not preserve or bless the existing saturated runtime
+    timing behavior; instead it creates the typed attempt identity and
+    diagnostic target required before replacing those producers.
+  - Standards/blast-radius gate: workflow-service remains the owner of the
+    contract; `contracts.rs` was not expanded because it already exceeds the
+    decomposition-review threshold. No diagnostics-ledger schema, generated
+    files, frontend code, saved workflow fixtures, lockfiles, Pumas contracts,
+    worker contracts, scheduler retry policy, or backend lifecycle behavior
+    changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service workflow_timing`,
+    `cargo test -p pantograph-workflow-service contracts`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` found one
+    rustfmt-only line wrap in the new contract module; `cargo fmt --all` was
+    applied and focused tests plus final format verification were rerun
+    successfully.
+  - Remaining follow-up: migrate runtime load/unload, inference warmup,
+    embedding warmup, and scheduler trace producers to create timing attempt
+    ids, emit attempt records or diagnostics, and use checked duration math.
+    Full baseline/deviation enforcement and scheduler retry/termination policy
+    remain the later required policy-completion path.
 
 **Verification:**
 

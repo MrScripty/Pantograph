@@ -32,6 +32,7 @@ public exports out of the service crate.
 | `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, session-scoped queue controls, and first-pass GUI-admin queued-run cancel facade methods. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider/media-conversion setup, and session-store guard helpers. |
+| `timing_contracts.rs` | Canonical timing attempt ids, attribution, checked duration semantics, and timing diagnostic DTOs for runtime/model load, unload, warmup, and scheduler trace spans. |
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
 | `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
@@ -201,6 +202,11 @@ session-runtime workflows, and the root facade test module.
   already knows the causal diagnostic event. Consumers should prefer that link
   for node-focused navigation while keeping `error_event_id` for direct
   node-scoped fatal diagnostic projections.
+- Runtime/model load, unload, warmup, and scheduler trace timing must flow
+  through canonical timing attempt contracts before local duration arithmetic
+  is trusted. Attempt records carry explicit identity and attribution, and
+  impossible timestamp state becomes typed diagnostics instead of saturated
+  duration values.
 
 ## Revisit Triggers
 - Runtime preflight becomes a public reusable crate-level policy.
