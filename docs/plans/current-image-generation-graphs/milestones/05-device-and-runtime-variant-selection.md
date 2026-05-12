@@ -4124,6 +4124,17 @@ typed diagnostic and the canonical design is fixed.
   through scheduler policy rather than candidate-id tie breaks or terminal
   ambiguity, records ranking/exploration reasons, and fails with bounded
   diagnostics only when no candidate is valid or policy cannot legally select.
+- Scheduler policy unit tests prove candidate hard filters, readiness
+  preference, ledger-history preference, no-history controlled exploration,
+  resource-pressure rejection, explicit constraint rejection, and policy
+  no-decision diagnostics in a synchronous pure policy module.
+- Diagnostics-ledger tests prove model/runtime history summaries are bounded,
+  use isolated SQLite roots, and key observations by typed model/task/runtime/
+  device facts rather than display strings.
+- Cross-layer fixture tests prove append-only automatic-selection fields on
+  `BackendExecutionDecision` and scheduler lifecycle diagnostics deserialize
+  through Rust and TypeScript mirrors without frontend ranking or candidate
+  fabrication.
 - Admission tests prove explicit backend overrides fail when incompatible with
   the task/model/platform, including diffusion through llama.cpp and MLX on
   Linux/Windows.

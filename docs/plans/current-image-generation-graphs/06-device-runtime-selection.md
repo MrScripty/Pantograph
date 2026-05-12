@@ -120,6 +120,80 @@ selection policy cannot legally produce one selected decision. Every selected
 or rejected automatic decision must be emitted as typed diagnostics/ledger
 facts so later runs can shift from exploration to history-backed preference.
 
+### Standards And Blast-Radius Guardrails
+
+The automatic-selection implementation must be split into standards-compliant
+vertical slices:
+
+- **Contract slice:** extend `BackendExecutionDecision`, selection diagnostics,
+  and scheduler trace/ledger DTOs with append-only selection policy fields such
+  as policy version, candidate set summary, ranking reason, exploration reason,
+  and seed basis. These contracts must serde-round-trip through Rust fixtures
+  and existing TypeScript mirrors before runtime behavior changes.
+- **Pure policy slice:** implement candidate hard-filtering, ranking, and
+  controlled exploration as synchronous pure functions over validated
+  `BackendExecutionCandidate` facts and ledger summary inputs. The policy must
+  not query Pumas, read SQLite, inspect frontend state, spawn tasks, hold async
+  locks, start runtimes, or call backend adapters.
+- **Ledger summary slice:** add any required diagnostics-ledger read model or
+  query projection as an async shell that returns bounded, typed model/runtime
+  history summaries. Tests must isolate SQLite paths and process-global state.
+- **Scheduler integration slice:** call the pure policy from the existing
+  scheduler/runtime-selection owner after adapters have produced candidate
+  facts and ledger summaries have been fetched. The integration slice must not
+  change workflow graph JSON shape except for optional user-intent fields that
+  are already part of the graph contract.
+- **Presentation slice, if needed:** expose selected policy facts and
+  diagnostics from backend-owned projections. Frontend code may render those
+  facts but must not compute ranking, fabricate candidates, or optimistically
+  display selected runtime/device state before backend confirmation.
+
+Blast-radius limits:
+
+- Workflow graph nodes must not carry Pumas package facts, backend probe
+  snapshots, ledger history, candidate lists, or selected scheduler decisions.
+  They may carry only task/model/options and optional explicit backend,
+  runtime, device, latency, or throughput intent.
+- Pumas facts should be resolved once at the planning boundary and reduced into
+  candidate facts or task-specific execution plans. Do not pass full Pumas
+  fact payloads through scheduler queues, frontend stores, worker envelopes, or
+  backend execution helpers unless that layer explicitly owns validation.
+- Backend adapters expose feasibility, estimates, diagnostics, and execution
+  translation only. They must not implement cross-backend ranking, random or
+  exploration policy, queue fairness, or learned model/runtime preference.
+- Scheduler policy must never depend on raw backend strings or local runtime
+  paths. Parse workflow/backend/device input once into validated contract
+  types, then rank typed candidates.
+- Controlled exploration must be deterministic enough to diagnose and replay:
+  persist the policy version, seed basis, eligible candidate ids, selected
+  candidate id, and reason. Do not use process-global RNG, wall-clock-only
+  randomness, or unrecorded random choice.
+- Resource, duration, failure-rate, and score arithmetic must use checked or
+  saturating-at-boundary math with typed diagnostics for impossible state. Do
+  not silently cap a rank or counter in a way that changes the selected
+  candidate without an emitted diagnostic.
+- Async code may fetch candidates, ledger summaries, and resource snapshots,
+  but ranking itself must be synchronous and lock-free. Never hold scheduler or
+  backend state locks while querying SQLite, probing devices, loading models,
+  or calling worker processes.
+
+Required verification before replacing the temporary ambiguity behavior:
+
+- Unit tests cover hard filtering, explicit constraint rejection,
+  already-ready runtime preference, no-history controlled exploration,
+  history-backed preference, failure-rate preference, resource-pressure
+  rejection, and policy no-decision diagnostics.
+- Fixture tests prove append-only selection policy fields deserialize in Rust
+  and TypeScript without frontend inference.
+- Ledger tests use isolated durable state and prove history summaries are
+  bounded, deterministic, and keyed by model/task/runtime/device facts rather
+  than display strings.
+- Integration tests prove two equal valid candidates produce one recorded
+  automatic decision through scheduler policy, not terminal ambiguity and not
+  candidate-id ordering.
+- Regression tests prove explicit unavailable backend/runtime/device requests
+  still fail closed and do not explore alternate candidates.
+
 ## Transformers-Compatible Canonical Semantics
 
 Pantograph should follow Transformers ecosystem conventions until a backend

@@ -376,3 +376,7 @@ translation, and Python image-envelope shape validation are implemented.
   should let the scheduler resolve omitted backend/runtime/device intent
   automatically using the policy in `06-device-runtime-selection.md`, including
   readiness/history ranking and controlled exploration among valid candidates.
+  Implementation must not add Pumas facts, ledger summaries, candidate lists,
+  or scheduler decisions to workflow graph nodes or worker envelopes; those
+  facts belong to the planning/scheduler boundary and must be reduced into the
+  validated `ImageGenerationExecutionPlan` before PyTorch execution.

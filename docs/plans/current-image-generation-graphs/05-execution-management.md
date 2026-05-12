@@ -2671,6 +2671,19 @@ Worker rules:
   candidates; the required implementation follow-up is to replace ambiguity as
   a terminal auto result with recorded ranking/exploration policy while keeping
   typed diagnostics for genuine no-decision cases.
+- 2026-05-12 standards iteration for scheduler-policy update: reviewed the
+  new automatic-selection direction against architecture, testing,
+  concurrency, Rust async/API, and security standards. Added guardrails that
+  split implementation into contract, pure-policy, ledger-summary, scheduler
+  integration, and presentation slices; keep workflow graph nodes free of
+  Pumas facts, ledger summaries, candidate lists, and selected decisions;
+  require ranking to be synchronous and lock-free over validated candidate
+  facts; require controlled exploration to record policy version, seed basis,
+  eligible candidates, selected candidate, and reason; and require isolated
+  ledger tests plus Rust/TypeScript fixture coverage for append-only decision
+  fields. This standards pass confirms the intended blast radius is scheduler
+  contracts/policy, diagnostics-ledger summaries, scheduler integration, and
+  backend-owned projections only.
 
 ### Traceability Links
 
