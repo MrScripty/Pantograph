@@ -2216,6 +2216,23 @@ Worker rules:
   diagnostics need the broader timing identity/history policy before they can
   be changed safely; broader image request limits, context/batch limits,
   byte-range projections, and worker/runtime request fields remain open.
+- 2026-05-12: Re-plan trigger reached before replacing the remaining
+  model/runtime load, unload, warmup, and scheduler trace duration saturation.
+  Code search found timing math in `crates/inference/src/gateway.rs`,
+  `crates/inference/src/embedding_runtime.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_runtime.rs`, and
+  `crates/pantograph-workflow-service/src/trace/`. The policy direction now
+  requires timing identity, durable diagnostics, historical baseline behavior,
+  and scheduler retry/termination semantics. Replacing each
+  `saturating_sub` locally would prevent underflow, but it would not provide
+  the load/run identity, ledger history, or retry policy needed to decide when
+  unusually slow loads fail, retry, or terminate. Required re-plan: define a
+  canonical timing measurement contract for runtime/model load attempts,
+  unload attempts, warmup attempts, and scheduler trace spans, including
+  attempt ids, workflow/run/session/runtime/model/device attribution, checked
+  timestamp math, diagnostics-ledger payloads, baseline/deviation policy, and
+  scheduler failure/retry ownership.
 
 ### Traceability Links
 

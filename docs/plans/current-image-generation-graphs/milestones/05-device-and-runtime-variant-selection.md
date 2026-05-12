@@ -3742,6 +3742,28 @@ typed diagnostic and the canonical design is fixed.
     still need the broader timing identity/history policy before they can be
     changed safely; broader image request limits, context/batch limits,
     byte-range projections, and worker/runtime request fields remain open.
+- 2026-05-12 re-plan trigger: remaining runtime/model timing saturation is
+  shared load/unload/warmup/trace policy, not isolated arithmetic.
+  - Code search found remaining duration saturation in
+    `crates/inference/src/gateway.rs`,
+    `crates/inference/src/embedding_runtime.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_runtime.rs`, and
+    `crates/pantograph-workflow-service/src/trace/`.
+  - Directly swapping those sites to checked subtraction would catch timestamp
+    underflow, but it would not satisfy the agreed policy that load timing is
+    diagnostic contract data with attribution, historical normal-range
+    learning, and scheduler failure/retry behavior.
+  - Required re-plan decision: define the canonical timing measurement
+    contract for runtime/model load attempts, unload attempts, warmup attempts,
+    and scheduler trace spans. The contract needs attempt ids, workflow run /
+    session / runtime / model / device attribution, checked timestamp math,
+    diagnostics-ledger payloads, baseline/deviation policy, and scheduler
+    ownership for retry versus terminal failure.
+  - Deferred until that design is explicit: replacing the remaining
+    load/unload/warmup/trace `saturating_sub` sites and deciding which layer
+    records timing outliers as retryable scheduler diagnostics versus terminal
+    workflow failures.
 
 **Verification:**
 
