@@ -4030,6 +4030,40 @@ typed diagnostic and the canonical design is fixed.
     warmup producers onto `pantograph-timing-contracts` timing attempt ids and
     checked duration math. Full baseline/deviation enforcement and scheduler
     retry/termination policy remain the later required policy-completion path.
+- 2026-05-12 slice: inference warmup timing attempt producers.
+  - Smallest useful vertical slice: migrate inference gateway warmup and
+    dedicated embedding runtime warmup producers onto
+    `pantograph-timing-contracts` timing attempt ids and checked duration
+    math.
+  - Allowed write set: `Cargo.lock`, `crates/inference/Cargo.toml`,
+    `crates/inference/src/types.rs`, `crates/inference/src/gateway.rs`,
+    `crates/inference/src/embedding_runtime.rs`,
+    `crates/inference/src/gateway_tests.rs`, and this plan directory.
+  - No-fallback/no-legacy confirmation: inference warmup duration producers no
+    longer use saturated subtraction. Warmup attempts now create
+    `timing_attempt_` ids, successful warmups use checked duration math, and
+    impossible timestamp order records typed `runtime_warmup`
+    `timestamp_underflow` diagnostics instead of synthesizing a duration.
+  - Standards/blast-radius gate: inference depends on the shared
+    `pantograph-timing-contracts` crate rather than workflow-service. No
+    workflow-service code, diagnostics-ledger schema, generated files,
+    frontend code, saved workflow fixtures, Pumas contracts, worker contracts,
+    or scheduler retry/termination policy changed.
+  - Verification passed:
+    `cargo test -p inference runtime_lifecycle_snapshot`,
+    `cargo test -p inference test_runtime_lifecycle_snapshot`,
+    `cargo check -p inference`, `cargo fmt --all -- --check`,
+    `git diff --check`, and
+    `rg -n "saturating_sub" crates/inference/src/gateway.rs crates/inference/src/embedding_runtime.rs`
+    returned no matches.
+  - Verification deviation/discovered issue: the first focused inference
+    compile exposed that the gateway helper used
+    `Option<InferenceStartRequest>` for saved previous backend config even
+    though the field stores `Option<BackendConfig>`. Corrected the helper
+    signature and reran focused tests successfully.
+  - Remaining follow-up: full baseline/deviation enforcement, scheduler
+    reschedule policy, retry exhaustion, and terminal workflow failure
+    semantics remain the later required policy-completion path.
 
 **Verification:**
 

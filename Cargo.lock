@@ -4940,6 +4940,7 @@ dependencies = [
  "pantograph-media-conversion",
  "pantograph-path-security",
  "pantograph-runtime-identity",
+ "pantograph-timing-contracts",
  "parking_lot",
  "pyo3",
  "reqwest",

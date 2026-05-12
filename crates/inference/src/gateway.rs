@@ -12,6 +12,7 @@ use std::task::{Context, Poll};
 
 use futures_util::{Stream, StreamExt};
 use pantograph_runtime_identity::canonical_runtime_id;
+use pantograph_timing_contracts::WorkflowTimingContractError;
 use tokio::sync::RwLock;
 
 use crate::backend::{
@@ -61,6 +62,9 @@ pub enum GatewayError {
 
     #[error("Invalid typed inference request: {0}")]
     Validation(#[from] InferenceExecutionRequestValidationError),
+
+    #[error("Runtime warmup timing contract error: {0}")]
+    WarmupTiming(#[from] WorkflowTimingContractError),
 }
 
 /// Host-supplied inputs for starting the active backend in inference mode.
@@ -580,24 +584,45 @@ impl InferenceGateway {
                 None
             }
         };
-        {
+        let warmup_timing_attempt_id = {
             let mut lifecycle = self.runtime_lifecycle.write().await;
             lifecycle.runtime_id = Some(runtime_id.clone());
             lifecycle.runtime_instance_id = None;
-            lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
-            lifecycle.warmup_completed_at_ms = None;
-            lifecycle.warmup_duration_ms = None;
+            let warmup_timing_attempt_id =
+                lifecycle.begin_warmup_timing_attempt(warmup_started_at_ms);
             lifecycle.runtime_reused = None;
             lifecycle.lifecycle_decision_reason = None;
             lifecycle.active = false;
             lifecycle.last_error = None;
-        }
-
+            warmup_timing_attempt_id
+        };
         let start_result = {
             let mut guard = self.backend.write().await;
             guard.start(config, spawner).await
         };
 
+        self.record_start_result(
+            config,
+            previous_last_inference_config,
+            previous_runtime_instance_id,
+            runtime_id,
+            warmup_started_at_ms,
+            warmup_timing_attempt_id,
+            start_result,
+        )
+        .await
+    }
+
+    async fn record_start_result(
+        &self,
+        config: &BackendConfig,
+        previous_last_inference_config: Option<BackendConfig>,
+        previous_runtime_instance_id: Option<String>,
+        runtime_id: String,
+        warmup_started_at_ms: u64,
+        warmup_timing_attempt_id: pantograph_timing_contracts::WorkflowTimingAttemptId,
+        start_result: Result<crate::backend::BackendStartOutcome, BackendError>,
+    ) -> Result<(), GatewayError> {
         match start_result {
             Ok(start_outcome) => {
                 let mut current_runtime_config = self.current_runtime_config.write().await;
@@ -628,10 +653,17 @@ impl InferenceGateway {
                 let mut lifecycle = self.runtime_lifecycle.write().await;
                 lifecycle.runtime_id = Some(runtime_id);
                 lifecycle.runtime_instance_id = Some(runtime_instance_id);
-                lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
-                lifecycle.warmup_completed_at_ms = Some(warmup_completed_at_ms);
-                lifecycle.warmup_duration_ms =
-                    Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
+                if let Err(error) = lifecycle.complete_warmup_timing_attempt(
+                    &warmup_timing_attempt_id,
+                    warmup_started_at_ms,
+                    warmup_completed_at_ms,
+                ) {
+                    lifecycle.active = false;
+                    lifecycle.last_error = Some(error.to_string());
+                    lifecycle.lifecycle_decision_reason =
+                        lifecycle.normalized_lifecycle_decision_reason();
+                    return Err(GatewayError::WarmupTiming(error));
+                }
                 lifecycle.runtime_reused = Some(runtime_reused);
                 lifecycle.active = true;
                 lifecycle.last_error = None;
@@ -664,10 +696,11 @@ impl InferenceGateway {
                 }
                 let mut lifecycle = self.runtime_lifecycle.write().await;
                 lifecycle.runtime_id = Some(runtime_id);
-                lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
-                lifecycle.warmup_completed_at_ms = Some(completed_at_ms);
-                lifecycle.warmup_duration_ms =
-                    Some(completed_at_ms.saturating_sub(warmup_started_at_ms));
+                let _ = lifecycle.complete_warmup_timing_attempt(
+                    &warmup_timing_attempt_id,
+                    warmup_started_at_ms,
+                    completed_at_ms,
+                );
                 lifecycle.active = false;
                 lifecycle.last_error = Some(error.to_string());
                 lifecycle.lifecycle_decision_reason =

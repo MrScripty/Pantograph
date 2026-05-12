@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use pantograph_timing_contracts::WorkflowTimingContractError;
+
 use crate::config::{DeviceConfig, DeviceInfo, EmbeddingMemoryMode};
 use crate::constants::hosts;
 use crate::device::DeviceBackend;
@@ -113,10 +115,7 @@ impl LlamaCppEmbeddingRuntime {
         };
 
         match self.start_server(model_path, spawner, &device_config).await {
-            Ok(()) => {
-                self.mark_start_success(warmup_started_at_ms);
-                Ok(())
-            }
+            Ok(()) => self.mark_start_success(warmup_started_at_ms),
             Err(error) => {
                 self.mark_start_failure(warmup_started_at_ms, error.clone());
                 Err(error)
@@ -338,9 +337,8 @@ impl LlamaCppEmbeddingRuntime {
     fn mark_start_attempt(&mut self, warmup_started_at_ms: u64) {
         self.runtime_lifecycle.runtime_id = Some(EMBEDDING_RUNTIME_ID.to_string());
         self.runtime_lifecycle.runtime_instance_id = None;
-        self.runtime_lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
-        self.runtime_lifecycle.warmup_completed_at_ms = None;
-        self.runtime_lifecycle.warmup_duration_ms = None;
+        self.runtime_lifecycle
+            .begin_warmup_timing_attempt(warmup_started_at_ms);
         self.runtime_lifecycle.runtime_reused = Some(false);
         self.runtime_lifecycle.lifecycle_decision_reason = None;
         self.runtime_lifecycle.active = false;
@@ -348,7 +346,7 @@ impl LlamaCppEmbeddingRuntime {
         self.refresh_lifecycle_decision_reason();
     }
 
-    fn mark_start_success(&mut self, warmup_started_at_ms: u64) {
+    fn mark_start_success(&mut self, warmup_started_at_ms: u64) -> Result<(), String> {
         let warmup_completed_at_ms = unix_timestamp_ms();
         self.runtime_instance_sequence = self.runtime_instance_sequence.saturating_add(1);
         self.runtime_lifecycle.runtime_id = Some(EMBEDDING_RUNTIME_ID.to_string());
@@ -356,23 +354,39 @@ impl LlamaCppEmbeddingRuntime {
             "llama-cpp-embedding-{}",
             self.runtime_instance_sequence
         ));
-        self.runtime_lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
-        self.runtime_lifecycle.warmup_completed_at_ms = Some(warmup_completed_at_ms);
-        self.runtime_lifecycle.warmup_duration_ms =
-            Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
+        let warmup_timing_attempt_id = self
+            .runtime_lifecycle
+            .warmup_timing_attempt_id
+            .clone()
+            .ok_or_else(|| WorkflowTimingContractError::MissingAttemptId.to_string())?;
+        if let Err(error) = self.runtime_lifecycle.complete_warmup_timing_attempt(
+            &warmup_timing_attempt_id,
+            warmup_started_at_ms,
+            warmup_completed_at_ms,
+        ) {
+            self.runtime_lifecycle.active = false;
+            self.runtime_lifecycle.last_error = Some(error.to_string());
+            self.refresh_lifecycle_decision_reason();
+            return Err(error.to_string());
+        }
         self.runtime_lifecycle.runtime_reused = Some(false);
         self.runtime_lifecycle.active = true;
         self.runtime_lifecycle.last_error = None;
         self.refresh_lifecycle_decision_reason();
+        Ok(())
     }
 
     fn mark_start_failure(&mut self, warmup_started_at_ms: u64, error: String) {
         let warmup_completed_at_ms = unix_timestamp_ms();
         self.runtime_lifecycle.runtime_id = Some(EMBEDDING_RUNTIME_ID.to_string());
-        self.runtime_lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
-        self.runtime_lifecycle.warmup_completed_at_ms = Some(warmup_completed_at_ms);
-        self.runtime_lifecycle.warmup_duration_ms =
-            Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
+        let warmup_timing_attempt_id = self.runtime_lifecycle.warmup_timing_attempt_id.clone();
+        if let Some(warmup_timing_attempt_id) = warmup_timing_attempt_id {
+            let _ = self.runtime_lifecycle.complete_warmup_timing_attempt(
+                &warmup_timing_attempt_id,
+                warmup_started_at_ms,
+                warmup_completed_at_ms,
+            );
+        }
         self.runtime_lifecycle.runtime_reused = Some(false);
         self.runtime_lifecycle.active = false;
         self.runtime_lifecycle.last_error = Some(error);
@@ -550,10 +564,12 @@ mod tests {
     #[test]
     fn test_runtime_lifecycle_snapshot_tracks_start_success() {
         let mut runtime = LlamaCppEmbeddingRuntime::new(EmbeddingMemoryMode::CpuParallel);
-        runtime.mark_start_success(100);
+        runtime.mark_start_attempt(100);
+        runtime.mark_start_success(100).expect("start success");
 
         let snapshot = runtime.runtime_lifecycle_snapshot();
         assert_eq!(snapshot.runtime_id.as_deref(), Some(EMBEDDING_RUNTIME_ID));
+        assert!(snapshot.warmup_timing_attempt_id.is_some());
         assert_eq!(
             snapshot.runtime_instance_id.as_deref(),
             Some("llama-cpp-embedding-1")
@@ -570,10 +586,12 @@ mod tests {
     #[test]
     fn test_runtime_lifecycle_snapshot_tracks_start_failure() {
         let mut runtime = LlamaCppEmbeddingRuntime::new(EmbeddingMemoryMode::CpuParallel);
+        runtime.mark_start_attempt(200);
         runtime.mark_start_failure(200, "boom".to_string());
 
         let snapshot = runtime.runtime_lifecycle_snapshot();
         assert_eq!(snapshot.runtime_id.as_deref(), Some(EMBEDDING_RUNTIME_ID));
+        assert!(snapshot.warmup_timing_attempt_id.is_some());
         assert_eq!(snapshot.runtime_reused, Some(false));
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),

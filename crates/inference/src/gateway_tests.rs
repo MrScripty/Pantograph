@@ -3257,9 +3257,11 @@ async fn test_runtime_lifecycle_snapshot_tracks_start_and_stop() {
     let started = gateway.runtime_lifecycle_snapshot().await;
     assert_eq!(started.runtime_id.as_deref(), Some("mock"));
     assert!(started.runtime_instance_id.is_some());
+    assert!(started.warmup_timing_attempt_id.is_some());
     assert!(started.warmup_started_at_ms.is_some());
     assert!(started.warmup_completed_at_ms.is_some());
     assert!(started.warmup_duration_ms.is_some());
+    assert!(started.timing_diagnostics.is_empty());
     assert_eq!(started.runtime_reused, Some(false));
     assert_eq!(
         started.lifecycle_decision_reason.as_deref(),

@@ -1,5 +1,9 @@
 //! Common types for inference operations
 
+use pantograph_timing_contracts::{
+    checked_timing_duration_ms, WorkflowTimingAttemptId, WorkflowTimingAttemptKind,
+    WorkflowTimingContractError, WorkflowTimingDiagnostic,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -989,12 +993,16 @@ pub struct RuntimeLifecycleSnapshot {
     pub runtime_id: Option<String>,
     #[serde(default)]
     pub runtime_instance_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warmup_timing_attempt_id: Option<WorkflowTimingAttemptId>,
     #[serde(default)]
     pub warmup_started_at_ms: Option<u64>,
     #[serde(default)]
     pub warmup_completed_at_ms: Option<u64>,
     #[serde(default)]
     pub warmup_duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timing_diagnostics: Vec<WorkflowTimingDiagnostic>,
     #[serde(default)]
     pub runtime_reused: Option<bool>,
     #[serde(default)]
@@ -1006,6 +1014,43 @@ pub struct RuntimeLifecycleSnapshot {
 }
 
 impl RuntimeLifecycleSnapshot {
+    pub fn begin_warmup_timing_attempt(&mut self, started_at_ms: u64) -> WorkflowTimingAttemptId {
+        let attempt_id = WorkflowTimingAttemptId::generate();
+        self.warmup_timing_attempt_id = Some(attempt_id.clone());
+        self.warmup_started_at_ms = Some(started_at_ms);
+        self.warmup_completed_at_ms = None;
+        self.warmup_duration_ms = None;
+        self.timing_diagnostics.clear();
+        attempt_id
+    }
+
+    pub fn complete_warmup_timing_attempt(
+        &mut self,
+        attempt_id: &WorkflowTimingAttemptId,
+        started_at_ms: u64,
+        completed_at_ms: u64,
+    ) -> Result<u64, WorkflowTimingContractError> {
+        self.warmup_timing_attempt_id = Some(attempt_id.clone());
+        self.warmup_started_at_ms = Some(started_at_ms);
+        self.warmup_completed_at_ms = Some(completed_at_ms);
+        match checked_timing_duration_ms(attempt_id, started_at_ms, completed_at_ms) {
+            Ok(duration_ms) => {
+                self.warmup_duration_ms = Some(duration_ms);
+                Ok(duration_ms)
+            }
+            Err(error) => {
+                self.warmup_duration_ms = None;
+                if let Some(diagnostic) = WorkflowTimingDiagnostic::from_contract_error(
+                    &error,
+                    WorkflowTimingAttemptKind::RuntimeWarmup,
+                ) {
+                    self.timing_diagnostics.push(diagnostic);
+                }
+                Err(error)
+            }
+        }
+    }
+
     pub fn runtime_fact_readiness(&self) -> RuntimeFactReadiness {
         if self.active {
             if self.warmup_started_at_ms.is_some() && self.warmup_completed_at_ms.is_none() {
@@ -2773,6 +2818,37 @@ mod tests {
     }
 
     #[test]
+    fn runtime_lifecycle_snapshot_records_warmup_timing_underflow_diagnostic() {
+        let mut snapshot = RuntimeLifecycleSnapshot::default();
+        let attempt_id = snapshot.begin_warmup_timing_attempt(200);
+        let error = snapshot
+            .complete_warmup_timing_attempt(&attempt_id, 200, 199)
+            .expect_err("underflow should fail");
+
+        assert_eq!(
+            error,
+            WorkflowTimingContractError::DurationUnderflow {
+                attempt_id: attempt_id.clone(),
+                started_at_ms: 200,
+                completed_at_ms: 199
+            }
+        );
+        assert_eq!(
+            snapshot.warmup_timing_attempt_id.as_ref(),
+            Some(&attempt_id)
+        );
+        assert_eq!(snapshot.warmup_started_at_ms, Some(200));
+        assert_eq!(snapshot.warmup_completed_at_ms, Some(199));
+        assert_eq!(snapshot.warmup_duration_ms, None);
+        assert_eq!(snapshot.timing_diagnostics.len(), 1);
+        assert_eq!(snapshot.timing_diagnostics[0].attempt_id, attempt_id);
+        assert_eq!(
+            snapshot.timing_diagnostics[0].code,
+            pantograph_timing_contracts::WorkflowTimingDiagnosticCode::TimestampUnderflow
+        );
+    }
+
+    #[test]
     fn runtime_fact_snapshot_normalizes_ready_reused_lifecycle() {
         let fact = RuntimeFactSnapshot::from_lifecycle(
             Some("llama_cpp".to_string()),
@@ -2788,6 +2864,7 @@ mod tests {
                 lifecycle_decision_reason: None,
                 active: true,
                 last_error: None,
+                ..RuntimeLifecycleSnapshot::default()
             },
         );
 
@@ -2910,6 +2987,7 @@ mod tests {
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
                 active: true,
                 last_error: None,
+                ..RuntimeLifecycleSnapshot::default()
             }),
             embedding_runtime: Some(RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama.cpp.embedding".to_string()),
