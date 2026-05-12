@@ -6,15 +6,16 @@ use pantograph_diagnostics_ledger::{
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord,
 };
+use pantograph_timing_contracts::{checked_timing_duration_ms, WorkflowTimingAttemptId};
 
 use crate::scheduler::WorkflowExecutionSessionPreflightCache;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::{
-    checked_timing_duration_ms, WorkflowExecutionSessionRetentionHint,
-    WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
-    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
-    WorkflowRuntimeCapability, WorkflowService, WorkflowServiceError, WorkflowTimingAttemptId,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
+    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionSummary,
+    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowRuntimeCapability, WorkflowService,
+    WorkflowServiceError,
 };
 
 fn compute_runtime_capability_fingerprint(

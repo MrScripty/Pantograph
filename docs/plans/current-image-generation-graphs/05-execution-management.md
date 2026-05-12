@@ -2379,6 +2379,45 @@ Worker rules:
   `inference` or duplicating the contract locally. Recommendation: use a
   dedicated shared timing-contract crate unless crate-count constraints are
   more important than a crisp ownership boundary.
+- 2026-05-12 shared timing-contract crate slice: smallest useful vertical
+  slice was to create `pantograph-timing-contracts` as the canonical shared
+  owner for timing attempt ids, checked duration semantics, attribution DTOs,
+  and timing diagnostics, then migrate workflow-service runtime-load/unload
+  and trace producers to consume that crate directly. Allowed write set: root
+  `Cargo.toml`, `Cargo.lock`, `crates/pantograph-timing-contracts/**`,
+  `crates/pantograph-workflow-service/Cargo.toml`,
+  `crates/pantograph-workflow-service/src/workflow.rs`,
+  `crates/pantograph-workflow-service/src/workflow/README.md`,
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_runtime.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests.rs`,
+  `crates/pantograph-workflow-service/src/trace/scheduler.rs`,
+  `crates/pantograph-workflow-service/src/trace/state.rs`,
+  `crates/pantograph-workflow-service/src/trace/store.rs`,
+  `crates/pantograph-workflow-service/src/trace/types.rs`,
+  `crates/pantograph-workflow-service/src/trace/tests/lifecycle.rs`,
+  `crates/pantograph-workflow-service/src/trace/tests/scheduler_runtime.rs`,
+  removed workflow-local timing contract files, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because the
+  workflow-local timing contract was removed rather than kept as a
+  compatibility shim. Workflow-service imports the shared canonical crate
+  directly, so inference can migrate without duplicating timing DTOs or
+  depending on workflow orchestration. Verification passed:
+  `cargo test -p pantograph-timing-contracts`,
+  `cargo test -p pantograph-workflow-service workflow_trace_store_emits_timing_diagnostic`,
+  `cargo test -p pantograph-workflow-service trace::tests`,
+  `cargo test -p pantograph-workflow-service session_capacity`,
+  `cargo test -p pantograph-workflow-service session_execution`, and
+  `cargo fmt --all -- --check`, `cargo check -p inference`, and
+  `git diff --check`. Verification deviation/discovered issue: the
+  first `cargo test -p pantograph-timing-contracts` compile exposed that the
+  new crate's serde contract tests used `serde_json` without declaring it as a
+  dev-dependency. Added `serde_json.workspace = true` under
+  `[dev-dependencies]` and reran successfully. Remaining follow-up: migrate
+  inference gateway warmup and embedding warmup producers onto
+  `pantograph-timing-contracts` timing attempt ids and checked duration math.
+  Full baseline/deviation enforcement and scheduler retry/termination policy
+  remain the later required policy-completion path.
 
 ### Traceability Links
 

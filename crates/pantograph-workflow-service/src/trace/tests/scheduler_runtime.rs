@@ -302,7 +302,7 @@ fn workflow_trace_store_emits_timing_diagnostic_for_queue_wait_underflow() {
     assert_eq!(trace.queue.timing_diagnostics.len(), 1);
     assert_eq!(
         trace.queue.timing_diagnostics[0].code,
-        crate::workflow::WorkflowTimingDiagnosticCode::TimestampUnderflow
+        pantograph_timing_contracts::WorkflowTimingDiagnosticCode::TimestampUnderflow
     );
     assert_eq!(&trace.queue.timing_diagnostics[0].attempt_id, attempt_id);
 }

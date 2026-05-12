@@ -41,7 +41,6 @@ mod session_lifecycle_api;
 mod session_queue_api;
 mod session_runtime;
 mod session_runtime_load_lifecycle;
-mod timing_contracts;
 mod validation;
 mod workflow_run_api;
 
@@ -82,7 +81,6 @@ pub use self::identity::{WorkflowIdentity, WorkflowIdentityError};
 pub use self::media_capability_contracts::*;
 pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
-pub use self::timing_contracts::*;
 pub(crate) use self::validation::validate_workflow_id;
 
 pub use pantograph_diagnostics_ledger::{

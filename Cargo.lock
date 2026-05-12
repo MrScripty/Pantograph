@@ -7376,6 +7376,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-timing-contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
 name = "pantograph-uniffi"
 version = "0.1.0"
 dependencies = [
@@ -7410,6 +7420,7 @@ dependencies = [
  "pantograph-node-contracts",
  "pantograph-runtime-attribution",
  "pantograph-runtime-identity",
+ "pantograph-timing-contracts",
  "parking_lot",
  "rusqlite",
  "serde",

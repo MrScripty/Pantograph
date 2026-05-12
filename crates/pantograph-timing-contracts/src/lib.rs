@@ -271,3 +271,98 @@ fn validate_timing_attempt_id(value: String) -> Result<String, WorkflowTimingCon
     }
     Ok(trimmed.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workflow_timing_attempt_record_serializes_with_attribution() {
+        let attempt_id = WorkflowTimingAttemptId::try_from(
+            "timing_attempt_018f753a-7c2d-72e9-a3d1-a422da29c7cf".to_string(),
+        )
+        .expect("valid attempt id");
+        let record = WorkflowTimingAttemptRecord::completed(
+            attempt_id.clone(),
+            WorkflowTimingAttemptKind::RuntimeModelLoad,
+            WorkflowTimingAttribution {
+                workflow_id: Some("workflow-1".to_string()),
+                workflow_run_id: Some("run-1".to_string()),
+                workflow_execution_session_id: Some("session-1".to_string()),
+                runtime_id: Some("pytorch".to_string()),
+                runtime_variant_id: Some("pytorch_cuda".to_string()),
+                model_id: Some("model-1".to_string()),
+                backend_key: Some("diffusers".to_string()),
+                device_class: Some("cuda".to_string()),
+                device_id: Some("cuda:0".to_string()),
+            },
+            100,
+            175,
+        )
+        .expect("completed timing record");
+
+        let value = serde_json::to_value(&record).expect("serialize timing record");
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "attempt_id": attempt_id.as_str(),
+                "attempt_kind": "runtime_model_load",
+                "attribution": {
+                    "workflow_id": "workflow-1",
+                    "workflow_run_id": "run-1",
+                    "workflow_execution_session_id": "session-1",
+                    "runtime_id": "pytorch",
+                    "runtime_variant_id": "pytorch_cuda",
+                    "model_id": "model-1",
+                    "backend_key": "diffusers",
+                    "device_class": "cuda",
+                    "device_id": "cuda:0"
+                },
+                "started_at_ms": 100,
+                "completed_at_ms": 175,
+                "duration_ms": 75
+            })
+        );
+
+        let parsed: WorkflowTimingAttemptRecord =
+            serde_json::from_value(value).expect("deserialize timing record");
+        assert_eq!(parsed, record);
+    }
+
+    #[test]
+    fn workflow_timing_attempt_id_rejects_invalid_prefix() {
+        let error =
+            WorkflowTimingAttemptId::try_from("attempt-1".to_string()).expect_err("invalid prefix");
+        assert_eq!(error, WorkflowTimingContractError::InvalidAttemptIdPrefix);
+    }
+
+    #[test]
+    fn checked_timing_duration_reports_underflow_diagnostic() {
+        let attempt_id = WorkflowTimingAttemptId::try_from(
+            "timing_attempt_018f753a-7c2d-72e9-a3d1-a422da29c7cf".to_string(),
+        )
+        .expect("valid attempt id");
+        let error = checked_timing_duration_ms(&attempt_id, 200, 199).expect_err("underflow error");
+        assert_eq!(
+            error,
+            WorkflowTimingContractError::DurationUnderflow {
+                attempt_id: attempt_id.clone(),
+                started_at_ms: 200,
+                completed_at_ms: 199
+            }
+        );
+
+        let diagnostic = WorkflowTimingDiagnostic::from_contract_error(
+            &error,
+            WorkflowTimingAttemptKind::RuntimeWarmup,
+        )
+        .expect("diagnostic");
+        assert_eq!(
+            diagnostic.code,
+            WorkflowTimingDiagnosticCode::TimestampUnderflow
+        );
+        assert_eq!(diagnostic.severity, WorkflowTimingDiagnosticSeverity::Error);
+        assert_eq!(diagnostic.attempt_id, attempt_id);
+        assert!(diagnostic.message.contains("completed_at_ms 199"));
+    }
+}

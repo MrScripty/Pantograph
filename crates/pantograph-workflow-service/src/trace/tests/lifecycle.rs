@@ -458,7 +458,7 @@ fn workflow_trace_store_emits_timing_diagnostic_for_run_duration_underflow() {
     assert_eq!(trace.timing_diagnostics.len(), 1);
     assert_eq!(
         trace.timing_diagnostics[0].code,
-        crate::workflow::WorkflowTimingDiagnosticCode::TimestampUnderflow
+        pantograph_timing_contracts::WorkflowTimingDiagnosticCode::TimestampUnderflow
     );
     assert_eq!(&trace.timing_diagnostics[0].attempt_id, attempt_id);
     assert_eq!(
@@ -502,7 +502,7 @@ fn workflow_trace_store_emits_timing_diagnostic_for_node_duration_underflow() {
     assert_eq!(node.timing_diagnostics.len(), 1);
     assert_eq!(
         node.timing_diagnostics[0].code,
-        crate::workflow::WorkflowTimingDiagnosticCode::TimestampUnderflow
+        pantograph_timing_contracts::WorkflowTimingDiagnosticCode::TimestampUnderflow
     );
     assert_eq!(&node.timing_diagnostics[0].attempt_id, attempt_id);
     assert_eq!(

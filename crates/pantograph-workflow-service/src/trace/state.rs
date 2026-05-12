@@ -7,7 +7,7 @@ use super::types::{
     WorkflowTraceEvent, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
     WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceStatus,
 };
-use crate::workflow::{
+use pantograph_timing_contracts::{
     checked_timing_duration_ms, WorkflowTimingAttemptId, WorkflowTimingAttemptKind,
     WorkflowTimingDiagnostic,
 };
@@ -367,7 +367,7 @@ fn node_duration_ms(node: &mut WorkflowTraceNodeRecord, completed_at_ms: u64) ->
 }
 
 fn checked_trace_span_duration(
-    duration: Result<u64, crate::workflow::WorkflowTimingContractError>,
+    duration: Result<u64, pantograph_timing_contracts::WorkflowTimingContractError>,
     diagnostics: &mut Vec<WorkflowTimingDiagnostic>,
     last_error: Option<&mut Option<String>>,
 ) -> Option<u64> {

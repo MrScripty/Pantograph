@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use node_engine::GraphMemoryImpactSummary;
 use pantograph_diagnostics_ledger::WorkflowTimingExpectation;
+use pantograph_timing_contracts::{WorkflowTimingAttemptId, WorkflowTimingDiagnostic};
 use serde::{Deserialize, Serialize};
 
 use crate::workflow::{
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionSummary, WorkflowServiceError, WorkflowTimingAttemptId,
-    WorkflowTimingDiagnostic,
+    WorkflowExecutionSessionSummary, WorkflowServiceError,
 };
 use crate::WorkflowSchedulerSnapshotDiagnostics;
 

@@ -1,0 +1,20 @@
+[package]
+name = "pantograph-timing-contracts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Shared timing attempt contracts for Pantograph runtime and workflow diagnostics"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

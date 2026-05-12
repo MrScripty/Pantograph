@@ -9,7 +9,9 @@ use pantograph_diagnostics_ledger::{
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use parking_lot::Mutex;
 
-use crate::workflow::{WorkflowServiceError, WorkflowTimingAttemptId, WorkflowTimingDiagnostic};
+use pantograph_timing_contracts::{WorkflowTimingAttemptId, WorkflowTimingDiagnostic};
+
+use crate::workflow::WorkflowServiceError;
 
 use super::query::{runtime_metrics_selection, snapshot_for_request};
 use super::state::{apply_trace_event, create_trace_run_state};

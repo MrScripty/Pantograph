@@ -1,9 +1,12 @@
-use crate::workflow::{
-    checked_timing_duration_ms, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState,
-    WorkflowExecutionSessionSummary, WorkflowSchedulerAdmissionOutcome,
-    WorkflowSchedulerDecisionReason, WorkflowTimingAttemptId, WorkflowTimingAttemptKind,
+use pantograph_timing_contracts::{
+    checked_timing_duration_ms, WorkflowTimingAttemptId, WorkflowTimingAttemptKind,
     WorkflowTimingDiagnostic,
+};
+
+use crate::workflow::{
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary,
+    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
 };
 use crate::WorkflowSchedulerSnapshotDiagnostics;
 
