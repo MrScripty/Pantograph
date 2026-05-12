@@ -804,6 +804,16 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(model_lifecycle_events[0]
         .payload_json
         .contains("\"reason\":\"runtime admission requested required models\""));
+    let load_requested_payload: serde_json::Value =
+        serde_json::from_str(&model_lifecycle_events[0].payload_json)
+            .expect("load requested payload json");
+    let load_dependency_payload: serde_json::Value =
+        serde_json::from_str(&model_lifecycle_events[1].payload_json)
+            .expect("load dependency payload json");
+    let timing_attempt_id = load_requested_payload["timing_attempt_id"]
+        .as_str()
+        .expect("load requested timing attempt id");
+    assert!(timing_attempt_id.starts_with("timing_attempt_"));
     assert!(model_lifecycle_events[1].event_seq > model_lifecycle_events[0].event_seq);
     assert!(model_lifecycle_events[1]
         .payload_json
@@ -814,6 +824,10 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(model_lifecycle_events[1]
         .payload_json
         .contains("\"reason\":\"runtime admission resolved required model dependencies\""));
+    assert_eq!(
+        load_dependency_payload["timing_attempt_id"].as_str(),
+        Some(timing_attempt_id)
+    );
     assert!(model_lifecycle_events.iter().all(|event| !event
         .payload_json
         .contains("\"transition\":\"load_completed\"")));
@@ -933,6 +947,15 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(library_event
         .payload_json
         .contains("\"operation\":\"run_usage\""));
+    service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::LibraryUsage],
+            workflow_run_id: Some(response.workflow_run_id.clone()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::ExplicitRefresh,
+            batch_size: 100,
+        })
+        .expect("library usage projection refresh");
 
     let library_usage = service
         .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
@@ -942,7 +965,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
             workflow_version_id: None,
             after_event_seq: None,
             limit: Some(10),
-            projection_batch_size: Some(10),
+            projection_batch_size: Some(100),
         })
         .expect("library usage query");
     assert_eq!(library_usage.assets.len(), 1);

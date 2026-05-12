@@ -3820,6 +3820,46 @@ typed diagnostic and the canonical design is fixed.
     ids, emit attempt records or diagnostics, and use checked duration math.
     Full baseline/deviation enforcement and scheduler retry/termination policy
     remain the later required policy-completion path.
+- 2026-05-12 slice: workflow runtime-load timing attempt producer.
+  - Smallest useful vertical slice: migrate workflow-session runtime-load
+    lifecycle diagnostics onto the timing attempt contract. Load requested,
+    dependency-resolved, completed, and failed scheduler model lifecycle events
+    now share one `timing_attempt_` id, and runtime-load duration uses checked
+    contract arithmetic instead of `saturating_sub`.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_runtime_load_lifecycle.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_runtime.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: runtime-load duration is no longer
+    anonymously saturated in workflow-session execution. Impossible timing
+    state returns a typed workflow-service internal error through the timing
+    contract instead of producing a successful lifecycle duration.
+  - Standards/blast-radius gate: diagnostics-ledger payload shape changed only
+    by adding optional `timing_attempt_id` to scheduler model lifecycle
+    payloads; no SQLite schema, generated files, frontend code, saved workflow
+    fixtures, lockfiles, Pumas contracts, worker contracts, runtime unload
+    policy, inference gateway warmup policy, or scheduler retry policy changed.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+    `cargo test -p pantograph-workflow-service session_execution`,
+    `cargo test -p pantograph-diagnostics-ledger model_lifecycle`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Verification deviation/discovered issue: broad session-execution
+    verification exposed that
+    `workflow_execution_session_run_records_snapshot_before_execution` queried
+    Library usage without explicitly refreshing the Library usage projection,
+    so the query could observe zero assets when the run emitted more events
+    than the previous small projection batch covered. The test now refreshes
+    the Library usage projection explicitly before asserting projected assets.
+  - Remaining follow-up: migrate runtime unload, capacity-rebalance unload,
+    inference gateway warmup, embedding warmup, and scheduler trace producers
+    to timing attempt ids and checked duration math. Full baseline/deviation
+    enforcement and scheduler retry/termination policy remain the later
+    required policy-completion path.
 
 **Verification:**
 

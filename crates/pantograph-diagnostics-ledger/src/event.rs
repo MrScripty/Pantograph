@@ -693,6 +693,8 @@ pub struct SchedulerModelLifecycleChangedPayload {
     #[serde(default)]
     pub cache_state: Option<SchedulerModelCacheState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_attempt_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_runtime_variant_id: Option<String>,
     pub reason: Option<String>,
     pub duration_ms: Option<u64>,
@@ -704,6 +706,11 @@ pub struct SchedulerModelLifecycleChangedPayload {
 impl SchedulerModelLifecycleChangedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_optional_text("model_lifecycle_reason", self.reason.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "timing_attempt_id",
+            self.timing_attempt_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text(
             "selected_runtime_variant_id",
             self.selected_runtime_variant_id.as_deref(),

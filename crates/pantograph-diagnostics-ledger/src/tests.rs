@@ -851,6 +851,9 @@ fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
         SchedulerModelLifecycleChangedPayload {
             transition: SchedulerModelLifecycleTransition::LoadFailed,
             cache_state: Some(SchedulerModelCacheState::Failed),
+            timing_attempt_id: Some(
+                "timing_attempt_550e8400-e29b-41d4-a716-446655440010".to_string(),
+            ),
             selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
             reason: Some("model load failed".to_string()),
             duration_ms: Some(42),
@@ -4999,6 +5002,7 @@ fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEv
             SchedulerModelLifecycleChangedPayload {
                 transition: SchedulerModelLifecycleTransition::LoadRequested,
                 cache_state: Some(SchedulerModelCacheState::CacheMiss),
+                timing_attempt_id: None,
                 selected_runtime_variant_id: None,
                 reason: Some("cache miss before queued run".to_string()),
                 duration_ms: None,

@@ -38,15 +38,16 @@ use super::validation::{
     validate_workflow_semantic_version,
 };
 use super::{
-    AttributionRepository, WorkflowCapabilityModel, WorkflowErrorDiagnosticsLink,
-    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
-    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint,
-    WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason, WorkflowService,
-    WorkflowServiceError,
+    checked_timing_duration_ms, AttributionRepository, WorkflowCapabilityModel,
+    WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionAttributedCreateRequest,
+    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
+    WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeRequirements,
+    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
+    WorkflowTimingAttemptId,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -63,6 +64,7 @@ pub(super) struct SchedulerModelLifecycleEventRequest<'a> {
     pub(super) required_backends: &'a [String],
     pub(super) required_models: &'a [String],
     pub(super) transition: SchedulerModelLifecycleTransition,
+    pub(super) timing_attempt_id: Option<&'a str>,
     pub(super) reason: Option<&'a str>,
     pub(super) duration_ms: Option<u64>,
     pub(super) error: Option<&'a str>,
@@ -389,11 +391,13 @@ impl WorkflowService {
         );
         let required_backends = preflight_cache.required_backends.clone();
         let required_models = preflight_cache.required_models.clone();
+        let runtime_load_timing_attempt_id = WorkflowTimingAttemptId::generate();
         let runtime_load_lifecycle_context = WorkflowRuntimeLoadLifecycleContext {
             session: &session,
             snapshot: run_snapshot.as_ref(),
             workflow_run_id: &workflow_run_id,
             workflow_semantic_version: &queued_workflow_semantic_version,
+            timing_attempt_id: runtime_load_timing_attempt_id.as_str(),
             selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
             selected_runtime_variant_id: reservation_context.selected_runtime_variant_id.as_deref(),
             required_backends: &required_backends,
@@ -417,8 +421,11 @@ impl WorkflowService {
                 }),
             )
             .await;
-        let runtime_load_duration_ms =
-            unix_timestamp_ms().saturating_sub(runtime_load_started_at_ms);
+        let runtime_load_duration_ms = workflow_timing_duration_ms(
+            &runtime_load_timing_attempt_id,
+            runtime_load_started_at_ms,
+            unix_timestamp_ms(),
+        )?;
         let runtime_load_result = match runtime_load_result {
             Ok(()) => {
                 host.session_runtime_load_proof(&session_id, &session.workflow_id)
@@ -595,6 +602,7 @@ impl WorkflowService {
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadScheduled,
+                    timing_attempt_id: None,
                     reason: Some("keep-alive disabled after run completion"),
                     duration_ms: None,
                     error: None,
@@ -615,6 +623,7 @@ impl WorkflowService {
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadStarted,
+                    timing_attempt_id: None,
                     reason: Some("keep-alive disabled after run completion"),
                     duration_ms: None,
                     error: None,
@@ -644,6 +653,7 @@ impl WorkflowService {
                         required_backends: &required_backends,
                         required_models: &required_models,
                         transition: SchedulerModelLifecycleTransition::UnloadCompleted,
+                        timing_attempt_id: None,
                         reason: Some("keep-alive disabled after run completion"),
                         duration_ms: Some(runtime_unload_duration_ms),
                         error: None,
@@ -668,6 +678,7 @@ impl WorkflowService {
                                 required_backends: &required_backends,
                                 required_models: &required_models,
                                 transition: SchedulerModelLifecycleTransition::UnloadFailed,
+                                timing_attempt_id: None,
                                 reason: Some("keep-alive disabled after run completion"),
                                 duration_ms: Some(runtime_unload_duration_ms),
                                 error: Some(error_text.as_str()),
@@ -1274,6 +1285,7 @@ impl WorkflowService {
                             cache_state: Some(SchedulerModelCacheState::for_lifecycle_transition(
                                 request.transition,
                             )),
+                            timing_attempt_id: request.timing_attempt_id.map(str::to_string),
                             selected_runtime_variant_id: request
                                 .selected_runtime_variant_id
                                 .map(str::to_string),
@@ -1636,6 +1648,15 @@ fn scheduler_delay_until_ms(now_ms: u64) -> Result<u64, WorkflowServiceError> {
                 "scheduler admission retry timestamp overflowed: now_ms={now_ms}, poll_ms={WORKFLOW_SESSION_QUEUE_POLL_MS}"
             ))
         })
+}
+
+fn workflow_timing_duration_ms(
+    attempt_id: &WorkflowTimingAttemptId,
+    started_at_ms: u64,
+    completed_at_ms: u64,
+) -> Result<u64, WorkflowServiceError> {
+    checked_timing_duration_ms(attempt_id, started_at_ms, completed_at_ms)
+        .map_err(|error| WorkflowServiceError::Internal(error.to_string()))
 }
 
 fn queue_position_u32(

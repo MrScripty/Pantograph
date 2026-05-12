@@ -2264,6 +2264,35 @@ Worker rules:
   producers onto timing attempt records and checked duration math. Full
   baseline/deviation enforcement and scheduler retry/termination policy remain
   the later required policy-completion path.
+- 2026-05-12 workflow runtime-load timing attempt producer slice: smallest
+  useful vertical slice was limited to workflow-session runtime-load lifecycle
+  diagnostics. Load requested, dependency-resolved, completed, and failed
+  scheduler model lifecycle events now carry one shared `timing_attempt_` id,
+  and runtime-load duration uses checked timing contract arithmetic instead of
+  `saturating_sub`. Allowed write set:
+  `crates/pantograph-diagnostics-ledger/src/event.rs`,
+  `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_runtime_load_lifecycle.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_runtime.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because runtime-load
+  duration no longer becomes an anonymous saturated value in workflow-session
+  execution; impossible timing state returns a typed workflow-service internal
+  error through the timing contract. Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+  `cargo test -p pantograph-workflow-service session_execution`,
+  `cargo test -p pantograph-diagnostics-ledger model_lifecycle`,
+  `cargo fmt --all -- --check`, and `git diff --check`. Discovered issue fixed
+  during verification: `workflow_execution_session_run_records_snapshot_before_execution`
+  queried Library usage without explicitly refreshing the Library usage
+  projection, so it could observe zero projected assets when the run emitted
+  more events than the small projection batch covered. Remaining follow-up:
+  migrate runtime unload, capacity-rebalance unload, inference gateway warmup,
+  embedding warmup, and scheduler trace producers onto timing attempt ids and
+  checked duration math. Full baseline/deviation enforcement and scheduler
+  retry/termination policy remain the later required policy-completion path.
 
 ### Traceability Links
 
