@@ -2832,6 +2832,17 @@ Worker rules:
   image gateway dispatch remain later slices. The public
   `ambiguous_auto_resolution` wire value remains append-only DTO history, but
   equal-ranked valid automatic selection no longer produces it.
+- 2026-05-12 re-plan trigger reached before diagnostics-ledger policy
+  projection. Investigation found that `SchedulerRunAdmittedPayload` is emitted
+  immediately after queue admission, before `ensure_session_runtime_preflight`
+  obtains the canonical `WorkflowTechnicalFitDecision`. Attaching
+  `selection_policy_trace` to that event would either require moving admission
+  event timing, duplicating a later synthetic admission event, or adding a new
+  scheduler technical-fit decision event/projection. Required re-plan: choose
+  the durable ledger event boundary for scheduler policy evidence so selected
+  candidate, ranking/exploration reason, candidate summary, and future
+  ledger-history inputs are recorded once without leaking policy facts into
+  workflow graphs or runtime lifecycle events.
 
 ### Traceability Links
 

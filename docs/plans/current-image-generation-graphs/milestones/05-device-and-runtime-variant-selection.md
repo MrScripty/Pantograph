@@ -1755,6 +1755,16 @@ typed diagnostic and the canonical design is fixed.
     later slices. The public `ambiguous_auto_resolution` enum value remains
     append-only DTO history but is no longer produced by equal-ranked valid
     automatic selection.
+- 2026-05-12 re-plan trigger: diagnostics-ledger policy projection needs an
+  explicit event boundary decision before source edits continue. Current
+  `scheduler.run_admitted` events are written before technical-fit preflight
+  resolves `WorkflowTechnicalFitDecision`, while runtime lifecycle events are
+  load-oriented rather than scheduler-policy-oriented. Do not attach policy
+  trace fields to the wrong event as a compatibility bridge. Choose one
+  canonical path before implementation: move the admission event after
+  technical fit, add a distinct scheduler technical-fit decision event, or
+  define another bounded policy-summary projection that can be written after
+  preflight without changing queue-admission semantics.
 - 2026-05-10 slice: runtime-registry no-valid-auto diagnostic.
   - Smallest useful vertical slice: add a `no_valid_candidate` error
     diagnostic to automatic technical-fit decisions when candidate facts exist
