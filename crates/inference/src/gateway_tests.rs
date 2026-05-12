@@ -1026,6 +1026,48 @@ async fn test_generate_image_rejects_zero_positive_count_options() {
 }
 
 #[tokio::test]
+async fn test_generate_image_rejects_output_byte_estimate_overflow() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let error = gateway
+        .generate_image(ImageGenerationRequest {
+            model: "mock".to_string(),
+            prompt: "paper lantern".to_string(),
+            negative_prompt: None,
+            width: Some(u32::MAX),
+            height: Some(u32::MAX),
+            num_inference_steps: Some(20),
+            guidance_scale: Some(4.0),
+            seed: Some(7),
+            scheduler: None,
+            num_images_per_prompt: Some(u32::MAX),
+            init_image: None,
+            mask_image: None,
+            strength: None,
+            extra_options: serde_json::Value::Null,
+        })
+        .await
+        .expect_err("overflowing image output estimate should fail closed");
+
+    let message = error.to_string();
+    assert!(
+        message.contains("image.width"),
+        "expected width in {message}"
+    );
+    assert!(
+        message.contains("image.height"),
+        "expected height in {message}"
+    );
+    assert!(
+        message.contains("image.num_images_per_prompt"),
+        "expected image count in {message}"
+    );
+    assert!(
+        message.contains("overflowed"),
+        "expected overflow reason in {message}"
+    );
+}
+
+#[tokio::test]
 async fn test_transcribe_audio_forwards_to_active_backend() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let result = gateway

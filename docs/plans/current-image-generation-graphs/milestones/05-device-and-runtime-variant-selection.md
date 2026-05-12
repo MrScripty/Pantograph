@@ -365,6 +365,13 @@ typed diagnostic and the canonical design is fixed.
     model/runtime load and unload duration diagnostics, broader image request
     limits, context/batch limits, byte-range projections, and worker/runtime
     request fields.
+  - 2026-05-12 partial: inference gateway image generation now checks the
+    conservative RGBA output byte estimate from width, height, and image count
+    before backend dispatch. Overflow returns `BackendError::Config` instead
+    of reaching a backend or worker with an impossible request size. Remaining
+    numeric boundaries include model/runtime load and unload duration
+    diagnostics, broader semantic image request limits, context/batch limits,
+    byte-range projections, and worker/runtime request fields.
 - [ ] If a touched backend starts or modifies a local service, require loopback
   binding, connection/request limits, readiness/startup/shutdown timeouts, and
   lifecycle-owned shutdown.
@@ -4251,6 +4258,25 @@ typed diagnostic and the canonical design is fixed.
     payloads. Ledger-history ranking inputs, retry/termination policy, and
     optional compact read-model policy summaries remain later scheduler
     slices.
+- 2026-05-12 slice: inference gateway image output estimate overflow.
+  - Smallest useful vertical slice: reject image-generation requests whose
+    width, height, and image count overflow the conservative RGBA output byte
+    estimate before dispatching to the active backend.
+  - Allowed write set: `crates/inference/src/gateway.rs`,
+    `crates/inference/src/gateway_tests.rs`, and this plan directory.
+  - No-fallback/no-legacy confirmation: impossible image output sizes now fail
+    with `BackendError::Config` at the gateway boundary instead of reaching
+    backend execution or being saturated/clamped. The slice does not add
+    semantic caps, alter planner/runtime selection, change worker contracts,
+    touch frontend behavior, generated files, lockfiles, or workflow fixtures.
+  - Verification passed:
+    `cargo test -p inference test_generate_image_rejects_output_byte_estimate_overflow`,
+    `cargo test -p inference test_generate_image_rejects_zero`,
+    `cargo check -p inference`, `cargo fmt --all -- --check`, and
+    `git diff --check`.
+  - Remaining follow-up: broader semantic image request limits, context/batch
+    limits, byte-range projections, and worker/runtime request fields remain
+    open numeric-boundary work.
 
 **Verification:**
 
@@ -4299,6 +4325,8 @@ typed diagnostic and the canonical design is fixed.
 - Resource tests prove dimensions, token/context limits, byte ranges, output
   size, and memory estimate calculations use checked arithmetic and typed
   failures at boundaries.
+- Inference gateway tests prove image-generation output byte estimates fail
+  closed on arithmetic overflow before backend dispatch.
 - Local service/process tests prove any touched backend listener binds only to
   loopback, enforces bounded connection/request limits, fails readiness
   timeouts explicitly, and shuts down through the lifecycle owner.

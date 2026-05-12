@@ -40,6 +40,7 @@ use crate::types::{
     RuntimeLifecycleSnapshot, ServerModeInfo,
 };
 
+const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
 const MAX_LIFECYCLE_COMPATIBILITY_ISSUES: usize = 32;
 
 #[cfg(feature = "backend-llamacpp")]
@@ -2349,6 +2350,7 @@ fn validate_image_generation_request(request: &ImageGenerationRequest) -> Result
         request.num_images_per_prompt,
         "image.num_images_per_prompt",
     )?;
+    validate_image_generation_output_byte_estimate(request)?;
     Ok(())
 }
 
@@ -2360,6 +2362,27 @@ fn validate_optional_positive_image_u32(
         return Err(BackendError::Config(format!(
             "{field_name} must be greater than zero when provided"
         )));
+    }
+    Ok(())
+}
+
+fn validate_image_generation_output_byte_estimate(
+    request: &ImageGenerationRequest,
+) -> Result<(), BackendError> {
+    let (Some(width), Some(height)) = (request.width, request.height) else {
+        return Ok(());
+    };
+    let count = request.num_images_per_prompt.unwrap_or(1);
+    if u64::from(width)
+        .checked_mul(u64::from(height))
+        .and_then(|pixels| pixels.checked_mul(u64::from(count)))
+        .and_then(|pixels| pixels.checked_mul(IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL))
+        .is_none()
+    {
+        return Err(BackendError::Config(
+            "image.width/image.height/image.num_images_per_prompt output byte estimate overflowed"
+                .to_string(),
+        ));
     }
     Ok(())
 }

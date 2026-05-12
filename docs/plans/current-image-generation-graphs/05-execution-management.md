@@ -2949,6 +2949,25 @@ Worker rules:
   policy and already uses checked candidate counts before producing these
   payloads. Ledger-history ranking inputs, retry/termination policy, and
   optional compact read-model policy summaries remain later scheduler slices.
+- 2026-05-12 inference gateway image output estimate overflow slice: smallest
+  useful vertical slice was to reject image-generation requests whose width,
+  height, and image count overflow the conservative RGBA output byte estimate
+  before dispatching to the active backend. Allowed write set:
+  `crates/inference/src/gateway.rs`,
+  `crates/inference/src/gateway_tests.rs`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because impossible image
+  output sizes now fail with `BackendError::Config` at the gateway boundary
+  instead of reaching backend execution or being saturated/clamped. It does not
+  add semantic caps, alter planner/runtime selection, change worker contracts,
+  touch frontend behavior, generated files, lockfiles, or workflow fixtures.
+- Verification passed:
+  `cargo test -p inference test_generate_image_rejects_output_byte_estimate_overflow`,
+  `cargo test -p inference test_generate_image_rejects_zero`,
+  `cargo check -p inference`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- Remaining follow-up: broader semantic image request limits, context/batch
+  limits, byte-range projections, and worker/runtime request fields remain
+  open numeric-boundary work.
 
 ### Traceability Links
 
