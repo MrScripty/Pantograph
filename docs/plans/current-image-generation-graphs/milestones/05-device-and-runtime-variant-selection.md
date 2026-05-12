@@ -3764,6 +3764,26 @@ typed diagnostic and the canonical design is fixed.
     load/unload/warmup/trace `saturating_sub` sites and deciding which layer
     records timing outliers as retryable scheduler diagnostics versus terminal
     workflow failures.
+- 2026-05-12 re-plan decision: use the contract-first timing diagnostics path
+  now, with full timing policy enforcement later.
+  - Selected option: define canonical timing attempt identities and
+    diagnostics payloads first, then replace local duration saturation through
+    those contracts in validated vertical slices.
+  - Required next slice: introduce the minimum shared timing attempt contract
+    for runtime/model load attempts, unload attempts, warmup attempts, and
+    scheduler trace spans. The contract must include attempt id, workflow run,
+    session, runtime, runtime variant, model/backend/device attribution where
+    available, checked start/end/duration semantics, and typed diagnostics for
+    impossible timestamp state.
+  - Later policy target: after timing history is durably recorded, implement
+    baseline/deviation analysis, scheduler reschedule policy, retry exhaustion,
+    and terminal workflow failure semantics. This is the full policy path and
+    must not be skipped; it is deferred only to keep the next implementation
+    slice contract-first and reviewable.
+  - No-fallback/no-legacy confirmation: timing outliers and impossible timing
+    state must become typed diagnostics. They must not be silently normalized,
+    capped, dropped from history, or converted into successful workflow
+    execution without scheduler-owned retry/termination decisions.
 
 **Verification:**
 

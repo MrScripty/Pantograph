@@ -2233,6 +2233,14 @@ Worker rules:
   attempt ids, workflow/run/session/runtime/model/device attribution, checked
   timestamp math, diagnostics-ledger payloads, baseline/deviation policy, and
   scheduler failure/retry ownership.
+- 2026-05-12: Re-plan decision resolved. Continue with the contract-first
+  timing diagnostics path before enforcing learned timing policy. The next
+  implementation slice should define canonical timing attempt identities and
+  diagnostic payloads for runtime/model load, unload, warmup, and scheduler
+  trace spans, then migrate checked duration math onto those owned contracts in
+  thin vertical slices. Full baseline/deviation enforcement, scheduler
+  reschedule policy, retry exhaustion, and terminal workflow failure semantics
+  remain required follow-up work after the timing history exists.
 
 ### Traceability Links
 
