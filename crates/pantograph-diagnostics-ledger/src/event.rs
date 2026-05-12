@@ -502,6 +502,26 @@ pub struct SchedulerCandidateSetSummary {
 
 impl SchedulerCandidateSetSummary {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        let summarized_candidate_count = self
+            .eligible_candidate_count
+            .checked_add(self.rejected_candidate_count)
+            .ok_or(DiagnosticsLedgerError::InvalidField {
+                field: "candidate_set_summary_counts",
+            })?;
+        if summarized_candidate_count != self.total_candidate_count {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "candidate_set_summary_counts",
+            });
+        }
+        let eligible_candidate_id_count = u32::try_from(self.eligible_candidate_ids.len())
+            .map_err(|_| DiagnosticsLedgerError::InvalidField {
+                field: "eligible_candidate_ids",
+            })?;
+        if eligible_candidate_id_count != self.eligible_candidate_count {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "eligible_candidate_ids",
+            });
+        }
         validate_text_list("eligible_candidate_ids", &self.eligible_candidate_ids)
     }
 }

@@ -4228,6 +4228,29 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: ledger-history ranking inputs, retry/termination
     policy, and optional compact read-model policy summaries remain later
     scheduler slices.
+- 2026-05-12 slice: diagnostics-ledger policy-trace count validation.
+  - Smallest useful vertical slice: make scheduler admission policy trace
+    candidate summaries fail closed when eligible/rejected counts do not add
+    up to the total candidate count, or when listed eligible candidate ids do
+    not match the eligible candidate count.
+  - Allowed write set: `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: malformed scheduler policy evidence
+    now returns typed diagnostics-ledger validation errors instead of being
+    accepted, saturated, normalized, or silently trimmed. Selector policy,
+    schema/projections, runtime execution, workflow graph facts, frontend
+    behavior, workers, lockfiles, and workflow fixtures are unchanged.
+  - Verification passed:
+    `cargo test -p pantograph-diagnostics-ledger scheduler_run_admitted_rejects_inconsistent_policy_trace_counts`,
+    `cargo test -p pantograph-diagnostics-ledger scheduler_run_admitted_payload_round_trips_policy_trace_contract`,
+    `cargo check -p pantograph-diagnostics-ledger`,
+    `cargo fmt --all -- --check`, and `git diff --check`.
+  - Remaining follow-up: runtime-registry still owns canonical candidate
+    selection and already uses checked candidate counts before producing these
+    payloads. Ledger-history ranking inputs, retry/termination policy, and
+    optional compact read-model policy summaries remain later scheduler
+    slices.
 
 **Verification:**
 
@@ -4240,6 +4263,9 @@ typed diagnostic and the canonical design is fixed.
   policy trace payloads preserve selected runtime/backend facts, candidate set
   summary, ranking reason, exploration reason, and seed basis without relying
   on display text or graph-visible Pumas facts.
+- Diagnostics-ledger validation tests prove scheduler admission policy trace
+  candidate summary counts fail closed when totals are impossible or when the
+  eligible-candidate id list no longer matches the eligible count.
 - Adapter-boundary tests prove unknown llama.cpp device strings and malformed
   device ordinals produce diagnostics instead of silently becoming auto or
   device zero.

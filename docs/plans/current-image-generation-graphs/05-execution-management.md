@@ -2927,6 +2927,28 @@ Worker rules:
 - Remaining follow-up: ledger-history ranking inputs, retry/termination
   policy, and optional compact read-model policy summaries remain later
   scheduler slices.
+- 2026-05-12 diagnostics-ledger policy-trace count validation slice: smallest
+  useful vertical slice was to make scheduler admission policy trace candidate
+  summaries fail closed when their count fields are impossible or when the
+  eligible-candidate id list does not match the eligible count. Allowed write
+  set: `crates/pantograph-diagnostics-ledger/src/event.rs`,
+  `crates/pantograph-diagnostics-ledger/src/tests.rs`, and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because malformed
+  scheduler policy evidence now returns typed diagnostics-ledger validation
+  errors instead of being accepted, saturated, normalized, or silently trimmed.
+  It does not change selector policy, schema/projections, runtime execution,
+  workflow graph facts, frontend behavior, workers, lockfiles, or workflow
+  fixtures.
+- Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger scheduler_run_admitted_rejects_inconsistent_policy_trace_counts`,
+  `cargo test -p pantograph-diagnostics-ledger scheduler_run_admitted_payload_round_trips_policy_trace_contract`,
+  `cargo check -p pantograph-diagnostics-ledger`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Remaining follow-up: runtime-registry still owns the canonical selection
+  policy and already uses checked candidate counts before producing these
+  payloads. Ledger-history ranking inputs, retry/termination policy, and
+  optional compact read-model policy summaries remain later scheduler slices.
 
 ### Traceability Links
 

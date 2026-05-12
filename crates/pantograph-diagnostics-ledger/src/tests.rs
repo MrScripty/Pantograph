@@ -143,6 +143,62 @@ fn scheduler_run_admitted_payload_round_trips_policy_trace_contract() {
 }
 
 #[test]
+fn scheduler_run_admitted_rejects_inconsistent_policy_trace_counts() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut mismatched_total = sample_scheduler_admission_event("workflow_run_alpha");
+    let DiagnosticEventPayload::SchedulerRunAdmitted(payload) = &mut mismatched_total.payload
+    else {
+        panic!("sample scheduler admission event uses admission payload");
+    };
+    payload.technical_fit_selection_policy_trace = Some(SchedulerSelectionPolicyTrace {
+        policy_version: 1,
+        candidate_set_summary: Some(SchedulerCandidateSetSummary {
+            total_candidate_count: 3,
+            eligible_candidate_count: 1,
+            rejected_candidate_count: 1,
+            eligible_candidate_ids: vec!["candidate-pytorch-cuda".to_string()],
+        }),
+        ranking_reason: Some("candidate_priority".to_string()),
+        exploration_reason: None,
+        seed_basis: Some("workflow_run_alpha|candidate-pytorch-cuda".to_string()),
+    });
+
+    let result = ledger.append_diagnostic_event(mismatched_total);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::InvalidField {
+            field: "candidate_set_summary_counts"
+        })
+    ));
+
+    let mut missing_eligible_id = sample_scheduler_admission_event("workflow_run_alpha");
+    let DiagnosticEventPayload::SchedulerRunAdmitted(payload) = &mut missing_eligible_id.payload
+    else {
+        panic!("sample scheduler admission event uses admission payload");
+    };
+    payload.technical_fit_selection_policy_trace = Some(SchedulerSelectionPolicyTrace {
+        policy_version: 1,
+        candidate_set_summary: Some(SchedulerCandidateSetSummary {
+            total_candidate_count: 2,
+            eligible_candidate_count: 2,
+            rejected_candidate_count: 0,
+            eligible_candidate_ids: vec!["candidate-pytorch-cuda".to_string()],
+        }),
+        ranking_reason: Some("candidate_priority".to_string()),
+        exploration_reason: Some("equal_priority_seeded_choice".to_string()),
+        seed_basis: Some("workflow_run_alpha|candidate-pytorch-cuda".to_string()),
+    });
+
+    let result = ledger.append_diagnostic_event(missing_eligible_id);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::InvalidField {
+            field: "eligible_candidate_ids"
+        })
+    ));
+}
+
+#[test]
 fn record_and_query_usage_event_preserves_snapshot_and_measurement() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let event = sample_event("usage_alpha", "model-a", 10, 20);
