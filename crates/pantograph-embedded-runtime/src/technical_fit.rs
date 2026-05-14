@@ -5,14 +5,16 @@ use pantograph_runtime_registry::{
     select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
     RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitCompatibilityIssue,
     RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision,
-    RuntimeTechnicalFitDeviceClass, RuntimeTechnicalFitDeviceDiagnostic,
-    RuntimeTechnicalFitDeviceDiagnosticCode, RuntimeTechnicalFitDeviceDiagnosticSeverity,
-    RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitDecisionCode, RuntimeTechnicalFitDeviceClass,
+    RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
+    RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitDevicePolicy,
+    RuntimeTechnicalFitFactor, RuntimeTechnicalFitHistoryThresholdState,
     RuntimeTechnicalFitObservedThroughputHint, RuntimeTechnicalFitOverride,
-    RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
-    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourceEstimate,
-    RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
-    RuntimeTechnicalFitSelectionPolicyTrace, RuntimeTechnicalFitWarmupState,
+    RuntimeTechnicalFitPolicyPhase, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
+    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
+    RuntimeTechnicalFitResourceEstimate, RuntimeTechnicalFitResourcePressure,
+    RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitSelectionPolicyTrace,
+    RuntimeTechnicalFitWarmupState,
 };
 use pantograph_workflow_service::{
     WorkflowDeviceResolutionDiagnostic, WorkflowDeviceResolutionDiagnosticCode,
@@ -20,12 +22,14 @@ use pantograph_workflow_service::{
     WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind,
     WorkflowRuntimeVariantCapability, WorkflowServiceError, WorkflowTechnicalFitCompatibilityIssue,
     WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
-    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDeviceDiagnostic,
-    WorkflowTechnicalFitDeviceDiagnosticCode, WorkflowTechnicalFitDeviceDiagnosticSeverity,
-    WorkflowTechnicalFitDevicePolicy, WorkflowTechnicalFitObservedThroughputHint,
-    WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
-    WorkflowTechnicalFitRequest, WorkflowTechnicalFitResourceEstimate,
-    WorkflowTechnicalFitSelectionMode, WorkflowTechnicalFitSelectionPolicyTrace,
+    WorkflowTechnicalFitDecisionCode, WorkflowTechnicalFitDeviceClass,
+    WorkflowTechnicalFitDeviceDiagnostic, WorkflowTechnicalFitDeviceDiagnosticCode,
+    WorkflowTechnicalFitDeviceDiagnosticSeverity, WorkflowTechnicalFitDevicePolicy,
+    WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitObservedThroughputHint,
+    WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
+    WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest,
+    WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitSelectionMode,
+    WorkflowTechnicalFitSelectionPolicyTrace,
 };
 use workflow_nodes::setup::PumasSelectorAccess;
 
@@ -232,6 +236,11 @@ fn project_selection_policy_trace(
 ) -> WorkflowTechnicalFitSelectionPolicyTrace {
     WorkflowTechnicalFitSelectionPolicyTrace {
         policy_version: trace.policy_version,
+        policy_phase: trace.policy_phase.map(project_policy_phase),
+        decision_code: trace.decision_code.map(project_decision_code),
+        history_threshold_state: trace
+            .history_threshold_state
+            .map(project_history_threshold_state),
         candidate_set_summary: trace.candidate_set_summary.as_ref().map(|summary| {
             pantograph_workflow_service::WorkflowTechnicalFitCandidateSetSummary {
                 total_candidate_count: summary.total_candidate_count,
@@ -245,6 +254,34 @@ fn project_selection_policy_trace(
         seed_basis: trace.seed_basis.clone(),
     }
     .normalized()
+}
+
+fn project_policy_phase(phase: RuntimeTechnicalFitPolicyPhase) -> WorkflowTechnicalFitPolicyPhase {
+    match phase {
+        RuntimeTechnicalFitPolicyPhase::CandidateRanking => {
+            WorkflowTechnicalFitPolicyPhase::CandidateRanking
+        }
+    }
+}
+
+fn project_decision_code(
+    code: RuntimeTechnicalFitDecisionCode,
+) -> WorkflowTechnicalFitDecisionCode {
+    match code {
+        RuntimeTechnicalFitDecisionCode::SelectedCandidate => {
+            WorkflowTechnicalFitDecisionCode::SelectedCandidate
+        }
+    }
+}
+
+fn project_history_threshold_state(
+    state: RuntimeTechnicalFitHistoryThresholdState,
+) -> WorkflowTechnicalFitHistoryThresholdState {
+    match state {
+        RuntimeTechnicalFitHistoryThresholdState::NotEvaluated => {
+            WorkflowTechnicalFitHistoryThresholdState::NotEvaluated
+        }
+    }
 }
 
 fn project_compatibility_report(
@@ -1828,6 +1865,11 @@ mod tests {
             )],
             selection_policy_trace: Some(RuntimeTechnicalFitSelectionPolicyTrace {
                 policy_version: 1,
+                policy_phase: Some(RuntimeTechnicalFitPolicyPhase::CandidateRanking),
+                decision_code: Some(RuntimeTechnicalFitDecisionCode::SelectedCandidate),
+                history_threshold_state: Some(
+                    RuntimeTechnicalFitHistoryThresholdState::NotEvaluated,
+                ),
                 candidate_set_summary: Some(
                     pantograph_runtime_registry::RuntimeTechnicalFitCandidateSetSummary {
                         total_candidate_count: 2,
@@ -1897,6 +1939,11 @@ mod tests {
                 }],
                 selection_policy_trace: Some(WorkflowTechnicalFitSelectionPolicyTrace {
                     policy_version: 1,
+                    policy_phase: Some(WorkflowTechnicalFitPolicyPhase::CandidateRanking),
+                    decision_code: Some(WorkflowTechnicalFitDecisionCode::SelectedCandidate),
+                    history_threshold_state: Some(
+                        WorkflowTechnicalFitHistoryThresholdState::NotEvaluated,
+                    ),
                     candidate_set_summary: Some(
                         pantograph_workflow_service::WorkflowTechnicalFitCandidateSetSummary {
                             total_candidate_count: 2,

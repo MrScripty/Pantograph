@@ -3993,6 +3993,14 @@ typed diagnostic and the canonical design is fixed.
     diagnostics-ledger payload fields. Remaining follow-up: append-only typed
     policy trace fields and selected device class propagation still need a
     cross-layer DTO slice.
+  - 2026-05-14 partial: runtime-selection policy traces now carry append-only
+    typed `policy_phase`, `decision_code`, and `history_threshold_state`
+    fields through runtime-registry, embedded-runtime projection,
+    workflow-service, diagnostics-ledger scheduler payloads, and frontend
+    workflow types. The current automatic selector marks selected-candidate
+    traces as candidate-ranking decisions with history not evaluated.
+    Remaining follow-up: selected device class propagation and ledger-backed
+    per-candidate runtime-selection history summaries.
   - 2026-05-14 standards iteration: implementation of the runtime-selection
     boundary must preserve layered dependency direction and
     sync-core/async-shell design. The pure policy module may depend only on
@@ -4209,6 +4217,48 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: selected device class and append-only typed
     runtime-selection trace fields still need a cross-layer DTO slice before
     diagnostics-ledger runtime-selection history work.
+- 2026-05-14 slice: typed runtime-selection trace foundation.
+  - Smallest useful vertical slice: add append-only typed policy trace fields
+    for `policy_phase`, `decision_code`, and `history_threshold_state`, project
+    them from runtime-registry through embedded-runtime and workflow-service,
+    persist them in diagnostics-ledger scheduler admission payload JSON, and
+    mirror them in frontend workflow types.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/lib.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `src/services/workflow/types.ts`, and this plan directory.
+  - No-fallback/no-legacy confirmation: the slice is append-only trace
+    metadata for canonical runtime-selection decisions. It does not query
+    ledger history, alter ranking, infer runtime/device choices from legacy
+    state, change generated files, alter lockfiles, update workflow fixtures,
+    or add compatibility shims.
+  - Verification passed:
+    `cargo test -p pantograph-runtime-registry technical_fit_decision_normalizes_selected_identifiers`,
+    `cargo test -p pantograph-embedded-runtime workflow_decision_projection_preserves_reason_codes`,
+    `cargo test -p pantograph-workflow-service workflow_technical_fit_decision_normalizes_selected_backend`,
+    `cargo test -p pantograph-diagnostics-ledger scheduler_run_admitted_payload_round_trips_policy_trace_contract`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`,
+    `cargo test -p pantograph-diagnostics-ledger scheduler_run_admitted`,
+    `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+    `npm run typecheck`, and `cargo fmt --package
+    pantograph-runtime-registry --package pantograph-embedded-runtime --package
+    pantograph-workflow-service --package pantograph-diagnostics-ledger`; `git
+    diff --check`.
+  - Remaining follow-up: selected device class propagation and
+    diagnostics-ledger runtime-selection history summaries remain before the
+    five-run threshold ranking algorithm.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract

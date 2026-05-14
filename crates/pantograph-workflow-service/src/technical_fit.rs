@@ -354,10 +354,34 @@ impl WorkflowTechnicalFitCandidateSetSummary {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowTechnicalFitPolicyPhase {
+    CandidateRanking,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowTechnicalFitDecisionCode {
+    SelectedCandidate,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowTechnicalFitHistoryThresholdState {
+    NotEvaluated,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowTechnicalFitSelectionPolicyTrace {
     pub policy_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_phase: Option<WorkflowTechnicalFitPolicyPhase>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_code: Option<WorkflowTechnicalFitDecisionCode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_threshold_state: Option<WorkflowTechnicalFitHistoryThresholdState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub candidate_set_summary: Option<WorkflowTechnicalFitCandidateSetSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -372,6 +396,9 @@ impl WorkflowTechnicalFitSelectionPolicyTrace {
     pub fn normalized(&self) -> Self {
         Self {
             policy_version: self.policy_version,
+            policy_phase: self.policy_phase,
+            decision_code: self.decision_code,
+            history_threshold_state: self.history_threshold_state,
             candidate_set_summary: self
                 .candidate_set_summary
                 .as_ref()
@@ -1190,6 +1217,11 @@ mod tests {
             )],
             selection_policy_trace: Some(WorkflowTechnicalFitSelectionPolicyTrace {
                 policy_version: 1,
+                policy_phase: Some(WorkflowTechnicalFitPolicyPhase::CandidateRanking),
+                decision_code: Some(WorkflowTechnicalFitDecisionCode::SelectedCandidate),
+                history_threshold_state: Some(
+                    WorkflowTechnicalFitHistoryThresholdState::NotEvaluated,
+                ),
                 candidate_set_summary: Some(WorkflowTechnicalFitCandidateSetSummary {
                     total_candidate_count: 2,
                     eligible_candidate_count: 1,
@@ -1242,6 +1274,18 @@ mod tests {
             .as_ref()
             .expect("selection policy trace should normalize");
         assert_eq!(trace.policy_version, 1);
+        assert_eq!(
+            trace.policy_phase,
+            Some(WorkflowTechnicalFitPolicyPhase::CandidateRanking)
+        );
+        assert_eq!(
+            trace.decision_code,
+            Some(WorkflowTechnicalFitDecisionCode::SelectedCandidate)
+        );
+        assert_eq!(
+            trace.history_threshold_state,
+            Some(WorkflowTechnicalFitHistoryThresholdState::NotEvaluated)
+        );
         assert_eq!(
             trace.ranking_reason.as_deref(),
             Some("explicit_backend_override")

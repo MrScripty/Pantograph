@@ -39,11 +39,12 @@ use crate::{
     SchedulerQueueControlPayload, SchedulerQueuePlacementPayload,
     SchedulerReservationChangedPayload, SchedulerReservationResourceKind,
     SchedulerReservationTransition, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
-    SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
-    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
-    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
-    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
-    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    SchedulerSelectionDecisionCode, SchedulerSelectionHistoryThresholdState,
+    SchedulerSelectionPolicyPhase, SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery,
+    SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage,
+    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
+    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
     DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MAX_INFERENCE_COMPATIBILITY_ISSUES,
@@ -88,6 +89,9 @@ fn scheduler_run_admitted_payload_round_trips_policy_trace_contract() {
         reserved_model_ids: vec!["pumas://models/image-alpha".to_string()],
         technical_fit_selection_policy_trace: Some(SchedulerSelectionPolicyTrace {
             policy_version: 1,
+            policy_phase: Some(SchedulerSelectionPolicyPhase::CandidateRanking),
+            decision_code: Some(SchedulerSelectionDecisionCode::SelectedCandidate),
+            history_threshold_state: Some(SchedulerSelectionHistoryThresholdState::NotEvaluated),
             candidate_set_summary: Some(SchedulerCandidateSetSummary {
                 total_candidate_count: 2,
                 eligible_candidate_count: 2,
@@ -121,6 +125,9 @@ fn scheduler_run_admitted_payload_round_trips_policy_trace_contract() {
             "reserved_model_ids": ["pumas://models/image-alpha"],
             "technical_fit_selection_policy_trace": {
                 "policy_version": 1,
+                "policy_phase": "candidate_ranking",
+                "decision_code": "selected_candidate",
+                "history_threshold_state": "not_evaluated",
                 "candidate_set_summary": {
                     "total_candidate_count": 2,
                     "eligible_candidate_count": 2,
@@ -152,6 +159,9 @@ fn scheduler_run_admitted_rejects_inconsistent_policy_trace_counts() {
     };
     payload.technical_fit_selection_policy_trace = Some(SchedulerSelectionPolicyTrace {
         policy_version: 1,
+        policy_phase: Some(SchedulerSelectionPolicyPhase::CandidateRanking),
+        decision_code: Some(SchedulerSelectionDecisionCode::SelectedCandidate),
+        history_threshold_state: Some(SchedulerSelectionHistoryThresholdState::NotEvaluated),
         candidate_set_summary: Some(SchedulerCandidateSetSummary {
             total_candidate_count: 3,
             eligible_candidate_count: 1,
@@ -178,6 +188,9 @@ fn scheduler_run_admitted_rejects_inconsistent_policy_trace_counts() {
     };
     payload.technical_fit_selection_policy_trace = Some(SchedulerSelectionPolicyTrace {
         policy_version: 1,
+        policy_phase: Some(SchedulerSelectionPolicyPhase::CandidateRanking),
+        decision_code: Some(SchedulerSelectionDecisionCode::SelectedCandidate),
+        history_threshold_state: Some(SchedulerSelectionHistoryThresholdState::NotEvaluated),
         candidate_set_summary: Some(SchedulerCandidateSetSummary {
             total_candidate_count: 2,
             eligible_candidate_count: 2,

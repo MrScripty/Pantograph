@@ -1,5 +1,9 @@
 use super::*;
-use crate::{WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitSelectionPolicyTrace};
+use crate::{
+    WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitDecisionCode,
+    WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitPolicyPhase,
+    WorkflowTechnicalFitSelectionPolicyTrace,
+};
 
 #[tokio::test]
 async fn workflow_execution_session_lifecycle_create_run_close() {
@@ -1033,6 +1037,9 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
         )],
         selection_policy_trace: Some(WorkflowTechnicalFitSelectionPolicyTrace {
             policy_version: 1,
+            policy_phase: Some(WorkflowTechnicalFitPolicyPhase::CandidateRanking),
+            decision_code: Some(WorkflowTechnicalFitDecisionCode::SelectedCandidate),
+            history_threshold_state: Some(WorkflowTechnicalFitHistoryThresholdState::NotEvaluated),
             candidate_set_summary: Some(WorkflowTechnicalFitCandidateSetSummary {
                 total_candidate_count: 2,
                 eligible_candidate_count: 2,
@@ -1118,6 +1125,15 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
     assert!(admission_event
         .payload_json
         .contains("\"technical_fit_selection_policy_trace\""));
+    assert!(admission_event
+        .payload_json
+        .contains("\"policy_phase\":\"candidate_ranking\""));
+    assert!(admission_event
+        .payload_json
+        .contains("\"decision_code\":\"selected_candidate\""));
+    assert!(admission_event
+        .payload_json
+        .contains("\"history_threshold_state\":\"not_evaluated\""));
     assert!(admission_event
         .payload_json
         .contains("\"ranking_reason\":\"candidate_priority\""));

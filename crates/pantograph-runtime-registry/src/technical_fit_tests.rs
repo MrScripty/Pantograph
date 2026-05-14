@@ -305,6 +305,9 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
         )],
         selection_policy_trace: Some(RuntimeTechnicalFitSelectionPolicyTrace {
             policy_version: 1,
+            policy_phase: Some(RuntimeTechnicalFitPolicyPhase::CandidateRanking),
+            decision_code: Some(RuntimeTechnicalFitDecisionCode::SelectedCandidate),
+            history_threshold_state: Some(RuntimeTechnicalFitHistoryThresholdState::NotEvaluated),
             candidate_set_summary: Some(RuntimeTechnicalFitCandidateSetSummary {
                 total_candidate_count: 2,
                 eligible_candidate_count: 1,
@@ -380,6 +383,18 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
         .as_ref()
         .expect("selection policy trace should normalize");
     assert_eq!(trace.policy_version, 1);
+    assert_eq!(
+        trace.policy_phase,
+        Some(RuntimeTechnicalFitPolicyPhase::CandidateRanking)
+    );
+    assert_eq!(
+        trace.decision_code,
+        Some(RuntimeTechnicalFitDecisionCode::SelectedCandidate)
+    );
+    assert_eq!(
+        trace.history_threshold_state,
+        Some(RuntimeTechnicalFitHistoryThresholdState::NotEvaluated)
+    );
     assert_eq!(
         trace.ranking_reason.as_deref(),
         Some("explicit_backend_override")

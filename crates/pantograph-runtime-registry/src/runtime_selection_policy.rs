@@ -6,10 +6,12 @@ use crate::technical_fit::{
     compare_candidate_ids, decision_from_candidate_with_trace,
     explicit_device_unavailable_diagnostics, unselected_decision_with_device_diagnostics,
     RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateSetSummary,
-    RuntimeTechnicalFitDecision, RuntimeTechnicalFitDeviceDiagnostic,
-    RuntimeTechnicalFitDeviceDiagnosticCode, RuntimeTechnicalFitDeviceDiagnosticSeverity,
-    RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor, RuntimeTechnicalFitReason,
-    RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
+    RuntimeTechnicalFitDecision, RuntimeTechnicalFitDecisionCode,
+    RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
+    RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitDevicePolicy,
+    RuntimeTechnicalFitFactor, RuntimeTechnicalFitHistoryThresholdState,
+    RuntimeTechnicalFitPolicyPhase, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
+    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
     RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitSelectionPolicyTrace,
     RuntimeTechnicalFitWarmupState,
 };
@@ -261,6 +263,9 @@ fn automatic_selection_policy_trace(
     let candidate_set_summary = automatic_candidate_set_summary(request, eligible_candidates)?;
     Ok(RuntimeTechnicalFitSelectionPolicyTrace {
         policy_version: TECHNICAL_FIT_SELECTION_POLICY_VERSION,
+        policy_phase: Some(RuntimeTechnicalFitPolicyPhase::CandidateRanking),
+        decision_code: Some(RuntimeTechnicalFitDecisionCode::SelectedCandidate),
+        history_threshold_state: Some(RuntimeTechnicalFitHistoryThresholdState::NotEvaluated),
         candidate_set_summary: Some(candidate_set_summary),
         ranking_reason: Some("candidate_priority".to_string()),
         exploration_reason: controlled_exploration_seed_basis

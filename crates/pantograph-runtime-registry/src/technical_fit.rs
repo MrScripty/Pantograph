@@ -532,10 +532,34 @@ impl RuntimeTechnicalFitCandidateSetSummary {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeTechnicalFitPolicyPhase {
+    CandidateRanking,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeTechnicalFitDecisionCode {
+    SelectedCandidate,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeTechnicalFitHistoryThresholdState {
+    NotEvaluated,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeTechnicalFitSelectionPolicyTrace {
     pub policy_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_phase: Option<RuntimeTechnicalFitPolicyPhase>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_code: Option<RuntimeTechnicalFitDecisionCode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_threshold_state: Option<RuntimeTechnicalFitHistoryThresholdState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub candidate_set_summary: Option<RuntimeTechnicalFitCandidateSetSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -550,6 +574,9 @@ impl RuntimeTechnicalFitSelectionPolicyTrace {
     pub fn normalized(&self) -> Self {
         Self {
             policy_version: self.policy_version,
+            policy_phase: self.policy_phase,
+            decision_code: self.decision_code,
+            history_threshold_state: self.history_threshold_state,
             candidate_set_summary: self
                 .candidate_set_summary
                 .as_ref()

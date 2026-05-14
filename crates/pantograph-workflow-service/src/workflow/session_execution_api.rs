@@ -10,7 +10,9 @@ use pantograph_diagnostics_ledger::{
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
     SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
-    SchedulerRunDelayedPayload, SchedulerSelectionPolicyTrace,
+    SchedulerRunDelayedPayload, SchedulerSelectionDecisionCode,
+    SchedulerSelectionHistoryThresholdState, SchedulerSelectionPolicyPhase,
+    SchedulerSelectionPolicyTrace,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
@@ -23,7 +25,11 @@ use crate::graph::{
     WorkflowExecutionSessionKind, WorkflowGraph, WorkflowGraphRunSettings,
 };
 use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
-use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
+use crate::technical_fit::{
+    WorkflowTechnicalFitDecision, WorkflowTechnicalFitDecisionCode,
+    WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitOverride,
+    WorkflowTechnicalFitPolicyPhase,
+};
 
 use super::diagnostic_errors::{
     WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticRunContext, WorkflowDiagnosticRunScope,
@@ -2056,6 +2062,11 @@ fn scheduler_selection_policy_trace(
     let trace = decision.selection_policy_trace.as_ref()?;
     Some(SchedulerSelectionPolicyTrace {
         policy_version: trace.policy_version,
+        policy_phase: trace.policy_phase.map(scheduler_selection_policy_phase),
+        decision_code: trace.decision_code.map(scheduler_selection_decision_code),
+        history_threshold_state: trace
+            .history_threshold_state
+            .map(scheduler_selection_history_threshold_state),
         candidate_set_summary: trace.candidate_set_summary.as_ref().map(|summary| {
             SchedulerCandidateSetSummary {
                 total_candidate_count: summary.total_candidate_count,
@@ -2068,6 +2079,36 @@ fn scheduler_selection_policy_trace(
         exploration_reason: trace.exploration_reason.clone(),
         seed_basis: trace.seed_basis.clone(),
     })
+}
+
+fn scheduler_selection_policy_phase(
+    phase: WorkflowTechnicalFitPolicyPhase,
+) -> SchedulerSelectionPolicyPhase {
+    match phase {
+        WorkflowTechnicalFitPolicyPhase::CandidateRanking => {
+            SchedulerSelectionPolicyPhase::CandidateRanking
+        }
+    }
+}
+
+fn scheduler_selection_decision_code(
+    code: WorkflowTechnicalFitDecisionCode,
+) -> SchedulerSelectionDecisionCode {
+    match code {
+        WorkflowTechnicalFitDecisionCode::SelectedCandidate => {
+            SchedulerSelectionDecisionCode::SelectedCandidate
+        }
+    }
+}
+
+fn scheduler_selection_history_threshold_state(
+    state: WorkflowTechnicalFitHistoryThresholdState,
+) -> SchedulerSelectionHistoryThresholdState {
+    match state {
+        WorkflowTechnicalFitHistoryThresholdState::NotEvaluated => {
+            SchedulerSelectionHistoryThresholdState::NotEvaluated
+        }
+    }
 }
 
 fn scheduler_runtime_slot_reservation_id(workflow_run_id: &WorkflowRunId) -> String {

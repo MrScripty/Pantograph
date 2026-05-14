@@ -847,8 +847,17 @@ export interface WorkflowTechnicalFitCandidateSetSummary {
   eligible_candidate_ids?: string[];
 }
 
+export type WorkflowTechnicalFitPolicyPhase = 'candidate_ranking';
+
+export type WorkflowTechnicalFitDecisionCode = 'selected_candidate';
+
+export type WorkflowTechnicalFitHistoryThresholdState = 'not_evaluated';
+
 export interface WorkflowTechnicalFitSelectionPolicyTrace {
   policy_version: number;
+  policy_phase?: WorkflowTechnicalFitPolicyPhase | null;
+  decision_code?: WorkflowTechnicalFitDecisionCode | null;
+  history_threshold_state?: WorkflowTechnicalFitHistoryThresholdState | null;
   candidate_set_summary?: WorkflowTechnicalFitCandidateSetSummary | null;
   ranking_reason?: string | null;
   exploration_reason?: string | null;

@@ -60,13 +60,15 @@ pub use scheduler::{
 pub use technical_fit::{
     build_workflow_technical_fit_request, WorkflowTechnicalFitCandidateSetSummary,
     WorkflowTechnicalFitCompatibilityIssue, WorkflowTechnicalFitCompatibilityReport,
-    WorkflowTechnicalFitDecision, WorkflowTechnicalFitDeviceClass,
-    WorkflowTechnicalFitDeviceDiagnostic, WorkflowTechnicalFitDeviceDiagnosticCode,
-    WorkflowTechnicalFitDeviceDiagnosticSeverity, WorkflowTechnicalFitDevicePolicy,
+    WorkflowTechnicalFitDecision, WorkflowTechnicalFitDecisionCode,
+    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDeviceDiagnostic,
+    WorkflowTechnicalFitDeviceDiagnosticCode, WorkflowTechnicalFitDeviceDiagnosticSeverity,
+    WorkflowTechnicalFitDevicePolicy, WorkflowTechnicalFitHistoryThresholdState,
     WorkflowTechnicalFitObservedThroughputHint, WorkflowTechnicalFitOverride,
-    WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
-    WorkflowTechnicalFitRequest, WorkflowTechnicalFitResourceEstimate,
-    WorkflowTechnicalFitSelectionMode, WorkflowTechnicalFitSelectionPolicyTrace,
+    WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
+    WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest,
+    WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitSelectionMode,
+    WorkflowTechnicalFitSelectionPolicyTrace,
 };
 pub use trace::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,
