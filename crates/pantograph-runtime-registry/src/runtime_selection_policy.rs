@@ -248,7 +248,7 @@ pub(crate) fn select_runtime_technical_fit_automatically(
     RuntimeSelectionDecision::new(unselected_decision_with_device_diagnostics(
         RuntimeTechnicalFitSelectionMode::Automatic,
         reasons,
-        automatic_no_valid_candidate_diagnostics(normalized),
+        automatic_no_valid_candidate_diagnostics(normalized, scoped_diagnostic_candidate),
     ))
 }
 
@@ -372,10 +372,17 @@ fn diagnostic_candidate<'a>(
 
 fn automatic_no_valid_candidate_diagnostics(
     request: &RuntimeTechnicalFitRequest,
+    diagnostic_candidate: Option<&RuntimeTechnicalFitCandidate>,
 ) -> Vec<RuntimeTechnicalFitDeviceDiagnostic> {
     let explicit_device_diagnostics = explicit_device_unavailable_diagnostics(request);
     if !explicit_device_diagnostics.is_empty() {
         return explicit_device_diagnostics;
+    }
+
+    if let Some(candidate) = diagnostic_candidate {
+        if !candidate.device_diagnostics.is_empty() {
+            return candidate.device_diagnostics.clone();
+        }
     }
 
     vec![RuntimeTechnicalFitDeviceDiagnostic {

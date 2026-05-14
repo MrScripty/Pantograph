@@ -88,19 +88,50 @@ pub(crate) async fn workflow_technical_fit_decision(
     let package_facts =
         resolve_required_model_package_facts(host, &request.runtime_requirements.required_models)
             .await;
-    let runtime_request = if package_facts.is_empty() {
-        build_runtime_technical_fit_request(request, runtime_snapshot, &runtime_capabilities)
-    } else {
-        build_runtime_technical_fit_request_with_backend_package_facts(
-            request,
-            runtime_snapshot,
-            &runtime_capabilities,
-            &available_backends,
-            &package_facts,
-        )
-    };
+    let runtime_request = build_runtime_technical_fit_request_for_resolved_package_facts(
+        request,
+        runtime_snapshot,
+        &runtime_capabilities,
+        &available_backends,
+        &package_facts,
+    );
     let decision = select_runtime_technical_fit(&runtime_request);
     Ok(Some(project_workflow_technical_fit_decision(&decision)))
+}
+
+fn build_runtime_technical_fit_request_for_resolved_package_facts(
+    request: &WorkflowTechnicalFitRequest,
+    runtime_snapshot: Option<RuntimeRegistrySnapshot>,
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+    available_backends: &[inference::BackendInfo],
+    package_facts: &[inference::ResolvedModelPackageFacts],
+) -> RuntimeTechnicalFitRequest {
+    let missing_package_fact_candidates = missing_required_model_package_fact_candidates(
+        &request.runtime_requirements.required_models,
+        package_facts,
+    );
+    if !missing_package_fact_candidates.is_empty() {
+        let mut runtime_request =
+            build_runtime_technical_fit_request(request, runtime_snapshot, &[]);
+        runtime_request.candidates = missing_package_fact_candidates;
+        return runtime_request.normalized();
+    }
+
+    if package_facts.is_empty() {
+        return build_runtime_technical_fit_request(
+            request,
+            runtime_snapshot,
+            runtime_capabilities,
+        );
+    }
+
+    build_runtime_technical_fit_request_with_backend_package_facts(
+        request,
+        runtime_snapshot,
+        runtime_capabilities,
+        available_backends,
+        package_facts,
+    )
 }
 
 pub fn build_runtime_technical_fit_request(
@@ -543,6 +574,64 @@ fn pumas_runtime_candidate_without_capability(
         compatibility_report,
         compatibility_issue_count,
         compatibility_issues,
+    }
+}
+
+fn missing_required_model_package_fact_candidates(
+    required_model_ids: &[String],
+    package_facts: &[inference::ResolvedModelPackageFacts],
+) -> Vec<RuntimeTechnicalFitCandidate> {
+    let resolved_model_ids = package_facts
+        .iter()
+        .map(|facts| facts.model_ref.model_id.trim().to_string())
+        .filter(|model_id| !model_id.is_empty())
+        .collect::<HashSet<_>>();
+    let mut seen = HashSet::new();
+    required_model_ids
+        .iter()
+        .map(|model_id| model_id.trim())
+        .filter(|model_id| !model_id.is_empty())
+        .filter(|model_id| seen.insert((*model_id).to_string()))
+        .filter(|model_id| !resolved_model_ids.contains(*model_id))
+        .map(missing_model_package_facts_candidate)
+        .collect()
+}
+
+fn missing_model_package_facts_candidate(model_id: &str) -> RuntimeTechnicalFitCandidate {
+    RuntimeTechnicalFitCandidate {
+        candidate_id: format!("missing_model_package_facts|{}", model_id),
+        runtime_id: None,
+        runtime_variant_id: None,
+        backend_key: None,
+        model_id: Some(model_id.to_string()),
+        device_class: None,
+        selected_device_id: None,
+        resource_estimate: None,
+        observed_throughput_hint: None,
+        device_diagnostics: vec![missing_model_package_facts_diagnostic(model_id)],
+        source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
+        context_window_tokens: None,
+        residency_state: None,
+        warmup_state: None,
+        supports_runtime_requirements: false,
+        compatibility_report: None,
+        compatibility_issue_count: 0,
+        compatibility_issues: Vec::new(),
+    }
+}
+
+fn missing_model_package_facts_diagnostic(model_id: &str) -> RuntimeTechnicalFitDeviceDiagnostic {
+    RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: format!(
+            "required model '{}' did not resolve to Pumas package facts for technical-fit planning",
+            model_id
+        ),
+        device_class: None,
+        device_id: None,
+        runtime_variant_id: None,
+        backend_key: None,
     }
 }
 
@@ -1058,6 +1147,9 @@ fn project_device_diagnostic_code(
         }
         RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant => {
             WorkflowTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts
         }
         RuntimeTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected => {
             WorkflowTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected
@@ -2178,6 +2270,58 @@ mod tests {
         assert_eq!(
             decision.selected_device_class,
             Some(RuntimeTechnicalFitDeviceClass::Cuda)
+        );
+    }
+
+    #[test]
+    fn missing_required_package_facts_block_capability_only_selection() {
+        let workflow_request = build_workflow_technical_fit_request(
+            "workflow-a",
+            &WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: Some(4096),
+                estimated_peak_ram_mb: Some(8192),
+                estimated_min_vram_mb: Some(2048),
+                estimated_min_ram_mb: Some(4096),
+                estimation_confidence: "high".to_string(),
+                required_models: vec!["llm/llama/missing-facts".to_string()],
+                required_backends: vec!["llama_cpp".to_string()],
+                required_extensions: Vec::new(),
+            },
+            None,
+            Some("session-a"),
+            Some("interactive"),
+            None,
+        );
+
+        let runtime_request = build_runtime_technical_fit_request_for_resolved_package_facts(
+            &workflow_request,
+            None,
+            &[runtime_capability()],
+            &[],
+            &[],
+        );
+
+        assert_eq!(runtime_request.candidates.len(), 1);
+        assert_eq!(
+            runtime_request.candidates[0].candidate_id,
+            "missing_model_package_facts|llm/llama/missing-facts"
+        );
+        assert_eq!(
+            runtime_request.candidates[0].device_diagnostics[0].code,
+            RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts
+        );
+
+        let registry_decision = select_runtime_technical_fit(&runtime_request);
+        assert_eq!(registry_decision.selected_candidate_id, None);
+        assert_eq!(
+            registry_decision.device_diagnostics[0].code,
+            RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts
+        );
+
+        let workflow_decision = project_workflow_technical_fit_decision(&registry_decision);
+        assert_eq!(
+            workflow_decision.device_diagnostics[0].code,
+            WorkflowTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts
         );
     }
 

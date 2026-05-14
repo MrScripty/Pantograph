@@ -88,6 +88,14 @@ typed diagnostic and the canonical design is fixed.
     required Pumas fact absence and documented candidate-cap overflow still
     need typed candidate-synthesis diagnostics before trace/admission/history
     slices.
+  - 2026-05-14 partial: missing required Pumas package facts now synthesize
+    non-selectable `missing_model_package_facts` candidates, and automatic
+    no-valid technical-fit decisions surface scoped candidate diagnostics
+    instead of replacing them with a generic no-valid-candidate message. Host
+    technical-fit planning no longer allows capability-only selection when a
+    required model cannot be resolved to package facts. Remaining follow-up:
+    documented candidate-cap overflow still needs a typed
+    candidate-synthesis diagnostic before trace/admission/history slices.
 - [x] Add a common backend-adapter capability contract for llama.cpp, PyTorch,
   vLLM, Candle, and future MLX. The contract reports facts and performs
   backend-specific translation; it must not rank candidates across backends or
@@ -4109,6 +4117,37 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: candidate synthesis still needs typed diagnostics for
     required Pumas fact absence and documented candidate-cap overflow before
     append-only trace/admission/history work.
+- 2026-05-14 slice: missing required Pumas package-fact diagnostics.
+  - Smallest useful vertical slice: add a typed
+    `missing_model_package_facts` technical-fit diagnostic, synthesize
+    non-selectable candidates for required models whose Pumas package facts
+    were unavailable, and have automatic no-valid decisions return scoped
+    candidate diagnostics when present.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `src/services/workflow/types.ts`, and this plan directory.
+  - No-fallback/no-legacy confirmation: host technical-fit planning now fails
+    candidate selection when required model package facts are absent instead of
+    selecting from generic runtime capability facts. The slice adds a canonical
+    diagnostic and TypeScript mirror value; it does not add compatibility
+    aliases, legacy graph behavior, generated files, lockfile changes,
+    workflow fixtures, diagnostics-ledger schema changes, or runtime loading.
+  - Verification passed:
+    `cargo test -p pantograph-runtime-registry selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid`,
+    `cargo test -p pantograph-embedded-runtime missing_required_package_facts_block_capability_only_selection`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`, `npm run
+    typecheck`, and `cargo fmt --package pantograph-embedded-runtime --package
+    pantograph-runtime-registry --package pantograph-workflow-service`; `git
+    diff --check`.
+  - Remaining follow-up: candidate synthesis still needs documented
+    candidate-cap overflow diagnostics before append-only
+    trace/admission/history work.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract

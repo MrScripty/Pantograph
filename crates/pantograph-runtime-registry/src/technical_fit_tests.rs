@@ -1225,6 +1225,72 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
 }
 
 #[test]
+fn selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid() {
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: vec!["model-a".to_string()],
+        required_backend_keys: Vec::new(),
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![RuntimeTechnicalFitCandidate {
+            candidate_id: "missing_model_package_facts|model-a".to_string(),
+            runtime_id: None,
+            backend_key: None,
+            model_id: Some("model-a".to_string()),
+            runtime_variant_id: None,
+            device_class: None,
+            selected_device_id: None,
+            resource_estimate: None,
+            observed_throughput_hint: None,
+            device_diagnostics: vec![RuntimeTechnicalFitDeviceDiagnostic {
+                code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts,
+                severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+                message: "required model did not resolve to Pumas package facts".to_string(),
+                device_class: None,
+                device_id: None,
+                runtime_variant_id: None,
+                backend_key: None,
+            }],
+            source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
+            context_window_tokens: None,
+            residency_state: None,
+            warmup_state: None,
+            supports_runtime_requirements: false,
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        }],
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selection_mode,
+        RuntimeTechnicalFitSelectionMode::Automatic
+    );
+    assert_eq!(decision.selected_candidate_id, None);
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::MissingCandidateData
+            && reason.candidate_id.as_deref() == Some("missing_model_package_facts|model-a")
+    }));
+    assert_eq!(
+        decision.device_diagnostics,
+        vec![RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "required model did not resolve to Pumas package facts".to_string(),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: None,
+            backend_key: None,
+        }]
+    );
+}
+
+#[test]
 fn selector_prefers_more_headroom_under_queue_pressure() {
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: RuntimeRegistrySnapshot {

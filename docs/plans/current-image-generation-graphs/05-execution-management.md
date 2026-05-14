@@ -3054,6 +3054,35 @@ Worker rules:
 - Remaining follow-up: candidate synthesis still needs typed diagnostics for
   required Pumas fact absence and documented candidate-cap overflow before
   append-only trace/admission/history work.
+- 2026-05-14 missing required Pumas package-fact diagnostics slice: smallest
+  useful vertical slice was to add a typed `missing_model_package_facts`
+  technical-fit diagnostic, synthesize non-selectable candidates for required
+  models whose Pumas package facts were unavailable, and have automatic
+  no-valid decisions return scoped candidate diagnostics when present. Allowed
+  write set: `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+  `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+  `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`,
+  `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+  `crates/pantograph-workflow-service/src/technical_fit.rs`,
+  `src/services/workflow/types.ts`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because host
+  technical-fit planning now fails candidate selection when required model
+  package facts are absent instead of selecting from generic runtime capability
+  facts. The slice adds a canonical diagnostic and TypeScript mirror value; it
+  does not add compatibility aliases, legacy graph behavior, generated files,
+  lockfile changes, workflow fixtures, diagnostics-ledger schema changes, or
+  runtime loading.
+- Verification passed:
+  `cargo test -p pantograph-runtime-registry selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid`,
+  `cargo test -p pantograph-embedded-runtime missing_required_package_facts_block_capability_only_selection`,
+  `cargo test -p pantograph-runtime-registry technical_fit`, `cargo test -p
+  pantograph-embedded-runtime technical_fit`, `cargo test -p
+  pantograph-workflow-service technical_fit`, `npm run typecheck`, and `cargo
+  fmt --package pantograph-embedded-runtime --package pantograph-runtime-registry
+  --package pantograph-workflow-service`; `git diff --check`.
+- Remaining follow-up: candidate synthesis still needs documented
+  candidate-cap overflow diagnostics before append-only trace/admission/history
+  work.
 
 ### Traceability Links
 

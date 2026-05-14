@@ -206,6 +206,7 @@ pub enum RuntimeTechnicalFitDeviceDiagnosticCode {
     BackendIncompatible,
     UnsupportedDeviceClass,
     MissingRuntimeVariant,
+    MissingModelPackageFacts,
     LegacyDeviceRejected,
 }
 
