@@ -386,9 +386,10 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
 - The policy-engine boundary must be introduced before any new automatic
   ranking behavior is added. The existing technical-fit call path may remain
   as an adapter facade, but the changeable ranking/exploration/history
-  algorithm must move behind explicit scheduler contracts such as
-  `SchedulerDecisionInput`, `SchedulerDecision`, `SchedulerPolicyTrace`, and
-  `SchedulerRuntimeHistorySummary`. The first slice must preserve current
+  algorithm must move behind execution-placement contracts named for this
+  policy domain, such as `RuntimeSelectionDecisionInput`,
+  `RuntimeSelectionDecision`, `RuntimeSelectionPolicyTrace`, and
+  `RuntimeSelectionHistorySummary`. The first slice must preserve current
   selector behavior through delegation, not through a compatibility shim or a
   second policy owner.
 - Naming must distinguish execution placement from the existing workflow
@@ -398,24 +399,34 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   reuse `WorkflowSchedulerDecisionReason` for backend/runtime/device placement
   reasons. Queue/admission policy remains owned by
   `pantograph-workflow-service::scheduler`; execution placement policy remains
-  owned by the runtime-selection/technical-fit boundary.
+  owned by the runtime-selection/technical-fit boundary. Contract, trace,
+  history, and diagnostic type names must use `RuntimeSelection*`,
+  `ExecutionPlacement*`, or another similarly specific prefix rather than bare
+  `Scheduler*`.
 - Candidate synthesis must be policy-neutral. Pumas lookup failures, stale
   package facts, unavailable selector access, unsupported package facts, and
   missing backend/runtime capability facts must be projected as typed
   candidate diagnostics when facts are required for canonical planning. They
   must not silently degrade into capability-only selection. Candidate synthesis
   must emit every valid backend/runtime-variant/device candidate available
-  from normalized facts; it must not preselect the first available runtime
-  variant or collapse alternatives before scheduler policy can compare them.
+  from normalized facts through one shared variant-expansion helper; it must
+  not preselect the first available runtime variant or collapse alternatives
+  before scheduler policy can compare them. Candidate set growth must be
+  bounded by a documented cap, and cap overflow must fail candidate selection
+  with a typed diagnostic recorded to scheduler trace/ledger surfaces.
 - Scheduler history and trace evidence must be typed enough to survive
   algorithm changes. Scheduler ranking must not reuse the UI-oriented workflow
   timing expectation API, because that API can use a different sample
   threshold and broaden runtime-specific history. Instead, diagnostics-ledger
   must expose a bounded scheduler history summary keyed by typed workflow,
   task/model, backend, runtime variant, and device facts with no broad-history
-  fallback. Policy traces should keep display strings only as supplementary
-  detail; scheduler phase, decision code, history-threshold state, and bounded
-  per-candidate history evidence must be append-only typed fields.
+  fallback. The five-run threshold applies per comparable
+  workflow/task/model/backend/runtime-variant/device candidate key; before that
+  threshold is met for each valid candidate, policy must use facts plus
+  controlled exploration instead of broadening history. Policy traces should
+  keep display strings only as supplementary detail; scheduler phase, decision
+  code, history-threshold state, and bounded per-candidate history evidence
+  must be append-only typed fields.
 - Scheduler policy implementation must preserve standards dependency
   direction. The pure policy module may depend only on scheduler/runtime
   contract types and deterministic helpers. It must not depend on
@@ -442,9 +453,11 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   automatic technical-fit selection into the named pure runtime-selection
   policy while preserving behavior; then add internal validated decision input
   and output types behind the existing serde facade; then make candidate
-  synthesis emit all required typed diagnostics and all valid variants; then
-  add typed append-only trace/admission fields and selected-device propagation;
-  then add diagnostics-ledger scheduler history summaries; only after those
+  synthesis emit all required typed diagnostics and all valid variants through
+  the shared bounded variant-expansion helper; then add typed append-only
+  trace/admission fields and selected-device propagation to both
+  scheduler-admission and scheduler-reservation event paths; then add
+  diagnostics-ledger scheduler history summaries; only after those
   slices may the five-run threshold and history-backed ranking algorithm be
   implemented.
 - Scheduler automatic selection should prefer already-ready compatible

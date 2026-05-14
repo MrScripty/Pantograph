@@ -3910,14 +3910,15 @@ typed diagnostic and the canonical design is fixed.
     adapters, inference request normalization, frontend presenters, or
     diagnostics projections.
   - 2026-05-14 scheduler contract requirement: add or reuse explicit
-    `SchedulerDecisionInput`, `SchedulerDecision`, policy trace, and
-    scheduler history summary contracts before changing automatic ranking.
-    Algorithm changes may be implemented by swapping policy modules or
-    updating policy configuration; cross-layer DTO changes must be append-only
-    and serde/fixture tested. This preserves the no-fallback rule because the
-    policy returns typed no-decision diagnostics when canonical planning cannot
-    legally select a candidate instead of falling through to legacy runtime,
-    backend, device, or graph behavior.
+    execution-placement contracts named for this policy domain, such as
+    `RuntimeSelectionDecisionInput`, `RuntimeSelectionDecision`,
+    `RuntimeSelectionPolicyTrace`, and `RuntimeSelectionHistorySummary`, before
+    changing automatic ranking. Algorithm changes may be implemented by
+    swapping policy modules or updating policy configuration; cross-layer DTO
+    changes must be append-only and serde/fixture tested. This preserves the
+    no-fallback rule because the policy returns typed no-decision diagnostics
+    when canonical planning cannot legally select a candidate instead of
+    falling through to legacy runtime, backend, device, or graph behavior.
   - 2026-05-14 codebase impact review: the current runtime selector is already
     synchronous and pure, but ranking, filtering, exploration, trace assembly,
     and technical-fit DTOs are still combined in
@@ -3934,13 +3935,20 @@ typed diagnostic and the canonical design is fixed.
     collapse runtime variants before policy sees them. Canonical planning must
     instead project required-fact absence as typed candidate diagnostics and
     emit all valid backend/runtime-variant/device candidates for policy to
-    compare.
+    compare. The implementation must use one shared variant-expansion helper
+    rather than separate first-variant and all-variants paths, and it must fail
+    candidate selection with a typed scheduler diagnostic if normalized facts
+    exceed a documented candidate cap.
   - 2026-05-14 diagnostics/history finding: scheduler ranking must not reuse
     the existing workflow timing expectation API because that API has a
     different minimum sample policy and may broaden runtime-specific history
     when runtime-refined samples are insufficient. Add a separate bounded
     diagnostics-ledger scheduler history summary keyed by typed workflow
     identity, task/model, backend, runtime variant, and device facts. The
+    five-run threshold applies per comparable
+    workflow/task/model/backend/runtime-variant/device candidate key; until
+    each valid candidate reaches that threshold, policy must rely on facts plus
+    recorded controlled exploration rather than broadening history. The
     scheduler input receives summaries; the pure policy module must not query
     the ledger.
   - 2026-05-14 trace/admission finding: current policy traces expose string
@@ -3949,9 +3957,9 @@ typed diagnostic and the canonical design is fixed.
     updates need append-only typed fields for policy phase, decision code,
     history-threshold state, and bounded per-candidate history evidence so
     frontend and ledger projections do not need to understand algorithm
-    internals. Admission must also propagate selected device class/id from the
-    scheduler decision instead of leaving selected device data empty when a
-    decision resolved it.
+    internals. Admission and reservation-change events must also propagate
+    selected device class/id from the scheduler decision instead of leaving
+    selected device data empty when a decision resolved it.
   - 2026-05-14 standards iteration: implementation of the scheduler boundary
     must preserve layered dependency direction and sync-core/async-shell
     design. The pure policy module may depend only on scheduler/runtime
@@ -3986,18 +3994,22 @@ typed diagnostic and the canonical design is fixed.
     `scheduler` module or reuse queue/admission reason types for execution
     placement. Use a specific module name such as `runtime_selection_policy`,
     `execution_placement_policy`, or `technical_fit_policy`; keep admission
-    scheduling and execution placement as separate policy domains.
+    scheduling and execution placement as separate policy domains. Contract,
+    trace, history, and diagnostic type names must use `RuntimeSelection*`,
+    `ExecutionPlacement*`, or another similarly specific prefix rather than
+    bare `Scheduler*`.
   - 2026-05-14 required implementation order: (1) extract current automatic
     technical-fit selection into the named pure runtime-selection policy while
     preserving behavior through facade delegation tests, (2) add internal
     validated decision input/output types behind existing public serde DTOs,
     (3) fix candidate synthesis so required Pumas fact absence emits typed
     diagnostics and all valid backend/runtime-variant/device candidates are
-    visible to policy, (4) add append-only typed trace/admission fields and
-    selected-device propagation, (5) add diagnostics-ledger scheduler history
-    summaries with isolated SQLite tests and no broad-history fallback, and
-    only then (6) implement the five-run threshold and history-backed ranking
-    algorithm.
+    visible to policy through a shared bounded variant-expansion helper, (4)
+    add append-only typed trace/admission fields and selected-device
+    propagation to scheduler-admission and scheduler-reservation event paths,
+    (5) add diagnostics-ledger scheduler history summaries with isolated
+    SQLite tests and no broad-history fallback, and only then (6) implement the
+    five-run threshold and history-backed ranking algorithm.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract
