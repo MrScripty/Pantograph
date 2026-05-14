@@ -481,6 +481,8 @@ pub struct SchedulerRunAdmittedPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_backend_key: Option<String>,
     #[serde(default)]
+    pub selected_device_class: Option<String>,
+    #[serde(default)]
     pub selected_device_id: Option<String>,
     #[serde(default)]
     pub selected_network_node_id: Option<String>,
@@ -602,6 +604,11 @@ impl SchedulerRunAdmittedPayload {
             MAX_ID_LEN,
         )?;
         validate_optional_text(
+            "selected_device_class",
+            self.selected_device_class.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
             "selected_device_id",
             self.selected_device_id.as_deref(),
             MAX_ID_LEN,
@@ -659,6 +666,8 @@ pub struct SchedulerReservationChangedPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_runtime_variant_id: Option<String>,
     #[serde(default)]
+    pub selected_device_class: Option<String>,
+    #[serde(default)]
     pub selected_device_id: Option<String>,
     #[serde(default)]
     pub selected_network_node_id: Option<String>,
@@ -678,6 +687,11 @@ impl SchedulerReservationChangedPayload {
         validate_optional_text(
             "selected_runtime_variant_id",
             self.selected_runtime_variant_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_device_class",
+            self.selected_device_class.as_deref(),
             MAX_ID_LEN,
         )?;
         validate_optional_text(

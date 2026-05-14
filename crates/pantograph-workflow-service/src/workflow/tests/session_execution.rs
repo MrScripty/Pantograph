@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     WorkflowTechnicalFitCandidateSetSummary, WorkflowTechnicalFitDecisionCode,
-    WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitPolicyPhase,
-    WorkflowTechnicalFitSelectionPolicyTrace,
+    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitHistoryThresholdState,
+    WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitSelectionPolicyTrace,
 };
 
 #[tokio::test]
@@ -1026,7 +1026,7 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
         selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
         selected_backend_key: Some("llama_cpp".to_string()),
         selected_model_id: Some("model-a".to_string()),
-        selected_device_class: None,
+        selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
         selected_device_id: Some("cuda:0".to_string()),
         resource_estimate: None,
         observed_throughput_hint: None,
@@ -1121,6 +1121,9 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
         .contains("\"selected_backend_key\":\"llama_cpp\""));
     assert!(admission_event
         .payload_json
+        .contains("\"selected_device_class\":\"cuda\""));
+    assert!(admission_event
+        .payload_json
         .contains("\"selected_device_id\":\"cuda:0\""));
     assert!(admission_event
         .payload_json
@@ -1207,6 +1210,9 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
         .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\""));
     assert!(reservation_events[0]
         .payload_json
+        .contains("\"selected_device_class\":\"cuda\""));
+    assert!(reservation_events[0]
+        .payload_json
         .contains("\"selected_device_id\":\"cuda:0\""));
     assert!(reservation_events[1]
         .payload_json
@@ -1214,6 +1220,9 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
     assert!(reservation_events[1]
         .payload_json
         .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\""));
+    assert!(reservation_events[1]
+        .payload_json
+        .contains("\"selected_device_class\":\"cuda\""));
     assert!(reservation_events[1]
         .payload_json
         .contains("\"selected_device_id\":\"cuda:0\""));

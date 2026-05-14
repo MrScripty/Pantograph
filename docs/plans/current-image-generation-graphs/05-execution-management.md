@@ -3165,9 +3165,32 @@ Worker rules:
   `npm run typecheck`, and `cargo fmt --package pantograph-runtime-registry
   --package pantograph-embedded-runtime --package pantograph-workflow-service
   --package pantograph-diagnostics-ledger`; `git diff --check`.
-- Remaining follow-up: selected device class propagation and
-  diagnostics-ledger runtime-selection history summaries remain before the
-  five-run threshold ranking algorithm.
+- Remaining follow-up: diagnostics-ledger runtime-selection history summaries
+  remain before the five-run threshold ranking algorithm.
+- 2026-05-14 scheduler selected device class propagation slice: smallest
+  useful vertical slice was to add optional `selected_device_class` to
+  scheduler admission and reservation-changed diagnostics payloads and copy it
+  from the canonical workflow technical-fit decision through the existing
+  workflow-session reservation context. Allowed write set:
+  `crates/pantograph-diagnostics-ledger/src/event.rs`,
+  `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because selected device
+  class is copied only from canonical technical-fit decision facts and
+  serialized as scheduler diagnostic attribution. It does not infer device
+  class from raw device strings, backend config, runtime ids, graph hints,
+  active backend state, or legacy frontend options.
+- Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+  `cargo test -p pantograph-diagnostics-ledger scheduler_run_admitted_payload_round_trips_policy_trace_contract`,
+  `cargo test -p pantograph-workflow-service session_execution`, `cargo test
+  -p pantograph-diagnostics-ledger scheduler_run_admitted`, and `cargo fmt
+  --package pantograph-workflow-service --package pantograph-diagnostics-ledger`;
+  `git diff --check`.
+- Remaining follow-up: diagnostics-ledger runtime-selection history summaries
+  remain before the five-run threshold ranking algorithm.
 
 ### Traceability Links
 

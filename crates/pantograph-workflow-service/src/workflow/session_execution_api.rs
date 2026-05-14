@@ -81,6 +81,7 @@ pub(super) struct SchedulerModelLifecycleEventRequest<'a> {
 struct SchedulerReservationContext {
     selected_runtime_id: Option<String>,
     selected_runtime_variant_id: Option<String>,
+    selected_device_class: Option<String>,
     selected_device_id: Option<String>,
     reserved_model_ids: Vec<String>,
 }
@@ -1369,6 +1370,7 @@ impl WorkflowService {
                             .clone(),
                         selected_backend_key: technical_fit_decision
                             .and_then(|decision| decision.selected_backend_key.clone()),
+                        selected_device_class: reservation_context.selected_device_class.clone(),
                         selected_device_id: reservation_context.selected_device_id.clone(),
                         selected_network_node_id: None,
                         reserved_model_ids: reservation_context.reserved_model_ids.clone(),
@@ -1440,6 +1442,7 @@ impl WorkflowService {
                         selected_runtime_variant_id: reservation_context
                             .selected_runtime_variant_id
                             .clone(),
+                        selected_device_class: reservation_context.selected_device_class.clone(),
                         selected_device_id: reservation_context.selected_device_id.clone(),
                         selected_network_node_id: None,
                         reserved_model_ids: reservation_context.reserved_model_ids.clone(),
@@ -2022,6 +2025,7 @@ fn scheduler_reservation_context(
     Ok(SchedulerReservationContext {
         selected_runtime_id,
         selected_runtime_variant_id: None,
+        selected_device_class: None,
         selected_device_id: None,
         reserved_model_ids,
     })
@@ -2047,12 +2051,30 @@ fn apply_technical_fit_to_reservation_context(
         context.selected_runtime_variant_id = Some(selected_runtime_variant_id.to_string());
     }
 
+    if let Some(selected_device_class) =
+        technical_fit_decision.and_then(|decision| decision.selected_device_class)
+    {
+        context.selected_device_class =
+            Some(workflow_technical_fit_device_class_key(selected_device_class).to_string());
+    }
+
     if let Some(selected_device_id) = technical_fit_decision
         .and_then(|decision| decision.selected_device_id.as_deref())
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
         context.selected_device_id = Some(selected_device_id.to_string());
+    }
+}
+
+fn workflow_technical_fit_device_class_key(
+    device_class: crate::technical_fit::WorkflowTechnicalFitDeviceClass,
+) -> &'static str {
+    match device_class {
+        crate::technical_fit::WorkflowTechnicalFitDeviceClass::Cpu => "cpu",
+        crate::technical_fit::WorkflowTechnicalFitDeviceClass::Cuda => "cuda",
+        crate::technical_fit::WorkflowTechnicalFitDeviceClass::Metal => "metal",
+        crate::technical_fit::WorkflowTechnicalFitDeviceClass::Mps => "mps",
     }
 }
 
