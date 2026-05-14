@@ -75,6 +75,13 @@ the resulting code simple:
   runtime, device, latency, or throughput preferences, but those preferences
   are intent only. Invalid explicit preferences fail with diagnostics rather
   than being silently replaced.
+- Scheduler algorithms are intentionally changeable policy. Scheduler ranking,
+  exploration, history weighting, retry/reschedule policy, and future learned
+  placement logic must live behind stable, versioned scheduler input and
+  decision contracts. Workflow graphs, inference nodes, runtime loading,
+  Pumas fact ownership, diagnostics storage, frontend DTOs, and backend
+  adapters must not need algorithm-specific changes when the scheduler policy
+  is revised.
 - Transformers ecosystem naming and generation-option conventions guide
   Pantograph's canonical task/model/request semantics until backend-specific
   adapter translation is required.

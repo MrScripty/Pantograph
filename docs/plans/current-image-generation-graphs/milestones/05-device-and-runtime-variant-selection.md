@@ -3895,6 +3895,29 @@ typed diagnostic and the canonical design is fixed.
     state must become typed diagnostics. They must not be silently normalized,
     capped, dropped from history, or converted into successful workflow
     execution without scheduler-owned retry/termination decisions.
+  - 2026-05-14 policy-boundary decision: scheduler algorithms are expected to
+    change often, so the implementation must make policy replacement cheap.
+    Runtime ranking, controlled exploration, history weighting, retry/
+    reschedule policy, and future learned placement must live behind a stable
+    scheduler policy-engine contract. The orchestration layer gathers Pumas
+    package facts, runtime registry candidate facts, resource snapshots,
+    diagnostics-ledger history summaries, and user intent, then projects them
+    into a normalized scheduler input DTO. The policy engine must be
+    synchronous and side-effect free, returning a typed selected candidate or
+    typed diagnostics plus bounded decision trace evidence. It must not query
+    Pumas or the ledger directly, inspect workflow graph internals, load
+    runtimes, mutate reservations, or hide ranking behavior in backend
+    adapters, inference request normalization, frontend presenters, or
+    diagnostics projections.
+  - 2026-05-14 scheduler contract requirement: add or reuse explicit
+    `SchedulerDecisionInput`, `SchedulerDecision`, policy trace, and
+    scheduler history summary contracts before changing automatic ranking.
+    Algorithm changes may be implemented by swapping policy modules or
+    updating policy configuration; cross-layer DTO changes must be append-only
+    and serde/fixture tested. This preserves the no-fallback rule because the
+    policy returns typed no-decision diagnostics when canonical planning cannot
+    legally select a candidate instead of falling through to legacy runtime,
+    backend, device, or graph behavior.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract

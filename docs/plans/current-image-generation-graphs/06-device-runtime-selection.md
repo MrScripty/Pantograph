@@ -370,6 +370,19 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   chosen, including the selected backend id, selected runtime variant, selected
   device class, selected concrete device when available, and bounded rejection
   reasons for stronger candidates or invalid explicit preferences.
+- Scheduler policy must be isolated behind a small, versioned policy-engine
+  boundary. The workflow service or embedded-runtime composition layer may
+  collect Pumas package facts, runtime registry snapshots, diagnostics-ledger
+  history summaries, resource snapshots, and user intent, but it must project
+  those inputs into normalized scheduler DTOs before invoking policy. The
+  policy module must be synchronous and side-effect free: it must not query
+  Pumas, read the diagnostics ledger, inspect workflow graph internals, start
+  runtimes, mutate reservations, or fabricate backend facts. It returns only a
+  typed selected candidate, typed no-decision diagnostics, and bounded
+  decision trace evidence. Algorithm revisions should replace or extend this
+  policy module and append fields to the stable DTOs when needed, not spread
+  ranking logic across graph normalization, inference requests, backend
+  adapters, runtime loading, frontend presenters, or diagnostics projections.
 - Scheduler automatic selection should prefer already-ready compatible
   runtimes, healthy runtime variants, lower queue/resource pressure, stronger
   historical success rates, lower historical warmup/execution duration, lower
