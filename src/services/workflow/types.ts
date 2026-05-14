@@ -578,6 +578,7 @@ export type WorkflowDeviceResolutionDiagnosticCode =
   | 'unsupported_device_class'
   | 'missing_runtime_variant'
   | 'missing_model_package_facts'
+  | 'candidate_set_overflow'
   | 'legacy_device_rejected';
 
 export interface WorkflowDeviceResolutionDiagnostic {

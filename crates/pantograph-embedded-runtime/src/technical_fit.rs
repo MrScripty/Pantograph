@@ -32,6 +32,7 @@ use workflow_nodes::setup::PumasSelectorAccess;
 use crate::{workflow_runtime::unix_timestamp_ms, EmbeddedWorkflowHost};
 
 const MAX_RUNTIME_TECHNICAL_FIT_COMPATIBILITY_ISSUES: usize = 32;
+const MAX_RUNTIME_TECHNICAL_FIT_CANDIDATES: usize = 512;
 
 pub fn build_runtime_technical_fit_request_with_package_facts(
     request: &WorkflowTechnicalFitRequest,
@@ -72,7 +73,7 @@ pub fn build_runtime_technical_fit_request_with_backend_package_facts(
         )
     };
     runtime_request.candidates.extend(package_fact_candidates);
-    runtime_request.normalized()
+    runtime_request_with_candidate_cap(runtime_request)
 }
 
 pub(crate) async fn workflow_technical_fit_decision(
@@ -114,7 +115,7 @@ fn build_runtime_technical_fit_request_for_resolved_package_facts(
         let mut runtime_request =
             build_runtime_technical_fit_request(request, runtime_snapshot, &[]);
         runtime_request.candidates = missing_package_fact_candidates;
-        return runtime_request.normalized();
+        return runtime_request_with_candidate_cap(runtime_request);
     }
 
     if package_facts.is_empty() {
@@ -139,7 +140,7 @@ pub fn build_runtime_technical_fit_request(
     runtime_snapshot: Option<RuntimeRegistrySnapshot>,
     runtime_capabilities: &[WorkflowRuntimeCapability],
 ) -> RuntimeTechnicalFitRequest {
-    RuntimeTechnicalFitRequest {
+    runtime_request_with_candidate_cap(RuntimeTechnicalFitRequest {
         runtime_snapshot: runtime_snapshot.unwrap_or_else(empty_runtime_snapshot),
         workflow_id: Some(request.workflow_id.clone()),
         required_model_ids: request.runtime_requirements.required_models.clone(),
@@ -161,8 +162,19 @@ pub fn build_runtime_technical_fit_request(
             request.runtime_requirements.estimated_peak_vram_mb,
             request.runtime_requirements.estimated_peak_ram_mb,
         ),
+    })
+}
+
+fn runtime_request_with_candidate_cap(
+    mut request: RuntimeTechnicalFitRequest,
+) -> RuntimeTechnicalFitRequest {
+    if request.candidates.len() <= MAX_RUNTIME_TECHNICAL_FIT_CANDIDATES {
+        return request.normalized();
     }
-    .normalized()
+
+    let candidate_count = request.candidates.len();
+    request.candidates = vec![candidate_set_overflow_candidate(candidate_count)];
+    request.normalized()
 }
 
 pub fn project_workflow_technical_fit_decision(
@@ -627,6 +639,46 @@ fn missing_model_package_facts_diagnostic(model_id: &str) -> RuntimeTechnicalFit
         message: format!(
             "required model '{}' did not resolve to Pumas package facts for technical-fit planning",
             model_id
+        ),
+        device_class: None,
+        device_id: None,
+        runtime_variant_id: None,
+        backend_key: None,
+    }
+}
+
+fn candidate_set_overflow_candidate(candidate_count: usize) -> RuntimeTechnicalFitCandidate {
+    RuntimeTechnicalFitCandidate {
+        candidate_id: "candidate_set_overflow".to_string(),
+        runtime_id: None,
+        runtime_variant_id: None,
+        backend_key: None,
+        model_id: None,
+        device_class: None,
+        selected_device_id: None,
+        resource_estimate: None,
+        observed_throughput_hint: None,
+        device_diagnostics: vec![candidate_set_overflow_diagnostic(candidate_count)],
+        source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
+        context_window_tokens: None,
+        residency_state: None,
+        warmup_state: None,
+        supports_runtime_requirements: false,
+        compatibility_report: None,
+        compatibility_issue_count: 0,
+        compatibility_issues: Vec::new(),
+    }
+}
+
+fn candidate_set_overflow_diagnostic(
+    candidate_count: usize,
+) -> RuntimeTechnicalFitDeviceDiagnostic {
+    RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::CandidateSetOverflow,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: format!(
+            "technical-fit candidate synthesis produced {} candidates, exceeding the documented cap of {}",
+            candidate_count, MAX_RUNTIME_TECHNICAL_FIT_CANDIDATES
         ),
         device_class: None,
         device_id: None,
@@ -1151,6 +1203,9 @@ fn project_device_diagnostic_code(
         RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts => {
             WorkflowTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts
         }
+        RuntimeTechnicalFitDeviceDiagnosticCode::CandidateSetOverflow => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::CandidateSetOverflow
+        }
         RuntimeTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected => {
             WorkflowTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected
         }
@@ -1668,6 +1723,71 @@ mod tests {
         assert_eq!(
             runtime_request.candidates[1].device_diagnostics[0].code,
             RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable
+        );
+    }
+
+    #[test]
+    fn runtime_request_projection_rejects_candidate_set_overflow() {
+        let capabilities = (0..=MAX_RUNTIME_TECHNICAL_FIT_CANDIDATES)
+            .map(|index| {
+                let mut capability = runtime_capability();
+                capability.runtime_id = format!("runtime-{index}");
+                capability.backend_keys = vec![format!("backend-{index}")];
+                let backend_facts = capability
+                    .backend_capability_facts
+                    .as_mut()
+                    .expect("test capability should include backend facts");
+                backend_facts.runtime_variants = vec![WorkflowRuntimeVariantCapability {
+                    runtime_variant_id: format!("runtime-{index}.cpu"),
+                    device_class: WorkflowInferenceDeviceClass::Cpu,
+                    available: true,
+                    diagnostics: Vec::new(),
+                }];
+                capability
+            })
+            .collect::<Vec<_>>();
+        let workflow_request = build_workflow_technical_fit_request(
+            "workflow-a",
+            &WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: Some(4096),
+                estimated_peak_ram_mb: Some(8192),
+                estimated_min_vram_mb: Some(2048),
+                estimated_min_ram_mb: Some(4096),
+                estimation_confidence: "high".to_string(),
+                required_models: Vec::new(),
+                required_backends: Vec::new(),
+                required_extensions: Vec::new(),
+            },
+            None,
+            Some("session-a"),
+            Some("interactive"),
+            None,
+        );
+
+        let runtime_request =
+            build_runtime_technical_fit_request(&workflow_request, None, &capabilities);
+
+        assert_eq!(runtime_request.candidates.len(), 1);
+        assert_eq!(
+            runtime_request.candidates[0].candidate_id,
+            "candidate_set_overflow"
+        );
+        assert_eq!(
+            runtime_request.candidates[0].device_diagnostics[0].code,
+            RuntimeTechnicalFitDeviceDiagnosticCode::CandidateSetOverflow
+        );
+
+        let registry_decision = select_runtime_technical_fit(&runtime_request);
+        assert_eq!(registry_decision.selected_candidate_id, None);
+        assert_eq!(
+            registry_decision.device_diagnostics[0].code,
+            RuntimeTechnicalFitDeviceDiagnosticCode::CandidateSetOverflow
+        );
+
+        let workflow_decision = project_workflow_technical_fit_decision(&registry_decision);
+        assert_eq!(
+            workflow_decision.device_diagnostics[0].code,
+            WorkflowTechnicalFitDeviceDiagnosticCode::CandidateSetOverflow
         );
     }
 

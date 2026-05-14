@@ -165,6 +165,7 @@ pub enum WorkflowTechnicalFitDeviceDiagnosticCode {
     UnsupportedDeviceClass,
     MissingRuntimeVariant,
     MissingModelPackageFacts,
+    CandidateSetOverflow,
     LegacyDeviceRejected,
 }
 

@@ -207,6 +207,7 @@ pub enum RuntimeTechnicalFitDeviceDiagnosticCode {
     UnsupportedDeviceClass,
     MissingRuntimeVariant,
     MissingModelPackageFacts,
+    CandidateSetOverflow,
     LegacyDeviceRejected,
 }
 

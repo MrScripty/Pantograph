@@ -96,6 +96,13 @@ typed diagnostic and the canonical design is fixed.
     required model cannot be resolved to package facts. Remaining follow-up:
     documented candidate-cap overflow still needs a typed
     candidate-synthesis diagnostic before trace/admission/history slices.
+  - 2026-05-14 partial: embedded-runtime candidate synthesis now enforces the
+    documented cap of 512 technical-fit candidates before policy invocation.
+    Oversized candidate sets are replaced by one non-selectable
+    `candidate_set_overflow` diagnostic candidate so policy receives a bounded
+    request and fails selection with the exact cause instead of truncating or
+    saturating counts. Remaining follow-up: promote executable candidate facts
+    into the scheduler policy trace and diagnostics-ledger summary path.
 - [x] Add a common backend-adapter capability contract for llama.cpp, PyTorch,
   vLLM, Candle, and future MLX. The contract reports facts and performs
   backend-specific translation; it must not rank candidates across backends or
@@ -4148,6 +4155,33 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: candidate synthesis still needs documented
     candidate-cap overflow diagnostics before append-only
     trace/admission/history work.
+- 2026-05-14 slice: candidate-synthesis cap overflow diagnostics.
+  - Smallest useful vertical slice: enforce a documented embedded-runtime
+    technical-fit candidate cap before policy invocation, synthesize a
+    non-selectable `candidate_set_overflow` diagnostic candidate when the cap
+    is exceeded, and mirror the new diagnostic code through workflow-service
+    and frontend workflow types.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `src/services/workflow/types.ts`, and this plan directory.
+  - No-fallback/no-legacy confirmation: oversized candidate sets now fail
+    candidate selection with a typed diagnostic before policy ranking. The
+    slice does not truncate candidates, select a generic fallback runtime, add
+    compatibility aliases, change generated files, alter lockfiles, update
+    workflow fixtures, or touch runtime loading.
+  - Verification passed:
+    `cargo test -p pantograph-embedded-runtime runtime_request_projection_rejects_candidate_set_overflow`,
+    `cargo test -p pantograph-runtime-registry selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`, `npm run
+    typecheck`, and `cargo fmt --package pantograph-embedded-runtime --package
+    pantograph-runtime-registry --package pantograph-workflow-service`; `git
+    diff --check`.
+  - Remaining follow-up: executable candidate facts still need append-only
+    trace/admission fields and diagnostics-ledger summary propagation.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract

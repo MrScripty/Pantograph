@@ -3083,6 +3083,31 @@ Worker rules:
 - Remaining follow-up: candidate synthesis still needs documented
   candidate-cap overflow diagnostics before append-only trace/admission/history
   work.
+- 2026-05-14 candidate-synthesis cap overflow diagnostics slice: smallest
+  useful vertical slice was to enforce a documented embedded-runtime
+  technical-fit candidate cap before policy invocation, synthesize a
+  non-selectable `candidate_set_overflow` diagnostic candidate when the cap is
+  exceeded, and mirror the new diagnostic code through workflow-service and
+  frontend workflow types. Allowed write set:
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+  `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+  `crates/pantograph-workflow-service/src/technical_fit.rs`,
+  `src/services/workflow/types.ts`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because oversized
+  candidate sets now fail candidate selection with a typed diagnostic before
+  policy ranking. The slice does not truncate candidates, select a generic
+  fallback runtime, add compatibility aliases, change generated files, alter
+  lockfiles, update workflow fixtures, or touch runtime loading.
+- Verification passed:
+  `cargo test -p pantograph-embedded-runtime runtime_request_projection_rejects_candidate_set_overflow`,
+  `cargo test -p pantograph-runtime-registry selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`, `cargo test -p
+  pantograph-runtime-registry technical_fit`, `cargo test -p
+  pantograph-workflow-service technical_fit`, `npm run typecheck`, and `cargo
+  fmt --package pantograph-embedded-runtime --package pantograph-runtime-registry
+  --package pantograph-workflow-service`; `git diff --check`.
+- Remaining follow-up: executable candidate facts still need append-only
+  trace/admission fields and diagnostics-ledger summary propagation.
 
 ### Traceability Links
 
