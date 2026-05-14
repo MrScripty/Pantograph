@@ -374,8 +374,8 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   boundary. The workflow service or embedded-runtime composition layer may
   collect Pumas package facts, runtime registry snapshots, diagnostics-ledger
   history summaries, resource snapshots, and user intent, but it must project
-  those inputs into normalized scheduler DTOs before invoking policy. The
-  policy module must be synchronous and side-effect free: it must not query
+  those inputs into normalized runtime-selection DTOs before invoking policy.
+  The policy module must be synchronous and side-effect free: it must not query
   Pumas, read the diagnostics ledger, inspect workflow graph internals, start
   runtimes, mutate reservations, or fabricate backend facts. It returns only a
   typed selected candidate, typed no-decision diagnostics, and bounded
@@ -413,29 +413,37 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   not preselect the first available runtime variant or collapse alternatives
   before scheduler policy can compare them. Candidate set growth must be
   bounded by a documented cap, and cap overflow must fail candidate selection
-  with a typed diagnostic recorded to scheduler trace/ledger surfaces.
-- Scheduler history and trace evidence must be typed enough to survive
-  algorithm changes. Scheduler ranking must not reuse the UI-oriented workflow
-  timing expectation API, because that API can use a different sample
+  with a typed diagnostic recorded to runtime-selection trace/ledger surfaces.
+- Runtime-selection history and trace evidence must be typed enough to survive
+  algorithm changes. Runtime-selection ranking must not reuse the UI-oriented
+  workflow timing expectation API, because that API can use a different sample
   threshold and broaden runtime-specific history. Instead, diagnostics-ledger
-  must expose a bounded scheduler history summary keyed by typed workflow,
-  task/model, backend, runtime variant, and device facts with no broad-history
-  fallback. The five-run threshold applies per comparable
+  must expose a bounded runtime-selection history summary keyed by typed
+  workflow, task/model, backend, runtime variant, and device facts with no
+  broad-history fallback. The five-run threshold applies per comparable
   workflow/task/model/backend/runtime-variant/device candidate key; before that
   threshold is met for each valid candidate, policy must use facts plus
   controlled exploration instead of broadening history. Policy traces should
-  keep display strings only as supplementary detail; scheduler phase, decision
-  code, history-threshold state, and bounded per-candidate history evidence
-  must be append-only typed fields.
-- Scheduler policy implementation must preserve standards dependency
-  direction. The pure policy module may depend only on scheduler/runtime
+  keep display strings only as supplementary detail; runtime-selection phase,
+  decision code, history-threshold state, and bounded per-candidate history
+  evidence must be append-only typed fields.
+- Runtime-selection policy implementation must preserve standards dependency
+  direction. The pure policy module may depend only on runtime-selection
   contract types and deterministic helpers. It must not depend on
   workflow-service, embedded-runtime, diagnostics-ledger, inference gateway,
   Pumas APIs, Tauri, TypeScript, filesystem paths, databases, network clients,
   subprocesses, Tokio runtimes, or frontend presenter code. Async shells may
   gather facts before invoking policy and may persist outcomes after policy
   returns.
-- Public or cross-crate scheduler DTOs must follow Rust API and interop
+- The initial policy-extraction slice must stay inside the existing
+  runtime-registry technical-fit boundary unless this plan is explicitly
+  revised. Do not create a new workspace crate, add workspace dependencies,
+  modify the workflow admission scheduler, change diagnostics-ledger schemas or
+  event DTOs, update TypeScript mirrors, alter generated/fixture files, or
+  touch workflow saved-state fixtures in the first slice. Those cross-layer
+  surfaces are separate later slices after the pure runtime-selection boundary
+  and validated internal DTOs exist.
+- Public or cross-crate runtime-selection DTOs must follow Rust API and interop
   standards: parse raw strings into validated IDs at boundaries, prefer enums
   over stringly policy states, mark extension-prone public types
   `#[non_exhaustive]` where compatible with existing serde contracts, derive
@@ -443,12 +451,13 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   and expose fallible validation as typed errors instead of `Result<T,
   String>`. Cross-layer DTO updates must land in Rust, diagnostics-ledger,
   TypeScript mirrors, and fixtures in the same slice.
-- Scheduler tests must preserve the repository's existing test strategy. Pure
-  policy behavior belongs in fast Rust unit tests; cross-crate serde and
-  projection behavior belongs in existing Rust fixture/contract tests; frontend
-  contract mirrors must continue using the existing Node test path, not a new
-  test platform. Diagnostics-ledger history tests must use isolated SQLite
-  roots and prove no broad-history fallback is used for scheduler ranking.
+- Runtime-selection tests must preserve the repository's existing test
+  strategy. Pure policy behavior belongs in fast Rust unit tests; cross-crate
+  serde and projection behavior belongs in existing Rust fixture/contract
+  tests; frontend contract mirrors must continue using the existing Node test
+  path, not a new test platform. Diagnostics-ledger history tests must use
+  isolated SQLite roots and prove no broad-history fallback is used for
+  runtime-selection ranking.
 - Implementation order for this boundary is fixed: first extract current
   automatic technical-fit selection into the named pure runtime-selection
   policy while preserving behavior; then add internal validated decision input
@@ -457,9 +466,13 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   the shared bounded variant-expansion helper; then add typed append-only
   trace/admission fields and selected-device propagation to both
   scheduler-admission and scheduler-reservation event paths; then add
-  diagnostics-ledger scheduler history summaries; only after those
+  diagnostics-ledger runtime-selection history summaries; only after those
   slices may the five-run threshold and history-backed ranking algorithm be
   implemented.
+- The bounded candidate cap belongs to candidate synthesis and must be tested
+  before policy receives candidate input. The policy module receives an already
+  bounded, normalized candidate set; it must not silently truncate candidates
+  or invent diagnostics for facts it was not given.
 - Scheduler automatic selection should prefer already-ready compatible
   runtimes, healthy runtime variants, lower queue/resource pressure, stronger
   historical success rates, lower historical warmup/execution duration, lower

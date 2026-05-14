@@ -3895,21 +3895,22 @@ typed diagnostic and the canonical design is fixed.
     state must become typed diagnostics. They must not be silently normalized,
     capped, dropped from history, or converted into successful workflow
     execution without scheduler-owned retry/termination decisions.
-  - 2026-05-14 policy-boundary decision: scheduler algorithms are expected to
-    change often, so the implementation must make policy replacement cheap.
-    Runtime ranking, controlled exploration, history weighting, retry/
-    reschedule policy, and future learned placement must live behind a stable
-    scheduler policy-engine contract. The orchestration layer gathers Pumas
-    package facts, runtime registry candidate facts, resource snapshots,
-    diagnostics-ledger history summaries, and user intent, then projects them
-    into a normalized scheduler input DTO. The policy engine must be
+  - 2026-05-14 policy-boundary decision: runtime-selection algorithms are
+    expected to change often, so the implementation must make policy
+    replacement cheap. Runtime ranking, controlled exploration, history
+    weighting, retry/reschedule policy, and future learned placement must live
+    behind a stable runtime-selection policy-engine contract. The orchestration
+    layer gathers Pumas package facts, runtime registry candidate facts,
+    resource snapshots, diagnostics-ledger history summaries, and user intent,
+    then projects them into a normalized runtime-selection input DTO. The policy
+    engine must be
     synchronous and side-effect free, returning a typed selected candidate or
     typed diagnostics plus bounded decision trace evidence. It must not query
     Pumas or the ledger directly, inspect workflow graph internals, load
     runtimes, mutate reservations, or hide ranking behavior in backend
     adapters, inference request normalization, frontend presenters, or
     diagnostics projections.
-  - 2026-05-14 scheduler contract requirement: add or reuse explicit
+  - 2026-05-14 runtime-selection contract requirement: add or reuse explicit
     execution-placement contracts named for this policy domain, such as
     `RuntimeSelectionDecisionInput`, `RuntimeSelectionDecision`,
     `RuntimeSelectionPolicyTrace`, and `RuntimeSelectionHistorySummary`, before
@@ -3923,7 +3924,7 @@ typed diagnostic and the canonical design is fixed.
     synchronous and pure, but ranking, filtering, exploration, trace assembly,
     and technical-fit DTOs are still combined in
     `crates/pantograph-runtime-registry/src/technical_fit.rs`. The next slice
-    must introduce the scheduler policy boundary by delegation: keep the
+    must introduce the runtime-selection policy boundary by delegation: keep the
     existing technical-fit facade for current callers, move automatic
     ranking/exploration into a pure policy module, and prove focused tests keep
     current behavior unchanged before adding history-backed ranking.
@@ -3937,20 +3938,23 @@ typed diagnostic and the canonical design is fixed.
     emit all valid backend/runtime-variant/device candidates for policy to
     compare. The implementation must use one shared variant-expansion helper
     rather than separate first-variant and all-variants paths, and it must fail
-    candidate selection with a typed scheduler diagnostic if normalized facts
-    exceed a documented candidate cap.
-  - 2026-05-14 diagnostics/history finding: scheduler ranking must not reuse
-    the existing workflow timing expectation API because that API has a
+    candidate selection with a typed runtime-selection diagnostic if normalized
+    facts exceed a documented candidate cap. The cap and overflow diagnostic
+    belong to candidate synthesis; the pure policy module receives an already
+    bounded, normalized candidate set and must not silently truncate candidates
+    or fabricate missing-fact diagnostics.
+  - 2026-05-14 diagnostics/history finding: runtime-selection ranking must not
+    reuse the existing workflow timing expectation API because that API has a
     different minimum sample policy and may broaden runtime-specific history
     when runtime-refined samples are insufficient. Add a separate bounded
-    diagnostics-ledger scheduler history summary keyed by typed workflow
-    identity, task/model, backend, runtime variant, and device facts. The
-    five-run threshold applies per comparable
+    diagnostics-ledger runtime-selection history summary keyed by typed
+    workflow identity, task/model, backend, runtime variant, and device facts.
+    The five-run threshold applies per comparable
     workflow/task/model/backend/runtime-variant/device candidate key; until
     each valid candidate reaches that threshold, policy must rely on facts plus
     recorded controlled exploration rather than broadening history. The
-    scheduler input receives summaries; the pure policy module must not query
-    the ledger.
+    runtime-selection input receives summaries; the pure policy module must not
+    query the ledger.
   - 2026-05-14 trace/admission finding: current policy traces expose string
     `ranking_reason` and `exploration_reason` fields through runtime-registry,
     workflow-service, diagnostics-ledger, and TypeScript DTOs. Future policy
@@ -3958,20 +3962,30 @@ typed diagnostic and the canonical design is fixed.
     history-threshold state, and bounded per-candidate history evidence so
     frontend and ledger projections do not need to understand algorithm
     internals. Admission and reservation-change events must also propagate
-    selected device class/id from the scheduler decision instead of leaving
-    selected device data empty when a decision resolved it.
-  - 2026-05-14 standards iteration: implementation of the scheduler boundary
-    must preserve layered dependency direction and sync-core/async-shell
-    design. The pure policy module may depend only on scheduler/runtime
-    contracts and deterministic helpers. It must not import workflow-service,
-    embedded-runtime, diagnostics-ledger, inference gateway, Pumas, Tauri,
-    TypeScript, filesystem/database/network/subprocess code, or create/own
-    async runtimes or background tasks. Fact gathering, ledger reads, runtime
-    loading, reservation mutation, and event persistence remain outer-shell
-    responsibilities before or after policy invocation.
+    selected device class/id from the runtime-selection decision instead of
+    leaving selected device data empty when a decision resolved it.
+  - 2026-05-14 standards iteration: implementation of the runtime-selection
+    boundary must preserve layered dependency direction and
+    sync-core/async-shell design. The pure policy module may depend only on
+    runtime-selection contracts and deterministic helpers. It must not import
+    workflow-service, embedded-runtime, diagnostics-ledger, inference gateway,
+    Pumas, Tauri, TypeScript, filesystem/database/network/subprocess code, or
+    create/own async runtimes or background tasks. Fact gathering, ledger
+    reads, runtime loading, reservation mutation, and event persistence remain
+    outer-shell responsibilities before or after policy invocation.
+  - 2026-05-14 standards/blast-radius refinement: the first implementation
+    slice for this boundary is limited to the existing runtime-registry
+    technical-fit module, a new in-crate pure runtime-selection policy module,
+    focused runtime-registry tests, and this plan directory. It must not create
+    a new workspace crate, add workspace dependencies, modify
+    `pantograph-workflow-service::scheduler`, change diagnostics-ledger schemas
+    or event DTOs, update TypeScript mirrors, alter generated/fixture files, or
+    touch workflow saved-state fixtures. Those cross-layer surfaces are
+    explicitly reserved for later slices after the pure policy boundary and
+    validated internal DTOs exist.
   - 2026-05-14 Rust/API and interop standards iteration: new or changed
-    scheduler DTOs must parse raw strings into validated identity types at
-    boundaries, prefer enums over stringly policy states, use typed fallible
+    runtime-selection DTOs must parse raw strings into validated identity types
+    at boundaries, prefer enums over stringly policy states, use typed fallible
     validation errors instead of `Result<T, String>`, derive useful
     `Debug`/`Clone`/`Eq`, apply `#[must_use]` to decisions/results/builders,
     and mark extension-prone public types `#[non_exhaustive]` where compatible
@@ -3979,14 +3993,14 @@ typed diagnostic and the canonical design is fixed.
     Rust producers/consumers, diagnostics-ledger payloads, TypeScript mirrors,
     and serde fixtures in the same atomic slice.
   - 2026-05-14 testing standards iteration: policy-boundary slices must keep
-    tests aligned with existing repository strategy. Pure scheduler behavior
-    needs fast Rust unit tests. Runtime-registry, workflow-service,
+    tests aligned with existing repository strategy. Pure runtime-selection
+    behavior needs fast Rust unit tests. Runtime-registry, workflow-service,
     embedded-runtime, diagnostics-ledger, and TypeScript mirrors need existing
     contract/fixture tests when their DTOs are touched. Frontend mirror
     verification must use the existing Node test path, not introduce Vitest or
     Playwright. Diagnostics-ledger history tests must use isolated SQLite
-    roots and prove scheduler ranking history never broadens runtime-specific
-    samples as a fallback.
+    roots and prove runtime-selection ranking history never broadens
+    runtime-specific samples as a fallback.
   - 2026-05-14 naming/blast-radius finding: the repository already has
     `pantograph-workflow-service::scheduler` for workflow queue/admission
     decisions, including `WorkflowSchedulerDecisionReason`. The
@@ -4007,7 +4021,7 @@ typed diagnostic and the canonical design is fixed.
     visible to policy through a shared bounded variant-expansion helper, (4)
     add append-only typed trace/admission fields and selected-device
     propagation to scheduler-admission and scheduler-reservation event paths,
-    (5) add diagnostics-ledger scheduler history summaries with isolated
+    (5) add diagnostics-ledger runtime-selection history summaries with isolated
     SQLite tests and no broad-history fallback, and only then (6) implement the
     five-run threshold and history-backed ranking algorithm.
 - 2026-05-12 slice: workflow timing attempt contract.
