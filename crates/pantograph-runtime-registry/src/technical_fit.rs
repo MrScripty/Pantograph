@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::runtime_selection_policy::{
     candidate_is_eligible, candidate_matches_device_policy,
-    select_runtime_technical_fit_automatically,
+    select_runtime_technical_fit_automatically, RuntimeSelectionDecisionInput,
 };
 use crate::snapshot::RuntimeRegistrySnapshot;
 
@@ -721,7 +721,21 @@ pub fn select_runtime_technical_fit(
         );
     }
 
-    select_runtime_technical_fit_automatically(&normalized, &candidates)
+    let input = match RuntimeSelectionDecisionInput::try_from_normalized_request(&normalized) {
+        Ok(input) => input,
+        Err(error) => {
+            return unselected_decision_with_device_diagnostics(
+                RuntimeTechnicalFitSelectionMode::Automatic,
+                vec![RuntimeTechnicalFitReason::new(
+                    RuntimeTechnicalFitReasonCode::MissingCandidateData,
+                    None,
+                )],
+                vec![error.into_diagnostic()],
+            );
+        }
+    };
+
+    select_runtime_technical_fit_automatically(input).into_technical_fit_decision()
 }
 
 fn normalize_runtime_id(value: Option<&str>) -> Option<String> {

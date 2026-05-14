@@ -19,10 +19,75 @@ const TECHNICAL_FIT_SELECTION_POLICY_VERSION: u32 = 1;
 const FNV_OFFSET_BASIS_64: u64 = 0xcbf29ce484222325;
 const FNV_PRIME_64: u64 = 0x100000001b3;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeSelectionInputValidationError {
+    UnnormalizedRequest,
+}
+
+impl RuntimeSelectionInputValidationError {
+    pub(crate) fn into_diagnostic(self) -> RuntimeTechnicalFitDeviceDiagnostic {
+        match self {
+            Self::UnnormalizedRequest => RuntimeTechnicalFitDeviceDiagnostic {
+                code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
+                severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+                message: "runtime-selection policy received an unnormalized technical-fit request"
+                    .to_string(),
+                device_class: None,
+                device_id: None,
+                runtime_variant_id: None,
+                backend_key: None,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[must_use]
+pub(crate) struct RuntimeSelectionDecisionInput<'a> {
+    request: &'a RuntimeTechnicalFitRequest,
+}
+
+impl<'a> RuntimeSelectionDecisionInput<'a> {
+    pub(crate) fn try_from_normalized_request(
+        request: &'a RuntimeTechnicalFitRequest,
+    ) -> Result<Self, RuntimeSelectionInputValidationError> {
+        if request.normalized() != *request {
+            return Err(RuntimeSelectionInputValidationError::UnnormalizedRequest);
+        }
+
+        Ok(Self { request })
+    }
+
+    fn request(self) -> &'a RuntimeTechnicalFitRequest {
+        self.request
+    }
+
+    fn candidates(self) -> &'a [RuntimeTechnicalFitCandidate] {
+        &self.request.candidates
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(crate) struct RuntimeSelectionDecision {
+    decision: RuntimeTechnicalFitDecision,
+}
+
+impl RuntimeSelectionDecision {
+    fn new(decision: RuntimeTechnicalFitDecision) -> Self {
+        Self { decision }
+    }
+
+    pub(crate) fn into_technical_fit_decision(self) -> RuntimeTechnicalFitDecision {
+        self.decision
+    }
+}
+
 pub(crate) fn select_runtime_technical_fit_automatically(
-    normalized: &RuntimeTechnicalFitRequest,
-    candidates: &[RuntimeTechnicalFitCandidate],
-) -> RuntimeTechnicalFitDecision {
+    input: RuntimeSelectionDecisionInput<'_>,
+) -> RuntimeSelectionDecision {
+    let normalized = input.request();
+    let candidates = input.candidates();
     let mut reasons = Vec::new();
     let mut eligible_candidates = candidates
         .iter()
@@ -47,13 +112,13 @@ pub(crate) fn select_runtime_technical_fit_automatically(
                 ));
             }
 
-            return unselected_decision_with_device_diagnostics(
+            return RuntimeSelectionDecision::new(unselected_decision_with_device_diagnostics(
                 RuntimeTechnicalFitSelectionMode::Automatic,
                 unrankable_reasons,
                 vec![unrankable_headroom_candidate_diagnostic(
                     unrankable_candidate,
                 )],
-            );
+            ));
         }
     }
 
@@ -84,11 +149,11 @@ pub(crate) fn select_runtime_technical_fit_automatically(
         ) {
             Ok(trace) => trace,
             Err(diagnostic) => {
-                return unselected_decision_with_device_diagnostics(
+                return RuntimeSelectionDecision::new(unselected_decision_with_device_diagnostics(
                     RuntimeTechnicalFitSelectionMode::Automatic,
                     Vec::new(),
                     vec![diagnostic],
-                );
+                ));
             }
         };
 
@@ -150,12 +215,12 @@ pub(crate) fn select_runtime_technical_fit_automatically(
             ));
         }
 
-        return decision_from_candidate_with_trace(
+        return RuntimeSelectionDecision::new(decision_from_candidate_with_trace(
             RuntimeTechnicalFitSelectionMode::Automatic,
             selected_candidate,
             reasons,
             Some(selection_policy_trace),
-        );
+        ));
     }
 
     let scoped_diagnostic_candidate = diagnostic_candidate(candidates, normalized);
@@ -180,11 +245,11 @@ pub(crate) fn select_runtime_technical_fit_automatically(
         ));
     }
 
-    unselected_decision_with_device_diagnostics(
+    RuntimeSelectionDecision::new(unselected_decision_with_device_diagnostics(
         RuntimeTechnicalFitSelectionMode::Automatic,
         reasons,
         automatic_no_valid_candidate_diagnostics(normalized),
-    )
+    ))
 }
 
 fn automatic_selection_policy_trace(

@@ -1,4 +1,7 @@
 use super::*;
+use crate::runtime_selection_policy::{
+    RuntimeSelectionDecisionInput, RuntimeSelectionInputValidationError,
+};
 use crate::snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
 use crate::state::RuntimeRegistryStatus;
 use serde::Deserialize;
@@ -226,6 +229,31 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
             .as_deref(),
         Some("model-a")
     );
+}
+
+#[test]
+fn runtime_selection_input_requires_normalized_request() {
+    let request = RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some(" workflow-a ".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: Vec::new(),
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: Vec::new(),
+        candidates: Vec::new(),
+        resource_pressure: None,
+    };
+
+    assert!(matches!(
+        RuntimeSelectionDecisionInput::try_from_normalized_request(&request),
+        Err(RuntimeSelectionInputValidationError::UnnormalizedRequest)
+    ));
+
+    let normalized = request.normalized();
+    assert!(RuntimeSelectionDecisionInput::try_from_normalized_request(&normalized).is_ok());
 }
 
 #[test]

@@ -4052,6 +4052,30 @@ typed diagnostic and the canonical design is fixed.
     input/output types behind the existing serde facade before changing
     candidate synthesis, cross-layer DTOs, scheduler history summaries, or the
     five-run threshold ranking algorithm.
+- 2026-05-14 slice: validated internal runtime-selection decision boundary.
+  - Smallest useful vertical slice: add internal runtime-selection
+    `RuntimeSelectionDecisionInput` and `RuntimeSelectionDecision` wrappers
+    behind the existing `RuntimeTechnicalFitRequest`/`RuntimeTechnicalFitDecision`
+    serde facade, with a focused guard that rejects unnormalized requests before
+    policy execution.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: the public wire DTOs, selector facade,
+    explicit override behavior, automatic ranking behavior, candidate
+    synthesis, diagnostics-ledger contracts, TypeScript mirrors, generated
+    files, lockfiles, and workflow fixtures were not changed. Invalid internal
+    policy input now has a typed diagnostic path instead of unchecked policy
+    execution.
+  - Verification passed:
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-runtime-registry`, and `cargo fmt --package
+    pantograph-runtime-registry`.
+  - Remaining follow-up: candidate synthesis still needs required Pumas fact
+    diagnostics, all-variant expansion through a shared bounded helper, and
+    cap-overflow diagnostics before cross-layer trace/admission/history work.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract
