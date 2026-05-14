@@ -383,6 +383,31 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   policy module and append fields to the stable DTOs when needed, not spread
   ranking logic across graph normalization, inference requests, backend
   adapters, runtime loading, frontend presenters, or diagnostics projections.
+- The policy-engine boundary must be introduced before any new automatic
+  ranking behavior is added. The existing technical-fit call path may remain
+  as an adapter facade, but the changeable ranking/exploration/history
+  algorithm must move behind explicit scheduler contracts such as
+  `SchedulerDecisionInput`, `SchedulerDecision`, `SchedulerPolicyTrace`, and
+  `SchedulerRuntimeHistorySummary`. The first slice must preserve current
+  selector behavior through delegation, not through a compatibility shim or a
+  second policy owner.
+- Candidate synthesis must be policy-neutral. Pumas lookup failures, stale
+  package facts, unavailable selector access, unsupported package facts, and
+  missing backend/runtime capability facts must be projected as typed
+  candidate diagnostics when facts are required for canonical planning. They
+  must not silently degrade into capability-only selection. Candidate synthesis
+  must emit every valid backend/runtime-variant/device candidate available
+  from normalized facts; it must not preselect the first available runtime
+  variant or collapse alternatives before scheduler policy can compare them.
+- Scheduler history and trace evidence must be typed enough to survive
+  algorithm changes. Scheduler ranking must not reuse the UI-oriented workflow
+  timing expectation API, because that API can use a different sample
+  threshold and broaden runtime-specific history. Instead, diagnostics-ledger
+  must expose a bounded scheduler history summary keyed by typed workflow,
+  task/model, backend, runtime variant, and device facts with no broad-history
+  fallback. Policy traces should keep display strings only as supplementary
+  detail; scheduler phase, decision code, history-threshold state, and bounded
+  per-candidate history evidence must be append-only typed fields.
 - Scheduler automatic selection should prefer already-ready compatible
   runtimes, healthy runtime variants, lower queue/resource pressure, stronger
   historical success rates, lower historical warmup/execution duration, lower

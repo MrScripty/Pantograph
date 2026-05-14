@@ -3918,6 +3918,40 @@ typed diagnostic and the canonical design is fixed.
     policy returns typed no-decision diagnostics when canonical planning cannot
     legally select a candidate instead of falling through to legacy runtime,
     backend, device, or graph behavior.
+  - 2026-05-14 codebase impact review: the current runtime selector is already
+    synchronous and pure, but ranking, filtering, exploration, trace assembly,
+    and technical-fit DTOs are still combined in
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`. The next slice
+    must introduce the scheduler policy boundary by delegation: keep the
+    existing technical-fit facade for current callers, move automatic
+    ranking/exploration into a pure policy module, and prove focused tests keep
+    current behavior unchanged before adding history-backed ranking.
+  - 2026-05-14 candidate synthesis finding: embedded-runtime currently gathers
+    Pumas package facts, backend capabilities, runtime snapshots, and runtime
+    variants before calling the selector. That orchestration ownership is
+    correct, but missing/unavailable Pumas facts can currently become
+    capability-only selection, and one generic runtime-capability path can
+    collapse runtime variants before policy sees them. Canonical planning must
+    instead project required-fact absence as typed candidate diagnostics and
+    emit all valid backend/runtime-variant/device candidates for policy to
+    compare.
+  - 2026-05-14 diagnostics/history finding: scheduler ranking must not reuse
+    the existing workflow timing expectation API because that API has a
+    different minimum sample policy and may broaden runtime-specific history
+    when runtime-refined samples are insufficient. Add a separate bounded
+    diagnostics-ledger scheduler history summary keyed by typed workflow
+    identity, task/model, backend, runtime variant, and device facts. The
+    scheduler input receives summaries; the pure policy module must not query
+    the ledger.
+  - 2026-05-14 trace/admission finding: current policy traces expose string
+    `ranking_reason` and `exploration_reason` fields through runtime-registry,
+    workflow-service, diagnostics-ledger, and TypeScript DTOs. Future policy
+    updates need append-only typed fields for policy phase, decision code,
+    history-threshold state, and bounded per-candidate history evidence so
+    frontend and ledger projections do not need to understand algorithm
+    internals. Admission must also propagate selected device class/id from the
+    scheduler decision instead of leaving selected device data empty when a
+    decision resolved it.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract
