@@ -235,39 +235,70 @@ fn runtime_capability_candidates(
 ) -> Vec<RuntimeTechnicalFitCandidate> {
     runtime_capabilities
         .iter()
-        .map(|capability| {
+        .flat_map(|capability| {
+            let resource_estimate = resource_estimate.clone();
             let backend_key = capability
                 .backend_keys
                 .first()
                 .cloned()
                 .or_else(|| Some(capability.runtime_id.clone()));
-            let runtime_variant_facts = runtime_capability_variant_facts(capability);
-            RuntimeTechnicalFitCandidate {
-                candidate_id: capability
-                    .backend_keys
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| capability.runtime_id.clone()),
-                runtime_id: Some(capability.runtime_id.clone()),
-                runtime_variant_id: runtime_variant_facts.runtime_variant_id,
-                backend_key,
-                model_id: None,
-                device_class: runtime_variant_facts.device_class,
-                selected_device_id: None,
-                resource_estimate: resource_estimate.clone(),
-                observed_throughput_hint: None,
-                device_diagnostics: runtime_variant_facts.device_diagnostics,
-                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
-                context_window_tokens: None,
-                residency_state: Some(runtime_capability_residency_state(capability)),
-                warmup_state: runtime_capability_warmup_state(capability),
-                supports_runtime_requirements: runtime_capability_is_ready(capability),
-                compatibility_report: None,
-                compatibility_issue_count: 0,
-                compatibility_issues: Vec::new(),
-            }
+            let variant_entries = runtime_capability_variant_fact_entries(capability);
+            let multi_variant = variant_entries.len() > 1;
+            variant_entries
+                .into_iter()
+                .map(move |runtime_variant_facts| {
+                    let supports_runtime_requirements = runtime_capability_is_ready(capability)
+                        && runtime_capability_variant_is_ready(&runtime_variant_facts);
+                    RuntimeTechnicalFitCandidate {
+                        candidate_id: runtime_capability_candidate_id(
+                            capability,
+                            backend_key.as_deref(),
+                            runtime_variant_facts.runtime_variant_id.as_deref(),
+                            multi_variant,
+                        ),
+                        runtime_id: Some(capability.runtime_id.clone()),
+                        runtime_variant_id: runtime_variant_facts.runtime_variant_id.clone(),
+                        backend_key: backend_key.clone(),
+                        model_id: None,
+                        device_class: runtime_variant_facts.device_class,
+                        selected_device_id: None,
+                        resource_estimate: resource_estimate.clone(),
+                        observed_throughput_hint: None,
+                        device_diagnostics: runtime_variant_facts.device_diagnostics,
+                        source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
+                        context_window_tokens: None,
+                        residency_state: Some(runtime_capability_residency_state(capability)),
+                        warmup_state: runtime_capability_warmup_state(capability),
+                        supports_runtime_requirements,
+                        compatibility_report: None,
+                        compatibility_issue_count: 0,
+                        compatibility_issues: Vec::new(),
+                    }
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
+}
+
+fn runtime_capability_candidate_id(
+    capability: &WorkflowRuntimeCapability,
+    backend_key: Option<&str>,
+    runtime_variant_id: Option<&str>,
+    multi_variant: bool,
+) -> String {
+    let base = backend_key.unwrap_or(capability.runtime_id.as_str());
+    if multi_variant {
+        if let Some(runtime_variant_id) = runtime_variant_id {
+            return format!("{}|{}|{}", base, capability.runtime_id, runtime_variant_id);
+        }
+    }
+    base.to_string()
+}
+
+fn runtime_capability_variant_is_ready(variant_facts: &RuntimeCapabilityVariantFacts) -> bool {
+    variant_facts.available
+        && variant_facts.runtime_variant_id.is_some()
+        && variant_facts.device_class.is_some()
 }
 
 struct RuntimeCapabilityVariantFacts {
@@ -275,52 +306,6 @@ struct RuntimeCapabilityVariantFacts {
     device_class: Option<RuntimeTechnicalFitDeviceClass>,
     available: bool,
     device_diagnostics: Vec<RuntimeTechnicalFitDeviceDiagnostic>,
-}
-
-fn runtime_capability_variant_facts(
-    capability: &WorkflowRuntimeCapability,
-) -> RuntimeCapabilityVariantFacts {
-    let variants = capability
-        .backend_capability_facts
-        .as_ref()
-        .map(|facts| facts.runtime_variants.as_slice())
-        .unwrap_or_default();
-    let selected_variant = variants
-        .iter()
-        .find(|variant| variant.available)
-        .or_else(|| variants.first());
-
-    let mut device_diagnostics = selected_variant
-        .map(|variant| {
-            variant
-                .diagnostics
-                .iter()
-                .map(project_workflow_device_diagnostic)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    let device_class = selected_variant
-        .and_then(|variant| project_workflow_runtime_variant_device_class(variant.device_class));
-
-    if selected_variant.is_some() && device_class.is_none() {
-        device_diagnostics.push(RuntimeTechnicalFitDeviceDiagnostic {
-            code: RuntimeTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass,
-            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
-            message: "runtime variant reported an unsupported device class".to_string(),
-            device_class: None,
-            device_id: None,
-            runtime_variant_id: selected_variant.map(|variant| variant.runtime_variant_id.clone()),
-            backend_key: capability.backend_keys.first().cloned(),
-        });
-    }
-
-    RuntimeCapabilityVariantFacts {
-        runtime_variant_id: selected_variant.map(|variant| variant.runtime_variant_id.clone()),
-        device_class,
-        available: selected_variant.is_some_and(|variant| variant.available),
-        device_diagnostics,
-    }
 }
 
 pub fn runtime_candidates_from_pumas_package_facts(
@@ -1508,6 +1493,89 @@ mod tests {
                 estimated_peak_vram_mb: Some(4096),
                 estimated_peak_ram_mb: Some(8192),
             })
+        );
+    }
+
+    #[test]
+    fn runtime_request_projection_emits_all_runtime_variant_candidates() {
+        let mut capability = runtime_capability();
+        let backend_facts = capability
+            .backend_capability_facts
+            .as_mut()
+            .expect("test capability should include backend facts");
+        backend_facts.runtime_variants = vec![
+            WorkflowRuntimeVariantCapability {
+                runtime_variant_id: "llama_cpp.cpu".to_string(),
+                device_class: WorkflowInferenceDeviceClass::Cpu,
+                available: true,
+                diagnostics: Vec::new(),
+            },
+            WorkflowRuntimeVariantCapability {
+                runtime_variant_id: "llama_cpp.cuda".to_string(),
+                device_class: WorkflowInferenceDeviceClass::Cuda,
+                available: false,
+                diagnostics: vec![WorkflowDeviceResolutionDiagnostic {
+                    code: WorkflowDeviceResolutionDiagnosticCode::CandidateUnavailable,
+                    severity: WorkflowDeviceResolutionDiagnosticSeverity::Error,
+                    message: "cuda runtime is unavailable".to_string(),
+                    device_class: Some(WorkflowInferenceDeviceClass::Cuda),
+                    device_id: Some("cuda:0".to_string()),
+                    runtime_variant_id: Some("llama_cpp.cuda".to_string()),
+                    backend_id: Some("llama_cpp".to_string()),
+                }],
+            },
+        ];
+        let workflow_request = build_workflow_technical_fit_request(
+            "workflow-a",
+            &WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: Some(4096),
+                estimated_peak_ram_mb: Some(8192),
+                estimated_min_vram_mb: Some(2048),
+                estimated_min_ram_mb: Some(4096),
+                estimation_confidence: "high".to_string(),
+                required_models: Vec::new(),
+                required_backends: vec!["llama_cpp".to_string()],
+                required_extensions: Vec::new(),
+            },
+            None,
+            Some("session-a"),
+            Some("interactive"),
+            None,
+        );
+
+        let runtime_request =
+            build_runtime_technical_fit_request(&workflow_request, None, &[capability]);
+
+        assert_eq!(runtime_request.candidates.len(), 2);
+        assert_eq!(
+            runtime_request
+                .candidates
+                .iter()
+                .map(|candidate| (
+                    candidate.candidate_id.as_str(),
+                    candidate.runtime_variant_id.as_deref(),
+                    candidate.device_class,
+                    candidate.supports_runtime_requirements,
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "llama_cpp|llama.cpp|llama_cpp.cpu",
+                    Some("llama_cpp.cpu"),
+                    Some(RuntimeTechnicalFitDeviceClass::Cpu),
+                    true,
+                ),
+                (
+                    "llama_cpp|llama.cpp|llama_cpp.cuda",
+                    Some("llama_cpp.cuda"),
+                    Some(RuntimeTechnicalFitDeviceClass::Cuda),
+                    false,
+                ),
+            ]
+        );
+        assert_eq!(
+            runtime_request.candidates[1].device_diagnostics[0].code,
+            RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable
         );
     }
 

@@ -3029,8 +3029,31 @@ Worker rules:
   `cargo test -p pantograph-runtime-registry`, and `cargo fmt --package
   pantograph-runtime-registry`.
 - Remaining follow-up: candidate synthesis still needs required Pumas fact
-  diagnostics, all-variant expansion through a shared bounded helper, and
-  cap-overflow diagnostics before cross-layer trace/admission/history work.
+  diagnostics and documented candidate-cap overflow diagnostics before
+  cross-layer trace/admission/history work.
+- 2026-05-14 generic runtime-capability variant candidate expansion slice:
+  smallest useful vertical slice was to change the embedded-runtime generic
+  runtime-capability technical-fit projection to emit one candidate per runtime
+  variant instead of collapsing to the first available or first variant before
+  runtime-selection policy can compare choices. Allowed write set:
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs` and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because it removes a
+  pre-policy variant collapse. Unavailable variants remain visible as
+  non-selectable diagnostic candidates; no Pumas fallback, compatibility shim,
+  public DTO, generated file, lockfile, workflow fixture, frontend, or ledger
+  contract changed.
+- Verification passed:
+  `cargo test -p pantograph-embedded-runtime runtime_request_projection_emits_all_runtime_variant_candidates`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`, and `cargo fmt
+  --package pantograph-embedded-runtime`; `git diff --check`.
+- Verification deviation fixed: the first focused compile showed candidate
+  readiness was checked after moving variant diagnostics into the candidate.
+  Readiness is now computed before candidate construction, and the dead
+  first-variant helper was removed with the collapse behavior it encoded.
+- Remaining follow-up: candidate synthesis still needs typed diagnostics for
+  required Pumas fact absence and documented candidate-cap overflow before
+  append-only trace/admission/history work.
 
 ### Traceability Links
 

@@ -80,6 +80,14 @@ typed diagnostic and the canonical design is fixed.
     selected through deterministic controlled exploration instead of terminal
     `ambiguous_auto_resolution`. Genuine no-candidate, invalid-candidate, and
     unrankable-policy states still fail with typed diagnostics.
+  - 2026-05-14 partial: embedded-runtime generic runtime-capability candidate
+    synthesis now emits one candidate per reported runtime variant through the
+    shared variant fact expansion helper. Unavailable variants remain visible
+    to policy as rejected diagnostic candidates instead of being hidden by the
+    former first-available/first-variant collapse. Remaining follow-up:
+    required Pumas fact absence and documented candidate-cap overflow still
+    need typed candidate-synthesis diagnostics before trace/admission/history
+    slices.
 - [x] Add a common backend-adapter capability contract for llama.cpp, PyTorch,
   vLLM, Candle, and future MLX. The contract reports facts and performs
   backend-specific translation; it must not rank candidates across backends or
@@ -4012,13 +4020,14 @@ typed diagnostic and the canonical design is fixed.
     trace, history, and diagnostic type names must use `RuntimeSelection*`,
     `ExecutionPlacement*`, or another similarly specific prefix rather than
     bare `Scheduler*`.
-  - 2026-05-14 required implementation order: (1) extract current automatic
+- 2026-05-14 required implementation order: (1) extract current automatic
     technical-fit selection into the named pure runtime-selection policy while
     preserving behavior through facade delegation tests, (2) add internal
     validated decision input/output types behind existing public serde DTOs,
     (3) fix candidate synthesis so required Pumas fact absence emits typed
-    diagnostics and all valid backend/runtime-variant/device candidates are
-    visible to policy through a shared bounded variant-expansion helper, (4)
+    diagnostics, all valid backend/runtime-variant/device candidates are
+    visible to policy through shared variant expansion, and candidate counts
+    are bounded before policy invocation, (4)
     add append-only typed trace/admission fields and selected-device
     propagation to scheduler-admission and scheduler-reservation event paths,
     (5) add diagnostics-ledger runtime-selection history summaries with isolated
@@ -4074,8 +4083,32 @@ typed diagnostic and the canonical design is fixed.
     `cargo test -p pantograph-runtime-registry`, and `cargo fmt --package
     pantograph-runtime-registry`.
   - Remaining follow-up: candidate synthesis still needs required Pumas fact
-    diagnostics, all-variant expansion through a shared bounded helper, and
-    cap-overflow diagnostics before cross-layer trace/admission/history work.
+    diagnostics and documented candidate-cap overflow diagnostics before
+    cross-layer trace/admission/history work.
+- 2026-05-14 slice: generic runtime-capability variant candidate expansion.
+  - Smallest useful vertical slice: change the embedded-runtime generic
+    runtime-capability technical-fit projection to emit one candidate per
+    runtime variant instead of collapsing to the first available or first
+    variant before runtime-selection policy can rank candidates.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs` and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the slice removes the pre-policy
+    variant collapse. Unavailable variants are retained as non-selectable
+    diagnostic candidates; no Pumas fallback, compatibility shim, public DTO,
+    generated file, lockfile, workflow fixture, frontend, or ledger contract
+    changed.
+  - Verification passed:
+    `cargo test -p pantograph-embedded-runtime runtime_request_projection_emits_all_runtime_variant_candidates`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`, and `cargo fmt
+    --package pantograph-embedded-runtime`; `git diff --check`.
+  - Deviation fixed: the first focused compile showed candidate readiness was
+    checked after moving variant diagnostics into the candidate. Readiness is
+    now computed before candidate construction, and the dead first-variant
+    helper was removed with the collapse behavior it encoded.
+  - Remaining follow-up: candidate synthesis still needs typed diagnostics for
+    required Pumas fact absence and documented candidate-cap overflow before
+    append-only trace/admission/history work.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract
