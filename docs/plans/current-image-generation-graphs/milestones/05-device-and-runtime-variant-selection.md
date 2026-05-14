@@ -3987,6 +3987,12 @@ typed diagnostic and the canonical design is fixed.
     internals. Admission and reservation-change events must also propagate
     selected device class/id from the runtime-selection decision instead of
     leaving selected device data empty when a decision resolved it.
+  - 2026-05-14 partial: workflow-session scheduler admission and
+    reservation-changed events now propagate `selected_device_id` from the
+    technical-fit decision through the existing reservation context and
+    diagnostics-ledger payload fields. Remaining follow-up: append-only typed
+    policy trace fields and selected device class propagation still need a
+    cross-layer DTO slice.
   - 2026-05-14 standards iteration: implementation of the runtime-selection
     boundary must preserve layered dependency direction and
     sync-core/async-shell design. The pure policy module may depend only on
@@ -4182,6 +4188,27 @@ typed diagnostic and the canonical design is fixed.
     diff --check`.
   - Remaining follow-up: executable candidate facts still need append-only
     trace/admission fields and diagnostics-ledger summary propagation.
+- 2026-05-14 slice: scheduler selected device id propagation.
+  - Smallest useful vertical slice: carry `selected_device_id` from the
+    workflow technical-fit decision into the workflow-session scheduler
+    reservation context and copy it into existing scheduler admission and
+    reservation-changed diagnostics payload fields.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+    and this plan directory.
+  - No-fallback/no-legacy confirmation: selected device id is copied only from
+    canonical technical-fit decision facts. The slice does not infer devices
+    from raw backend config, runtime strings, graph hints, legacy device
+    options, or active backend state, and it does not change ledger schemas,
+    TypeScript mirrors, generated files, lockfiles, or workflow fixtures.
+  - Verification passed:
+    `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+    `cargo test -p pantograph-workflow-service session_execution`, and `cargo
+    fmt --package pantograph-workflow-service`; `git diff --check`.
+  - Remaining follow-up: selected device class and append-only typed
+    runtime-selection trace fields still need a cross-layer DTO slice before
+    diagnostics-ledger runtime-selection history work.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract

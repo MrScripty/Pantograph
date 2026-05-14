@@ -3108,6 +3108,26 @@ Worker rules:
   --package pantograph-workflow-service`; `git diff --check`.
 - Remaining follow-up: executable candidate facts still need append-only
   trace/admission fields and diagnostics-ledger summary propagation.
+- 2026-05-14 scheduler selected device id propagation slice: smallest useful
+  vertical slice was to carry `selected_device_id` from the workflow
+  technical-fit decision into the workflow-session scheduler reservation
+  context and copy it into existing scheduler admission and reservation-changed
+  diagnostics payload fields. Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/session_execution.rs`,
+  and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because selected device id
+  is copied only from canonical technical-fit decision facts. It does not infer
+  devices from raw backend config, runtime strings, graph hints, legacy device
+  options, or active backend state, and it does not change ledger schemas,
+  TypeScript mirrors, generated files, lockfiles, or workflow fixtures.
+- Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_execution_session_records_load_completed_only_with_runtime_proof`,
+  `cargo test -p pantograph-workflow-service session_execution`, and `cargo fmt
+  --package pantograph-workflow-service`; `git diff --check`.
+- Remaining follow-up: selected device class and append-only typed
+  runtime-selection trace fields still need a cross-layer DTO slice before
+  diagnostics-ledger runtime-selection history work.
 
 ### Traceability Links
 

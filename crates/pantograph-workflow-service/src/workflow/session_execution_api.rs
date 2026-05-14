@@ -75,6 +75,7 @@ pub(super) struct SchedulerModelLifecycleEventRequest<'a> {
 struct SchedulerReservationContext {
     selected_runtime_id: Option<String>,
     selected_runtime_variant_id: Option<String>,
+    selected_device_id: Option<String>,
     reserved_model_ids: Vec<String>,
 }
 
@@ -1362,7 +1363,7 @@ impl WorkflowService {
                             .clone(),
                         selected_backend_key: technical_fit_decision
                             .and_then(|decision| decision.selected_backend_key.clone()),
-                        selected_device_id: None,
+                        selected_device_id: reservation_context.selected_device_id.clone(),
                         selected_network_node_id: None,
                         reserved_model_ids: reservation_context.reserved_model_ids.clone(),
                         technical_fit_selection_policy_trace: technical_fit_decision
@@ -1433,7 +1434,7 @@ impl WorkflowService {
                         selected_runtime_variant_id: reservation_context
                             .selected_runtime_variant_id
                             .clone(),
-                        selected_device_id: None,
+                        selected_device_id: reservation_context.selected_device_id.clone(),
                         selected_network_node_id: None,
                         reserved_model_ids: reservation_context.reserved_model_ids.clone(),
                         reason: reason.map(str::to_string),
@@ -2015,6 +2016,7 @@ fn scheduler_reservation_context(
     Ok(SchedulerReservationContext {
         selected_runtime_id,
         selected_runtime_variant_id: None,
+        selected_device_id: None,
         reserved_model_ids,
     })
 }
@@ -2037,6 +2039,14 @@ fn apply_technical_fit_to_reservation_context(
         .filter(|value| !value.is_empty())
     {
         context.selected_runtime_variant_id = Some(selected_runtime_variant_id.to_string());
+    }
+
+    if let Some(selected_device_id) = technical_fit_decision
+        .and_then(|decision| decision.selected_device_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        context.selected_device_id = Some(selected_device_id.to_string());
     }
 }
 
