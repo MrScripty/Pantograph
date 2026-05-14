@@ -3952,6 +3952,33 @@ typed diagnostic and the canonical design is fixed.
     internals. Admission must also propagate selected device class/id from the
     scheduler decision instead of leaving selected device data empty when a
     decision resolved it.
+  - 2026-05-14 standards iteration: implementation of the scheduler boundary
+    must preserve layered dependency direction and sync-core/async-shell
+    design. The pure policy module may depend only on scheduler/runtime
+    contracts and deterministic helpers. It must not import workflow-service,
+    embedded-runtime, diagnostics-ledger, inference gateway, Pumas, Tauri,
+    TypeScript, filesystem/database/network/subprocess code, or create/own
+    async runtimes or background tasks. Fact gathering, ledger reads, runtime
+    loading, reservation mutation, and event persistence remain outer-shell
+    responsibilities before or after policy invocation.
+  - 2026-05-14 Rust/API and interop standards iteration: new or changed
+    scheduler DTOs must parse raw strings into validated identity types at
+    boundaries, prefer enums over stringly policy states, use typed fallible
+    validation errors instead of `Result<T, String>`, derive useful
+    `Debug`/`Clone`/`Eq`, apply `#[must_use]` to decisions/results/builders,
+    and mark extension-prone public types `#[non_exhaustive]` where compatible
+    with existing serde fixtures. Any cross-layer DTO shape change must update
+    Rust producers/consumers, diagnostics-ledger payloads, TypeScript mirrors,
+    and serde fixtures in the same atomic slice.
+  - 2026-05-14 testing standards iteration: policy-boundary slices must keep
+    tests aligned with existing repository strategy. Pure scheduler behavior
+    needs fast Rust unit tests. Runtime-registry, workflow-service,
+    embedded-runtime, diagnostics-ledger, and TypeScript mirrors need existing
+    contract/fixture tests when their DTOs are touched. Frontend mirror
+    verification must use the existing Node test path, not introduce Vitest or
+    Playwright. Diagnostics-ledger history tests must use isolated SQLite
+    roots and prove scheduler ranking history never broadens runtime-specific
+    samples as a fallback.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract
@@ -4421,9 +4448,20 @@ typed diagnostic and the canonical design is fixed.
   every valid runtime for the same workflow identity has at least five
   completed runs; below that threshold, valid runtimes are selected through
   current facts and recorded controlled exploration.
+- Scheduler boundary unit tests prove the existing technical-fit facade
+  delegates to the pure policy module and preserves current automatic
+  selection behavior before any history-backed ranking change lands.
+- Scheduler contract tests prove typed policy phase, decision code,
+  history-threshold state, candidate history summaries, and no-decision
+  diagnostics serialize append-only across runtime-registry,
+  workflow-service, embedded-runtime, diagnostics-ledger, and TypeScript
+  mirrors without replacing typed fields with display strings.
 - Diagnostics-ledger tests prove model/runtime history summaries are bounded,
   use isolated SQLite roots, and key observations by typed model/task/runtime/
   device facts rather than display strings.
+- Diagnostics-ledger scheduler-history tests prove runtime-specific history is
+  not broadened to workflow-level timing samples when scheduler sample counts
+  are below threshold.
 - Cross-layer fixture tests prove append-only automatic-selection fields on
   `BackendExecutionDecision` and scheduler lifecycle diagnostics deserialize
   through Rust and TypeScript mirrors without frontend ranking or candidate

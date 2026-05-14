@@ -408,6 +408,28 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   fallback. Policy traces should keep display strings only as supplementary
   detail; scheduler phase, decision code, history-threshold state, and bounded
   per-candidate history evidence must be append-only typed fields.
+- Scheduler policy implementation must preserve standards dependency
+  direction. The pure policy module may depend only on scheduler/runtime
+  contract types and deterministic helpers. It must not depend on
+  workflow-service, embedded-runtime, diagnostics-ledger, inference gateway,
+  Pumas APIs, Tauri, TypeScript, filesystem paths, databases, network clients,
+  subprocesses, Tokio runtimes, or frontend presenter code. Async shells may
+  gather facts before invoking policy and may persist outcomes after policy
+  returns.
+- Public or cross-crate scheduler DTOs must follow Rust API and interop
+  standards: parse raw strings into validated IDs at boundaries, prefer enums
+  over stringly policy states, mark extension-prone public types
+  `#[non_exhaustive]` where compatible with existing serde contracts, derive
+  useful `Debug`/`Clone`/`Eq`, use `#[must_use]` on decisions/results/builders,
+  and expose fallible validation as typed errors instead of `Result<T,
+  String>`. Cross-layer DTO updates must land in Rust, diagnostics-ledger,
+  TypeScript mirrors, and fixtures in the same slice.
+- Scheduler tests must preserve the repository's existing test strategy. Pure
+  policy behavior belongs in fast Rust unit tests; cross-crate serde and
+  projection behavior belongs in existing Rust fixture/contract tests; frontend
+  contract mirrors must continue using the existing Node test path, not a new
+  test platform. Diagnostics-ledger history tests must use isolated SQLite
+  roots and prove no broad-history fallback is used for scheduler ranking.
 - Scheduler automatic selection should prefer already-ready compatible
   runtimes, healthy runtime variants, lower queue/resource pressure, stronger
   historical success rates, lower historical warmup/execution duration, lower
