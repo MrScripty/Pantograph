@@ -2249,6 +2249,19 @@ Worker rules:
   thin vertical slices. Full baseline/deviation enforcement, scheduler
   reschedule policy, retry exhaustion, and terminal workflow failure semantics
   remain required follow-up work after the timing history exists.
+- 2026-05-13 scheduler timing/history policy decision: timing and memory-fit
+  metrics are mandatory scheduler inputs because the scheduler's main job is to
+  find the least time-intensive valid execution path without overflowing system
+  memory. History-backed runtime ranking must not begin until every valid
+  runtime for the same workflow identity has at least five completed runs.
+  Before that threshold, automatic selection relies solely on current facts and
+  distributes runs across valid runtimes through recorded controlled
+  exploration. After the threshold, ranking may weigh load duration, warmup
+  duration, execution duration, memory pressure, OOM/failure history, and
+  already-resident runtime state. This resolves the minimum-history policy
+  portion of the retry/ranking re-plan boundary; implementation still needs
+  durable timing summaries, ranking tests, retry exhaustion, and terminal
+  failure semantics.
 - 2026-05-12 workflow timing attempt contract slice: smallest useful vertical
   slice was limited to adding a workflow-service timing attempt contract and
   focused serde/validation tests. Allowed write set:

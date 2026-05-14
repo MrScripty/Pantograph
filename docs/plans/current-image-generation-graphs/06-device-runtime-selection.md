@@ -108,8 +108,20 @@ Automatic selection proceeds in stages:
    pressure, model/runtime diagnostic history, warmup duration history,
    execution duration history, memory/OOM history, workflow priority, and
    task/model-family policy.
-3. If evidence is insufficient and more than one candidate remains valid, the
-   scheduler may use controlled exploration. Exploration must be seeded and
+3. History-backed ranking is disabled until each valid runtime candidate has at
+   least five completed runs for the same workflow identity. Until that minimum
+   is met, the scheduler must rely only on current facts such as readiness,
+   resource pressure, hard compatibility facts, and explicit workflow
+   constraints, then distribute runs across valid runtimes through controlled
+   exploration so comparable timing and memory evidence can accumulate.
+4. Once the five-run-per-valid-runtime minimum is met, timing and memory
+   history become first-class ranking inputs because they are the primary reason
+   the scheduler exists: choose the least time-intensive valid execution path
+   without overflowing system memory. Ranking must consider load duration,
+   warmup duration, execution duration, memory pressure, OOM/failure history,
+   and whether the runtime is already resident.
+5. If evidence is still insufficient and more than one candidate remains valid,
+   the scheduler may use controlled exploration. Exploration must be seeded and
    recorded so the decision is diagnosable: candidate set, selected candidate,
    policy version, seed basis, and `insufficient_history` or similar reason.
 
@@ -194,6 +206,10 @@ Required verification before replacing the temporary ambiguity behavior:
   already-ready runtime preference, no-history controlled exploration,
   history-backed preference, failure-rate preference, resource-pressure
   rejection, and policy no-decision diagnostics.
+- Unit tests prove history-backed preference is gated until every valid runtime
+  for the same workflow identity has at least five completed runs; before that,
+  selection uses current facts plus recorded controlled exploration rather than
+  timing-history ranking.
 - Fixture tests prove append-only selection policy fields deserialize in Rust
   and TypeScript without frontend inference.
 - Ledger tests use isolated durable state and prove history summaries are

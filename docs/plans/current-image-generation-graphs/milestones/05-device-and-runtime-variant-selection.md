@@ -3881,6 +3881,16 @@ typed diagnostic and the canonical design is fixed.
     and terminal workflow failure semantics. This is the full policy path and
     must not be skipped; it is deferred only to keep the next implementation
     slice contract-first and reviewable.
+  - 2026-05-13 policy decision: timing and memory-fit metrics are mandatory
+    scheduler evidence, because the scheduler's main job is to find the least
+    time-intensive valid execution path without overflowing system memory.
+    History-backed runtime ranking starts only after each valid runtime for the
+    same workflow identity has at least five completed runs. Before that
+    threshold, automatic selection must rely solely on current facts and
+    distribute runs across valid runtimes with recorded controlled exploration.
+    Once the threshold is met, ranking may weigh load duration, warmup
+    duration, execution duration, memory pressure, OOM/failure history, and
+    already-resident runtime state.
   - No-fallback/no-legacy confirmation: timing outliers and impossible timing
     state must become typed diagnostics. They must not be silently normalized,
     capped, dropped from history, or converted into successful workflow
@@ -4350,6 +4360,10 @@ typed diagnostic and the canonical design is fixed.
   preference, ledger-history preference, no-history controlled exploration,
   resource-pressure rejection, explicit constraint rejection, and policy
   no-decision diagnostics in a synchronous pure policy module.
+- Scheduler policy unit tests prove ledger-history preference is gated until
+  every valid runtime for the same workflow identity has at least five
+  completed runs; below that threshold, valid runtimes are selected through
+  current facts and recorded controlled exploration.
 - Diagnostics-ledger tests prove model/runtime history summaries are bounded,
   use isolated SQLite roots, and key observations by typed model/task/runtime/
   device facts rather than display strings.
