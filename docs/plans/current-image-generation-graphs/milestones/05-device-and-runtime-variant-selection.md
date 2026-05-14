@@ -3979,6 +3979,25 @@ typed diagnostic and the canonical design is fixed.
     Playwright. Diagnostics-ledger history tests must use isolated SQLite
     roots and prove scheduler ranking history never broadens runtime-specific
     samples as a fallback.
+  - 2026-05-14 naming/blast-radius finding: the repository already has
+    `pantograph-workflow-service::scheduler` for workflow queue/admission
+    decisions, including `WorkflowSchedulerDecisionReason`. The
+    backend/runtime/device policy boundary must not add another generic
+    `scheduler` module or reuse queue/admission reason types for execution
+    placement. Use a specific module name such as `runtime_selection_policy`,
+    `execution_placement_policy`, or `technical_fit_policy`; keep admission
+    scheduling and execution placement as separate policy domains.
+  - 2026-05-14 required implementation order: (1) extract current automatic
+    technical-fit selection into the named pure runtime-selection policy while
+    preserving behavior through facade delegation tests, (2) add internal
+    validated decision input/output types behind existing public serde DTOs,
+    (3) fix candidate synthesis so required Pumas fact absence emits typed
+    diagnostics and all valid backend/runtime-variant/device candidates are
+    visible to policy, (4) add append-only typed trace/admission fields and
+    selected-device propagation, (5) add diagnostics-ledger scheduler history
+    summaries with isolated SQLite tests and no broad-history fallback, and
+    only then (6) implement the five-run threshold and history-backed ranking
+    algorithm.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract

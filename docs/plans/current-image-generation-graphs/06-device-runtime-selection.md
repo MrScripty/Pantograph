@@ -391,6 +391,14 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   `SchedulerRuntimeHistorySummary`. The first slice must preserve current
   selector behavior through delegation, not through a compatibility shim or a
   second policy owner.
+- Naming must distinguish execution placement from the existing workflow
+  admission scheduler. The new pure policy module should use a name such as
+  `runtime_selection_policy`, `execution_placement_policy`, or
+  `technical_fit_policy`. Do not add a second generic `scheduler` module or
+  reuse `WorkflowSchedulerDecisionReason` for backend/runtime/device placement
+  reasons. Queue/admission policy remains owned by
+  `pantograph-workflow-service::scheduler`; execution placement policy remains
+  owned by the runtime-selection/technical-fit boundary.
 - Candidate synthesis must be policy-neutral. Pumas lookup failures, stale
   package facts, unavailable selector access, unsupported package facts, and
   missing backend/runtime capability facts must be projected as typed
@@ -430,6 +438,15 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   contract mirrors must continue using the existing Node test path, not a new
   test platform. Diagnostics-ledger history tests must use isolated SQLite
   roots and prove no broad-history fallback is used for scheduler ranking.
+- Implementation order for this boundary is fixed: first extract current
+  automatic technical-fit selection into the named pure runtime-selection
+  policy while preserving behavior; then add internal validated decision input
+  and output types behind the existing serde facade; then make candidate
+  synthesis emit all required typed diagnostics and all valid variants; then
+  add typed append-only trace/admission fields and selected-device propagation;
+  then add diagnostics-ledger scheduler history summaries; only after those
+  slices may the five-run threshold and history-backed ranking algorithm be
+  implemented.
 - Scheduler automatic selection should prefer already-ready compatible
   runtimes, healthy runtime variants, lower queue/resource pressure, stronger
   historical success rates, lower historical warmup/execution duration, lower
