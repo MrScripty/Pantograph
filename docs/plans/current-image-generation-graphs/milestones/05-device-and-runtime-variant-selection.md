@@ -4024,6 +4024,34 @@ typed diagnostic and the canonical design is fixed.
     (5) add diagnostics-ledger runtime-selection history summaries with isolated
     SQLite tests and no broad-history fallback, and only then (6) implement the
     five-run threshold and history-backed ranking algorithm.
+- 2026-05-14 slice: runtime-selection policy boundary extraction.
+  - Smallest useful vertical slice: move the existing automatic technical-fit
+    filtering, ranking, controlled exploration, and automatic no-decision
+    diagnostic assembly behind an in-crate pure `runtime_selection_policy`
+    module while preserving the public `select_runtime_technical_fit` facade
+    and explicit override behavior.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`, and
+    this plan directory.
+  - No-fallback/no-legacy confirmation: this is a behavior-preserving
+    delegation slice. It does not add history ranking, candidate caps, Pumas
+    fact fallback, compatibility aliases, workflow admission scheduler changes,
+    diagnostics-ledger schema/DTO changes, TypeScript mirrors, generated files,
+    lockfiles, or workflow fixtures.
+  - Verification passed:
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-runtime-registry`, and `cargo fmt --package
+    pantograph-runtime-registry`.
+  - Deviation fixed: the first focused compile showed explicit override
+    matching still needed the shared eligibility predicate. The predicate now
+    lives in the runtime-selection policy module and is exposed only
+    crate-internally for the technical-fit facade.
+  - Remaining follow-up: add internal validated runtime-selection
+    input/output types behind the existing serde facade before changing
+    candidate synthesis, cross-layer DTOs, scheduler history summaries, or the
+    five-run threshold ranking algorithm.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract

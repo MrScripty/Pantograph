@@ -4,6 +4,7 @@ mod reclaim;
 mod registry_queries;
 mod reservation;
 mod retention;
+mod runtime_selection_policy;
 mod snapshot;
 mod state;
 pub mod technical_fit;

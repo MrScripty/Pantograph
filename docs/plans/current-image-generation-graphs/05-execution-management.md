@@ -2981,6 +2981,33 @@ Worker rules:
 - Remaining follow-up: broader semantic image request limits, context/batch
   limits, byte-range projections, and worker/runtime request fields remain
   open numeric-boundary work.
+- 2026-05-14 runtime-selection policy boundary extraction slice: smallest
+  useful vertical slice was to move the existing automatic technical-fit
+  filtering, ranking, controlled exploration, and automatic no-decision
+  diagnostic assembly behind an in-crate pure `runtime_selection_policy`
+  module while preserving the public `select_runtime_technical_fit` facade and
+  explicit override behavior. Allowed write set:
+  `crates/pantograph-runtime-registry/src/lib.rs`,
+  `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+  `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`, and
+  this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because it only delegates
+  the existing automatic selector behavior. It does not add history ranking,
+  candidate caps, Pumas fact fallback, compatibility aliases, workflow
+  admission scheduler changes, diagnostics-ledger schema/DTO changes,
+  TypeScript mirrors, generated files, lockfiles, or workflow fixtures.
+- Verification passed:
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-runtime-registry`, and `cargo fmt --package
+  pantograph-runtime-registry`.
+- Verification deviation fixed: the first focused compile showed explicit
+  override matching still needed the shared eligibility predicate. The
+  predicate now lives in the runtime-selection policy module and is exposed
+  only crate-internally for the technical-fit facade.
+- Remaining follow-up: add internal validated runtime-selection input/output
+  types behind the existing serde facade before changing candidate synthesis,
+  cross-layer DTOs, scheduler history summaries, or the five-run threshold
+  ranking algorithm.
 
 ### Traceability Links
 
