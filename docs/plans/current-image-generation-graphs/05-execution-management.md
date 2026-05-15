@@ -3722,6 +3722,26 @@ Worker rules:
   prevent Pumas package facts, scheduler decisions, local paths, graph payloads,
   or worker envelopes from leaking through frontend state while keeping future
   selectable inference traits generic and maintainable.
+- 2026-05-15 standards iteration over the denoising option plan update:
+  re-checked the updated Milestone 6 gates against `PLAN-STANDARDS.md`,
+  `ARCHITECTURE-PATTERNS.md`, `INTEROP-STANDARDS.md`,
+  `FRONTEND-STANDARDS.md`, `TESTING-STANDARDS.md`,
+  `CONCURRENCY-STANDARDS.md`, and Rust API standards. Additional compliance
+  gaps were found and added to the milestone before implementation begins.
+- Added standards gates from that iteration: the port-option context slice must
+  update node-engine, Tauri, UniFFI, Rustler, frontend TypeScript mirrors, and
+  README/API notes together; provider context and denoising scheduler option
+  ids must be validated typed Rust values with structured errors/diagnostics;
+  provider-backed selection UI must stay declarative, accessible, event-driven,
+  and protected against stale async responses; and tests must cover binding
+  contract preservation, accessibility/keyboard behavior, graph gesture
+  interaction, stale response discard, and context-keyed cache invalidation.
+- Standards conclusion for this iteration: with the added gates, implementing
+  the plan should remain standards-compliant across architecture, interop,
+  frontend ownership, testing, concurrency, and Rust API boundaries. Without
+  these gates, likely violations would be cross-binding DTO drift, stringly
+  typed option ids, stale frontend async writes, inaccessible embedded selects,
+  and accidental frontend ownership of backend-derived executable choices.
 
 ### Traceability Links
 

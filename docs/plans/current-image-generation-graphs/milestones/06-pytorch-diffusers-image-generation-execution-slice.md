@@ -66,6 +66,17 @@ PyTorch/diffusers and produce a retained image artifact.
   it must not push full Pumas package facts, scheduler decisions, worker
   envelopes, graph node payloads, or local filesystem paths through frontend
   state.
+- [ ] Update every port-option interop surface in the same context slice:
+  `node-engine` contracts/provider tests, Tauri `query_port_options`, UniFFI
+  `workflow_graph_query_port_options`, Rustler `node_registry_query_port_options`,
+  frontend TypeScript mirrors, and affected README/API notes. Do not add a
+  context field in only one binding or rely on untyped JSON passthrough for
+  cross-language behavior.
+- [ ] Model provider context and denoising scheduler option ids as validated
+  typed values at Rust boundaries. Public constructors/projection helpers must
+  return structured errors or bounded diagnostics, not `Result<T, String>` or
+  string-matched control flow. Use stable primitive option ids for selected
+  values and reserve display labels/descriptions for presentation only.
 - [ ] Add backend-owned port options for `llm-inference.denoising_scheduler`
   so graph editors can present valid denoising/sampling schedulers from
   model/package/runtime facts. The frontend must not hardcode the allowed
@@ -74,6 +85,11 @@ PyTorch/diffusers and produce a retained image artifact.
   are displayed without silently writing executable defaults into graph data.
   Missing or stale selected values should render as unset/stale UI state and
   let the planner apply default policy or return typed diagnostics.
+- [ ] Keep provider-backed selection UI declarative, accessible, and
+  event-driven. It must not introduce polling loops, optimistic backend-owned
+  state updates, manual DOM mutation, or graph-canvas gesture conflicts. Async
+  option loads must discard stale responses when model/runtime context changes
+  before the previous query returns.
 - [ ] Add context-keyed cache/invalidation for provider-backed option queries
   before reusing backend port options for model/runtime-dependent traits. The
   cache key must include node type, port id, provider context, and package-facts
@@ -203,8 +219,18 @@ PyTorch/diffusers and produce a retained image artifact.
   context, reject insufficient context with diagnostics, and do not transport
   full Pumas package facts, local paths, graph payloads, worker envelopes, or
   scheduler decisions through frontend state.
+- Binding contract tests prove the port-option context serde shape is preserved
+  across node-engine, Tauri, UniFFI, Rustler, and frontend TypeScript mirrors in
+  the same slice.
 - Selection-input tests prove provider-backed options render unset/stale values
   without auto-selecting a default or first option into graph data.
+- Selection-input accessibility and interaction tests prove the provider-backed
+  control has an accessible name, keyboard selection behavior, stale-value
+  presentation, and does not let graph pan/drag gestures corrupt the embedded
+  control interaction.
+- Frontend async tests prove stale provider responses are discarded when the
+  selected model, package-facts cursor, or runtime context changes before a
+  prior option query resolves.
 - Provider cache tests prove denoising scheduler options are keyed by node type,
   port id, selected model/package-facts cursor, and backend/runtime context so
   model changes cannot reuse stale option lists.
