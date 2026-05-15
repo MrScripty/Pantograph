@@ -23,6 +23,13 @@ PyTorch/diffusers and produce a retained image artifact.
   `BackendExecutionDecision` into `ImageGenerationExecutionPlan`; it must not
   dispatch image generation from `ImageGenerationRequest` alone or infer
   backend/runtime/device/package decisions from request fields.
+- [ ] Add a first-class run-scoped workflow execution plan before successful
+  end-to-end image execution. The plan is produced by scheduler/admission,
+  contains per-node reduced execution decisions, and is consumed by node
+  execution without writing scheduler facts into graph inputs.
+- [ ] Project the workflow execution plan's image-generation node decision into
+  inference's `BackendExecutionDecision` at the composition boundary before
+  calling `generate_image_from_planning_input`.
 - [ ] Verify backend runtime selection maps diffusion/image-generation package
   facts and graph hints to PyTorch execution, preserving `diffusers` as the
   dependency and package capability label.
@@ -492,3 +499,87 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   gateway stay side-effect free below that boundary; node-engine must not
   invent backend/runtime/device decisions from request fields, active backend
   state, or graph hints.
+
+2026-05-15 execution-plan architecture decision:
+
+- Decision: use Option 3 as the target architecture. The scheduler/admission
+  path will produce a first-class per-run workflow execution plan containing
+  per-node execution decisions. Node execution consumes that plan; it does not
+  recompute scheduling policy, infer runtime choices, or persist scheduler
+  facts in graph inputs.
+- Reason: the scheduler algorithm is expected to change often. A run-level
+  execution plan lets future ranking, exploration, readiness, residency,
+  warmup, memory-fit, retry, and queue-policy changes stay in scheduler/plan
+  production instead of leaking into node-engine, inference gateway, graph
+  schemas, frontend state, or worker envelopes.
+- No-fallback/no-legacy confirmation: the execution plan is not a compatibility
+  shim for request-only image generation. If a runnable image-generation node
+  lacks a selected per-node decision, execution fails with typed diagnostics
+  instead of using active backend state, raw graph hints, request model strings,
+  implicit `diffusers` aliases, or CPU/runtime fallback.
+
+Staged Option 3 implementation plan:
+
+1. Contract foundation slice:
+   - Add a small workflow execution-plan DTO at the workflow/embedded-runtime
+     boundary. The initial DTO should contain run id/workflow id, a schema
+     version, and a map keyed by stable node id to reduced execution decisions.
+   - The first per-node decision shape must include selected backend key,
+     selected runtime id/variant id, selected device class/id, selected task id,
+     selected model ref when available, and bounded diagnostics/trace ids.
+   - Do not include full Pumas facts, worker envelopes, raw graph node payloads,
+     local paths beyond existing approved model/package refs, or mutable
+     scheduler internals.
+   - Verification: contract serde tests, append-only/default behavior tests,
+     and a no-graph-input test proving scheduler decisions are not written into
+     workflow node inputs.
+
+2. Admission production slice:
+   - Build the initial execution plan immediately after runtime preflight and
+     scheduler admission, using the existing `WorkflowTechnicalFitDecision`
+     already computed before run start.
+   - Store it as run-scoped execution context, not as saved workflow content.
+     If persistence is needed for diagnostics or recovery, persist only the
+     execution-plan record with explicit schema/version and source ids.
+   - Verification: session admission tests prove the admitted run has an
+     execution plan when technical-fit selected a candidate, and no plan is
+     produced when technical-fit fails.
+
+3. Projection adapter slice:
+   - Add a focused adapter that projects a workflow execution-plan node
+     decision into inference's `BackendExecutionDecision`.
+   - Keep this adapter at the composition boundary. Inference planner remains
+     side-effect free, and node-engine does not know scheduler ranking policy.
+   - Verification: adapter tests cover selected backend/runtime/device
+     projection, missing fields, unknown device/runtime identifiers, and
+     diagnostic propagation.
+
+4. Node-engine consumption slice:
+   - Thread the execution plan into node execution through a typed runtime
+     context, likely `ExecutorExtensions`, without serializing it into graph
+     inputs.
+   - `execute_image_generation_inference` reads the current node's per-node
+     decision, combines it with the existing `ImageGenerationRequest` and
+     Pumas `ResolvedModelPackageFacts`, and calls
+     `generate_image_from_planning_input`.
+   - Missing plan, missing node decision, missing package facts, or failed
+     projection must terminate the workflow task with typed diagnostics.
+   - Verification: node-engine tests prove successful planned image execution
+     and fail-closed behavior for absent/invalid execution-plan decisions.
+
+5. Lifecycle/diagnostics slice:
+   - Attach execution-plan identifiers and selected per-node decision facts to
+     existing scheduler, runtime-load, inference lifecycle, and diagnostics
+     ledger records without duplicating large payloads.
+   - Verification: diagnostics tests prove selected backend/runtime/device
+     facts come from the execution plan and that planner failures preserve
+     diagnostic codes.
+
+6. Recovery and future expansion slice:
+   - Define how execution plans participate in retry/recovery. A retry may
+     reuse a still-valid plan or request a new scheduler plan, but the policy
+     must be explicit and diagnostic-backed.
+   - Keep later additions append-only: multi-node placement, memory
+     reservations, exploration cohorts, warmed-runtime affinity, historical
+     performance summaries, and artifact-retention decisions can extend the
+     plan without changing node graph ergonomics.

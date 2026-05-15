@@ -3306,6 +3306,45 @@ Worker rules:
   gateway stay side-effect free below that boundary; node-engine must not
   invent backend/runtime/device decisions from request fields, active backend
   state, or graph hints.
+- 2026-05-15 execution-plan architecture decision: Option 3 is now the target
+  architecture. Scheduler/admission will produce a first-class per-run workflow
+  execution plan containing per-node execution decisions. Node execution
+  consumes that plan and must not recompute scheduling policy, infer runtime
+  choices, or persist scheduler facts in graph inputs.
+- Rationale: scheduler ranking, exploration, readiness, residency, warmup,
+  memory-fit, retry, and queue policy are expected to change often. A run-level
+  execution plan keeps those changes in scheduler/plan production instead of
+  leaking policy into node-engine, inference gateway, graph schemas, frontend
+  state, or worker envelopes.
+- Staged implementation:
+  1. Contract foundation: add a small workflow execution-plan DTO with
+     schema/version, run/workflow identity, and per-node reduced execution
+     decisions. The initial decision includes selected backend key, runtime
+     id/variant id, device class/id, task id, selected model ref when available,
+     and bounded diagnostics/trace ids. It must not include full Pumas facts,
+     worker envelopes, raw graph node payloads, or mutable scheduler internals.
+  2. Admission production: build the initial execution plan immediately after
+     runtime preflight and scheduler admission from the existing
+     `WorkflowTechnicalFitDecision`; store it as run-scoped execution context,
+     not saved workflow content.
+  3. Projection adapter: add a focused adapter from workflow execution-plan
+     node decision to inference `BackendExecutionDecision`, with typed failures
+     for missing/invalid selected identifiers.
+  4. Node-engine consumption: thread the execution plan into node execution via
+     typed runtime context such as `ExecutorExtensions`; image generation reads
+     the current node decision, combines it with request and Pumas facts, and
+     calls `generate_image_from_planning_input`.
+  5. Lifecycle/diagnostics: attach execution-plan identifiers and selected
+     decision facts to scheduler, runtime-load, inference lifecycle, and ledger
+     records without duplicating large payloads.
+  6. Recovery/future expansion: define whether retries reuse a still-valid plan
+     or request a new scheduler plan, then extend append-only for multi-node
+     placement, memory reservations, exploration cohorts, warmed-runtime
+     affinity, historical summaries, and artifact-retention decisions.
+- No-fallback/no-legacy confirmation: a runnable image-generation node without
+  a selected per-node execution-plan decision must fail with typed diagnostics
+  instead of using active backend state, raw graph hints, request model strings,
+  implicit `diffusers` aliases, or CPU/runtime fallback.
 
 ### Traceability Links
 
