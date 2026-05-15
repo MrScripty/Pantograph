@@ -150,6 +150,30 @@ fn planner_rejects_ambiguous_family_evidence() {
 }
 
 #[test]
+fn planner_rejects_unsupported_single_family_without_generic_diffusers_fallback() {
+    let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let diffusers = facts.diffusers.as_mut().expect("diffusers facts");
+    diffusers.family_evidence = vec![crate::model_contracts::ImageGenerationFamilyEvidence {
+        family: ImageGenerationFamilyLabel::Flux,
+        source: crate::model_contracts::ImageGenerationFamilyEvidenceSource::PipelineClass,
+        value_source: crate::model_contracts::PackageFactValueSource::Config,
+        source_path: Some("model_index.json".to_string()),
+        message: None,
+    }];
+    let request = image_request();
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    assert!(diagnostic_codes(&outcome)
+        .contains(&ImageGenerationPlannerDiagnosticCode::UnsupportedFamily));
+}
+
+#[test]
 fn planner_reports_exact_missing_component_role_path() {
     let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
     facts

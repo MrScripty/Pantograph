@@ -282,6 +282,26 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   planning or backend execution contract; do not replace that with ad hoc
   string inspection inside the side-effect-free planner.
 
+2026-05-15 planner unsupported-family guardrail slice:
+
+- Smallest useful vertical slice: add focused coverage for a single valid but
+  unsupported image-generation family so the planner emits
+  `UnsupportedFamily` instead of attempting generic Diffusers loading.
+- Allowed write set: `crates/inference/src/image_generation_planner_tests.rs`
+  and this plan directory.
+- No-fallback/no-legacy confirmation: Flux family evidence is treated as
+  recognized but unsupported in this slice. The planner does not reinterpret it
+  as Stable Diffusion, strip the family requirement, or dispatch to worker
+  execution.
+- Verification passed: `cargo test -p inference
+  planner_rejects_unsupported_single_family_without_generic_diffusers_fallback
+  --lib`, `cargo check -p inference`, `cargo fmt -p inference`, and `git diff
+  --check`.
+- Remaining follow-up: support for FLUX, FLUX.2, Qwen Image, Lumina Image, GLM
+  Image, Z-Image, and SDXL requires explicit family requirement tables,
+  option-support rules, component ambiguity diagnostics, and fixtures before
+  any of those families can execute.
+
 2026-05-12 worker image-envelope contract slice:
 
 - Smallest useful vertical slice: add the Rust-side PyTorch worker

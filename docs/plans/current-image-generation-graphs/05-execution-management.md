@@ -3675,6 +3675,17 @@ Worker rules:
   follow-up: Pumas/model root validation needs a root-bearing planning or
   backend execution contract rather than ad hoc string inspection inside the
   side-effect-free planner.
+- 2026-05-15: Completed the planner unsupported-family guardrail slice. Added
+  focused coverage proving Flux family evidence is recognized as a single valid
+  but unsupported family and returns `UnsupportedFamily` instead of falling
+  back to generic Diffusers loading, Stable Diffusion assumptions, or worker
+  execution. Verification passed: `cargo test -p inference
+  planner_rejects_unsupported_single_family_without_generic_diffusers_fallback
+  --lib`, `cargo check -p inference`, `cargo fmt -p inference`, and `git diff
+  --check`. Remaining follow-up: executable support for FLUX, FLUX.2, Qwen
+  Image, Lumina Image, GLM Image, Z-Image, and SDXL requires explicit family
+  requirement tables, option-support rules, component ambiguity diagnostics,
+  and fixtures.
 
 ### Traceability Links
 
