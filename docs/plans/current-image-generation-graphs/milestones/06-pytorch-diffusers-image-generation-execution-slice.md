@@ -929,6 +929,18 @@ Staged Option 3 implementation plan:
      --lib`, `cargo check -p pantograph-diagnostics-ledger`, `cargo check -p
      pantograph-workflow-service`, `cargo fmt -p pantograph-diagnostics-ledger
      -p pantograph-workflow-service`, and `git diff --check` passed.
+   - Unsupported image option lifecycle diagnostic coverage (completed
+     2026-05-15): planned image-generation gateway lifecycle tests now prove
+     planner `UnsupportedOption` diagnostics are projected as
+     `unsupported_option` compatibility issues with exact request field paths,
+     while request image bodies remain absent from serialized lifecycle
+     events. This is test-only coverage; it does not add fallback execution,
+     graph schema fields, frontend behavior, worker fields, lockfiles, saved
+     workflow fixtures, persisted schemas, or new diagnostics payload types.
+   - Verification result: `cargo test -p inference
+     test_generate_image_from_planning_input_with_lifecycle_records_unsupported_option_code --lib`,
+     `cargo check -p inference`, `cargo fmt -p inference`, and
+     `git diff --check` passed.
    - Remaining follow-up: recovery/retry policy still needs explicit planning
      before execution plans can become durable replay state. That belongs to
      the recovery and future expansion slice, not scheduler lifecycle

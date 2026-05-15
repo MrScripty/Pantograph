@@ -26,7 +26,7 @@ use crate::model_contracts::{
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, DepthEstimationRequest, EncodedAudio,
-    ImageGenerationRequest, ImageUnderstandingRequest, InferenceExecutionInput,
+    EncodedImage, ImageGenerationRequest, ImageUnderstandingRequest, InferenceExecutionInput,
     InferenceExecutionRequest, InferenceExecutionResult, InferenceRequestLifecycleEvent,
     InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink,
     InferenceRequestLifecycleEventSinkError, InferenceUsage, MultimodalGenerationRequest,
@@ -1246,6 +1246,50 @@ async fn test_generate_image_from_planning_input_with_lifecycle_records_planner_
     let event_json = serde_json::to_string(&events).expect("events serialize");
     assert!(!event_json.contains("a compact test image"));
     assert!(!event_json.contains("/tmp"));
+}
+
+#[tokio::test]
+async fn test_generate_image_from_planning_input_with_lifecycle_records_unsupported_option_code() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = ImageGenerationRequest {
+        init_image: Some(EncodedImage {
+            data_base64: "aW1hZ2U=".to_string(),
+            mime_type: "image/png".to_string(),
+            width: Some(16),
+            height: Some(16),
+        }),
+        ..sample_image_generation_request()
+    };
+    let decision = sample_image_backend_decision("pytorch");
+
+    let error = gateway
+        .generate_image_from_planning_input_with_lifecycle(
+            ImageGenerationPlanningInput {
+                request: &request,
+                package_facts: &facts,
+                backend_decision: &decision,
+            },
+            Some("run-a:image-node-1:image_generation".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect_err("unsupported image options should fail during planning");
+
+    assert!(matches!(
+        error,
+        GatewayError::ImageGenerationPlanning { .. }
+    ));
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
+    assert!(events[1].compatibility_issues.iter().any(|issue| {
+        issue.kind == "unsupported_option" && issue.path.as_deref() == Some("request.init_image")
+    }));
+    let event_json = serde_json::to_string(&events).expect("events serialize");
+    assert!(!event_json.contains("aW1hZ2U="));
 }
 
 #[tokio::test]
