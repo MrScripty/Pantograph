@@ -3491,6 +3491,18 @@ Worker rules:
   model/package facts can change without graph/runtime fingerprint changes,
   preflight cache invalidation needs a package-facts/update-cursor component
   before warm-session plan reuse becomes authoritative.
+- 2026-05-15: Completed Milestone 6 Option 3 projection adapter slice. Added
+  an embedded-runtime composition-boundary adapter that projects a workflow
+  execution-plan node decision into inference `BackendExecutionDecision` with
+  typed validation for backend ids, runtime variant ids, device ids/classes,
+  task ids, selected model refs, diagnostics, and technical-fit policy trace
+  ids. No node-engine runtime context or execution behavior was threaded in
+  this slice. Verification passed: `cargo test -p
+  pantograph-embedded-runtime workflow_execution_plan_projection`, `cargo
+  check -p pantograph-embedded-runtime`, and `cargo fmt -p
+  pantograph-embedded-runtime`. Deviation recorded: the crate-private adapter
+  module is temporarily marked `#[allow(dead_code)]` until the node-engine
+  consumption slice uses it.
 
 ### Traceability Links
 

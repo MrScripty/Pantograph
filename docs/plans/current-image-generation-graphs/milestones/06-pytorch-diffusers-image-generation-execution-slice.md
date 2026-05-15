@@ -636,7 +636,7 @@ Staged Option 3 implementation plan:
      slice must add a package-facts/update-cursor fingerprint before execution
      plans are reused for warm sessions.
 
-3. Projection adapter slice:
+3. Projection adapter slice (completed 2026-05-15):
    - Add a focused adapter that projects a workflow execution-plan node
      decision into inference's `BackendExecutionDecision`.
    - Keep this adapter at the composition boundary. Embedded-runtime owns the
@@ -650,6 +650,26 @@ Staged Option 3 implementation plan:
    - Verification: adapter tests cover selected backend/runtime/device
      projection, missing fields, unknown device/runtime identifiers, and
      diagnostic propagation.
+   - Completed scope: added
+     `crates/pantograph-embedded-runtime/src/workflow_execution_plan_projection.rs`
+     as the composition-boundary adapter from workflow execution-plan node
+     decisions to inference `BackendExecutionDecision`. The adapter validates
+     backend ids, runtime variant ids, device ids/classes, task ids, selected
+     Pumas model refs, bounded diagnostics, and parseable technical-fit policy
+     trace ids before constructing the inference decision.
+   - No-fallback/no-legacy confirmation: the adapter copies selected facts
+     from the workflow execution plan only. It does not inspect graph hints,
+     active backend state, raw device strings, Pumas package facts, or request
+     fields to choose a backend/runtime/device. Invalid projected ids fail with
+     typed `WorkflowExecutionPlanProjectionError` values.
+   - Verification result: `cargo test -p pantograph-embedded-runtime
+     workflow_execution_plan_projection`, `cargo check -p
+     pantograph-embedded-runtime`, and `cargo fmt -p
+     pantograph-embedded-runtime` passed.
+   - Deviation: the adapter module is intentionally marked `#[allow(dead_code)]`
+     until the next node-engine consumption slice threads it into runtime
+     context. This keeps the adapter crate-private instead of exposing a
+     premature public API just to silence unused warnings.
 
 4. Node-engine consumption slice:
    - Thread the execution plan into node execution through a typed runtime
