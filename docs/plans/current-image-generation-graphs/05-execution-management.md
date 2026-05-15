@@ -3617,6 +3617,24 @@ Worker rules:
   pantograph-workflow-service`, and `git diff --check`. Remaining follow-up:
   recovery/retry policy still needs explicit planning before execution plans
   can become durable replay state.
+- 2026-05-15: Completed the run-scoped execution-plan lifecycle guardrail
+  slice. Added scheduler-store coverage proving `finish_run` clears the active
+  execution plan and that neither the finished workflow run id nor the next
+  admitted run can observe the prior plan before a new scheduler plan is
+  produced. This locks in the current recovery boundary: execution plans are
+  active-run scoped and retries/re-admissions must produce a fresh plan unless
+  a future durable replay slice explicitly adds transactional/idempotent
+  persistence, duplicate-admission handling, cancellation coverage, and
+  diagnostic-backed reuse policy. No production behavior, durable storage,
+  scheduler ranking, node-engine context, inference gateway, frontend DTOs,
+  saved workflow fixtures, worker contracts, lockfiles, or generated files
+  changed. Verification passed: `cargo test -p pantograph-workflow-service
+  finish_run_clears_run_scoped_execution_plan_before_next_admission --lib`,
+  `cargo test -p pantograph-workflow-service
+  active_run_records_run_scoped_execution_plan --lib`, `cargo check -p
+  pantograph-workflow-service`, `cargo fmt -p pantograph-workflow-service`,
+  and `git diff --check`. Remaining follow-up: durable replay/retry semantics
+  remain deferred behind a separate re-plan.
 
 ### Traceability Links
 

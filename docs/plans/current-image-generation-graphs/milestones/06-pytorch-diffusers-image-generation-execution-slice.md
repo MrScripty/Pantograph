@@ -855,6 +855,27 @@ Staged Option 3 implementation plan:
      reservations, exploration cohorts, warmed-runtime affinity, historical
      performance summaries, and artifact-retention decisions can extend the
      plan without changing node graph ergonomics.
+   - Run-scoped plan lifecycle guardrail (completed 2026-05-15):
+     scheduler-store tests now prove an active execution plan is cleared when
+     the active run finishes and is not visible to either the finished run id or
+     the next admitted run before a new plan is produced. This codifies the
+     current policy: retries/re-admissions must get a fresh active-run plan
+     unless a future durable replay slice explicitly adds idempotent persistence
+     and diagnostic-backed reuse semantics. No production behavior, durable
+     storage, scheduler ranking, node-engine context, inference gateway,
+     frontend DTOs, saved workflow fixtures, worker contracts, lockfiles, or
+     generated files changed.
+   - Verification result: `cargo test -p pantograph-workflow-service
+     finish_run_clears_run_scoped_execution_plan_before_next_admission --lib`,
+     `cargo test -p pantograph-workflow-service
+     active_run_records_run_scoped_execution_plan --lib`, `cargo check -p
+     pantograph-workflow-service`, `cargo fmt -p pantograph-workflow-service`,
+     and `git diff --check` passed.
+   - Remaining follow-up: durable replay/retry semantics remain deferred and
+     require a separate re-plan with transactional/idempotent persistence,
+     duplicate-admission tests, cancellation tests, and diagnostic-backed
+     retry/reuse policy before any execution-plan record becomes recoverable
+     state.
 
 Standards compliance gates for every Option 3 slice:
 

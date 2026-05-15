@@ -21,6 +21,23 @@ fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
     }
 }
 
+fn image_execution_plan_for_run(workflow_run_id: &str) -> WorkflowExecutionPlan {
+    WorkflowExecutionPlan::new(
+        WorkflowRunId::try_from(workflow_run_id.to_string()).expect("valid run id"),
+        WorkflowId::try_from("workflow-image-plan".to_string()).expect("valid workflow id"),
+        vec![WorkflowExecutionPlanNodeDecision::new(
+            "image-node-1",
+            "pytorch",
+            "pytorch-runtime",
+            "pytorch.cuda",
+            WorkflowInferenceDeviceClass::Cuda,
+            WorkflowInferenceTaskId::ImageGeneration,
+        )
+        .expect("valid node decision")],
+    )
+    .expect("valid execution plan")
+}
+
 #[test]
 fn admission_input_marks_loaded_runtime_reuse_as_incompatible_when_override_diverges() {
     let mut store = WorkflowExecutionSessionStore::new(1, 1);
@@ -125,20 +142,7 @@ fn active_run_records_run_scoped_execution_plan() {
         .expect("begin run")
         .expect("dequeued run");
 
-    let execution_plan = WorkflowExecutionPlan::new(
-        WorkflowRunId::try_from(workflow_run_id.clone()).expect("valid run id"),
-        WorkflowId::try_from("workflow-image-plan".to_string()).expect("valid workflow id"),
-        vec![WorkflowExecutionPlanNodeDecision::new(
-            "image-node-1",
-            "pytorch",
-            "pytorch-runtime",
-            "pytorch.cuda",
-            WorkflowInferenceDeviceClass::Cuda,
-            WorkflowInferenceTaskId::ImageGeneration,
-        )
-        .expect("valid node decision")],
-    )
-    .expect("valid execution plan");
+    let execution_plan = image_execution_plan_for_run(&workflow_run_id);
 
     store
         .set_active_run_execution_plan(&session_id, &workflow_run_id, execution_plan)
@@ -170,5 +174,59 @@ fn active_run_records_run_scoped_execution_plan() {
     assert!(store
         .active_run_execution_plan(&session_id, "other-run")
         .expect("query mismatched active plan")
+        .is_none());
+}
+
+#[test]
+fn finish_run_clears_run_scoped_execution_plan_before_next_admission() {
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = store
+        .create_session(
+            "workflow-image-plan".to_string(),
+            None,
+            None,
+            vec!["pytorch".to_string()],
+            vec!["stable-diffusion-xl".to_string()],
+            true,
+        )
+        .expect("create session");
+    let first_workflow_run_id = store
+        .enqueue_run(&session_id, &empty_run_request())
+        .expect("enqueue first run");
+    store
+        .begin_queued_run(&session_id, &first_workflow_run_id)
+        .expect("begin first run")
+        .expect("dequeued first run");
+    store
+        .set_active_run_execution_plan(
+            &session_id,
+            &first_workflow_run_id,
+            image_execution_plan_for_run(&first_workflow_run_id),
+        )
+        .expect("record first execution plan");
+
+    store
+        .finish_run(&session_id, &first_workflow_run_id)
+        .expect("finish first run");
+    assert!(store
+        .active_run_execution_plan(&session_id, &first_workflow_run_id)
+        .expect("query finished run plan")
+        .is_none());
+
+    let second_workflow_run_id = store
+        .enqueue_run(&session_id, &empty_run_request())
+        .expect("enqueue second run");
+    store
+        .begin_queued_run(&session_id, &second_workflow_run_id)
+        .expect("begin second run")
+        .expect("dequeued second run");
+
+    assert!(store
+        .active_run_execution_plan(&session_id, &first_workflow_run_id)
+        .expect("query prior run plan during second run")
+        .is_none());
+    assert!(store
+        .active_run_execution_plan(&session_id, &second_workflow_run_id)
+        .expect("query second run before plan")
         .is_none());
 }
