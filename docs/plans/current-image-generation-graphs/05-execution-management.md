@@ -3259,6 +3259,24 @@ Worker rules:
   that gathers request, Pumas facts, readiness, executable candidates, history
   summaries, and the scheduler decision before calling the planning-input
   gateway method.
+- 2026-05-14 typed image execution boundary validation slice: smallest useful
+  vertical slice was to update typed gateway tests that still expected
+  request-only image generation to execute, proving `execute_typed` and
+  `execute_typed_with_lifecycle` now fail closed at the planned execution
+  boundary until a planning-input caller supplies Pumas facts and the scheduler
+  decision. Allowed write set: `crates/inference/src/gateway_tests.rs` and
+  this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because no raw typed-image
+  compatibility path was restored. The lifecycle path records backend execution
+  failure with the `ImageGenerationExecutionPlan` diagnostic and does not emit
+  postprocessing or result-projection success phases.
+- Verification passed: `cargo test -p inference
+  test_execute_typed_image_generation_requires_planned_context`, `cargo test
+  -p inference planned_boundary`, `cargo test -p inference gateway::tests::`,
+  `cargo fmt --package inference -- --check`, and `git diff --check`.
+- Remaining follow-up: workflow/inference execution still needs a successful
+  planned-image path that calls `generate_image_from_planning_input` and then
+  updates typed lifecycle coverage for the planned success case.
 
 ### Traceability Links
 

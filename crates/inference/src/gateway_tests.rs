@@ -1306,7 +1306,7 @@ async fn test_transcribe_audio_forwards_to_active_backend() {
 }
 
 #[tokio::test]
-async fn test_execute_typed_forwards_image_generation_to_active_backend() {
+async fn test_execute_typed_image_generation_requires_planned_context() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
     let request = InferenceExecutionRequest {
         request_id: Some("typed-image-1".to_string()),
@@ -1338,34 +1338,16 @@ async fn test_execute_typed_forwards_image_generation_to_active_backend() {
         extra_options: serde_json::Value::Null,
     };
 
-    let result = gateway
+    let error = gateway
         .execute_typed(request)
         .await
-        .expect("typed image request should execute");
+        .expect_err("typed image request should require a planned execution context");
 
-    match result {
-        InferenceExecutionResult::ImageGeneration {
-            result,
-            option_diagnostics,
-        } => {
-            assert_eq!(result.images[0].data_base64, "typed prompt");
-            assert_eq!(result.seed_used, Some(7));
-            assert!(option_diagnostics.iter().any(|diagnostic| {
-                diagnostic.option_path == "image.width"
-                    && diagnostic.state == OptionSupportState::Honored
-                    && diagnostic.backend_key.as_deref() == Some("mock")
-            }));
-            assert!(option_diagnostics.iter().any(|diagnostic| {
-                diagnostic.option_path == "image.scheduler"
-                    && diagnostic.state == OptionSupportState::Honored
-            }));
-            assert!(option_diagnostics.iter().any(|diagnostic| {
-                diagnostic.option_path == "image.extra_options.safety_checker"
-                    && diagnostic.state == OptionSupportState::Mapped
-            }));
-        }
-        other => panic!("expected image generation result, got {other:?}"),
-    }
+    assert!(matches!(
+        error,
+        GatewayError::Backend(BackendError::Config(message))
+            if message.contains("ImageGenerationExecutionPlan")
+    ));
 }
 
 #[tokio::test]
@@ -2314,7 +2296,7 @@ async fn test_mode_info_runtime_facts_do_not_report_auto_as_resolved_device() {
 }
 
 #[tokio::test]
-async fn test_execute_typed_with_lifecycle_records_validation_and_backend_completion() {
+async fn test_execute_typed_with_lifecycle_records_planned_boundary_failure() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let sink = Arc::new(RecordingLifecycleSink::default());
     let request = InferenceExecutionRequest {
@@ -2349,13 +2331,19 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
         }),
     };
 
-    gateway
+    let error = gateway
         .execute_typed_with_lifecycle(request, sink.clone())
         .await
-        .expect("typed request should execute");
+        .expect_err("typed image request should require a planned execution context");
+
+    assert!(matches!(
+        error,
+        GatewayError::Backend(BackendError::Config(message))
+            if message.contains("ImageGenerationExecutionPlan")
+    ));
 
     let events = sink.events();
-    assert_eq!(events.len(), 15);
+    assert_eq!(events.len(), 9);
     assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
     assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
     assert_eq!(events[0].task_id.as_deref(), Some("image_generation"));
@@ -2386,10 +2374,11 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
     assert_eq!(events[6].kind, InferenceRequestLifecycleEventKind::Started);
     assert_eq!(events[6].task_id.as_deref(), Some("image_generation"));
     assert_eq!(events[7].phase, InferenceLifecyclePhase::BackendExecution);
-    assert_eq!(
-        events[7].kind,
-        InferenceRequestLifecycleEventKind::Completed
-    );
+    assert_eq!(events[7].kind, InferenceRequestLifecycleEventKind::Failed);
+    assert!(events[7]
+        .detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("ImageGenerationExecutionPlan")));
     assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "image.width"
             && diagnostic.state == OptionSupportState::Honored
@@ -2406,30 +2395,6 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
     assert_eq!(events[8].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(
         events[8].kind,
-        InferenceRequestLifecycleEventKind::CleanupCompleted
-    );
-    assert_eq!(events[9].phase, InferenceLifecyclePhase::Postprocessing);
-    assert_eq!(events[9].kind, InferenceRequestLifecycleEventKind::Started);
-    assert_eq!(events[10].phase, InferenceLifecyclePhase::Postprocessing);
-    assert_eq!(
-        events[10].kind,
-        InferenceRequestLifecycleEventKind::Completed
-    );
-    assert_eq!(events[11].phase, InferenceLifecyclePhase::Postprocessing);
-    assert_eq!(
-        events[11].kind,
-        InferenceRequestLifecycleEventKind::CleanupCompleted
-    );
-    assert_eq!(events[12].phase, InferenceLifecyclePhase::ResultProjection);
-    assert_eq!(events[12].kind, InferenceRequestLifecycleEventKind::Started);
-    assert_eq!(events[13].phase, InferenceLifecyclePhase::ResultProjection);
-    assert_eq!(
-        events[13].kind,
-        InferenceRequestLifecycleEventKind::Completed
-    );
-    assert_eq!(events[14].phase, InferenceLifecyclePhase::ResultProjection);
-    assert_eq!(
-        events[14].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
     );
     assert!(events.iter().all(|event| {

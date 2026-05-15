@@ -437,3 +437,25 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 - Remaining follow-up: wire the workflow/inference async shell that gathers the
   existing request, Pumas facts, dependency readiness, candidate facts, history
   summaries, and scheduler decision before calling this gateway method.
+
+2026-05-14 typed image execution boundary validation slice:
+
+- Smallest useful vertical slice: update typed gateway tests that still
+  expected request-only image generation to execute, proving typed image
+  execution and typed lifecycle paths now fail closed at the planned execution
+  boundary until a planning-input caller supplies Pumas facts and the scheduler
+  decision.
+- Allowed write set: `crates/inference/src/gateway_tests.rs` and this plan
+  directory.
+- No-fallback/no-legacy confirmation: no raw typed-image compatibility path was
+  restored. `execute_typed` and `execute_typed_with_lifecycle` continue to
+  reach the same typed config diagnostic requiring
+  `ImageGenerationExecutionPlan`; lifecycle recording marks backend execution
+  failed and does not emit postprocessing/result-projection success phases.
+- Verification passed: `cargo test -p inference
+  test_execute_typed_image_generation_requires_planned_context`, `cargo test
+  -p inference planned_boundary`, `cargo test -p inference gateway::tests::`,
+  `cargo fmt --package inference -- --check`, and `git diff --check`.
+- Remaining follow-up: add the workflow/inference async shell that calls the
+  planning-input gateway method for image generation, then update typed
+  lifecycle coverage for the successful planned-image path.
