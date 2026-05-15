@@ -11,7 +11,7 @@ stay reviewable as more tests are split.
 ## Contents
 | File | Description |
 | ---- | ----------- |
-| `contracts.rs` | Workflow DTO serialization and service error-envelope contract tests. |
+| `contracts.rs` | Workflow DTO serialization, execution-plan contract, and service error-envelope contract tests. |
 | `fixtures.rs` | Re-export index for shared workflow test fixture families in `fixtures/`. |
 | `fixtures/` | Shared workflow test hosts, runtime capabilities, scheduler diagnostics providers, and helper constructors split by fixture family. |
 | `local_network.rs` | Local Network status facade tests for local node identity, platform facts, scheduler load, and selected-run scheduler placement. |

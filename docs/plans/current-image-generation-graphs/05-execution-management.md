@@ -1063,6 +1063,11 @@ Worker rules:
   this plan pass.
 - Milestone 4 now has a neutral graph-inspection presenter wrapper for saved
   graph display; larger run component/module renaming is deferred.
+- Milestone 6 Option 3 contract foundation slice completed for workflow-service
+  execution-plan DTOs, serde validation, bounded diagnostics, README
+  traceability, and focused contract tests. Admission production, projection,
+  node-engine consumption, diagnostics attachment, and durable recovery remain
+  follow-up slices.
 - Milestone 4 saved-graph path and selected-node fallback rules are covered in
   the presenter layer under the existing Node test strategy.
 - Milestone 5 device/runtime contract gate is in place in
@@ -3458,6 +3463,20 @@ Worker rules:
   likely violations would be untyped public errors, undocumented structured
   contracts, acceptance tests added too late, cancellable partial persistence,
   or accidental interop/schema blast radius.
+- 2026-05-15: Completed Milestone 6 Option 3 contract foundation slice. Added
+  workflow-service `WorkflowExecutionPlan` DTOs in a focused
+  `workflow/execution_plan.rs` module with schema versioning, validated
+  workflow/run ids, per-node reduced selected backend/runtime/device/task facts,
+  optional selected model ref, bounded diagnostics, policy trace ids, typed
+  constructor/deserialization errors, and private fields. Updated
+  workflow-service facade exports plus source/module/test READMEs. No scheduler
+  admission, durable persistence, embedded-runtime projection, node-engine
+  context, frontend DTO, worker envelope, saved workflow fixture, or inference
+  execution behavior changed in this slice, preserving the no-fallback rule.
+  Verification passed: `cargo test -p pantograph-workflow-service
+  workflow::tests::contracts`; `cargo fmt -p pantograph-workflow-service`.
+  Verification deviation fixed: the first focused test run exposed missing
+  `WorkflowId`/`WorkflowRunId` imports in the new contract tests.
 
 ### Traceability Links
 

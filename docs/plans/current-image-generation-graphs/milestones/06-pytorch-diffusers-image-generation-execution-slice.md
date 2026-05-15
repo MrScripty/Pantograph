@@ -520,7 +520,7 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 
 Staged Option 3 implementation plan:
 
-1. Contract foundation slice:
+1. Contract foundation slice (completed 2026-05-15):
    - Add a small workflow execution-plan DTO in a focused workflow-service
      module, not by growing the already broad workflow contracts module. The
      DTO is owned at the workflow/embedded-runtime boundary; node-engine must
@@ -551,6 +551,16 @@ Staged Option 3 implementation plan:
    - Verification: contract serde tests, append-only/default behavior tests,
      and a no-graph-input test proving scheduler decisions are not written into
      workflow node inputs.
+   - Completed scope: added `workflow/execution_plan.rs` with schema-versioned
+     `WorkflowExecutionPlan`, reduced per-node decisions, bounded diagnostics,
+     policy trace ids, typed errors, private validated fields, and
+     `serde(try_from)` validation for deserialization. Updated workflow-service
+     public re-exports and README traceability. No scheduler admission,
+     durable persistence, embedded-runtime projection, node-engine context, or
+     inference execution behavior was changed in this slice.
+   - Verification result: `cargo test -p pantograph-workflow-service
+     workflow::tests::contracts` passed after fixing a missing test import for
+     attribution id types. `cargo fmt -p pantograph-workflow-service` was run.
 
 2. Admission production slice:
    - Build the initial execution plan immediately after runtime preflight and

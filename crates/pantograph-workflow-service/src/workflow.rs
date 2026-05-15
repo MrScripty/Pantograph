@@ -26,6 +26,7 @@ mod contracts;
 #[allow(dead_code)]
 mod diagnostic_errors;
 mod diagnostics_api;
+mod execution_plan;
 mod graph_api;
 mod host;
 mod identity;
@@ -73,6 +74,13 @@ pub use self::diagnostics_api::{
     WorkflowSchedulerEstimateQueryRequest, WorkflowSchedulerEstimateQueryResponse,
     WorkflowSchedulerEstimateRecord, WorkflowSchedulerTimelineQueryRequest,
     WorkflowSchedulerTimelineQueryResponse,
+};
+pub use self::execution_plan::{
+    WorkflowExecutionPlan, WorkflowExecutionPlanDiagnostic, WorkflowExecutionPlanDiagnosticCode,
+    WorkflowExecutionPlanDiagnosticSeverity, WorkflowExecutionPlanError,
+    WorkflowExecutionPlanNodeDecision, WORKFLOW_EXECUTION_PLAN_MAX_DIAGNOSTICS,
+    WORKFLOW_EXECUTION_PLAN_MAX_NODE_DECISIONS, WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
+    WORKFLOW_EXECUTION_PLAN_SCHEMA_VERSION,
 };
 pub use self::host::{
     WorkflowHost, WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,

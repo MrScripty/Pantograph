@@ -13,7 +13,7 @@ diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 | ----------- | ----------- |
 | `lib.rs` | Public module exports for the workflow service crate. |
 | `workflow.rs` | Public workflow facade exports, execution/session facade methods, and orchestration logic. |
-| `workflow/` | Private workflow contracts, host traits, graph API methods, diagnostics ledger query methods, capability/preflight API methods, workflow run and session execution API methods, queue and lifecycle API methods, service configuration, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
+| `workflow/` | Private workflow contracts, execution-plan DTOs, host traits, graph API methods, diagnostics ledger query methods, capability/preflight API methods, workflow run and session execution API methods, queue and lifecycle API methods, service configuration, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
 | `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
 | `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
 | `graph/` | Graph DTOs and session-kind contracts shared by service operations. |
@@ -138,6 +138,13 @@ device class/id, resource estimates, observed-throughput hints, and bounded
 device diagnostics from backend/runtime selectors. These fields are transport
 facts only; workflow-service does not rank devices or infer missing values from
 backend ids, runtime ids, or raw device strings.
+Workflow execution-plan DTOs now define the run-scoped contract that scheduler
+admission will use to hand selected per-node backend/runtime/device decisions
+to embedded-runtime projection. The DTO carries schema version, workflow/run
+ids, node ids, selected task/runtime/device facts, optional model ref, bounded
+diagnostics, and trace ids only; it must not carry graph inputs, full Pumas
+facts, worker envelopes, image bytes, local paths, or mutable scheduler
+internals.
 Artifact format metadata now includes optional typed conversion status,
 conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through
@@ -178,6 +185,10 @@ executor, the service fails closed.
 - Technical-fit decisions with error-severity device diagnostics are blocking
   runtime diagnostics, including explicit device requests that canonical
   planning cannot satisfy.
+- Execution-plan DTOs are correct-by-construction. Public builders and serde
+  deserialization must reject missing selected node-decision facts, unknown
+  task/device selections, oversized diagnostics, unsupported schema versions,
+  and node-decision key mismatches before embedded-runtime receives a plan.
 - Workflow capability extraction does not treat legacy `runtime_hint` values
   as backend requirements. Current workflow backend requirements must come from
   explicit backend/package facts until typed backend preference intent replaces

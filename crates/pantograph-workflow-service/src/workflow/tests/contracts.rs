@@ -3,8 +3,8 @@ use crate::{
     GraphEdge, GraphNode, Position, WorkflowExecutableTopology, WorkflowExecutableTopologyEdge,
     WorkflowExecutableTopologyNode, WorkflowGraph, WorkflowGraphDiagnostic,
     WorkflowGraphDiagnosticCode, WorkflowGraphDiagnosticSeverity, WorkflowGraphRunSettings,
-    WorkflowGraphRunSettingsNode, WorkflowPresentationEdge, WorkflowPresentationMetadata,
-    WorkflowPresentationNode,
+    WorkflowGraphRunSettingsNode, WorkflowId, WorkflowPresentationEdge,
+    WorkflowPresentationMetadata, WorkflowPresentationNode, WorkflowRunId,
 };
 
 #[test]
@@ -116,6 +116,169 @@ fn workflow_io_roundtrip_uses_snake_case() {
         parsed.outputs[0].ports[0].data_type.as_deref(),
         Some("string")
     );
+}
+
+fn execution_plan_decision_fixture(node_id: &str) -> WorkflowExecutionPlanNodeDecision {
+    WorkflowExecutionPlanNodeDecision::new(
+        node_id,
+        "pytorch",
+        "pytorch",
+        "pytorch.cuda",
+        WorkflowInferenceDeviceClass::Cuda,
+        WorkflowInferenceTaskId::ImageGeneration,
+    )
+    .expect("valid execution-plan node decision")
+    .with_selected_device_id("cuda:0")
+    .expect("valid selected device id")
+    .with_selected_model_ref("pumas://models/stable-diffusion-xl")
+    .expect("valid selected model ref")
+    .with_policy_trace_ids(vec!["trace-runtime-selection-1".to_string()])
+    .expect("valid policy trace ids")
+}
+
+fn execution_plan_fixture() -> WorkflowExecutionPlan {
+    WorkflowExecutionPlan::new(
+        WorkflowRunId::try_from("run-image-plan".to_string()).expect("valid workflow run id"),
+        WorkflowId::try_from("workflow-image-plan".to_string()).expect("valid workflow id"),
+        vec![execution_plan_decision_fixture("image-node-1")],
+    )
+    .expect("valid execution plan")
+}
+
+#[test]
+fn workflow_execution_plan_roundtrip_uses_snake_case() {
+    let plan = execution_plan_fixture();
+
+    let json = serde_json::to_value(&plan).expect("serialize execution plan");
+    assert_eq!(
+        json["schema_version"],
+        WORKFLOW_EXECUTION_PLAN_SCHEMA_VERSION
+    );
+    assert_eq!(json["workflow_run_id"], "run-image-plan");
+    assert_eq!(json["workflow_id"], "workflow-image-plan");
+    assert_eq!(
+        json["node_decisions"]["image-node-1"]["selected_backend_key"],
+        "pytorch"
+    );
+    assert_eq!(
+        json["node_decisions"]["image-node-1"]["selected_task_id"],
+        "image_generation"
+    );
+
+    let parsed: WorkflowExecutionPlan = serde_json::from_value(json).expect("parse execution plan");
+    let decision = parsed
+        .node_decision("image-node-1")
+        .expect("execution plan decision");
+    assert_eq!(decision.selected_backend_key(), "pytorch");
+    assert_eq!(decision.selected_runtime_variant_id(), "pytorch.cuda");
+    assert_eq!(
+        decision.selected_task_id(),
+        WorkflowInferenceTaskId::ImageGeneration
+    );
+    assert_eq!(
+        decision.selected_model_ref(),
+        Some("pumas://models/stable-diffusion-xl")
+    );
+}
+
+#[test]
+fn workflow_execution_plan_deserialize_defaults_optional_decision_fields() {
+    let payload = serde_json::json!({
+        "schema_version": 1,
+        "workflow_run_id": "run-image-plan",
+        "workflow_id": "workflow-image-plan",
+        "node_decisions": {
+            "image-node-1": {
+                "node_id": "image-node-1",
+                "selected_backend_key": "pytorch",
+                "selected_runtime_id": "pytorch",
+                "selected_runtime_variant_id": "pytorch.cuda",
+                "selected_device_class": "cuda",
+                "selected_task_id": "image_generation"
+            }
+        }
+    });
+
+    let plan: WorkflowExecutionPlan =
+        serde_json::from_value(payload).expect("parse execution plan");
+    let decision = plan
+        .node_decision("image-node-1")
+        .expect("execution plan decision");
+    assert_eq!(decision.selected_device_id(), None);
+    assert_eq!(decision.selected_model_ref(), None);
+    assert!(decision.diagnostics().is_empty());
+    assert!(decision.policy_trace_ids().is_empty());
+}
+
+#[test]
+fn workflow_execution_plan_rejects_unbounded_diagnostics() {
+    let diagnostic = WorkflowExecutionPlanDiagnostic::new(
+        WorkflowExecutionPlanDiagnosticCode::ProjectionFailed,
+        WorkflowExecutionPlanDiagnosticSeverity::Error,
+        "projection failed",
+    )
+    .expect("valid diagnostic");
+    let diagnostics = std::iter::repeat_with(|| diagnostic.clone())
+        .take(WORKFLOW_EXECUTION_PLAN_MAX_DIAGNOSTICS + 1)
+        .collect::<Vec<_>>();
+
+    let error = WorkflowExecutionPlanNodeDecision::new(
+        "image-node-1",
+        "pytorch",
+        "pytorch",
+        "pytorch.cuda",
+        WorkflowInferenceDeviceClass::Cuda,
+        WorkflowInferenceTaskId::ImageGeneration,
+    )
+    .expect("valid decision")
+    .with_diagnostics(diagnostics)
+    .expect_err("unbounded diagnostics must be rejected");
+
+    assert!(matches!(
+        error,
+        WorkflowExecutionPlanError::TooManyEntries {
+            field: "diagnostics",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn workflow_execution_plan_rejects_node_decision_key_mismatch() {
+    let payload = serde_json::json!({
+        "schema_version": 1,
+        "workflow_run_id": "run-image-plan",
+        "workflow_id": "workflow-image-plan",
+        "node_decisions": {
+            "image-node-1": {
+                "node_id": "other-node",
+                "selected_backend_key": "pytorch",
+                "selected_runtime_id": "pytorch",
+                "selected_runtime_variant_id": "pytorch.cuda",
+                "selected_device_class": "cuda",
+                "selected_task_id": "image_generation"
+            }
+        }
+    });
+
+    let error = serde_json::from_value::<WorkflowExecutionPlan>(payload)
+        .expect_err("node decision key mismatch must be rejected");
+    assert!(error.to_string().contains("does not match node id"));
+}
+
+#[test]
+fn workflow_execution_plan_serialization_does_not_include_graph_inputs() {
+    let json = serde_json::to_value(execution_plan_fixture()).expect("serialize execution plan");
+
+    assert!(json.get("inputs").is_none());
+    assert!(json.get("graph").is_none());
+    assert!(json.get("raw_node_payload").is_none());
+    assert!(json["node_decisions"]["image-node-1"]
+        .get("inputs")
+        .is_none());
+    assert!(json["node_decisions"]["image-node-1"]
+        .get("resolved_model_package_facts")
+        .is_none());
 }
 
 #[test]

@@ -18,6 +18,7 @@ public exports out of the service crate.
 | `artifact_store.rs` | Backend ArtifactStore body ownership, private disk persistence, restart reconciliation, retention cleanup, and consume acknowledgement. |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `diagnostic_errors.rs` | Typed workflow error phase registry, scoped diagnostics recorder API, and durable error-event append helpers. |
+| `execution_plan.rs` | Run-scoped workflow execution-plan DTOs produced by scheduler admission and consumed through embedded-runtime projection. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `identity.rs` | Validated workflow identity value object and grammar used by workflow submission and saved graph boundaries. |
@@ -60,7 +61,8 @@ validation, graph edit-session methods, capability/preflight methods, session
 execution methods, session queue inspection methods, session lifecycle methods,
 service configuration methods, diagnostics projection and audit helpers,
 workflow run execution, workflow I/O derivation, runtime readiness,
-session-runtime workflows, and the root facade test module.
+session-runtime workflows, run-scoped execution-plan contracts, and the root
+facade test module.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -183,6 +185,16 @@ session-runtime workflows, and the root facade test module.
   `diagnostic_errors.rs`. Call sites must use registered phase helpers and
   typed scope structs so ledger error events carry the required run, node,
   runtime/model, projection, or transport context consistently.
+- Workflow execution-plan contracts stay run-scoped and scheduler-owned.
+  `execution_plan.rs` records only reduced per-node selected backend, runtime,
+  device, task, optional model ref, bounded diagnostics, and policy trace ids.
+  It must not store graph inputs, raw node payloads, full Pumas facts, worker
+  envelopes, image bytes, local filesystem paths, or scheduler internals.
+- Workflow execution-plan DTOs are correct-by-construction: public builders and
+  serde deserialization validate schema version, attribution ids, node ids,
+  selected task/device facts, bounded diagnostic vectors, and policy trace ids.
+  Invalid or ambiguous execution-plan state must become typed errors or
+  diagnostics before embedded-runtime projects it into node execution context.
 - Workflow errors that have a recorded diagnostic event should return
   `WorkflowServiceError::with_diagnostics(...)` so Tauri envelopes and frontend
   pages can link directly to the run diagnostic. The wrapper must preserve the
@@ -366,6 +378,11 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   from the dequeued scheduler state into `scheduler.run_admitted` events. It
   must not reread current graph files or runtime internals to populate those
   audit fields.
+- Workflow execution plans use schema version
+  `WORKFLOW_EXECUTION_PLAN_SCHEMA_VERSION` and a stable `node_decisions` map
+  keyed by node id. The serialized shape is append-only; consumers must ignore
+  later additive fields they do not need, but producers must continue to supply
+  validated workflow/run ids and explicit selected node-decision facts.
 - Workflow-run error handling records canonical diagnostic errors where
   possible, but secondary diagnostic append failures must not replace the
   original workflow execution, timeout, output-validation, artifact-conversion,
