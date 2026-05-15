@@ -459,3 +459,18 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 - Remaining follow-up: add the workflow/inference async shell that calls the
   planning-input gateway method for image generation, then update typed
   lifecycle coverage for the successful planned-image path.
+
+2026-05-14 inference README planned-boundary documentation slice:
+
+- Smallest useful vertical slice: update the inference module README so public
+  gateway examples and API notes no longer describe raw `generate_image()` as
+  an executable image-generation path.
+- Allowed write set: `crates/inference/src/README.md` and this plan directory.
+- No-fallback/no-legacy confirmation: documentation now points image-generation
+  callers to `ImageGenerationPlanningInput` or `ImageGenerationExecutionPlan`
+  and states that raw `generate_image()` validates request shape but does not
+  dispatch to a backend.
+- Verification passed: `git diff --check`.
+- Remaining follow-up: the workflow/inference async shell still needs to build
+  the planning input from request, Pumas facts, readiness, candidates, history,
+  and scheduler decision facts.

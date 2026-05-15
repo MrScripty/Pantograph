@@ -293,28 +293,15 @@ Revisit trigger: update these examples when inference request defaults or
 optional field semantics change.
 
 ```rust
-use inference::{BackendConfig, ImageGenerationRequest, InferenceGateway};
+use inference::{BackendConfig, ImageGenerationPlanningInput, InferenceGateway};
 
-async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
+async fn run_image_request(
+    gateway: &InferenceGateway,
+    config: &BackendConfig,
+    planning_input: ImageGenerationPlanningInput<'_>,
+) {
     gateway.start(config).await.unwrap();
-    let _ = gateway
-        .generate_image(ImageGenerationRequest {
-            model: "model-id".to_string(),
-            prompt: "paper lantern in the rain".to_string(),
-            negative_prompt: None,
-            width: Some(1024),
-            height: Some(1024),
-            num_inference_steps: Some(30),
-            guidance_scale: Some(4.0),
-            seed: Some(42),
-            scheduler: None,
-            num_images_per_prompt: Some(1),
-            init_image: None,
-            mask_image: None,
-            strength: None,
-            extra_options: serde_json::Value::Null,
-        })
-        .await;
+    let _ = gateway.generate_image_from_planning_input(planning_input).await;
 }
 ```
 
@@ -345,8 +332,11 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   path-shaped values before they can become durable metadata. Typed text
   generation applies the same rule to cache-handle projection before returning
   non-streaming typed results or lifecycle cache-handle facts.
-- `generate_image()` is synchronous-at-contract-level and returns final images;
-  streaming progress is not yet part of the facade.
+- Raw `generate_image()` validates request shape but does not dispatch to a
+  backend. Image generation must use a validated `ImageGenerationExecutionPlan`
+  or `ImageGenerationPlanningInput` built from the request, Pumas package
+  facts, and the scheduler-owned backend/runtime/device decision. Streaming
+  progress is not yet part of the facade.
 - `rerank()` accepts one query plus candidate documents and returns scored,
   ordered results; callers should treat response order, not input order, as
   authoritative.

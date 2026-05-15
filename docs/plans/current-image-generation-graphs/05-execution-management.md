@@ -3277,6 +3277,19 @@ Worker rules:
 - Remaining follow-up: workflow/inference execution still needs a successful
   planned-image path that calls `generate_image_from_planning_input` and then
   updates typed lifecycle coverage for the planned success case.
+- 2026-05-14 inference README planned-boundary documentation slice: smallest
+  useful vertical slice was to update the inference module README so public
+  gateway examples and API notes no longer describe raw `generate_image()` as
+  an executable image-generation path. Allowed write set:
+  `crates/inference/src/README.md` and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because documentation now
+  directs image-generation callers to `ImageGenerationPlanningInput` or
+  `ImageGenerationExecutionPlan` and states that raw `generate_image()`
+  validates request shape but does not dispatch to a backend.
+- Verification passed: `git diff --check`.
+- Remaining follow-up: workflow/inference execution still needs to build the
+  planning input from request, Pumas facts, readiness, executable candidates,
+  history summaries, and the scheduler decision.
 
 ### Traceability Links
 
