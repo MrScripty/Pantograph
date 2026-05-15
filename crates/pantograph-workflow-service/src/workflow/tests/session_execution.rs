@@ -1130,6 +1130,18 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
         .contains("\"technical_fit_selection_policy_trace\""));
     assert!(admission_event
         .payload_json
+        .contains("\"execution_plan_summary\""));
+    assert!(admission_event
+        .payload_json
+        .contains("\"schema_version\":1"));
+    assert!(admission_event
+        .payload_json
+        .contains("\"node_decision_count\":1"));
+    assert!(admission_event
+        .payload_json
+        .contains("\"policy_trace_ids\":[\"technical_fit_policy_v1\"]"));
+    assert!(admission_event
+        .payload_json
         .contains("\"policy_phase\":\"candidate_ranking\""));
     assert!(admission_event
         .payload_json
@@ -1193,6 +1205,12 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
     assert!(lifecycle_events.iter().all(|event| event
         .payload_json
         .contains("\"selected_runtime_variant_id\":\"llama_cpp.cuda\"")));
+    assert!(lifecycle_events
+        .iter()
+        .all(|event| event.payload_json.contains("\"execution_plan_summary\"")));
+    assert!(lifecycle_events.iter().all(|event| event
+        .payload_json
+        .contains("\"policy_trace_ids\":[\"technical_fit_policy_v1\"]")));
     let reservation_events = diagnostic_events
         .iter()
         .filter(|event| {

@@ -33,18 +33,19 @@ use crate::{
     RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
     RuntimeSelectionHistoryKey, RuntimeSelectionHistoryQuery, SchedulerCandidateSetSummary,
-    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
-    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
-    SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
-    SchedulerQueueControlPayload, SchedulerQueuePlacementPayload,
-    SchedulerReservationChangedPayload, SchedulerReservationResourceKind,
-    SchedulerReservationTransition, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
-    SchedulerSelectionDecisionCode, SchedulerSelectionHistoryThresholdState,
-    SchedulerSelectionPolicyPhase, SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery,
-    SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage,
-    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
-    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload,
+    SchedulerExecutionPlanSummary, SchedulerModelCacheState, SchedulerModelLifecycleChangedPayload,
+    SchedulerModelLifecycleTransition, SchedulerQueueControlAction,
+    SchedulerQueueControlActorScope, SchedulerQueueControlOutcome, SchedulerQueueControlPayload,
+    SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
+    SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
+    SchedulerRunDelayedPayload, SchedulerSelectionDecisionCode,
+    SchedulerSelectionHistoryThresholdState, SchedulerSelectionPolicyPhase,
+    SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
+    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
+    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
     DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MAX_INFERENCE_COMPATIBILITY_ISSUES,
@@ -81,6 +82,11 @@ fn scheduler_run_admitted_payload_round_trips_policy_trace_contract() {
     let payload = DiagnosticEventPayload::SchedulerRunAdmitted(SchedulerRunAdmittedPayload {
         queue_wait_ms: Some(12),
         decision_reason: "automatic_ranking".to_string(),
+        execution_plan_summary: Some(SchedulerExecutionPlanSummary {
+            schema_version: 1,
+            node_decision_count: 1,
+            policy_trace_ids: vec!["technical_fit_policy_v1".to_string()],
+        }),
         selected_runtime_id: Some("pytorch".to_string()),
         selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
         selected_backend_key: Some("pytorch".to_string()),
@@ -118,6 +124,11 @@ fn scheduler_run_admitted_payload_round_trips_policy_trace_contract() {
             "payload_type": "scheduler_run_admitted",
             "queue_wait_ms": 12,
             "decision_reason": "automatic_ranking",
+            "execution_plan_summary": {
+                "schema_version": 1,
+                "node_decision_count": 1,
+                "policy_trace_ids": ["technical_fit_policy_v1"]
+            },
             "selected_runtime_id": "pytorch",
             "selected_runtime_variant_id": "pytorch.cuda",
             "selected_backend_key": "pytorch",
@@ -209,6 +220,28 @@ fn scheduler_run_admitted_rejects_inconsistent_policy_trace_counts() {
         result,
         Err(DiagnosticsLedgerError::InvalidField {
             field: "eligible_candidate_ids"
+        })
+    ));
+}
+
+#[test]
+fn scheduler_run_admitted_rejects_invalid_execution_plan_summary() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut invalid_summary = sample_scheduler_admission_event("workflow_run_alpha");
+    let DiagnosticEventPayload::SchedulerRunAdmitted(payload) = &mut invalid_summary.payload else {
+        panic!("sample scheduler admission event uses admission payload");
+    };
+    payload.execution_plan_summary = Some(SchedulerExecutionPlanSummary {
+        schema_version: 1,
+        node_decision_count: 0,
+        policy_trace_ids: vec!["technical_fit_policy_v1".to_string()],
+    });
+
+    let result = ledger.append_diagnostic_event(invalid_summary);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::InvalidField {
+            field: "execution_plan_summary"
         })
     ));
 }
@@ -991,6 +1024,11 @@ fn model_lifecycle_projects_canonical_error_link_without_counting_new_error() {
         SchedulerModelLifecycleChangedPayload {
             transition: SchedulerModelLifecycleTransition::LoadFailed,
             cache_state: Some(SchedulerModelCacheState::Failed),
+            execution_plan_summary: Some(SchedulerExecutionPlanSummary {
+                schema_version: 1,
+                node_decision_count: 1,
+                policy_trace_ids: vec!["technical_fit_policy_v1".to_string()],
+            }),
             timing_attempt_id: Some(
                 "timing_attempt_550e8400-e29b-41d4-a716-446655440010".to_string(),
             ),
@@ -5374,6 +5412,7 @@ fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEv
             SchedulerModelLifecycleChangedPayload {
                 transition: SchedulerModelLifecycleTransition::LoadRequested,
                 cache_state: Some(SchedulerModelCacheState::CacheMiss),
+                execution_plan_summary: None,
                 timing_attempt_id: None,
                 selected_runtime_variant_id: None,
                 reason: Some("cache miss before queued run".to_string()),
@@ -5465,6 +5504,7 @@ fn sample_scheduler_admission_event(workflow_run_id: &str) -> DiagnosticEventApp
             selected_device_id: None,
             selected_network_node_id: None,
             reserved_model_ids: vec!["model-alpha".to_string()],
+            execution_plan_summary: None,
             technical_fit_selection_policy_trace: None,
         }),
     }

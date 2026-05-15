@@ -6,7 +6,7 @@ use pantograph_diagnostics_ledger::{
     IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetOperation, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
     SchedulerCandidateSetSummary, SchedulerEstimateBlockingCondition,
-    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    SchedulerEstimateProducedPayload, SchedulerExecutionPlanSummary, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
     SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
@@ -47,14 +47,15 @@ use super::validation::{
 };
 use super::{
     build_workflow_execution_plan_from_admission, AttributionRepository, WorkflowCapabilityModel,
-    WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionAttributedCreateRequest,
-    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
-    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeRequirements,
-    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
+    WorkflowErrorDiagnosticsLink, WorkflowExecutionPlan,
+    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
+    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
+    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint,
+    WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason, WorkflowService,
+    WorkflowServiceError, WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -68,6 +69,7 @@ pub(super) struct SchedulerModelLifecycleEventRequest<'a> {
     pub(super) workflow_semantic_version: &'a str,
     pub(super) selected_runtime_id: Option<&'a str>,
     pub(super) selected_runtime_variant_id: Option<&'a str>,
+    pub(super) execution_plan_summary: Option<&'a SchedulerExecutionPlanSummary>,
     pub(super) required_backends: &'a [String],
     pub(super) required_models: &'a [String],
     pub(super) transition: SchedulerModelLifecycleTransition,
@@ -84,6 +86,28 @@ struct SchedulerReservationContext {
     selected_device_class: Option<String>,
     selected_device_id: Option<String>,
     reserved_model_ids: Vec<String>,
+}
+
+fn workflow_execution_plan_diagnostic_summary(
+    execution_plan: &WorkflowExecutionPlan,
+) -> SchedulerExecutionPlanSummary {
+    let mut policy_trace_ids = Vec::new();
+    for decision in execution_plan.node_decisions().values() {
+        for trace_id in decision.policy_trace_ids() {
+            if !policy_trace_ids.contains(trace_id)
+                && policy_trace_ids.len() < WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS
+            {
+                policy_trace_ids.push(trace_id.clone());
+            }
+        }
+    }
+
+    SchedulerExecutionPlanSummary {
+        schema_version: execution_plan.schema_version(),
+        node_decision_count: u32::try_from(execution_plan.node_decisions().len())
+            .expect("workflow execution plan node decisions are bounded below u32::MAX"),
+        policy_trace_ids,
+    }
 }
 
 impl WorkflowService {
@@ -419,6 +443,9 @@ impl WorkflowService {
                 return terminal_result;
             }
         };
+        let execution_plan_summary = execution_plan
+            .as_ref()
+            .map(workflow_execution_plan_diagnostic_summary);
         if let Some(execution_plan) = execution_plan {
             let mut store = self.session_store_guard()?;
             store.set_active_run_execution_plan(&session_id, &workflow_run_id, execution_plan)?;
@@ -433,6 +460,7 @@ impl WorkflowService {
             &queued_run,
             &reservation_context,
             preflight_cache.technical_fit_decision.as_ref(),
+            execution_plan_summary.as_ref(),
         )?;
         self.record_scheduler_reservation_event_if_configured(
             &session,
@@ -455,6 +483,7 @@ impl WorkflowService {
             timing_attempt_id: runtime_load_timing_attempt_id.as_str(),
             selected_runtime_id: reservation_context.selected_runtime_id.as_deref(),
             selected_runtime_variant_id: reservation_context.selected_runtime_variant_id.as_deref(),
+            execution_plan_summary: execution_plan_summary.as_ref(),
             required_backends: &required_backends,
             required_models: &required_models,
         };
@@ -655,6 +684,7 @@ impl WorkflowService {
                     selected_runtime_variant_id: reservation_context
                         .selected_runtime_variant_id
                         .as_deref(),
+                    execution_plan_summary: execution_plan_summary.as_ref(),
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadScheduled,
@@ -676,6 +706,7 @@ impl WorkflowService {
                     selected_runtime_variant_id: reservation_context
                         .selected_runtime_variant_id
                         .as_deref(),
+                    execution_plan_summary: execution_plan_summary.as_ref(),
                     required_backends: &required_backends,
                     required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::UnloadStarted,
@@ -709,6 +740,7 @@ impl WorkflowService {
                         selected_runtime_variant_id: reservation_context
                             .selected_runtime_variant_id
                             .as_deref(),
+                        execution_plan_summary: execution_plan_summary.as_ref(),
                         required_backends: &required_backends,
                         required_models: &required_models,
                         transition: SchedulerModelLifecycleTransition::UnloadCompleted,
@@ -734,6 +766,7 @@ impl WorkflowService {
                                 selected_runtime_variant_id: reservation_context
                                     .selected_runtime_variant_id
                                     .as_deref(),
+                                execution_plan_summary: execution_plan_summary.as_ref(),
                                 required_backends: &required_backends,
                                 required_models: &required_models,
                                 transition: SchedulerModelLifecycleTransition::UnloadFailed,
@@ -1344,6 +1377,7 @@ impl WorkflowService {
                             cache_state: Some(SchedulerModelCacheState::for_lifecycle_transition(
                                 request.transition,
                             )),
+                            execution_plan_summary: request.execution_plan_summary.cloned(),
                             timing_attempt_id: request.timing_attempt_id.map(str::to_string),
                             selected_runtime_variant_id: request
                                 .selected_runtime_variant_id
@@ -1370,6 +1404,7 @@ impl WorkflowService {
         queued_run: &crate::scheduler::WorkflowExecutionSessionDequeuedRun,
         reservation_context: &SchedulerReservationContext,
         technical_fit_decision: Option<&WorkflowTechnicalFitDecision>,
+        execution_plan_summary: Option<&SchedulerExecutionPlanSummary>,
     ) -> Result<(), WorkflowServiceError> {
         let Some(ledger) = self.diagnostics_ledger.as_ref() else {
             return Ok(());
@@ -1417,6 +1452,7 @@ impl WorkflowService {
                     SchedulerRunAdmittedPayload {
                         queue_wait_ms,
                         decision_reason: queued_run.scheduler_decision_reason.as_str().to_string(),
+                        execution_plan_summary: execution_plan_summary.cloned(),
                         selected_runtime_id: reservation_context.selected_runtime_id.clone(),
                         selected_runtime_variant_id: reservation_context
                             .selected_runtime_variant_id

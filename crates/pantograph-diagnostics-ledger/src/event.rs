@@ -28,6 +28,7 @@ pub const MAX_INFERENCE_RUNTIME_SETTINGS: usize = 32;
 pub const MAX_INFERENCE_COMPATIBILITY_ISSUES: usize = 32;
 pub const MAX_INFERENCE_KV_CACHE_REASON_LEN: usize = 1_024;
 pub const MAX_INFERENCE_ARTIFACT_REFS: usize = 16;
+pub const MAX_SCHEDULER_EXECUTION_PLAN_POLICY_TRACE_IDS: usize = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -474,6 +475,8 @@ impl SchedulerRunDelayedPayload {
 pub struct SchedulerRunAdmittedPayload {
     pub queue_wait_ms: Option<u64>,
     pub decision_reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_plan_summary: Option<SchedulerExecutionPlanSummary>,
     #[serde(default)]
     pub selected_runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -490,6 +493,30 @@ pub struct SchedulerRunAdmittedPayload {
     pub reserved_model_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub technical_fit_selection_policy_trace: Option<SchedulerSelectionPolicyTrace>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SchedulerExecutionPlanSummary {
+    pub schema_version: u32,
+    pub node_decision_count: u32,
+    #[serde(default)]
+    pub policy_trace_ids: Vec<String>,
+}
+
+impl SchedulerExecutionPlanSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        if self.schema_version == 0 || self.node_decision_count == 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "execution_plan_summary",
+            });
+        }
+        validate_bounded_text_list(
+            "execution_plan_policy_trace_ids",
+            &self.policy_trace_ids,
+            MAX_SCHEDULER_EXECUTION_PLAN_POLICY_TRACE_IDS,
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -590,6 +617,9 @@ impl SchedulerRunAdmittedPayload {
             &self.decision_reason,
             MAX_ID_LEN,
         )?;
+        if let Some(summary) = self.execution_plan_summary.as_ref() {
+            summary.validate()?;
+        }
         validate_optional_text(
             "selected_runtime_id",
             self.selected_runtime_id.as_deref(),
@@ -817,6 +847,8 @@ pub struct SchedulerModelLifecycleChangedPayload {
     #[serde(default)]
     pub cache_state: Option<SchedulerModelCacheState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_plan_summary: Option<SchedulerExecutionPlanSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timing_attempt_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_runtime_variant_id: Option<String>,
@@ -829,6 +861,9 @@ pub struct SchedulerModelLifecycleChangedPayload {
 
 impl SchedulerModelLifecycleChangedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        if let Some(summary) = self.execution_plan_summary.as_ref() {
+            summary.validate()?;
+        }
         validate_optional_text("model_lifecycle_reason", self.reason.as_deref(), MAX_ID_LEN)?;
         validate_optional_text(
             "timing_attempt_id",
@@ -2899,6 +2934,17 @@ fn validate_text_list(
         validate_required_text(field, value, MAX_ID_LEN)?;
     }
     Ok(())
+}
+
+fn validate_bounded_text_list(
+    field: &'static str,
+    values: &[String],
+    max_len: usize,
+) -> Result<(), DiagnosticsLedgerError> {
+    if values.len() > max_len {
+        return Err(DiagnosticsLedgerError::InvalidField { field });
+    }
+    validate_text_list(field, values)
 }
 
 fn validate_payload_ref(value: Option<&str>) -> Result<(), DiagnosticsLedgerError> {

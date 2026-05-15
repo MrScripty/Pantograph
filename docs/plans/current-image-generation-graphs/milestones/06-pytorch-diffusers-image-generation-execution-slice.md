@@ -808,9 +808,35 @@ Staged Option 3 implementation plan:
      check -p inference`, `cargo check -p node-engine --features
      inference-nodes`, `cargo check -p pantograph-embedded-runtime`, and `cargo
      fmt -p inference -p node-engine -p pantograph-embedded-runtime` passed.
-   - Remaining follow-up: scheduler admission and runtime-load diagnostics
-     still need bounded execution-plan identifiers and policy trace ids. This
-     must stay outside node-engine and inference gateway policy logic.
+   - Scheduler admission/runtime-load execution-plan diagnostics (completed
+     2026-05-15): diagnostics-ledger now has a bounded
+     `SchedulerExecutionPlanSummary` contract with schema version, node
+     decision count, and policy trace ids. Workflow-service produces that
+     summary from the scheduler-owned active execution plan after admission and
+     attaches it to scheduler run-admitted and model lifecycle load/unload
+     records. Runtime/session cache events without run-plan context explicitly
+     omit the field. The slice does not expose full execution plans, Pumas
+     package facts, graph payloads, worker envelopes, local paths, or scheduler
+     ranking internals to node-engine, inference, frontend DTOs, saved workflow
+     files, or worker contracts.
+   - Verification result: `cargo test -p pantograph-diagnostics-ledger
+     scheduler_run_admitted_payload_round_trips_policy_trace_contract --lib`,
+     `cargo test -p pantograph-diagnostics-ledger
+     scheduler_run_admitted_rejects_invalid_execution_plan_summary --lib`,
+     `cargo test -p pantograph-diagnostics-ledger
+     scheduler_run_admitted_rejects_inconsistent_policy_trace_counts --lib`,
+     `cargo test -p pantograph-diagnostics-ledger
+     model_lifecycle_projects_canonical_error_link_without_counting_new_error
+     --lib`,
+     `cargo test -p pantograph-workflow-service
+     workflow_execution_session_records_load_completed_only_with_runtime_proof
+     --lib`, `cargo check -p pantograph-diagnostics-ledger`, `cargo check -p
+     pantograph-workflow-service`, `cargo fmt -p pantograph-diagnostics-ledger
+     -p pantograph-workflow-service`, and `git diff --check` passed.
+   - Remaining follow-up: recovery/retry policy still needs explicit planning
+     before execution plans can become durable replay state. That belongs to
+     the recovery and future expansion slice, not scheduler lifecycle
+     diagnostic payloads.
 
 6. Recovery and future expansion slice:
    - Define how execution plans participate in retry/recovery. A retry may

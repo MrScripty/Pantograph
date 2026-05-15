@@ -324,6 +324,7 @@ impl WorkflowService {
                             cache_state: Some(SchedulerModelCacheState::for_lifecycle_transition(
                                 request.transition,
                             )),
+                            execution_plan_summary: None,
                             timing_attempt_id: request.timing_attempt_id.map(str::to_string),
                             selected_runtime_variant_id: None,
                             reason: Some(request.reason.to_string()),

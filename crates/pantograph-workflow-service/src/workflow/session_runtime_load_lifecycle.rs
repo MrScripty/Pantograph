@@ -1,4 +1,6 @@
-use pantograph_diagnostics_ledger::SchedulerModelLifecycleTransition;
+use pantograph_diagnostics_ledger::{
+    SchedulerExecutionPlanSummary, SchedulerModelLifecycleTransition,
+};
 use pantograph_runtime_attribution::WorkflowRunSnapshotRecord;
 
 use super::session_execution_api::SchedulerModelLifecycleEventRequest;
@@ -13,6 +15,7 @@ pub(super) struct WorkflowRuntimeLoadLifecycleContext<'a> {
     pub(super) timing_attempt_id: &'a str,
     pub(super) selected_runtime_id: Option<&'a str>,
     pub(super) selected_runtime_variant_id: Option<&'a str>,
+    pub(super) execution_plan_summary: Option<&'a SchedulerExecutionPlanSummary>,
     pub(super) required_backends: &'a [String],
     pub(super) required_models: &'a [String],
 }
@@ -81,6 +84,7 @@ impl WorkflowService {
                 workflow_semantic_version: context.workflow_semantic_version,
                 selected_runtime_id: context.selected_runtime_id,
                 selected_runtime_variant_id: context.selected_runtime_variant_id,
+                execution_plan_summary: context.execution_plan_summary,
                 required_backends: context.required_backends,
                 required_models: context.required_models,
                 transition,

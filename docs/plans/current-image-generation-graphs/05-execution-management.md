@@ -3588,6 +3588,35 @@ Worker rules:
   follow-up: scheduler admission/runtime-load diagnostics still need selected
   execution-plan identifiers and policy trace ids without exposing full plans
   or package facts.
+- 2026-05-15: Completed the scheduler admission/runtime-load execution-plan
+  diagnostics slice. Diagnostics-ledger now owns a bounded
+  `SchedulerExecutionPlanSummary` payload contract containing only schema
+  version, node decision count, and policy trace ids. Workflow-service derives
+  that summary from the scheduler-produced active execution plan after
+  admission and attaches it to scheduler run-admitted plus runtime model
+  lifecycle load/unload events. Session runtime cache events that do not have
+  run-scoped plan context explicitly omit the field. This preserves the
+  no-fallback/no-legacy rule: diagnostics are projected from the canonical
+  plan, not reconstructed from graph inputs, legacy backend mappings, Pumas
+  package payloads, node-engine state, or inference gateway policy. No frontend
+  DTOs, saved workflow fixtures, worker envelopes, lockfiles, generated files,
+  scheduler ranking logic, durable plan persistence, node-engine execution, or
+  inference behavior changed. Verification passed: `cargo test -p
+  pantograph-diagnostics-ledger
+  scheduler_run_admitted_payload_round_trips_policy_trace_contract --lib`,
+  `cargo test -p pantograph-diagnostics-ledger
+  scheduler_run_admitted_rejects_invalid_execution_plan_summary --lib`, `cargo
+  test -p pantograph-diagnostics-ledger
+  scheduler_run_admitted_rejects_inconsistent_policy_trace_counts --lib`,
+  `cargo test -p pantograph-diagnostics-ledger
+  model_lifecycle_projects_canonical_error_link_without_counting_new_error
+  --lib`, `cargo test -p pantograph-workflow-service
+  workflow_execution_session_records_load_completed_only_with_runtime_proof
+  --lib`, `cargo check -p pantograph-diagnostics-ledger`, `cargo check -p
+  pantograph-workflow-service`, `cargo fmt -p pantograph-diagnostics-ledger -p
+  pantograph-workflow-service`, and `git diff --check`. Remaining follow-up:
+  recovery/retry policy still needs explicit planning before execution plans
+  can become durable replay state.
 
 ### Traceability Links
 
