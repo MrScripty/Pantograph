@@ -158,4 +158,17 @@ fn active_run_records_run_scoped_execution_plan() {
             .as_str(),
         workflow_run_id
     );
+    assert_eq!(
+        store
+            .active_run_execution_plan(&session_id, &workflow_run_id)
+            .expect("query active plan")
+            .expect("execution plan")
+            .workflow_run_id()
+            .as_str(),
+        workflow_run_id
+    );
+    assert!(store
+        .active_run_execution_plan(&session_id, "other-run")
+        .expect("query mismatched active plan")
+        .is_none());
 }

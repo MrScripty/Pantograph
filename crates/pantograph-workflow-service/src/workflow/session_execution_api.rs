@@ -87,6 +87,15 @@ struct SchedulerReservationContext {
 }
 
 impl WorkflowService {
+    pub fn workflow_execution_session_active_execution_plan(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<Option<super::WorkflowExecutionPlan>, WorkflowServiceError> {
+        let store = self.session_store_guard()?;
+        store.active_run_execution_plan(session_id, workflow_run_id)
+    }
+
     fn resolve_execution_session_attribution(
         &self,
         request: super::WorkflowExecutionSessionAttributionRequest,

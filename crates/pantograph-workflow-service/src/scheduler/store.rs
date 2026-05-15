@@ -427,6 +427,23 @@ impl WorkflowExecutionSessionStore {
         Ok(())
     }
 
+    pub(crate) fn active_run_execution_plan(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<Option<WorkflowExecutionPlan>, WorkflowServiceError> {
+        let state = self.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let Some(active_run) = state.active_run.as_ref() else {
+            return Ok(None);
+        };
+        if active_run.workflow_run_id != workflow_run_id {
+            return Ok(None);
+        }
+        Ok(active_run.execution_plan.clone())
+    }
+
     pub(crate) fn update_runtime_affinity_basis(
         &mut self,
         session_id: &str,

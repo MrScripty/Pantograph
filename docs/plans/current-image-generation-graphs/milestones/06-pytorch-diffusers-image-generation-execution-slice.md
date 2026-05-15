@@ -672,6 +672,17 @@ Staged Option 3 implementation plan:
      premature public API just to silence unused warnings.
 
 4. Node-engine consumption slice:
+   - Prerequisite active-plan query (completed 2026-05-15): added a
+     workflow-service read-only active-run execution-plan query so
+     embedded-runtime can fetch the plan for the currently executing session
+     run without changing graph inputs, serializing the plan through saved
+     workflow data, or exposing scheduler internals to node-engine. The query
+     returns `None` for no active run or mismatched run id, and clones only the
+     bounded `WorkflowExecutionPlan` DTO. Verification passed: `cargo test -p
+     pantograph-workflow-service
+     scheduler::store::tests::active_run_records_run_scoped_execution_plan`,
+     `cargo check -p pantograph-workflow-service`, and `cargo fmt -p
+     pantograph-workflow-service`.
    - Thread the execution plan into node execution through a typed runtime
      context, likely `ExecutorExtensions`, without serializing it into graph
      inputs.

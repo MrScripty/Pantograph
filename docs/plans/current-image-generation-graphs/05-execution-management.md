@@ -3503,6 +3503,14 @@ Worker rules:
   pantograph-embedded-runtime`. Deviation recorded: the crate-private adapter
   module is temporarily marked `#[allow(dead_code)]` until the node-engine
   consumption slice uses it.
+- 2026-05-15: Completed the Node-engine consumption prerequisite query slice.
+  Workflow-service now exposes a read-only active-run execution-plan lookup so
+  embedded-runtime can retrieve the bounded plan for the current
+  workflow-run/session pair without passing scheduler facts through graph
+  inputs, saved workflow JSON, frontend DTOs, or worker envelopes. Verification
+  passed: focused scheduler store test, `cargo check -p
+  pantograph-workflow-service`, and `cargo fmt -p
+  pantograph-workflow-service`.
 
 ### Traceability Links
 
