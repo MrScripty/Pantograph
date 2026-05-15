@@ -474,3 +474,21 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 - Remaining follow-up: the workflow/inference async shell still needs to build
   the planning input from request, Pumas facts, readiness, candidates, history,
   and scheduler decision facts.
+
+2026-05-14 re-plan boundary before workflow async-shell wiring:
+
+- Boundary: the next successful image-generation execution slice must connect
+  the scheduler-owned `WorkflowTechnicalFitDecision` to node-engine image
+  execution so `generate_image_from_planning_input` receives a reduced
+  `BackendExecutionDecision`. Current node-engine image execution has the
+  request and optional Pumas facts, but it does not own the scheduler decision.
+- Planning needed: choose the ownership boundary for projecting
+  `WorkflowTechnicalFitDecision` into inference's `BackendExecutionDecision`
+  without storing scheduler facts in workflow graph nodes, pushing Pumas facts
+  through worker envelopes, or fragmenting runtime-selection policy across
+  node-engine and embedded-runtime.
+- Standards constraint: this must be a narrow async-shell integration owned at
+  the workflow/embedded-runtime composition boundary. The inference planner and
+  gateway stay side-effect free below that boundary; node-engine must not
+  invent backend/runtime/device decisions from request fields, active backend
+  state, or graph hints.
