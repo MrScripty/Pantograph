@@ -487,6 +487,13 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
     history. The remaining boundary is async-shell summary gathering and
     candidate-id projection; the pure policy still has no diagnostics-ledger
     dependency.
+  - 2026-05-14 progress: embedded-runtime now gathers exact-key
+    diagnostics-ledger runtime-selection history summaries after candidate
+    synthesis and before pure policy invocation. The query key uses workflow
+    id, backend compatibility task id, model id, backend key, runtime variant,
+    device class, and nullable selected device id. Missing exact key fields or
+    no configured ledger leave candidates facts-only; configured-ledger query
+    errors propagate instead of falling back or broadening history.
 - The bounded candidate cap belongs to candidate synthesis and must be tested
   before policy receives candidate input. The policy module receives an already
   bounded, normalized candidate set; it must not silently truncate candidates

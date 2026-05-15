@@ -3191,6 +3191,32 @@ Worker rules:
   `git diff --check`.
 - Remaining follow-up: diagnostics-ledger runtime-selection history summaries
   remain before the five-run threshold ranking algorithm.
+- 2026-05-14 async-shell runtime-selection history gathering slice: smallest
+  useful vertical slice was to expose a workflow-service runtime-selection
+  history query wrapper and gather exact-key candidate history summaries in
+  embedded-runtime after candidate synthesis, before invoking the pure
+  runtime-selection policy. Allowed write set:
+  `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs`, and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because the pure policy
+  still has no diagnostics-ledger dependency, every queried history key matches
+  workflow/task/model/backend/runtime-variant/device fields exactly, and
+  configured-ledger query failures propagate as workflow-service errors.
+  Candidates without all exact key fields remain facts-only; no broad-history
+  substitution, compatibility alias, legacy runtime path, generated file,
+  lockfile, frontend change, or workflow fixture change was added.
+- Verification passed:
+  `cargo test -p pantograph-embedded-runtime runtime_selection_history_summaries_project_exact_candidate_keys`,
+  `cargo test -p pantograph-embedded-runtime technical_fit`,
+  `cargo test -p pantograph-workflow-service technical_fit`,
+  `cargo test -p pantograph-runtime-registry technical_fit`,
+  `cargo test -p pantograph-diagnostics-ledger runtime_selection_history`,
+  `cargo fmt --package pantograph-embedded-runtime --package
+  pantograph-workflow-service -- --check`, and `git diff --check`.
+- Remaining follow-up: keep history-backed ranking limited to currently
+  populated status, execution-duration, and queue-wait evidence until
+  canonical load, warmup, and memory producers exist.
 
 ### Traceability Links
 

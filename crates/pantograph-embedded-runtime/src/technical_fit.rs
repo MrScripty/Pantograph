@@ -1,11 +1,16 @@
 use std::collections::HashSet;
 
+use pantograph_diagnostics_ledger::{
+    RuntimeSelectionHistoryKey, RuntimeSelectionHistoryQuery, RuntimeSelectionHistorySummary,
+    RUNTIME_SELECTION_HISTORY_MAX_SAMPLE_LIMIT, RUNTIME_SELECTION_HISTORY_MIN_SAMPLE_COUNT,
+};
+use pantograph_runtime_attribution::WorkflowId;
 use pantograph_runtime_identity::canonical_runtime_backend_key;
 use pantograph_runtime_registry::{
     select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
-    RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitCompatibilityIssue,
-    RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision,
-    RuntimeTechnicalFitDecisionCode, RuntimeTechnicalFitDeviceClass,
+    RuntimeTechnicalFitCandidateHistorySummary, RuntimeTechnicalFitCandidateSourceKind,
+    RuntimeTechnicalFitCompatibilityIssue, RuntimeTechnicalFitCompatibilityReport,
+    RuntimeTechnicalFitDecision, RuntimeTechnicalFitDecisionCode, RuntimeTechnicalFitDeviceClass,
     RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
     RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitDevicePolicy,
     RuntimeTechnicalFitFactor, RuntimeTechnicalFitHistoryThresholdState,
@@ -100,8 +105,144 @@ pub(crate) async fn workflow_technical_fit_decision(
         &available_backends,
         &package_facts,
     );
+    let runtime_request = runtime_request_with_history_summaries(host, runtime_request, request)?;
     let decision = select_runtime_technical_fit(&runtime_request);
     Ok(Some(project_workflow_technical_fit_decision(&decision)))
+}
+
+fn runtime_request_with_history_summaries(
+    host: &EmbeddedWorkflowHost,
+    mut runtime_request: RuntimeTechnicalFitRequest,
+    workflow_request: &WorkflowTechnicalFitRequest,
+) -> Result<RuntimeTechnicalFitRequest, WorkflowServiceError> {
+    runtime_request.candidate_history_summaries =
+        runtime_selection_history_summaries_for_candidates(
+            &workflow_request.workflow_id,
+            &runtime_request.candidates,
+            |query| {
+                host.workflow_service
+                    .runtime_selection_history_summary(query)
+            },
+        )?;
+    Ok(runtime_request.normalized())
+}
+
+fn runtime_selection_history_summaries_for_candidates<F>(
+    workflow_id: &str,
+    candidates: &[RuntimeTechnicalFitCandidate],
+    mut summary_for_query: F,
+) -> Result<Vec<RuntimeTechnicalFitCandidateHistorySummary>, WorkflowServiceError>
+where
+    F: FnMut(
+        RuntimeSelectionHistoryQuery,
+    ) -> Result<Option<RuntimeSelectionHistorySummary>, WorkflowServiceError>,
+{
+    let mut summaries = Vec::new();
+    for candidate in candidates {
+        let Some(query) = runtime_selection_history_query_for_candidate(workflow_id, candidate)?
+        else {
+            continue;
+        };
+        if let Some(summary) = summary_for_query(query)? {
+            summaries.push(candidate_history_summary_from_ledger_summary(
+                &candidate.candidate_id,
+                &summary,
+            ));
+        }
+    }
+    Ok(summaries)
+}
+
+fn runtime_selection_history_query_for_candidate(
+    workflow_id: &str,
+    candidate: &RuntimeTechnicalFitCandidate,
+) -> Result<Option<RuntimeSelectionHistoryQuery>, WorkflowServiceError> {
+    let Some(model_id) = normalized_nonempty(candidate.model_id.as_deref()) else {
+        return Ok(None);
+    };
+    let Some(selected_backend_key) = normalized_nonempty(candidate.backend_key.as_deref()) else {
+        return Ok(None);
+    };
+    let Some(selected_runtime_variant_id) =
+        normalized_nonempty(candidate.runtime_variant_id.as_deref())
+    else {
+        return Ok(None);
+    };
+    let Some(selected_device_class) = candidate
+        .device_class
+        .map(runtime_selection_history_device_class_key)
+    else {
+        return Ok(None);
+    };
+    let Some(task_id) = candidate
+        .compatibility_report
+        .as_ref()
+        .and_then(|report| normalized_nonempty(Some(report.task.as_str())))
+    else {
+        return Ok(None);
+    };
+    let selected_device_id = normalized_nonempty(candidate.selected_device_id.as_deref());
+    let workflow_id = WorkflowId::try_from(workflow_id.trim().to_string()).map_err(|error| {
+        WorkflowServiceError::InvalidRequest(format!(
+            "invalid runtime-selection history workflow id: {error}"
+        ))
+    })?;
+
+    Ok(Some(RuntimeSelectionHistoryQuery {
+        key: RuntimeSelectionHistoryKey {
+            workflow_id,
+            task_id,
+            model_id,
+            selected_backend_key,
+            selected_runtime_variant_id,
+            selected_device_class: selected_device_class.to_string(),
+            selected_device_id,
+        },
+        min_sample_count: RUNTIME_SELECTION_HISTORY_MIN_SAMPLE_COUNT,
+        sample_limit: RUNTIME_SELECTION_HISTORY_MAX_SAMPLE_LIMIT,
+    }))
+}
+
+fn candidate_history_summary_from_ledger_summary(
+    candidate_id: &str,
+    summary: &RuntimeSelectionHistorySummary,
+) -> RuntimeTechnicalFitCandidateHistorySummary {
+    RuntimeTechnicalFitCandidateHistorySummary {
+        candidate_id: candidate_id.to_string(),
+        sample_count: summary.sample_count,
+        min_sample_count: summary.min_sample_count,
+        threshold_met: summary.threshold_met,
+        completed_count: summary.completed_count,
+        failed_count: summary.failed_count,
+        cancelled_count: summary.cancelled_count,
+        duration_sample_count: summary.duration_sample_count,
+        average_duration_ms: summary.average_duration_ms,
+        median_duration_ms: summary.median_duration_ms,
+        typical_min_duration_ms: summary.typical_min_duration_ms,
+        typical_max_duration_ms: summary.typical_max_duration_ms,
+        queue_wait_sample_count: summary.queue_wait_sample_count,
+        average_queue_wait_ms: summary.average_queue_wait_ms,
+        median_queue_wait_ms: summary.median_queue_wait_ms,
+    }
+    .normalized()
+}
+
+fn runtime_selection_history_device_class_key(
+    device_class: RuntimeTechnicalFitDeviceClass,
+) -> &'static str {
+    match device_class {
+        RuntimeTechnicalFitDeviceClass::Cpu => "cpu",
+        RuntimeTechnicalFitDeviceClass::Cuda => "cuda",
+        RuntimeTechnicalFitDeviceClass::Metal => "metal",
+        RuntimeTechnicalFitDeviceClass::Mps => "mps",
+    }
+}
+
+fn normalized_nonempty(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn build_runtime_technical_fit_request_for_resolved_package_facts(
@@ -1594,6 +1735,90 @@ mod tests {
             can_install: false,
             runtime_binary_id: None,
         }
+    }
+
+    fn candidate_with_history_key(candidate_id: &str) -> RuntimeTechnicalFitCandidate {
+        RuntimeTechnicalFitCandidate {
+            candidate_id: candidate_id.to_string(),
+            runtime_id: Some("pytorch.transformers".to_string()),
+            runtime_variant_id: Some("pytorch.cuda".to_string()),
+            backend_key: Some("pytorch".to_string()),
+            model_id: Some("pumas://models/juggernaut-xl".to_string()),
+            device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+            selected_device_id: Some("cuda:0".to_string()),
+            resource_estimate: None,
+            observed_throughput_hint: None,
+            device_diagnostics: Vec::new(),
+            source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
+            context_window_tokens: None,
+            residency_state: Some(RuntimeTechnicalFitResidencyState::Unloaded),
+            warmup_state: None,
+            supports_runtime_requirements: true,
+            compatibility_report: Some(RuntimeTechnicalFitCompatibilityReport {
+                status: "compatible".to_string(),
+                compatible: true,
+                task: "image_generation".to_string(),
+                model_source: "diffusers".to_string(),
+                preprocessing: "requires_package_component".to_string(),
+                postprocessing: "backend_managed".to_string(),
+            }),
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn runtime_selection_history_summaries_project_exact_candidate_keys() {
+        let candidates = vec![
+            candidate_with_history_key("candidate-a"),
+            RuntimeTechnicalFitCandidate {
+                candidate_id: "candidate-without-task".to_string(),
+                compatibility_report: None,
+                ..candidate_with_history_key("candidate-without-task")
+            },
+        ];
+        let mut queried_keys = Vec::new();
+
+        let summaries = runtime_selection_history_summaries_for_candidates(
+            "workflow_alpha",
+            &candidates,
+            |query| {
+                queried_keys.push(query.key.clone());
+                Ok(Some(RuntimeSelectionHistorySummary {
+                    key: query.key,
+                    sample_count: 5,
+                    min_sample_count: 5,
+                    threshold_met: true,
+                    completed_count: 5,
+                    failed_count: 0,
+                    cancelled_count: 0,
+                    duration_sample_count: 5,
+                    average_duration_ms: Some(1200),
+                    median_duration_ms: Some(1180),
+                    typical_min_duration_ms: Some(1100),
+                    typical_max_duration_ms: Some(1300),
+                    queue_wait_sample_count: 5,
+                    average_queue_wait_ms: Some(40),
+                    median_queue_wait_ms: Some(35),
+                }))
+            },
+        )
+        .expect("history summaries project");
+
+        assert_eq!(queried_keys.len(), 1);
+        let key = &queried_keys[0];
+        assert_eq!(key.workflow_id.as_str(), "workflow_alpha");
+        assert_eq!(key.task_id, "image_generation");
+        assert_eq!(key.model_id, "pumas://models/juggernaut-xl");
+        assert_eq!(key.selected_backend_key, "pytorch");
+        assert_eq!(key.selected_runtime_variant_id, "pytorch.cuda");
+        assert_eq!(key.selected_device_class, "cuda");
+        assert_eq!(key.selected_device_id.as_deref(), Some("cuda:0"));
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].candidate_id, "candidate-a");
+        assert!(summaries[0].threshold_met);
+        assert_eq!(summaries[0].average_duration_ms, Some(1200));
+        assert_eq!(summaries[0].average_queue_wait_ms, Some(40));
     }
 
     #[test]

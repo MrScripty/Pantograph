@@ -14,12 +14,12 @@ use pantograph_diagnostics_ledger::{
     RetentionClass, RetentionPolicyActorScope, RetentionPolicyChangedPayload,
     RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetRecord,
     RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus, RunTerminalPayload,
-    RunTerminalStatus, SchedulerModelCacheState, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord, UpdateRetentionPolicyCommand, IO_ARTIFACT_PROJECTION_NAME,
-    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
-    LIBRARY_USAGE_PROJECTION_VERSION, NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION,
-    RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME,
-    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    RunTerminalStatus, RuntimeSelectionHistoryQuery, RuntimeSelectionHistorySummary,
+    SchedulerModelCacheState, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    UpdateRetentionPolicyCommand, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
@@ -763,6 +763,23 @@ impl WorkflowService {
             facets,
             projection_state,
         })
+    }
+
+    pub fn runtime_selection_history_summary(
+        &self,
+        query: RuntimeSelectionHistoryQuery,
+    ) -> Result<Option<RuntimeSelectionHistorySummary>, WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(None);
+        };
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        drain_run_list_projection_until_idle(&mut *ledger)?;
+        ledger
+            .runtime_selection_history_summary(query)
+            .map(Some)
+            .map_err(WorkflowServiceError::from)
     }
 
     pub fn workflow_run_detail_query(

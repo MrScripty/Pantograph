@@ -4317,11 +4317,9 @@ typed diagnostic and the canonical design is fixed.
     memory/OOM pressure are not yet present in this summary source; future
     ranking must either consume only populated evidence or first add the
     canonical timing/memory producers before weighting those dimensions.
-  - Remaining follow-up: gather these summaries in the async orchestration
-    shell, pass them into the pure runtime-selection policy input, and then
-    implement the five-run threshold/history-backed ranking algorithm with
-    controlled exploration for candidates whose exact key has insufficient
-    history.
+  - Completed follow-up: subsequent 2026-05-14 pure-policy and async-shell
+    slices pass exact-key summaries into runtime-selection policy input and
+    apply the five-run threshold without broad-history fallback.
 - 2026-05-14 slice: pure policy five-run history threshold.
   - Smallest useful vertical slice: add request-provided
     `RuntimeTechnicalFitCandidateHistorySummary` evidence to the pure
@@ -4353,12 +4351,41 @@ typed diagnostic and the canonical design is fixed.
     `npm run typecheck`, `cargo fmt --package pantograph-runtime-registry
     --package pantograph-embedded-runtime --package pantograph-workflow-service
     --package pantograph-diagnostics-ledger`, and `git diff --check`.
-  - Remaining follow-up: the async orchestration shell still needs to gather
-    exact-key `RuntimeSelectionHistorySummary` records from
-    diagnostics-ledger, project them into
-    `RuntimeTechnicalFitCandidateHistorySummary` by candidate id, and preserve
-    controlled exploration until every valid candidate for the workflow/task
-    key has threshold-met history.
+  - Completed follow-up: the 2026-05-14 async-shell history gathering slice
+    gathers exact-key `RuntimeSelectionHistorySummary` records from
+    diagnostics-ledger and projects them into
+    `RuntimeTechnicalFitCandidateHistorySummary` by candidate id before policy
+    invocation.
+- 2026-05-14 slice: async-shell runtime-selection history gathering.
+  - Smallest useful vertical slice: expose a workflow-service
+    `runtime_selection_history_summary` wrapper over the diagnostics ledger,
+    gather exact-key summaries in embedded-runtime after technical-fit
+    candidate synthesis, and project successful summaries into
+    `RuntimeTechnicalFitCandidateHistorySummary` by candidate id before
+    invoking the pure runtime-selection policy.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/workflow/diagnostics_api.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the pure policy still has no
+    diagnostics-ledger dependency. The orchestration shell only queries history
+    for candidates with every exact key field: workflow id, task id from the
+    backend compatibility report, model id, backend key, runtime variant id,
+    device class, and nullable selected device id. It does not broaden missing
+    history to another workflow, task, model, runtime, backend, or device key;
+    configured-ledger query failures propagate as workflow-service errors.
+    Candidates without exact history keys remain facts-only rather than using
+    fabricated summaries.
+  - Verification passed:
+    `cargo test -p pantograph-embedded-runtime runtime_selection_history_summaries_project_exact_candidate_keys`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`,
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-diagnostics-ledger runtime_selection_history`,
+    `cargo fmt --package pantograph-embedded-runtime --package
+    pantograph-workflow-service -- --check`, and `git diff --check`.
+  - Remaining follow-up: keep future ranking dimensions limited to populated
+    evidence until canonical load/warmup/memory producers exist.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract
