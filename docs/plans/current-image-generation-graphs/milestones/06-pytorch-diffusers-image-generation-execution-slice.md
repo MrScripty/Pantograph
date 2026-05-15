@@ -247,6 +247,24 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 - Remaining follow-up: wire the planner into PyTorch image generation and add
   broader family/default/dependency/path diagnostics before worker execution.
 
+2026-05-15 planner checked-resource-estimate verification slice:
+
+- Smallest useful vertical slice: add direct planner coverage proving
+  overflow-prone image dimensions and image counts fail closed through typed
+  diagnostics without allocation or wrapped byte estimates.
+- Allowed write set: `crates/inference/src/image_generation_planner_tests.rs`
+  and this plan directory.
+- No-fallback/no-legacy confirmation: this only verifies the existing checked
+  arithmetic boundary. It does not relax planner validation, choose alternate
+  backends, infer defaults, or call worker execution after a resource estimate
+  failure.
+- Verification passed: `cargo test -p inference
+  planner_rejects_resource_estimate_overflow_without_allocation --lib`, `cargo
+  check -p inference`, `cargo fmt -p inference`, and `git diff --check`.
+- Remaining follow-up: path validation, family-specific option rules, and
+  generation default merge-order coverage still need separate focused planner
+  slices before real worker execution is treated as complete.
+
 2026-05-12 worker image-envelope contract slice:
 
 - Smallest useful vertical slice: add the Rust-side PyTorch worker

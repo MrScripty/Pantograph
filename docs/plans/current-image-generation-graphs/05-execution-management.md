@@ -3651,6 +3651,17 @@ Worker rules:
   node-engine`, and `git diff --check`. Remaining follow-up: add an
   end-to-end retained image workflow-output test once the image-generation
   workflow fixture exists.
+- 2026-05-15: Completed the planner checked-resource-estimate verification
+  slice. Added focused inference planner coverage proving overflow-prone width,
+  height, and image-count combinations return
+  `ResourceEstimateOverflow` without allocation, worker execution, alternate
+  backend selection, default inference, or wrapped byte estimates. Verification
+  passed: `cargo test -p inference
+  planner_rejects_resource_estimate_overflow_without_allocation --lib`, `cargo
+  check -p inference`, `cargo fmt -p inference`, and `git diff --check`.
+  Remaining follow-up: path validation, family-specific option rules, and
+  generation default merge-order coverage still need separate planner slices
+  before real worker execution is treated as complete.
 
 ### Traceability Links
 
