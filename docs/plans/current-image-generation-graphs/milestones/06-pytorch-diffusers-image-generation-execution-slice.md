@@ -416,3 +416,24 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   async shell, then reduce them into `ImageGenerationExecutionPlan` before
   calling the planned gateway method. Artifact retention and compact
   graph-output shaping remain separate later slices.
+
+2026-05-14 gateway planning-input execution slice:
+
+- Smallest useful vertical slice: add a gateway method that accepts the
+  side-effect-free image-generation planning input, runs the Rust planner, and
+  dispatches only the resulting `ImageGenerationExecutionPlan` to the active
+  backend.
+- Allowed write set: `crates/inference/src/gateway.rs`,
+  `crates/inference/src/gateway_tests.rs`, and this plan directory.
+- No-fallback/no-legacy confirmation: the gateway planning-input method either
+  produces one planner-owned execution plan or returns typed
+  `ImageGenerationPlannerDiagnostic` records through `GatewayError`. It does
+  not infer Pumas facts, backend/runtime/device decisions, package family, or
+  execution defaults from request fields or active backend state, and it does
+  not dispatch raw image requests after planner rejection.
+- Verification passed: `cargo test -p inference test_generate_image`, `cargo
+  check -p inference`, `cargo fmt --package inference -- --check`, and `git
+  diff --check`.
+- Remaining follow-up: wire the workflow/inference async shell that gathers the
+  existing request, Pumas facts, dependency readiness, candidate facts, history
+  summaries, and scheduler decision before calling this gateway method.

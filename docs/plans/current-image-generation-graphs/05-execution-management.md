@@ -3241,6 +3241,24 @@ Worker rules:
   facts, reduce them into `ImageGenerationExecutionPlan`, then call the planned
   gateway/backend path before artifact retention and compact output shaping are
   implemented.
+- 2026-05-14 gateway planning-input execution slice: smallest useful vertical
+  slice was to add a gateway method that accepts the side-effect-free
+  image-generation planning input, invokes the Rust planner, and dispatches
+  only the resulting `ImageGenerationExecutionPlan` to the active backend.
+  Allowed write set: `crates/inference/src/gateway.rs`,
+  `crates/inference/src/gateway_tests.rs`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because rejected planning
+  returns typed `ImageGenerationPlannerDiagnostic` records through
+  `GatewayError` and never dispatches raw image requests. The method does not
+  infer Pumas facts, backend/runtime/device decisions, package family, or
+  execution defaults from request fields or active backend state.
+- Verification passed: `cargo test -p inference test_generate_image`, `cargo
+  check -p inference`, `cargo fmt --package inference -- --check`, and `git
+  diff --check`.
+- Remaining follow-up: workflow/inference execution still needs the async shell
+  that gathers request, Pumas facts, readiness, executable candidates, history
+  summaries, and the scheduler decision before calling the planning-input
+  gateway method.
 
 ### Traceability Links
 

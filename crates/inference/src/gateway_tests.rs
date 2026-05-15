@@ -11,9 +11,13 @@ use crate::backend::{BackendStartOutcome, BackendStartupDeviceIntent};
 use crate::config::DeviceConfig;
 use crate::device::DeviceBackend;
 use crate::device_contracts::{
-    BackendId, DeviceResolutionDecision, InferenceDevicePolicy, RuntimeVariantId,
+    BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDevicePolicy,
+    RuntimeVariantId,
 };
-use crate::image_generation_planner::ImageGenerationExecutionPlan;
+use crate::image_generation_planner::{
+    ImageGenerationExecutionPlan, ImageGenerationPlannerDiagnosticCode,
+    ImageGenerationPlanningInput,
+};
 use crate::model_contracts::{
     CacheGenerationOptions, DiffusersComponentRole, GenerationOptions, ImageGenerationFamilyLabel,
     InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions, OptionSupportState,
@@ -160,6 +164,64 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
         scheduler: None,
         num_images_per_prompt: Some(1),
         estimated_output_rgba_bytes: Some(512_u64 * 512 * 4),
+    }
+}
+
+fn image_generation_package_fixture(name: &str) -> ResolvedModelPackageFacts {
+    let raw = match name {
+        "diffusers_sd_text_to_image_package_facts.json" => include_str!(
+            "../tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
+        ),
+        "gguf_text_generation_package_facts.json" => include_str!(
+            "../tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+        ),
+        other => panic!("unknown package fixture: {other}"),
+    };
+    serde_json::from_str(raw).expect("package fixture should decode")
+}
+
+fn sample_image_generation_request() -> ImageGenerationRequest {
+    ImageGenerationRequest {
+        model: "image/stable-diffusion/tiny-sd".to_string(),
+        prompt: "a compact test image".to_string(),
+        negative_prompt: Some("blur".to_string()),
+        width: Some(512),
+        height: Some(512),
+        num_inference_steps: Some(8),
+        guidance_scale: Some(7.5),
+        seed: Some(42),
+        scheduler: Some("euler".to_string()),
+        num_images_per_prompt: Some(2),
+        init_image: None,
+        mask_image: None,
+        strength: None,
+        extra_options: serde_json::Value::Null,
+    }
+}
+
+fn sample_image_backend_decision(backend_id: &str) -> BackendExecutionDecision {
+    let backend_id = BackendId::parse(backend_id).expect("valid backend id");
+    let runtime_variant_id =
+        RuntimeVariantId::parse("pytorch.diffusers").expect("valid runtime variant");
+    let selected_device_id = InferenceDeviceId::parse("cpu").expect("valid device id");
+    let device_decision = DeviceResolutionDecision {
+        policy: InferenceDevicePolicy::Auto,
+        runtime_variant_id: runtime_variant_id.clone(),
+        selected_device_class: InferenceDeviceClass::Cpu,
+        selected_device_id: Some(selected_device_id.clone()),
+        diagnostics: Vec::new(),
+    };
+
+    BackendExecutionDecision {
+        selected_backend_id: backend_id,
+        selected_runtime_variant_id: runtime_variant_id,
+        selected_device_class: InferenceDeviceClass::Cpu,
+        selected_device_id: Some(selected_device_id),
+        device_decision,
+        selected_task_id: Some(InferenceTaskId::ImageGeneration),
+        selected_model_ref: None,
+        diagnostics: Vec::new(),
+        selection_policy_trace: None,
     }
 }
 
@@ -1052,6 +1114,65 @@ async fn test_generate_image_from_plan_forwards_to_active_backend() {
         result.metadata["planned_runtime_variant"],
         "pytorch.diffusers"
     );
+}
+
+#[tokio::test]
+async fn test_generate_image_from_planning_input_plans_and_forwards() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = sample_image_generation_request();
+    let decision = sample_image_backend_decision("pytorch");
+
+    let result = gateway
+        .generate_image_from_planning_input(ImageGenerationPlanningInput {
+            request: &request,
+            package_facts: &facts,
+            backend_decision: &decision,
+        })
+        .await
+        .expect("planning input should build one execution plan");
+
+    assert_eq!(result.images.len(), 1);
+    assert_eq!(result.images[0].data_base64, "a compact test image");
+    assert_eq!(result.seed_used, Some(42));
+    assert_eq!(result.metadata["planned_backend"], "pytorch");
+    assert_eq!(
+        result.metadata["planned_runtime_variant"],
+        "pytorch.diffusers"
+    );
+}
+
+#[tokio::test]
+async fn test_generate_image_from_planning_input_returns_planner_diagnostics() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let facts = image_generation_package_fixture("gguf_text_generation_package_facts.json");
+    let request = sample_image_generation_request();
+    let decision = sample_image_backend_decision("pytorch");
+
+    let error = gateway
+        .generate_image_from_planning_input(ImageGenerationPlanningInput {
+            request: &request,
+            package_facts: &facts,
+            backend_decision: &decision,
+        })
+        .await
+        .expect_err("non-Diffusers package facts should fail during planning");
+
+    let GatewayError::ImageGenerationPlanning {
+        diagnostic_count,
+        diagnostics,
+    } = error
+    else {
+        panic!("expected image-generation planner diagnostics");
+    };
+    let codes: Vec<_> = diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code)
+        .collect();
+
+    assert_eq!(diagnostic_count, diagnostics.len());
+    assert!(codes.contains(&ImageGenerationPlannerDiagnosticCode::MissingDiffusersEvidence));
+    assert!(codes.contains(&ImageGenerationPlannerDiagnosticCode::UnsupportedTaskEvidence));
 }
 
 #[tokio::test]

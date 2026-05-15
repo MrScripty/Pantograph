@@ -22,7 +22,10 @@ use crate::backend::{
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy};
-use crate::image_generation_planner::ImageGenerationExecutionPlan;
+use crate::image_generation_planner::{
+    plan_image_generation_execution, ImageGenerationExecutionPlan,
+    ImageGenerationPlannerDiagnostic, ImageGenerationPlanningInput, ImageGenerationPlanningOutcome,
+};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase, ModelArtifactKind,
@@ -67,6 +70,12 @@ pub enum GatewayError {
 
     #[error("Runtime warmup timing contract error: {0}")]
     WarmupTiming(#[from] WorkflowTimingContractError),
+
+    #[error("Image generation planning failed with {diagnostic_count} diagnostic(s)")]
+    ImageGenerationPlanning {
+        diagnostic_count: usize,
+        diagnostics: Vec<ImageGenerationPlannerDiagnostic>,
+    },
 }
 
 /// Host-supplied inputs for starting the active backend in inference mode.
@@ -1323,6 +1332,24 @@ impl InferenceGateway {
             .generate_image_from_plan(plan)
             .await
             .map_err(GatewayError::Backend)
+    }
+
+    /// Build and execute one image-generation plan from canonical planning facts.
+    pub async fn generate_image_from_planning_input(
+        &self,
+        input: ImageGenerationPlanningInput<'_>,
+    ) -> Result<ImageGenerationResult, GatewayError> {
+        match plan_image_generation_execution(input) {
+            ImageGenerationPlanningOutcome::Planned { plan } => {
+                self.generate_image_from_plan(plan).await
+            }
+            ImageGenerationPlanningOutcome::Rejected { diagnostics } => {
+                Err(GatewayError::ImageGenerationPlanning {
+                    diagnostic_count: diagnostics.len(),
+                    diagnostics,
+                })
+            }
+        }
     }
 
     /// Transcribe audio through the active backend.
