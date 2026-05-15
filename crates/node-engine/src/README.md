@@ -213,6 +213,9 @@ use node_engine::core_executor::CoreNodeExecutor;
   metadata from typed gateway results or terminal stream chunks. It must not
   contain prompt text, generated text, token arrays, logits, tensors, backend
   kwargs, or local paths.
+- Canonical `llm-inference` image-generation request construction consumes the
+  graph/API field `denoising_scheduler` for optional sampling intent. The
+  overloaded graph/API key `scheduler` is intentionally not read as an alias.
 
 ## Structured Producer Contract
 - Built-in node descriptors, canonical contract projection, and execution

@@ -1321,7 +1321,7 @@ fn test_build_image_generation_execution_request_preserves_canonical_inputs() {
             "num_inference_steps": 12,
             "guidance_scale": 7.5,
             "seed": 42,
-            "scheduler": "euler",
+            "denoising_scheduler": "euler",
             "num_images_per_prompt": 2
         }),
     );
@@ -1365,7 +1365,34 @@ fn test_build_image_generation_execution_request_preserves_canonical_inputs() {
             assert_eq!(request.scheduler.as_deref(), Some("euler"));
             assert_eq!(request.num_images_per_prompt, Some(2));
             assert_eq!(request.strength, Some(0.35));
-            assert_eq!(request.extra_options, serde_json::json!({}));
+            assert_eq!(request.extra_options, serde_json::Value::Null);
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_image_generation_execution_request_ignores_noncanonical_scheduler_input() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "prompt".to_string(),
+        serde_json::json!("paint a quiet lake"),
+    );
+    inputs.insert("model".to_string(), serde_json::json!("tiny-diffusion"));
+    inputs.insert(
+        "task_options".to_string(),
+        serde_json::json!({
+            "scheduler": "legacy-euler"
+        }),
+    );
+
+    let request = build_image_generation_execution_request(&inputs)
+        .expect("image generation request should build without legacy scheduler");
+
+    match request.input {
+        InferenceExecutionInput::ImageGeneration { request } => {
+            assert_eq!(request.scheduler, None);
         }
         other => panic!("unexpected input variant: {other:?}"),
     }
@@ -1492,7 +1519,7 @@ async fn test_canonical_llm_image_generation_requires_planned_context() {
             "num_inference_steps": 12,
             "guidance_scale": 7.5,
             "seed": 42,
-            "scheduler": "euler",
+            "denoising_scheduler": "euler",
             "num_images_per_prompt": 1
         }),
     );
@@ -1615,7 +1642,7 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
             "num_inference_steps": 12,
             "guidance_scale": 7.5,
             "seed": 42,
-            "scheduler": "euler",
+            "denoising_scheduler": "euler",
             "num_images_per_prompt": 1
         }),
     );

@@ -358,6 +358,10 @@ fn llm_input_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
         "task_kind" | "backend_key" | "task_options" | "inference_settings" => {
             task_role_payloads(&llm_supported_task_ids(), InferencePortPayloadRole::Options)
         }
+        "denoising_scheduler" => task_role_payloads(
+            &[ContractInferenceTaskId::ImageGeneration],
+            InferencePortPayloadRole::Options,
+        ),
         "prompt" | "system_prompt" | "context" | "tools" => vec![
             InferencePortPayloadContract::task_input(
                 ContractInferenceTaskId::TextGeneration,
@@ -773,6 +777,18 @@ mod tests {
             payload.task_id == ContractInferenceTaskId::Embedding
                 && payload.role == InferencePortPayloadRole::ModelReference
         }));
+
+        let denoising_scheduler = llm
+            .input(&port_id("denoising_scheduler").expect("denoising scheduler port id"))
+            .unwrap();
+        assert_eq!(denoising_scheduler.inference_payloads.len(), 1);
+        assert!(denoising_scheduler
+            .inference_payloads
+            .iter()
+            .any(|payload| {
+                payload.task_id == ContractInferenceTaskId::ImageGeneration
+                    && payload.role == InferencePortPayloadRole::Options
+            }));
 
         assert!(llm
             .input(&port_id("resolved_model_source").expect("resolved model source port id"))

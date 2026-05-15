@@ -3855,6 +3855,46 @@ Worker rules:
   that exists, add the project-approved equivalent of mounted interaction
   coverage for accessible-name, native keyboard selection, and graph gesture
   containment without introducing a new browser test platform.
+- 2026-05-15: Completed the canonical denoising scheduler graph-input slice.
+  Smallest useful vertical slice: expose optional
+  `llm-inference.denoising_scheduler` in workflow-node descriptors, project it
+  as an image-generation options payload in canonical node contracts, and make
+  node-engine image request construction read only `denoising_scheduler` /
+  `denoisingScheduler` for graph/API sampling intent. Allowed write set:
+  `crates/workflow-nodes/src/processing/inference.rs`,
+  `crates/workflow-nodes/src/contracts.rs`,
+  `crates/workflow-nodes/src/README.md`,
+  `crates/node-engine/src/core_executor/inference_nodes.rs`,
+  `crates/node-engine/src/core_executor/inference_tests.rs`,
+  `crates/node-engine/src/core_executor/README.md`,
+  `crates/node-engine/src/README.md`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because graph/API
+  `scheduler` is no longer read as an image-generation sampling alias. Existing
+  inference internals may still carry a field named `scheduler` until the later
+  planner/worker DTO rename slice, but new graph request construction uses the
+  canonical `denoising_scheduler` input only.
+- Discovered issue fixed in-slice: node-engine was forwarding an empty image
+  `extra_options` object, which the planner correctly treated as an explicit
+  unsupported option. Empty image extra options now serialize as `null`; real
+  extra options still fail closed through planner diagnostics.
+- Verification passed: `cargo test -p workflow-nodes
+  test_descriptor_has_canonical_inference_contract_ports --lib`, `cargo test
+  -p workflow-nodes
+  llm_inference_contract_exposes_inference_task_payload_metadata --lib`,
+  `cargo test -p node-engine --features inference-nodes
+  test_build_image_generation_execution_request_preserves_canonical_inputs
+  --lib`, `cargo test -p node-engine --features inference-nodes
+  test_build_image_generation_execution_request_ignores_noncanonical_scheduler_input
+  --lib`, `cargo test -p node-engine --features inference-nodes
+  test_canonical_llm_image_generation_uses_planned_gateway_boundary --lib`,
+  `cargo check -p workflow-nodes`, `cargo check -p node-engine --features
+  inference-nodes`, `cargo fmt -p workflow-nodes -p node-engine -- --check`,
+  and `git diff --check`.
+- Remaining follow-up: the larger rename task still needs inference planner
+  DTOs, worker envelopes, Python worker inputs, diagnostics, metadata, and
+  fixtures moved from internal `scheduler` names to `denoising_scheduler` where
+  those names are Pantograph execution intent rather than factual Pumas
+  component roles.
 
 ### Traceability Links
 

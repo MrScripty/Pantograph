@@ -127,6 +127,10 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   graph-visible inputs because current preflight and execution consume those
   fields as canonical node data. Legacy `runtime_hint` is not a descriptor
   input or compatibility alias.
+- Canonical `llm-inference` exposes image-generation denoising scheduler intent
+  through the optional `denoising_scheduler` input. Graphs must not use the
+  overloaded `scheduler` name for image sampling intent; factual Diffusers/Pumas
+  component roles may still use source package names such as `scheduler`.
 - Direct `diffusion-inference` is retired from the built-in descriptor
   inventory. New image-generation authoring must use canonical
   `llm-inference` with `task_kind = image_generation`; old direct-diffusion

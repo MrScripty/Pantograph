@@ -927,6 +927,7 @@ pub(crate) fn build_image_generation_execution_request(
         .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing image model input".to_string()))?;
     let mut extra_options = build_extra_settings(inputs);
     remove_image_generation_first_class_options(&mut extra_options);
+    let extra_options = json_object_or_null(extra_options);
 
     Ok(inference::InferenceExecutionRequest {
         request_id: None,
@@ -953,7 +954,10 @@ pub(crate) fn build_image_generation_execution_request(
                     &["guidance_scale", "guidanceScale", "cfg_scale", "cfgScale"],
                 ),
                 seed: read_u64_with_task_options(inputs, &["seed"]),
-                scheduler: read_string_with_task_options(inputs, &["scheduler"]),
+                scheduler: read_string_with_task_options(
+                    inputs,
+                    &["denoising_scheduler", "denoisingScheduler"],
+                ),
                 num_images_per_prompt: read_positive_u32_with_task_options(
                     inputs,
                     &[
@@ -966,12 +970,21 @@ pub(crate) fn build_image_generation_execution_request(
                 init_image: None,
                 mask_image: None,
                 strength: read_positive_f32_with_task_options(inputs, &["strength"]),
-                extra_options: serde_json::Value::Object(extra_options.into_iter().collect()),
+                extra_options,
             },
         },
         generation_options: None,
         extra_options: serde_json::Value::Null,
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn json_object_or_null(extra_options: HashMap<String, serde_json::Value>) -> serde_json::Value {
+    if extra_options.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::Object(extra_options.into_iter().collect())
+    }
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -1171,7 +1184,8 @@ fn remove_image_generation_first_class_options(
         "cfg_scale",
         "cfgScale",
         "seed",
-        "scheduler",
+        "denoising_scheduler",
+        "denoisingScheduler",
         "num_images_per_prompt",
         "numImagesPerPrompt",
         "num_images",

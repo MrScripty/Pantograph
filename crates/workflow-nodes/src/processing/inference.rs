@@ -66,6 +66,8 @@ impl InferenceTask {
     pub const PORT_GENERATION_OPTIONS: &'static str = "generation_options";
     /// Port ID for canonical task option input
     pub const PORT_TASK_OPTIONS: &'static str = "task_options";
+    /// Port ID for optional image denoising scheduler selection
+    pub const PORT_DENOISING_SCHEDULER: &'static str = "denoising_scheduler";
     /// Port ID for text input used by embedding/scoring tasks
     pub const PORT_TEXT: &'static str = "text";
     /// Port ID for query input used by rerank tasks
@@ -174,6 +176,11 @@ impl TaskDescriptor for InferenceTask {
                     PortDataType::Json,
                 ),
                 PortMetadata::optional(Self::PORT_TASK_OPTIONS, "Task Options", PortDataType::Json),
+                PortMetadata::optional(
+                    Self::PORT_DENOISING_SCHEDULER,
+                    "Denoising Scheduler",
+                    PortDataType::String,
+                ),
                 PortMetadata::optional(
                     "inference_settings",
                     "Inference Settings",
@@ -321,6 +328,11 @@ mod tests {
                 .any(|p| p.id == InferenceTask::PORT_TASK_OPTIONS
                     && p.data_type == PortDataType::Json)
         );
+        assert!(meta.inputs.iter().any(|p| {
+            p.id == InferenceTask::PORT_DENOISING_SCHEDULER
+                && p.data_type == PortDataType::String
+                && !p.required
+        }));
         assert!(meta
             .outputs
             .iter()

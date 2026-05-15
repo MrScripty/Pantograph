@@ -52,10 +52,10 @@ PyTorch/diffusers and produce a retained image artifact.
   names such as `scheduler` and paths such as `scheduler/scheduler_config.json`;
   the rename applies to Pantograph graph/API execution intent, not source
   package evidence.
-- [ ] Ensure `ImageGenerationRequest` is populated from canonical
+- [x] Ensure `ImageGenerationRequest` is populated from canonical
   `llm-inference` inputs: prompt, negative prompt, width, height, steps,
   guidance scale, seed, optional `denoising_scheduler`, and image count.
-- [ ] Expose `denoising_scheduler` as a first-class optional image-generation
+- [x] Expose `denoising_scheduler` as a first-class optional image-generation
   input on canonical `llm-inference`. A connected `selection-input` may provide
   the value, but unset means the selected model/pipeline default by explicit
   policy rather than a fallback.
