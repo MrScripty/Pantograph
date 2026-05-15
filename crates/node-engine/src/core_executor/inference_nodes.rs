@@ -864,7 +864,7 @@ pub(crate) async fn execute_image_generation_inference(
     );
     outputs.insert(
         "results".to_string(),
-        serde_json::to_value(&image_result).unwrap_or(serde_json::Value::Null),
+        compact_image_generation_result(&image_result),
     );
     outputs.insert(
         "metadata".to_string(),
@@ -876,6 +876,31 @@ pub(crate) async fn execute_image_generation_inference(
     );
     outputs.insert("diagnostics".to_string(), serde_json::json!([]));
     Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+fn compact_image_generation_result(
+    image_result: &inference::ImageGenerationResult,
+) -> serde_json::Value {
+    let images = image_result
+        .images
+        .iter()
+        .enumerate()
+        .map(|(index, image)| {
+            serde_json::json!({
+                "index": index,
+                "mime_type": image.mime_type,
+                "width": image.width,
+                "height": image.height,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    serde_json::json!({
+        "images": images,
+        "seed_used": image_result.seed_used,
+        "metadata": image_result.metadata,
+    })
 }
 
 #[cfg(feature = "inference-nodes")]

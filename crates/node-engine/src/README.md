@@ -225,10 +225,10 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Reranker outputs are published as ordered result lists plus convenience fields
   such as top score/document; consumers should not infer ranking from raw input
   order.
-- Image-generation outputs are published as generated image results plus
-  bounded metadata/diagnostics. Diagnostics must not include prompt text,
-  generated image bytes, tensors, backend kwargs, or backend-local command
-  flags.
+- Image-generation outputs publish one graph-visible image body for artifact
+  conversion plus compact generated-image summaries, metadata, and diagnostics.
+  `results` and diagnostics must not duplicate generated image bytes, prompt
+  text, tensors, backend kwargs, or backend-local command flags.
 - Text/chat outputs may include the existing graph `usage` port when the
   backend reports bounded prompt/completion/total token counts. Missing usage
   remains a valid backend-default case and must not be synthesized by

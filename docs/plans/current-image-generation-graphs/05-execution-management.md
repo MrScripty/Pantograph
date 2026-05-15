@@ -3635,6 +3635,22 @@ Worker rules:
   pantograph-workflow-service`, `cargo fmt -p pantograph-workflow-service`,
   and `git diff --check`. Remaining follow-up: durable replay/retry semantics
   remain deferred behind a separate re-plan.
+- 2026-05-15: Completed the compact image-generation output slice.
+  Node-engine canonical image-generation execution now keeps the graph-visible
+  `image` port as the single generated image body source and publishes compact
+  per-image summaries in `results` without `data_base64`. This removes
+  pre-conversion duplication of generated image bytes while preserving the
+  planned gateway boundary and leaving workflow artifact conversion as the
+  owner of retained media-body storage. No raw image-generation execution,
+  backend/runtime/device inference, scheduler policy, worker envelope,
+  frontend DTO, saved workflow fixture, lockfile, generated file, durable
+  storage, or artifact conversion behavior changed. Verification passed:
+  `cargo test -p node-engine --features inference-nodes
+  test_canonical_llm_image_generation_uses_planned_gateway_boundary`, `cargo
+  check -p node-engine --features inference-nodes`, `cargo fmt -p
+  node-engine`, and `git diff --check`. Remaining follow-up: add an
+  end-to-end retained image workflow-output test once the image-generation
+  workflow fixture exists.
 
 ### Traceability Links
 

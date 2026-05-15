@@ -1646,11 +1646,16 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
 
     assert_eq!(outputs["results"]["images"][0]["mime_type"], "image/png");
     assert_eq!(outputs["results"]["images"][0]["width"], 512);
+    assert!(outputs["results"]["images"][0].get("data_base64").is_none());
     assert_eq!(outputs["image"], "aW1hZ2U=");
     assert_eq!(outputs["metadata"]["seed_used"], 42);
     assert_eq!(outputs["metadata"]["image_count"], 1);
+    let compact_results =
+        serde_json::to_string(&outputs["results"]).expect("compact results serialize");
+    assert!(!compact_results.contains("aW1hZ2U="));
     let bounded_outputs = serde_json::to_string(&serde_json::json!({
         "metadata": outputs.get("metadata"),
+        "results": outputs.get("results"),
         "diagnostics": outputs.get("diagnostics"),
     }))
     .expect("bounded outputs serialize");

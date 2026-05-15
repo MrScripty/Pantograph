@@ -102,9 +102,10 @@ stable public facade and dispatch owner.
   promote resolved Pumas package facts into typed request `model_ref` when an
   explicit graph `pumas_model_ref` or `model_ref` is not wired, so stable model
   identity still reaches backend lifecycle and transport contracts.
-- Canonical image-generation execution should expose both the structured
-  `results` JSON and the first generated image on the graph-visible `image`
-  output so image-output templates do not need to parse typed result envelopes.
+- Canonical image-generation execution exposes the first generated image body on
+  the graph-visible `image` output and compact per-image summaries in
+  `results`. `results` must not duplicate generated image base64 bodies; the
+  workflow artifact conversion path owns retention of the `image` body.
 - Canonical `llm-inference` task/request compatibility checks should consume
   inference task registry request contracts instead of hard-coded backend names
   or raw task labels.

@@ -877,6 +877,33 @@ Staged Option 3 implementation plan:
      retry/reuse policy before any execution-plan record becomes recoverable
      state.
 
+2026-05-15 compact image-generation output slice:
+
+- Smallest useful vertical slice: stop canonical image-generation node
+  execution from duplicating generated image base64 in both graph-visible
+  `image` and structured `results` outputs before workflow artifact
+  conversion runs.
+- Allowed write set: `crates/node-engine/src/core_executor/inference_nodes.rs`,
+  `crates/node-engine/src/core_executor/inference_tests.rs`,
+  `crates/node-engine/src/core_executor/README.md`,
+  `crates/node-engine/src/README.md`, and this plan directory.
+- No-fallback/no-legacy confirmation: this only changes output projection after
+  successful planned image generation. It does not restore raw
+  image-generation execution, infer backend/runtime/device decisions, change
+  worker envelopes, bypass artifact conversion, or add compatibility shims.
+- Result: the `image` port remains the single image body source for
+  image-output templates and workflow artifact conversion, while `results`
+  carries compact per-image summaries plus seed/backend metadata without
+  `data_base64` bodies.
+- Verification passed: `cargo test -p node-engine --features inference-nodes
+  test_canonical_llm_image_generation_uses_planned_gateway_boundary`, `cargo
+  check -p node-engine --features inference-nodes`, `cargo fmt -p
+  node-engine`, and `git diff --check`.
+- Remaining follow-up: workflow-service artifact conversion still needs a
+  vertical retained-output test once an end-to-end image-generation workflow
+  fixture exists, proving the `image` port is retained as one media body and
+  `results` remains compact after conversion.
+
 Standards compliance gates for every Option 3 slice:
 
 - Worktree hygiene: inspect `git status` before each slice and do not start
