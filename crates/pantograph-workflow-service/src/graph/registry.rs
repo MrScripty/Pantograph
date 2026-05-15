@@ -70,6 +70,7 @@ pub(super) fn convert_port(port: &pantograph_node_contracts::PortContract) -> Po
             port.cardinality,
             pantograph_node_contracts::PortCardinality::Multiple
         ),
+        options_provider: port.options_provider.clone(),
         inference_payloads: port.inference_payloads.clone(),
     }
 }
@@ -207,6 +208,35 @@ mod tests {
                         && payload["result_kind"] == serde_json::json!("image_generation")
                 })
             }));
+    }
+
+    #[test]
+    fn node_definition_preserves_registered_port_options_provider_refs() {
+        let registry = NodeRegistry::new();
+        let definition = registry
+            .get_definition("puma-lib")
+            .expect("puma-lib definition");
+        let model_path = definition
+            .outputs
+            .iter()
+            .find(|port| port.id == "model_path")
+            .expect("model path output");
+
+        let provider = model_path
+            .options_provider
+            .as_ref()
+            .expect("registered options provider");
+        assert_eq!(provider.node_type.as_str(), "puma-lib");
+        assert_eq!(provider.port_id.as_str(), "model_path");
+
+        let encoded = serde_json::to_value(model_path).expect("encode model path port");
+        assert_eq!(
+            encoded["options_provider"],
+            serde_json::json!({
+                "node_type": "puma-lib",
+                "port_id": "model_path"
+            })
+        );
     }
 
     fn assert_llm_inference_payloads_do_not_expose_runtime_policy(definition: &NodeDefinition) {

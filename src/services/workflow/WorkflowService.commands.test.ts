@@ -92,6 +92,11 @@ test('mock node definitions expose intent-only Pumas inference ports', () => {
 
   assert.ok(pumaLib);
   assert.ok(llmInference);
+  const pumaModelPath = pumaLib.outputs.find((port) => port.id === 'model_path');
+  assert.deepEqual(pumaModelPath?.options_provider, {
+    node_type: 'puma-lib',
+    port_id: 'model_path',
+  });
   assert.ok(pumaLib.outputs.some((port) => port.id === 'pumas_model_ref'));
   assert.equal(pumaLib.outputs.some((port) => port.id === 'resolved_model_package_facts'), false);
   assert.ok(pumaLib.outputs.some((port) => port.id === 'dependency_requirements'));
@@ -105,6 +110,7 @@ test('mock node definitions expose intent-only Pumas inference ports', () => {
   );
   assert.ok(llmInference.outputs.some((port) => port.id === 'diagnostics'));
   const prompt = llmInference.inputs.find((port) => port.id === 'prompt');
+  const denoisingScheduler = llmInference.inputs.find((port) => port.id === 'denoising_scheduler');
   const audio = llmInference.inputs.find((port) => port.id === 'audio');
   const response = llmInference.outputs.find((port) => port.id === 'response');
   const results = llmInference.outputs.find((port) => port.id === 'results');
@@ -123,6 +129,9 @@ test('mock node definitions expose intent-only Pumas inference ports', () => {
         payload.task_id === 'image_generation' && payload.input_kind === 'image_generation',
     ),
   );
+  assert.deepEqual(denoisingScheduler?.inference_payloads, [
+    { task_id: 'image_generation', role: 'options' },
+  ]);
   assert.deepEqual(audio?.inference_payloads, [
     { task_id: 'audio_transcription', role: 'task_input', input_kind: 'audio_transcription' },
   ]);

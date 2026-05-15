@@ -262,6 +262,10 @@ missing `events` array as empty rather than a transport failure.
   request, and provider context. A selected model, package-facts cursor,
   backend, or runtime change must produce a different cache entry rather than
   reusing stale option rows.
+- Node definition `options_provider` fields are backend-authored provider
+  references only. Frontend services use them to choose the `query_port_options`
+  target, but must not infer valid values, defaults, runtime placement, or
+  execution policy from the presence of a provider.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.
@@ -395,6 +399,9 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   usage, cache-handle, and diagnostics roles. Mock producers must not add
   backend/runtime policy fields such as `backend_key` or `runtime_id` to
   canonical `llm-inference` inputs.
+- Mock node definitions must also preserve backend-authored
+  `options_provider` references for provider-backed built-ins so frontend
+  development exercises the same provider-query path as native mode.
 - TypeScript mirrors for workflow backend capability facts must carry
   append-only task ids and optional `WorkflowTaskRequestContract` objects in
   the same slice as Rust DTO changes. Roadmap tasks such as `depth_estimation`

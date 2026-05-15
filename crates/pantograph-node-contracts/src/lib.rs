@@ -361,6 +361,19 @@ pub struct NodeAuthoringMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub struct PortOptionsProviderRef {
+    pub node_type: NodeTypeId,
+    pub port_id: PortId,
+}
+
+impl PortOptionsProviderRef {
+    pub fn new(node_type: NodeTypeId, port_id: PortId) -> Self {
+        Self { node_type, port_id }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct PortContract {
     pub id: PortId,
     pub kind: PortKind,
@@ -375,6 +388,8 @@ pub struct PortContract {
     pub editor_hints: Vec<EditorHint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inference_payloads: Vec<InferencePortPayloadContract>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options_provider: Option<PortOptionsProviderRef>,
 }
 
 impl PortContract {
@@ -395,6 +410,7 @@ impl PortContract {
             constraints: Vec::new(),
             editor_hints: Vec::new(),
             inference_payloads: Vec::new(),
+            options_provider: None,
         }
     }
 
@@ -410,6 +426,7 @@ impl PortContract {
             constraints: Vec::new(),
             editor_hints: Vec::new(),
             inference_payloads: Vec::new(),
+            options_provider: None,
         }
     }
 

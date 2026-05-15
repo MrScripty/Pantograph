@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use pantograph_node_contracts::{ContractUpgradeRecord, InferencePortPayloadContract};
+use pantograph_node_contracts::{
+    ContractUpgradeRecord, InferencePortPayloadContract, PortOptionsProviderRef,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -108,6 +110,8 @@ pub struct PortDefinition {
     pub required: bool,
     #[serde(default)]
     pub multiple: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options_provider: Option<PortOptionsProviderRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inference_payloads: Vec<InferencePortPayloadContract>,
 }
@@ -137,6 +141,7 @@ impl PortDefinition {
             constraints: Vec::new(),
             editor_hints: Vec::new(),
             inference_payloads: self.inference_payloads.clone(),
+            options_provider: self.options_provider.clone(),
         })
     }
 }
@@ -156,6 +161,7 @@ mod tests {
             data_type: PortDataType::Json,
             required: false,
             multiple: false,
+            options_provider: None,
             inference_payloads: vec![InferencePortPayloadContract::task_role(
                 ContractInferenceTaskId::TextGeneration,
                 InferencePortPayloadRole::Diagnostics,

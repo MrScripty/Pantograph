@@ -56,6 +56,7 @@ const RERANK_RESULT_PAYLOADS: InferencePortPayloadContract[] = [
 const LLM_MODEL_REFERENCE_PAYLOADS = taskRolePayloads(LLM_TASK_IDS, 'model_reference');
 const LLM_OPTIONS_PAYLOADS = taskRolePayloads(LLM_TASK_IDS, 'options');
 const TEXT_CHAT_OPTIONS_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'options');
+const IMAGE_GENERATION_OPTIONS_PAYLOADS = taskRolePayloads(['image_generation'], 'options');
 const TEXT_CHAT_USAGE_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'usage');
 const TEXT_CHAT_KV_OUTPUT_PAYLOADS = taskRolePayloads(TEXT_CHAT_TASK_IDS, 'cache_handle');
 const LLM_DIAGNOSTIC_PAYLOADS = taskRolePayloads(LLM_TASK_IDS, 'diagnostics');
@@ -152,7 +153,14 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     io_binding_origin: 'integrated',
     inputs: [],
     outputs: [
-      { id: 'model_path', label: 'Model Path', data_type: 'string', required: false, multiple: false },
+      {
+        id: 'model_path',
+        label: 'Model Path',
+        data_type: 'string',
+        required: false,
+        multiple: false,
+        options_provider: { node_type: 'puma-lib', port_id: 'model_path' },
+      },
       { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false },
       { id: 'model_id', label: 'Model ID', data_type: 'string', required: false, multiple: false },
       { id: 'model_type', label: 'Model Type', data_type: 'string', required: false, multiple: false },
@@ -220,6 +228,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
       { id: 'kv_cache_in', label: 'KV Cache In', data_type: 'kv_cache', required: false, multiple: false },
       { id: 'generation_options', label: 'Generation Options', data_type: 'json', required: false, multiple: false, inference_payloads: TEXT_CHAT_OPTIONS_PAYLOADS },
       { id: 'task_options', label: 'Task Options', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
+      { id: 'denoising_scheduler', label: 'Denoising Scheduler', data_type: 'string', required: false, multiple: false, inference_payloads: IMAGE_GENERATION_OPTIONS_PAYLOADS },
       { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: false, multiple: false, inference_payloads: LLM_OPTIONS_PAYLOADS },
     ],
     outputs: [

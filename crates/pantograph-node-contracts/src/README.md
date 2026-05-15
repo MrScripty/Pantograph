@@ -120,5 +120,9 @@ candidates, graph-authoring diagnostics, or saved-workflow migration results.
   describe graph-visible request/result families. This metadata is
   transport-neutral authoring information; it does not select a backend,
   scheduler policy, loaded model, or runtime process.
+- Ports with registered backend option providers may attach
+  `options_provider` references. The reference identifies the backend provider
+  to query for authoring choices; it does not carry option rows, package facts,
+  scheduler decisions, or execution policy.
 - Compatibility diagnostics should be safe to return to GUI, binding, and
   headless clients.

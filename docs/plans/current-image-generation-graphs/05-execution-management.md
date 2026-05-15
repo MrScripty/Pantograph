@@ -3895,6 +3895,49 @@ Worker rules:
   fixtures moved from internal `scheduler` names to `denoising_scheduler` where
   those names are Pantograph execution intent rather than factual Pumas
   component roles.
+- 2026-05-15: Completed the backend node-definition option-provider metadata
+  slice. Smallest useful vertical slice: project registered
+  `PortOptionsProvider` ownership through `pantograph-node-contracts`,
+  workflow-service graph definitions, and TypeScript mock definitions as
+  append-only `options_provider` references. Allowed write set:
+  `crates/pantograph-node-contracts/src/lib.rs`,
+  `crates/pantograph-node-contracts/src/README.md`,
+  `crates/workflow-nodes/src/contracts.rs`,
+  `crates/workflow-nodes/src/README.md`,
+  `crates/pantograph-workflow-service/src/graph/types.rs`,
+  `crates/pantograph-workflow-service/src/graph/registry.rs`,
+  `crates/pantograph-workflow-service/src/graph/canonicalization_inference.rs`,
+  `src/services/workflow/mocks.ts`,
+  `src/services/workflow/WorkflowService.commands.test.ts`,
+  `src/services/workflow/README.md`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because provider metadata
+  is derived from backend-registered provider ownership and only identifies the
+  query target. It does not embed selectable values, hardcode denoising
+  scheduler choices, pass Pumas package facts/local paths through frontend
+  state, choose runtime/backend placement, synthesize defaults, or add legacy
+  aliases.
+- Verification passed: `cargo test -p workflow-nodes
+  builtin_contracts_preserve_registered_port_options_provider_refs --features
+  model-library --lib`, `cargo test -p pantograph-workflow-service
+  node_definition_preserves_registered_port_options_provider_refs --lib`,
+  `cargo test -p pantograph-workflow-service
+  port_definition_round_trip_preserves_inference_payloads --lib`, `cargo test
+  -p pantograph-workflow-service canonicalization --lib`, `cargo test -p
+  workflow-nodes llm_inference_contract_exposes_inference_task_payload_metadata
+  --features model-library --lib`, and
+  `node --experimental-strip-types --test
+  src/services/workflow/WorkflowService.commands.test.ts
+  src/components/nodes/workflow/selectionInputState.test.ts
+  src/components/nodes/workflow/selectionInputProviderOptions.test.ts`.
+  Broader checks passed: `cargo check -p pantograph-node-contracts`, `cargo
+  check -p workflow-nodes --features model-library`, `cargo check -p
+  pantograph-workflow-service`, `npm run typecheck`, `npm run test:frontend`,
+  `cargo fmt -p pantograph-node-contracts -p workflow-nodes -p
+  pantograph-workflow-service -- --check`, and `git diff --check`.
+- Remaining follow-up: add the actual
+  `llm-inference.denoising_scheduler` backend provider once the option id
+  validation and package/runtime fact source are wired. This slice only makes
+  provider references visible to graph clients.
 
 ### Traceability Links
 

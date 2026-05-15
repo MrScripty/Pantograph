@@ -45,6 +45,11 @@ registration is `tool-loop`, which maps its stable external contract onto
 primitive `llm-inference`, `tool-executor`, and turn-state control nodes so
 diagnostics can preserve primitive execution facts.
 
+Registered `PortOptionsProvider` entries are projected into canonical port
+contracts as `options_provider` references. The provider registry remains the
+source of truth for whether a port has backend-owned authoring options; node
+descriptors do not duplicate option lists or package/runtime facts.
+
 ## Alternatives Rejected
 - Put all node implementations in one file: rejected because node families have
   distinct runtime and contract concerns.
@@ -57,6 +62,9 @@ diagnostics can preserve primitive execution facts.
   contracts.
 - Composed registrations use `pantograph-node-contracts` mapping DTOs and must
   preserve primitive trace policy.
+- Backend option-provider references identify query ownership only. They must
+  not embed selectable rows, Pumas package facts, scheduler decisions, or
+  runtime execution policy in static node definitions.
 - Saved templates must not rely on frontend-only aliases for backend ports.
 - Experimental control/tool nodes must not be presented as complete execution
   behavior while tool execution is disabled.

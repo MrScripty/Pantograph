@@ -8,6 +8,8 @@ use inference::model_contracts::{
     default_task_registry_entries, InferenceExecutionInputKind, InferenceExecutionResultKind,
     InferenceModality, InferenceTaskId, TaskRequestContract, TaskStreamingSupport,
 };
+use std::collections::HashSet;
+
 use pantograph_node_contracts::{
     ComposedInternalEdge, ComposedInternalGraph, ComposedInternalNode, ComposedNodeContract,
     ComposedPortMapping, ComposedPortMappings, ComposedTracePolicy,
@@ -16,15 +18,21 @@ use pantograph_node_contracts::{
     InferencePortPayloadContract, InferencePortPayloadRole, NodeAuthoringMetadata,
     NodeCapabilityRequirement, NodeCategory, NodeContractError, NodeExecutionSemantics,
     NodeInferenceTaskContract, NodeInstanceId, NodeTypeContract, NodeTypeId, PortCardinality,
-    PortContract, PortId, PortKind, PortRequirement, PortValueType, PortVisibility,
+    PortContract, PortId, PortKind, PortOptionsProviderRef, PortRequirement, PortValueType,
+    PortVisibility,
 };
 
 pub fn builtin_node_contracts() -> Result<Vec<NodeTypeContract>, NodeContractError> {
     let registry = node_engine::NodeRegistry::with_builtins();
+    let queryable_ports = registry
+        .queryable_ports()
+        .into_iter()
+        .map(|(node_type, port_id)| (node_type.to_string(), port_id.to_string()))
+        .collect::<HashSet<_>>();
     let mut contracts = registry
         .all_metadata()
         .into_iter()
-        .map(task_metadata_to_contract)
+        .map(|metadata| task_metadata_to_contract_with_options(metadata, &queryable_ports))
         .collect::<Result<Vec<_>, _>>()?;
     contracts.sort_by(|left, right| left.node_type.as_str().cmp(right.node_type.as_str()));
     Ok(contracts)
@@ -41,16 +49,23 @@ pub fn builtin_composed_node_contracts() -> Result<Vec<ComposedNodeContract>, No
 pub fn task_metadata_to_contract(
     metadata: &node_engine::TaskMetadata,
 ) -> Result<NodeTypeContract, NodeContractError> {
+    task_metadata_to_contract_with_options(metadata, &HashSet::new())
+}
+
+fn task_metadata_to_contract_with_options(
+    metadata: &node_engine::TaskMetadata,
+    queryable_ports: &HashSet<(String, String)>,
+) -> Result<NodeTypeContract, NodeContractError> {
     let node_type = NodeTypeId::try_from(metadata.node_type.clone())?;
     let inputs = metadata
         .inputs
         .iter()
-        .map(|port| port_metadata_to_contract(PortKind::Input, port))
+        .map(|port| port_metadata_to_contract(&node_type, PortKind::Input, port, queryable_ports))
         .collect::<Result<Vec<_>, _>>()?;
     let outputs = metadata
         .outputs
         .iter()
-        .map(|port| port_metadata_to_contract(PortKind::Output, port))
+        .map(|port| port_metadata_to_contract(&node_type, PortKind::Output, port, queryable_ports))
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut contract = NodeTypeContract {
@@ -157,11 +172,24 @@ fn port_id(value: &str) -> Result<PortId, NodeContractError> {
 }
 
 fn port_metadata_to_contract(
+    node_type: &NodeTypeId,
     kind: PortKind,
     metadata: &node_engine::PortMetadata,
+    queryable_ports: &HashSet<(String, String)>,
 ) -> Result<PortContract, NodeContractError> {
+    let port_id = PortId::try_from(metadata.id.clone())?;
+    let options_provider = if queryable_ports
+        .contains(&(node_type.as_str().to_string(), port_id.as_str().to_string()))
+    {
+        Some(PortOptionsProviderRef::new(
+            node_type.clone(),
+            port_id.clone(),
+        ))
+    } else {
+        None
+    };
     let contract = PortContract {
-        id: PortId::try_from(metadata.id.clone())?,
+        id: port_id,
         kind,
         label: metadata.label.clone(),
         value_type: convert_value_type(metadata.data_type),
@@ -179,6 +207,7 @@ fn port_metadata_to_contract(
         constraints: Vec::new(),
         editor_hints: Vec::new(),
         inference_payloads: Vec::new(),
+        options_provider,
     };
     contract.validate()?;
     Ok(contract)
@@ -876,6 +905,29 @@ mod tests {
             assert!(!serialized.contains("scheduler"));
             assert!(!serialized.contains("reservation"));
         }
+    }
+
+    #[test]
+    fn builtin_contracts_preserve_registered_port_options_provider_refs() {
+        let contracts = builtin_node_contracts().expect("canonical contracts");
+        let puma_lib = contracts
+            .iter()
+            .find(|contract| contract.node_type.as_str() == "puma-lib")
+            .expect("puma-lib contract");
+        let model_path = puma_lib
+            .output(&port_id("model_path").expect("model path port id"))
+            .expect("model path output");
+
+        let provider = model_path
+            .options_provider
+            .as_ref()
+            .expect("registered options provider");
+        assert_eq!(provider.node_type.as_str(), "puma-lib");
+        assert_eq!(provider.port_id.as_str(), "model_path");
+
+        let serialized = serde_json::to_value(model_path).expect("provider serialization");
+        assert_eq!(serialized["options_provider"]["node_type"], "puma-lib");
+        assert_eq!(serialized["options_provider"]["port_id"], "model_path");
     }
 
     #[test]

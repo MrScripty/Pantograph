@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 
 use super::super::registry::NodeRegistry;
 use super::super::types::{GraphEdge, GraphNode, NodeDefinition, PortDataType, PortDefinition};
@@ -394,13 +394,7 @@ fn inference_param_to_port_json(param: &InferenceParamSchema) -> Value {
 }
 
 fn base_port_to_json(port: &PortDefinition) -> Value {
-    json!({
-        "id": port.id,
-        "label": port.label,
-        "data_type": port.data_type,
-        "required": port.required,
-        "multiple": port.multiple,
-    })
+    serde_json::to_value(port).unwrap_or(Value::Null)
 }
 
 fn port_id(port: &Value) -> Option<&str> {

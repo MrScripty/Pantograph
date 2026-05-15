@@ -72,6 +72,11 @@ PyTorch/diffusers and produce a retained image artifact.
   frontend TypeScript mirrors, and affected README/API notes. Do not add a
   context field in only one binding or rely on untyped JSON passthrough for
   cross-language behavior.
+- [x] Expose registered backend port-option providers through backend-owned
+  node definitions as append-only `options_provider` references. The reference
+  identifies the provider query target only; it must not carry option rows,
+  Pumas package facts, scheduler decisions, worker envelopes, local paths, or
+  execution policy.
 - [x] Model provider context references as validated typed values at Rust
   boundaries. Public constructors/projection helpers must return structured
   errors or bounded diagnostics, not `Result<T, String>` or string-matched
