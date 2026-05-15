@@ -22,6 +22,7 @@ use crate::backend::{
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy};
+use crate::image_generation_planner::ImageGenerationExecutionPlan;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry, GenerationOptions, InferenceLifecyclePhase, ModelArtifactKind,
@@ -1304,12 +1305,22 @@ impl InferenceGateway {
         request: ImageGenerationRequest,
     ) -> Result<ImageGenerationResult, GatewayError> {
         validate_image_generation_request(&request)?;
+        Err(GatewayError::Backend(BackendError::Config(
+            "image generation requires a validated ImageGenerationExecutionPlan".to_string(),
+        )))
+    }
+
+    /// Generate one or more images through the active backend from a planned execution context.
+    pub async fn generate_image_from_plan(
+        &self,
+        plan: ImageGenerationExecutionPlan,
+    ) -> Result<ImageGenerationResult, GatewayError> {
         let guard = self.backend.read().await;
         if !guard.is_ready() {
             return Err(GatewayError::Backend(BackendError::NotReady));
         }
         guard
-            .generate_image(request)
+            .generate_image_from_plan(plan)
             .await
             .map_err(GatewayError::Backend)
     }

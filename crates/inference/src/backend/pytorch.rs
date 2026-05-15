@@ -51,8 +51,8 @@ use crate::model_contracts::{
 };
 use crate::process::ProcessSpawner;
 use crate::types::{
-    AudioTranscriptionRequest, AudioTranscriptionResult, InferenceUsage, RerankRequest,
-    RerankResponse,
+    AudioTranscriptionRequest, AudioTranscriptionResult, ImageGenerationResult, InferenceUsage,
+    RerankRequest, RerankResponse,
 };
 use crate::{BackendHintLabel, ModelArtifactKind};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
@@ -2931,6 +2931,13 @@ impl InferenceBackend for PyTorchBackend {
         })
         .await
         .map_err(|e| BackendError::Inference(task_join_error_message(e)))?
+    }
+
+    async fn generate_image_from_plan(
+        &self,
+        plan: crate::image_generation_planner::ImageGenerationExecutionPlan,
+    ) -> Result<ImageGenerationResult, BackendError> {
+        PyTorchBackend::generate_image_from_plan(self, plan).await
     }
 
     async fn kv_cache_runtime_fingerprint(

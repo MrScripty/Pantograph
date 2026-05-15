@@ -162,8 +162,9 @@ PyTorch/diffusers and produce a retained image artifact.
 - Artifact test verifies generated image retention stores one media body and
   projects only descriptors/metadata instead of duplicate base64 payloads.
 
-**Status:** In progress. Planner contract, Rust worker envelope, planner-to-worker
-translation, and Python image-envelope shape validation are implemented.
+**Status:** In progress. Planner contract, Rust worker envelope,
+planner-to-worker translation, Python image-envelope shape validation, planned
+PyTorch image helper, and the planned gateway/backend boundary are implemented.
 
 2026-05-12 boundary check:
 
@@ -387,3 +388,31 @@ translation, and Python image-envelope shape validation are implemented.
   worker envelopes. Those facts belong to the planning/scheduler boundary and
   must be reduced into the validated `ImageGenerationExecutionPlan` before
   PyTorch execution.
+
+2026-05-14 planned gateway/backend boundary slice:
+
+- Smallest useful vertical slice: add an explicit planned image-generation
+  gateway/backend method and fail raw gateway image generation after request
+  shape validation unless a validated `ImageGenerationExecutionPlan` is
+  supplied.
+- Allowed write set: `crates/inference/src/backend/mod.rs`,
+  `crates/inference/src/backend/pytorch.rs`, `crates/inference/src/gateway.rs`,
+  `crates/inference/src/gateway_tests.rs`, and this plan directory.
+- No-fallback/no-legacy confirmation: raw `ImageGenerationRequest` dispatch no
+  longer reaches any backend. The gateway still returns typed validation
+  diagnostics for invalid dimensions/counts/resource estimates, but valid raw
+  requests fail closed with a typed config error requiring
+  `ImageGenerationExecutionPlan`. The PyTorch backend only receives planned
+  image generation through the existing validated helper; no request-only
+  backend/runtime/device/package inference, `diffusers` backend alias,
+  scheduler fallback, or raw device parsing was added.
+- Verification passed: `cargo test -p inference test_generate_image`, `cargo
+  test -p inference --features backend-pytorch pytorch_image_generation`,
+  `cargo check -p inference --features backend-pytorch`, `cargo fmt --package
+  inference -- --check`, and `git diff --check`.
+- Remaining follow-up: wire the workflow/inference execution path to gather
+  Pumas package facts, dependency readiness, runtime capabilities, scheduler
+  history/readiness decisions, and selected backend/runtime/device facts in an
+  async shell, then reduce them into `ImageGenerationExecutionPlan` before
+  calling the planned gateway method. Artifact retention and compact
+  graph-output shaping remain separate later slices.

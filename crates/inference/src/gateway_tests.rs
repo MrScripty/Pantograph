@@ -10,11 +10,14 @@ use tokio::sync::mpsc;
 use crate::backend::{BackendStartOutcome, BackendStartupDeviceIntent};
 use crate::config::DeviceConfig;
 use crate::device::DeviceBackend;
-use crate::device_contracts::InferenceDevicePolicy;
+use crate::device_contracts::{
+    BackendId, DeviceResolutionDecision, InferenceDevicePolicy, RuntimeVariantId,
+};
+use crate::image_generation_planner::ImageGenerationExecutionPlan;
 use crate::model_contracts::{
-    CacheGenerationOptions, GenerationOptions, InferenceLifecyclePhase, InferenceTaskId,
-    LengthGenerationOptions, OptionSupportState, ResolvedModelPackageFacts,
-    SamplingGenerationOptions, StoppingGenerationOptions,
+    CacheGenerationOptions, DiffusersComponentRole, GenerationOptions, ImageGenerationFamilyLabel,
+    InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions, OptionSupportState,
+    PumasModelRef, ResolvedModelPackageFacts, SamplingGenerationOptions, StoppingGenerationOptions,
 };
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
@@ -106,6 +109,57 @@ impl ProcessSpawner for MockProcessSpawner {
 
     fn binaries_dir(&self) -> Result<PathBuf, String> {
         Ok(PathBuf::from("/tmp"))
+    }
+}
+
+fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
+    let runtime_variant_id =
+        RuntimeVariantId::parse("pytorch.diffusers").expect("valid runtime variant id");
+    let selected_device_id = InferenceDeviceId::parse("cuda:0").expect("valid device id");
+
+    ImageGenerationExecutionPlan {
+        model_ref: PumasModelRef {
+            model_id: "mock-image-model".to_string(),
+            revision: Some("main".to_string()),
+            selected_artifact_id: Some("diffusers".to_string()),
+            selected_artifact_path: Some("/models/mock-image-model".to_string()),
+            migration_diagnostics: Vec::new(),
+        },
+        artifact_entry_path: "/models/mock-image-model".to_string(),
+        backend_id: BackendId::parse("pytorch").expect("valid backend id"),
+        runtime_variant_id: runtime_variant_id.clone(),
+        selected_device_class: InferenceDeviceClass::Cuda,
+        selected_device_id: Some(selected_device_id.clone()),
+        device_decision: DeviceResolutionDecision {
+            policy: InferenceDevicePolicy::Explicit {
+                device_class: InferenceDeviceClass::Cuda,
+                device_id: Some(selected_device_id.clone()),
+            },
+            runtime_variant_id,
+            selected_device_class: InferenceDeviceClass::Cuda,
+            selected_device_id: Some(selected_device_id),
+            diagnostics: Vec::new(),
+        },
+        family: ImageGenerationFamilyLabel::StableDiffusion,
+        pipeline_class: "StableDiffusionPipeline".to_string(),
+        required_components: vec![
+            DiffusersComponentRole::PipelineIndex,
+            DiffusersComponentRole::Scheduler,
+            DiffusersComponentRole::Tokenizer,
+            DiffusersComponentRole::TextEncoder,
+            DiffusersComponentRole::Unet,
+            DiffusersComponentRole::Vae,
+        ],
+        prompt: "paper lantern".to_string(),
+        negative_prompt: None,
+        width: Some(512),
+        height: Some(512),
+        num_inference_steps: Some(20),
+        guidance_scale: Some(4.0),
+        seed: Some(7),
+        scheduler: None,
+        num_images_per_prompt: Some(1),
+        estimated_output_rgba_bytes: Some(512_u64 * 512 * 4),
     }
 }
 
@@ -211,6 +265,25 @@ impl InferenceBackend for MockImageBackend {
             }],
             seed_used: Some(7),
             metadata: serde_json::Value::Null,
+        })
+    }
+
+    async fn generate_image_from_plan(
+        &self,
+        plan: ImageGenerationExecutionPlan,
+    ) -> Result<ImageGenerationResult, BackendError> {
+        Ok(ImageGenerationResult {
+            images: vec![crate::types::EncodedImage {
+                data_base64: plan.prompt,
+                mime_type: "image/png".to_string(),
+                width: plan.width,
+                height: plan.height,
+            }],
+            seed_used: plan.seed,
+            metadata: serde_json::json!({
+                "planned_backend": plan.backend_id.as_str(),
+                "planned_runtime_variant": plan.runtime_variant_id.as_str(),
+            }),
         })
     }
 
@@ -932,9 +1005,9 @@ async fn test_not_ready_initially() {
 }
 
 #[tokio::test]
-async fn test_generate_image_forwards_to_active_backend() {
+async fn test_generate_image_requires_planned_execution_context() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
-    let result = gateway
+    let error = gateway
         .generate_image(ImageGenerationRequest {
             model: "mock".to_string(),
             prompt: "paper lantern".to_string(),
@@ -952,11 +1025,33 @@ async fn test_generate_image_forwards_to_active_backend() {
             extra_options: serde_json::Value::Null,
         })
         .await
-        .unwrap();
+        .expect_err("raw image generation should require a planned execution context");
+
+    let message = error.to_string();
+    assert!(
+        message.contains("ImageGenerationExecutionPlan"),
+        "expected planned execution boundary in {message}"
+    );
+}
+
+#[tokio::test]
+async fn test_generate_image_from_plan_forwards_to_active_backend() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let result = gateway
+        .generate_image_from_plan(sample_image_generation_plan())
+        .await
+        .expect("planned image generation should reach the active backend");
 
     assert_eq!(result.seed_used, Some(7));
     assert_eq!(result.images.len(), 1);
     assert_eq!(result.images[0].data_base64, "paper lantern");
+    assert_eq!(result.images[0].width, Some(512));
+    assert_eq!(result.images[0].height, Some(512));
+    assert_eq!(result.metadata["planned_backend"], "pytorch");
+    assert_eq!(
+        result.metadata["planned_runtime_variant"],
+        "pytorch.diffusers"
+    );
 }
 
 #[tokio::test]
@@ -3262,12 +3357,12 @@ async fn test_generate_image_with_lifecycle_records_failure() {
             sink.clone(),
         )
         .await
-        .expect_err("image generation should be unsupported");
+        .expect_err("image generation should require a planned execution context");
 
     assert!(matches!(
         error,
-        GatewayError::Backend(BackendError::Inference(message))
-            if message.contains("Image generation not supported")
+        GatewayError::Backend(BackendError::Config(message))
+            if message.contains("ImageGenerationExecutionPlan")
     ));
     let events = sink.events();
     assert_eq!(events.len(), 3);
@@ -3280,7 +3375,7 @@ async fn test_generate_image_with_lifecycle_records_failure() {
     assert!(events[1]
         .detail
         .as_deref()
-        .is_some_and(|detail| detail.contains("Image generation not supported")));
+        .is_some_and(|detail| detail.contains("ImageGenerationExecutionPlan")));
     assert!(events
         .iter()
         .all(|event| event.model_id.as_deref() == Some("mock")));

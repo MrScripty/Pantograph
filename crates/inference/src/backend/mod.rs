@@ -37,6 +37,7 @@ use crate::device_contracts::{
     BackendId, DeviceResolutionDiagnostic, DeviceResolutionDiagnosticCode,
     DeviceResolutionDiagnosticSeverity, InferenceDeviceClass, RuntimeVariantId,
 };
+use crate::image_generation_planner::ImageGenerationExecutionPlan;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::managed_runtime::ManagedBinaryId;
 use crate::model_contracts::{
@@ -1120,6 +1121,16 @@ pub trait InferenceBackend: Send + Sync {
     ) -> Result<ImageGenerationResult, BackendError> {
         Err(BackendError::Inference(
             "Image generation not supported by this backend".to_string(),
+        ))
+    }
+
+    /// Generate one or more images from a canonical planned execution context.
+    async fn generate_image_from_plan(
+        &self,
+        _plan: ImageGenerationExecutionPlan,
+    ) -> Result<ImageGenerationResult, BackendError> {
+        Err(BackendError::Inference(
+            "Planned image generation not supported by this backend".to_string(),
         ))
     }
 

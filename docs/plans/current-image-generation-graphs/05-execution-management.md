@@ -3217,6 +3217,30 @@ Worker rules:
 - Remaining follow-up: keep history-backed ranking limited to currently
   populated status, execution-duration, and queue-wait evidence until
   canonical load, warmup, and memory producers exist.
+- 2026-05-14 planned image-generation gateway/backend boundary slice: smallest
+  useful vertical slice was to add an explicit planned image-generation
+  gateway/backend method and stop raw `ImageGenerationRequest` gateway dispatch
+  from reaching a backend. Allowed write set:
+  `crates/inference/src/backend/mod.rs`,
+  `crates/inference/src/backend/pytorch.rs`, `crates/inference/src/gateway.rs`,
+  `crates/inference/src/gateway_tests.rs`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because a valid raw image
+  request now fails closed with a typed config error requiring
+  `ImageGenerationExecutionPlan`, while invalid raw requests still return typed
+  request-validation diagnostics. The PyTorch backend only receives image
+  generation through the planned helper, and the slice adds no request-only
+  backend/runtime/device/package inference, `diffusers` backend alias,
+  scheduler fallback, generated file, lockfile, frontend change, or workflow
+  fixture change.
+- Verification passed: `cargo test -p inference test_generate_image`, `cargo
+  test -p inference --features backend-pytorch pytorch_image_generation`,
+  `cargo check -p inference --features backend-pytorch`, `cargo fmt --package
+  inference -- --check`, and `git diff --check`.
+- Remaining follow-up: wire the workflow/inference execution async shell to
+  gather Pumas facts, readiness, candidate, history, and scheduler decision
+  facts, reduce them into `ImageGenerationExecutionPlan`, then call the planned
+  gateway/backend path before artifact retention and compact output shaping are
+  implemented.
 
 ### Traceability Links
 
