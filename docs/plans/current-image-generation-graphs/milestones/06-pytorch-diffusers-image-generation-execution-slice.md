@@ -342,6 +342,14 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 - Remaining follow-up: future img2img/inpaint and family-specific opaque
   option support needs explicit family option tables plus worker contract
   fields before these request fields can become executable.
+- Discovered issue: the planner and worker DTO can still carry a
+  `scheduler` override, but the current Python worker treats scheduler
+  swapping as reserved and deletes the value before generation. This means
+  existing scheduler tests prove DTO projection only, not execution semantics.
+  Do not broaden scheduler override support until a focused option-rule slice
+  decides whether each family accepts, rejects, or explicitly reports ignored
+  scheduler overrides, then updates the worker contract and diagnostics
+  accordingly.
 
 2026-05-12 worker image-envelope contract slice:
 
