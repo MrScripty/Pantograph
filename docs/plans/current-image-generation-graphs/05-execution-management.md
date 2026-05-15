@@ -3383,6 +3383,47 @@ Worker rules:
   cross-crate contracts, scheduler policy leaking into node-engine, unbounded
   diagnostics, undocumented boundary changes, and insufficient cross-layer
   acceptance coverage.
+- 2026-05-15 blast-radius pass over Option 3 execution-plan update:
+  reviewed workflow-service/session preflight, technical-fit DTOs,
+  embedded-runtime session execution, node-engine executor extensions,
+  inference gateway/planner, diagnostics ledger hooks, and crate dependency
+  direction.
+- Findings and required plan refinements:
+  1. Workflow-service can own the run execution-plan DTO, but node-engine must
+     not import workflow-service execution-plan contracts because
+     workflow-service already depends on node-engine. Embedded-runtime must own
+     the projection from workflow execution plan into a node-engine/inference
+     runtime context.
+  2. `WorkflowExecutionSessionPreflightCache` already carries
+     `WorkflowTechnicalFitDecision`, required backends, and required models.
+     Execution-plan production must derive from that admission evidence instead
+     of re-querying scheduler/runtime facts or creating a second source of
+     technical-fit truth.
+  3. The current `WorkflowTechnicalFitDecision` is workflow-level. The first
+     per-node execution-plan implementation may derive node decisions from it
+     only when selected model/task facts map unambiguously to one runnable
+     inference node. Ambiguous model-to-node mapping, missing selected
+     model/task facts, or multiple runtime/model needs represented by one
+     workflow-level decision must fail with typed diagnostics.
+  4. Warm session executors reuse `ExecutorExtensions`. Every run must install
+     a fresh run-scoped execution-plan context carrying the current
+     workflow-run id, or explicitly clear/replace the previous context before
+     execution. Missing or mismatched run id must fail closed so stale execution
+     decisions cannot be reused across runs.
+  5. Node-engine should consume only a minimal inference-facing lookup keyed by
+     node id/task id and carrying reduced `BackendExecutionDecision` data. It
+     may compose request, resolved package facts, and reduced decision, but it
+     must not own scheduler ranking, workflow-service DTOs, retry policy, or
+     full Pumas package propagation.
+  6. Durable execution-plan persistence remains deferred until replay, retry,
+     and idempotency semantics are specified and tested. Initial vertical
+     slices should use run-scoped execution context unless a later slice adds
+     durable recovery behavior.
+- Blast-radius conclusion: Option 3 remains the most maintainable path if
+  implemented with these refinements. They keep scheduler policy changeable,
+  preserve simple graph ergonomics, avoid dependency inversion, prevent
+  stale-plan reuse in warm sessions, and keep Pumas facts localized to existing
+  model-resolution boundaries.
 
 ### Traceability Links
 

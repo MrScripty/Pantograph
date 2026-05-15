@@ -521,9 +521,13 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 Staged Option 3 implementation plan:
 
 1. Contract foundation slice:
-   - Add a small workflow execution-plan DTO at the workflow/embedded-runtime
-     boundary. The initial DTO should contain run id/workflow id, a schema
-     version, and a map keyed by stable node id to reduced execution decisions.
+   - Add a small workflow execution-plan DTO in a focused workflow-service
+     module, not by growing the already broad workflow contracts module. The
+     DTO is owned at the workflow/embedded-runtime boundary; node-engine must
+     not import workflow-service execution-plan contracts because
+     workflow-service already depends on node-engine.
+   - The initial DTO should contain run id/workflow id, a schema version, and a
+     map keyed by stable node id to reduced execution decisions.
    - The first per-node decision shape must include selected backend key,
      selected runtime id/variant id, selected device class/id, selected task id,
      selected model ref when available, and bounded diagnostics/trace ids.
@@ -546,6 +550,15 @@ Staged Option 3 implementation plan:
    - Build the initial execution plan immediately after runtime preflight and
      scheduler admission, using the existing `WorkflowTechnicalFitDecision`
      already computed before run start.
+   - Treat `WorkflowExecutionSessionPreflightCache` as the current source of
+     admission evidence. Do not re-query scheduler/runtime facts or create a
+     second technical-fit source of truth during plan production.
+   - The first implementation may derive per-node decisions from the current
+     workflow-level technical-fit decision only when the selected model/task can
+     be mapped to exactly one runnable inference node. Ambiguous model-to-node
+     mapping, missing selected model/task facts, or multiple runtime/model
+     needs represented by one workflow-level decision must fail with typed
+     diagnostics rather than fabricating per-node decisions.
    - Store it as run-scoped execution context, not as saved workflow content.
      If persistence is needed for diagnostics or recovery, persist only the
      execution-plan record with explicit schema/version and source ids.
@@ -561,8 +574,10 @@ Staged Option 3 implementation plan:
 3. Projection adapter slice:
    - Add a focused adapter that projects a workflow execution-plan node
      decision into inference's `BackendExecutionDecision`.
-   - Keep this adapter at the composition boundary. Inference planner remains
-     side-effect free, and node-engine does not know scheduler ranking policy.
+   - Keep this adapter at the composition boundary. Embedded-runtime owns the
+     workflow-plan-to-node-runtime-context projection; inference planner remains
+     side-effect free, and node-engine does not know workflow-service DTOs or
+     scheduler ranking policy.
    - Use parse/validation boundaries rather than stringly typed pass-through:
      unknown backend ids, runtime variant ids, device ids/classes, missing task
      ids, and malformed selected model refs produce typed projection
@@ -575,6 +590,14 @@ Staged Option 3 implementation plan:
    - Thread the execution plan into node execution through a typed runtime
      context, likely `ExecutorExtensions`, without serializing it into graph
      inputs.
+   - Node-engine consumes only a minimal inference-facing decision lookup keyed
+     by node id/task id, projected by embedded-runtime from the workflow
+     execution plan. It must not depend on workflow-service execution-plan DTOs.
+   - Because session executors and `ExecutorExtensions` are reused across warm
+     runs, every run must install a fresh run-scoped context that carries the
+     current workflow run id, or explicitly clear/replace the old context before
+     execution. Missing or mismatched run id must fail closed to prevent stale
+     plan reuse.
    - `execute_image_generation_inference` reads the current node's per-node
      decision, combines it with the existing `ImageGenerationRequest` and
      Pumas `ResolvedModelPackageFacts`, and calls
@@ -609,6 +632,10 @@ Staged Option 3 implementation plan:
    - Define how execution plans participate in retry/recovery. A retry may
      reuse a still-valid plan or request a new scheduler plan, but the policy
      must be explicit and diagnostic-backed.
+   - Durable persistence of execution plans remains deferred until replay,
+     retry, and idempotency semantics are specified. The initial vertical
+     slices should keep the plan in run-scoped execution context unless a later
+     slice adds the durable semantics and tests below.
    - Add replay/recovery/idempotency tests before treating the execution-plan
      record as durable. Duplicate admission, cancellation during execution-plan
      production, and retry after runtime/resource failure must not produce
@@ -627,6 +654,13 @@ Standards compliance gates for every Option 3 slice:
   serde fixtures, generated DTOs, lockfiles, saved workflow fixtures, ADRs, and
   README updates are serial integration-owner work unless explicitly
   reassigned.
+- Crate-boundary rule: workflow-service may own the run execution-plan
+  contract, embedded-runtime adapts it, and node-engine consumes only
+  node-engine/inference-facing runtime context. Do not add a node-engine
+  dependency on workflow-service.
+- Warm-session safety rule: reused executors must not retain stale execution
+  decisions across workflow runs; run id validation or explicit context
+  replacement/clearing is required before planned node execution.
 - Public facade rule: preserve `InferenceGateway` and node-engine public task
   entrypoints while adding planned execution paths; do not restore raw
   `generate_image` or request-only typed image execution.
