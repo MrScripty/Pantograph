@@ -3662,6 +3662,19 @@ Worker rules:
   Remaining follow-up: path validation, family-specific option rules, and
   generation default merge-order coverage still need separate planner slices
   before real worker execution is treated as complete.
+- 2026-05-15: Completed the planner missing-component diagnostic slice. Added
+  focused inference planner coverage proving a missing required Diffusers
+  component role reports the exact absent field path
+  (`package_facts.diffusers.components.vae`) while preserving the fail-closed
+  planner path. No planner behavior, fallback behavior, worker execution,
+  scheduler policy, Pumas facts, frontend DTOs, saved workflow fixtures,
+  lockfiles, generated files, or backend contracts changed. Verification
+  passed: `cargo test -p inference
+  planner_reports_exact_missing_component_role_path --lib`, `cargo check -p
+  inference`, `cargo fmt -p inference`, and `git diff --check`. Remaining
+  follow-up: Pumas/model root validation needs a root-bearing planning or
+  backend execution contract rather than ad hoc string inspection inside the
+  side-effect-free planner.
 
 ### Traceability Links
 

@@ -69,6 +69,15 @@ fn diagnostic_codes(
     }
 }
 
+fn rejected_diagnostics(
+    outcome: &ImageGenerationPlanningOutcome,
+) -> &[ImageGenerationPlannerDiagnostic] {
+    match outcome {
+        ImageGenerationPlanningOutcome::Planned { .. } => &[],
+        ImageGenerationPlanningOutcome::Rejected { diagnostics } => diagnostics,
+    }
+}
+
 #[test]
 fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
     let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
@@ -138,6 +147,31 @@ fn planner_rejects_ambiguous_family_evidence() {
 
     assert!(diagnostic_codes(&outcome)
         .contains(&ImageGenerationPlannerDiagnosticCode::AmbiguousFamilyEvidence));
+}
+
+#[test]
+fn planner_reports_exact_missing_component_role_path() {
+    let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    facts
+        .diffusers
+        .as_mut()
+        .expect("diffusers facts")
+        .components
+        .retain(|component| component.role != DiffusersComponentRole::Vae);
+    let request = image_request();
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::MissingComponentRole
+            && diagnostic.field_path == "package_facts.diffusers.components.vae"
+    }));
 }
 
 #[test]

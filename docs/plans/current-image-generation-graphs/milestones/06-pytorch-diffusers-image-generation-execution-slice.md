@@ -265,6 +265,23 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   generation default merge-order coverage still need separate focused planner
   slices before real worker execution is treated as complete.
 
+2026-05-15 planner missing-component diagnostic slice:
+
+- Smallest useful vertical slice: prove missing Diffusers component-role
+  diagnostics include the exact absent family requirement field path.
+- Allowed write set: `crates/inference/src/image_generation_planner_tests.rs`
+  and this plan directory.
+- No-fallback/no-legacy confirmation: this only strengthens diagnostic
+  coverage for the existing fail-closed planner path. It does not infer missing
+  components, choose alternate packages, call worker execution, or relax family
+  requirements.
+- Verification passed: `cargo test -p inference
+  planner_reports_exact_missing_component_role_path --lib`, `cargo check -p
+  inference`, `cargo fmt -p inference`, and `git diff --check`.
+- Remaining follow-up: Pumas/model root validation needs a root-bearing
+  planning or backend execution contract; do not replace that with ad hoc
+  string inspection inside the side-effect-free planner.
+
 2026-05-12 worker image-envelope contract slice:
 
 - Smallest useful vertical slice: add the Rust-side PyTorch worker
