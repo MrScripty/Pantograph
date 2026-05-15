@@ -530,6 +530,14 @@ Staged Option 3 implementation plan:
    - Do not include full Pumas facts, worker envelopes, raw graph node payloads,
      local paths beyond existing approved model/package refs, or mutable
      scheduler internals.
+   - Make the DTO append-only and correct-by-construction: use typed ids/enums
+     where available, `#[non_exhaustive]` on public enums likely to grow,
+     explicit schema/version fields, bounded diagnostic arrays, and `Result`
+     returning constructors or projection helpers instead of public raw-field
+     mutation for validated decisions.
+   - Update the owning module README or add an ADR in the same slice, because
+     this contract changes the workflow execution boundary and will be consumed
+     across crates.
    - Verification: contract serde tests, append-only/default behavior tests,
      and a no-graph-input test proving scheduler decisions are not written into
      workflow node inputs.
@@ -541,15 +549,24 @@ Staged Option 3 implementation plan:
    - Store it as run-scoped execution context, not as saved workflow content.
      If persistence is needed for diagnostics or recovery, persist only the
      execution-plan record with explicit schema/version and source ids.
+   - Keep execution-plan production in a synchronous core helper fed by an
+     async shell that has already gathered runtime preflight and scheduler
+     facts. Do not introduce untracked background tasks, polling loops,
+     unbounded queues, or locks held across `.await`.
    - Verification: session admission tests prove the admitted run has an
      execution plan when technical-fit selected a candidate, and no plan is
-     produced when technical-fit fails.
+     produced when technical-fit fails. Tests must isolate any durable run,
+     scheduler, or sqlite state per test.
 
 3. Projection adapter slice:
    - Add a focused adapter that projects a workflow execution-plan node
      decision into inference's `BackendExecutionDecision`.
    - Keep this adapter at the composition boundary. Inference planner remains
      side-effect free, and node-engine does not know scheduler ranking policy.
+   - Use parse/validation boundaries rather than stringly typed pass-through:
+     unknown backend ids, runtime variant ids, device ids/classes, missing task
+     ids, and malformed selected model refs produce typed projection
+     diagnostics.
    - Verification: adapter tests cover selected backend/runtime/device
      projection, missing fields, unknown device/runtime identifiers, and
      diagnostic propagation.
@@ -564,13 +581,26 @@ Staged Option 3 implementation plan:
      `generate_image_from_planning_input`.
    - Missing plan, missing node decision, missing package facts, or failed
      projection must terminate the workflow task with typed diagnostics.
+   - `ExecutorExtensions` use must remain a typed runtime context only. Do not
+     serialize execution-plan data into graph input maps, saved workflow JSON,
+     frontend DTOs, or worker envelopes. Node-engine may compose the request,
+     package facts, and reduced decision, but it must not own scheduler ranking
+     or retry policy.
    - Verification: node-engine tests prove successful planned image execution
-     and fail-closed behavior for absent/invalid execution-plan decisions.
+     and fail-closed behavior for absent/invalid execution-plan decisions. The
+     first cross-layer acceptance test must start from canonical
+     `llm-inference` image inputs plus resolved package facts and assert the
+     planned gateway call/output without depending on private scheduler
+     internals.
 
 5. Lifecycle/diagnostics slice:
    - Attach execution-plan identifiers and selected per-node decision facts to
      existing scheduler, runtime-load, inference lifecycle, and diagnostics
      ledger records without duplicating large payloads.
+   - Diagnostics must carry bounded identifiers, selected backend/runtime/device
+     facts, policy trace ids, and planner codes only. Do not persist full Pumas
+     package facts, local filesystem paths, worker kwargs, image bytes, raw
+     graph node payloads, or unbounded diagnostic vectors.
    - Verification: diagnostics tests prove selected backend/runtime/device
      facts come from the execution plan and that planner failures preserve
      diagnostic codes.
@@ -579,7 +609,30 @@ Staged Option 3 implementation plan:
    - Define how execution plans participate in retry/recovery. A retry may
      reuse a still-valid plan or request a new scheduler plan, but the policy
      must be explicit and diagnostic-backed.
+   - Add replay/recovery/idempotency tests before treating the execution-plan
+     record as durable. Duplicate admission, cancellation during execution-plan
+     production, and retry after runtime/resource failure must not produce
+     conflicting selected decisions without a new explicit plan version/source
+     id.
    - Keep later additions append-only: multi-node placement, memory
      reservations, exploration cohorts, warmed-runtime affinity, historical
      performance summaries, and artifact-retention decisions can extend the
      plan without changing node graph ergonomics.
+
+Standards compliance gates for every Option 3 slice:
+
+- Worktree hygiene: inspect `git status` before each slice and do not start
+  code work while unrelated tracked implementation files are dirty.
+- Shared-contract ownership: workflow execution-plan DTOs, projection adapters,
+  serde fixtures, generated DTOs, lockfiles, saved workflow fixtures, ADRs, and
+  README updates are serial integration-owner work unless explicitly
+  reassigned.
+- Public facade rule: preserve `InferenceGateway` and node-engine public task
+  entrypoints while adding planned execution paths; do not restore raw
+  `generate_image` or request-only typed image execution.
+- Security/path rule: any path-like model/package/artifact value crossing into
+  execution-plan records must already be validated by the existing Pumas/model
+  root validation boundary or rejected before worker execution.
+- Verification rule: each slice needs focused unit/contract tests, and the
+  first cross-layer implementation slice needs a vertical acceptance test
+  through the real node-engine/inference boundary.

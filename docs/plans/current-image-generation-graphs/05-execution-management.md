@@ -3345,6 +3345,44 @@ Worker rules:
   a selected per-node execution-plan decision must fail with typed diagnostics
   instead of using active backend state, raw graph hints, request model strings,
   implicit `diffusers` aliases, or CPU/runtime fallback.
+- 2026-05-15 standards pass over Option 3 execution-plan update:
+  reviewed `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+  `TESTING-STANDARDS.md`, `RUST-API-STANDARDS.md`, `RUST-ASYNC-STANDARDS.md`,
+  `SECURITY-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`, and
+  `INTEROP-STANDARDS.md` against the staged execution-plan proposal.
+- Findings and required plan constraints:
+  1. Contract foundation must be append-only and correct-by-construction:
+     schema/version fields, typed ids/enums, bounded diagnostic arrays,
+     `#[non_exhaustive]` where future extension is likely, and `Result`
+     returning constructors/projection helpers for validated decisions.
+  2. Admission production must use a synchronous core helper inside an async
+     shell. It must not add untracked `tokio::spawn`, polling loops, unbounded
+     queues, or locks held across `.await`.
+  3. Projection from workflow execution-plan node decision to inference
+     `BackendExecutionDecision` must parse/validate selected backend,
+     runtime-variant, device, task, and model-ref fields and return typed
+     diagnostics for missing or malformed facts.
+  4. `ExecutorExtensions` may carry a typed runtime context only; execution
+     plan data must not be serialized into graph input maps, saved workflow
+     JSON, frontend DTOs, or worker envelopes.
+  5. Diagnostics and ledger records must carry bounded identifiers, selected
+     backend/runtime/device facts, policy trace ids, and planner codes only.
+     They must not persist full Pumas facts, local filesystem paths, raw graph
+     payloads, worker kwargs, image bytes, or unbounded diagnostics.
+  6. Recovery/future expansion requires replay, duplicate-admission,
+     cancellation, and retry/idempotency tests before an execution-plan record
+     is treated as durable.
+  7. README or ADR traceability is required in the same slice that introduces
+     the workflow execution-plan contract or changes the workflow execution
+     ownership boundary.
+  8. The first cross-layer implementation slice needs a vertical acceptance
+     test through the real node-engine/inference boundary, plus focused
+     contract/adapter tests for risky branches.
+- Standards conclusion: Option 3 remains compliant if implemented with these
+  gates. Without them, the likely violations would be mutable/stringly typed
+  cross-crate contracts, scheduler policy leaking into node-engine, unbounded
+  diagnostics, undocumented boundary changes, and insufficient cross-layer
+  acceptance coverage.
 
 ### Traceability Links
 
