@@ -3686,6 +3686,17 @@ Worker rules:
   Image, Lumina Image, GLM Image, Z-Image, and SDXL requires explicit family
   requirement tables, option-support rules, component ambiguity diagnostics,
   and fixtures.
+- 2026-05-15: Completed the planner guidance-scale numeric guardrail slice.
+  The image-generation planner now rejects non-finite `guidance_scale` values
+  with the existing typed `InvalidNumericOption` diagnostic before any worker
+  envelope is built. This preserves the no-fallback boundary by failing the
+  plan instead of relying on Python worker behavior, backend defaults, alternate
+  runtime selection, or request rewriting. Verification passed: `cargo test -p
+  inference planner_rejects_non_finite_guidance_scale --lib`, `cargo check -p
+  inference`, `cargo fmt -p inference`, and `git diff --check`. Remaining
+  follow-up: family-specific option-support tables still need to classify
+  guidance scale, negative prompt, image count, scheduler override, dtype, and
+  dimensions as accepted, ignored, or rejected per family.
 
 ### Traceability Links
 

@@ -300,6 +300,16 @@ fn validate_image_request(
         "request.num_images_per_prompt",
         diagnostics,
     );
+    if request
+        .guidance_scale
+        .is_some_and(|guidance_scale| !guidance_scale.is_finite())
+    {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::InvalidNumericOption,
+            "request.guidance_scale",
+            "image-generation guidance scale must be finite when provided",
+        ));
+    }
 }
 
 fn validate_non_zero(

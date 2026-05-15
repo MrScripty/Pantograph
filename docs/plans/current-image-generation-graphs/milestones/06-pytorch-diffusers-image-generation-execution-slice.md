@@ -302,6 +302,25 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   option-support rules, component ambiguity diagnostics, and fixtures before
   any of those families can execute.
 
+2026-05-15 planner guidance-scale numeric guardrail slice:
+
+- Smallest useful vertical slice: reject non-finite `guidance_scale` values in
+  the side-effect-free image-generation planner before any worker envelope is
+  built.
+- Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`, and this plan
+  directory.
+- No-fallback/no-legacy confirmation: invalid numeric options now fail with the
+  existing typed `InvalidNumericOption` diagnostic. The slice does not add
+  request defaults, backend fallback, scheduler overrides, raw device parsing,
+  or worker-side recovery for invalid values.
+- Verification passed: `cargo test -p inference
+  planner_rejects_non_finite_guidance_scale --lib`, `cargo check -p
+  inference`, `cargo fmt -p inference`, and `git diff --check`.
+- Remaining follow-up: family-specific option-support tables still need to
+  classify guidance scale, negative prompt, image count, scheduler override,
+  dtype, and dimensions as accepted, ignored, or rejected per family.
+
 2026-05-12 worker image-envelope contract slice:
 
 - Smallest useful vertical slice: add the Rust-side PyTorch worker

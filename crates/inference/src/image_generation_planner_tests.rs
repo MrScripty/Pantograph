@@ -233,6 +233,25 @@ fn planner_rejects_invalid_dimensions_before_resource_estimate() {
 }
 
 #[test]
+fn planner_rejects_non_finite_guidance_scale() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = ImageGenerationRequest {
+        guidance_scale: Some(f32::INFINITY),
+        ..image_request()
+    };
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    assert!(diagnostic_codes(&outcome)
+        .contains(&ImageGenerationPlannerDiagnosticCode::InvalidNumericOption));
+}
+
+#[test]
 fn planner_rejects_resource_estimate_overflow_without_allocation() {
     let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
     let request = ImageGenerationRequest {
