@@ -3424,6 +3424,40 @@ Worker rules:
   preserve simple graph ergonomics, avoid dependency inversion, prevent
   stale-plan reuse in warm sessions, and keep Pumas facts localized to existing
   model-resolution boundaries.
+- 2026-05-15 standards iteration over blast-radius refinements:
+  re-checked the updated Option 3 constraints against plan, architecture, Rust
+  API, Rust async, concurrency, testing, security, documentation, and interop
+  standards.
+- Additional required gates found during the standards iteration:
+  1. Public cross-crate constructors, projection helpers, and validation paths
+     for execution-plan contracts must return specific typed errors or bounded
+     typed diagnostics. Do not introduce `Result<T, String>` public APIs or
+     string-matched control flow at the workflow-plan/inference projection
+     boundary.
+  2. A new execution-plan source module must include README or ADR traceability
+     in the same slice. If a README is used, it must document the API consumer
+     contract and structured producer contract: serde shape, schema/version
+     behavior, append-only evolution, default semantics, bounded diagnostics,
+     and persistence/replay compatibility.
+  3. The first node-engine/inference vertical acceptance test must be written
+     before the node-consumption implementation, fail for the expected missing
+     planned execution path, then pass after the slice. Focused unit tests still
+     cover constructors, projection failures, and stale run-context rejection.
+  4. If durable execution-plan persistence is introduced in a later slice, the
+     admission/plan write/active-run transition must be transactional or
+     explicitly idempotent across cancellation points. Recovery support requires
+     replay, duplicate-admission, cancellation, and retry tests before the
+     record is treated as authoritative state.
+  5. Interop and frontend blast radius stays intentionally closed for the first
+     slices: no generated frontend DTOs, saved workflow fixture mutations,
+     worker envelopes, or IPC payloads may carry execution-plan decisions. If a
+     later slice exposes the plan across a process or language boundary, both
+     sides and their serialization fixtures must change in the same slice.
+- Standards iteration conclusion: no objective change is required. The plan is
+  standards-compliant if implementation follows the added gates; otherwise the
+  likely violations would be untyped public errors, undocumented structured
+  contracts, acceptance tests added too late, cancellable partial persistence,
+  or accidental interop/schema blast radius.
 
 ### Traceability Links
 

@@ -539,9 +539,15 @@ Staged Option 3 implementation plan:
      explicit schema/version fields, bounded diagnostic arrays, and `Result`
      returning constructors or projection helpers instead of public raw-field
      mutation for validated decisions.
+   - Public fallible constructors, projection helpers, and validation paths
+     must return specific typed errors or diagnostics, not `Result<T, String>`
+     or ad hoc string matching.
    - Update the owning module README or add an ADR in the same slice, because
      this contract changes the workflow execution boundary and will be consumed
-     across crates.
+     across crates. If a new source directory/module is introduced, its README
+     must include the relevant `API Consumer Contract` and
+     `Structured Producer Contract` sections for execution-plan DTO semantics,
+     versioning, default behavior, and persistence compatibility.
    - Verification: contract serde tests, append-only/default behavior tests,
      and a no-graph-input test proving scheduler decisions are not written into
      workflow node inputs.
@@ -566,6 +572,10 @@ Staged Option 3 implementation plan:
      async shell that has already gathered runtime preflight and scheduler
      facts. Do not introduce untracked background tasks, polling loops,
      unbounded queues, or locks held across `.await`.
+   - If a later slice persists execution plans during admission, the durable
+     write must be transactional or explicitly idempotent across cancellation
+     points. Do not split admission, plan persistence, and active-run state into
+     partially committed steps without a compensating diagnostic-backed state.
    - Verification: session admission tests prove the admitted run has an
      execution plan when technical-fit selected a candidate, and no plan is
      produced when technical-fit fails. Tests must isolate any durable run,
@@ -611,7 +621,9 @@ Staged Option 3 implementation plan:
      or retry policy.
    - Verification: node-engine tests prove successful planned image execution
      and fail-closed behavior for absent/invalid execution-plan decisions. The
-     first cross-layer acceptance test must start from canonical
+     first cross-layer acceptance test must be written before implementing the
+     node-consumption slice, fail for the expected missing planned path, then
+     pass after implementation. It must start from canonical
      `llm-inference` image inputs plus resolved package facts and assert the
      planned gateway call/output without depending on private scheduler
      internals.
@@ -661,6 +673,16 @@ Standards compliance gates for every Option 3 slice:
 - Warm-session safety rule: reused executors must not retain stale execution
   decisions across workflow runs; run id validation or explicit context
   replacement/clearing is required before planned node execution.
+- Typed-error rule: public cross-crate constructors and projection helpers must
+  expose typed errors/diagnostics and avoid `Result<T, String>` or stringly
+  branch behavior.
+- Documentation contract rule: a new execution-plan source module requires a
+  README or ADR in the same slice. README content must document consumer
+  expectations, serde shape, schema/version behavior, append-only evolution,
+  and persistence/replay compatibility.
+- Cancellation/idempotency rule: any durable execution-plan write introduced
+  later must be transactional or idempotent across cancellation points and must
+  have replay/retry tests before being treated as recoverable state.
 - Public facade rule: preserve `InferenceGateway` and node-engine public task
   entrypoints while adding planned execution paths; do not restore raw
   `generate_image` or request-only typed image execution.
