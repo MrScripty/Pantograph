@@ -299,7 +299,7 @@ pub(crate) async fn run_session_workflow(
                     .clone()
                     .unwrap_or_else(|| Arc::new(NullEventSink)),
             )
-            .with_execution_id(workflow_execution_session_id.to_string()),
+            .with_execution_id(workflow_run_id.to_string()),
     );
     let tauri_executor = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
         host.rag_backend.clone(),
@@ -342,13 +342,13 @@ pub(crate) async fn run_session_workflow(
         &mut executor,
         &runtime_ext,
         node_execution_sink,
-        Some(workflow_execution_session_id.to_string()),
+        Some(workflow_run_id.to_string()),
         Some(python_runtime_execution_recorder.clone()),
         InferenceLifecycleWorkflowLedgerSink::try_new(
             host.workflow_service.clone(),
             workflow_id.to_string(),
             workflow_run_id.to_string(),
-            workflow_execution_session_id.to_string(),
+            workflow_run_id.to_string(),
             &graph,
         )
         .ok()

@@ -741,6 +741,34 @@ Staged Option 3 implementation plan:
      `llm-inference` image inputs plus resolved package facts and assert the
      planned gateway call/output without depending on private scheduler
      internals.
+   - Node-engine planned image consumption (completed 2026-05-15): canonical
+     `llm-inference` image-generation execution now builds the existing image
+     request, requires the `PLANNED_INFERENCE_DECISIONS` run-scoped context,
+     validates the current workflow run id and node/task decision, requires
+     `resolved_model_package_facts`, and invokes
+     `generate_image_from_planning_input`. The raw typed image-generation
+     gateway path is no longer used for this node path, preserving the
+     no-fallback rule.
+   - Embedded-runtime run-id alignment (completed 2026-05-15): keep-alive
+     session execution now passes `workflow_run_id` to the core task executor,
+     runtime extension execution id, and inference lifecycle ledger sink. This
+     keeps planned-context stale-run validation and request-id correlation on
+     the same run identifier while leaving session residency/checkpoint keys on
+     the session id.
+   - Verification result: `cargo test -p node-engine --features
+     inference-nodes test_canonical_llm_image_generation`, `cargo test -p
+     node-engine --features inference-nodes
+     core_executor::tests::inference_tests`, `cargo test -p node-engine
+     --features inference-nodes planned_inference`, `cargo check -p
+     node-engine --features inference-nodes`, `cargo check -p node-engine`,
+     `cargo check -p pantograph-embedded-runtime`, and `cargo fmt -p
+     node-engine -p pantograph-embedded-runtime` passed.
+   - Verification deviation: `cargo test -p pantograph-embedded-runtime
+     scheduler_session_live_events_use_backend_workflow_run_id` failed before
+     exercising this slice because technical-fit rejected the test's
+     `candle.cpu` runtime with "Candle executable model loading is not
+     implemented". Record this as a fixture/runtime readiness follow-up rather
+     than weakening the planned image execution boundary.
 
 5. Lifecycle/diagnostics slice:
    - Attach execution-plan identifiers and selected per-node decision facts to

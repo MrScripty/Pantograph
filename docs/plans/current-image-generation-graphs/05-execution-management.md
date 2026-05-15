@@ -3528,6 +3528,34 @@ Worker rules:
   embedded-runtime projection tests, node-engine extension removal test,
   `cargo check -p pantograph-embedded-runtime`, `cargo check -p node-engine
   --features inference-nodes`, and formatting for both crates.
+- 2026-05-15: Completed the Node-engine planned image-generation consumption
+  slice. Canonical `llm-inference` image-generation execution now requires a
+  run-scoped planned inference decision for the current workflow run/node,
+  requires resolved Pumas package facts, and calls
+  `InferenceGateway::generate_image_from_planning_input`; missing planned
+  context, stale run context, missing package facts, planner rejection, or
+  backend failure terminates the node instead of using raw typed
+  image-generation execution. Embedded-runtime session execution now passes the
+  workflow run id into the core executor, runtime extension execution id, and
+  inference lifecycle ledger sink so planned-context stale-run validation and
+  request-id correlation use the same run id. No graph inputs, saved workflow
+  fixtures, frontend DTOs, worker envelopes, lockfiles, or durable execution
+  plan persistence changed. Verification passed: `cargo test -p node-engine
+  --features inference-nodes test_canonical_llm_image_generation`, `cargo test
+  -p node-engine --features inference-nodes
+  core_executor::tests::inference_tests`, `cargo test -p node-engine
+  --features inference-nodes planned_inference`, `cargo check -p node-engine
+  --features inference-nodes`, `cargo check -p node-engine`, `cargo check -p
+  pantograph-embedded-runtime`, and `cargo fmt -p node-engine -p
+  pantograph-embedded-runtime`. Verification deviation: `cargo test -p
+  pantograph-embedded-runtime
+  scheduler_session_live_events_use_backend_workflow_run_id` failed before
+  reaching the run-id handoff behavior because technical-fit rejects
+  `candle.cpu` with "Candle executable model loading is not implemented"; this
+  remains a pre-existing session fixture/runtime readiness issue to fix outside
+  this slice. Remaining follow-up: add lifecycle/ledger diagnostics for
+  selected execution-plan identifiers and planner failures without persisting
+  full package facts or worker payloads.
 
 ### Traceability Links
 

@@ -51,6 +51,35 @@ fn inference_lifecycle_sink(
 }
 
 #[cfg(feature = "inference-nodes")]
+fn require_image_generation_planned_decision<'a>(
+    extensions: &'a ExecutorExtensions,
+    task_id: &str,
+    execution_id: &str,
+) -> Result<&'a inference::BackendExecutionDecision> {
+    let context = extensions
+        .get::<Arc<crate::planned_inference::PlannedInferenceDecisionContext>>(
+            extension_keys::PLANNED_INFERENCE_DECISIONS,
+        )
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "Image generation requires planned inference context with an ImageGenerationExecutionPlan decision".to_string(),
+            )
+        })?;
+
+    context
+        .decision_for_node(
+            execution_id,
+            task_id,
+            inference::InferenceTaskId::ImageGeneration,
+        )
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!(
+                "Image generation planned inference context rejected execution: {error}"
+            ))
+        })
+}
+
+#[cfg(feature = "inference-nodes")]
 fn assign_typed_request_id(
     request: &mut inference::InferenceExecutionRequest,
     task_id: &str,
@@ -786,24 +815,35 @@ pub(crate) async fn execute_image_generation_inference(
     let gw = require_gateway(gateway)?;
     let mut request = build_image_generation_execution_request(inputs)?;
     assign_typed_request_id(&mut request, task_id, execution_id);
-    let expected_result_kind = expected_typed_result_kind(&request)?;
-    let result = execute_typed_gateway(gw, request, extensions)
-        .await
-        .map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!("Typed image generation failed: {error}"))
+    let backend_decision =
+        require_image_generation_planned_decision(extensions, task_id, execution_id)?;
+    let package_facts = request
+        .resolved_model_package_facts
+        .as_ref()
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "Image generation requires resolved_model_package_facts for planned execution"
+                    .to_string(),
+            )
         })?;
-    ensure_typed_result_kind(&result, expected_result_kind, "Typed image generation")?;
-    let (image_result, option_diagnostics) = match result {
-        inference::InferenceExecutionResult::ImageGeneration {
-            result,
-            option_diagnostics,
-        } => (result, option_diagnostics),
+    let image_request = match &request.input {
+        inference::InferenceExecutionInput::ImageGeneration { request } => request,
         other => {
             return Err(NodeEngineError::ExecutionFailed(format!(
-                "Typed image generation returned unexpected result: {other:?}"
+                "Image generation request builder returned unexpected input: {other:?}"
             )));
         }
     };
+    let image_result = gw
+        .generate_image_from_planning_input(inference::ImageGenerationPlanningInput {
+            request: image_request,
+            package_facts,
+            backend_decision,
+        })
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Planned image generation failed: {error}"))
+        })?;
 
     let mut outputs = HashMap::new();
     outputs.insert(
@@ -826,10 +866,7 @@ pub(crate) async fn execute_image_generation_inference(
             "backend_metadata": image_result.metadata,
         }),
     );
-    outputs.insert(
-        "diagnostics".to_string(),
-        serde_json::to_value(option_diagnostics).unwrap_or(serde_json::Value::Null),
-    );
+    outputs.insert("diagnostics".to_string(), serde_json::json!([]));
     Ok(outputs)
 }
 
