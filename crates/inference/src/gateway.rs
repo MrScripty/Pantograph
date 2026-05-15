@@ -1352,6 +1352,76 @@ impl InferenceGateway {
         }
     }
 
+    /// Build and execute one image-generation plan while emitting bounded lifecycle facts.
+    pub async fn generate_image_from_planning_input_with_lifecycle(
+        &self,
+        input: ImageGenerationPlanningInput<'_>,
+        request_id: Option<String>,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    ) -> Result<ImageGenerationResult, GatewayError> {
+        let (_, _, runtime_instance_id, _, _) = self.lifecycle_event_context().await;
+        let lifecycle_context = PlannedImageGenerationLifecycleContext::from_input(
+            input,
+            request_id,
+            runtime_instance_id,
+        );
+
+        record_planned_image_generation_lifecycle_event(
+            lifecycle_sink.as_ref(),
+            InferenceLifecyclePhase::TaskValidation,
+            InferenceRequestLifecycleEventKind::Started,
+            &lifecycle_context,
+            None,
+            Vec::new(),
+        );
+
+        match plan_image_generation_execution(input) {
+            ImageGenerationPlanningOutcome::Planned { plan } => {
+                record_planned_image_generation_lifecycle_result(
+                    lifecycle_sink.as_ref(),
+                    InferenceLifecyclePhase::TaskValidation,
+                    &lifecycle_context,
+                    &Ok::<(), GatewayError>(()),
+                    Vec::new(),
+                );
+                record_planned_image_generation_lifecycle_event(
+                    lifecycle_sink.as_ref(),
+                    InferenceLifecyclePhase::BackendExecution,
+                    InferenceRequestLifecycleEventKind::Started,
+                    &lifecycle_context,
+                    None,
+                    Vec::new(),
+                );
+                let result = self.generate_image_from_plan(plan).await;
+                record_planned_image_generation_lifecycle_result(
+                    lifecycle_sink.as_ref(),
+                    InferenceLifecyclePhase::BackendExecution,
+                    &lifecycle_context,
+                    &result,
+                    Vec::new(),
+                );
+                result
+            }
+            ImageGenerationPlanningOutcome::Rejected { diagnostics } => {
+                let diagnostic_count = diagnostics.len();
+                let compatibility_issues =
+                    image_generation_planner_compatibility_issues(&diagnostics);
+                let result = Err(GatewayError::ImageGenerationPlanning {
+                    diagnostic_count,
+                    diagnostics,
+                });
+                record_planned_image_generation_lifecycle_result(
+                    lifecycle_sink.as_ref(),
+                    InferenceLifecyclePhase::TaskValidation,
+                    &lifecycle_context,
+                    &result,
+                    compatibility_issues,
+                );
+                result
+            }
+        }
+    }
+
     /// Transcribe audio through the active backend.
     pub async fn transcribe_audio(
         &self,
@@ -2746,6 +2816,147 @@ fn model_artifact_kind_label(kind: &ModelArtifactKind) -> &'static str {
         ModelArtifactKind::Adapter => "adapter",
         ModelArtifactKind::Shard => "shard",
         ModelArtifactKind::Unknown => "unknown",
+    }
+}
+
+struct PlannedImageGenerationLifecycleContext {
+    request_id: Option<String>,
+    task_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_id: Option<String>,
+    selected_runtime_variant_id: Option<String>,
+    runtime_instance_id: Option<String>,
+    selected_device_class: Option<InferenceDeviceClass>,
+    selected_device_id: Option<InferenceDeviceId>,
+    model_id: Option<String>,
+    resolved_artifact_kind: Option<String>,
+}
+
+impl PlannedImageGenerationLifecycleContext {
+    fn from_input(
+        input: ImageGenerationPlanningInput<'_>,
+        request_id: Option<String>,
+        runtime_instance_id: Option<String>,
+    ) -> Self {
+        let selected_runtime_variant_id = Some(
+            input
+                .backend_decision
+                .selected_runtime_variant_id
+                .as_str()
+                .to_string(),
+        );
+        Self {
+            request_id,
+            task_id: Some("image_generation".to_string()),
+            backend_key: Some(
+                input
+                    .backend_decision
+                    .selected_backend_id
+                    .as_str()
+                    .to_string(),
+            ),
+            runtime_id: selected_runtime_variant_id.clone(),
+            selected_runtime_variant_id,
+            runtime_instance_id,
+            selected_device_class: Some(input.backend_decision.selected_device_class),
+            selected_device_id: input.backend_decision.selected_device_id.clone(),
+            model_id: Some(input.package_facts.model_ref.model_id.clone()),
+            resolved_artifact_kind: Some(
+                model_artifact_kind_label(&input.package_facts.artifact.artifact_kind).to_string(),
+            ),
+        }
+    }
+}
+
+fn image_generation_planner_compatibility_issues(
+    diagnostics: &[ImageGenerationPlannerDiagnostic],
+) -> Vec<InferenceCompatibilityIssueSummary> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| InferenceCompatibilityIssueSummary {
+            kind: image_generation_planner_diagnostic_code_label(diagnostic.code),
+            phase: InferenceLifecyclePhase::TaskValidation,
+            message: diagnostic.message.clone(),
+            model_id: None,
+            path: Some(diagnostic.field_path.clone()),
+        })
+        .collect()
+}
+
+fn image_generation_planner_diagnostic_code_label(
+    code: crate::image_generation_planner::ImageGenerationPlannerDiagnosticCode,
+) -> String {
+    serde_json::to_value(code)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| format!("{code:?}"))
+}
+
+fn record_planned_image_generation_lifecycle_result<T>(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    context: &PlannedImageGenerationLifecycleContext,
+    result: &Result<T, GatewayError>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+) {
+    let (kind, detail) = match result {
+        Ok(_) => (InferenceRequestLifecycleEventKind::Completed, None),
+        Err(error) => (
+            InferenceRequestLifecycleEventKind::Failed,
+            Some(error.to_string()),
+        ),
+    };
+    record_planned_image_generation_lifecycle_event(
+        sink,
+        phase.clone(),
+        kind,
+        context,
+        detail,
+        compatibility_issues,
+    );
+    record_planned_image_generation_lifecycle_event(
+        sink,
+        phase,
+        InferenceRequestLifecycleEventKind::CleanupCompleted,
+        context,
+        None,
+        Vec::new(),
+    );
+}
+
+fn record_planned_image_generation_lifecycle_event(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    phase: InferenceLifecyclePhase,
+    kind: InferenceRequestLifecycleEventKind,
+    context: &PlannedImageGenerationLifecycleContext,
+    detail: Option<String>,
+    compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+) {
+    if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
+        request_id: context.request_id.clone(),
+        phase,
+        kind,
+        occurred_at_ms: unix_timestamp_ms(),
+        task_id: context.task_id.clone(),
+        backend_key: context.backend_key.clone(),
+        runtime_id: context.runtime_id.clone(),
+        selected_runtime_variant_id: context.selected_runtime_variant_id.clone(),
+        runtime_instance_id: context.runtime_instance_id.clone(),
+        selected_device_class: context.selected_device_class,
+        selected_device_id: context.selected_device_id.clone(),
+        selected_network_node_id: None,
+        model_id: context.model_id.clone(),
+        resolved_artifact_kind: context.resolved_artifact_kind.clone(),
+        usage: None,
+        cache_handle_id: None,
+        artifact_refs: Vec::new(),
+        detail,
+        canonical_error_event_id: None,
+        compatibility_report: None,
+        compatibility_issues,
+        option_diagnostics: Vec::new(),
+    }) {
+        log::warn!("failed to record planned image-generation lifecycle event: {error}");
     }
 }
 

@@ -834,16 +834,24 @@ pub(crate) async fn execute_image_generation_inference(
             )));
         }
     };
-    let image_result = gw
-        .generate_image_from_planning_input(inference::ImageGenerationPlanningInput {
-            request: image_request,
-            package_facts,
-            backend_decision,
-        })
+    let planning_input = inference::ImageGenerationPlanningInput {
+        request: image_request,
+        package_facts,
+        backend_decision,
+    };
+    let image_result = if let Some(lifecycle_sink) = inference_lifecycle_sink(extensions) {
+        gw.generate_image_from_planning_input_with_lifecycle(
+            planning_input,
+            request.request_id.clone(),
+            lifecycle_sink,
+        )
         .await
-        .map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!("Planned image generation failed: {error}"))
-        })?;
+    } else {
+        gw.generate_image_from_planning_input(planning_input).await
+    }
+    .map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!("Planned image generation failed: {error}"))
+    })?;
 
     let mut outputs = HashMap::new();
     outputs.insert(

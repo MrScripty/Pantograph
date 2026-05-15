@@ -1143,6 +1143,112 @@ async fn test_generate_image_from_planning_input_plans_and_forwards() {
 }
 
 #[tokio::test]
+async fn test_generate_image_from_planning_input_with_lifecycle_records_planned_decision() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = sample_image_generation_request();
+    let decision = sample_image_backend_decision("pytorch");
+
+    let result = gateway
+        .generate_image_from_planning_input_with_lifecycle(
+            ImageGenerationPlanningInput {
+                request: &request,
+                package_facts: &facts,
+                backend_decision: &decision,
+            },
+            Some("run-a:image-node-1:image_generation".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("planned image generation should emit lifecycle");
+
+    assert_eq!(result.images.len(), 1);
+    let events = sink.events();
+    assert_eq!(events.len(), 6);
+    assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(
+        events[4].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert!(events.iter().all(|event| {
+        event.request_id.as_deref() == Some("run-a:image-node-1:image_generation")
+            && event.task_id.as_deref() == Some("image_generation")
+            && event.backend_key.as_deref() == Some("pytorch")
+            && event.runtime_id.as_deref() == Some("pytorch.diffusers")
+            && event.selected_runtime_variant_id.as_deref() == Some("pytorch.diffusers")
+            && event.selected_device_class == Some(InferenceDeviceClass::Cpu)
+            && event
+                .selected_device_id
+                .as_ref()
+                .is_some_and(|id| id.as_str() == "cpu")
+            && event.model_id.as_deref() == Some("image/stable-diffusion/tiny-sd")
+            && event.resolved_artifact_kind.as_deref() == Some("diffusers_bundle")
+    }));
+    let event_json = serde_json::to_string(&events).expect("events serialize");
+    assert!(!event_json.contains("a compact test image"));
+    assert!(!event_json.contains("aW1hZ2U="));
+}
+
+#[tokio::test]
+async fn test_generate_image_from_planning_input_with_lifecycle_records_planner_codes() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+    let facts = image_generation_package_fixture("gguf_text_generation_package_facts.json");
+    let request = sample_image_generation_request();
+    let decision = sample_image_backend_decision("pytorch");
+
+    let error = gateway
+        .generate_image_from_planning_input_with_lifecycle(
+            ImageGenerationPlanningInput {
+                request: &request,
+                package_facts: &facts,
+                backend_decision: &decision,
+            },
+            Some("run-a:image-node-1:image_generation".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect_err("planner rejection should emit lifecycle diagnostics");
+
+    assert!(matches!(
+        error,
+        GatewayError::ImageGenerationPlanning { .. }
+    ));
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
+    let planner_codes = events[1]
+        .compatibility_issues
+        .iter()
+        .map(|issue| issue.kind.as_str())
+        .collect::<Vec<_>>();
+    assert!(planner_codes.contains(&"missing_diffusers_evidence"));
+    assert!(planner_codes.contains(&"unsupported_task_evidence"));
+    assert!(events.iter().all(|event| {
+        event.backend_key.as_deref() == Some("pytorch")
+            && event.selected_runtime_variant_id.as_deref() == Some("pytorch.diffusers")
+            && event.model_id.as_deref() == Some("llm/llama/tiny-gguf")
+            && event.resolved_artifact_kind.as_deref() == Some("gguf")
+    }));
+    let event_json = serde_json::to_string(&events).expect("events serialize");
+    assert!(!event_json.contains("a compact test image"));
+    assert!(!event_json.contains("/tmp"));
+}
+
+#[tokio::test]
 async fn test_generate_image_from_planning_input_returns_planner_diagnostics() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     let facts = image_generation_package_fixture("gguf_text_generation_package_facts.json");

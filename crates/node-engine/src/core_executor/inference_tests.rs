@@ -1628,8 +1628,17 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
         .with_gateway(gateway)
         .with_execution_id("run-image".to_string());
     let context = graph_flow::Context::new();
-    let extensions =
+    let mut extensions =
         planned_image_generation_extensions("run-image", "llm-inference-1", &package_facts);
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
     let outputs = executor
         .execute_task("llm-inference-1", inputs, &context, &extensions)
         .await
@@ -1667,6 +1676,40 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     assert_eq!(captured[0].guidance_scale, Some(7.5));
     assert_eq!(captured[0].seed, Some(42));
     assert_eq!(captured[0].scheduler.as_deref(), Some("euler"));
+
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 6);
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion");
+    assert_eq!(
+        backend_completed.request_id.as_deref(),
+        Some("run-image:llm-inference-1:image_generation")
+    );
+    assert_eq!(backend_completed.backend_key.as_deref(), Some("pytorch"));
+    assert_eq!(
+        backend_completed.selected_runtime_variant_id.as_deref(),
+        Some("pytorch.diffusers")
+    );
+    assert_eq!(
+        backend_completed.selected_device_class,
+        Some(InferenceDeviceClass::Cuda)
+    );
+    assert!(backend_completed
+        .selected_device_id
+        .as_ref()
+        .is_some_and(|id| id.as_str() == "cuda:0"));
+    assert_eq!(
+        backend_completed.model_id.as_deref(),
+        Some("image/stable-diffusion/tiny-sd")
+    );
+    let bounded_events = serde_json::to_string(&*events).expect("events serialize");
+    assert!(!bounded_events.contains("SECRET_PROMPT"));
+    assert!(!bounded_events.contains("aW1hZ2U="));
 }
 
 #[cfg(feature = "inference-nodes")]

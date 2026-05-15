@@ -781,6 +781,36 @@ Staged Option 3 implementation plan:
    - Verification: diagnostics tests prove selected backend/runtime/device
      facts come from the execution plan and that planner failures preserve
      diagnostic codes.
+   - Planned image lifecycle/ledger diagnostics (completed 2026-05-15):
+     `InferenceGateway::generate_image_from_planning_input_with_lifecycle`
+     emits task-validation and backend-execution lifecycle facts for the
+     planned image path using only bounded selected backend, runtime variant,
+     device, model id, artifact kind, and planner diagnostic code facts.
+     Planner rejections are projected into lifecycle compatibility issue
+     summaries so ledger consumers can see typed planner codes without storing
+     Pumas package facts, prompts, local paths, worker kwargs, or image bytes.
+     Node-engine uses this lifecycle path only when the existing inference
+     lifecycle sink extension is installed; otherwise it remains on the same
+     non-lifecycle planned gateway path. The raw image-generation gateway path
+     remains rejected and no graph/schema/worker/frontend/durable-plan contract
+     changed.
+   - Verification result: `cargo test -p inference
+     generate_image_from_planning_input_with_lifecycle --lib`, `cargo test -p
+     inference gateway::tests::test_generate_image`, `cargo test -p
+     node-engine --features inference-nodes
+     test_canonical_llm_image_generation_uses_planned_gateway_boundary`,
+     `cargo test -p node-engine --features inference-nodes
+     test_canonical_llm_image_generation`, `cargo test -p
+     pantograph-embedded-runtime
+     inference_diagnostic_event_adapter_persists_image_generation_bounded_lifecycle_summary`,
+     `cargo test -p pantograph-embedded-runtime
+     node_execution_ledger::tests::inference_diagnostic_event_adapter`, `cargo
+     check -p inference`, `cargo check -p node-engine --features
+     inference-nodes`, `cargo check -p pantograph-embedded-runtime`, and `cargo
+     fmt -p inference -p node-engine -p pantograph-embedded-runtime` passed.
+   - Remaining follow-up: scheduler admission and runtime-load diagnostics
+     still need bounded execution-plan identifiers and policy trace ids. This
+     must stay outside node-engine and inference gateway policy logic.
 
 6. Recovery and future expansion slice:
    - Define how execution plans participate in retry/recovery. A retry may

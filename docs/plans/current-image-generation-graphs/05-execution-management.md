@@ -3556,6 +3556,38 @@ Worker rules:
   this slice. Remaining follow-up: add lifecycle/ledger diagnostics for
   selected execution-plan identifiers and planner failures without persisting
   full package facts or worker payloads.
+- 2026-05-15: Completed the planned image-generation lifecycle/ledger
+  diagnostics slice. `InferenceGateway` now exposes
+  `generate_image_from_planning_input_with_lifecycle`, which emits bounded
+  planned image task-validation and backend-execution lifecycle facts using
+  the scheduler-selected backend id, runtime variant id, device class/id,
+  stable model id, and artifact kind. Planner rejection maps typed
+  image-generation planner diagnostic codes into lifecycle compatibility issue
+  summaries, while preserving the no-fallback rule and keeping prompts,
+  package fact payloads, local paths, worker kwargs, and image bytes out of
+  events. Node-engine uses this planned lifecycle path when an inference
+  lifecycle sink is installed; otherwise it continues to call the non-lifecycle
+  planned gateway method. The existing embedded-runtime ledger adapter now has
+  coverage proving selected planned runtime/device facts persist into bounded
+  inference diagnostic payloads. No graph inputs, saved workflow fixtures,
+  frontend DTOs, worker envelopes, lockfiles, scheduler ranking, runtime-load
+  behavior, or durable execution-plan persistence changed. Verification
+  passed: `cargo test -p inference generate_image_from_planning_input_with_lifecycle
+  --lib`, `cargo test -p inference gateway::tests::test_generate_image`, `cargo
+  test -p node-engine --features inference-nodes
+  test_canonical_llm_image_generation_uses_planned_gateway_boundary`, `cargo
+  test -p node-engine --features inference-nodes
+  test_canonical_llm_image_generation`, `cargo test -p
+  pantograph-embedded-runtime
+  inference_diagnostic_event_adapter_persists_image_generation_bounded_lifecycle_summary`,
+  `cargo test -p pantograph-embedded-runtime
+  node_execution_ledger::tests::inference_diagnostic_event_adapter`, `cargo
+  check -p inference`, `cargo check -p node-engine --features
+  inference-nodes`, `cargo check -p pantograph-embedded-runtime`, and `cargo
+  fmt -p inference -p node-engine -p pantograph-embedded-runtime`. Remaining
+  follow-up: scheduler admission/runtime-load diagnostics still need selected
+  execution-plan identifiers and policy trace ids without exposing full plans
+  or package facts.
 
 ### Traceability Links
 

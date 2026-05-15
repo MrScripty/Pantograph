@@ -513,6 +513,10 @@ fn inference_diagnostic_event_adapter_persists_image_generation_bounded_lifecycl
     event.model_id = Some("image/example/tiny-diffusers".to_string());
     event.runtime_id = Some("pytorch.diffusers".to_string());
     event.backend_key = Some("pytorch".to_string());
+    event.selected_runtime_variant_id = Some("pytorch.diffusers".to_string());
+    event.selected_device_class = Some(inference::InferenceDeviceClass::Cuda);
+    event.selected_device_id =
+        Some(inference::InferenceDeviceId::parse("cuda:0").expect("valid device id"));
     event.resolved_artifact_kind = Some("diffusers_bundle".to_string());
     event.detail = Some(
         "SECRET_PROMPT image prompt SECRET_IMAGE_BYTES aW1hZ2U= BACKEND_FLAG --model /tmp/private/diffusers"
@@ -570,6 +574,12 @@ fn inference_diagnostic_event_adapter_persists_image_generation_bounded_lifecycl
                 payload.selected_backend_family.as_deref(),
                 Some("transformers_pytorch")
             );
+            assert_eq!(
+                payload.selected_runtime_variant_id.as_deref(),
+                Some("pytorch.diffusers")
+            );
+            assert_eq!(payload.selected_device_class.as_deref(), Some("cuda"));
+            assert_eq!(payload.selected_device_id.as_deref(), Some("cuda:0"));
             assert_eq!(
                 payload.resolved_artifact_kind.as_deref(),
                 Some("diffusers_bundle")
