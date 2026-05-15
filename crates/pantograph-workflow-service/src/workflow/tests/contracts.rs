@@ -1,4 +1,8 @@
 use super::*;
+use crate::technical_fit::{
+    WorkflowTechnicalFitDecision, WorkflowTechnicalFitDeviceClass,
+    WorkflowTechnicalFitSelectionMode,
+};
 use crate::{
     GraphEdge, GraphNode, Position, WorkflowExecutableTopology, WorkflowExecutableTopologyEdge,
     WorkflowExecutableTopologyNode, WorkflowGraph, WorkflowGraphDiagnostic,
@@ -279,6 +283,110 @@ fn workflow_execution_plan_serialization_does_not_include_graph_inputs() {
     assert!(json["node_decisions"]["image-node-1"]
         .get("resolved_model_package_facts")
         .is_none());
+}
+
+#[test]
+fn workflow_execution_plan_admission_builds_selected_node_decision() {
+    let decision = WorkflowTechnicalFitDecision {
+        selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+        selected_candidate_id: Some("candidate-pytorch-sdxl".to_string()),
+        selected_runtime_id: Some("pytorch-runtime".to_string()),
+        selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+        selected_backend_key: Some("pytorch".to_string()),
+        selected_model_id: Some("stable-diffusion-xl".to_string()),
+        selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+        selected_device_id: Some("cuda:0".to_string()),
+        ..WorkflowTechnicalFitDecision::default()
+    };
+    let models = vec![WorkflowCapabilityModel {
+        model_id: "stable-diffusion-xl".to_string(),
+        model_revision_or_hash: Some("sha256:model".to_string()),
+        model_type: Some("diffusion".to_string()),
+        node_ids: vec!["image-node-1".to_string()],
+        roles: vec!["image_generation".to_string()],
+    }];
+
+    let plan = build_workflow_execution_plan_from_admission(
+        "run-image-admission",
+        "workflow-image-admission",
+        &models,
+        Some(&decision),
+    )
+    .expect("build execution plan")
+    .expect("selected technical fit produces a plan");
+
+    let node_decision = plan
+        .node_decision("image-node-1")
+        .expect("image node decision");
+    assert_eq!(node_decision.selected_backend_key(), "pytorch");
+    assert_eq!(node_decision.selected_runtime_id(), "pytorch-runtime");
+    assert_eq!(node_decision.selected_runtime_variant_id(), "pytorch.cuda");
+    assert_eq!(
+        node_decision.selected_task_id(),
+        WorkflowInferenceTaskId::ImageGeneration
+    );
+    assert_eq!(
+        node_decision.selected_device_class(),
+        WorkflowInferenceDeviceClass::Cuda
+    );
+    assert_eq!(node_decision.selected_device_id(), Some("cuda:0"));
+    assert_eq!(
+        node_decision.selected_model_ref(),
+        Some("pumas://models/stable-diffusion-xl")
+    );
+}
+
+#[test]
+fn workflow_execution_plan_admission_skips_failed_technical_fit() {
+    let decision = WorkflowTechnicalFitDecision {
+        selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+        selected_backend_key: Some("pytorch".to_string()),
+        ..WorkflowTechnicalFitDecision::default()
+    };
+
+    let plan = build_workflow_execution_plan_from_admission(
+        "run-image-admission",
+        "workflow-image-admission",
+        &[],
+        Some(&decision),
+    )
+    .expect("failed technical fit should not produce plan");
+
+    assert!(plan.is_none());
+}
+
+#[test]
+fn workflow_execution_plan_admission_rejects_ambiguous_node_mapping() {
+    let decision = WorkflowTechnicalFitDecision {
+        selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+        selected_candidate_id: Some("candidate-pytorch-sdxl".to_string()),
+        selected_runtime_id: Some("pytorch-runtime".to_string()),
+        selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+        selected_backend_key: Some("pytorch".to_string()),
+        selected_model_id: Some("stable-diffusion-xl".to_string()),
+        selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+        ..WorkflowTechnicalFitDecision::default()
+    };
+    let models = vec![WorkflowCapabilityModel {
+        model_id: "stable-diffusion-xl".to_string(),
+        model_revision_or_hash: None,
+        model_type: Some("diffusion".to_string()),
+        node_ids: vec!["image-node-1".to_string(), "image-node-2".to_string()],
+        roles: vec!["image_generation".to_string()],
+    }];
+
+    let error = build_workflow_execution_plan_from_admission(
+        "run-image-admission",
+        "workflow-image-admission",
+        &models,
+        Some(&decision),
+    )
+    .expect_err("ambiguous mapping must fail closed");
+
+    assert!(matches!(
+        error,
+        WorkflowExecutionPlanError::AmbiguousNodeMapping { .. }
+    ));
 }
 
 #[test]

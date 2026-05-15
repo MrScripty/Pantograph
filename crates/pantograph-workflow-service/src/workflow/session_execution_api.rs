@@ -46,15 +46,15 @@ use super::validation::{
     validate_workflow_semantic_version,
 };
 use super::{
-    AttributionRepository, WorkflowCapabilityModel, WorkflowErrorDiagnosticsLink,
-    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
-    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint,
-    WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason, WorkflowService,
-    WorkflowServiceError,
+    build_workflow_execution_plan_from_admission, AttributionRepository, WorkflowCapabilityModel,
+    WorkflowErrorDiagnosticsLink, WorkflowExecutionSessionAttributedCreateRequest,
+    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
+    WorkflowRuntimeDiagnosticPhaseHint, WorkflowRuntimeRequirements,
+    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -370,6 +370,50 @@ impl WorkflowService {
                 return terminal_result;
             }
         };
+        let execution_plan = match build_workflow_execution_plan_from_admission(
+            &workflow_run_id,
+            &queued_run.workflow_id,
+            &preflight_cache.capability_models,
+            preflight_cache.technical_fit_decision.as_ref(),
+        ) {
+            Ok(execution_plan) => execution_plan,
+            Err(error) => {
+                let error = WorkflowServiceError::CapabilityViolation(format!(
+                    "workflow execution-plan production failed: {error}"
+                ));
+                let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
+                    WorkflowDiagnosticErrorRecordRequest::runtime_preflight_failed(
+                        workflow_runtime_model_error_scope(
+                            &session,
+                            run_snapshot.as_ref(),
+                            &workflow_run_id,
+                            &queued_workflow_semantic_version,
+                            &preflight_cache.required_backends,
+                            &preflight_cache.required_models,
+                        )?,
+                        &error,
+                    )
+                    .with_source_instance_id("workflow-session-scheduler")
+                    .with_cause("execution-plan production failed after runtime admission"),
+                )?;
+                self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
+                let terminal_error = error
+                    .with_diagnostics(diagnostic_outcome.into_error_link(Some(&workflow_run_id)));
+                let terminal_result = Err(terminal_error);
+                self.record_run_terminal_event_if_configured(
+                    &session,
+                    run_snapshot.as_ref(),
+                    &workflow_run_id,
+                    Some(&queued_workflow_semantic_version),
+                    &terminal_result,
+                )?;
+                return terminal_result;
+            }
+        };
+        if let Some(execution_plan) = execution_plan {
+            let mut store = self.session_store_guard()?;
+            store.set_active_run_execution_plan(&session_id, &workflow_run_id, execution_plan)?;
+        }
         apply_technical_fit_to_reservation_context(
             &mut reservation_context,
             preflight_cache.technical_fit_decision.as_ref(),

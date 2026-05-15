@@ -1,5 +1,9 @@
 use super::*;
-use crate::workflow::WorkflowExecutionSessionRunRequest;
+use crate::workflow::{
+    WorkflowExecutionPlan, WorkflowExecutionPlanNodeDecision, WorkflowExecutionSessionRunRequest,
+    WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
+};
+use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 
 use super::super::policy::{
     WorkflowExecutionSessionAdmissionRuntimePosture, WorkflowExecutionSessionWarmCompatibility,
@@ -97,5 +101,61 @@ fn admission_input_marks_loaded_runtime_reuse_as_compatible_without_override_div
     assert_eq!(
         candidate.warm_session_compatibility,
         WorkflowExecutionSessionWarmCompatibility::Compatible
+    );
+}
+
+#[test]
+fn active_run_records_run_scoped_execution_plan() {
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
+    let session_id = store
+        .create_session(
+            "workflow-image-plan".to_string(),
+            None,
+            None,
+            vec!["pytorch".to_string()],
+            vec!["stable-diffusion-xl".to_string()],
+            true,
+        )
+        .expect("create session");
+    let workflow_run_id = store
+        .enqueue_run(&session_id, &empty_run_request())
+        .expect("enqueue run");
+    store
+        .begin_queued_run(&session_id, &workflow_run_id)
+        .expect("begin run")
+        .expect("dequeued run");
+
+    let execution_plan = WorkflowExecutionPlan::new(
+        WorkflowRunId::try_from(workflow_run_id.clone()).expect("valid run id"),
+        WorkflowId::try_from("workflow-image-plan".to_string()).expect("valid workflow id"),
+        vec![WorkflowExecutionPlanNodeDecision::new(
+            "image-node-1",
+            "pytorch",
+            "pytorch-runtime",
+            "pytorch.cuda",
+            WorkflowInferenceDeviceClass::Cuda,
+            WorkflowInferenceTaskId::ImageGeneration,
+        )
+        .expect("valid node decision")],
+    )
+    .expect("valid execution plan");
+
+    store
+        .set_active_run_execution_plan(&session_id, &workflow_run_id, execution_plan)
+        .expect("record execution plan");
+
+    let active_run = store
+        .active
+        .get(&session_id)
+        .and_then(|session| session.active_run.as_ref())
+        .expect("active run");
+    assert_eq!(
+        active_run
+            .execution_plan
+            .as_ref()
+            .expect("execution plan")
+            .workflow_run_id()
+            .as_str(),
+        workflow_run_id
     );
 }

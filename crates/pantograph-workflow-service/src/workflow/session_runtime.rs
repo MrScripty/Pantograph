@@ -380,6 +380,7 @@ impl WorkflowService {
             override_selection,
             required_backends: capabilities.runtime_requirements.required_backends.clone(),
             required_models: capabilities.runtime_requirements.required_models.clone(),
+            capability_models: capabilities.models,
             technical_fit_decision: runtime_preflight.technical_fit_decision,
             blocking_runtime_issues: runtime_preflight.blocking_runtime_issues,
         };

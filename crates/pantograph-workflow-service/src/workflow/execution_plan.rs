@@ -471,6 +471,16 @@ pub enum WorkflowExecutionPlanError {
         field: &'static str,
         message: String,
     },
+    #[error("technical-fit decision is missing selected fact {field}")]
+    MissingSelectedDecisionFact { field: &'static str },
+    #[error("selected model '{model_id}' was not present in workflow capabilities")]
+    SelectedModelNotFound { model_id: String },
+    #[error("selected model '{model_id}' matched {count} workflow capability records")]
+    AmbiguousSelectedModel { model_id: String, count: usize },
+    #[error("selected model '{model_id}' maps to {count} nodes")]
+    AmbiguousNodeMapping { model_id: String, count: usize },
+    #[error("selected model '{model_id}' maps to {count} inference tasks")]
+    AmbiguousSelectedTask { model_id: String, count: usize },
 }
 
 fn validate_required_text(

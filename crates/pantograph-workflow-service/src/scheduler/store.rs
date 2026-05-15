@@ -7,8 +7,9 @@ use pantograph_diagnostics_ledger::SchedulerModelCacheState;
 use crate::graph::WorkflowExecutionSessionKind;
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
 use crate::workflow::{
-    WorkflowLocalRunPlacementRecord, WorkflowLocalRunPlacementState, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRuntimeIssue, WorkflowServiceError,
+    WorkflowCapabilityModel, WorkflowExecutionPlan, WorkflowLocalRunPlacementRecord,
+    WorkflowLocalRunPlacementState, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowRuntimeIssue, WorkflowServiceError,
 };
 
 use super::{
@@ -46,6 +47,7 @@ struct WorkflowExecutionSessionActiveRun {
     dequeued_at_ms: u64,
     priority: i32,
     scheduler_decision_reason: WorkflowSchedulerDecisionReason,
+    execution_plan: Option<WorkflowExecutionPlan>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +59,7 @@ pub(crate) struct WorkflowExecutionSessionPreflightCache {
     pub(crate) override_selection: Option<WorkflowTechnicalFitOverride>,
     pub(crate) required_backends: Vec<String>,
     pub(crate) required_models: Vec<String>,
+    pub(crate) capability_models: Vec<WorkflowCapabilityModel>,
     pub(crate) technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
     pub(crate) blocking_runtime_issues: Vec<WorkflowRuntimeIssue>,
 }
@@ -393,6 +396,33 @@ impl WorkflowExecutionSessionStore {
             .as_ref()
             .map(|cache| cache.required_models.clone())
             .unwrap_or_default();
+        Self::mark_session_access(state, tick);
+        Ok(())
+    }
+
+    pub(crate) fn set_active_run_execution_plan(
+        &mut self,
+        session_id: &str,
+        workflow_run_id: &str,
+        execution_plan: WorkflowExecutionPlan,
+    ) -> Result<(), WorkflowServiceError> {
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let Some(active_run) = state.active_run.as_mut() else {
+            return Err(WorkflowServiceError::Internal(format!(
+                "session '{}' has no active run",
+                session_id
+            )));
+        };
+        if active_run.workflow_run_id != workflow_run_id {
+            return Err(WorkflowServiceError::Internal(format!(
+                "session '{}' active run '{}' does not match '{}'",
+                session_id, active_run.workflow_run_id, workflow_run_id
+            )));
+        }
+        active_run.execution_plan = Some(execution_plan);
         Self::mark_session_access(state, tick);
         Ok(())
     }

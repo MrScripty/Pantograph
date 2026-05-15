@@ -3477,6 +3477,20 @@ Worker rules:
   workflow::tests::contracts`; `cargo fmt -p pantograph-workflow-service`.
   Verification deviation fixed: the first focused test run exposed missing
   `WorkflowId`/`WorkflowRunId` imports in the new contract tests.
+- 2026-05-15: Completed Milestone 6 Option 3 admission production slice. Added
+  a sync workflow execution-plan admission helper that consumes cached
+  technical-fit decisions plus workflow capability model summaries, attaches
+  the resulting reduced plan to the active run context, and fails admitted runs
+  with typed workflow capability diagnostics when selected candidate facts are
+  missing or ambiguous. No saved workflow graph, durable plan persistence,
+  frontend DTO, worker envelope, or node-engine execution behavior changed in
+  this slice. Verification passed: focused admission contract tests, scheduler
+  active-run plan storage test, session runtime preflight suite, session
+  execution suite, `cargo check -p pantograph-workflow-service`, and
+  `cargo fmt -p pantograph-workflow-service`. Follow-up recorded: if Pumas
+  model/package facts can change without graph/runtime fingerprint changes,
+  preflight cache invalidation needs a package-facts/update-cursor component
+  before warm-session plan reuse becomes authoritative.
 
 ### Traceability Links
 

@@ -562,7 +562,7 @@ Staged Option 3 implementation plan:
      workflow::tests::contracts` passed after fixing a missing test import for
      attribution id types. `cargo fmt -p pantograph-workflow-service` was run.
 
-2. Admission production slice:
+2. Admission production slice (completed 2026-05-15):
    - Build the initial execution plan immediately after runtime preflight and
      scheduler admission, using the existing `WorkflowTechnicalFitDecision`
      already computed before run start.
@@ -590,6 +590,51 @@ Staged Option 3 implementation plan:
      execution plan when technical-fit selected a candidate, and no plan is
      produced when technical-fit fails. Tests must isolate any durable run,
      scheduler, or sqlite state per test.
+   - Completed scope: added `workflow/execution_plan_admission.rs` as the
+     synchronous projection helper from cached workflow capabilities plus the
+     selected `WorkflowTechnicalFitDecision` into a reduced
+     `WorkflowExecutionPlan`. The helper returns no plan when technical fit
+     has no selected candidate and fails closed with typed
+     `WorkflowExecutionPlanError` variants for missing selected facts,
+     ambiguous selected model records, ambiguous model-to-node mappings,
+     unknown selected models, and ambiguous task facts. It maps only
+     unambiguous model/task/node facts, requires selected runtime variant and
+     selected device class, and records a Pumas model ref instead of full
+     package facts.
+   - Run-scoped storage: `WorkflowExecutionSessionPreflightCache` now carries
+     workflow capability model summaries as admission evidence, and the active
+     scheduler run can hold an optional execution plan. Session run admission
+     builds and attaches the plan immediately after runtime preflight and
+     before runtime load/lifecycle records. Plan build errors terminate the
+     admitted run with a workflow capability violation diagnostic rather than
+     continuing with request-only execution.
+   - No-fallback/no-legacy confirmation: this slice did not add graph-input
+     storage, durable execution-plan persistence, frontend DTOs, worker
+     envelope fields, node-engine consumption, or request-only image execution.
+     Missing/ambiguous canonical admission facts fail closed; they do not
+     trigger backend/runtime/device inference from graph hints or active
+     backend state.
+   - Verification result: `cargo test -p pantograph-workflow-service
+     workflow::tests::contracts::workflow_execution_plan_admission`,
+     `cargo test -p pantograph-workflow-service
+     scheduler::store::tests::active_run_records_run_scoped_execution_plan`,
+     `cargo test -p pantograph-workflow-service
+     workflow::tests::session_runtime_preflight`, `cargo test -p
+     pantograph-workflow-service workflow::tests::session_execution`, `cargo
+     check -p pantograph-workflow-service`, and `cargo fmt -p
+     pantograph-workflow-service` passed.
+   - Deviation/discovered issue: existing session mock technical-fit fixtures
+     that represented selected candidates without selected runtime variant or
+     selected device facts were updated to canonical complete decisions where
+     execution-plan production is expected. This is not compatibility
+     fallback; incomplete selected decisions now fail plan production.
+   - Discovered follow-up: preflight cache invalidation still keys on graph
+     fingerprint, runtime capability fingerprint, and override selection. The
+     new cached capability model summaries assume those fingerprints cover the
+     selected model/task/node evidence. If Pumas package/model facts can change
+     independently of the graph and runtime capability fingerprints, a later
+     slice must add a package-facts/update-cursor fingerprint before execution
+     plans are reused for warm sessions.
 
 3. Projection adapter slice:
    - Add a focused adapter that projects a workflow execution-plan node

@@ -19,6 +19,7 @@ public exports out of the service crate.
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `diagnostic_errors.rs` | Typed workflow error phase registry, scoped diagnostics recorder API, and durable error-event append helpers. |
 | `execution_plan.rs` | Run-scoped workflow execution-plan DTOs produced by scheduler admission and consumed through embedded-runtime projection. |
+| `execution_plan_admission.rs` | Synchronous admission projection from cached technical-fit evidence and workflow capability facts into reduced run execution plans. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `identity.rs` | Validated workflow identity value object and grammar used by workflow submission and saved graph boundaries. |

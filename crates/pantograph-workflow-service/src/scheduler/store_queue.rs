@@ -267,6 +267,7 @@ impl WorkflowExecutionSessionStore {
             dequeued_at_ms,
             priority: queued.priority,
             scheduler_decision_reason,
+            execution_plan: None,
         });
         Self::mark_session_access(state, tick);
         Ok(Some(WorkflowExecutionSessionDequeuedRun {
