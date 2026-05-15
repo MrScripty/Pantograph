@@ -321,6 +321,28 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   classify guidance scale, negative prompt, image count, scheduler override,
   dtype, and dimensions as accepted, ignored, or rejected per family.
 
+2026-05-15 planner unsupported-option guardrail slice:
+
+- Smallest useful vertical slice: make the canonical image-generation planner
+  reject request fields that the current text-to-image execution plan cannot
+  carry (`init_image`, `mask_image`, `strength`, and non-null
+  `extra_options`) instead of silently dropping them before worker dispatch.
+- Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`, and this plan
+  directory.
+- No-fallback/no-legacy confirmation: unsupported img2img/inpaint and opaque
+  option fields now fail with typed `UnsupportedOption` planner diagnostics.
+  The slice does not add generic Diffusers fallback behavior, compatibility
+  shims, worker fields, frontend behavior, generated files, lockfiles,
+  persisted schemas, workflow fixtures, or alternate execution paths.
+- Verification passed: `cargo test -p inference
+  planner_rejects_unsupported_image_options_without_silent_ignore --lib`,
+  `cargo check -p inference`, `cargo fmt -p inference`, and
+  `git diff --check`.
+- Remaining follow-up: future img2img/inpaint and family-specific opaque
+  option support needs explicit family option tables plus worker contract
+  fields before these request fields can become executable.
+
 2026-05-12 worker image-envelope contract slice:
 
 - Smallest useful vertical slice: add the Rust-side PyTorch worker

@@ -122,6 +122,7 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     MissingComponentRole,
     MissingPrompt,
     InvalidNumericOption,
+    UnsupportedOption,
     ResourceEstimateOverflow,
 }
 
@@ -310,6 +311,30 @@ fn validate_image_request(
             "image-generation guidance scale must be finite when provided",
         ));
     }
+    validate_unsupported_option(
+        request.init_image.is_some(),
+        "request.init_image",
+        "init_image is reserved for later img2img support and is not supported by this planner slice",
+        diagnostics,
+    );
+    validate_unsupported_option(
+        request.mask_image.is_some(),
+        "request.mask_image",
+        "mask_image is reserved for later inpaint support and is not supported by this planner slice",
+        diagnostics,
+    );
+    validate_unsupported_option(
+        request.strength.is_some(),
+        "request.strength",
+        "strength is reserved for later img2img/inpaint support and is not supported by this planner slice",
+        diagnostics,
+    );
+    validate_unsupported_option(
+        !request.extra_options.is_null(),
+        "request.extra_options",
+        "image-generation extra_options require explicit family support and are not supported by this planner slice",
+        diagnostics,
+    );
 }
 
 fn validate_non_zero(
@@ -322,6 +347,21 @@ fn validate_non_zero(
             ImageGenerationPlannerDiagnosticCode::InvalidNumericOption,
             field_path,
             "numeric image-generation options must be greater than zero when provided",
+        ));
+    }
+}
+
+fn validate_unsupported_option(
+    requested: bool,
+    field_path: &'static str,
+    message: &'static str,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) {
+    if requested {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::UnsupportedOption,
+            field_path,
+            message,
         ));
     }
 }

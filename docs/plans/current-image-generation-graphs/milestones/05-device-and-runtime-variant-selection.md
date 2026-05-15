@@ -4778,6 +4778,27 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: broader semantic image request limits, context/batch
     limits, byte-range projections, and worker/runtime request fields remain
     open numeric-boundary work.
+- 2026-05-15 slice: image planner unsupported option rejection.
+  - Smallest useful vertical slice: make the canonical image-generation
+    planner reject request fields that the current text-to-image execution
+    plan cannot carry (`init_image`, `mask_image`, `strength`, and non-null
+    `extra_options`) instead of silently dropping them before worker dispatch.
+  - Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+    `crates/inference/src/image_generation_planner_tests.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: unsupported img2img/inpaint and
+    opaque option fields now fail with typed `UnsupportedOption` planner
+    diagnostics. The slice does not add generic Diffusers fallback behavior,
+    compatibility shims, worker fields, frontend behavior, generated files,
+    lockfiles, persisted schemas, workflow fixtures, or alternate execution
+    paths.
+  - Verification passed:
+    `cargo test -p inference planner_rejects_unsupported_image_options_without_silent_ignore --lib`,
+    `cargo check -p inference`, `cargo fmt -p inference`, and
+    `git diff --check`.
+  - Remaining follow-up: future img2img/inpaint and family-specific opaque
+    option support needs explicit family option tables plus worker contract
+    fields before these request fields can become executable.
 
 **Verification:**
 

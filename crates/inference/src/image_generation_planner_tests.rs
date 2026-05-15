@@ -1,5 +1,6 @@
 use super::*;
 use crate::device_contracts::{InferenceDevicePolicy, RuntimeVariantId};
+use crate::types::EncodedImage;
 
 fn package_fixture(name: &str) -> ResolvedModelPackageFacts {
     let raw = match name {
@@ -249,6 +250,50 @@ fn planner_rejects_non_finite_guidance_scale() {
 
     assert!(diagnostic_codes(&outcome)
         .contains(&ImageGenerationPlannerDiagnosticCode::InvalidNumericOption));
+}
+
+#[test]
+fn planner_rejects_unsupported_image_options_without_silent_ignore() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = ImageGenerationRequest {
+        init_image: Some(EncodedImage {
+            data_base64: "aW1hZ2U=".to_string(),
+            mime_type: "image/png".to_string(),
+            width: Some(32),
+            height: Some(32),
+        }),
+        mask_image: Some(EncodedImage {
+            data_base64: "bWFzaw==".to_string(),
+            mime_type: "image/png".to_string(),
+            width: Some(32),
+            height: Some(32),
+        }),
+        strength: Some(0.5),
+        extra_options: serde_json::json!({
+            "adapter:opaque_option": true,
+        }),
+        ..image_request()
+    };
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    for field_path in [
+        "request.init_image",
+        "request.mask_image",
+        "request.strength",
+        "request.extra_options",
+    ] {
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == ImageGenerationPlannerDiagnosticCode::UnsupportedOption
+                && diagnostic.field_path == field_path
+        }));
+    }
 }
 
 #[test]
