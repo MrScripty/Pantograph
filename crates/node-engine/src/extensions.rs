@@ -59,6 +59,11 @@ impl ExecutorExtensions {
     pub fn has(&self, key: &str) -> bool {
         self.inner.contains_key(key)
     }
+
+    /// Remove a value by key.
+    pub fn remove(&mut self, key: &str) {
+        self.inner.remove(key);
+    }
 }
 
 impl Default for ExecutorExtensions {
@@ -133,5 +138,16 @@ mod tests {
         ext.set("key", "second".to_string());
 
         assert_eq!(ext.get::<String>("key"), Some(&"second".to_string()));
+    }
+
+    #[test]
+    fn test_remove_clears_key() {
+        let mut ext = ExecutorExtensions::new();
+        ext.set("name", "hello".to_string());
+
+        ext.remove("name");
+
+        assert!(!ext.has("name"));
+        assert!(ext.get::<String>("name").is_none());
     }
 }

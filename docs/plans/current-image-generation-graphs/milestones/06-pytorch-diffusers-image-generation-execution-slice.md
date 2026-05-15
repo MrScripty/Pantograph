@@ -697,6 +697,20 @@ Staged Option 3 implementation plan:
      -p node-engine` passed. The featureless `cargo test -p node-engine
      planned_inference` compiled and filtered out the feature-gated tests as
      expected.
+   - Embedded-runtime context installation (completed 2026-05-15): added
+     workflow-plan-to-node-engine context projection and installed the
+     resulting `PlannedInferenceDecisionContext` during keep-alive session
+     workflow execution. The warm-session executor now removes the planned
+     inference extension before each run and then installs a freshly projected
+     context only when the active workflow run has an execution plan. This
+     prevents stale plan reuse while keeping workflow-service DTOs out of
+     node-engine.
+   - Verification result: `cargo test -p pantograph-embedded-runtime
+     workflow_execution_plan_projection`, `cargo test -p node-engine
+     --features inference-nodes extensions::tests::test_remove_clears_key`,
+     `cargo check -p pantograph-embedded-runtime`, `cargo check -p
+     node-engine --features inference-nodes`, and `cargo fmt -p node-engine -p
+     pantograph-embedded-runtime` passed.
    - Thread the execution plan into node execution through a typed runtime
      context, likely `ExecutorExtensions`, without serializing it into graph
      inputs.

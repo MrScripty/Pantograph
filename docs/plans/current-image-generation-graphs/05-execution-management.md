@@ -3520,6 +3520,14 @@ Worker rules:
   node-engine --features inference-nodes planned_inference`, `cargo check -p
   node-engine --features inference-nodes`, `cargo check -p node-engine`, and
   `cargo fmt -p node-engine`.
+- 2026-05-15: Completed the embedded-runtime planned context installation
+  slice. Runtime session execution now fetches the active workflow execution
+  plan, projects it into node-engine's planned inference context, clears any
+  stale planned context from the reused executor, and installs the fresh
+  context for the current workflow run only. Verification passed:
+  embedded-runtime projection tests, node-engine extension removal test,
+  `cargo check -p pantograph-embedded-runtime`, `cargo check -p node-engine
+  --features inference-nodes`, and formatting for both crates.
 
 ### Traceability Links
 

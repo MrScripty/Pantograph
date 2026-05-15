@@ -4,8 +4,9 @@ use inference::{
     DeviceResolutionDiagnosticSeverity, InferenceDeviceClass, InferenceDeviceId,
     InferenceDevicePolicy, InferenceTaskId, PumasModelRef, RuntimeVariantId,
 };
+use node_engine::planned_inference::PlannedInferenceDecisionContext;
 use pantograph_workflow_service::{
-    WorkflowExecutionPlanDiagnostic, WorkflowExecutionPlanDiagnosticCode,
+    WorkflowExecutionPlan, WorkflowExecutionPlanDiagnostic, WorkflowExecutionPlanDiagnosticCode,
     WorkflowExecutionPlanDiagnosticSeverity, WorkflowExecutionPlanNodeDecision,
     WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
 };
@@ -67,6 +68,26 @@ pub(crate) fn project_workflow_node_decision_to_backend_execution_decision(
     })
 }
 
+pub(crate) fn project_workflow_execution_plan_to_planned_inference_context(
+    execution_plan: &WorkflowExecutionPlan,
+) -> Result<PlannedInferenceDecisionContext, WorkflowExecutionPlanProjectionError> {
+    let decisions = execution_plan
+        .node_decisions()
+        .iter()
+        .map(|(node_id, decision)| {
+            project_workflow_node_decision_to_backend_execution_decision(decision)
+                .map(|backend_decision| (node_id.clone(), backend_decision))
+        })
+        .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
+
+    PlannedInferenceDecisionContext::new(execution_plan.workflow_run_id().as_str(), decisions)
+        .map_err(
+            |error| WorkflowExecutionPlanProjectionError::InvalidPlannedContext {
+                message: error.to_string(),
+            },
+        )
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 #[non_exhaustive]
 pub(crate) enum WorkflowExecutionPlanProjectionError {
@@ -80,6 +101,8 @@ pub(crate) enum WorkflowExecutionPlanProjectionError {
     UnsupportedDeviceClass { device_class: &'static str },
     #[error("unsupported selected task id {task_id}")]
     UnsupportedTaskId { task_id: &'static str },
+    #[error("invalid planned inference context: {message}")]
+    InvalidPlannedContext { message: String },
 }
 
 fn project_device_class(
