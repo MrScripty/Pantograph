@@ -3829,6 +3829,32 @@ Worker rules:
   integration with backend `query_port_options` plus stale async response
   discard at the request owner. This slice only prevents silent graph mutation
   once a port definition marks an input as provider-backed.
+- 2026-05-15: Completed the provider-backed selection-input async loading
+  slice. Smallest useful vertical slice: wire `SelectionInputNode.svelte` to
+  load provider-backed options through the generic `portOptionsCache`, build
+  bounded backend query context from stable target-node references, and discard
+  late async responses when model/runtime context changes or the effect is
+  cleaned up. Allowed write set:
+  `src/components/nodes/workflow/SelectionInputNode.svelte`,
+  `src/components/nodes/workflow/selectionInputProviderOptions.ts`,
+  `src/components/nodes/workflow/selectionInputProviderOptions.test.ts`,
+  `src/components/nodes/workflow/README.md`, `package.json`, and this plan
+  directory.
+- The slice preserves the no-fallback/no-legacy rule because the frontend only
+  requests backend-owned options and maps returned primitive option values into
+  the select. It does not hardcode denoising scheduler choices, synthesize
+  defaults, inspect full Pumas package facts, pass local paths through provider
+  context, infer runtime/backend decisions, or write loaded provider options
+  into graph data.
+- Verification passed: `node --experimental-strip-types --test
+  src/components/nodes/workflow/selectionInputProviderOptions.test.ts
+  src/components/nodes/workflow/selectionInputState.test.ts`, `npm run
+  typecheck`, `npm run test:frontend`, and `git diff --check`.
+- Remaining follow-up: real `llm-inference.denoising_scheduler` provider
+  metadata still needs to be exposed through backend node definitions. Once
+  that exists, add the project-approved equivalent of mounted interaction
+  coverage for accessible-name, native keyboard selection, and graph gesture
+  containment without introducing a new browser test platform.
 
 ### Traceability Links
 

@@ -8,6 +8,11 @@
     stringifySelectionValue,
     type SelectionInputOption,
   } from './selectionInputState';
+  import {
+    buildSelectionInputProviderQuery,
+    loadLatestSelectionInputProviderOptions,
+    type SelectionInputTargetNode,
+  } from './selectionInputProviderOptions';
 
   interface Props {
     id: string;
@@ -24,7 +29,12 @@
   const nodeColor = '#2563eb';
   const selectId = $derived(`selection-input-${id}-value`);
 
-  function getTargetPort(): PortDefinition | null {
+  interface SelectionTarget {
+    node: SelectionInputTargetNode;
+    port: PortDefinition;
+  }
+
+  function getTarget(): SelectionTarget | null {
     const edge = $edges.find((candidate) => candidate.source === id && candidate.sourceHandle === 'value');
     if (!edge) return null;
 
@@ -32,7 +42,13 @@
     if (!targetNode?.data?.definition) return null;
 
     const definition = targetNode.data.definition as NodeDefinition;
-    return definition.inputs.find((port) => port.id === edge.targetHandle) ?? null;
+    const port = definition.inputs.find((candidate) => candidate.id === edge.targetHandle);
+    if (!port) return null;
+
+    return {
+      node: targetNode as SelectionInputTargetNode,
+      port,
+    };
   }
 
   function normalizeOption(option: unknown): SelectionInputOption | null {
@@ -59,8 +75,15 @@
     return record.value ?? value;
   }
 
-  let targetPort = $derived.by(() => getTargetPort());
+  let target = $derived.by(() => getTarget());
+  let targetPort = $derived(target?.port ?? null);
+  let providerQuery = $derived.by(() => buildSelectionInputProviderQuery(target?.node ?? null, targetPort));
+  let providerOptions = $state<SelectionInputOption[]>([]);
+  let providerOptionsLoading = $state(false);
+  let providerOptionsError = $state<string | null>(null);
   let options = $derived.by(() => {
+    if (targetPort?.options_provider) return providerOptions;
+
     const allowedValues = targetPort?.constraints?.allowed_values;
     if (!Array.isArray(allowedValues)) return [];
 
@@ -70,8 +93,41 @@
   });
   let defaultValue = $derived(normalizeDefaultValue(targetPort?.default_value));
   let hasTarget = $derived(Boolean(targetPort));
-  let hasOptions = $derived(options.length > 0);
+  let isProviderBacked = $derived(Boolean(targetPort?.options_provider));
+  let hasOptions = $derived(isProviderBacked || options.length > 0);
   let selectionState = $derived(buildSelectionInputState(targetPort, options, data.value));
+
+  $effect(() => {
+    const query = providerQuery;
+    if (!query) {
+      providerOptions = [];
+      providerOptionsLoading = false;
+      providerOptionsError = null;
+      return;
+    }
+
+    providerOptionsLoading = true;
+    providerOptionsError = null;
+    let active = true;
+    loadLatestSelectionInputProviderOptions(query, () =>
+      active ? providerQuery?.requestKey ?? null : null,
+    )
+      .then((result) => {
+        if (!active || result.status === 'stale') return;
+        providerOptions = result.options;
+        providerOptionsLoading = false;
+      })
+      .catch((error: unknown) => {
+        if (!active || providerQuery?.requestKey !== query.requestKey) return;
+        providerOptions = [];
+        providerOptionsLoading = false;
+        providerOptionsError = error instanceof Error ? error.message : 'Unable to load options';
+      });
+
+    return () => {
+      active = false;
+    };
+  });
 
   $effect(() => {
     const update = resolveSelectionAutoUpdate(targetPort, options, data.value, defaultValue);
@@ -105,6 +161,14 @@
         <div class="text-xs text-neutral-500 italic">
           Connect this node to an enum-constrained input
         </div>
+      {:else if providerOptionsLoading}
+        <div class="text-xs text-neutral-500 italic" role="status">
+          Loading options
+        </div>
+      {:else if providerOptionsError}
+        <div class="text-xs text-red-300" role="status">
+          Options unavailable
+        </div>
       {:else if !hasOptions}
         <div class="text-xs text-neutral-500 italic">
           Target input does not expose selectable options
@@ -120,6 +184,7 @@
             style="--focus-color: {nodeColor}"
             value={selectionState.displayValue}
             onchange={handleChange}
+            disabled={isProviderBacked && options.length === 0}
           >
             {#if selectionState.placeholderLabel}
               <option value="" disabled>{selectionState.placeholderLabel}</option>

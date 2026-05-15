@@ -88,11 +88,17 @@ PyTorch/diffusers and produce a retained image artifact.
   are displayed without silently writing executable defaults into graph data.
   Missing or stale selected values should render as unset/stale UI state and
   let the planner apply default policy or return typed diagnostics.
-- [ ] Keep provider-backed selection UI declarative, accessible, and
+- [x] Keep provider-backed selection UI declarative, accessible, and
   event-driven. It must not introduce polling loops, optimistic backend-owned
   state updates, manual DOM mutation, or graph-canvas gesture conflicts. Async
   option loads must discard stale responses when model/runtime context changes
   before the previous query returns.
+- [ ] Add node-test coverage or the existing project-approved equivalent for
+  provider-backed selection accessible-name, native keyboard selection, and
+  graph gesture containment after real backend provider metadata is exposed
+  through node definitions. The current slice keeps the control labelled,
+  native-select based, and `nodrag`/`nopan`/`nowheel`, but does not add a
+  browser-mounted component test platform.
 - [x] Add context-keyed cache/invalidation for provider-backed option queries
   before reusing backend port options for model/runtime-dependent traits. The
   cache key must include node type, port id, provider context, and package-facts
