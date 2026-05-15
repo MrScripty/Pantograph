@@ -27,6 +27,7 @@ inputs, and keeps execution dispatch aligned with descriptors published by
 | `model_dependencies.rs` | Model dependency typing used by execution preflight and runtime selection. |
 | `orchestration/` | Orchestration-specific execution and state modules. |
 | `path_validation.rs` | Validation helpers for file and model-path inputs. |
+| `planned_inference.rs` | Run-scoped planned inference decision context installed by hosts through executor extensions. |
 | `port_options.rs` | Port metadata helpers used by graph editing and execution. |
 | `registry.rs` | Built-in node registration, descriptor inventory, and callback-executor type boundaries. |
 | `tasks/` | Task metadata and task-oriented helpers. |

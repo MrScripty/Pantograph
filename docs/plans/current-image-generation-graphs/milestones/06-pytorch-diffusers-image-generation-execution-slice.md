@@ -683,6 +683,20 @@ Staged Option 3 implementation plan:
      scheduler::store::tests::active_run_records_run_scoped_execution_plan`,
      `cargo check -p pantograph-workflow-service`, and `cargo fmt -p
      pantograph-workflow-service`.
+   - Planned inference context contract (completed 2026-05-15): added
+     node-engine-owned `PlannedInferenceDecisionContext` plus the
+     `PLANNED_INFERENCE_DECISIONS` executor-extension key. The context stores
+     reduced inference `BackendExecutionDecision` values by node id for one
+     workflow run, validates non-empty run/node ids, and fails closed for stale
+     run ids, missing node decisions, or selected-task mismatches. Node-engine
+     still does not import workflow-service execution-plan DTOs or scheduler
+     policy.
+   - Verification result: `cargo test -p node-engine --features
+     inference-nodes planned_inference`, `cargo check -p node-engine
+     --features inference-nodes`, `cargo check -p node-engine`, and `cargo fmt
+     -p node-engine` passed. The featureless `cargo test -p node-engine
+     planned_inference` compiled and filtered out the feature-gated tests as
+     expected.
    - Thread the execution plan into node execution through a typed runtime
      context, likely `ExecutorExtensions`, without serializing it into graph
      inputs.

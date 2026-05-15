@@ -83,6 +83,11 @@ pub mod extension_keys {
     /// host-provided sink for typed inference lifecycle facts.
     #[cfg(feature = "inference-nodes")]
     pub const INFERENCE_LIFECYCLE_SINK: &str = "inference_lifecycle_sink";
+
+    /// Key for `Arc<crate::planned_inference::PlannedInferenceDecisionContext>` —
+    /// run-scoped scheduler decisions projected by the host runtime.
+    #[cfg(feature = "inference-nodes")]
+    pub const PLANNED_INFERENCE_DECISIONS: &str = "planned_inference_decisions";
 }
 
 #[cfg(test)]

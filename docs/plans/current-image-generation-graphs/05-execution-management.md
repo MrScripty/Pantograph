@@ -3511,6 +3511,15 @@ Worker rules:
   passed: focused scheduler store test, `cargo check -p
   pantograph-workflow-service`, and `cargo fmt -p
   pantograph-workflow-service`.
+- 2026-05-15: Completed the Node-engine planned inference context contract
+  slice. Added node-engine-owned `PlannedInferenceDecisionContext` and the
+  `PLANNED_INFERENCE_DECISIONS` executor-extension key so hosts can install
+  reduced inference decisions by workflow run id and node id without importing
+  workflow-service DTOs. The context fails closed for stale run ids, missing
+  node decisions, and task mismatches. Verification passed: `cargo test -p
+  node-engine --features inference-nodes planned_inference`, `cargo check -p
+  node-engine --features inference-nodes`, `cargo check -p node-engine`, and
+  `cargo fmt -p node-engine`.
 
 ### Traceability Links
 
