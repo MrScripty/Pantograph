@@ -43,9 +43,27 @@ PyTorch/diffusers and produce a retained image artifact.
   `backend_key = pytorch` and Pumas Diffusers package hints. `diffusers`
   remains package/runtime capability evidence, not a graph-visible backend
   preference.
+- [ ] Rename image-generation sampling-scheduler fields to
+  `denoising_scheduler` across graph ports, node-engine request construction,
+  inference planner DTOs, worker envelopes, Python worker inputs, diagnostics,
+  and fixtures. Keep any compatibility handling explicit and temporary; do not
+  let the overloaded `scheduler` name remain as the canonical graph/API field.
 - [ ] Ensure `ImageGenerationRequest` is populated from canonical
   `llm-inference` inputs: prompt, negative prompt, width, height, steps,
-  guidance scale, seed, scheduler, and image count.
+  guidance scale, seed, optional `denoising_scheduler`, and image count.
+- [ ] Expose `denoising_scheduler` as a first-class optional image-generation
+  input on canonical `llm-inference`. A connected `selection-input` may provide
+  the value, but unset means the selected model/pipeline default by explicit
+  policy rather than a fallback.
+- [ ] Add backend-owned port options for `llm-inference.denoising_scheduler`
+  so graph editors can present valid denoising/sampling schedulers from
+  model/package/runtime facts. The frontend must not hardcode the allowed
+  denoising scheduler list.
+- [ ] Keep `PortOptionsProvider` generic for other selectable inference traits
+  whose valid values are backend/model/runtime dependent. Promote a trait to a
+  first-class port/provider only when it is user-facing, fact-dependent, and
+  diagnostics/reproducibility relevant; keep long-tail model knobs in
+  `expand-settings`.
 - [ ] Implement `PyTorchBackend::generate_image` using the existing Python
   worker diffusion load/generate path and typed worker request/response
   envelopes.
@@ -82,12 +100,13 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Keep reference-derived logic behind Pantograph-owned Rust planner types
   and Pumas package facts; do not mirror ComfyUI/InvokeAI graph/runtime
   architecture.
-- [ ] Validate scheduler, dimensions, negative prompt, guidance scale, image
-  count, dtype, device policy, dependency environment, and required package
-  components before calling the worker.
+- [ ] Validate denoising scheduler, dimensions, negative prompt, guidance
+  scale, image count, dtype, device policy, dependency environment, and
+  required package components before calling the worker.
 - [ ] Validate option support per family. For example, guidance scale,
-  negative prompt, image count, scheduler override, dtype, and dimensions must
-  be accepted, ignored, or rejected by typed family rules before execution.
+  negative prompt, image count, denoising scheduler, dtype, and dimensions
+  must be accepted, ignored, or rejected by typed family rules before
+  execution.
 - [ ] Ensure gateway-level image option diagnostics are reconciled with planner
   diagnostics so users see one authoritative option-support answer.
 - [ ] Validate component source ambiguity per family. Families such as Z-Image
@@ -136,9 +155,9 @@ PyTorch/diffusers and produce a retained image artifact.
   and gateway execution all agree on the same task/artifact-aware execution
   backend decision while preserving `diffusers` display/dependency facts.
 - Planner tests prove unsupported pipeline family, missing component facts,
-  incompatible scheduler, invalid dimensions, unsupported options, unavailable
-  dependency environment, unavailable device, and unacceptable resource
-  estimates fail with diagnostics and no fallback attempt.
+  incompatible denoising scheduler, invalid dimensions, unsupported options,
+  unavailable dependency environment, unavailable device, and unacceptable
+  resource estimates fail with diagnostics and no fallback attempt.
 - Planner tests cover component-role extraction from Pumas facts and reject
   missing or ambiguous family evidence.
 - Planner tests cover generation-default merge order: request value,
@@ -147,6 +166,10 @@ PyTorch/diffusers and produce a retained image artifact.
   expected evidence for insufficient Pumas facts.
 - Family requirement tests cover accepted/rejected options for SD/SDXL, FLUX,
   FLUX.2, Qwen Image, Lumina Image, GLM Image, and Z-Image.
+- Port option tests prove `llm-inference.denoising_scheduler` choices are
+  produced by backend/model/runtime facts, use stable ids rather than display
+  labels, and do not mutate graph data when the current value is absent or
+  stale.
 - Planner tests prove overflow-prone dimensions/counts/resource estimates are
   rejected without allocation or worker calls.
 - Path validation tests prove worker execution rejects model/package paths
@@ -350,6 +373,36 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   decides whether each family accepts, rejects, or explicitly reports ignored
   scheduler overrides, then updates the worker contract and diagnostics
   accordingly.
+- Naming decision: replace the overloaded image-generation `scheduler` option
+  with `denoising_scheduler`. This value refers only to the Diffusers
+  denoising/sampling scheduler selected inside image generation. It must not
+  influence Pantograph workflow scheduling, queue order, runtime placement,
+  device selection, warm runtime reuse, or retry policy.
+- Graph/option-provider decision: `denoising_scheduler` is a first-class
+  optional `llm-inference` image input. The graph may wire a `selection-input`
+  into it, and the valid choices should come from a backend-owned
+  `PortOptionsProvider` for that target port. `selection-input` remains a
+  generic value passthrough; the image-generation planner remains the authority
+  that validates whether the selected value is executable for the selected
+  model family, package facts, runtime, and worker contract.
+- Default decision: an omitted `denoising_scheduler` means use the selected
+  model/pipeline default by explicit planner policy. A provided value must be
+  validated and applied by the worker end to end. If the worker cannot apply
+  it, planning must reject the request rather than accepting and silently
+  ignoring it.
+- Selection/expand-settings boundary: use backend-owned port options for
+  selectable traits that are important, user-facing, fact-dependent, and
+  diagnostics/reproducibility relevant. Keep long-tail model/runtime knobs in
+  schema-driven `expand-settings`. The same provider mechanism may later serve
+  dtype, adapters, tokenizer/chat-template variants, pooling strategies, audio
+  voices, or other selectable traits, but each promoted trait needs its own
+  stable ids, option diagnostics, and planner validation.
+- Frontend anti-pattern to avoid: the current `SelectionInputNode` can
+  auto-write the first/default allowed value into graph data when a target
+  connection changes or the current value is missing/stale. Future
+  `denoising_scheduler` work must not rely on silent frontend mutation for
+  executable defaults. Defaults belong to planner policy, and stale selections
+  must surface as unset/invalid state or typed planner diagnostics.
 
 2026-05-12 worker image-envelope contract slice:
 
@@ -1048,6 +1101,14 @@ Standards compliance gates for every Option 3 slice:
 - Public facade rule: preserve `InferenceGateway` and node-engine public task
   entrypoints while adding planned execution paths; do not restore raw
   `generate_image` or request-only typed image execution.
+- Option-provider rule: backend-owned `PortOptionsProvider` implementations may
+  list valid selectable values for graph ergonomics, but they must not become
+  execution-policy owners. The planner must revalidate selected values against
+  package facts, runtime facts, family rules, and worker support.
+- Graph-default rule: frontend selection helpers must not silently make
+  executable choices by writing first/default option values into graph data for
+  fact-dependent inference traits. Omitted graph options must remain omitted
+  until planner-owned defaults or typed diagnostics are applied.
 - Security/path rule: any path-like model/package/artifact value crossing into
   execution-plan records must already be validated by the existing Pumas/model
   root validation boundary or rejected before worker execution.

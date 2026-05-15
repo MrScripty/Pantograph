@@ -122,6 +122,22 @@ the resulting code simple:
 - Add model-family adapter seams inside the PyTorch/diffusers bridge for
   pipeline families such as SD/SDXL, FLUX, qwen-image, lumina-image,
   glm-image, and z-image, selected by package facts rather than model names.
+- Rename image-generation sampling-scheduler semantics away from the overloaded
+  `scheduler` term. The canonical graph/API field is `denoising_scheduler`,
+  meaning the Diffusers denoising/sampling scheduler, not Pantograph workflow
+  scheduling. Omitted `denoising_scheduler` means the selected model/pipeline
+  default is used by explicit policy; provided values must be validated and
+  executed end to end.
+- Use backend-owned port options for selectable inference traits whose valid
+  values depend on model facts, package facts, runtime capabilities, or backend
+  readiness. Denoising scheduler selection is the first image-generation use
+  case, but the same mechanism may serve other selectable traits such as dtype,
+  adapter selection, tokenizer/chat-template variants, pooling strategies, or
+  audio voices when they are user-facing and fact-dependent.
+- Keep generic long-tail model/runtime parameters behind schema-driven
+  `expand-settings`; promote only important, frequently used,
+  diagnostics-relevant options to first-class graph ports and backend-owned
+  option providers.
 - Use the local reference repos as implementation guidance without copying
   their architecture:
   - Transformers for task/config naming conventions and generation option

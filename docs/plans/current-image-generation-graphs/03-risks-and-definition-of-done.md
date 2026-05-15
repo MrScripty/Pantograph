@@ -45,6 +45,9 @@
 | Frontend becomes the source of truth for available devices | High | Device options render backend-owned capability facts and submit only validated device policy intent. |
 | Pumas facts are insufficient for a model family | High | Reject planning with an explicit missing-facts diagnostic instead of inferring from names or trying generic Diffusers behavior. |
 | Workflow options are unsupported by the selected image family | Medium | Validate options during planning and fail with bounded option diagnostics instead of ignoring or substituting values. |
+| Denoising scheduler is confused with Pantograph scheduling | Medium | Rename the image sampling option to `denoising_scheduler`; keep it as a generation parameter that never controls workflow queueing, runtime placement, device selection, or retry policy. |
+| Frontend option selection silently changes executable behavior | High | Backend-owned port options may present selectable values, but omitted/stale values must remain unset or diagnostic-backed; planner-owned defaults must not be implemented as frontend first-option writes. |
+| Port options become a second execution policy engine | Medium | Use `PortOptionsProvider` only to list selectable values. The image-generation planner must revalidate selected values against model/package/runtime facts, family rules, and worker support before execution. |
 | New planner or diagnostic contracts become stringly typed | High | Parse raw inputs once into validated Rust types and expose structured DTOs/errors. |
 | Async implementation blocks runtime or leaks tasks | High | Keep planning sync, isolate async I/O shells, avoid holding locks across awaits, and add lifecycle ownership for any new task. |
 | Frontend saved-graph inspection drifts from backend facts | Medium | Backend owns graph/diagnostic facts; frontend renders declaratively with no optimistic backend-owned state. |
