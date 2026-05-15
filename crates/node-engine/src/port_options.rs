@@ -26,6 +26,7 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::error::Result;
 use crate::extensions::ExecutorExtensions;
@@ -44,6 +45,92 @@ pub struct PortOption {
     pub metadata: Option<serde_json::Value>,
 }
 
+/// Error returned when a port-option context identifier is invalid.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum PortOptionsContextIdError {
+    /// Context identifiers must not be blank.
+    #[error("port options context id must not be blank")]
+    Blank,
+    /// Context identifiers are bounded to keep interop payloads small.
+    #[error("port options context id must be at most {max} bytes, got {actual}")]
+    TooLong { max: usize, actual: usize },
+    /// Context identifiers must be displayable, single-line boundary values.
+    #[error("port options context id must not contain control characters")]
+    ContainsControlCharacter,
+}
+
+/// Validated identifier carried in provider query context.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct PortOptionsContextId(String);
+
+impl PortOptionsContextId {
+    /// Maximum serialized byte length for a single context identifier.
+    pub const MAX_LEN: usize = 512;
+
+    /// Build a validated context identifier.
+    pub fn new(value: impl Into<String>) -> std::result::Result<Self, PortOptionsContextIdError> {
+        let value = value.into();
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(PortOptionsContextIdError::Blank);
+        }
+        if trimmed.len() > Self::MAX_LEN {
+            return Err(PortOptionsContextIdError::TooLong {
+                max: Self::MAX_LEN,
+                actual: trimmed.len(),
+            });
+        }
+        if trimmed.chars().any(char::is_control) {
+            return Err(PortOptionsContextIdError::ContainsControlCharacter);
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    /// Return the validated identifier string.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl TryFrom<String> for PortOptionsContextId {
+    type Error = PortOptionsContextIdError;
+
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<PortOptionsContextId> for String {
+    fn from(value: PortOptionsContextId) -> Self {
+        value.0
+    }
+}
+
+/// Optional fact context used by model/runtime-dependent option providers.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortOptionsQueryContext {
+    /// Target graph node requesting options.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_node_id: Option<PortOptionsContextId>,
+    /// Canonical task kind for the target port.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_kind: Option<PortOptionsContextId>,
+    /// Stable selected model reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_model_ref: Option<PortOptionsContextId>,
+    /// Package-facts summary/update cursor used for cache invalidation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_facts_summary_cursor: Option<PortOptionsContextId>,
+    /// Optional selected or constrained backend id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_id: Option<PortOptionsContextId>,
+    /// Optional selected or constrained runtime variant id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<PortOptionsContextId>,
+}
+
 /// Query parameters for fetching port options.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,6 +141,9 @@ pub struct PortOptionsQuery {
     pub limit: Option<usize>,
     /// Offset for pagination.
     pub offset: Option<usize>,
+    /// Optional provider context for model/runtime-dependent option lists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<PortOptionsQueryContext>,
 }
 
 /// Result of a port options query.
@@ -136,6 +226,64 @@ mod tests {
         assert!(query.search.is_none());
         assert!(query.limit.is_none());
         assert!(query.offset.is_none());
+        assert!(query.context.is_none());
+    }
+
+    #[test]
+    fn test_port_options_query_context_serializes_stable_refs() {
+        let query = PortOptionsQuery {
+            search: Some("euler".to_string()),
+            limit: Some(10),
+            offset: None,
+            context: Some(PortOptionsQueryContext {
+                target_node_id: Some(PortOptionsContextId::new("node-image-1").unwrap()),
+                task_kind: Some(PortOptionsContextId::new("image_generation").unwrap()),
+                selected_model_ref: Some(
+                    PortOptionsContextId::new("pumas://models/diffusion/tiny").unwrap(),
+                ),
+                package_facts_summary_cursor: Some(
+                    PortOptionsContextId::new("model-library-updates:42").unwrap(),
+                ),
+                backend_id: Some(PortOptionsContextId::new("pytorch").unwrap()),
+                runtime_variant_id: Some(PortOptionsContextId::new("pytorch.cuda").unwrap()),
+            }),
+        };
+
+        let json = serde_json::to_value(&query).unwrap();
+        assert_eq!(json["context"]["targetNodeId"], "node-image-1");
+        assert_eq!(json["context"]["taskKind"], "image_generation");
+        assert_eq!(
+            json["context"]["selectedModelRef"],
+            "pumas://models/diffusion/tiny"
+        );
+        assert_eq!(
+            json["context"]["packageFactsSummaryCursor"],
+            "model-library-updates:42"
+        );
+
+        let round_trip: PortOptionsQuery = serde_json::from_value(json).unwrap();
+        let context = round_trip.context.expect("context should round trip");
+        assert_eq!(
+            context
+                .selected_model_ref
+                .as_ref()
+                .map(PortOptionsContextId::as_str),
+            Some("pumas://models/diffusion/tiny")
+        );
+    }
+
+    #[test]
+    fn test_port_options_query_context_rejects_blank_ids() {
+        let error = serde_json::from_value::<PortOptionsQuery>(serde_json::json!({
+            "context": {
+                "targetNodeId": "  "
+            }
+        }))
+        .expect_err("blank context identifiers should fail deserialization");
+
+        assert!(error
+            .to_string()
+            .contains("port options context id must not be blank"));
     }
 
     #[test]

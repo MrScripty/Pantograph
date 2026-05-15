@@ -749,6 +749,7 @@ pub async fn query_port_options(
     search: Option<String>,
     limit: Option<usize>,
     offset: Option<usize>,
+    context: Option<node_engine::PortOptionsQueryContext>,
 ) -> Result<node_engine::PortOptionsResult, String> {
     super::workflow_port_query_commands::query_port_options(
         registry,
@@ -759,6 +760,7 @@ pub async fn query_port_options(
         search,
         limit,
         offset,
+        context,
     )
     .await
 }

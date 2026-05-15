@@ -3742,6 +3742,50 @@ Worker rules:
   these gates, likely violations would be cross-binding DTO drift, stringly
   typed option ids, stale frontend async writes, inaccessible embedded selects,
   and accidental frontend ownership of backend-derived executable choices.
+- 2026-05-15: Completed the port-option context contract foundation slice.
+  Smallest useful vertical slice: add append-only `PortOptionsQuery` context
+  with validated stable reference ids, thread it through Tauri
+  `query_port_options`, preserve UniFFI/Rustler JSON query parsing, mirror the
+  context DTO in frontend TypeScript, and document that provider context must
+  not carry full Pumas facts, local paths, scheduler decisions, graph payloads,
+  or worker envelopes. Allowed write set:
+  `crates/node-engine/src/port_options.rs`, `crates/node-engine/src/lib.rs`,
+  `crates/node-engine/src/README.md`, `src-tauri/src/workflow/commands.rs`,
+  `src-tauri/src/workflow/workflow_port_query_commands.rs`,
+  `crates/pantograph-uniffi/**README.md`,
+  `crates/pantograph-uniffi/src/runtime_tests.rs`,
+  `crates/pantograph-rustler/src/README.md`,
+  `src/services/workflow/types.ts`,
+  `src/services/workflow/pumaModelOptionsCache.ts`,
+  `src/services/workflow/README.md`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because it only adds
+  validated query-context transport for future fact-aware providers. It does
+  not add denoising scheduler options, infer runtime/model facts, select a
+  backend, mutate graph defaults, change execution behavior, add fallback
+  scheduler values, pass Pumas package facts through frontend state, or alter
+  worker envelopes.
+- Verification passed: `cargo test -p node-engine port_options`, `cargo test
+  -p pantograph-uniffi
+  direct_runtime_puma_lib_options_use_selector_access_from_pumas_api`, `cargo
+  check -p pantograph_rustler`, `npm run typecheck`, `node
+  --experimental-strip-types --test
+  src/services/workflow/pumaModelOptionsCache.test.ts`, `cargo fmt -p
+  node-engine -p pantograph-uniffi -p pantograph_rustler -p pantograph --
+  --check`, and `git diff --check`.
+- Verification deviation/discovered issue: `cargo check -p pantograph` still
+  fails in pre-existing, unrelated Tauri code before this slice's command
+  signature can be fully validated. The errors are the old `String` device
+  startup values where `BackendStartupDeviceIntent` is now required in
+  `src-tauri/src/llm/startup.rs`, plus missing `timing_diagnostics` and
+  `warmup_timing_attempt_id` fields in
+  `src-tauri/src/workflow/diagnostics/types.rs`. These are outside the
+  port-option context write set and should be fixed in a separate compile-
+  unblocking slice before relying on full Tauri crate verification.
+- Remaining follow-up: implement the provider-backed `selection-input`
+  behavior, context-keyed frontend option cache, and
+  `llm-inference.denoising_scheduler` provider in later slices. Those slices
+  must keep stable primitive option ids, discard stale async responses, and
+  avoid writing planner defaults into graph data.
 
 ### Traceability Links
 

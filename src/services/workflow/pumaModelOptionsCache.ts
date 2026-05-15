@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { PortOption, PortOptionsResult } from './types';
+import type { PortOption, PortOptionsCommandArgs, PortOptionsResult } from './types';
 
 export interface ModelLibraryUpdateEvent {
   cursor: string;
@@ -125,10 +125,11 @@ async function loadFreshPumasModelOptions(invoker: WorkflowInvoker): Promise<Por
 async function fetchPumasModelOptionsSnapshot(
   invoker: WorkflowInvoker,
 ): Promise<PumasModelOptionsSnapshot> {
-  const response = await invoker<PortOptionsResult>('query_port_options', {
+  const args: PortOptionsCommandArgs = {
     nodeType: 'puma-lib',
     portId: 'model_path',
-  });
+  };
+  const response = await invoker<PortOptionsResult>('query_port_options', args);
   return {
     options: response.options,
     cursor: extractPumasSelectorCursorFromResult(response),

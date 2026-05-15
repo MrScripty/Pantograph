@@ -59,24 +59,27 @@ PyTorch/diffusers and produce a retained image artifact.
   input on canonical `llm-inference`. A connected `selection-input` may provide
   the value, but unset means the selected model/pipeline default by explicit
   policy rather than a fallback.
-- [ ] Extend backend port-option querying with an append-only typed context
+- [x] Extend backend port-option querying with an append-only typed context
   before implementing fact-aware denoising scheduler options. The context must
   carry stable references such as target node id, task kind, selected model
   ref, package-facts summary cursor, and optional backend/runtime constraint;
   it must not push full Pumas package facts, scheduler decisions, worker
   envelopes, graph node payloads, or local filesystem paths through frontend
   state.
-- [ ] Update every port-option interop surface in the same context slice:
+- [x] Update every port-option interop surface in the same context slice:
   `node-engine` contracts/provider tests, Tauri `query_port_options`, UniFFI
   `workflow_graph_query_port_options`, Rustler `node_registry_query_port_options`,
   frontend TypeScript mirrors, and affected README/API notes. Do not add a
   context field in only one binding or rely on untyped JSON passthrough for
   cross-language behavior.
-- [ ] Model provider context and denoising scheduler option ids as validated
-  typed values at Rust boundaries. Public constructors/projection helpers must
-  return structured errors or bounded diagnostics, not `Result<T, String>` or
-  string-matched control flow. Use stable primitive option ids for selected
-  values and reserve display labels/descriptions for presentation only.
+- [x] Model provider context references as validated typed values at Rust
+  boundaries. Public constructors/projection helpers must return structured
+  errors or bounded diagnostics, not `Result<T, String>` or string-matched
+  control flow.
+- [ ] Model denoising scheduler option ids as validated typed values at Rust
+  boundaries when the provider is added. Use stable primitive option ids for
+  selected values and reserve display labels/descriptions for presentation
+  only.
 - [ ] Add backend-owned port options for `llm-inference.denoising_scheduler`
   so graph editors can present valid denoising/sampling schedulers from
   model/package/runtime facts. The frontend must not hardcode the allowed

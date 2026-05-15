@@ -733,7 +733,18 @@ async fn direct_runtime_puma_lib_options_use_selector_access_from_pumas_api() {
         .workflow_graph_query_port_options(
             "puma-lib".to_string(),
             "model_path".to_string(),
-            serde_json::json!({"limit": 10}).to_string(),
+            serde_json::json!({
+                "limit": 10,
+                "context": {
+                    "targetNodeId": "puma-lib-1",
+                    "taskKind": "image_generation",
+                    "selectedModelRef": "pumas://models/llm/imported/uniffi-test-gguf",
+                    "packageFactsSummaryCursor": "model-library-updates:1",
+                    "backendId": "pytorch",
+                    "runtimeVariantId": "pytorch.cpu"
+                }
+            })
+            .to_string(),
         )
         .await
         .expect("puma-lib options should use selector access");

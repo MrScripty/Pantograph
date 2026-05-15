@@ -1637,6 +1637,30 @@ export interface MaskedPrompt {
 
 // Port options query types (matches node-engine PortOption/PortOptionsResult)
 
+/** Stable context references for fact-aware port option providers */
+export interface PortOptionsQueryContext {
+  targetNodeId?: string;
+  taskKind?: string;
+  selectedModelRef?: string;
+  packageFactsSummaryCursor?: string;
+  backendId?: string;
+  runtimeVariantId?: string;
+}
+
+/** Query parameters for backend-owned port options */
+export interface PortOptionsQuery {
+  search?: string;
+  limit?: number;
+  offset?: number;
+  context?: PortOptionsQueryContext;
+}
+
+/** Tauri command arguments for backend-owned port options */
+export interface PortOptionsCommandArgs extends PortOptionsQuery, Record<string, unknown> {
+  nodeType: string;
+  portId: string;
+}
+
 /** A selectable option for a port value */
 export interface PortOption {
   value: unknown;

@@ -252,6 +252,11 @@ missing `events` array as empty rather than a transport failure.
   selector path without owner API, components may reuse the snapshot but must
   not start frontend polling. Other update-feed failures must propagate instead
   of silently serving cached selector rows.
+- Fact-aware port option queries may pass only validated context references
+  such as node id, task kind, selected model ref, package-facts cursor, backend
+  id, or runtime variant id. Frontend services must not place full Pumas facts,
+  local paths, scheduler decisions, worker envelopes, or graph payloads in port
+  option query context.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.

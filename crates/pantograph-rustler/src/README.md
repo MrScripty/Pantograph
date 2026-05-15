@@ -72,6 +72,10 @@ registration, callback transport, and feature-gated adapter calls.
   `lib.rs` keeps only the exported orchestration execution NIF wrappers.
 - Node registry and extension setup behavior stays in `registry_nifs.rs`;
   `lib.rs` keeps only the exported registry/extension NIF wrappers.
+- `node_registry_query_port_options` consumes the shared node-engine
+  `PortOptionsQuery` JSON shape. Optional provider context must stay limited
+  to stable validated references and must not carry full Pumas facts, local
+  paths, scheduler decisions, graph payloads, or worker envelopes.
 - Pumas model-library behavior stays in `pumas_nifs.rs`; `lib.rs` keeps only
   the exported Pumas and related executor-extension NIF wrappers.
 - Executor construction, inference gateway setup, demand, cache, graph

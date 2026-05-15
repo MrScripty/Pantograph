@@ -11,12 +11,14 @@ pub async fn query_port_options(
     search: Option<String>,
     limit: Option<usize>,
     offset: Option<usize>,
+    context: Option<node_engine::PortOptionsQueryContext>,
 ) -> Result<node_engine::PortOptionsResult, String> {
     let ext = extensions.read().await;
     let query = node_engine::PortOptionsQuery {
         search: search.clone(),
         limit,
         offset,
+        context,
     };
     let result = registry
         .query_port_options(&node_type, &port_id, &query, &ext)

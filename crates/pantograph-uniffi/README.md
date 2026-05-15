@@ -107,6 +107,10 @@ uniffi-bindgen-cs target/debug/libpantograph_headless.so \
   selected-model Pumas API access and the explicit selector-access role used by
   `workflow_graph_query_port_options`; host code must not expect raw Pumas API
   injection alone to populate `puma-lib` model selectors.
+- `workflow_graph_query_port_options` accepts the shared node-engine
+  `PortOptionsQuery` JSON shape, including optional validated provider context
+  references. Hosts must pass stable ids/cursors only, not full package facts,
+  local paths, scheduler decisions, or worker envelopes.
 
 ## Binding Support Tiers
 | Tier | Surface | Contract |

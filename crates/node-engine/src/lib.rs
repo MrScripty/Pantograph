@@ -116,7 +116,8 @@ pub use path_validation::resolve_path_within_root;
 
 // Re-export port options types
 pub use port_options::{
-    PortOption, PortOptionsProvider, PortOptionsQuery, PortOptionsResult, PortQueryFn,
+    PortOption, PortOptionsContextId, PortOptionsContextIdError, PortOptionsProvider,
+    PortOptionsQuery, PortOptionsQueryContext, PortOptionsResult, PortQueryFn,
 };
 
 // Re-export ContextKeys helper (only framework type from tasks module)
