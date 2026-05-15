@@ -3806,6 +3806,29 @@ Worker rules:
   stale async response handling at the component/use-site boundary. The cache
   keys prevent stale context reuse, but UI owners must still discard late
   responses when the selected model/runtime context changes during a request.
+- 2026-05-15: Completed the provider-backed selection-input display guardrail
+  slice. Smallest useful vertical slice: add shared selection-input state
+  helpers and update `SelectionInputNode.svelte` so existing static
+  `allowed_values` ports keep their default-adoption behavior, while future
+  provider-backed ports render unset or stale values without writing a default
+  or first option into graph data. Allowed write set:
+  `src/components/nodes/workflow/SelectionInputNode.svelte`,
+  `src/components/nodes/workflow/selectionInputState.ts`,
+  `src/components/nodes/workflow/selectionInputState.test.ts`,
+  `src/components/nodes/workflow/README.md`,
+  `src/services/workflow/types.ts`, `package.json`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because provider-backed
+  selection inputs now remain display-only when no current valid value exists.
+  It does not synthesize denoising scheduler defaults, mutate executable graph
+  data for provider-backed ports, hardcode scheduler choices, infer runtime
+  facts, or call backend providers.
+- Verification passed: `node --experimental-strip-types --test
+  src/components/nodes/workflow/selectionInputState.test.ts`, `npm run
+  typecheck`, `npm run test:frontend`, and `git diff --check`.
+- Remaining follow-up: provider-backed option loading still needs a concrete UI
+  integration with backend `query_port_options` plus stale async response
+  discard at the request owner. This slice only prevents silent graph mutation
+  once a port definition marks an input as provider-backed.
 
 ### Traceability Links
 

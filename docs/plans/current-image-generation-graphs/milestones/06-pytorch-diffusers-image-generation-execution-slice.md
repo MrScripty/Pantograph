@@ -84,7 +84,7 @@ PyTorch/diffusers and produce a retained image artifact.
   so graph editors can present valid denoising/sampling schedulers from
   model/package/runtime facts. The frontend must not hardcode the allowed
   denoising scheduler list.
-- [ ] Wire provider-backed `selection-input` behavior so fact-dependent options
+- [x] Wire provider-backed `selection-input` behavior so fact-dependent options
   are displayed without silently writing executable defaults into graph data.
   Missing or stale selected values should render as unset/stale UI state and
   let the planner apply default policy or return typed diagnostics.

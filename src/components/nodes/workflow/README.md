@@ -36,6 +36,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `NumberInputNode.svelte` | Renders a metadata-driven numeric editor that adopts downstream default values and range constraints. |
 | `PumaLibNode.svelte` | Presents model-library selection and routes model metadata into the correct downstream inference node type. |
 | `primitiveInputMetadata.ts` | Shared helpers that resolve downstream port metadata and normalize primitive editor defaults. |
+| `selectionInputState.ts` | Shared selection-input state helpers, including provider-backed unset/stale presentation and static allowed-values default adoption. |
 | `TextOutputNode.svelte` | Displays terminal text values and streaming text updates from workflow execution. |
 | `AudioInputNode.svelte` | Captures user-selected audio files and writes stable input data into node configuration. |
 | `AudioGenerationNode.svelte` | Shows execution and dependency status for Stable Audio generation nodes. |
@@ -164,6 +165,9 @@ and finality metadata in runtime data while the component reads bytes lazily wit
   definition.
 - `ExpandSettingsNode.svelte` must display the connected override value when one
   is available, otherwise the last runtime passthrough value or schema default.
+- `SelectionInputNode.svelte` may auto-adopt defaults for static
+  `allowed_values` ports, but provider-backed ports must render unset or stale
+  values without writing planner defaults into graph data.
 - `DependencyEnvironmentNode.svelte` must keep dependency override parsing and
   merge semantics aligned with the backend patch contract in
   `dependencyEnvironmentOverrides.ts`.

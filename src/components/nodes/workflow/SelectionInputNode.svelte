@@ -2,6 +2,12 @@
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition, PortDefinition } from '../../../services/workflow/types';
   import { updateNodeData, edges, nodes } from '../../../stores/workflowStore';
+  import {
+    buildSelectionInputState,
+    resolveSelectionAutoUpdate,
+    stringifySelectionValue,
+    type SelectionInputOption,
+  } from './selectionInputState';
 
   interface Props {
     id: string;
@@ -11,11 +17,6 @@
       value?: unknown;
     };
     selected?: boolean;
-  }
-
-  interface SelectionOption {
-    label: string;
-    value: unknown;
   }
 
   let { id, data, selected = false }: Props = $props();
@@ -34,7 +35,7 @@
     return definition.inputs.find((port) => port.id === edge.targetHandle) ?? null;
   }
 
-  function normalizeOption(option: unknown): SelectionOption | null {
+  function normalizeOption(option: unknown): SelectionInputOption | null {
     if (typeof option === 'string' || typeof option === 'number' || typeof option === 'boolean') {
       return { label: String(option), value: option };
     }
@@ -65,41 +66,23 @@
 
     return allowedValues
       .map(normalizeOption)
-      .filter((option): option is SelectionOption => option !== null);
+      .filter((option): option is SelectionInputOption => option !== null);
   });
   let defaultValue = $derived(normalizeDefaultValue(targetPort?.default_value));
   let hasTarget = $derived(Boolean(targetPort));
   let hasOptions = $derived(options.length > 0);
-  let selectedString = $derived.by(() => {
-    if (data.value === null || data.value === undefined) return '';
-    return JSON.stringify(data.value);
-  });
+  let selectionState = $derived(buildSelectionInputState(targetPort, options, data.value));
 
   $effect(() => {
-    if (!hasOptions) {
-      return;
+    const update = resolveSelectionAutoUpdate(targetPort, options, data.value, defaultValue);
+    if (update.shouldUpdate) {
+      updateNodeData(id, { value: update.value ?? null });
     }
-
-    const optionValues = options.map((option) => option.value);
-    const currentValue = data.value;
-    const hasCurrent = optionValues.some((value) => JSON.stringify(value) === JSON.stringify(currentValue));
-
-    if (hasCurrent) {
-      return;
-    }
-
-    const nextValue = optionValues.some(
-      (value) => JSON.stringify(value) === JSON.stringify(defaultValue)
-    )
-      ? defaultValue
-      : options[0]?.value;
-
-    updateNodeData(id, { value: nextValue ?? null });
   });
 
   function handleChange(event: Event) {
     const target = event.currentTarget as HTMLSelectElement | null;
-    const nextValue = options.find((option) => JSON.stringify(option.value) === target?.value)?.value ?? null;
+    const nextValue = options.find((option) => stringifySelectionValue(option.value) === target?.value)?.value ?? null;
     updateNodeData(id, { value: nextValue });
   }
 </script>
@@ -135,11 +118,14 @@
             id={selectId}
             class="nodrag nopan nowheel w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-sm text-neutral-200 focus:outline-none"
             style="--focus-color: {nodeColor}"
-            value={selectedString}
+            value={selectionState.displayValue}
             onchange={handleChange}
           >
-            {#each options as option (JSON.stringify(option.value))}
-              <option value={JSON.stringify(option.value)}>{option.label}</option>
+            {#if selectionState.placeholderLabel}
+              <option value="" disabled>{selectionState.placeholderLabel}</option>
+            {/if}
+            {#each options as option (stringifySelectionValue(option.value))}
+              <option value={stringifySelectionValue(option.value)}>{option.label}</option>
             {/each}
           </select>
         </div>

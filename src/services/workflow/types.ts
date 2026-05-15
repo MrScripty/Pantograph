@@ -64,12 +64,18 @@ export interface InferencePortPayloadContract {
   result_kind?: InferenceExecutionResultKind;
 }
 
+export interface PortOptionsProviderRef {
+  node_type: string;
+  port_id: string;
+}
+
 export interface PortDefinition {
   id: string;
   label: string;
   data_type: PortDataType;
   required: boolean;
   multiple: boolean;
+  options_provider?: PortOptionsProviderRef;
   inference_payloads?: InferencePortPayloadContract[];
   description?: string;
   default_value?: unknown;
