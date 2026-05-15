@@ -161,6 +161,7 @@ pub fn build_runtime_technical_fit_request(
             runtime_capabilities,
             runtime_requirements_resource_estimate(&request.runtime_requirements),
         ),
+        candidate_history_summaries: Vec::new(),
         resource_pressure: project_resource_pressure(
             request.queue_pressure.as_ref(),
             request.runtime_requirements.estimated_peak_vram_mb,
@@ -280,6 +281,12 @@ fn project_history_threshold_state(
     match state {
         RuntimeTechnicalFitHistoryThresholdState::NotEvaluated => {
             WorkflowTechnicalFitHistoryThresholdState::NotEvaluated
+        }
+        RuntimeTechnicalFitHistoryThresholdState::InsufficientSamples => {
+            WorkflowTechnicalFitHistoryThresholdState::InsufficientSamples
+        }
+        RuntimeTechnicalFitHistoryThresholdState::Evaluated => {
+            WorkflowTechnicalFitHistoryThresholdState::Evaluated
         }
     }
 }
@@ -1441,6 +1448,9 @@ fn project_reason_code(
         }
         RuntimeTechnicalFitReasonCode::MissingRuntimeState => {
             WorkflowTechnicalFitReasonCode::MissingRuntimeState
+        }
+        RuntimeTechnicalFitReasonCode::HistoricalPerformance => {
+            WorkflowTechnicalFitReasonCode::HistoricalPerformance
         }
     }
 }

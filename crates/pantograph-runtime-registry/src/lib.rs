@@ -35,9 +35,10 @@ pub use state::{
 };
 pub use technical_fit::{
     select_runtime_technical_fit, RuntimeTechnicalFitCandidate,
-    RuntimeTechnicalFitCandidateSetSummary, RuntimeTechnicalFitCandidateSourceKind,
-    RuntimeTechnicalFitCompatibilityIssue, RuntimeTechnicalFitCompatibilityReport,
-    RuntimeTechnicalFitDecision, RuntimeTechnicalFitDecisionCode, RuntimeTechnicalFitDeviceClass,
+    RuntimeTechnicalFitCandidateHistorySummary, RuntimeTechnicalFitCandidateSetSummary,
+    RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitCompatibilityIssue,
+    RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision,
+    RuntimeTechnicalFitDecisionCode, RuntimeTechnicalFitDeviceClass,
     RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
     RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitDevicePolicy,
     RuntimeTechnicalFitFactor, RuntimeTechnicalFitHistoryThresholdState,

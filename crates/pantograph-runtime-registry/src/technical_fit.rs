@@ -424,6 +424,8 @@ pub struct RuntimeTechnicalFitRequest {
     pub legal_factors: Vec<RuntimeTechnicalFitFactor>,
     #[serde(default)]
     pub candidates: Vec<RuntimeTechnicalFitCandidate>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidate_history_summaries: Vec<RuntimeTechnicalFitCandidateHistorySummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resource_pressure: Option<RuntimeTechnicalFitResourcePressure>,
 }
@@ -459,6 +461,12 @@ impl RuntimeTechnicalFitRequest {
                 .iter()
                 .map(RuntimeTechnicalFitCandidate::normalized)
                 .collect(),
+            candidate_history_summaries: self
+                .candidate_history_summaries
+                .iter()
+                .map(RuntimeTechnicalFitCandidateHistorySummary::normalized)
+                .filter(|summary| !summary.candidate_id.is_empty())
+                .collect(),
             resource_pressure: self.resource_pressure.clone(),
         }
     }
@@ -489,6 +497,7 @@ pub enum RuntimeTechnicalFitReasonCode {
     QueuePressure,
     MissingCandidateData,
     MissingRuntimeState,
+    HistoricalPerformance,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -532,6 +541,63 @@ impl RuntimeTechnicalFitCandidateSetSummary {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeTechnicalFitCandidateHistorySummary {
+    pub candidate_id: String,
+    #[serde(default)]
+    pub sample_count: u32,
+    #[serde(default)]
+    pub min_sample_count: u32,
+    #[serde(default)]
+    pub threshold_met: bool,
+    #[serde(default)]
+    pub completed_count: u32,
+    #[serde(default)]
+    pub failed_count: u32,
+    #[serde(default)]
+    pub cancelled_count: u32,
+    #[serde(default)]
+    pub duration_sample_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub average_duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub median_duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typical_min_duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typical_max_duration_ms: Option<u64>,
+    #[serde(default)]
+    pub queue_wait_sample_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub average_queue_wait_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub median_queue_wait_ms: Option<u64>,
+}
+
+impl RuntimeTechnicalFitCandidateHistorySummary {
+    pub fn normalized(&self) -> Self {
+        Self {
+            candidate_id: normalize_trimmed_string(Some(self.candidate_id.as_str()))
+                .unwrap_or_default(),
+            sample_count: self.sample_count,
+            min_sample_count: self.min_sample_count,
+            threshold_met: self.threshold_met,
+            completed_count: self.completed_count,
+            failed_count: self.failed_count,
+            cancelled_count: self.cancelled_count,
+            duration_sample_count: self.duration_sample_count,
+            average_duration_ms: self.average_duration_ms,
+            median_duration_ms: self.median_duration_ms,
+            typical_min_duration_ms: self.typical_min_duration_ms,
+            typical_max_duration_ms: self.typical_max_duration_ms,
+            queue_wait_sample_count: self.queue_wait_sample_count,
+            average_queue_wait_ms: self.average_queue_wait_ms,
+            median_queue_wait_ms: self.median_queue_wait_ms,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeTechnicalFitPolicyPhase {
@@ -548,6 +614,8 @@ pub enum RuntimeTechnicalFitDecisionCode {
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeTechnicalFitHistoryThresholdState {
     NotEvaluated,
+    InsufficientSamples,
+    Evaluated,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

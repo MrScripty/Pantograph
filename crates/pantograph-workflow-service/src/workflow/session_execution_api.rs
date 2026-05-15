@@ -2130,6 +2130,12 @@ fn scheduler_selection_history_threshold_state(
         WorkflowTechnicalFitHistoryThresholdState::NotEvaluated => {
             SchedulerSelectionHistoryThresholdState::NotEvaluated
         }
+        WorkflowTechnicalFitHistoryThresholdState::InsufficientSamples => {
+            SchedulerSelectionHistoryThresholdState::InsufficientSamples
+        }
+        WorkflowTechnicalFitHistoryThresholdState::Evaluated => {
+            SchedulerSelectionHistoryThresholdState::Evaluated
+        }
     }
 }
 

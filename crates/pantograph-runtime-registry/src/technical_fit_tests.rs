@@ -39,6 +39,54 @@ fn runtime_snapshot(
     }
 }
 
+fn runtime_capability_candidate(candidate_id: &str) -> RuntimeTechnicalFitCandidate {
+    RuntimeTechnicalFitCandidate {
+        candidate_id: candidate_id.to_string(),
+        runtime_id: Some(candidate_id.to_string()),
+        backend_key: Some("llama_cpp".to_string()),
+        model_id: None,
+        runtime_variant_id: None,
+        device_class: None,
+        selected_device_id: None,
+        resource_estimate: None,
+        observed_throughput_hint: None,
+        device_diagnostics: Vec::new(),
+        source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
+        context_window_tokens: Some(8192),
+        residency_state: None,
+        warmup_state: None,
+        supports_runtime_requirements: true,
+        compatibility_report: None,
+        compatibility_issue_count: 0,
+        compatibility_issues: Vec::new(),
+    }
+}
+
+fn candidate_history_summary(
+    candidate_id: &str,
+    threshold_met: bool,
+    average_duration_ms: Option<u64>,
+) -> RuntimeTechnicalFitCandidateHistorySummary {
+    let sample_count = if threshold_met { 5 } else { 4 };
+    RuntimeTechnicalFitCandidateHistorySummary {
+        candidate_id: candidate_id.to_string(),
+        sample_count,
+        min_sample_count: 5,
+        threshold_met,
+        completed_count: sample_count,
+        failed_count: 0,
+        cancelled_count: 0,
+        duration_sample_count: sample_count,
+        average_duration_ms,
+        median_duration_ms: average_duration_ms,
+        typical_min_duration_ms: average_duration_ms,
+        typical_max_duration_ms: average_duration_ms,
+        queue_wait_sample_count: sample_count,
+        average_queue_wait_ms: Some(10),
+        median_queue_wait_ms: Some(10),
+    }
+}
+
 #[test]
 fn runtime_capability_source_kind_uses_facts_wire_value() {
     let decoded = deserialize_source_kind("runtime_capability_facts")
@@ -130,6 +178,7 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
                 path: Some(" model.gguf ".to_string()),
             }],
         }],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: Some(RuntimeTechnicalFitResourcePressure {
             queued_run_count: Some(2),
             loaded_runtime_count: Some(1),
@@ -244,6 +293,7 @@ fn runtime_selection_input_requires_normalized_request() {
         device_policy: None,
         legal_factors: Vec::new(),
         candidates: Vec::new(),
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     };
 
@@ -501,6 +551,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 compatibility_issues: Vec::new(),
             },
         ],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -588,6 +639,7 @@ fn selector_rejects_ineligible_explicit_backend_override_without_selection() {
                 path: None,
             }],
         }],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -678,6 +730,7 @@ fn selector_honors_explicit_runtime_variant_override() {
                 compatibility_issues: Vec::new(),
             },
         ],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -736,6 +789,7 @@ fn selector_rejects_unmatched_runtime_variant_override_without_synthetic_candida
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),
         }],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -802,6 +856,7 @@ fn selector_rejects_unavailable_explicit_device_without_cpu_fallback() {
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),
         }],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -886,6 +941,7 @@ fn selector_honors_explicit_device_when_candidate_facts_match() {
                 compatibility_issues: Vec::new(),
             },
         ],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -942,6 +998,7 @@ fn selector_rejects_unmatched_override_without_synthetic_candidate() {
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),
         }],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -1037,6 +1094,7 @@ fn selector_uses_controlled_exploration_for_equal_ranked_auto_candidates() {
                 compatibility_issues: Vec::new(),
             },
         ],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -1094,6 +1152,106 @@ fn selector_uses_controlled_exploration_for_equal_ranked_auto_candidates() {
 }
 
 #[test]
+fn selector_uses_history_when_all_eligible_candidates_meet_threshold() {
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: RuntimeRegistrySnapshot {
+            generated_at_ms: 123,
+            runtimes: vec![
+                runtime_snapshot("a-slow", vec!["llama_cpp"], RuntimeRegistryStatus::Ready, 0),
+                runtime_snapshot("z-fast", vec!["llama_cpp"], RuntimeRegistryStatus::Ready, 0),
+            ],
+            reservations: Vec::new(),
+        },
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["llama_cpp".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![
+            runtime_capability_candidate("a-slow"),
+            runtime_capability_candidate("z-fast"),
+        ],
+        candidate_history_summaries: vec![
+            candidate_history_summary("a-slow", true, Some(500)),
+            candidate_history_summary("z-fast", true, Some(50)),
+        ],
+        resource_pressure: None,
+    });
+
+    assert_eq!(decision.selected_candidate_id.as_deref(), Some("z-fast"));
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::HistoricalPerformance
+            && reason.candidate_id.as_deref() == Some("z-fast")
+    }));
+
+    let selection_policy_trace = decision
+        .selection_policy_trace
+        .as_ref()
+        .expect("automatic selection should record its policy trace");
+    assert_eq!(
+        selection_policy_trace.history_threshold_state,
+        Some(RuntimeTechnicalFitHistoryThresholdState::Evaluated)
+    );
+    assert_eq!(
+        selection_policy_trace.ranking_reason.as_deref(),
+        Some("history_backed_candidate_priority")
+    );
+    assert_eq!(selection_policy_trace.exploration_reason, None);
+}
+
+#[test]
+fn selector_does_not_use_history_until_every_eligible_candidate_meets_threshold() {
+    let mut loaded_candidate = runtime_capability_candidate("a-loaded");
+    loaded_candidate.residency_state = Some(RuntimeTechnicalFitResidencyState::Loaded);
+    let mut fast_candidate = runtime_capability_candidate("z-fast");
+    fast_candidate.residency_state = Some(RuntimeTechnicalFitResidencyState::Unloaded);
+
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: RuntimeRegistrySnapshot {
+            generated_at_ms: 123,
+            runtimes: Vec::new(),
+            reservations: Vec::new(),
+        },
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["llama_cpp".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![loaded_candidate, fast_candidate],
+        candidate_history_summaries: vec![
+            candidate_history_summary("a-loaded", false, Some(500)),
+            candidate_history_summary("z-fast", true, Some(50)),
+        ],
+        resource_pressure: None,
+    });
+
+    assert_eq!(decision.selected_candidate_id.as_deref(), Some("a-loaded"));
+    assert!(!decision
+        .reasons
+        .iter()
+        .any(|reason| reason.code == RuntimeTechnicalFitReasonCode::HistoricalPerformance));
+
+    let selection_policy_trace = decision
+        .selection_policy_trace
+        .as_ref()
+        .expect("automatic selection should record its policy trace");
+    assert_eq!(
+        selection_policy_trace.history_threshold_state,
+        Some(RuntimeTechnicalFitHistoryThresholdState::InsufficientSamples)
+    );
+    assert_eq!(
+        selection_policy_trace.ranking_reason.as_deref(),
+        Some("candidate_priority")
+    );
+}
+
+#[test]
 fn selector_rejects_when_required_context_is_missing() {
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: empty_snapshot(),
@@ -1125,6 +1283,7 @@ fn selector_rejects_when_required_context_is_missing() {
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),
         }],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -1211,6 +1370,7 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
                 compatibility_issues: Vec::new(),
             },
         ],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -1279,6 +1439,7 @@ fn selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid() {
             compatibility_issue_count: 0,
             compatibility_issues: Vec::new(),
         }],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: None,
     });
 
@@ -1376,6 +1537,7 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 compatibility_issues: Vec::new(),
             },
         ],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: Some(RuntimeTechnicalFitResourcePressure {
             queued_run_count: Some(4),
             loaded_runtime_count: Some(2),
@@ -1466,6 +1628,7 @@ fn selector_rejects_unrankable_headroom_under_queue_pressure() {
                 compatibility_issues: Vec::new(),
             },
         ],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: Some(RuntimeTechnicalFitResourcePressure {
             queued_run_count: Some(4),
             loaded_runtime_count: Some(2),
@@ -1573,6 +1736,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 compatibility_issues: Vec::new(),
             },
         ],
+        candidate_history_summaries: Vec::new(),
         resource_pressure: Some(RuntimeTechnicalFitResourcePressure {
             queued_run_count: Some(0),
             loaded_runtime_count: Some(2),

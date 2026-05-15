@@ -4322,6 +4322,43 @@ typed diagnostic and the canonical design is fixed.
     implement the five-run threshold/history-backed ranking algorithm with
     controlled exploration for candidates whose exact key has insufficient
     history.
+- 2026-05-14 slice: pure policy five-run history threshold.
+  - Smallest useful vertical slice: add request-provided
+    `RuntimeTechnicalFitCandidateHistorySummary` evidence to the pure
+    runtime-registry selector and enable history-backed candidate ordering only
+    when every eligible candidate has an exact-key summary whose threshold is
+    met.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `src/services/workflow/types.ts`, and this plan directory.
+  - No-fallback/no-legacy confirmation: the policy consumes only summaries
+    supplied in normalized request input. It does not query diagnostics-ledger,
+    Pumas, graph internals, frontend state, or runtime loaders; if any eligible
+    candidate lacks threshold-met history, historical ranking is disabled and
+    the trace records `insufficient_samples` instead of broadening to another
+    key.
+  - Verification passed:
+    `cargo test -p pantograph-runtime-registry technical_fit`,
+    `cargo test -p pantograph-runtime-registry`,
+    `cargo test -p pantograph-embedded-runtime technical_fit`,
+    `cargo test -p pantograph-workflow-service technical_fit`,
+    `cargo test -p pantograph-diagnostics-ledger scheduler_run_admitted`,
+    `npm run typecheck`, `cargo fmt --package pantograph-runtime-registry
+    --package pantograph-embedded-runtime --package pantograph-workflow-service
+    --package pantograph-diagnostics-ledger`, and `git diff --check`.
+  - Remaining follow-up: the async orchestration shell still needs to gather
+    exact-key `RuntimeSelectionHistorySummary` records from
+    diagnostics-ledger, project them into
+    `RuntimeTechnicalFitCandidateHistorySummary` by candidate id, and preserve
+    controlled exploration until every valid candidate for the workflow/task
+    key has threshold-met history.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract

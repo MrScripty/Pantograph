@@ -833,7 +833,8 @@ export type WorkflowTechnicalFitReasonCode =
   | 'budget_pressure'
   | 'queue_pressure'
   | 'missing_candidate_data'
-  | 'missing_runtime_state';
+  | 'missing_runtime_state'
+  | 'historical_performance';
 
 export interface WorkflowTechnicalFitReason {
   code: WorkflowTechnicalFitReasonCode;
@@ -851,7 +852,10 @@ export type WorkflowTechnicalFitPolicyPhase = 'candidate_ranking';
 
 export type WorkflowTechnicalFitDecisionCode = 'selected_candidate';
 
-export type WorkflowTechnicalFitHistoryThresholdState = 'not_evaluated';
+export type WorkflowTechnicalFitHistoryThresholdState =
+  | 'not_evaluated'
+  | 'insufficient_samples'
+  | 'evaluated';
 
 export interface WorkflowTechnicalFitSelectionPolicyTrace {
   policy_version: number;

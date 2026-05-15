@@ -481,6 +481,12 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
     orchestration/policy slice that gathers exact-key summaries outside the
     pure policy module and applies the five-run threshold without broadening
     history.
+  - 2026-05-14 progress: the pure runtime-selection policy now accepts
+    request-provided per-candidate history summaries and applies history-backed
+    ranking only when every eligible candidate has threshold-met exact-key
+    history. The remaining boundary is async-shell summary gathering and
+    candidate-id projection; the pure policy still has no diagnostics-ledger
+    dependency.
 - The bounded candidate cap belongs to candidate synthesis and must be tested
   before policy receives candidate input. The policy module receives an already
   bounded, normalized candidate set; it must not silently truncate candidates

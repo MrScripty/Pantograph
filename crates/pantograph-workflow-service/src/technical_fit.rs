@@ -311,6 +311,7 @@ pub enum WorkflowTechnicalFitReasonCode {
     QueuePressure,
     MissingCandidateData,
     MissingRuntimeState,
+    HistoricalPerformance,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -370,6 +371,8 @@ pub enum WorkflowTechnicalFitDecisionCode {
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowTechnicalFitHistoryThresholdState {
     NotEvaluated,
+    InsufficientSamples,
+    Evaluated,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

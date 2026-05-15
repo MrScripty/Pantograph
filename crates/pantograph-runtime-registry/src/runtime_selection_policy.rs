@@ -5,15 +5,15 @@ use crate::state::RuntimeRegistryStatus;
 use crate::technical_fit::{
     compare_candidate_ids, decision_from_candidate_with_trace,
     explicit_device_unavailable_diagnostics, unselected_decision_with_device_diagnostics,
-    RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateSetSummary,
-    RuntimeTechnicalFitDecision, RuntimeTechnicalFitDecisionCode,
-    RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
-    RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitDevicePolicy,
-    RuntimeTechnicalFitFactor, RuntimeTechnicalFitHistoryThresholdState,
-    RuntimeTechnicalFitPolicyPhase, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
-    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
-    RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitSelectionPolicyTrace,
-    RuntimeTechnicalFitWarmupState,
+    RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateHistorySummary,
+    RuntimeTechnicalFitCandidateSetSummary, RuntimeTechnicalFitDecision,
+    RuntimeTechnicalFitDecisionCode, RuntimeTechnicalFitDeviceDiagnostic,
+    RuntimeTechnicalFitDeviceDiagnosticCode, RuntimeTechnicalFitDeviceDiagnosticSeverity,
+    RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitHistoryThresholdState, RuntimeTechnicalFitPolicyPhase,
+    RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
+    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitSelectionMode,
+    RuntimeTechnicalFitSelectionPolicyTrace, RuntimeTechnicalFitWarmupState,
 };
 
 const MAX_HEADROOM_RANKABLE_ACTIVE_RESERVATIONS: usize = u16::MAX as usize;
@@ -124,14 +124,26 @@ pub(crate) fn select_runtime_technical_fit_automatically(
         }
     }
 
-    eligible_candidates.sort_by(|left, right| compare_candidates(left, right, normalized));
+    let history_threshold_state = history_threshold_state(normalized, &eligible_candidates);
+    let history_ranking_enabled =
+        history_threshold_state == RuntimeTechnicalFitHistoryThresholdState::Evaluated;
+
+    eligible_candidates.sort_by(|left, right| {
+        compare_candidates(left, right, normalized, history_ranking_enabled)
+    });
 
     if let Some(selected_candidate) = eligible_candidates.first().copied() {
         let tied_candidates = eligible_candidates
             .iter()
             .copied()
             .filter(|candidate| {
-                compare_candidate_priority(selected_candidate, candidate, normalized).is_eq()
+                compare_candidate_priority(
+                    selected_candidate,
+                    candidate,
+                    normalized,
+                    history_ranking_enabled,
+                )
+                .is_eq()
             })
             .collect::<Vec<_>>();
         let (selected_candidate, controlled_exploration_seed_basis) = if tied_candidates.len() > 1 {
@@ -148,6 +160,8 @@ pub(crate) fn select_runtime_technical_fit_automatically(
             &eligible_candidates,
             selected_candidate,
             controlled_exploration_seed_basis.as_deref(),
+            history_threshold_state,
+            history_ranking_enabled,
         ) {
             Ok(trace) => trace,
             Err(diagnostic) => {
@@ -217,6 +231,13 @@ pub(crate) fn select_runtime_technical_fit_automatically(
             ));
         }
 
+        if history_ranking_enabled {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::HistoricalPerformance,
+                Some(selected_candidate.candidate_id.as_str()),
+            ));
+        }
+
         return RuntimeSelectionDecision::new(decision_from_candidate_with_trace(
             RuntimeTechnicalFitSelectionMode::Automatic,
             selected_candidate,
@@ -259,15 +280,24 @@ fn automatic_selection_policy_trace(
     eligible_candidates: &[&RuntimeTechnicalFitCandidate],
     selected_candidate: &RuntimeTechnicalFitCandidate,
     controlled_exploration_seed_basis: Option<&str>,
+    history_threshold_state: RuntimeTechnicalFitHistoryThresholdState,
+    history_ranking_enabled: bool,
 ) -> Result<RuntimeTechnicalFitSelectionPolicyTrace, RuntimeTechnicalFitDeviceDiagnostic> {
     let candidate_set_summary = automatic_candidate_set_summary(request, eligible_candidates)?;
     Ok(RuntimeTechnicalFitSelectionPolicyTrace {
         policy_version: TECHNICAL_FIT_SELECTION_POLICY_VERSION,
         policy_phase: Some(RuntimeTechnicalFitPolicyPhase::CandidateRanking),
         decision_code: Some(RuntimeTechnicalFitDecisionCode::SelectedCandidate),
-        history_threshold_state: Some(RuntimeTechnicalFitHistoryThresholdState::NotEvaluated),
+        history_threshold_state: Some(history_threshold_state),
         candidate_set_summary: Some(candidate_set_summary),
-        ranking_reason: Some("candidate_priority".to_string()),
+        ranking_reason: Some(
+            if history_ranking_enabled {
+                "history_backed_candidate_priority"
+            } else {
+                "candidate_priority"
+            }
+            .to_string(),
+        ),
         exploration_reason: controlled_exploration_seed_basis
             .map(|_| "equal_priority_seeded_choice".to_string()),
         seed_basis: controlled_exploration_seed_basis
@@ -421,8 +451,9 @@ fn compare_candidates(
     left: &RuntimeTechnicalFitCandidate,
     right: &RuntimeTechnicalFitCandidate,
     request: &RuntimeTechnicalFitRequest,
+    history_ranking_enabled: bool,
 ) -> Ordering {
-    compare_candidate_priority(left, right, request)
+    compare_candidate_priority(left, right, request, history_ranking_enabled)
         .then_with(|| compare_candidate_ids(left, right))
 }
 
@@ -430,6 +461,7 @@ fn compare_candidate_priority(
     left: &RuntimeTechnicalFitCandidate,
     right: &RuntimeTechnicalFitCandidate,
     request: &RuntimeTechnicalFitRequest,
+    history_ranking_enabled: bool,
 ) -> Ordering {
     candidate_residency_rank(left, request)
         .cmp(&candidate_residency_rank(right, request))
@@ -449,6 +481,97 @@ fn compare_candidate_priority(
                 .cmp(&candidate_budget_pressure_rank(right, request))
                 .reverse()
         })
+        .then_with(|| {
+            if history_ranking_enabled {
+                compare_candidate_history_priority(left, right, request)
+            } else {
+                Ordering::Equal
+            }
+        })
+}
+
+fn history_threshold_state(
+    request: &RuntimeTechnicalFitRequest,
+    eligible_candidates: &[&RuntimeTechnicalFitCandidate],
+) -> RuntimeTechnicalFitHistoryThresholdState {
+    if request.candidate_history_summaries.is_empty() {
+        return RuntimeTechnicalFitHistoryThresholdState::NotEvaluated;
+    }
+    if eligible_candidates.is_empty() {
+        return RuntimeTechnicalFitHistoryThresholdState::NotEvaluated;
+    }
+    if eligible_candidates.iter().all(|candidate| {
+        candidate_history_summary(candidate, request).is_some_and(|summary| summary.threshold_met)
+    }) {
+        RuntimeTechnicalFitHistoryThresholdState::Evaluated
+    } else {
+        RuntimeTechnicalFitHistoryThresholdState::InsufficientSamples
+    }
+}
+
+fn compare_candidate_history_priority(
+    left: &RuntimeTechnicalFitCandidate,
+    right: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> Ordering {
+    let Some(left_history) = candidate_history_summary(left, request) else {
+        return Ordering::Equal;
+    };
+    let Some(right_history) = candidate_history_summary(right, request) else {
+        return Ordering::Equal;
+    };
+
+    compare_failure_rate(left_history, right_history)
+        .then_with(|| {
+            compare_lower_optional_u64(
+                left_history.average_duration_ms,
+                right_history.average_duration_ms,
+            )
+        })
+        .then_with(|| {
+            compare_lower_optional_u64(
+                left_history.median_duration_ms,
+                right_history.median_duration_ms,
+            )
+        })
+        .then_with(|| {
+            compare_lower_optional_u64(
+                left_history.average_queue_wait_ms,
+                right_history.average_queue_wait_ms,
+            )
+        })
+}
+
+fn candidate_history_summary<'a>(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &'a RuntimeTechnicalFitRequest,
+) -> Option<&'a RuntimeTechnicalFitCandidateHistorySummary> {
+    request
+        .candidate_history_summaries
+        .iter()
+        .find(|summary| summary.candidate_id == candidate.candidate_id)
+}
+
+fn compare_failure_rate(
+    left: &RuntimeTechnicalFitCandidateHistorySummary,
+    right: &RuntimeTechnicalFitCandidateHistorySummary,
+) -> Ordering {
+    let left_terminal_failures = u128::from(left.failed_count) + u128::from(left.cancelled_count);
+    let right_terminal_failures =
+        u128::from(right.failed_count) + u128::from(right.cancelled_count);
+    let left_sample_count = u128::from(left.sample_count.max(1));
+    let right_sample_count = u128::from(right.sample_count.max(1));
+    (left_terminal_failures * right_sample_count)
+        .cmp(&(right_terminal_failures * left_sample_count))
+}
+
+fn compare_lower_optional_u64(left: Option<u64>, right: Option<u64>) -> Ordering {
+    match (left, right) {
+        (Some(left), Some(right)) => left.cmp(&right),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
 }
 
 pub(crate) fn candidate_is_eligible(

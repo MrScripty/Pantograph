@@ -544,6 +544,8 @@ pub enum SchedulerSelectionDecisionCode {
 #[serde(rename_all = "snake_case")]
 pub enum SchedulerSelectionHistoryThresholdState {
     NotEvaluated,
+    InsufficientSamples,
+    Evaluated,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
