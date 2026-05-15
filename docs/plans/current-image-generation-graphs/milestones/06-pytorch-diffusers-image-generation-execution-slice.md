@@ -48,6 +48,10 @@ PyTorch/diffusers and produce a retained image artifact.
   inference planner DTOs, worker envelopes, Python worker inputs, diagnostics,
   and fixtures. Keep any compatibility handling explicit and temporary; do not
   let the overloaded `scheduler` name remain as the canonical graph/API field.
+  Diffusers/Pumas package component facts may still use factual component-role
+  names such as `scheduler` and paths such as `scheduler/scheduler_config.json`;
+  the rename applies to Pantograph graph/API execution intent, not source
+  package evidence.
 - [ ] Ensure `ImageGenerationRequest` is populated from canonical
   `llm-inference` inputs: prompt, negative prompt, width, height, steps,
   guidance scale, seed, optional `denoising_scheduler`, and image count.
@@ -55,21 +59,46 @@ PyTorch/diffusers and produce a retained image artifact.
   input on canonical `llm-inference`. A connected `selection-input` may provide
   the value, but unset means the selected model/pipeline default by explicit
   policy rather than a fallback.
+- [ ] Extend backend port-option querying with an append-only typed context
+  before implementing fact-aware denoising scheduler options. The context must
+  carry stable references such as target node id, task kind, selected model
+  ref, package-facts summary cursor, and optional backend/runtime constraint;
+  it must not push full Pumas package facts, scheduler decisions, worker
+  envelopes, graph node payloads, or local filesystem paths through frontend
+  state.
 - [ ] Add backend-owned port options for `llm-inference.denoising_scheduler`
   so graph editors can present valid denoising/sampling schedulers from
   model/package/runtime facts. The frontend must not hardcode the allowed
   denoising scheduler list.
+- [ ] Wire provider-backed `selection-input` behavior so fact-dependent options
+  are displayed without silently writing executable defaults into graph data.
+  Missing or stale selected values should render as unset/stale UI state and
+  let the planner apply default policy or return typed diagnostics.
+- [ ] Add context-keyed cache/invalidation for provider-backed option queries
+  before reusing backend port options for model/runtime-dependent traits. The
+  cache key must include node type, port id, provider context, and package-facts
+  cursor/runtime facts; the current Pumas model-list cache is not sufficient
+  for denoising scheduler choices.
 - [ ] Keep `PortOptionsProvider` generic for other selectable inference traits
   whose valid values are backend/model/runtime dependent. Promote a trait to a
   first-class port/provider only when it is user-facing, fact-dependent, and
   diagnostics/reproducibility relevant; keep long-tail model knobs in
   `expand-settings`.
+- [ ] Keep `expand-settings` out of the canonical denoising scheduler path.
+  It may continue to expose long-tail model/runtime knobs, but first-class
+  image traits with reproducibility or diagnostic impact must use typed ports,
+  backend validation, stable option ids, and planner diagnostics instead of
+  display-label-to-value normalization.
 - [ ] Implement `PyTorchBackend::generate_image` using the existing Python
   worker diffusion load/generate path and typed worker request/response
   envelopes.
 - [ ] Change the Python worker image path to consume the validated Rust plan
   fields. It must not decide pipeline family, scheduler, custom-code trust, or
   device fallback on its own.
+- [ ] Ensure the Python worker applies the validated `denoising_scheduler`
+  decision or rejects unsupported explicit scheduler changes before returning
+  success. Worker metadata must not report a scheduler value that was accepted
+  by Rust but ignored by the worker.
 - [ ] Version or explicitly shape-check the Python worker image-generation
   envelope so Rust rejects unknown, missing, or incompatible worker request and
   response fields before trusting them.
@@ -170,6 +199,15 @@ PyTorch/diffusers and produce a retained image artifact.
   produced by backend/model/runtime facts, use stable ids rather than display
   labels, and do not mutate graph data when the current value is absent or
   stale.
+- Port option context tests prove fact-aware option queries require typed
+  context, reject insufficient context with diagnostics, and do not transport
+  full Pumas package facts, local paths, graph payloads, worker envelopes, or
+  scheduler decisions through frontend state.
+- Selection-input tests prove provider-backed options render unset/stale values
+  without auto-selecting a default or first option into graph data.
+- Provider cache tests prove denoising scheduler options are keyed by node type,
+  port id, selected model/package-facts cursor, and backend/runtime context so
+  model changes cannot reuse stale option lists.
 - Planner tests prove overflow-prone dimensions/counts/resource estimates are
   rejected without allocation or worker calls.
 - Path validation tests prove worker execution rejects model/package paths

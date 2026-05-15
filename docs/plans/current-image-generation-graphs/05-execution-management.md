@@ -3695,8 +3695,33 @@ Worker rules:
   inference planner_rejects_non_finite_guidance_scale --lib`, `cargo check -p
   inference`, `cargo fmt -p inference`, and `git diff --check`. Remaining
   follow-up: family-specific option-support tables still need to classify
-  guidance scale, negative prompt, image count, scheduler override, dtype, and
+  guidance scale, negative prompt, image count, denoising scheduler, dtype, and
   dimensions as accepted, ignored, or rejected per family.
+- 2026-05-15 plan update after selection/port-option blast-radius review:
+  inspected `PortOptionsProvider`, `selection-input`, `expand-settings`,
+  graph canonicalization, Pumas model-option caching, node-engine image request
+  construction, inference image DTOs, and the Python worker image path. The
+  review found that backend port options are the correct owner for
+  fact-dependent denoising scheduler choices, but the current query DTO only
+  carries search/pagination and cannot express selected model/package/runtime
+  context. Milestone 6 now requires an append-only typed port-option context
+  before implementing `llm-inference.denoising_scheduler` options.
+- Plan refinements from that review: provider-backed `selection-input` must
+  display unset/stale choices without auto-writing defaults into graph data;
+  provider option caches must be keyed by node type, port id, selected
+  model/package-facts cursor, and backend/runtime context; `expand-settings`
+  remains the long-tail knob surface and must not become the canonical path for
+  reproducibility-relevant image traits; the `scheduler` rename applies to
+  Pantograph graph/API execution intent while factual Diffusers/Pumas component
+  roles and paths may continue to use `scheduler`; and the Python worker must
+  apply or reject a validated `denoising_scheduler` value rather than reporting
+  metadata for a value it ignored.
+- Standards conclusion for the plan update: the added gates preserve backend-
+  owned data, layered dependency direction, interop DTO synchronization,
+  test-first vertical slices, and no-fallback/no-legacy behavior. They also
+  prevent Pumas package facts, scheduler decisions, local paths, graph payloads,
+  or worker envelopes from leaking through frontend state while keeping future
+  selectable inference traits generic and maintainable.
 
 ### Traceability Links
 
