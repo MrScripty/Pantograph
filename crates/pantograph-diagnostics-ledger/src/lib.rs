@@ -7,6 +7,7 @@ mod error;
 mod event;
 mod records;
 mod repository;
+mod runtime_selection_history;
 mod schema;
 mod sqlite;
 mod timing;
@@ -66,6 +67,11 @@ pub use records::{
     UsageLineage, DEFAULT_STANDARD_RETENTION_DAYS, MAX_RETENTION_DAYS, MILLIS_PER_DAY,
 };
 pub use repository::DiagnosticsLedgerRepository;
+pub use runtime_selection_history::{
+    RuntimeSelectionHistoryKey, RuntimeSelectionHistoryQuery, RuntimeSelectionHistoryRunStatus,
+    RuntimeSelectionHistorySample, RuntimeSelectionHistorySummary,
+    RUNTIME_SELECTION_HISTORY_MAX_SAMPLE_LIMIT, RUNTIME_SELECTION_HISTORY_MIN_SAMPLE_COUNT,
+};
 pub use sqlite::SqliteDiagnosticsLedger;
 pub use timing::{
     PruneTimingObservationsCommand, PruneTimingObservationsResult, WorkflowRunSummaryProjection,

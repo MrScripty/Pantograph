@@ -7,6 +7,7 @@ use rusqlite::{params, Connection, Row};
 
 mod event_sqlite;
 mod run_summary_sqlite;
+mod runtime_selection_history_sqlite;
 mod timing_sqlite;
 
 use crate::event::{
@@ -26,6 +27,9 @@ use crate::records::{
     ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality,
     PruneUsageEventsCommand, PruneUsageEventsResult, RetentionClass, UpdateRetentionPolicyCommand,
     UsageEventStatus, UsageLineage, MILLIS_PER_DAY,
+};
+use crate::runtime_selection_history::{
+    RuntimeSelectionHistoryQuery, RuntimeSelectionHistorySummary,
 };
 use crate::schema::{apply_schema, current_schema_version, migrate_schema, SCHEMA_VERSION};
 use crate::timing::{
@@ -510,6 +514,13 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         query: RunListProjectionQuery,
     ) -> Result<Vec<RunListFacetRecord>, DiagnosticsLedgerError> {
         event_sqlite::query_run_list_facets(self, query)
+    }
+
+    fn runtime_selection_history_summary(
+        &self,
+        query: RuntimeSelectionHistoryQuery,
+    ) -> Result<RuntimeSelectionHistorySummary, DiagnosticsLedgerError> {
+        runtime_selection_history_sqlite::runtime_selection_history_summary(self, query)
     }
 
     fn drain_run_detail_projection(

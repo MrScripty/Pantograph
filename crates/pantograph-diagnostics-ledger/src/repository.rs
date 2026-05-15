@@ -8,10 +8,10 @@ use crate::{
     ProjectionStateUpdate, PruneTimingObservationsCommand, PruneTimingObservationsResult,
     PruneUsageEventsCommand, PruneUsageEventsResult, RunDetailProjectionQuery,
     RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    UpdateRetentionPolicyCommand, WorkflowRunSummaryProjection, WorkflowRunSummaryQuery,
-    WorkflowRunSummaryRecord, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation,
+    RuntimeSelectionHistoryQuery, RuntimeSelectionHistorySummary, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord, UpdateRetentionPolicyCommand, WorkflowRunSummaryProjection,
+    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowTimingExpectation,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
 
 pub trait DiagnosticsLedgerRepository {
@@ -87,6 +87,11 @@ pub trait DiagnosticsLedgerRepository {
         &self,
         query: RunListProjectionQuery,
     ) -> Result<Vec<RunListFacetRecord>, DiagnosticsLedgerError>;
+
+    fn runtime_selection_history_summary(
+        &self,
+        query: RuntimeSelectionHistoryQuery,
+    ) -> Result<RuntimeSelectionHistorySummary, DiagnosticsLedgerError>;
 
     fn drain_run_detail_projection(
         &mut self,

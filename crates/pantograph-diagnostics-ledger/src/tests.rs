@@ -32,8 +32,8 @@ use crate::{
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
     RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerCandidateSetSummary, SchedulerEstimateBlockingCondition,
-    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    RuntimeSelectionHistoryKey, RuntimeSelectionHistoryQuery, SchedulerCandidateSetSummary,
+    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
     SchedulerQueueControlPayload, SchedulerQueuePlacementPayload,
@@ -4897,6 +4897,95 @@ fn apply_artifact_retention_policy_expires_shared_payload_aliases_once() {
 }
 
 #[test]
+fn runtime_selection_history_summarizes_exact_terminal_run_key() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    for (index, duration_ms) in [100_u64, 110, 120, 130, 140].into_iter().enumerate() {
+        append_runtime_selection_history_run(
+            &mut ledger,
+            index,
+            "pytorch.cuda",
+            Some("cuda:0"),
+            RunTerminalStatus::Completed,
+            Some(duration_ms),
+        );
+    }
+    append_runtime_selection_history_run(
+        &mut ledger,
+        5,
+        "pytorch.cpu",
+        Some("cuda:0"),
+        RunTerminalStatus::Completed,
+        Some(10),
+    );
+    append_runtime_selection_history_run(
+        &mut ledger,
+        6,
+        "pytorch.cuda",
+        Some("cuda:1"),
+        RunTerminalStatus::Failed,
+        None,
+    );
+    ledger
+        .drain_run_list_projection(500)
+        .expect("run list projection drains");
+
+    let summary = ledger
+        .runtime_selection_history_summary(sample_runtime_selection_history_query(Some("cuda:0")))
+        .expect("runtime selection history summary loads");
+
+    assert_eq!(summary.sample_count, 5);
+    assert!(summary.threshold_met);
+    assert_eq!(summary.completed_count, 5);
+    assert_eq!(summary.failed_count, 0);
+    assert_eq!(summary.cancelled_count, 0);
+    assert_eq!(summary.duration_sample_count, 5);
+    assert_eq!(summary.average_duration_ms, Some(120));
+    assert_eq!(summary.median_duration_ms, Some(120));
+    assert_eq!(summary.typical_min_duration_ms, Some(110));
+    assert_eq!(summary.typical_max_duration_ms, Some(130));
+    assert_eq!(summary.queue_wait_sample_count, 5);
+    assert_eq!(summary.average_queue_wait_ms, Some(30));
+    assert_eq!(summary.median_queue_wait_ms, Some(30));
+}
+
+#[test]
+fn runtime_selection_history_does_not_broaden_when_threshold_is_unmet() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    for index in 0..4 {
+        append_runtime_selection_history_run(
+            &mut ledger,
+            index,
+            "pytorch.cuda",
+            Some("cuda:0"),
+            RunTerminalStatus::Completed,
+            Some(100 + index as u64),
+        );
+    }
+    for index in 4..10 {
+        append_runtime_selection_history_run(
+            &mut ledger,
+            index,
+            "pytorch.cpu",
+            Some("cuda:0"),
+            RunTerminalStatus::Completed,
+            Some(10),
+        );
+    }
+    ledger
+        .drain_run_list_projection(500)
+        .expect("run list projection drains");
+
+    let summary = ledger
+        .runtime_selection_history_summary(sample_runtime_selection_history_query(Some("cuda:0")))
+        .expect("runtime selection history summary loads");
+
+    assert_eq!(summary.sample_count, 4);
+    assert!(!summary.threshold_met);
+    assert_eq!(summary.completed_count, 4);
+    assert_eq!(summary.average_duration_ms, Some(101));
+}
+
+#[test]
 fn timing_expectation_reports_insufficient_history_until_minimum_samples_exist() {
     let query = sample_timing_query(Some(150));
 
@@ -4979,6 +5068,96 @@ fn sample_timing_query(current_duration_ms: Option<u64>) -> WorkflowTimingExpect
         current_duration_ms,
         current_duration_is_complete: true,
     }
+}
+
+fn sample_runtime_selection_history_query(
+    selected_device_id: Option<&str>,
+) -> RuntimeSelectionHistoryQuery {
+    RuntimeSelectionHistoryQuery {
+        key: RuntimeSelectionHistoryKey {
+            workflow_id: WorkflowId::try_from("workflow_alpha".to_string()).unwrap(),
+            task_id: "text_generation".to_string(),
+            model_id: "pumas://models/tiny-transformers".to_string(),
+            selected_backend_key: "pytorch".to_string(),
+            selected_runtime_variant_id: "pytorch.cuda".to_string(),
+            selected_device_class: "cuda".to_string(),
+            selected_device_id: selected_device_id.map(str::to_string),
+        },
+        min_sample_count: 5,
+        sample_limit: 100,
+    }
+}
+
+fn append_runtime_selection_history_run(
+    ledger: &mut SqliteDiagnosticsLedger,
+    index: usize,
+    selected_runtime_variant_id: &str,
+    selected_device_id: Option<&str>,
+    terminal_status: RunTerminalStatus,
+    duration_ms: Option<u64>,
+) {
+    let workflow_run_id = format!("runtime_selection_run_{index}");
+    let occurred_at_base_ms = 10_000 + index as i64 * 1_000;
+
+    let mut snapshot = sample_run_snapshot_event(&workflow_run_id);
+    snapshot.occurred_at_ms = occurred_at_base_ms;
+    ledger
+        .append_diagnostic_event(snapshot)
+        .expect("run snapshot event appends");
+
+    let mut admission = sample_scheduler_admission_event(&workflow_run_id);
+    admission.occurred_at_ms = occurred_at_base_ms + 10;
+    if let DiagnosticEventPayload::SchedulerRunAdmitted(payload) = &mut admission.payload {
+        payload.selected_runtime_id = Some("pytorch.transformers".to_string());
+        payload.selected_runtime_variant_id = Some(selected_runtime_variant_id.to_string());
+        payload.selected_backend_key = Some("pytorch".to_string());
+        payload.selected_device_class = Some("cuda".to_string());
+        payload.selected_device_id = selected_device_id.map(str::to_string);
+        payload.reserved_model_ids = vec!["pumas://models/tiny-transformers".to_string()];
+    }
+    ledger
+        .append_diagnostic_event(admission)
+        .expect("scheduler admission event appends");
+
+    let mut started = sample_run_started_event(&workflow_run_id);
+    started.occurred_at_ms = occurred_at_base_ms + 30;
+    if let DiagnosticEventPayload::RunStarted(payload) = &mut started.payload {
+        payload.queue_wait_ms = Some(30);
+    }
+    ledger
+        .append_diagnostic_event(started)
+        .expect("run started event appends");
+
+    let mut inference = sample_inference_execution_diagnostic_event();
+    inference.occurred_at_ms = occurred_at_base_ms + 40;
+    inference.workflow_run_id = Some(WorkflowRunId::try_from(workflow_run_id.clone()).unwrap());
+    inference.runtime_id = Some("pytorch.transformers".to_string());
+    inference.model_id = Some("pumas://models/tiny-transformers".to_string());
+    if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) =
+        &mut inference.payload
+    {
+        payload.task_id = "text_generation".to_string();
+        payload.selected_backend_key = Some("pytorch".to_string());
+        payload.selected_runtime_variant_id = Some(selected_runtime_variant_id.to_string());
+        payload.selected_device_class = Some("cuda".to_string());
+        payload.selected_device_id = selected_device_id.map(str::to_string);
+    }
+    ledger
+        .append_diagnostic_event(inference)
+        .expect("inference diagnostic event appends");
+
+    let mut terminal = sample_run_terminal_event(&workflow_run_id);
+    terminal.occurred_at_ms = occurred_at_base_ms + 100;
+    terminal.payload = DiagnosticEventPayload::RunTerminal(RunTerminalPayload {
+        status: terminal_status,
+        duration_ms,
+        error: (terminal_status == RunTerminalStatus::Failed)
+            .then(|| "runtime selection sample failed".to_string()),
+        canonical_error_event_id: None,
+    });
+    ledger
+        .append_diagnostic_event(terminal)
+        .expect("run terminal event appends");
 }
 
 fn sample_timing_observation(index: usize, duration_ms: u64) -> WorkflowTimingObservation {

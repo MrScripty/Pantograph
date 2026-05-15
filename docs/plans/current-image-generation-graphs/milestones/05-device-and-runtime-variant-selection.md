@@ -4288,6 +4288,40 @@ typed diagnostic and the canonical design is fixed.
     pantograph-diagnostics-ledger`; `git diff --check`.
   - Remaining follow-up: diagnostics-ledger runtime-selection history
     summaries remain before the five-run threshold ranking algorithm.
+- 2026-05-14 slice: diagnostics-ledger runtime-selection history summaries.
+  - Smallest useful vertical slice: add a diagnostics-ledger-owned
+    `RuntimeSelectionHistorySummary` query contract and SQLite read path over
+    `run_list_projection` terminal runs, keyed exactly by workflow identity,
+    task id, model id, backend key, runtime variant id, device class, and
+    nullable selected device id.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/lib.rs`,
+    `crates/pantograph-diagnostics-ledger/src/repository.rs`,
+    `crates/pantograph-diagnostics-ledger/src/runtime_selection_history.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/runtime_selection_history_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`, and this plan
+    directory.
+  - No-fallback/no-legacy confirmation: the summary query does not call the
+    UI-oriented workflow timing expectation API and does not broaden history
+    when the five-run threshold is unmet. Every comparable key field is matched
+    exactly; `selected_device_id = None` is treated as an exact no-device-id
+    key rather than a wildcard.
+  - Verification passed:
+    `cargo test -p pantograph-diagnostics-ledger runtime_selection_history -- --nocapture`,
+    `cargo test -p pantograph-diagnostics-ledger`, and `cargo fmt --package
+    pantograph-diagnostics-ledger`.
+  - Discovered issue/deferred scope: the existing run projection can provide
+    terminal status, execution duration, and derived queue wait for comparable
+    runtime-selection history. Canonical load duration, warmup duration, and
+    memory/OOM pressure are not yet present in this summary source; future
+    ranking must either consume only populated evidence or first add the
+    canonical timing/memory producers before weighting those dimensions.
+  - Remaining follow-up: gather these summaries in the async orchestration
+    shell, pass them into the pure runtime-selection policy input, and then
+    implement the five-run threshold/history-backed ranking algorithm with
+    controlled exploration for candidates whose exact key has insufficient
+    history.
 - 2026-05-12 slice: workflow timing attempt contract.
   - Smallest useful vertical slice: add the workflow-service timing attempt
     contract without wiring existing runtime execution paths yet. The contract

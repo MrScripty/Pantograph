@@ -427,6 +427,13 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   keep display strings only as supplementary detail; runtime-selection phase,
   decision code, history-threshold state, and bounded per-candidate history
   evidence must be append-only typed fields.
+  - 2026-05-14 implementation note: `pantograph-diagnostics-ledger` now exposes
+    an exact-key `RuntimeSelectionHistorySummary` over terminal run
+    projections. The current summary includes terminal status counts,
+    completed execution duration distribution, and derived queue-wait
+    distribution. Load duration, warmup duration, and memory/OOM pressure still
+    require canonical producers before the history-backed policy may weight
+    those dimensions.
 - Runtime-selection policy implementation must preserve standards dependency
   direction. The pure policy module may depend only on runtime-selection
   contract types and deterministic helpers. It must not depend on
@@ -469,6 +476,11 @@ adapter boundary; it is not a concrete `InferenceDeviceId`.
   diagnostics-ledger runtime-selection history summaries; only after those
   slices may the five-run threshold and history-backed ranking algorithm be
   implemented.
+  - 2026-05-14 progress: the diagnostics-ledger history-summary slice is now
+    implemented and verified. The next implementation boundary is the
+    orchestration/policy slice that gathers exact-key summaries outside the
+    pure policy module and applies the five-run threshold without broadening
+    history.
 - The bounded candidate cap belongs to candidate synthesis and must be tested
   before policy receives candidate input. The policy module receives an already
   bounded, normalized candidate set; it must not silently truncate candidates
