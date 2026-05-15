@@ -93,7 +93,7 @@ PyTorch/diffusers and produce a retained image artifact.
   state updates, manual DOM mutation, or graph-canvas gesture conflicts. Async
   option loads must discard stale responses when model/runtime context changes
   before the previous query returns.
-- [ ] Add context-keyed cache/invalidation for provider-backed option queries
+- [x] Add context-keyed cache/invalidation for provider-backed option queries
   before reusing backend port options for model/runtime-dependent traits. The
   cache key must include node type, port id, provider context, and package-facts
   cursor/runtime facts; the current Pumas model-list cache is not sufficient

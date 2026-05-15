@@ -19,6 +19,7 @@ on raw invoke payloads.
 | `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
 | `workflowServiceErrors.test.ts` | Unit coverage for backend error-envelope parsing and transport-error fallback behavior. |
 | `workflowConnectionActions.ts` | Focused Tauri invoke helpers for connection-intent candidate, commit, and edge-insert commands. |
+| `portOptionsCache.ts` | Context-keyed cache for backend-owned port option queries whose valid rows depend on selected model/package/runtime references. |
 | `pumaModelOptionsCache.ts` | Shared Pumas selector-row cache for graph nodes and Library views, including selector cursor handoff against backend update feeds. |
 | `pumaModelOptionsCache.test.ts` | Unit coverage for selector cursor extraction, update-feed invalidation, reload, cache reuse, and read-only update-feed-unavailable behavior. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
@@ -257,6 +258,10 @@ missing `events` array as empty rather than a transport failure.
   id, or runtime variant id. Frontend services must not place full Pumas facts,
   local paths, scheduler decisions, worker envelopes, or graph payloads in port
   option query context.
+- Generic port option caching must key by node type, port id, search/pagination
+  request, and provider context. A selected model, package-facts cursor,
+  backend, or runtime change must produce a different cache entry rather than
+  reusing stale option rows.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.

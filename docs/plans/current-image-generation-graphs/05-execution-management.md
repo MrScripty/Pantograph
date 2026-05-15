@@ -3786,6 +3786,26 @@ Worker rules:
   `llm-inference.denoising_scheduler` provider in later slices. Those slices
   must keep stable primitive option ids, discard stale async responses, and
   avoid writing planner defaults into graph data.
+- 2026-05-15: Completed the generic provider-backed port-options cache slice.
+  Smallest useful vertical slice: add a frontend service cache keyed by node
+  type, port id, search/pagination request, and provider context so future
+  model/runtime-dependent options cannot reuse stale rows across selected
+  model, package-facts cursor, backend, or runtime changes. Allowed write set:
+  `src/services/workflow/portOptionsCache.ts`,
+  `src/services/workflow/portOptionsCache.test.ts`,
+  `src/services/workflow/README.md`, `package.json`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because it adds only
+  frontend query-result caching for backend-owned port options. It does not
+  hardcode denoising scheduler values, synthesize options, write graph
+  defaults, inspect Pumas facts, infer backend/runtime selection, or change
+  node execution.
+- Verification passed: `node --experimental-strip-types --test
+  src/services/workflow/portOptionsCache.test.ts`, `npm run typecheck`, `npm
+  run test:frontend`, and `git diff --check`.
+- Remaining follow-up: provider-backed `selection-input` behavior still needs
+  stale async response handling at the component/use-site boundary. The cache
+  keys prevent stale context reuse, but UI owners must still discard late
+  responses when the selected model/runtime context changes during a request.
 
 ### Traceability Links
 
