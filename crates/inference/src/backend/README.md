@@ -231,7 +231,9 @@ fn create_backend() {
 - PyTorch image-generation worker envelopes use `denoising_scheduler` for
   optional sampling intent. Factual Diffusers component roles may still be
   named `scheduler`, but worker request payloads must not accept the old
-  overloaded sampling field.
+  overloaded sampling field. Until scheduler swapping support is implemented,
+  explicit `denoising_scheduler` values fail the worker request instead of
+  being ignored while reporting success.
 - PyTorch persisted KV truncation crosses the embedded Python boundary through
   a versioned worker envelope and typed response decoder before the temporary
   file is read back. The adapter validates the temp path and token position,

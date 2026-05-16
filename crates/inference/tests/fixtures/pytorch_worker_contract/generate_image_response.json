@@ -12,7 +12,7 @@
     ],
     "seed_used": 42,
     "metadata": {
-      "denoising_scheduler": "euler"
+      "denoising_scheduler": null
     }
   }
 }

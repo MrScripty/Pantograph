@@ -241,9 +241,9 @@ fn test_python_worker_generate_image_contract_projects_planned_kwargs() {
             generation_kwargs
                 .get_item("denoising_scheduler")
                 .expect("denoising scheduler key should exist")
-                .extract::<String>()
-                .expect("denoising scheduler should be a string"),
-            "euler"
+                .extract::<Option<String>>()
+                .expect("denoising scheduler should be optional"),
+            None
         );
     });
 }

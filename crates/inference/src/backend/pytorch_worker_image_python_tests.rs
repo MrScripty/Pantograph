@@ -167,8 +167,38 @@ fn test_python_worker_generate_image_from_envelope_returns_worker_response() {
         assert_eq!(success.result.images.len(), 1);
         assert_eq!(success.result.images[0].mime_type, "image/png");
         assert_eq!(success.result.seed_used, Some(42));
-        assert_eq!(success.result.metadata["denoising_scheduler"], "euler");
+        assert!(success.result.metadata["denoising_scheduler"].is_null());
         assert_eq!(success.result.metadata["device"], "cpu");
+    });
+}
+
+#[test]
+fn test_python_worker_generate_image_from_envelope_rejects_unsupported_denoising_scheduler() {
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_image_stubs(py);
+        attach_stub_diffusion_pipeline(&module);
+        let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
+        ))
+        .expect("decode image request fixture");
+        envelope["payload"]["denoising_scheduler"] = serde_json::json!("euler");
+
+        let response_json: String = module
+            .call_method1("generate_image_from_envelope", (envelope.to_string(),))
+            .expect("generate_image_from_envelope should return JSON")
+            .extract()
+            .expect("response should be a string");
+        let response: PyTorchWorkerResponse<PyTorchGenerateImageResult> =
+            serde_json::from_str(&response_json).expect("worker response should decode");
+
+        let PyTorchWorkerResponse::Error(PyTorchWorkerFailure { error, .. }) = response else {
+            panic!("expected explicit denoising scheduler to fail");
+        };
+        assert_eq!(
+            error.canonical_code.as_deref(),
+            Some("pytorch_worker_invalid_generate_image_request")
+        );
+        assert!(error.message.contains("denoising_scheduler changes yet"));
     });
 }
 

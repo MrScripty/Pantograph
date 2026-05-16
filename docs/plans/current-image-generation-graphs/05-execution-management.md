@@ -4002,11 +4002,33 @@ Worker rules:
   node-engine --features inference-nodes`, `cargo fmt -p inference -p
   node-engine -- --check`, code search for old image-generation request/worker
   `scheduler` field consumers, and `git diff --check`.
-- Remaining follow-up: the Python worker still treats
-  `denoising_scheduler` swapping as reserved and ignores the value before
-  generation. The later worker execution-support slice must either apply the
-  validated value or reject unsupported explicit scheduler changes before
-  returning success.
+- Follow-up at this point: the Python worker still needed to apply or reject
+  explicit `denoising_scheduler` values instead of ignoring them. The next
+  slice resolves this by rejecting unsupported explicit scheduler changes.
+- 2026-05-15: Completed the denoising scheduler worker guardrail slice.
+  Smallest useful vertical slice: make the PyTorch image worker reject
+  explicit `denoising_scheduler` values until scheduler swapping is actually
+  implemented, so worker success metadata cannot claim a scheduler value that
+  the worker ignored. Allowed write set: `crates/inference/torch/worker.py`,
+  `crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_python_tests.rs`,
+  `crates/inference/src/backend/pytorch_image_generation_tests.rs`,
+  `crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_request.json`,
+  `crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_response.json`,
+  affected inference READMEs, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because the worker does
+  not fall back to the model default while reporting the explicit value as
+  accepted. It returns the existing typed worker invalid-request envelope until
+  a later slice can apply validated scheduler changes for supported
+  families/runtimes.
+- Verification passed: `cargo test -p inference --features backend-pytorch
+  pytorch_worker_image --lib`, `cargo test -p inference --features
+  backend-pytorch test_image_generation_result_from_worker_response_maps_images
+  --lib`, `cargo check -p inference`, `cargo fmt -p inference -- --check`, and
+  `git diff --check`.
+- Remaining follow-up: planner/family option-support rules still need to reject
+  unsupported explicit `denoising_scheduler` values before worker dispatch when
+  the selected family/runtime cannot apply them.
 
 ### Traceability Links
 

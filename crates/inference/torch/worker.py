@@ -1497,7 +1497,11 @@ def generate_image(
     **kwargs,
 ):
     """Generate one or more images from the loaded diffusion pipeline."""
-    del denoising_scheduler  # Reserved for later scheduler swapping support.
+    if denoising_scheduler is not None:
+        raise ValueError(
+            "PyTorch worker image generation does not support explicit "
+            "denoising_scheduler changes yet"
+        )
 
     if _diffusion_pipeline is None:
         raise RuntimeError("No diffusion pipeline loaded. Call load_diffusion_model() first.")

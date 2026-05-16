@@ -125,7 +125,7 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Change the Python worker image path to consume the validated Rust plan
   fields. It must not decide pipeline family, scheduler, custom-code trust, or
   device fallback on its own.
-- [ ] Ensure the Python worker applies the validated `denoising_scheduler`
+- [x] Ensure the Python worker applies the validated `denoising_scheduler`
   decision or rejects unsupported explicit scheduler changes before returning
   success. Worker metadata must not report a scheduler value that was accepted
   by Rust but ignored by the worker.
@@ -490,6 +490,32 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   classify guidance scale, negative prompt, image count, scheduler override,
   dtype, and dimensions as accepted, ignored, or rejected per family.
 
+2026-05-15 denoising scheduler worker guardrail slice:
+
+- Smallest useful vertical slice: make the PyTorch image worker reject
+  explicit `denoising_scheduler` values until scheduler swapping is actually
+  implemented, so worker success metadata cannot claim a scheduler value that
+  the worker ignored.
+- Allowed write set: `crates/inference/torch/worker.py`,
+  `crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_python_tests.rs`,
+  `crates/inference/src/backend/pytorch_image_generation_tests.rs`,
+  `crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_request.json`,
+  `crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_response.json`,
+  affected inference READMEs, and this plan directory.
+- No-fallback/no-legacy confirmation: the worker does not fall back to the
+  model default while reporting the explicit value as accepted. It returns the
+  existing typed worker invalid-request envelope until a later slice can apply
+  validated scheduler changes for supported families/runtimes.
+- Verification passed: `cargo test -p inference --features backend-pytorch
+  pytorch_worker_image --lib`, `cargo test -p inference --features
+  backend-pytorch test_image_generation_result_from_worker_response_maps_images
+  --lib`, `cargo check -p inference`, `cargo fmt -p inference -- --check`, and
+  `git diff --check`.
+- Remaining follow-up: planner/family option-support rules still need to reject
+  unsupported explicit `denoising_scheduler` values before worker dispatch when
+  the selected family/runtime cannot apply them.
+
 2026-05-15 planner unsupported-option guardrail slice:
 
 - Smallest useful vertical slice: make the canonical image-generation planner
@@ -511,11 +537,9 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 - Remaining follow-up: future img2img/inpaint and family-specific opaque
   option support needs explicit family option tables plus worker contract
   fields before these request fields can become executable.
-- Discovered issue: the planner and worker DTO now carry
-  `denoising_scheduler`, but the current Python worker treats scheduler
-  swapping as reserved and deletes the value before generation. This means
-  existing denoising scheduler tests prove DTO projection only, not execution
-  semantics.
+- Discovered issue resolved by the 2026-05-15 denoising scheduler worker
+  guardrail slice: explicit `denoising_scheduler` values now fail the Python
+  worker instead of being deleted before generation and reported as success.
   Do not broaden scheduler override support until a focused option-rule slice
   decides whether each family accepts, rejects, or explicitly reports ignored
   scheduler overrides, then updates the worker contract and diagnostics
