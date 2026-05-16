@@ -1458,6 +1458,7 @@ fn planned_image_generation_decision(
         selected_task_id: Some(InferenceTaskId::ImageGeneration),
         selected_model_ref: Some(package_facts.model_ref.clone()),
         diagnostics: Vec::new(),
+        dependency_readiness: Vec::new(),
         selection_policy_trace: None,
     }
 }

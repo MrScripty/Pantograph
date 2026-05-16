@@ -2534,6 +2534,18 @@ readiness:
            `workflow_technical_fit_decision` still passes an empty fact slice
            until the host package snapshot source is wired; scheduler
            filtering remains unchanged.
+         - 2026-05-16 workflow execution-plan proof propagation slice:
+           extended workflow-service technical-fit and run execution-plan DTOs
+           with workflow-owned dependency-readiness proof, copied selected
+           proof during admission, and projected it at the embedded-runtime
+           composition boundary into inference `BackendExecutionDecision`
+           values. Focused tests prove runtime-registry selected proof reaches
+           workflow technical-fit decisions, workflow execution plans, and
+           inference-owned dependency-readiness facts without using graph
+           inputs, diagnostics strings, worker discovery, or hidden fallback
+           channels. Stage 4 proof carriage is complete; production host
+           package snapshots still need to supply real facts before scheduler
+           filtering can safely become blocking.
       5. Wire scheduler/admission candidate filtering to consume readiness
          proof and fail candidate selection while emitting ledger diagnostics
          when required dependencies are unavailable.

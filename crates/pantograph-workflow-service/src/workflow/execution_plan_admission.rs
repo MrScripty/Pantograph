@@ -45,6 +45,7 @@ pub(crate) fn build_workflow_execution_plan_from_admission(
         selected_task_id,
     )?
     .with_selected_model_ref(selected_model_ref.as_str())?
+    .with_dependency_readiness(decision.dependency_readiness.clone())?
     .with_policy_trace_ids(policy_trace_ids(selected_candidate_id, &decision))?;
 
     if let Some(selected_device_id) = decision.selected_device_id.as_deref() {

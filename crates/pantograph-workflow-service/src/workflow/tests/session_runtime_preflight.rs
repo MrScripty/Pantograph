@@ -206,6 +206,7 @@ async fn keep_alive_session_create_blocks_when_runtime_preflight_fails() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason::new(
                 WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 None,
@@ -260,6 +261,7 @@ async fn keep_alive_enable_blocks_when_runtime_preflight_fails() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason::new(
                 WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 None,

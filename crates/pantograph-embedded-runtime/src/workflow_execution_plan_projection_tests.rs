@@ -1,4 +1,5 @@
 use inference::{
+    CapabilityAvailabilityState, DependencyReadinessResolverOwner, DependencyReadinessSubjectKind,
     DeviceResolutionDiagnosticCode, DeviceResolutionDiagnosticSeverity, InferenceDeviceClass,
     InferenceTaskId,
 };
@@ -8,6 +9,12 @@ use pantograph_workflow_service::{
     WorkflowExecutionPlanNodeDecision, WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
 };
 use pantograph_workflow_service::{WorkflowId, WorkflowRunId};
+use pantograph_workflow_service::{
+    WorkflowTechnicalFitDependencyReadinessFact,
+    WorkflowTechnicalFitDependencyReadinessResolverOwner,
+    WorkflowTechnicalFitDependencyReadinessState,
+    WorkflowTechnicalFitDependencyReadinessSubjectKind,
+};
 
 use super::{
     project_workflow_execution_plan_to_planned_inference_context,
@@ -71,6 +78,68 @@ fn workflow_node_decision_projects_to_backend_execution_decision() {
             .as_ref()
             .map(|trace| trace.policy_version),
         Some(3)
+    );
+}
+
+#[test]
+fn workflow_node_decision_projects_dependency_readiness_proof() {
+    let decision = workflow_node_decision()
+        .with_dependency_readiness(vec![WorkflowTechnicalFitDependencyReadinessFact {
+            subject_kind: WorkflowTechnicalFitDependencyReadinessSubjectKind::Package,
+            runtime_id: Some("pytorch-runtime".to_string()),
+            backend_key: Some("pytorch".to_string()),
+            runtime_variant_id: Some("pytorch.cuda".to_string()),
+            task_id: Some("image_generation".to_string()),
+            model_family_id: Some("stable_diffusion".to_string()),
+            dependency_id: "diffusers".to_string(),
+            state: WorkflowTechnicalFitDependencyReadinessState::Available,
+            resolver_owner: WorkflowTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime,
+            reason_code: Some("installed".to_string()),
+            reason: Some("diffusers is installed".to_string()),
+        }])
+        .expect("valid dependency readiness proof");
+
+    let backend_decision = project_workflow_node_decision_to_backend_execution_decision(&decision)
+        .expect("project backend decision");
+
+    let proof = &backend_decision.dependency_readiness;
+    assert_eq!(proof.len(), 1);
+    assert_eq!(
+        proof[0].subject_kind,
+        DependencyReadinessSubjectKind::Package
+    );
+    assert_eq!(proof[0].runtime_id.as_str(), "pytorch");
+    assert_eq!(
+        proof[0]
+            .runtime_variant_id
+            .as_ref()
+            .map(|runtime_variant_id| runtime_variant_id.as_str()),
+        Some("pytorch.cuda")
+    );
+    assert_eq!(proof[0].task_id, Some(InferenceTaskId::ImageGeneration));
+    assert_eq!(
+        proof[0]
+            .model_family_id
+            .as_ref()
+            .map(|model_family_id| model_family_id.as_str()),
+        Some("stable_diffusion")
+    );
+    assert_eq!(proof[0].dependency_id.as_str(), "diffusers");
+    assert_eq!(proof[0].state, CapabilityAvailabilityState::Available);
+    assert_eq!(
+        proof[0].resolver_owner,
+        DependencyReadinessResolverOwner::EmbeddedRuntime
+    );
+    assert_eq!(
+        proof[0]
+            .reason_code
+            .as_ref()
+            .map(|reason_code| reason_code.as_str()),
+        Some("installed")
+    );
+    assert_eq!(
+        proof[0].reason.as_ref().map(ToString::to_string).as_deref(),
+        Some("diffusers is installed")
     );
 }
 

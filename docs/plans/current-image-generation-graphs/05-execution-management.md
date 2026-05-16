@@ -5263,6 +5263,49 @@ Worker rules:
     production technical-fit calls pass real PyTorch/Diffusers package
     readiness facts, then carry selected proof through workflow/admission
     execution plans into inference.
+- 2026-05-16 workflow execution-plan dependency-readiness propagation slice:
+  - Smallest useful vertical slice: carry selected dependency-readiness proof
+    from workflow technical-fit decisions through run execution-plan admission
+    and into inference `BackendExecutionDecision` at the embedded-runtime
+    composition boundary.
+  - Allowed write set: `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/workflow/execution_plan.rs`,
+    `crates/pantograph-workflow-service/src/workflow/execution_plan_admission.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, focused
+    workflow-service tests, `crates/inference/src/device_contracts/planning.rs`,
+    `crates/inference/src/README.md`, affected inference/node-engine test constructors,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_execution_plan_projection.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, focused
+    embedded-runtime tests, and this plan directory.
+  - No-fallback/no-legacy confirmation: the slice only transports typed
+    scheduler/admission proof. It does not infer readiness from graph inputs,
+    package hints, diagnostics messages, worker imports, runtime display
+    strings, or legacy dependency-environment checks.
+  - Implementation notes: workflow-service now owns a dependency-readiness
+    proof DTO on `WorkflowTechnicalFitDecision` and
+    `WorkflowExecutionPlanNodeDecision`; admission copies selected proof into
+    run-scoped node decisions. Inference `BackendExecutionDecision` now retains
+    `DependencyReadinessFact` values, and embedded-runtime projection validates
+    proof ids while converting workflow DTOs into inference contracts.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    workflow_execution_plan_admission_carries_dependency_readiness_proof
+    --lib`; `cargo test -p pantograph-embedded-runtime
+    workflow_node_decision_projects_dependency_readiness_proof --lib`; `cargo
+    test -p inference image_generation_planner --lib`; `cargo test -p
+    node-engine planned_inference --lib`; `cargo test -p
+    pantograph-workflow-service workflow_execution_plan --lib`; `cargo test -p
+    pantograph-embedded-runtime workflow_execution_plan_projection --lib`;
+    `cargo test -p pantograph-workflow-service technical_fit --lib`; `cargo
+    test -p pantograph-embedded-runtime technical_fit --lib`; `cargo test -p
+    pantograph-embedded-runtime
+    technical_fit_request_projects_dependency_readiness_into_pumas_candidates
+    --lib`; cargo fmt checks for workflow-service, embedded-runtime,
+    inference, and node-engine; `git diff --check`.
+  - Remaining follow-up: production `workflow_technical_fit_decision` still
+    needs host-resolved Python package readiness facts before scheduler
+    filtering can reject unavailable PyTorch/Diffusers candidates without
+    failing every candidate that currently has intentionally empty proof.
 
 ### Traceability Links
 

@@ -138,6 +138,7 @@ mod tests {
             selected_task_id: task_id,
             selected_model_ref: None,
             diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             selection_policy_trace: None,
         }
     }

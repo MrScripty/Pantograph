@@ -111,6 +111,7 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![
                 WorkflowTechnicalFitReason::new(
                     WorkflowTechnicalFitReasonCode::MissingRuntimeState,

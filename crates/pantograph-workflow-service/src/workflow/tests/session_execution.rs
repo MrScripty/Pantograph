@@ -408,6 +408,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason::new(
                 WorkflowTechnicalFitReasonCode::RuntimeRequirements,
                 Some("candidate-managed-llama"),
@@ -1031,6 +1032,7 @@ async fn workflow_execution_session_records_load_completed_only_with_runtime_pro
         resource_estimate: None,
         observed_throughput_hint: None,
         device_diagnostics: Vec::new(),
+        dependency_readiness: Vec::new(),
         reasons: vec![WorkflowTechnicalFitReason::new(
             WorkflowTechnicalFitReasonCode::RuntimeRequirements,
             Some("candidate-managed-llama"),

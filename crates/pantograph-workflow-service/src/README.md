@@ -17,7 +17,7 @@ diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 | `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
 | `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
 | `graph/` | Graph DTOs and session-kind contracts shared by service operations. |
-| `technical_fit.rs` | Technical-fit request/decision DTOs, normalization helpers, session context assembly, and runtime-preflight integration. |
+| `technical_fit.rs` | Technical-fit request/decision DTOs, dependency-readiness proof DTOs, normalization helpers, session context assembly, and runtime-preflight integration. |
 | `capabilities.rs` | Shared workflow capability and validation utilities. |
 
 ## Problem
@@ -118,6 +118,11 @@ selected-run Network facts without reconstructing scheduler or diagnostics
 payload state.
 Workflow backend task capability DTOs now carry optional
 `WorkflowTaskRequestContract` payload metadata projected from backend facts.
+Workflow technical-fit and run execution-plan DTOs now carry reduced
+dependency-readiness proof as scheduler/admission evidence. The proof is
+transported as workflow-owned DTOs only; this crate does not infer package
+readiness from graph inputs, diagnostics messages, runtime display names, or
+worker behavior.
 The contract describes task input/result families and executable versus
 contract-only status without encoding runtime selection, scheduler admission, or
 backend residency policy.

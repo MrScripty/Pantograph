@@ -2,6 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::capability_availability::DependencyReadinessFact;
 use crate::model_contracts::{InferenceTaskId, PumasModelRef};
 
 use super::{BackendId, DeviceContractError, InferenceDeviceId, RuntimeVariantId};
@@ -294,6 +295,9 @@ pub struct BackendExecutionDecision {
     /// Diagnostics retained with the decision.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<DeviceResolutionDiagnostic>,
+    /// Dependency/package readiness proof retained with the selected decision.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependency_readiness: Vec<DependencyReadinessFact>,
     /// Scheduler policy evidence retained for diagnostics and replay.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selection_policy_trace: Option<BackendExecutionSelectionPolicyTrace>,
@@ -334,6 +338,7 @@ impl BackendExecutionDecision {
             selected_task_id,
             selected_model_ref: candidate.model_ref,
             diagnostics: candidate.diagnostics,
+            dependency_readiness: Vec::new(),
             selection_policy_trace: None,
         })
     }

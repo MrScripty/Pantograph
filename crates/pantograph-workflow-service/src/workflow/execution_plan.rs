@@ -4,6 +4,8 @@ use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::technical_fit::WorkflowTechnicalFitDependencyReadinessFact;
+
 use super::{
     WorkflowExecutionPlanBackendKey, WorkflowExecutionPlanDeviceId, WorkflowExecutionPlanModelRef,
     WorkflowExecutionPlanRuntimeId, WorkflowExecutionPlanRuntimeVariantId,
@@ -13,6 +15,7 @@ use super::{WorkflowInferenceDeviceClass, WorkflowInferenceTaskId};
 pub const WORKFLOW_EXECUTION_PLAN_SCHEMA_VERSION: u32 = 1;
 pub const WORKFLOW_EXECUTION_PLAN_MAX_NODE_DECISIONS: usize = 1024;
 pub const WORKFLOW_EXECUTION_PLAN_MAX_DIAGNOSTICS: usize = 32;
+pub const WORKFLOW_EXECUTION_PLAN_MAX_DEPENDENCY_READINESS: usize = 128;
 pub const WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS: usize = 32;
 
 const MAX_EXECUTION_PLAN_ID_LEN: usize = 128;
@@ -167,6 +170,7 @@ pub struct WorkflowExecutionPlanNodeDecision {
     selected_task_id: WorkflowInferenceTaskId,
     selected_model_ref: Option<WorkflowExecutionPlanModelRef>,
     diagnostics: Vec<WorkflowExecutionPlanDiagnostic>,
+    dependency_readiness: Vec<WorkflowTechnicalFitDependencyReadinessFact>,
     policy_trace_ids: Vec<String>,
 }
 
@@ -197,6 +201,7 @@ impl WorkflowExecutionPlanNodeDecision {
             selected_task_id,
             selected_model_ref: None,
             diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             policy_trace_ids: Vec::new(),
         })
     }
@@ -227,6 +232,22 @@ impl WorkflowExecutionPlanNodeDecision {
             WORKFLOW_EXECUTION_PLAN_MAX_DIAGNOSTICS,
         )?;
         self.diagnostics = diagnostics;
+        Ok(self)
+    }
+
+    pub fn with_dependency_readiness(
+        mut self,
+        dependency_readiness: Vec<WorkflowTechnicalFitDependencyReadinessFact>,
+    ) -> Result<Self, WorkflowExecutionPlanError> {
+        validate_count(
+            "dependency_readiness",
+            dependency_readiness.len(),
+            WORKFLOW_EXECUTION_PLAN_MAX_DEPENDENCY_READINESS,
+        )?;
+        self.dependency_readiness = dependency_readiness
+            .into_iter()
+            .filter_map(|fact| fact.normalized())
+            .collect();
         Ok(self)
     }
 
@@ -298,6 +319,11 @@ impl WorkflowExecutionPlanNodeDecision {
     }
 
     #[must_use]
+    pub fn dependency_readiness(&self) -> &[WorkflowTechnicalFitDependencyReadinessFact] {
+        &self.dependency_readiness
+    }
+
+    #[must_use]
     pub fn policy_trace_ids(&self) -> &[String] {
         &self.policy_trace_ids
     }
@@ -322,6 +348,7 @@ impl TryFrom<WorkflowExecutionPlanNodeDecisionUnchecked> for WorkflowExecutionPl
             decision = decision.with_selected_model_ref(selected_model_ref)?;
         }
         decision = decision.with_diagnostics(value.diagnostics)?;
+        decision = decision.with_dependency_readiness(value.dependency_readiness)?;
         decision.with_policy_trace_ids(value.policy_trace_ids)
     }
 }
@@ -341,6 +368,8 @@ struct WorkflowExecutionPlanNodeDecisionUnchecked {
     selected_model_ref: Option<String>,
     #[serde(default)]
     diagnostics: Vec<WorkflowExecutionPlanDiagnostic>,
+    #[serde(default)]
+    dependency_readiness: Vec<WorkflowTechnicalFitDependencyReadinessFact>,
     #[serde(default)]
     policy_trace_ids: Vec<String>,
 }

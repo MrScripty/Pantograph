@@ -60,6 +60,7 @@ fn backend_decision(backend_id: &str) -> BackendExecutionDecision {
             migration_diagnostics: Vec::new(),
         }),
         diagnostics: Vec::new(),
+        dependency_readiness: Vec::new(),
         selection_policy_trace: None,
     }
 }

@@ -1,14 +1,22 @@
 use inference::{
     BackendExecutionDecision, BackendExecutionSelectionPolicyTrace, BackendId,
-    DeviceResolutionDecision, DeviceResolutionDiagnostic, DeviceResolutionDiagnosticCode,
-    DeviceResolutionDiagnosticSeverity, InferenceDeviceClass, InferenceDeviceId,
-    InferenceDevicePolicy, InferenceTaskId, PumasModelRef, RuntimeVariantId,
+    CapabilityAvailabilityId, CapabilityAvailabilityReason, CapabilityAvailabilityState,
+    DependencyReadinessFact, DependencyReadinessResolverOwner, DeviceResolutionDecision,
+    DeviceResolutionDiagnostic, DeviceResolutionDiagnosticCode, DeviceResolutionDiagnosticSeverity,
+    InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, InferenceTaskId, PumasModelRef,
+    RuntimeVariantId,
 };
 use node_engine::planned_inference::PlannedInferenceDecisionContext;
 use pantograph_workflow_service::{
     WorkflowExecutionPlan, WorkflowExecutionPlanDiagnostic, WorkflowExecutionPlanDiagnosticCode,
     WorkflowExecutionPlanDiagnosticSeverity, WorkflowExecutionPlanNodeDecision,
     WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
+};
+use pantograph_workflow_service::{
+    WorkflowTechnicalFitDependencyReadinessFact,
+    WorkflowTechnicalFitDependencyReadinessResolverOwner,
+    WorkflowTechnicalFitDependencyReadinessState,
+    WorkflowTechnicalFitDependencyReadinessSubjectKind,
 };
 use thiserror::Error;
 
@@ -47,6 +55,11 @@ pub(crate) fn project_workflow_node_decision_to_backend_execution_decision(
         .iter()
         .map(|diagnostic| project_diagnostic(diagnostic, &selected_backend_id))
         .collect::<Vec<_>>();
+    let dependency_readiness = decision
+        .dependency_readiness()
+        .iter()
+        .map(|fact| project_dependency_readiness_fact(fact, &selected_backend_id))
+        .collect::<Result<Vec<_>, _>>()?;
     let selection_policy_trace = project_policy_trace(decision.policy_trace_ids());
 
     Ok(BackendExecutionDecision {
@@ -64,6 +77,7 @@ pub(crate) fn project_workflow_node_decision_to_backend_execution_decision(
         selected_task_id: Some(selected_task_id),
         selected_model_ref: decision.selected_model_ref().map(project_model_ref),
         diagnostics,
+        dependency_readiness,
         selection_policy_trace,
     })
 }
@@ -103,6 +117,178 @@ pub(crate) enum WorkflowExecutionPlanProjectionError {
     UnsupportedTaskId { task_id: &'static str },
     #[error("invalid planned inference context: {message}")]
     InvalidPlannedContext { message: String },
+    #[error("invalid dependency readiness proof {field} '{value}': {message}")]
+    InvalidDependencyReadinessProof {
+        field: &'static str,
+        value: String,
+        message: String,
+    },
+}
+
+fn project_dependency_readiness_fact(
+    fact: &WorkflowTechnicalFitDependencyReadinessFact,
+    selected_backend_id: &BackendId,
+) -> Result<DependencyReadinessFact, WorkflowExecutionPlanProjectionError> {
+    let runtime_id = fact
+        .backend_key
+        .as_deref()
+        .map(parse_dependency_backend_id)
+        .transpose()?
+        .unwrap_or_else(|| selected_backend_id.clone());
+    let dependency_id = parse_capability_id("dependency_id", fact.dependency_id.as_str())?;
+    let mut projected = match fact.subject_kind {
+        WorkflowTechnicalFitDependencyReadinessSubjectKind::Package => {
+            DependencyReadinessFact::package(
+                runtime_id,
+                dependency_id,
+                project_dependency_readiness_state(fact.state),
+                project_dependency_readiness_owner(fact.resolver_owner),
+            )
+        }
+        WorkflowTechnicalFitDependencyReadinessSubjectKind::Dependency => {
+            DependencyReadinessFact::dependency(
+                runtime_id,
+                dependency_id,
+                project_dependency_readiness_state(fact.state),
+                project_dependency_readiness_owner(fact.resolver_owner),
+            )
+        }
+    };
+
+    if let Some(runtime_variant_id) = fact.runtime_variant_id.as_deref() {
+        projected = projected.with_runtime_variant_id(
+            RuntimeVariantId::parse(runtime_variant_id).map_err(|error| {
+                WorkflowExecutionPlanProjectionError::InvalidDependencyReadinessProof {
+                    field: "runtime_variant_id",
+                    value: runtime_variant_id.to_string(),
+                    message: error.to_string(),
+                }
+            })?,
+        );
+    }
+    if let Some(task_id) = fact.task_id.as_deref() {
+        projected = projected.with_task_id(project_dependency_task_id(task_id)?);
+    }
+    if let Some(model_family_id) = fact.model_family_id.as_deref() {
+        projected = projected
+            .with_model_family_id(parse_capability_id("model_family_id", model_family_id)?);
+    }
+    if let Some(reason_code) = fact.reason_code.as_deref() {
+        projected = projected.with_reason_code(parse_capability_id("reason_code", reason_code)?);
+    }
+    if let Some(reason) = fact.reason.as_deref() {
+        projected = projected.with_reason(CapabilityAvailabilityReason::parse(reason).map_err(
+            |error| WorkflowExecutionPlanProjectionError::InvalidDependencyReadinessProof {
+                field: "reason",
+                value: reason.to_string(),
+                message: error.to_string(),
+            },
+        )?);
+    }
+
+    Ok(projected)
+}
+
+fn parse_dependency_backend_id(
+    backend_key: &str,
+) -> Result<BackendId, WorkflowExecutionPlanProjectionError> {
+    BackendId::parse(backend_key).map_err(|error| {
+        WorkflowExecutionPlanProjectionError::InvalidDependencyReadinessProof {
+            field: "backend_key",
+            value: backend_key.to_string(),
+            message: error.to_string(),
+        }
+    })
+}
+
+fn parse_capability_id(
+    field: &'static str,
+    value: &str,
+) -> Result<CapabilityAvailabilityId, WorkflowExecutionPlanProjectionError> {
+    CapabilityAvailabilityId::parse(value).map_err(|error| {
+        WorkflowExecutionPlanProjectionError::InvalidDependencyReadinessProof {
+            field,
+            value: value.to_string(),
+            message: error.to_string(),
+        }
+    })
+}
+
+fn project_dependency_task_id(
+    task_id: &str,
+) -> Result<InferenceTaskId, WorkflowExecutionPlanProjectionError> {
+    match task_id {
+        "text_generation" => Ok(InferenceTaskId::TextGeneration),
+        "chat_completion" => Ok(InferenceTaskId::ChatCompletion),
+        "embedding" => Ok(InferenceTaskId::Embedding),
+        "rerank" => Ok(InferenceTaskId::Rerank),
+        "image_generation" => Ok(InferenceTaskId::ImageGeneration),
+        "image_understanding" => Ok(InferenceTaskId::ImageUnderstanding),
+        "depth_estimation" => Ok(InferenceTaskId::DepthEstimation),
+        "audio_transcription" => Ok(InferenceTaskId::AudioTranscription),
+        "video_understanding" => Ok(InferenceTaskId::VideoUnderstanding),
+        "multimodal_generation" => Ok(InferenceTaskId::MultimodalGeneration),
+        _ => Err(
+            WorkflowExecutionPlanProjectionError::InvalidDependencyReadinessProof {
+                field: "task_id",
+                value: task_id.to_string(),
+                message: "unsupported inference task id".to_string(),
+            },
+        ),
+    }
+}
+
+fn project_dependency_readiness_state(
+    state: WorkflowTechnicalFitDependencyReadinessState,
+) -> CapabilityAvailabilityState {
+    match state {
+        WorkflowTechnicalFitDependencyReadinessState::Available => {
+            CapabilityAvailabilityState::Available
+        }
+        WorkflowTechnicalFitDependencyReadinessState::NotInstalled => {
+            CapabilityAvailabilityState::NotInstalled
+        }
+        WorkflowTechnicalFitDependencyReadinessState::NotImplemented => {
+            CapabilityAvailabilityState::NotImplemented
+        }
+        WorkflowTechnicalFitDependencyReadinessState::UnsupportedPlatform => {
+            CapabilityAvailabilityState::UnsupportedPlatform
+        }
+        WorkflowTechnicalFitDependencyReadinessState::MissingDependency => {
+            CapabilityAvailabilityState::MissingDependency
+        }
+        WorkflowTechnicalFitDependencyReadinessState::DisabledByPolicy => {
+            CapabilityAvailabilityState::DisabledByPolicy
+        }
+        WorkflowTechnicalFitDependencyReadinessState::MissingModelFacts => {
+            CapabilityAvailabilityState::MissingModelFacts
+        }
+        WorkflowTechnicalFitDependencyReadinessState::RequiresRuntimeCapability => {
+            CapabilityAvailabilityState::RequiresRuntimeCapability
+        }
+        WorkflowTechnicalFitDependencyReadinessState::RequiresModelCapability => {
+            CapabilityAvailabilityState::RequiresModelCapability
+        }
+    }
+}
+
+fn project_dependency_readiness_owner(
+    owner: WorkflowTechnicalFitDependencyReadinessResolverOwner,
+) -> DependencyReadinessResolverOwner {
+    match owner {
+        WorkflowTechnicalFitDependencyReadinessResolverOwner::Inference => {
+            DependencyReadinessResolverOwner::Inference
+        }
+        WorkflowTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime => {
+            DependencyReadinessResolverOwner::EmbeddedRuntime
+        }
+        WorkflowTechnicalFitDependencyReadinessResolverOwner::ManagedRuntime => {
+            DependencyReadinessResolverOwner::ManagedRuntime
+        }
+        WorkflowTechnicalFitDependencyReadinessResolverOwner::RuntimeBridge => {
+            DependencyReadinessResolverOwner::RuntimeBridge
+        }
+    }
 }
 
 fn project_device_class(

@@ -15,7 +15,7 @@ details.
 | `backend/` | Backend trait definitions and concrete supported engine adapters such as llama.cpp, Candle, and PyTorch. |
 | `capability_availability.rs` | Typed runtime, package, dependency, model-capability, runtime-trait, and dependency-readiness facts with validated ids, scoped scheduler proof, and bounded reason text for scheduler/provider projection. |
 | `device.rs` | Backend-local llama.cpp device inventory parsing, canonical inventory fact projection, and command-selector formatting. |
-| `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation. |
+| `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation, including selected dependency-readiness proof carried from scheduler/admission. |
 | `dependency_requirements.rs` | Inference-owned runtime/package dependency requirement declarations that can project resolved states into dependency-readiness proof without probing environments or selecting runtimes. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
 | `execution_evidence.rs` | Side-effect-free normalization of model package facts, backend capability facts, runtime capability evidence, and graph runtime requirements into typed executable-candidate evidence without scheduler ranking. |

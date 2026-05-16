@@ -222,6 +222,86 @@ impl WorkflowTechnicalFitDeviceDiagnostic {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowTechnicalFitDependencyReadinessSubjectKind {
+    Package,
+    Dependency,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowTechnicalFitDependencyReadinessState {
+    Available,
+    NotInstalled,
+    NotImplemented,
+    UnsupportedPlatform,
+    MissingDependency,
+    DisabledByPolicy,
+    MissingModelFacts,
+    RequiresRuntimeCapability,
+    RequiresModelCapability,
+}
+
+impl WorkflowTechnicalFitDependencyReadinessState {
+    #[must_use]
+    pub fn is_ready(self) -> bool {
+        matches!(self, Self::Available)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowTechnicalFitDependencyReadinessResolverOwner {
+    Inference,
+    EmbeddedRuntime,
+    ManagedRuntime,
+    RuntimeBridge,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowTechnicalFitDependencyReadinessFact {
+    pub subject_kind: WorkflowTechnicalFitDependencyReadinessSubjectKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_family_id: Option<String>,
+    pub dependency_id: String,
+    pub state: WorkflowTechnicalFitDependencyReadinessState,
+    pub resolver_owner: WorkflowTechnicalFitDependencyReadinessResolverOwner,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl WorkflowTechnicalFitDependencyReadinessFact {
+    pub fn normalized(&self) -> Option<Self> {
+        let dependency_id = normalize_trimmed_string(Some(self.dependency_id.as_str()))?;
+
+        Some(Self {
+            subject_kind: self.subject_kind,
+            runtime_id: normalize_runtime_id(self.runtime_id.as_deref()),
+            backend_key: normalize_backend_key(self.backend_key.as_deref()),
+            runtime_variant_id: normalize_trimmed_string(self.runtime_variant_id.as_deref()),
+            task_id: normalize_trimmed_string(self.task_id.as_deref()),
+            model_family_id: normalize_trimmed_string(self.model_family_id.as_deref()),
+            dependency_id,
+            state: self.state,
+            resolver_owner: self.resolver_owner,
+            reason_code: normalize_trimmed_string(self.reason_code.as_deref()),
+            reason: normalize_trimmed_string(self.reason.as_deref()),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkflowTechnicalFitSessionContext {
     pub workflow_id: String,
@@ -512,6 +592,8 @@ pub struct WorkflowTechnicalFitDecision {
     pub observed_throughput_hint: Option<WorkflowTechnicalFitObservedThroughputHint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub device_diagnostics: Vec<WorkflowTechnicalFitDeviceDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependency_readiness: Vec<WorkflowTechnicalFitDependencyReadinessFact>,
     #[serde(default)]
     pub reasons: Vec<WorkflowTechnicalFitReason>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -549,6 +631,11 @@ impl WorkflowTechnicalFitDecision {
                 .device_diagnostics
                 .iter()
                 .map(WorkflowTechnicalFitDeviceDiagnostic::normalized)
+                .collect(),
+            dependency_readiness: self
+                .dependency_readiness
+                .iter()
+                .filter_map(WorkflowTechnicalFitDependencyReadinessFact::normalized)
                 .collect(),
             reasons: self.reasons.clone(),
             selection_policy_trace: self
@@ -1247,6 +1334,7 @@ mod tests {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason::new(
                 WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,
                 Some(" candidate-a "),
@@ -1366,6 +1454,7 @@ mod tests {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason::new(
                 WorkflowTechnicalFitReasonCode::MissingCandidateData,
                 Some("candle"),
@@ -1417,6 +1506,7 @@ mod tests {
                 evidence_key: Some(" runtime_variant ".to_string()),
                 requested_runtime_key: Some(" PyTorch ".to_string()),
             }],
+            dependency_readiness: Vec::new(),
             reasons: Vec::new(),
             selection_policy_trace: None,
             compatibility_report: None,
@@ -1455,6 +1545,7 @@ mod tests {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason::new(
                 WorkflowTechnicalFitReasonCode::RuntimeRequirements,
                 Some("candle|llm/model"),
@@ -1492,6 +1583,7 @@ mod tests {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason::new(
                 WorkflowTechnicalFitReasonCode::RuntimeRequirements,
                 Some("candle|vlm/qwen"),

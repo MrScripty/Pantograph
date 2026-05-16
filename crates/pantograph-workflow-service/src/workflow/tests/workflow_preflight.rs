@@ -103,6 +103,7 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason::new(
                 WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 Some("llama_cpp"),
@@ -157,6 +158,7 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason {
                 code: WorkflowTechnicalFitReasonCode::MissingRuntimeState,
                 candidate_id: Some("llama_cpp".to_string()),
@@ -229,6 +231,7 @@ async fn workflow_preflight_blocks_selected_technical_fit_runtime_when_capabilit
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![WorkflowTechnicalFitReason::new(
                 WorkflowTechnicalFitReasonCode::RuntimeRequirements,
                 Some("llama_cpp"),

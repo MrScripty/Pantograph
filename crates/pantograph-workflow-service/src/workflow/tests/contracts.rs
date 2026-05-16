@@ -1,6 +1,9 @@
 use super::*;
 use crate::technical_fit::{
-    WorkflowTechnicalFitDecision, WorkflowTechnicalFitDeviceClass,
+    WorkflowTechnicalFitDecision, WorkflowTechnicalFitDependencyReadinessFact,
+    WorkflowTechnicalFitDependencyReadinessResolverOwner,
+    WorkflowTechnicalFitDependencyReadinessState,
+    WorkflowTechnicalFitDependencyReadinessSubjectKind, WorkflowTechnicalFitDeviceClass,
     WorkflowTechnicalFitSelectionMode,
 };
 use crate::{
@@ -458,6 +461,61 @@ fn workflow_execution_plan_admission_builds_selected_node_decision() {
     assert_eq!(
         node_decision.selected_model_ref(),
         Some("pumas://models/stable-diffusion-xl")
+    );
+}
+
+#[test]
+fn workflow_execution_plan_admission_carries_dependency_readiness_proof() {
+    let decision = WorkflowTechnicalFitDecision {
+        selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+        selected_candidate_id: Some("candidate-pytorch-sdxl".to_string()),
+        selected_runtime_id: Some("pytorch-runtime".to_string()),
+        selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+        selected_backend_key: Some("pytorch".to_string()),
+        selected_model_id: Some("stable-diffusion-xl".to_string()),
+        selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+        selected_device_id: Some("cuda:0".to_string()),
+        dependency_readiness: vec![WorkflowTechnicalFitDependencyReadinessFact {
+            subject_kind: WorkflowTechnicalFitDependencyReadinessSubjectKind::Package,
+            runtime_id: Some("pytorch-runtime".to_string()),
+            backend_key: Some("pytorch".to_string()),
+            runtime_variant_id: Some("pytorch.cuda".to_string()),
+            task_id: Some("image_generation".to_string()),
+            model_family_id: Some("stable_diffusion".to_string()),
+            dependency_id: "diffusers".to_string(),
+            state: WorkflowTechnicalFitDependencyReadinessState::Available,
+            resolver_owner: WorkflowTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime,
+            reason_code: Some("installed".to_string()),
+            reason: Some("diffusers is installed".to_string()),
+        }],
+        ..WorkflowTechnicalFitDecision::default()
+    };
+    let models = vec![WorkflowCapabilityModel {
+        model_id: "stable-diffusion-xl".to_string(),
+        model_revision_or_hash: Some("sha256:model".to_string()),
+        model_type: Some("diffusion".to_string()),
+        node_ids: vec!["image-node-1".to_string()],
+        roles: vec!["image_generation".to_string()],
+    }];
+
+    let plan = build_workflow_execution_plan_from_admission(
+        "run-image-admission",
+        "workflow-image-admission",
+        &models,
+        Some(&decision),
+    )
+    .expect("build execution plan")
+    .expect("selected technical fit produces a plan");
+
+    let proof = plan
+        .node_decision("image-node-1")
+        .expect("image node decision")
+        .dependency_readiness();
+    assert_eq!(proof.len(), 1);
+    assert_eq!(proof[0].dependency_id, "diffusers");
+    assert_eq!(
+        proof[0].state,
+        WorkflowTechnicalFitDependencyReadinessState::Available
     );
 }
 

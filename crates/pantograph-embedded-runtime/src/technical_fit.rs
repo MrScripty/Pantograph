@@ -10,13 +10,16 @@ use pantograph_runtime_registry::{
     select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
     RuntimeTechnicalFitCandidateHistorySummary, RuntimeTechnicalFitCandidateSourceKind,
     RuntimeTechnicalFitCompatibilityIssue, RuntimeTechnicalFitCompatibilityReport,
-    RuntimeTechnicalFitDecision, RuntimeTechnicalFitDecisionCode, RuntimeTechnicalFitDeviceClass,
-    RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
-    RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitDevicePolicy,
-    RuntimeTechnicalFitFactor, RuntimeTechnicalFitHistoryThresholdState,
-    RuntimeTechnicalFitObservedThroughputHint, RuntimeTechnicalFitOverride,
-    RuntimeTechnicalFitPolicyPhase, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
-    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
+    RuntimeTechnicalFitDecision, RuntimeTechnicalFitDecisionCode,
+    RuntimeTechnicalFitDependencyReadinessFact,
+    RuntimeTechnicalFitDependencyReadinessResolverOwner,
+    RuntimeTechnicalFitDependencyReadinessState, RuntimeTechnicalFitDependencyReadinessSubjectKind,
+    RuntimeTechnicalFitDeviceClass, RuntimeTechnicalFitDeviceDiagnostic,
+    RuntimeTechnicalFitDeviceDiagnosticCode, RuntimeTechnicalFitDeviceDiagnosticSeverity,
+    RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitHistoryThresholdState, RuntimeTechnicalFitObservedThroughputHint,
+    RuntimeTechnicalFitOverride, RuntimeTechnicalFitPolicyPhase, RuntimeTechnicalFitReason,
+    RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
     RuntimeTechnicalFitResourceEstimate, RuntimeTechnicalFitResourcePressure,
     RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitSelectionPolicyTrace,
     RuntimeTechnicalFitWarmupState,
@@ -26,12 +29,15 @@ use pantograph_workflow_service::{
     WorkflowRuntimeSourceKind, WorkflowRuntimeVariantCapability, WorkflowServiceError,
     WorkflowTechnicalFitCompatibilityIssue, WorkflowTechnicalFitCompatibilityReport,
     WorkflowTechnicalFitDecision, WorkflowTechnicalFitDecisionCode,
-    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDevicePolicy,
-    WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitObservedThroughputHint,
-    WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
-    WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest,
-    WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitSelectionMode,
-    WorkflowTechnicalFitSelectionPolicyTrace,
+    WorkflowTechnicalFitDependencyReadinessFact,
+    WorkflowTechnicalFitDependencyReadinessResolverOwner,
+    WorkflowTechnicalFitDependencyReadinessState,
+    WorkflowTechnicalFitDependencyReadinessSubjectKind, WorkflowTechnicalFitDeviceClass,
+    WorkflowTechnicalFitDevicePolicy, WorkflowTechnicalFitHistoryThresholdState,
+    WorkflowTechnicalFitObservedThroughputHint, WorkflowTechnicalFitPolicyPhase,
+    WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
+    WorkflowTechnicalFitRequest, WorkflowTechnicalFitResourceEstimate,
+    WorkflowTechnicalFitSelectionMode, WorkflowTechnicalFitSelectionPolicyTrace,
 };
 use workflow_nodes::setup::PumasSelectorAccess;
 
@@ -357,6 +363,11 @@ pub fn project_workflow_technical_fit_decision(
             .iter()
             .map(project_runtime_device_diagnostic)
             .collect(),
+        dependency_readiness: decision
+            .dependency_readiness
+            .iter()
+            .map(project_dependency_readiness_fact)
+            .collect(),
         reasons: decision
             .reasons
             .iter()
@@ -378,6 +389,87 @@ pub fn project_workflow_technical_fit_decision(
             .collect(),
     }
     .normalized()
+}
+
+fn project_dependency_readiness_fact(
+    fact: &RuntimeTechnicalFitDependencyReadinessFact,
+) -> WorkflowTechnicalFitDependencyReadinessFact {
+    WorkflowTechnicalFitDependencyReadinessFact {
+        subject_kind: match fact.subject_kind {
+            RuntimeTechnicalFitDependencyReadinessSubjectKind::Package => {
+                WorkflowTechnicalFitDependencyReadinessSubjectKind::Package
+            }
+            RuntimeTechnicalFitDependencyReadinessSubjectKind::Dependency => {
+                WorkflowTechnicalFitDependencyReadinessSubjectKind::Dependency
+            }
+            _ => WorkflowTechnicalFitDependencyReadinessSubjectKind::Dependency,
+        },
+        runtime_id: fact.runtime_id.clone(),
+        backend_key: fact.backend_key.clone(),
+        runtime_variant_id: fact.runtime_variant_id.clone(),
+        task_id: fact.task_id.clone(),
+        model_family_id: fact.model_family_id.clone(),
+        dependency_id: fact.dependency_id.clone(),
+        state: project_dependency_readiness_state(fact.state),
+        resolver_owner: project_dependency_readiness_resolver_owner(fact.resolver_owner),
+        reason_code: fact.reason_code.clone(),
+        reason: fact.reason.clone(),
+    }
+}
+
+fn project_dependency_readiness_state(
+    state: RuntimeTechnicalFitDependencyReadinessState,
+) -> WorkflowTechnicalFitDependencyReadinessState {
+    match state {
+        RuntimeTechnicalFitDependencyReadinessState::Available => {
+            WorkflowTechnicalFitDependencyReadinessState::Available
+        }
+        RuntimeTechnicalFitDependencyReadinessState::NotInstalled => {
+            WorkflowTechnicalFitDependencyReadinessState::NotInstalled
+        }
+        RuntimeTechnicalFitDependencyReadinessState::NotImplemented => {
+            WorkflowTechnicalFitDependencyReadinessState::NotImplemented
+        }
+        RuntimeTechnicalFitDependencyReadinessState::UnsupportedPlatform => {
+            WorkflowTechnicalFitDependencyReadinessState::UnsupportedPlatform
+        }
+        RuntimeTechnicalFitDependencyReadinessState::MissingDependency => {
+            WorkflowTechnicalFitDependencyReadinessState::MissingDependency
+        }
+        RuntimeTechnicalFitDependencyReadinessState::DisabledByPolicy => {
+            WorkflowTechnicalFitDependencyReadinessState::DisabledByPolicy
+        }
+        RuntimeTechnicalFitDependencyReadinessState::MissingModelFacts => {
+            WorkflowTechnicalFitDependencyReadinessState::MissingModelFacts
+        }
+        RuntimeTechnicalFitDependencyReadinessState::RequiresRuntimeCapability => {
+            WorkflowTechnicalFitDependencyReadinessState::RequiresRuntimeCapability
+        }
+        RuntimeTechnicalFitDependencyReadinessState::RequiresModelCapability => {
+            WorkflowTechnicalFitDependencyReadinessState::RequiresModelCapability
+        }
+        _ => WorkflowTechnicalFitDependencyReadinessState::MissingDependency,
+    }
+}
+
+fn project_dependency_readiness_resolver_owner(
+    owner: RuntimeTechnicalFitDependencyReadinessResolverOwner,
+) -> WorkflowTechnicalFitDependencyReadinessResolverOwner {
+    match owner {
+        RuntimeTechnicalFitDependencyReadinessResolverOwner::Inference => {
+            WorkflowTechnicalFitDependencyReadinessResolverOwner::Inference
+        }
+        RuntimeTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime => {
+            WorkflowTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime
+        }
+        RuntimeTechnicalFitDependencyReadinessResolverOwner::ManagedRuntime => {
+            WorkflowTechnicalFitDependencyReadinessResolverOwner::ManagedRuntime
+        }
+        RuntimeTechnicalFitDependencyReadinessResolverOwner::RuntimeBridge => {
+            WorkflowTechnicalFitDependencyReadinessResolverOwner::RuntimeBridge
+        }
+        _ => WorkflowTechnicalFitDependencyReadinessResolverOwner::RuntimeBridge,
+    }
 }
 
 fn project_selection_policy_trace(
@@ -1908,6 +2000,7 @@ mod tests {
                     evidence_key: Some("compatibility_report".to_string()),
                     requested_runtime_key: Some("llama_cpp".to_string()),
                 }],
+                dependency_readiness: Vec::new(),
                 reasons: vec![WorkflowTechnicalFitReason {
                     code: WorkflowTechnicalFitReasonCode::QueuePressure,
                     candidate_id: Some("candidate-a".to_string()),
@@ -2080,6 +2173,7 @@ mod tests {
                     evidence_key: None,
                     requested_runtime_key: None,
                 }],
+                dependency_readiness: Vec::new(),
                 reasons: vec![WorkflowTechnicalFitReason {
                     code: WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,
                     candidate_id: Some("llama_cpp".to_string()),
@@ -2795,6 +2889,20 @@ mod tests {
             .iter()
             .all(|fact| fact.state.is_ready()));
         assert!(candidate
+            .dependency_readiness
+            .iter()
+            .any(|fact| fact.dependency_id == "diffusers"));
+
+        let registry_decision = select_runtime_technical_fit(&runtime_request);
+        assert_eq!(registry_decision.dependency_readiness.len(), 5);
+        assert!(registry_decision
+            .dependency_readiness
+            .iter()
+            .any(|fact| fact.dependency_id == "diffusers"));
+
+        let workflow_decision = project_workflow_technical_fit_decision(&registry_decision);
+        assert_eq!(workflow_decision.dependency_readiness.len(), 5);
+        assert!(workflow_decision
             .dependency_readiness
             .iter()
             .any(|fact| fact.dependency_id == "diffusers"));
