@@ -106,6 +106,55 @@ PyTorch/diffusers and produce a retained image artifact.
   capability/readiness context and produce `RuntimeTechnicalFitCandidate`
   values and typed technical-fit diagnostics. It must not preserve the old
   direct package-hint/backend compatibility loops as fallback behavior.
+- [ ] Add an explicit diagnostics mapping table for the
+  `ExecutionEvidenceTechnicalFitAdapter`. Each inference-owned
+  `ExecutionEvidenceDiagnostic` kind must map to one runtime-registry
+  technical-fit diagnostic code with preserved attribution for task id,
+  backend/runtime id, model/package facts, and explicit graph runtime
+  requirements where available. Unsupported tasks, unavailable backends,
+  missing runtime capabilities, missing required package evidence,
+  compatibility rejection, explicit graph runtime mismatch, and no accepted
+  candidate must remain distinguishable; the adapter must not flatten them into
+  a generic no-fit message or use a broad catch-all diagnostic except for
+  genuinely unknown future non-exhaustive codes.
+- [ ] Extend technical-fit diagnostics as an append-only contract before wiring
+  the evidence adapter. Prefer adding typed runtime-registry diagnostic codes
+  and structured attribution fields, then project them through embedded-runtime
+  and workflow-service, over encoding evidence meaning in diagnostic messages
+  or compatibility issue strings. The new contract should include the minimum
+  fields needed for long-term scheduler history and diagnostics analysis:
+  task id, selected or requested backend/runtime key, selected or requested
+  runtime variant id where available, model id/ref, package/evidence key, and
+  explicit graph runtime request. Keep the design small and append-only; do
+  not introduce a parallel diagnostic envelope unless the existing
+  `RuntimeTechnicalFitDeviceDiagnostic` shape cannot be evolved without
+  breaking consumers.
+- [ ] Implement the diagnostic contract extension as a serial shared-contract
+  slice before adapter wiring. Runtime-registry remains the source contract,
+  embedded-runtime owns projection into workflow-service DTOs, and any exposed
+  Tauri/UniFFI/Rustler/frontend mirrors or JSON fixtures must be updated in the
+  same slice when they carry these diagnostics. Public diagnostic enums/DTOs
+  that are expected to keep growing should use append-only serde-compatible
+  evolution and `#[non_exhaustive]` where appropriate; projection code must
+  match every known variant explicitly instead of collapsing new evidence
+  diagnostics into message strings.
+- [ ] Keep the diagnostic mapping and attribution projection in focused modules
+  instead of growing already broad technical-fit files. Add or update module
+  README/ADR traceability for runtime-registry, embedded-runtime, and
+  workflow-service ownership changes, including wire-format defaults,
+  append-only evolution rules, and the no message-string parsing invariant.
+- [ ] Add contract and projection tests for the diagnostic extension before
+  adapter wiring: runtime-registry serde/default/normalization tests,
+  embedded-runtime runtime-to-workflow projection tests, workflow-service
+  public DTO tests, and fixture or binding mirror tests for any exposed
+  interop surfaces. Tests must cover every new diagnostic code and attribution
+  field, unknown/omitted optional fields, and prove diagnostics survive
+  projection without string matching.
+- [ ] Treat "no accepted execution-evidence candidate" as an explicit adapter
+  outcome. Either add an inference-owned diagnostic code before mapping or
+  synthesize one typed runtime-registry diagnostic in the adapter, but do not
+  infer it only from an empty candidate list without a durable diagnostic code
+  and attribution.
 - [x] Retire scheduler-visible pseudo-Diffusers runtime/backend paths unless a
   real executable Diffusers backend is registered. `diffusers` may remain a
   display/dependency/capability label, but `python_runtime_capabilities`,

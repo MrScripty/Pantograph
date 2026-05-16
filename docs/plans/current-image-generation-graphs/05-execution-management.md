@@ -4557,6 +4557,58 @@ Worker rules:
   technical-fit to the adapter and remove the old builders; fourth run focused
   embedded-runtime technical-fit/runtime-capability tests, `cargo check -p
   pantograph-embedded-runtime`, formatting, and `git diff --check`.
+- 2026-05-16: Added the diagnostics mapping-table requirement for the
+  technical-fit evidence adapter. The adapter must explicitly translate each
+  inference-owned `ExecutionEvidenceDiagnostic` kind into one scheduler-facing
+  runtime-registry technical-fit diagnostic while preserving attribution for
+  task, backend/runtime, model/package facts, and explicit graph runtime
+  requirements. Unsupported task, backend unavailable, missing runtime
+  capability, missing required package evidence, backend compatibility
+  rejection, graph runtime requirement mismatch, and no accepted executable
+  candidate must remain distinguishable so scheduler failure history can be
+  used for future runtime policy, memory-fit, retry, and diagnostics analysis.
+- No-fallback/no-legacy confirmation: this mapping table is a contract for
+  diagnostic projection, not a recovery path. If evidence cannot produce a
+  valid executable candidate, technical-fit must fail candidate selection with
+  the mapped typed diagnostics instead of falling back to package hints,
+  pseudo-Diffusers aliases, node-engine context, default runtime choices, or
+  the old compatibility loop.
+- 2026-05-16: Accepted the append-only technical-fit diagnostic contract option
+  for the evidence adapter. The implementation should extend
+  runtime-registry technical-fit diagnostics with typed evidence-oriented codes
+  and structured attribution fields, then project those fields through
+  embedded-runtime and workflow-service. This is preferred over reusing vague
+  existing codes or hiding evidence meaning in message strings because the
+  scheduler will use this history for future runtime policy, memory-fit,
+  retry, and failure analysis. The contract should remain small, append-only,
+  and easy to reason about: task id, backend/runtime keys, runtime variant id
+  where available, model id/ref, package/evidence key, and explicit graph
+  runtime request are the expected attribution fields.
+- Maintainability decision: do not introduce a parallel diagnostic envelope
+  unless the existing technical-fit diagnostic DTO cannot be safely evolved.
+  A single structured diagnostic contract keeps runtime-registry,
+  embedded-runtime, workflow-service, diagnostics ledger, and future scheduler
+  policy aligned without duplicating projection logic.
+- No-fallback/no-legacy confirmation: rejected evidence must produce typed
+  diagnostics and no selectable fallback candidate. The adapter must not leave
+  generic runtime-capability candidates eligible for model-bound canonical
+  inference when package/backend execution evidence failed.
+- 2026-05-16: Completed a standards iteration over the append-only diagnostic
+  contract plan. The implementation must land the runtime-registry diagnostic
+  DTO/code extension as a serial shared-contract slice before adapter wiring,
+  then update embedded-runtime and workflow-service projections plus any
+  exposed Tauri, UniFFI, Rustler, frontend, JSON fixture, or diagnostics-ledger
+  mirrors in the same slice when they carry technical-fit diagnostics.
+  Public enums/DTOs expected to grow should use serde-compatible append-only
+  evolution and `#[non_exhaustive]` where appropriate, with explicit projection
+  matches for every known variant.
+- Standards guardrails: keep mapping/projection helpers in focused modules
+  instead of growing oversized technical-fit files; update README/ADR
+  traceability for runtime-registry, embedded-runtime, and workflow-service
+  ownership changes; add serde/default/normalization tests, runtime-to-workflow
+  projection tests, public DTO tests, and binding/fixture round-trip tests for
+  any exposed interop surface. The tests must prove every new code and
+  attribution field survives projection without message-string parsing.
 
 ### Traceability Links
 
