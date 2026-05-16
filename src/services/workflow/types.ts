@@ -1682,11 +1682,26 @@ export interface PortOptionsCommandArgs extends PortOptionsQuery, Record<string,
 }
 
 /** A selectable option for a port value */
+export type PortOptionAvailabilityState =
+  | 'available'
+  | 'not_installed'
+  | 'not_implemented'
+  | 'unsupported_platform'
+  | 'missing_dependency'
+  | 'disabled_by_policy'
+  | 'missing_model_facts'
+  | 'requires_runtime_capability'
+  | 'requires_model_capability';
+
 export interface PortOption {
   value: unknown;
   label: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  disabled?: boolean;
+  unavailableState?: PortOptionAvailabilityState;
+  unavailableReasonCode?: string;
+  unavailableReason?: string;
 }
 
 /** Result of a port options query */

@@ -138,7 +138,9 @@
 
   function handleChange(event: Event) {
     const target = event.currentTarget as HTMLSelectElement | null;
-    const nextValue = options.find((option) => stringifySelectionValue(option.value) === target?.value)?.value ?? null;
+    const nextValue = options.find(
+      (option) => !option.disabled && stringifySelectionValue(option.value) === target?.value,
+    )?.value ?? null;
     updateNodeData(id, { value: nextValue });
   }
 </script>
@@ -190,7 +192,13 @@
               <option value="" disabled>{selectionState.placeholderLabel}</option>
             {/if}
             {#each options as option (stringifySelectionValue(option.value))}
-              <option value={stringifySelectionValue(option.value)}>{option.label}</option>
+              <option
+                value={stringifySelectionValue(option.value)}
+                disabled={option.disabled}
+                title={option.unavailableReason}
+              >
+                {option.label}
+              </option>
             {/each}
           </select>
         </div>

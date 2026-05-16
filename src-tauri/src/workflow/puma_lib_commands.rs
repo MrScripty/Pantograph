@@ -493,6 +493,10 @@ async fn find_matching_model_option(
             "package_facts_summary_status": package_facts_summary_status,
             "package_facts_summary": package_facts_summary,
         })),
+        disabled: false,
+        unavailable_state: None,
+        unavailable_reason_code: None,
+        unavailable_reason: None,
     })
 }
 
@@ -657,6 +661,10 @@ fn build_selected_model_option_from_detail(
             "package_facts_summary_status": package_facts_summary_status,
             "package_facts_summary": package_facts_summary,
         })),
+        disabled: false,
+        unavailable_state: None,
+        unavailable_reason_code: None,
+        unavailable_reason: None,
     })
 }
 
@@ -1143,6 +1151,10 @@ mod tests {
                 "review_reasons": ["imported"],
                 "inference_settings": [{ "key": "steps" }]
             })),
+            disabled: false,
+            unavailable_state: None,
+            unavailable_reason_code: None,
+            unavailable_reason: None,
         }
     }
 
@@ -1184,6 +1196,10 @@ mod tests {
                     }
                 ]
             })),
+            disabled: false,
+            unavailable_state: None,
+            unavailable_reason_code: None,
+            unavailable_reason: None,
         };
 
         let node_data = build_hydrated_node_data(&option, Vec::new()).expect("node data");

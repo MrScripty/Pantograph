@@ -4985,6 +4985,40 @@ Worker rules:
     diagnostics and port-option DTOs in later slices, then replace dependency
     readiness and provider disabled-state paths without creating parallel
     contracts.
+- 2026-05-16 port-option disabled/unavailable contract slice:
+  - Smallest useful vertical slice: extend the existing backend-owned
+    port-options channel with append-only disabled/unavailable fields and carry
+    them through the selection-input frontend normalization/rendering path.
+  - Allowed write set: `crates/node-engine/src/port_options.rs`,
+    `crates/node-engine/src/lib.rs`, `crates/node-engine/src/README.md`,
+    existing `PortOption` literal call sites in `crates/workflow-nodes` and
+    `src-tauri/src/workflow/puma_lib_commands.rs`, TypeScript workflow and
+    svelte-graph port-option mirrors, selection-input state/provider/component
+    files, focused selection-input tests, and this plan directory.
+  - No-fallback/no-legacy confirmation: this slice does not add scheduler
+    policy, hardcoded denoising scheduler lists, pseudo-runtime choices, or
+    metadata/label-based disabled state. Disabled availability remains typed
+    port-option data for later projection from capability facts.
+  - Verification passed: `cargo fmt --manifest-path crates/node-engine/Cargo.toml`,
+    `cargo fmt --manifest-path crates/node-engine/Cargo.toml -- --check`,
+    `cargo test -p node-engine port_options --lib`, `cargo test -p
+    workflow-nodes puma_lib --lib`, `node --experimental-strip-types --test
+    src/components/nodes/workflow/selectionInputProviderOptions.test.ts
+    src/components/nodes/workflow/selectionInputState.test.ts`, `npm run
+    typecheck`, and `git diff --check`.
+  - Verification deviation/discovered issue: the first verification attempted
+    `cargo test --manifest-path src-tauri/Cargo.toml puma_lib_commands --lib`,
+    but the Tauri package has no library target. The follow-up `cargo check
+    --manifest-path src-tauri/Cargo.toml` reached the Tauri crate and failed on
+    pre-existing unrelated errors in `src-tauri/src/llm/startup.rs`
+    (`BackendConfig.device` now expects `BackendStartupDeviceIntent`, not
+    `String`) and `src-tauri/src/workflow/diagnostics/types.rs`
+    (`RuntimeLifecycleSnapshot` initializer missing timing fields). These are
+    recorded as out-of-scope follow-ups and were not fixed in this slice.
+  - Remaining follow-up: wire actual availability facts into provider rows in
+    the backend-owned options providers, then add scheduler/admission tests
+    proving unavailable rows are non-selectable without hiding the reason in
+    metadata.
 
 ### Traceability Links
 

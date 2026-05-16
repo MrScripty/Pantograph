@@ -523,6 +523,10 @@ mod options_provider {
             label: row.display_name.clone(),
             description: Some(selector_row_description(row)),
             metadata: Some(selector_row_option_metadata(row, cursor)),
+            disabled: false,
+            unavailable_state: None,
+            unavailable_reason_code: None,
+            unavailable_reason: None,
         }
     }
 

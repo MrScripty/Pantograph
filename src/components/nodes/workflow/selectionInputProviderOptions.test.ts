@@ -85,6 +85,34 @@ test('normalizePortOptions keeps backend option values and presentation labels s
   );
 });
 
+test('normalizePortOptions carries typed disabled state outside metadata', () => {
+  assert.deepEqual(
+    normalizePortOptions([
+      {
+        label: 'DPM++',
+        value: 'dpmpp',
+        disabled: true,
+        unavailableState: 'requires_runtime_capability',
+        unavailableReasonCode: 'scheduler_not_supported',
+        unavailableReason: 'Selected runtime does not expose this scheduler',
+        metadata: {
+          family: 'diffusers',
+        },
+      },
+    ]),
+    [
+      {
+        label: 'DPM++',
+        value: 'dpmpp',
+        disabled: true,
+        unavailableState: 'requires_runtime_capability',
+        unavailableReasonCode: 'scheduler_not_supported',
+        unavailableReason: 'Selected runtime does not expose this scheduler',
+      },
+    ],
+  );
+});
+
 test('loadLatestSelectionInputProviderOptions discards stale provider responses', async () => {
   let latestKey = '';
   const pending = new Map<string, (value: PortOptionsResult) => void>();

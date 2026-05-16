@@ -73,3 +73,35 @@ test('buildSelectionInputState renders provider-backed unset and stale states ex
     placeholderLabel: 'Stale selection',
   });
 });
+
+test('buildSelectionInputState keeps disabled provider rows visible when selected', () => {
+  const providerPort = port({
+    options_provider: {
+      node_type: 'llm-inference',
+      port_id: 'denoising_scheduler',
+    },
+  });
+
+  assert.deepEqual(
+    buildSelectionInputState(
+      providerPort,
+      [
+        {
+          label: 'DPM++',
+          value: 'dpmpp',
+          disabled: true,
+          unavailableState: 'requires_runtime_capability',
+          unavailableReason: 'Selected runtime does not expose this scheduler',
+        },
+      ],
+      'dpmpp',
+    ),
+    {
+      isProviderBacked: true,
+      selectedString: '"dpmpp"',
+      displayValue: '"dpmpp"',
+      hasSelectedOption: true,
+      placeholderLabel: null,
+    },
+  );
+});

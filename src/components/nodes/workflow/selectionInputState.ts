@@ -3,6 +3,10 @@ import type { PortDefinition } from '../../../services/workflow/types';
 export interface SelectionInputOption {
   label: string;
   value: unknown;
+  disabled?: boolean;
+  unavailableState?: string;
+  unavailableReasonCode?: string;
+  unavailableReason?: string;
 }
 
 export interface SelectionInputState {

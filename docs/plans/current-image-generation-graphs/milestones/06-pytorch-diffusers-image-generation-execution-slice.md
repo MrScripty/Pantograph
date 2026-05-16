@@ -2376,10 +2376,18 @@ readiness:
       availability states, validated primitive ids, bounded single-line
       reasons, serde round-trip coverage, and README ownership notes. No
       scheduler ranking, UI projection, or fallback runtime path was added.
-  - [ ] Extend `PortOption` and all Rust/TypeScript/interop mirrors with
+  - [x] Extend `PortOption` and all Rust/TypeScript/interop mirrors with
     append-only disabled/unavailable fields and focused node tests. Provider
     rows must keep primitive option ids separate from presentation labels and
     must not hide disabled state in metadata.
+    - 2026-05-16 slice: added append-only `disabled`,
+      `unavailableState`, `unavailableReasonCode`, and
+      `unavailableReason` fields to the Rust `node_engine::PortOption`
+      contract, mirrored them in TypeScript workflow and svelte-graph
+      contracts, and propagated them through selection-input provider
+      normalization and rendered disabled option rows. Focused tests verify
+      serde defaults, typed disabled-state serialization, metadata separation,
+      stale-response handling, and selected disabled rows remaining visible.
   - [ ] Replace canonical inference dependency readiness with a single owner:
     inference declares runtime/package dependency requirements; embedded-runtime
     or managed-runtime resolves installed/readiness facts; scheduler/admission

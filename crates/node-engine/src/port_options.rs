@@ -43,6 +43,43 @@ pub struct PortOption {
     pub description: Option<String>,
     /// Optional structured metadata (e.g., model type, tags).
     pub metadata: Option<serde_json::Value>,
+    /// Whether this option should be shown but not selectable.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disabled: bool,
+    /// Typed unavailable state for disabled options.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_state: Option<PortOptionAvailabilityState>,
+    /// Stable reason code for disabled/unavailable display.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason_code: Option<String>,
+    /// Human-readable disabled/unavailable reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason: Option<String>,
+}
+
+/// Port-option availability state projected from backend capability facts.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum PortOptionAvailabilityState {
+    /// The option can be selected.
+    Available,
+    /// The option is supported but not installed locally.
+    NotInstalled,
+    /// The option is reserved/planned but execution is not implemented.
+    NotImplemented,
+    /// The option cannot run on the current platform.
+    UnsupportedPlatform,
+    /// The option needs a package/runtime dependency that is not ready.
+    MissingDependency,
+    /// Product or host policy disables this option.
+    DisabledByPolicy,
+    /// Required model/package facts were not available.
+    MissingModelFacts,
+    /// The option requires runtime support that is not available.
+    RequiresRuntimeCapability,
+    /// The option requires model support that is not available.
+    RequiresModelCapability,
 }
 
 /// Error returned when a port-option context identifier is invalid.
@@ -201,6 +238,10 @@ pub struct PortQueryFn {
 
 inventory::collect!(PortQueryFn);
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,6 +253,10 @@ mod tests {
             label: "Llama 3.2 7B".to_string(),
             description: Some("llm | gguf, quantized".to_string()),
             metadata: Some(serde_json::json!({"model_type": "llm"})),
+            disabled: false,
+            unavailable_state: None,
+            unavailable_reason_code: None,
+            unavailable_reason: None,
         };
 
         let json = serde_json::to_value(&option).unwrap();
@@ -294,6 +339,10 @@ mod tests {
                 label: "Test".to_string(),
                 description: None,
                 metadata: None,
+                disabled: false,
+                unavailable_state: None,
+                unavailable_reason_code: None,
+                unavailable_reason: None,
             }],
             total_count: 1,
             searchable: true,
@@ -305,5 +354,51 @@ mod tests {
         assert_eq!(json["searchable"], true);
         assert_eq!(json["metadata"]["cursor"], "model-library-updates:1");
         assert_eq!(json["options"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_port_option_disabled_state_serializes_append_only_fields() {
+        let option = PortOption {
+            value: serde_json::json!("euler_discrete"),
+            label: "Euler Discrete".to_string(),
+            description: None,
+            metadata: None,
+            disabled: true,
+            unavailable_state: Some(PortOptionAvailabilityState::RequiresRuntimeCapability),
+            unavailable_reason_code: Some("scheduler_not_supported".to_string()),
+            unavailable_reason: Some("Selected runtime does not expose this scheduler".to_string()),
+        };
+
+        let json = serde_json::to_value(&option).unwrap();
+        assert_eq!(json["disabled"], true);
+        assert_eq!(json["unavailableState"], "requires_runtime_capability");
+        assert_eq!(json["unavailableReasonCode"], "scheduler_not_supported");
+        assert_eq!(
+            json["unavailableReason"],
+            "Selected runtime does not expose this scheduler"
+        );
+
+        let round_trip: PortOption = serde_json::from_value(json).unwrap();
+        assert!(round_trip.disabled);
+        assert_eq!(
+            round_trip.unavailable_state,
+            Some(PortOptionAvailabilityState::RequiresRuntimeCapability)
+        );
+    }
+
+    #[test]
+    fn test_port_option_disabled_fields_default_for_legacy_payloads() {
+        let option: PortOption = serde_json::from_value(serde_json::json!({
+            "value": "euler_discrete",
+            "label": "Euler Discrete",
+            "description": null,
+            "metadata": null
+        }))
+        .unwrap();
+
+        assert!(!option.disabled);
+        assert!(option.unavailable_state.is_none());
+        assert!(option.unavailable_reason_code.is_none());
+        assert!(option.unavailable_reason.is_none());
     }
 }

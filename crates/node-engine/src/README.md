@@ -28,7 +28,7 @@ inputs, and keeps execution dispatch aligned with descriptors published by
 | `orchestration/` | Orchestration-specific execution and state modules. |
 | `path_validation.rs` | Validation helpers for file and model-path inputs. |
 | `planned_inference.rs` | Run-scoped planned inference decision context installed by hosts through executor extensions. |
-| `port_options.rs` | Port metadata helpers used by graph editing and execution, including validated provider query context for fact-aware option lists. |
+| `port_options.rs` | Port metadata helpers used by graph editing and execution, including validated provider query context and typed disabled/unavailable rows for fact-aware option lists. |
 | `registry.rs` | Built-in node registration, descriptor inventory, and callback-executor type boundaries. |
 | `tasks/` | Task metadata and task-oriented helpers. |
 | `types.rs` | Shared workflow graph and runtime DTOs. |
@@ -216,6 +216,10 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Canonical `llm-inference` image-generation request construction consumes the
   graph/API field `denoising_scheduler` for optional sampling intent. The
   overloaded graph/API key `scheduler` is intentionally not read as an alias.
+- Backend-owned port options may expose disabled rows with typed availability
+  state, stable reason code, and bounded display reason fields. Providers must
+  keep primitive option values separate from labels and must not hide
+  unavailable state in metadata or presentation strings.
 
 ## Structured Producer Contract
 - Built-in node descriptors, canonical contract projection, and execution

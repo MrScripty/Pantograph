@@ -23,11 +23,26 @@ import type {
 import type { PortMapping } from './groups.js';
 
 /** A single option for a port dropdown (e.g., model selection) */
+export type PortOptionAvailabilityState =
+  | 'available'
+  | 'not_installed'
+  | 'not_implemented'
+  | 'unsupported_platform'
+  | 'missing_dependency'
+  | 'disabled_by_policy'
+  | 'missing_model_facts'
+  | 'requires_runtime_capability'
+  | 'requires_model_capability';
+
 export interface PortOption {
   value: string | number | boolean;
   label: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  disabled?: boolean;
+  unavailableState?: PortOptionAvailabilityState;
+  unavailableReasonCode?: string;
+  unavailableReason?: string;
 }
 
 /** Result from querying port options */

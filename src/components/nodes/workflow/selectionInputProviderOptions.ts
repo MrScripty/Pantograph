@@ -82,10 +82,17 @@ export async function loadLatestSelectionInputProviderOptions(
 }
 
 export function normalizePortOptions(options: PortOption[]): SelectionInputOption[] {
-  return options.map((option) => ({
-    label: option.label,
-    value: option.value,
-  }));
+  return options.map((option) => {
+    const normalized: SelectionInputOption = {
+      label: option.label,
+      value: option.value,
+    };
+    if (option.disabled === true) normalized.disabled = true;
+    if (option.unavailableState) normalized.unavailableState = option.unavailableState;
+    if (option.unavailableReasonCode) normalized.unavailableReasonCode = option.unavailableReasonCode;
+    if (option.unavailableReason) normalized.unavailableReason = option.unavailableReason;
+    return normalized;
+  });
 }
 
 function defaultPortOptionsLoader(args: PortOptionsCommandArgs): Promise<PortOptionsResult> {
