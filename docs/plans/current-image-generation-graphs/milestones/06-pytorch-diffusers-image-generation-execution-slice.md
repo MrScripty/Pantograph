@@ -2305,13 +2305,18 @@ readiness:
   missing model facts, requires runtime capability, and requires model
   capability.
 - Diagnostics contract decision: runtime and capability diagnostics must be
-  explicit about the runtime/candidate/capability they describe. Use
-  runtime-scoped diagnostics for scheduler/admission failures and capability
-  facts for graph editor/provider availability. The same source facts may feed
-  both surfaces, but the scheduler-facing diagnostic must identify the
-  candidate runtime/backend and non-selectable reason, while the provider-facing
-  fact must identify the trait id, runtime/model scope, availability state,
-  and disabled-display reason.
+  explicit about the runtime/candidate/capability they describe. Capability
+  facts are the factual source of truth: they say which runtime, package,
+  model, or trait exists and whether it is available, not installed, not
+  implemented, unsupported, missing dependencies, disabled by policy, or
+  blocked by missing model/runtime facts. Scheduler/admission diagnostics are
+  the decision trail: they say which concrete candidate runtime/backend/variant
+  was selected or rejected for a workflow and why. Provider-facing facts for
+  graph editors use the same source facts but must identify the trait id,
+  runtime/model scope, availability state, and disabled-display reason. Do not
+  make provider availability messages, scheduler diagnostics, or lifecycle
+  events the source facts themselves, and do not require message-string parsing
+  to recover the runtime/candidate/trait that a diagnostic describes.
 - Pumas root/path decision: "roots" means approved filesystem/storage base
   locations for Pumas-managed model artifacts, such as the Pumas
   `shared-resources/models` tree. Worker execution must receive a typed Pumas
@@ -2328,6 +2333,123 @@ readiness:
   embedded-runtime, inference backend capability facts, managed runtime, or a
   PyTorch bridge preflight shell, and must define the reduced typed facts
   passed to scheduler/planner/gateway.
+- Codebase review findings after these decisions:
+  - `inference::execution_evidence` is the correct reusable boundary for
+    separating executable backend candidates from package/dependency evidence,
+    graph runtime constraints, runtime capability facts, and display labels. Do
+    not move that normalization into image planning, node-engine,
+    workflow-service, or scheduler ranking.
+  - `pantograph-embedded-runtime::task_executor::dependency_environment` still
+    contains legacy dependency-preflight behavior that can derive backend keys
+    from package hints, legacy dependency requirements, or node-type defaults.
+    That path must be replaced for canonical inference execution rather than
+    expanded; package hints may feed execution evidence, but dependency
+    readiness must not become a second scheduler/runtime-selection path.
+  - `node_engine::PortOption` and TypeScript mirrors currently lack first-class
+    disabled/unavailable fields. Do not encode availability in metadata or
+    label strings. The graph editor needs typed disabled options so unavailable
+    runtime traits can be visible, greyed out, and non-selectable with a
+    precise reason.
+  - `selection-input` provider context is structurally good because it carries
+    stable refs and summary cursors instead of full Pumas facts, but backend or
+    runtime context must come from scheduler/runtime context or runtime overlay,
+    not persisted structural graph data. Avoid writing scheduler decisions into
+    graph nodes to satisfy provider queries.
+  - `ImageGenerationExecutionPlan` and the PyTorch image worker contract still
+    carry `artifact_entry_path` as a raw string. Introduce a validated
+    Pumas/root-relative artifact path contract before dispatch, and reject
+    arbitrary local paths, traversal, and unapproved storage roots at the owning
+    Rust boundary.
+  - `pantograph-runtime-identity` may keep `diffusers` as reserved spelling,
+    but display/selectability must come from runtime capability facts. A display
+    label must not imply an executable Diffusers sidecar when only PyTorch is
+    registered as the executable backend.
+- Ordered implementation slices required before worker-ready image generation:
+  - [ ] Add a shared typed availability contract for runtime/trait/package
+    capability facts. Required states include available, not installed, not
+    implemented, unsupported platform, missing dependency, disabled by policy,
+    missing model facts, requires runtime capability, and requires model
+    capability. Project it to scheduler diagnostics and port-option rows
+    through existing DTOs instead of adding a parallel diagnostic envelope.
+  - [ ] Extend `PortOption` and all Rust/TypeScript/interop mirrors with
+    append-only disabled/unavailable fields and focused node tests. Provider
+    rows must keep primitive option ids separate from presentation labels and
+    must not hide disabled state in metadata.
+  - [ ] Replace canonical inference dependency readiness with a single owner:
+    inference declares runtime/package dependency requirements; embedded-runtime
+    or managed-runtime resolves installed/readiness facts; scheduler/admission
+    consumes reduced readiness facts; inference planner/gateway refuses
+    non-ready decisions; the PyTorch worker only receives already-approved
+    execution envelopes. Remove canonical inference reliance on
+    `dependency_environment` backend-hint/default backend selection.
+  - [ ] Introduce a validated Pumas artifact/root path type or DTO at the
+    workflow execution-plan/admission projection boundary and carry only that
+    proof, a root-relative artifact path, or an already root-validated resolved
+    path into inference and worker envelopes.
+  - [ ] Reconcile reserved `diffusers` runtime identity and diagnostics
+    fixtures: preserve the canonical spelling only as package/source/future
+    runtime identity, remove or mark misleading sidecar display strings until a
+    real executable runtime registers, and ensure diagnostics/metrics fixtures
+    distinguish package evidence from observed executable runtimes.
+  - [ ] Replace remaining generic recursive `backend_key` discovery for each
+    node family as that family moves onto canonical scheduler-owned inference
+    execution. Do not create a new broad scanner; add explicit typed runtime or
+    trait inputs per family and fail closed with diagnostics when the typed
+    contract is absent or invalid.
+- Standards-compliance requirements for the ordered slices:
+  - Shared contracts are serial integration-owner work. Availability facts,
+    `PortOption` disabled state, dependency-readiness facts, validated
+    artifact/root DTOs, runtime identity display semantics, public diagnostic
+    enums, Tauri/UniFFI/Rustler mirrors, TypeScript mirrors, fixtures, README
+    notes, and ADRs must not be split across parallel write sets unless an
+    explicit integration owner is recorded first.
+  - Boundary values must be correct by construction. New runtime ids, trait ids,
+    availability states, dependency ids, provider-context ids, and
+    Pumas/root-relative artifact paths must use typed constructors or
+    `TryFrom`/`FromStr` validation with specific error enums. Internal code must
+    accept validated values rather than repeatedly re-validating raw `String`,
+    `PathBuf`, or JSON fields.
+  - Public wire contracts must evolve append-only. Public enums/DTOs expected
+    to grow should use serde-compatible defaults and `#[non_exhaustive]` where
+    appropriate; projection code must match known variants explicitly and must
+    not collapse new states into display strings, metadata blobs, or generic
+    "unknown" diagnostics unless the unknown state is truly from a future
+    producer.
+  - Path safety must have one owner. Pumas/model root validation belongs in a
+    focused Rust boundary module or DTO constructor; handlers, planners, and
+    worker-envelope builders must not duplicate inline path traversal/root
+    checks. Diagnostics may include stable model/artifact ids and bounded
+    field paths, but must not leak arbitrary local paths when a stable Pumas id
+    is available.
+  - Dependency ownership must match execution boundaries. Runtime-package
+    readiness checks for `diffusers`, `transformers`, `accelerate`, `torch`,
+    Pillow, and future runtime packages must be declared by the owner that
+    executes or manages them. Do not add broad workspace dependencies or depend
+    on incidental Python/package-manager availability. Any new third-party
+    dependency must be justified against the dependency standards before it is
+    added.
+  - Diagnostics must use existing owned channels. Scheduler/admission failures,
+    provider unavailable options, dependency readiness failures, and path-root
+    rejection must carry bounded structured fields through the existing
+    runtime-registry, workflow-service, node-engine, and lifecycle diagnostic
+    paths. Do not add a second diagnostic system or require message-string
+    parsing for control flow.
+  - Verification must follow the blast radius of each slice. Contract slices
+    require Rust serde/default/round-trip tests plus affected Tauri, UniFFI,
+    Rustler, TypeScript mirror, and fixture tests. Provider UI slices require
+    the project-approved Node tests for disabled/unavailable options,
+    accessible names, keyboard behavior, stale-response discard, and graph
+    gesture containment. Scheduler/readiness/path slices require success and
+    failure tests proving unavailable candidates are non-selectable, explicit
+    graph runtime requirements fail closed, invalid roots/path traversal reject
+    before worker dispatch, and no worker-side dependency discovery is the first
+    readiness signal.
+  - Documentation must move with public contract changes. Any new source
+    module, shared DTO, public constructor, diagnostic enum, provider context
+    field, or execution-plan boundary must update the owning README or add an
+    ADR in the same slice, documenting ownership, parse-once invariants,
+    append-only evolution, diagnostics semantics, and migration/removal of old
+    behavior.
 - No-fallback/no-legacy confirmation: these decisions do not allow
   pseudo-Diffusers runtime candidates, hardcoded frontend scheduler lists,
   recursive inference `backend_key` selection, raw local-path execution,

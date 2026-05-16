@@ -4941,6 +4941,29 @@ Worker rules:
   recursive inference `backend_key` selection, raw local-path execution,
   worker-side dependency discovery as readiness policy, or direct graph-to-
   inference runtime selection.
+- 2026-05-16 diagnostics and standards tightening slice:
+  - Smallest useful vertical slice: update Milestone 6 re-plan guidance after
+    codebase review and standards pass so implementation cannot satisfy the
+    remaining rows with metadata-only availability, parallel contract drift,
+    hidden dependency-readiness paths, raw artifact paths, or unscoped
+    diagnostics.
+  - Allowed write set: this plan directory only.
+  - No-fallback/no-legacy confirmation: this slice changes planning guidance
+    only. It keeps capability facts as factual source data, scheduler/admission
+    diagnostics as the decision trail, provider-facing disabled state as a
+    projection of the same source facts, and rejects message-string parsing or
+    lifecycle events as runtime/trait source facts.
+  - Standards review: checked the update against the Coding Standards for
+    correct-by-construction boundary values, append-only public contracts,
+    single-owner path validation, dependency ownership, existing diagnostic
+    channels, binding/mirror updates, README/ADR traceability, and verification
+    proportional to blast radius.
+  - Verification: docs-only diff review; no code tests were run.
+  - Remaining follow-up: implement the ordered Milestone 6 slices for typed
+    availability, disabled port options, dependency readiness ownership,
+    validated Pumas artifact/root paths, reserved `diffusers` identity
+    reconciliation, and typed runtime/trait input replacement for remaining
+    generic `backend_key` discovery.
 
 ### Traceability Links
 
