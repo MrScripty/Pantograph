@@ -90,6 +90,20 @@ PyTorch/diffusers and produce a retained image artifact.
   gateway, and workflow runtime preflight mappings so execution selection,
   runtime display, and dependency diagnostics do not each maintain conflicting
   `diffusers` rules.
+- [ ] Retire scheduler-visible pseudo-Diffusers runtime/backend paths unless a
+  real executable Diffusers backend is registered. `diffusers` may remain a
+  display/dependency/capability label, but `python_runtime_capabilities`,
+  runtime capability projection, and tests must not advertise `diffusers` as a
+  selectable runtime/backend when the executable backend is PyTorch.
+- [ ] Update workflow capability extraction so package-owned
+  `recommended_backend` fields from Pumas facts do not become hard required
+  executable backends. Only explicit graph-owned backend constraints should
+  enter workflow runtime requirements; package recommendations should flow
+  through the inference-owned evidence boundary.
+- [ ] Keep node-engine dependency-context forwarding from becoming a backend
+  decision path. Node-engine may carry model intent and host-installed planned
+  inference decisions, but Pumas `recommended_backend` and dependency metadata
+  must not be interpreted there as executable backend selection.
 - [ ] Add or update centralized normalization tests for graph
   `backend_key = pytorch` and Pumas Diffusers package hints. `diffusers`
   remains package/runtime capability evidence, not a graph-visible backend
@@ -1462,6 +1476,14 @@ Staged Option 3 implementation plan:
   candidate only when PyTorch runtime capability facts advertise Diffusers
   support for the requested task/model shape. The emitted executable backend
   key is `pytorch`; `diffusers` remains dependency/package/capability evidence.
+  Existing pseudo-backend helpers that convert `BackendHintLabel::Diffusers`
+  directly to `"diffusers"` for execution selection are implementation debt to
+  remove, not compatibility behavior to preserve.
+- PyTorch capability requirement: the evidence rule cannot infer PyTorch image
+  eligibility from package facts alone. The PyTorch backend capability facts
+  must explicitly advertise the supported image-generation task, Diffusers
+  artifact/source support, and valid runtime variants before the evidence
+  boundary can emit a PyTorch executable candidate for Diffusers package facts.
 - Runtime-specific separation: PyTorch-specific image behavior starts only
   after scheduler selection has produced a PyTorch `BackendExecutionDecision`.
   The PyTorch/diffusers image bridge may validate pipeline family, components,
@@ -1483,9 +1505,10 @@ Staged Option 3 implementation plan:
 - First implementation slice: add the typed evidence boundary plus focused
   tests for Diffusers package facts, PyTorch capability facts, and graph
   `backend_key = pytorch`. The allowed initial write set should be limited to
-  the new inference evidence module, existing inference model/backend
-  compatibility tests or fixtures, runtime-identity tests only if alias
-  documentation needs clarification, and this plan. It should not edit
+  the new inference evidence module, PyTorch static capability facts and their
+  focused tests if required to express Diffusers support, existing inference
+  model/backend compatibility tests or fixtures, runtime-identity tests only if
+  alias documentation needs clarification, and this plan. It should not edit
   workflow-service admission, embedded-runtime technical fit, node-engine, or
   gateway behavior until the boundary contract is pinned.
 - Second implementation slice: migrate embedded-runtime technical-fit
@@ -1493,12 +1516,17 @@ Staged Option 3 implementation plan:
   Allowed write set can include
   `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
   `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+  `crates/pantograph-embedded-runtime/src/runtime_capabilities.rs`,
+  `crates/pantograph-embedded-runtime/src/model_dependency_descriptors.rs`,
   `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
   focused technical-fit/dependency tests, and this plan.
 - Third implementation slice: migrate workflow/runtime preflight and gateway
-  diagnostics that currently maintain their own `diffusers` backend logic, then
-  add a cross-boundary guard search proving execution selectors do not treat
-  `diffusers` as a scheduler-selected backend key.
+  diagnostics that currently maintain their own `diffusers` backend logic.
+  This includes workflow-service required-backend extraction for nested
+  package/Pumas `recommended_backend`, node-engine dependency-context forwarding
+  expectations, lifecycle diagnostics, and any remaining gateway diagnostic
+  paths. Add a cross-boundary guard search proving execution selectors do not
+  treat `diffusers` as a scheduler-selected backend key.
 - Out of scope for these normalization slices: actual PyTorch image worker
   execution, model-family adapters, denoising scheduler provider rows,
   artifact retention, end-to-end smoke generation, durable scheduler replay,

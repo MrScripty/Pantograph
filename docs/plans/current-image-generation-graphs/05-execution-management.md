@@ -4316,6 +4316,21 @@ Worker rules:
   `recommended_backend` as required backend evidence. Future graph-hint work
   must distinguish explicit graph-owned preferences from nested package/Pumas
   evidence so package facts do not become hard execution decisions.
+- Additional blast-radius finding: runtime capability projection currently has
+  enough shape for a scheduler-visible `diffusers` runtime/backend even though
+  the executable image-generation backend is PyTorch. Future normalization work
+  must retire pseudo-Diffusers runtime/backend selection paths unless a real
+  executable Diffusers backend is registered; `diffusers` may remain only as
+  display, dependency, package, or capability evidence in the PyTorch case.
+- Additional blast-radius finding: PyTorch capability facts are the required
+  gate for Diffusers image-generation eligibility. The evidence boundary must
+  not infer PyTorch execution from Pumas Diffusers facts alone; PyTorch must
+  explicitly advertise image-generation task/source/runtime support before the
+  boundary emits a PyTorch executable candidate.
+- Additional blast-radius finding: node-engine dependency-context forwarding
+  should not become a backend selection path. It may carry model intent and
+  host-installed planned inference decisions, but Pumas `recommended_backend`
+  and dependency metadata must not be interpreted there as scheduler decisions.
 - Maintainability finding: the affected files remain above the decomposition
   review threshold, including node-engine inference execution, dependency
   preflight, runtime-registry technical-fit/policy, inference planner, and the
@@ -4347,6 +4362,25 @@ Worker rules:
   oversized modules without a focused extraction.
 - Verification for this standards pass: `git status --short`, standards
   review, plan diff review, and `git diff --check`.
+- 2026-05-15: Updated the Milestone 6 execution-evidence normalization plan
+  after checking whether the current text already answered the latest
+  blast-radius findings. Existing plan text already covered the general rule:
+  Diffusers remains package/dependency/capability evidence, PyTorch execution
+  requires capability support, graph hints are scheduler inputs only, and the
+  evidence boundary belongs in inference. The update adds the missing concrete
+  implementation consequences: retire scheduler-visible pseudo-Diffusers
+  runtime/backend paths unless a real executable Diffusers backend is
+  registered, require explicit PyTorch image/Diffusers capability facts before
+  emitting a PyTorch candidate, prevent workflow-service nested
+  `recommended_backend` extraction from becoming hard runtime requirements, and
+  keep node-engine dependency-context forwarding out of backend selection.
+- No-fallback/no-legacy confirmation: these plan changes do not preserve
+  `diffusers` as an executable alias for compatibility. They require typed
+  diagnostics or no candidate when package facts, runtime capabilities, and
+  graph constraints cannot produce a canonical executable backend decision.
+- Verification for this plan-only update: `git status --short`, targeted plan
+  duplicate-check, codebase blast-radius findings review, and `git diff
+  --check`.
 
 ### Traceability Links
 
