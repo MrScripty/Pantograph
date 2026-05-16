@@ -4751,6 +4751,21 @@ Worker rules:
 - Remaining follow-up: implement backend-owned denoising scheduler port options
   and reconcile gateway-level image option diagnostics with planner diagnostics
   before accepting explicit scheduler changes in successful planned execution.
+- 2026-05-16 inference compatibility package-vs-backend naming slice:
+  smallest useful vertical slice was to rename the Diffusers image-generation
+  compatibility test helper so it represents a PyTorch backend with Diffusers
+  package support, and attribute compatibility checks to executable backend
+  key `pytorch` while preserving `BackendHintLabel::Diffusers` as package
+  evidence. Allowed write set:
+  `crates/inference/src/backend/compatibility.rs` and this plan directory.
+- No-fallback/no-legacy confirmation: this slice does not introduce a
+  selectable Diffusers backend or alias Diffusers to PyTorch. It clarifies that
+  PyTorch is the executable backend and Diffusers is package/source evidence.
+- Verification passed: `cargo test -p inference
+  diffusers_bundle_model_index_satisfies_image_generation_preprocessing --lib`
+  and `cargo test -p inference backend::compatibility --lib`.
+- Remaining follow-up: continue the broader package/dependency-key audit across
+  runtime display, dependency diagnostics, and scheduler-selected backend facts.
 
 ### Traceability Links
 

@@ -738,7 +738,7 @@ mod tests {
         }
     }
 
-    fn backend_for_diffusers_image_generation() -> BackendCapabilities {
+    fn pytorch_backend_with_diffusers_package_support() -> BackendCapabilities {
         BackendCapabilities {
             facts: BackendCapabilityFacts {
                 tasks: vec![BackendTaskCapability {
@@ -825,8 +825,8 @@ mod tests {
             "../../tests/fixtures/inference_package_facts/diffusers_bundle_package_facts.json"
         ));
         let task = image_generation_task();
-        let report = backend_for_diffusers_image_generation().check_model_compatibility(
-            Some("diffusers"),
+        let report = pytorch_backend_with_diffusers_package_support().check_model_compatibility(
+            Some("pytorch"),
             BackendCompatibilityRequest::new(&task, &package),
         );
 
