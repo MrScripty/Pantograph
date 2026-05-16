@@ -55,6 +55,14 @@ PyTorch/diffusers and produce a retained image artifact.
   constructor/projection boundary rather than private helper details. This
   slice is a prerequisite for using selected model identity as scheduler
   history input.
+- [ ] Validate planned image execution identity consistency before the image
+  planner returns an `ImageGenerationExecutionPlan`: the scheduler-selected
+  model ref from `BackendExecutionDecision` must match the resolved Pumas
+  package facts model ref used for worker dispatch. A missing selected model
+  ref may remain allowed only while the execution-plan contract explicitly
+  marks it optional for non-image tasks; for image generation, a present
+  mismatch must fail with a typed planner or execution-plan diagnostic rather
+  than silently using package facts.
 - [ ] Tighten selected-decision fact typing at the workflow execution-plan
   boundary. Keep workflow-service independent from inference DTOs, but use
   workflow-owned validated constructors or newtypes for selected backend key,
@@ -258,6 +266,9 @@ PyTorch/diffusers and produce a retained image artifact.
 - Execution-plan identity tests exercise the public validated constructor and
   projection boundary, proving raw selected strings are not repaired in
   embedded-runtime or node-engine after the owner-boundary parse.
+- Planned image execution tests prove scheduler-selected model refs and
+  resolved package-facts model refs agree before worker planning. Mismatches
+  must produce a typed diagnostic and no worker dispatch.
 - Normalization tests prove package/dependency labels such as `diffusers` are
   not reused as scheduler-selected execution backend keys.
 - Planner tests prove unsupported pipeline family, missing component facts,
@@ -1412,6 +1423,10 @@ Standards compliance gates for every Option 3 slice:
   value or fail projection. They must not re-validate by string matching,
   silently repair malformed data, or infer missing identity from graph inputs,
   package facts, active backend state, or worker metadata.
+- Identity-consistency rule: planned image execution must not let package
+  facts silently override a scheduler-selected model identity. If both the
+  execution plan and package facts carry model refs, they must match before
+  planning can produce a worker execution plan.
 - Graph-hint rule: graph-provided backend/runtime/device hints are admissible
   only as scheduler inputs. They are not execution decisions, are not required
   for ordinary inference graphs, and must produce typed diagnostics when they

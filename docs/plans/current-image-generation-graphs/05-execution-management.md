@@ -4182,6 +4182,40 @@ Worker rules:
   threshold.
 - Verification for this standards pass: `git status --short`, standards
   review, plan diff review, and `git diff --check`.
+- 2026-05-15: Completed a codebase blast-radius review of the standards
+  identity refinements. Reviewed workflow-service execution-plan DTO and
+  admission projection, embedded-runtime workflow-plan projection,
+  node-engine planned image execution, inference image-generation planning,
+  runtime-registry selection policy, workflow capability extraction, and
+  dependency preflight/package-hint normalization.
+- Finding recorded in Milestone 6: planned image execution must verify that
+  the scheduler-selected model ref in `BackendExecutionDecision` matches the
+  resolved Pumas package facts model ref before returning an
+  `ImageGenerationExecutionPlan`. The current planner builds the worker plan
+  from package facts, so a mismatch would otherwise be hidden rather than
+  reported as a scheduler/package identity diagnostic.
+- Additional blast-radius finding: dependency preflight paths still convert
+  `BackendHintLabel::Diffusers` into generic backend-key strings for
+  dependency/package evidence. Future normalization work must split
+  package/dependency labels from execution backend keys before those helpers
+  can influence scheduler execution decisions.
+- Additional blast-radius finding: workflow capability extraction already
+  ignores legacy `runtime_hint`, but it recursively treats `backend_key` and
+  `recommended_backend` as required backend evidence. Future graph-hint work
+  must distinguish explicit graph-owned preferences from nested package/Pumas
+  evidence so package facts do not become hard execution decisions.
+- Maintainability finding: the affected files remain above the decomposition
+  review threshold, including node-engine inference execution, dependency
+  preflight, runtime-registry technical-fit/policy, inference planner, and the
+  workflow execution-plan DTO. New identity and backend-normalization logic
+  should land in focused modules with README/ADR updates when boundaries
+  change.
+- No-fallback/no-legacy confirmation: the new plan gate rejects mismatched
+  scheduler/package model identity through typed diagnostics instead of
+  repairing the model ref, using package facts as an implicit override, or
+  falling back to request-only image execution.
+- Verification for this plan-only update: `git status --short`, targeted
+  codebase blast-radius inspection, plan diff review, and `git diff --check`.
 
 ### Traceability Links
 
