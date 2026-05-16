@@ -131,10 +131,12 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   `vision-analysis`, are not registered built-ins. Saved graph upgrades and
   stale-node diagnostics belong to workflow-service canonicalization and
   node-engine guardrails, not workflow-node descriptor shims.
-- Canonical `llm-inference` declares `task_kind` and `backend_key` as optional
-  graph-visible inputs because current preflight and execution consume those
-  fields as canonical node data. Legacy `runtime_hint` is not a descriptor
-  input or compatibility alias.
+- Canonical `llm-inference` declares `task_kind` and `runtime` as optional
+  graph-visible inputs. `runtime` is scheduler intent only: omitted values
+  leave runtime selection to scheduler policy, while explicit values become a
+  hard scheduler requirement after capability validation. Legacy
+  `runtime_hint` and `backend_key` are not descriptor inputs or compatibility
+  aliases for canonical inference nodes.
 - Canonical `llm-inference` exposes image-generation denoising scheduler intent
   through the optional `denoising_scheduler` input. Graphs must not use the
   overloaded `scheduler` name for image sampling intent; factual Diffusers/Pumas

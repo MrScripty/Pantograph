@@ -28,6 +28,10 @@ hidden behavior that the graph cannot express safely.
 - Contract changes must remain additive so saved workflows continue to load.
 - Dependency/runtime metadata used by Python-backed nodes must be graph-visible
   when workflows need to stage environment readiness explicitly.
+- Canonical inference runtime selection is graph-visible only as optional
+  scheduler intent. An omitted `runtime` input leaves runtime choice to
+  scheduler policy, while an explicit value is a hard scheduler requirement
+  after backend capability validation.
 
 ## Decision
 Keep descriptors in this directory as the graph-visible contract layer and let
@@ -38,6 +42,9 @@ re-enter this directory; canonical `llm-inference` task metadata owns text/chat,
 embedding, rerank, audio-transcription, image-understanding, and
 image-generation graph contracts. Its `Task::run` implementation fails closed so
 standalone graph execution cannot bypass the host typed inference gateway.
+The optional `runtime` input is not projected into node-engine execution,
+worker envelopes, or inference requests directly; scheduler-produced execution
+decisions are the only source of selected runtime facts.
 The old descriptor-local `base_url`/model generation config has been removed;
 generation and task options must flow through canonical graph ports and typed
 inference requests.

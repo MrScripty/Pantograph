@@ -83,7 +83,7 @@ PyTorch/diffusers and produce a retained image artifact.
   explains why it cannot be used. Explicit runtime requests must not bypass
   package/capability validation, memory-fit checks, or lifecycle diagnostics,
   and they must not become fallback runtime choices.
-- [ ] Add an optional `runtime` input to inference graph nodes for explicit
+- [x] Add an optional `runtime` input to inference graph nodes for explicit
   scheduler requirements. The input is only graph intent; it must be projected
   into scheduler/admission request data and must never be passed directly from
   the graph or node executor into inference execution. The inference crate
@@ -105,7 +105,7 @@ PyTorch/diffusers and produce a retained image artifact.
   display/dependency/capability label, but `python_runtime_capabilities`,
   runtime capability projection, and tests must not advertise `diffusers` as a
   selectable runtime/backend when the executable backend is PyTorch.
-- [ ] Update workflow capability extraction so package-owned
+- [x] Update workflow capability extraction so package-owned
   `recommended_backend` fields from Pumas facts do not become hard required
   executable backends. Only the explicit graph-owned `runtime` input on an
   inference node may become a hard scheduler runtime requirement; package
@@ -1712,3 +1712,46 @@ Standards compliance gates for every Option 3 slice:
 - Remaining follow-up: migrate embedded-runtime technical-fit and dependency
   preflight to consume the new evidence boundary before removing scattered
   pseudo-Diffusers execution mappings from those layers.
+
+2026-05-16 graph runtime input/projection implementation slice:
+
+- Smallest useful vertical slice: expose `llm-inference.runtime` as the
+  canonical optional graph-authored scheduler requirement, remove the
+  graph-visible `backend_key` inference input, and project only that explicit
+  runtime value through workflow capability extraction into scheduler/preflight
+  request data.
+- Allowed write set: `crates/workflow-nodes/src/processing/inference.rs`,
+  `crates/workflow-nodes/src/contracts.rs`,
+  `crates/workflow-nodes/src/README.md`,
+  `crates/workflow-nodes/src/processing/README.md`,
+  `crates/pantograph-workflow-service/src/capabilities.rs`,
+  `crates/pantograph-workflow-service/src/workflow/tests/workflow_capabilities.rs`,
+  `crates/pantograph-workflow-service/src/README.md`, and this plan
+  directory.
+- No-fallback/no-legacy confirmation: this slice does not preserve
+  `backend_key` as a canonical inference-node runtime input and does not pass
+  graph runtime values into node-engine execution, worker envelopes, gateway
+  calls, or inference DTOs. Omitted `runtime` values produce no hard runtime
+  requirement; Pumas `recommended_backend` and dependency metadata remain
+  package/capability evidence, not scheduler requirements.
+- Verification passed: `cargo test -p workflow-nodes
+  test_descriptor_has_canonical_inference_contract_ports --lib`, `cargo test
+  -p pantograph-workflow-service capabilities --lib`, `cargo test -p
+  pantograph-workflow-service
+  default_capabilities_project_inference_runtime_as_scheduler_requirement
+  --lib`, `cargo test -p workflow-nodes --features model-library
+  builtin_contracts_preserve_registered_port_options_provider_refs --lib`,
+  `cargo check -p workflow-nodes`, `cargo check -p
+  pantograph-workflow-service`, `cargo fmt -p workflow-nodes -p
+  pantograph-workflow-service -- --check`, and `git diff --check`.
+- Verification deviation: `cargo test -p workflow-nodes --lib` still fails in
+  `contracts::tests::builtin_contracts_preserve_registered_port_options_provider_refs`
+  because the test expects the `puma-lib.model_path` options provider without
+  enabling the `model-library` feature that registers that provider. The same
+  test passes with `--features model-library`; fixing the feature-gated test
+  policy is outside this slice.
+- Remaining follow-up: scheduler/runtime-registry selection still needs the
+  next slice to enforce explicit runtime constraints against canonical
+  candidates and typed diagnostics, and embedded-runtime technical-fit,
+  dependency preflight, workflow/runtime preflight, and gateway diagnostics
+  still need migration to consume the inference-owned evidence boundary.

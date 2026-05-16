@@ -58,8 +58,8 @@ pub struct InferenceTask {
 impl InferenceTask {
     /// Port ID for canonical task registry id input
     pub const PORT_TASK_KIND: &'static str = "task_kind";
-    /// Port ID for optional canonical backend preference input
-    pub const PORT_BACKEND_KEY: &'static str = "backend_key";
+    /// Port ID for optional graph-authored scheduler runtime requirement
+    pub const PORT_RUNTIME: &'static str = "runtime";
     /// Port ID for canonical Pumas model reference input
     pub const PORT_PUMAS_MODEL_REF: &'static str = "pumas_model_ref";
     /// Port ID for canonical generation option input
@@ -142,7 +142,7 @@ impl TaskDescriptor for InferenceTask {
                 .to_string(),
             inputs: vec![
                 PortMetadata::optional(Self::PORT_TASK_KIND, "Task Kind", PortDataType::String),
-                PortMetadata::optional(Self::PORT_BACKEND_KEY, "Backend Key", PortDataType::String),
+                PortMetadata::optional(Self::PORT_RUNTIME, "Runtime", PortDataType::String),
                 PortMetadata::optional(
                     Self::PORT_PUMAS_MODEL_REF,
                     "Pumas Model Ref",
@@ -276,9 +276,10 @@ mod tests {
         assert!(meta
             .inputs
             .iter()
-            .any(|p| p.id == InferenceTask::PORT_BACKEND_KEY
+            .any(|p| p.id == InferenceTask::PORT_RUNTIME
                 && p.data_type == PortDataType::String
                 && !p.required));
+        assert!(!meta.inputs.iter().any(|p| p.id == "backend_key"));
         assert!(meta
             .inputs
             .iter()

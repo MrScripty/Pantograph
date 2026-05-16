@@ -4454,6 +4454,43 @@ Worker rules:
   workflow/runtime preflight, and gateway diagnostics still need migration to
   consume this evidence boundary before pseudo-Diffusers execution mappings can
   be removed from those layers.
+- 2026-05-16: Completed the graph runtime input/projection implementation
+  slice. Canonical `llm-inference` now exposes optional `runtime` graph intent
+  instead of a graph-visible `backend_key` inference input, workflow-node
+  contract payload metadata follows that port, and workflow capability
+  extraction reads only explicit inference-node `runtime` values as hard
+  scheduler requirements. Pumas `recommended_backend`, dependency metadata, and
+  stale inference-node `backend_key` fields no longer become required
+  executable backends for canonical inference nodes. A saved-workflow
+  capability test now proves the real workflow capability path projects
+  explicit `runtime = PyTorch` as `pytorch` while ignoring package metadata and
+  inference-node backend metadata without a runtime input.
+- No-fallback/no-legacy confirmation: this slice rejects preserving
+  `backend_key` as a canonical inference-node runtime-selection compatibility
+  path. It does not send graph runtime values directly into node-engine
+  execution, worker envelopes, gateway calls, or inference DTOs; scheduler
+  output remains the only selected-runtime source for execution.
+- Verification passed: `cargo test -p workflow-nodes
+  test_descriptor_has_canonical_inference_contract_ports --lib`, `cargo test
+  -p pantograph-workflow-service capabilities --lib`, `cargo test -p
+  pantograph-workflow-service
+  default_capabilities_project_inference_runtime_as_scheduler_requirement
+  --lib`, `cargo test -p workflow-nodes --features model-library
+  builtin_contracts_preserve_registered_port_options_provider_refs --lib`,
+  `cargo check -p workflow-nodes`, `cargo check -p
+  pantograph-workflow-service`, `cargo fmt -p workflow-nodes -p
+  pantograph-workflow-service -- --check`, and `git diff --check`.
+- Discovered issue: `cargo test -p workflow-nodes --lib` still fails because
+  `builtin_contracts_preserve_registered_port_options_provider_refs` expects
+  the `puma-lib.model_path` options provider when the `model-library` feature
+  is not enabled. The provider-specific test passes with `--features
+  model-library`; deciding whether to gate, split, or re-scope that full-suite
+  test is deferred outside this slice.
+- Remaining follow-up: scheduler/runtime-registry selection still needs to
+  enforce explicit runtime constraints against canonical executable candidates
+  and typed diagnostics. Embedded-runtime technical-fit, dependency preflight,
+  workflow/runtime preflight, and gateway diagnostics still need migration to
+  consume the inference-owned execution-evidence boundary.
 
 ### Traceability Links
 

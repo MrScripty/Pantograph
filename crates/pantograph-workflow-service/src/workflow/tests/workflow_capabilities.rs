@@ -115,6 +115,71 @@ async fn default_capabilities_derive_runtime_requirements_from_workflow() {
 }
 
 #[tokio::test]
+async fn default_capabilities_project_inference_runtime_as_scheduler_requirement() {
+    let temp_root = std::env::temp_dir()
+        .join("pantograph-workflow-service-tests")
+        .join(uuid::Uuid::new_v4().to_string());
+    let workflow_root = temp_root.join(".pantograph").join("workflows");
+    fs::create_dir_all(&workflow_root).expect("create workflow root");
+    fs::write(
+        workflow_root.join("wf-runtime.json"),
+        serde_json::json!({
+            "metadata": {
+                "name": "Runtime Intent Test"
+            },
+            "graph": {
+                "nodes": [
+                    {
+                        "id": "image-1",
+                        "node_type": "llm-inference",
+                        "data": {
+                            "runtime": "PyTorch",
+                            "backend_key": "llama_cpp",
+                            "resolved_model_package_facts": {
+                                "recommended_backend": "diffusers"
+                            }
+                        },
+                        "position": { "x": 0.0, "y": 0.0 }
+                    },
+                    {
+                        "id": "image-2",
+                        "node_type": "llm-inference",
+                        "data": {
+                            "backend_key": "candle",
+                            "resolved_model_package_facts": {
+                                "recommended_backend": "diffusers"
+                            }
+                        },
+                        "position": { "x": 100.0, "y": 0.0 }
+                    }
+                ],
+                "edges": []
+            }
+        })
+        .to_string(),
+    )
+    .expect("write workflow");
+
+    let host = DefaultCapabilitiesHost { workflow_root };
+    let response = WorkflowService::new()
+        .workflow_get_capabilities(
+            &host,
+            WorkflowCapabilitiesRequest {
+                workflow_id: "wf-runtime".to_string(),
+            },
+        )
+        .await
+        .expect("capabilities response");
+
+    assert_eq!(
+        response.runtime_requirements.required_backends,
+        vec!["pytorch"]
+    );
+
+    let _ = fs::remove_dir_all(temp_root);
+}
+
+#[tokio::test]
 async fn default_capabilities_accept_dot_workflow_identity() {
     let temp_root = std::env::temp_dir()
         .join("pantograph-workflow-service-tests")

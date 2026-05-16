@@ -261,7 +261,11 @@ pub fn extract_model_usages(nodes: &[StoredGraphNode]) -> Vec<ModelUsage> {
 pub fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
     let mut out = HashSet::new();
     for node in nodes {
-        extract_backend_keys_from_value(&node.data, &mut out, false);
+        if node.node_type() == "llm-inference" {
+            extract_inference_runtime_requirement(node.data(), &mut out);
+        } else {
+            extract_backend_keys_from_value(node.data(), &mut out, false);
+        }
     }
     let mut backends = out.into_iter().collect::<Vec<_>>();
     backends.sort();
@@ -531,6 +535,19 @@ fn model_id_from_pumas_model_suffix(suffix: &str) -> Option<&str> {
     }
 }
 
+fn extract_inference_runtime_requirement(value: &serde_json::Value, out: &mut HashSet<String>) {
+    let Some(map) = value.as_object() else {
+        return;
+    };
+    let Some(raw) = map.get("runtime").and_then(|value| value.as_str()) else {
+        return;
+    };
+    let canonical = canonical_runtime_backend_key(raw);
+    if !canonical.is_empty() {
+        out.insert(canonical);
+    }
+}
+
 fn extract_backend_keys_from_value(
     value: &serde_json::Value,
     out: &mut HashSet<String>,
@@ -543,10 +560,7 @@ fn extract_backend_keys_from_value(
                 out.insert("llama_cpp".to_string());
             }
             for (key, child) in map {
-                if key.eq_ignore_ascii_case("backend_key")
-                    || key.eq_ignore_ascii_case("backendKey")
-                    || key.eq_ignore_ascii_case("recommended_backend")
-                    || key.eq_ignore_ascii_case("recommendedBackend")
+                if key.eq_ignore_ascii_case("backend_key") || key.eq_ignore_ascii_case("backendKey")
                 {
                     if let Some(raw) = child.as_str() {
                         let canonical_backend_key = canonical_runtime_backend_key(raw);
@@ -758,19 +772,19 @@ mod tests {
             StoredGraphNode {
                 id: "n1".to_string(),
                 node_type: "llm-inference".to_string(),
-                data: serde_json::json!({"backend_key": "llama.cpp"}),
+                data: serde_json::json!({"runtime": "llama.cpp"}),
                 position: StoredPosition::default(),
             },
             StoredGraphNode {
                 id: "n2".to_string(),
                 node_type: "llm-inference".to_string(),
-                data: serde_json::json!({"settings": {"backendKey": "PyTorch"}}),
+                data: serde_json::json!({"runtime": "PyTorch"}),
                 position: StoredPosition::default(),
             },
             StoredGraphNode {
                 id: "n3".to_string(),
                 node_type: "llm-inference".to_string(),
-                data: serde_json::json!({"backend_key": "llamacpp"}),
+                data: serde_json::json!({"runtime": "llamacpp"}),
                 position: StoredPosition::default(),
             },
             StoredGraphNode {
@@ -796,6 +810,54 @@ mod tests {
                 "stable_audio".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn extract_required_backends_uses_only_inference_runtime_input_as_hard_requirement() {
+        let nodes = vec![StoredGraphNode {
+            id: "image".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({
+                "runtime": "PyTorch",
+                "backend_key": "llama_cpp",
+                "resolved_model_package_facts": {
+                    "recommended_backend": "diffusers",
+                    "backend_hints": {
+                        "accepted": ["diffusers"]
+                    }
+                },
+                "dependency_bindings": [{
+                    "recommended_backend": "candle",
+                    "backend_key": "candle"
+                }]
+            }),
+            position: StoredPosition::default(),
+        }];
+
+        assert_eq!(
+            extract_required_backends(&nodes),
+            vec!["pytorch".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_required_backends_ignores_inference_backend_metadata_without_runtime_input() {
+        let nodes = vec![StoredGraphNode {
+            id: "image".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({
+                "backend_key": "pytorch",
+                "resolved_model_package_facts": {
+                    "recommended_backend": "diffusers"
+                },
+                "dependency_bindings": [{
+                    "backend_key": "candle"
+                }]
+            }),
+            position: StoredPosition::default(),
+        }];
+
+        assert!(extract_required_backends(&nodes).is_empty());
     }
 
     #[test]

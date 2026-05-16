@@ -133,6 +133,12 @@ Workflow technical-fit override intent may name runtime id, runtime variant id,
 model id, or backend key. Workflow-service normalizes and transports that
 intent, while runtime-registry owns candidate matching and rejection
 diagnostics.
+Workflow capability extraction treats canonical inference-node `runtime` input
+as graph-authored scheduler intent. Omitted `runtime` values leave scheduler
+policy free to choose among valid executable candidates. Explicit values become
+hard scheduler requirements only after selector validation, and package facts
+such as `recommended_backend` remain dependency/capability evidence rather than
+required runtime constraints.
 Workflow technical-fit decisions now also mirror selected runtime variant,
 device class/id, resource estimates, observed-throughput hints, and bounded
 device diagnostics from backend/runtime selectors. These fields are transport
