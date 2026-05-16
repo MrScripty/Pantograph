@@ -5207,6 +5207,38 @@ Worker rules:
     `DependencyReadinessFact` values into runtime-registry candidates, carry
     selected proof through workflow/admission execution plans into inference,
     then make scheduler filtering consume readiness proof.
+- 2026-05-16 execution-evidence dependency-readiness projection slice:
+  - Smallest useful vertical slice: let the embedded-runtime
+    execution-evidence adapter project supplied inference dependency-readiness
+    facts onto matching runtime-registry candidates, without changing
+    scheduler ranking or filtering.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/technical_fit_execution_evidence.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `crates/pantograph-runtime-registry/src/lib.rs`, the Milestone 6 plan, and
+    this execution log.
+  - No-fallback/no-legacy confirmation: the adapter only projects supplied
+    typed readiness facts. It does not infer dependencies from Pumas package
+    hints, inspect local Python packages, rank candidates, filter candidates,
+    synthesize a Diffusers executable backend, or call the legacy dependency
+    environment.
+  - Implementation notes: `ExecutionEvidenceTechnicalFitAdapterInput` now
+    accepts `dependency_readiness_facts`. The adapter matches readiness facts
+    by executable backend key, optional runtime variant, and task id, then
+    emits runtime-registry readiness proof carrying dependency id, state,
+    resolver owner, model-family scope, reason code, and reason text.
+  - Verification passed: `cargo fmt --manifest-path
+    crates/pantograph-runtime-registry/Cargo.toml -- --check`, `cargo fmt
+    --manifest-path crates/pantograph-embedded-runtime/Cargo.toml -- --check`,
+    `cargo test -p pantograph-runtime-registry technical_fit --lib`, and
+    `cargo test -p pantograph-embedded-runtime technical_fit_execution_evidence
+    --lib`.
+  - Remaining follow-up: production technical-fit construction still passes an
+    empty readiness fact slice. A later slice must supply host-resolved Python
+    package readiness snapshots, carry selected proof through
+    workflow/admission execution plans into inference, and then make
+    scheduler filtering consume readiness proof.
 
 ### Traceability Links
 

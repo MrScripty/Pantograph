@@ -575,6 +575,7 @@ fn runtime_candidates_from_execution_evidence(
         adapt_execution_evidence_to_technical_fit(ExecutionEvidenceTechnicalFitAdapterInput {
             reports: &report_inputs,
             runtime_capabilities,
+            dependency_readiness_facts: &[],
             resource_estimate,
         });
 

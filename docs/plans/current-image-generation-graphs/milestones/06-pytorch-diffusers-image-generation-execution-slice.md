@@ -2512,8 +2512,18 @@ readiness:
            Tests prove normalization preserves scoped dependency proof and that
            selected decisions carry the proof rather than relying on
            `supports_runtime_requirements` or device diagnostics. This is a
-           partial completion of stage 4 because workflow/admission execution
-           plans still need to carry the selected proof into inference.
+         partial completion of stage 4 because workflow/admission execution
+         plans still need to carry the selected proof into inference.
+         - 2026-05-16 adapter projection slice: extended the
+           embedded-runtime execution-evidence adapter input with supplied
+           `inference::DependencyReadinessFact` values and projected matching
+           facts onto runtime-registry candidates as reduced
+           `RuntimeTechnicalFitDependencyReadinessFact` proof. The adapter
+           matches facts by executable backend key, optional runtime variant,
+           and task id, preserving dependency id, state, resolver owner,
+           model-family scope, reason code, and reason text. This still leaves
+           production host package snapshots and workflow/admission execution
+           plan propagation for later slices; no scheduler filtering changed.
       5. Wire scheduler/admission candidate filtering to consume readiness
          proof and fail candidate selection while emitting ledger diagnostics
          when required dependencies are unavailable.

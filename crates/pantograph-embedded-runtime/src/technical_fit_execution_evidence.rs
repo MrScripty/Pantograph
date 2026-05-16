@@ -1,5 +1,8 @@
 use pantograph_runtime_registry::{
     RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateSourceKind,
+    RuntimeTechnicalFitDependencyReadinessFact,
+    RuntimeTechnicalFitDependencyReadinessResolverOwner,
+    RuntimeTechnicalFitDependencyReadinessState, RuntimeTechnicalFitDependencyReadinessSubjectKind,
     RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
     RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitResourceEstimate,
 };
@@ -23,6 +26,7 @@ pub(crate) struct ExecutionEvidenceTechnicalFitReport<'a> {
 pub(crate) struct ExecutionEvidenceTechnicalFitAdapterInput<'a> {
     pub(crate) reports: &'a [ExecutionEvidenceTechnicalFitReport<'a>],
     pub(crate) runtime_capabilities: &'a [WorkflowRuntimeCapability],
+    pub(crate) dependency_readiness_facts: &'a [inference::DependencyReadinessFact],
     pub(crate) resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
 }
 
@@ -89,6 +93,13 @@ pub(crate) fn adapt_execution_evidence_to_technical_fit(
                         let variant_ready = variant_facts.available
                             && variant_facts.runtime_variant_id.is_some()
                             && variant_facts.device_class.is_some();
+                        let dependency_readiness = dependency_readiness_for_candidate(
+                            input.dependency_readiness_facts,
+                            &candidate.backend_key,
+                            runtime_id.as_deref(),
+                            variant_facts.runtime_variant_id.as_deref(),
+                            &report.task_id,
+                        );
                         RuntimeTechnicalFitCandidate {
                             candidate_id: pumas_candidate_id(
                                 &candidate.backend_key,
@@ -105,7 +116,7 @@ pub(crate) fn adapt_execution_evidence_to_technical_fit(
                             resource_estimate: input.resource_estimate.clone(),
                             observed_throughput_hint: None,
                             device_diagnostics: variant_facts.device_diagnostics,
-                            dependency_readiness: Vec::new(),
+                            dependency_readiness,
                             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                             context_window_tokens: None,
                             residency_state: Some(runtime_capability_residency_state(capability)),
@@ -133,6 +144,125 @@ pub(crate) fn adapt_execution_evidence_to_technical_fit(
     }
 
     output
+}
+
+fn dependency_readiness_for_candidate(
+    facts: &[inference::DependencyReadinessFact],
+    backend_key: &str,
+    runtime_id: Option<&str>,
+    runtime_variant_id: Option<&str>,
+    task_id: &inference::InferenceTaskId,
+) -> Vec<RuntimeTechnicalFitDependencyReadinessFact> {
+    facts
+        .iter()
+        .filter(|fact| fact.runtime_id.as_str() == backend_key)
+        .filter(|fact| {
+            fact.runtime_variant_id
+                .as_ref()
+                .is_none_or(|variant| Some(variant.as_str()) == runtime_variant_id)
+        })
+        .filter(|fact| {
+            fact.task_id
+                .as_ref()
+                .is_none_or(|fact_task_id| fact_task_id == task_id)
+        })
+        .map(|fact| project_dependency_readiness_fact(fact, runtime_id, backend_key))
+        .collect()
+}
+
+fn project_dependency_readiness_fact(
+    fact: &inference::DependencyReadinessFact,
+    runtime_id: Option<&str>,
+    backend_key: &str,
+) -> RuntimeTechnicalFitDependencyReadinessFact {
+    RuntimeTechnicalFitDependencyReadinessFact {
+        subject_kind: match fact.subject_kind {
+            inference::DependencyReadinessSubjectKind::Package => {
+                RuntimeTechnicalFitDependencyReadinessSubjectKind::Package
+            }
+            inference::DependencyReadinessSubjectKind::Dependency => {
+                RuntimeTechnicalFitDependencyReadinessSubjectKind::Dependency
+            }
+            _ => RuntimeTechnicalFitDependencyReadinessSubjectKind::Dependency,
+        },
+        runtime_id: runtime_id.map(str::to_string),
+        backend_key: Some(backend_key.to_string()),
+        runtime_variant_id: fact
+            .runtime_variant_id
+            .as_ref()
+            .map(|runtime_variant_id| runtime_variant_id.as_str().to_string()),
+        task_id: fact
+            .task_id
+            .as_ref()
+            .map(|task_id| task_id.canonical_label().to_string()),
+        model_family_id: fact
+            .model_family_id
+            .as_ref()
+            .map(|model_family_id| model_family_id.as_str().to_string()),
+        dependency_id: fact.dependency_id.as_str().to_string(),
+        state: project_dependency_readiness_state(fact.state),
+        resolver_owner: project_dependency_readiness_resolver_owner(fact.resolver_owner),
+        reason_code: fact
+            .reason_code
+            .as_ref()
+            .map(|reason_code| reason_code.as_str().to_string()),
+        reason: fact.reason.as_ref().map(ToString::to_string),
+    }
+}
+
+fn project_dependency_readiness_state(
+    state: inference::CapabilityAvailabilityState,
+) -> RuntimeTechnicalFitDependencyReadinessState {
+    match state {
+        inference::CapabilityAvailabilityState::Available => {
+            RuntimeTechnicalFitDependencyReadinessState::Available
+        }
+        inference::CapabilityAvailabilityState::NotInstalled => {
+            RuntimeTechnicalFitDependencyReadinessState::NotInstalled
+        }
+        inference::CapabilityAvailabilityState::NotImplemented => {
+            RuntimeTechnicalFitDependencyReadinessState::NotImplemented
+        }
+        inference::CapabilityAvailabilityState::UnsupportedPlatform => {
+            RuntimeTechnicalFitDependencyReadinessState::UnsupportedPlatform
+        }
+        inference::CapabilityAvailabilityState::MissingDependency => {
+            RuntimeTechnicalFitDependencyReadinessState::MissingDependency
+        }
+        inference::CapabilityAvailabilityState::DisabledByPolicy => {
+            RuntimeTechnicalFitDependencyReadinessState::DisabledByPolicy
+        }
+        inference::CapabilityAvailabilityState::MissingModelFacts => {
+            RuntimeTechnicalFitDependencyReadinessState::MissingModelFacts
+        }
+        inference::CapabilityAvailabilityState::RequiresRuntimeCapability => {
+            RuntimeTechnicalFitDependencyReadinessState::RequiresRuntimeCapability
+        }
+        inference::CapabilityAvailabilityState::RequiresModelCapability => {
+            RuntimeTechnicalFitDependencyReadinessState::RequiresModelCapability
+        }
+        _ => RuntimeTechnicalFitDependencyReadinessState::RequiresRuntimeCapability,
+    }
+}
+
+fn project_dependency_readiness_resolver_owner(
+    resolver_owner: inference::DependencyReadinessResolverOwner,
+) -> RuntimeTechnicalFitDependencyReadinessResolverOwner {
+    match resolver_owner {
+        inference::DependencyReadinessResolverOwner::Inference => {
+            RuntimeTechnicalFitDependencyReadinessResolverOwner::Inference
+        }
+        inference::DependencyReadinessResolverOwner::EmbeddedRuntime => {
+            RuntimeTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime
+        }
+        inference::DependencyReadinessResolverOwner::ManagedRuntime => {
+            RuntimeTechnicalFitDependencyReadinessResolverOwner::ManagedRuntime
+        }
+        inference::DependencyReadinessResolverOwner::RuntimeBridge => {
+            RuntimeTechnicalFitDependencyReadinessResolverOwner::RuntimeBridge
+        }
+        _ => RuntimeTechnicalFitDependencyReadinessResolverOwner::RuntimeBridge,
+    }
 }
 
 fn map_execution_evidence_diagnostic(
@@ -401,6 +531,20 @@ mod tests {
         })
     }
 
+    fn dependency_readiness_facts(
+        state: inference::CapabilityAvailabilityState,
+    ) -> Vec<inference::DependencyReadinessFact> {
+        inference::pytorch_diffusers_image_generation_package_requirements()
+            .into_iter()
+            .map(|declaration| {
+                declaration.to_readiness_fact(
+                    state,
+                    inference::DependencyReadinessResolverOwner::EmbeddedRuntime,
+                )
+            })
+            .collect()
+    }
+
     #[test]
     fn adapter_projects_pytorch_diffusers_evidence_candidate() {
         let package = diffusers_package();
@@ -417,6 +561,7 @@ mod tests {
             adapt_execution_evidence_to_technical_fit(ExecutionEvidenceTechnicalFitAdapterInput {
                 reports: &reports,
                 runtime_capabilities: &runtime_capabilities,
+                dependency_readiness_facts: &[],
                 resource_estimate: Some(RuntimeTechnicalFitResourceEstimate {
                     estimated_peak_vram_mb: Some(4096),
                     estimated_peak_ram_mb: Some(8192),
@@ -462,6 +607,43 @@ mod tests {
     }
 
     #[test]
+    fn adapter_projects_dependency_readiness_onto_matching_candidate() {
+        let package = diffusers_package();
+        let backends = vec![pytorch_diffusers_backend()];
+        let report = report_for_package(&package, &backends, None);
+        let runtime_capabilities = vec![pytorch_runtime_capability()];
+        let reports = vec![ExecutionEvidenceTechnicalFitReport {
+            task_id: inference::InferenceTaskId::ImageGeneration,
+            model_id: &package.model_ref.model_id,
+            report: &report,
+        }];
+        let dependency_readiness_facts =
+            dependency_readiness_facts(inference::CapabilityAvailabilityState::Available);
+
+        let output =
+            adapt_execution_evidence_to_technical_fit(ExecutionEvidenceTechnicalFitAdapterInput {
+                reports: &reports,
+                runtime_capabilities: &runtime_capabilities,
+                dependency_readiness_facts: &dependency_readiness_facts,
+                resource_estimate: None,
+            });
+
+        assert!(output.diagnostics.is_empty());
+        assert_eq!(output.candidates.len(), 1);
+        let readiness = &output.candidates[0].dependency_readiness;
+        assert_eq!(readiness.len(), 5);
+        assert!(readiness.iter().all(|fact| fact.state.is_ready()));
+        assert!(readiness.iter().all(|fact| {
+            fact.runtime_id.as_deref() == Some("pytorch")
+                && fact.backend_key.as_deref() == Some("pytorch")
+                && fact.task_id.as_deref() == Some("image_generation")
+        }));
+        assert!(readiness
+            .iter()
+            .any(|fact| fact.dependency_id == "diffusers"));
+    }
+
+    #[test]
     fn adapter_maps_explicit_diffusers_runtime_without_aliasing_to_pytorch() {
         let package = diffusers_package();
         let requirement =
@@ -479,6 +661,7 @@ mod tests {
             adapt_execution_evidence_to_technical_fit(ExecutionEvidenceTechnicalFitAdapterInput {
                 reports: &reports,
                 runtime_capabilities: &runtime_capabilities,
+                dependency_readiness_facts: &[],
                 resource_estimate: None,
             });
 
@@ -513,6 +696,7 @@ mod tests {
             adapt_execution_evidence_to_technical_fit(ExecutionEvidenceTechnicalFitAdapterInput {
                 reports: &reports,
                 runtime_capabilities: &[],
+                dependency_readiness_facts: &[],
                 resource_estimate: None,
             });
 
@@ -562,6 +746,7 @@ mod tests {
             adapt_execution_evidence_to_technical_fit(ExecutionEvidenceTechnicalFitAdapterInput {
                 reports: &reports,
                 runtime_capabilities: &runtime_capabilities,
+                dependency_readiness_facts: &[],
                 resource_estimate: None,
             });
 
