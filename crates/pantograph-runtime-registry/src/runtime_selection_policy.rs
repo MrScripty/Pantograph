@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use crate::snapshot::RuntimeRegistryRuntimeSnapshot;
 use crate::state::RuntimeRegistryStatus;
 use crate::technical_fit::{
+    candidate_dependency_readiness_diagnostics, candidate_dependency_readiness_is_ready,
     compare_candidate_ids, decision_from_candidate_with_trace,
     explicit_device_unavailable_diagnostics, unselected_decision_with_device_diagnostics,
     RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateHistorySummary,
@@ -428,6 +429,10 @@ fn automatic_no_valid_candidate_diagnostics(
         if !candidate.device_diagnostics.is_empty() {
             return candidate.device_diagnostics.clone();
         }
+        let dependency_diagnostics = candidate_dependency_readiness_diagnostics(candidate);
+        if !dependency_diagnostics.is_empty() {
+            return dependency_diagnostics;
+        }
     }
 
     vec![RuntimeTechnicalFitDeviceDiagnostic {
@@ -606,6 +611,7 @@ pub(crate) fn candidate_is_eligible(
         && candidate_matches_required_backends(candidate, runtime_snapshot, request)
         && candidate_matches_device_policy(candidate, request)
         && candidate_meets_context_length(candidate, request)
+        && candidate_dependency_readiness_is_ready(candidate)
 }
 
 pub(crate) fn candidate_matches_device_policy(

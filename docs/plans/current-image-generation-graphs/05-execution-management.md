@@ -5306,6 +5306,35 @@ Worker rules:
     needs host-resolved Python package readiness facts before scheduler
     filtering can reject unavailable PyTorch/Diffusers candidates without
     failing every candidate that currently has intentionally empty proof.
+- 2026-05-16 runtime-registry dependency-readiness filtering slice:
+  - Smallest useful vertical slice: make runtime technical-fit selection
+    consume explicit unavailable dependency-readiness proof on candidates
+    before ranking or explicit override selection.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: candidates with unavailable
+    dependency-readiness proof are now ineligible and produce typed
+    `evidence_required_package_unavailable` diagnostics. The selector does
+    not recover by selecting another backend for an explicit override, parsing
+    diagnostic messages, consulting worker imports, or treating package hints
+    as readiness facts.
+  - Implementation notes: automatic selection filters candidates whose
+    dependency-readiness facts are not all ready. No-valid-candidate and
+    explicit-override diagnostics now prefer dependency-readiness diagnostics
+    over generic incompatibility when the rejected candidate carries negative
+    proof. Empty proof remains non-blocking until production host package
+    snapshots are wired.
+  - Verification passed: `cargo test -p pantograph-runtime-registry
+    dependency_readiness --lib`; `cargo test -p pantograph-runtime-registry
+    technical_fit --lib`; `cargo fmt --manifest-path
+    crates/pantograph-runtime-registry/Cargo.toml -- --check`; `git diff
+    --check`.
+  - Remaining follow-up: wire host-resolved Python package readiness facts
+    into production technical-fit requests, then add the image
+    planner/gateway missing-proof rejection before worker dispatch.
 
 ### Traceability Links
 

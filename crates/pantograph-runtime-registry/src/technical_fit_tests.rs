@@ -63,6 +63,35 @@ fn runtime_capability_candidate(candidate_id: &str) -> RuntimeTechnicalFitCandid
     }
 }
 
+fn dependency_readiness_fact(
+    dependency_id: &str,
+    state: RuntimeTechnicalFitDependencyReadinessState,
+) -> RuntimeTechnicalFitDependencyReadinessFact {
+    RuntimeTechnicalFitDependencyReadinessFact {
+        subject_kind: RuntimeTechnicalFitDependencyReadinessSubjectKind::Package,
+        runtime_id: Some("pytorch".to_string()),
+        backend_key: Some("pytorch".to_string()),
+        runtime_variant_id: Some("pytorch.cuda".to_string()),
+        task_id: Some("image_generation".to_string()),
+        model_family_id: Some("stable_diffusion".to_string()),
+        dependency_id: dependency_id.to_string(),
+        state,
+        resolver_owner: RuntimeTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime,
+        reason_code: if state.is_ready() {
+            None
+        } else {
+            Some("python_package_not_installed".to_string())
+        },
+        reason: if state.is_ready() {
+            None
+        } else {
+            Some(format!(
+                "Python package '{dependency_id}' is not installed for runtime 'pytorch'."
+            ))
+        },
+    }
+}
+
 fn candidate_history_summary(
     candidate_id: &str,
     threshold_met: bool,
@@ -112,19 +141,10 @@ fn runtime_capability_source_kind_rejects_retired_fallback_wire_value() {
 #[test]
 fn selector_copies_dependency_readiness_proof_to_selected_decision() {
     let mut candidate = runtime_capability_candidate("pytorch");
-    candidate.dependency_readiness = vec![RuntimeTechnicalFitDependencyReadinessFact {
-        subject_kind: RuntimeTechnicalFitDependencyReadinessSubjectKind::Package,
-        runtime_id: Some("pytorch".to_string()),
-        backend_key: Some("pytorch".to_string()),
-        runtime_variant_id: Some("pytorch.cuda".to_string()),
-        task_id: Some("image_generation".to_string()),
-        model_family_id: Some("stable_diffusion".to_string()),
-        dependency_id: "diffusers".to_string(),
-        state: RuntimeTechnicalFitDependencyReadinessState::Available,
-        resolver_owner: RuntimeTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime,
-        reason_code: None,
-        reason: None,
-    }];
+    candidate.dependency_readiness = vec![dependency_readiness_fact(
+        "diffusers",
+        RuntimeTechnicalFitDependencyReadinessState::Available,
+    )];
 
     let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
         runtime_snapshot: empty_snapshot(),
@@ -148,6 +168,128 @@ fn selector_copies_dependency_readiness_proof_to_selected_decision() {
     assert_eq!(
         decision.dependency_readiness,
         candidate.dependency_readiness
+    );
+}
+
+#[test]
+fn selector_skips_candidate_with_unavailable_dependency_readiness() {
+    let mut unavailable = runtime_capability_candidate("candidate-unavailable");
+    unavailable.backend_key = Some("pytorch".to_string());
+    unavailable.dependency_readiness = vec![dependency_readiness_fact(
+        "diffusers",
+        RuntimeTechnicalFitDependencyReadinessState::NotInstalled,
+    )];
+    let mut ready = runtime_capability_candidate("candidate-ready");
+    ready.backend_key = Some("pytorch".to_string());
+    ready.dependency_readiness = vec![dependency_readiness_fact(
+        "diffusers",
+        RuntimeTechnicalFitDependencyReadinessState::Available,
+    )];
+
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["pytorch".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![unavailable, ready],
+        candidate_history_summaries: Vec::new(),
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selected_candidate_id.as_deref(),
+        Some("candidate-ready")
+    );
+    let summary = decision
+        .selection_policy_trace
+        .as_ref()
+        .and_then(|trace| trace.candidate_set_summary.as_ref())
+        .expect("candidate summary");
+    assert_eq!(summary.total_candidate_count, 2);
+    assert_eq!(summary.eligible_candidate_count, 1);
+    assert_eq!(summary.rejected_candidate_count, 1);
+    assert_eq!(summary.eligible_candidate_ids, vec!["candidate-ready"]);
+}
+
+#[test]
+fn selector_reports_unavailable_dependency_readiness_when_no_candidate_is_valid() {
+    let mut candidate = runtime_capability_candidate("candidate-unavailable");
+    candidate.backend_key = Some("pytorch".to_string());
+    candidate.dependency_readiness = vec![dependency_readiness_fact(
+        "diffusers",
+        RuntimeTechnicalFitDependencyReadinessState::NotInstalled,
+    )];
+
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["pytorch".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![candidate],
+        candidate_history_summaries: Vec::new(),
+        resource_pressure: None,
+    });
+
+    assert!(decision.selected_candidate_id.is_none());
+    assert_eq!(decision.device_diagnostics.len(), 1);
+    assert_eq!(
+        decision.device_diagnostics[0].code,
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable
+    );
+    assert_eq!(
+        decision.device_diagnostics[0].evidence_key.as_deref(),
+        Some("diffusers")
+    );
+}
+
+#[test]
+fn explicit_override_reports_unavailable_dependency_readiness() {
+    let mut candidate = runtime_capability_candidate("candidate-unavailable");
+    candidate.backend_key = Some("pytorch".to_string());
+    candidate.dependency_readiness = vec![dependency_readiness_fact(
+        "diffusers",
+        RuntimeTechnicalFitDependencyReadinessState::NotInstalled,
+    )];
+
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["pytorch".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: Some(RuntimeTechnicalFitOverride {
+            runtime_id: None,
+            runtime_variant_id: None,
+            model_id: None,
+            backend_key: Some("pytorch".to_string()),
+        }),
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![candidate],
+        candidate_history_summaries: Vec::new(),
+        resource_pressure: None,
+    });
+
+    assert!(decision.selected_candidate_id.is_none());
+    assert_eq!(decision.device_diagnostics.len(), 1);
+    assert_eq!(
+        decision.device_diagnostics[0].code,
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable
+    );
+    assert_eq!(
+        decision.device_diagnostics[0].backend_key.as_deref(),
+        Some("pytorch")
     );
 }
 

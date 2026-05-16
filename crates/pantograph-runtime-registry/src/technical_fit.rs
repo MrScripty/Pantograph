@@ -1148,6 +1148,10 @@ fn candidate_rejection_diagnostics(
     if !candidate.device_diagnostics.is_empty() {
         return candidate.device_diagnostics.clone();
     }
+    let dependency_diagnostics = candidate_dependency_readiness_diagnostics(candidate);
+    if !dependency_diagnostics.is_empty() {
+        return dependency_diagnostics;
+    }
 
     let compatibility_rejected = candidate
         .compatibility_report
@@ -1184,6 +1188,53 @@ fn candidate_rejection_diagnostics(
         evidence_key: None,
         requested_runtime_key: None,
     }]
+}
+
+pub(crate) fn candidate_dependency_readiness_is_ready(
+    candidate: &RuntimeTechnicalFitCandidate,
+) -> bool {
+    candidate
+        .dependency_readiness
+        .iter()
+        .all(|fact| fact.state.is_ready())
+}
+
+pub(crate) fn candidate_dependency_readiness_diagnostics(
+    candidate: &RuntimeTechnicalFitCandidate,
+) -> Vec<RuntimeTechnicalFitDeviceDiagnostic> {
+    candidate
+        .dependency_readiness
+        .iter()
+        .filter(|fact| !fact.state.is_ready())
+        .map(|fact| RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: fact.reason.clone().unwrap_or_else(|| {
+                format!(
+                    "required dependency '{}' is not ready for technical-fit candidate '{}'",
+                    fact.dependency_id, candidate.candidate_id
+                )
+            }),
+            task_id: fact.task_id.clone(),
+            runtime_id: fact
+                .runtime_id
+                .clone()
+                .or_else(|| candidate.runtime_id.clone()),
+            device_class: candidate.device_class,
+            device_id: candidate.selected_device_id.clone(),
+            runtime_variant_id: fact
+                .runtime_variant_id
+                .clone()
+                .or_else(|| candidate.runtime_variant_id.clone()),
+            backend_key: fact
+                .backend_key
+                .clone()
+                .or_else(|| candidate.backend_key.clone()),
+            model_id: candidate.model_id.clone(),
+            evidence_key: Some(fact.dependency_id.clone()),
+            requested_runtime_key: None,
+        })
+        .collect()
 }
 
 fn synthetic_explicit_override_diagnostic(

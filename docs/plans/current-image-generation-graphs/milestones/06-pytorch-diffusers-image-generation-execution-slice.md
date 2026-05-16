@@ -2549,6 +2549,17 @@ readiness:
       5. Wire scheduler/admission candidate filtering to consume readiness
          proof and fail candidate selection while emitting ledger diagnostics
          when required dependencies are unavailable.
+         - 2026-05-16 runtime-registry readiness filtering slice: runtime
+           technical-fit selection now treats explicit unavailable
+           dependency-readiness proof on a candidate as ineligible. Automatic
+           selection skips unavailable candidates, no-valid-candidate outcomes
+           surface `evidence_required_package_unavailable` diagnostics with
+           runtime/backend/task/dependency attribution, and explicit overrides
+           report the same typed dependency diagnostic instead of falling back
+           to a generic backend-incompatible result. Empty proof remains
+           non-blocking until production host package snapshots are wired and
+           the planner/gateway missing-proof gate can be enabled without
+           rejecting every current production candidate.
       6. Make image planner/gateway reject selected decisions that lack ready
          dependency proof before worker dispatch.
       7. Remove the legacy dependency-environment backend-key and fallback
