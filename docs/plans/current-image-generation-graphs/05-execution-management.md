@@ -5054,6 +5054,34 @@ Worker rules:
     were run.
   - Remaining follow-up: implement the staged replacement in thin slices,
     starting with the dependency-readiness DTO/projection and tests.
+- 2026-05-16 dependency-readiness scheduler-proof tightening slice:
+  - Smallest useful vertical slice: update Milestone 6 after codebase impact
+    review so dependency readiness cannot be implemented as late diagnostics,
+    lifecycle-only facts, worker-first package discovery, or a reuse of
+    device diagnostics/runtime-requirement booleans.
+  - Allowed write set: this plan directory only.
+  - Decision: dependency readiness must attach to scheduler-facing candidate
+    data and the selected execution decision as typed readiness proof. The
+    scheduler/admission path consumes that proof before ranking/selection, and
+    the inference planner/gateway validates the selected proof before worker
+    dispatch without rerunning local package probes or choosing a runtime.
+  - Standards review: this keeps the scheduler as the single runtime decision
+    owner, preserves `inference::capability_availability` as factual source
+    data, avoids overloading primitive ids with combined runtime/model/package
+    scope, prevents `supports_runtime_requirements` and device diagnostics
+    from becoming hidden dependency-readiness channels, and keeps Python
+    sidecar availability separate from PyTorch/Diffusers package readiness.
+  - No-fallback/no-legacy confirmation: the updated plan rejects
+    diagnostic-only readiness, worker-first missing-package discovery,
+    dependency-environment fallback selection, pseudo-Diffusers executable
+    runtimes, and Python-executable-only readiness for canonical image
+    generation.
+  - Verification: docs-only diff review and `git diff --check`; no code tests
+    were run.
+  - Remaining follow-up: implement the staged dependency-readiness replacement
+    by first adding the DTO/projection and then attaching readiness proof to
+    scheduler candidates and selected decisions before filtering and planner
+    rejection slices.
 
 ### Traceability Links
 

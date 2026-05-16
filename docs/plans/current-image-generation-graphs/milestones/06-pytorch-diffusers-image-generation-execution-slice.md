@@ -2427,19 +2427,39 @@ readiness:
         runtime variant when applicable, package/dependency id, task/family
         scope when applicable, availability state, stable reason code, bounded
         reason text, and resolver owner.
+      - Dependency-readiness facts must attach to scheduler-facing candidate
+        data and the final selected execution decision as typed readiness
+        proof. They must not be represented only as late diagnostics,
+        lifecycle events, worker errors, `supports_runtime_requirements`, or
+        device diagnostics.
+      - Keep `CapabilityAvailabilityFact` as the shared factual availability
+        primitive, but add an explicit dependency-readiness projection or
+        wrapper when scheduler candidates need additional scope such as
+        runtime/backend id, runtime variant id, task id, model family,
+        package/dependency id, resolver owner, reason code, and bounded reason
+        text. Do not overload one primitive id string with combined model,
+        runtime, package, and task scope.
       - Inference declares package requirements for PyTorch/Diffusers image
         execution (`diffusers`, `transformers`, `accelerate`, `torch`, Pillow)
         without probing the local Python environment.
       - Embedded-runtime resolves those declarations into readiness facts using
-        installed/runtime state and existing diagnostic channels. It does not
-        rank candidates or select runtimes.
+        installed/runtime state and existing diagnostic channels. Python
+        executable presence only proves the Python sidecar shell exists; it
+        does not prove PyTorch/Diffusers package readiness. The resolver does
+        not rank candidates or select runtimes.
       - Scheduler/admission treats unavailable dependency facts as
         non-selectable candidate evidence. If an explicit graph runtime was
         requested, the scheduler either selects that runtime with ready facts
         or fails closed with diagnostics. If runtime is implicit, the scheduler
         may choose among only ready candidates.
       - Inference planner/gateway validates that the scheduler-selected runtime
-        carries ready dependency facts before building a worker envelope.
+        carries ready dependency facts before building a worker envelope. The
+        planner/gateway may validate the selected proof, but must not rerun
+        local package probes or make an independent runtime selection.
+      - If `dependency-environment` remains useful for explicit diagnostics or
+        tooling workflows, split or restrict that path so canonical inference
+        code cannot import it for backend selection, dependency readiness, or
+        fallback execution.
     - Staged implementation plan:
       1. Add the dependency-readiness DTO/projection and focused serde/default
          tests without changing selection behavior.
@@ -2448,14 +2468,19 @@ readiness:
          local probes or scheduler policy.
       3. Add embedded-runtime readiness resolution from those declarations into
          typed facts and existing diagnostics.
-      4. Wire scheduler/admission candidate filtering to consume readiness
-         facts and fail candidate selection while emitting ledger diagnostics
+      4. Attach dependency-readiness facts to runtime-registry/admission
+         candidates and selected execution decisions as typed proof. Add tests
+         proving unavailable readiness cannot be hidden behind
+         `supports_runtime_requirements`, device diagnostics, lifecycle
+         diagnostics, or worker errors.
+      5. Wire scheduler/admission candidate filtering to consume readiness
+         proof and fail candidate selection while emitting ledger diagnostics
          when required dependencies are unavailable.
-      5. Make image planner/gateway reject non-ready scheduler decisions before
-         worker dispatch.
-      6. Remove the legacy dependency-environment backend-key and fallback
+      6. Make image planner/gateway reject selected decisions that lack ready
+         dependency proof before worker dispatch.
+      7. Remove the legacy dependency-environment backend-key and fallback
          selection paths from canonical inference execution.
-      7. Retire `dependency-environment` from canonical inference execution or
+      8. Retire `dependency-environment` from canonical inference execution or
          restrict it to explicit diagnostic/tooling workflows that cannot
          influence runtime selection.
     - Required tests:
@@ -2467,6 +2492,11 @@ readiness:
         facts.
       - Missing `torch`, `diffusers`, `transformers`, `accelerate`, or Pillow
         blocks before worker dispatch and records runtime-scoped diagnostics.
+      - Scheduler candidate and selected decision fixtures carry explicit
+        dependency-readiness proof for selected PyTorch/Diffusers execution;
+        diagnostic-only readiness is rejected as insufficient.
+      - Python sidecar availability does not mark PyTorch/Diffusers image
+        execution ready unless the required package facts are available.
       - Explicit graph runtime requirements fail closed when that runtime has
         unavailable dependency facts.
       - Implicit runtime selection skips unavailable candidates and only ranks
