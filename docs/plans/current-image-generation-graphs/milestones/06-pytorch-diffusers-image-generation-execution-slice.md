@@ -37,10 +37,24 @@ PyTorch/diffusers and produce a retained image artifact.
   prefixed again; malformed refs, local paths, or ambiguous model/artifact
   identities must fail with typed execution-plan diagnostics rather than being
   repaired by inference nodes.
+- [ ] Parse selected model identity once at the workflow execution-plan owner
+  boundary into a validated workflow-owned model-ref type, then project that
+  validated value into inference. Embedded-runtime projection may adapt the
+  type shape, but it must not re-parse, re-prefix, repair, or reinterpret raw
+  selected model strings.
+- [ ] If the model-ref normalization slice introduces a new source module,
+  public constructor, or changed execution-plan boundary contract, update the
+  owning README or add an ADR in the same commit. The documentation must state
+  the parse-once invariant, accepted raw selected-fact forms, rejected local
+  path/URI forms, append-only evolution rules, and scheduler-history identity
+  semantics.
 - [ ] Add a focused execution-plan model-ref normalization test covering raw
   model ids, already-prefixed Pumas refs, malformed refs, and projection into
-  `BackendExecutionDecision`. This slice is a prerequisite for using selected
-  model identity as scheduler history input.
+  `BackendExecutionDecision`. Write the first failing test before changing the
+  normalization implementation, and keep the test focused on the public
+  constructor/projection boundary rather than private helper details. This
+  slice is a prerequisite for using selected model identity as scheduler
+  history input.
 - [ ] Tighten selected-decision fact typing at the workflow execution-plan
   boundary. Keep workflow-service independent from inference DTOs, but use
   workflow-owned validated constructors or newtypes for selected backend key,
@@ -49,6 +63,11 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Verify backend runtime selection maps diffusion/image-generation package
   facts and graph hints to PyTorch execution, preserving `diffusers` as the
   dependency and package capability label.
+- [ ] Treat graph/runtime hints as optional constraints or preferences only.
+  The scheduler/admission policy remains the owner of runtime selection among
+  valid candidates, including warmed-runtime affinity, historical diagnostics,
+  exploration, and memory-fit ranking. A graph hint must not bypass candidate
+  validation or become a fallback runtime choice.
 - [ ] Replace scattered `diffusers` backend-key mappings that affect execution
   with calls into the single normalization boundary defined in Milestone 0.
 - [ ] Keep package/dependency keys and execution backend keys represented by
@@ -236,6 +255,9 @@ PyTorch/diffusers and produce a retained image artifact.
 - Execution-plan identity tests prove selected model refs are normalized once,
   reject malformed/local-path values, and preserve already-prefixed Pumas refs
   without producing `pumas://models/pumas://models/...`.
+- Execution-plan identity tests exercise the public validated constructor and
+  projection boundary, proving raw selected strings are not repaired in
+  embedded-runtime or node-engine after the owner-boundary parse.
 - Normalization tests prove package/dependency labels such as `diffusers` are
   not reused as scheduler-selected execution backend keys.
 - Planner tests prove unsupported pipeline family, missing component facts,
@@ -1385,6 +1407,15 @@ Standards compliance gates for every Option 3 slice:
   runtime readiness, or worker dispatch. Do not compose Pumas refs with string
   prefixing in multiple layers; normalize once at the owner boundary or reject
   the selected fact.
+- Parse-once rule: once a selected model/backend/runtime/device fact crosses
+  into a validated execution-plan type, downstream layers consume the typed
+  value or fail projection. They must not re-validate by string matching,
+  silently repair malformed data, or infer missing identity from graph inputs,
+  package facts, active backend state, or worker metadata.
+- Graph-hint rule: graph-provided backend/runtime/device hints are admissible
+  only as scheduler inputs. They are not execution decisions, are not required
+  for ordinary inference graphs, and must produce typed diagnostics when they
+  cannot be reconciled with canonical runtime/package facts.
 - Dependency/backend separation rule: package/dependency evidence and
   execution backend selection must use separate names/types. `diffusers`
   package facts can drive PyTorch eligibility, but they must not become an

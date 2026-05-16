@@ -4150,6 +4150,38 @@ Worker rules:
   facts fail as typed diagnostics before execution.
 - Verification for this plan-only slice: read-only codebase inspection,
   `git status --short`, plan diff review, and `git diff --check`.
+- 2026-05-15: Completed a standards iteration over the new execution-plan
+  identity gates against the plan, architecture, Rust API, Rust async,
+  concurrency, testing, documentation, interop, security, and generic coding
+  standards.
+- Standards refinement recorded in Milestone 6: selected model identity must
+  be parsed once at the workflow execution-plan owner boundary into a
+  validated workflow-owned model-ref type. Embedded-runtime may project that
+  typed value into inference, but it must not re-prefix, repair, or reinterpret
+  raw selected model strings. This aligns the plan with Rust
+  correct-by-construction and security parse-once requirements.
+- Standards refinement recorded in Milestone 6: any model-ref normalization
+  module, public constructor, or execution-plan contract change must update
+  the owning README or add an ADR in the same commit, including accepted raw
+  selected-fact forms, rejected local path/URI forms, append-only evolution,
+  and scheduler-history identity semantics.
+- Standards refinement recorded in Milestone 6: focused model-ref tests must
+  start as a failing public-boundary test and then pass after implementation.
+  The test should cover raw ids, already-prefixed Pumas refs, malformed/local
+  path values, and projection without coupling to private helper names.
+- Standards refinement recorded in Milestone 6: graph runtime/backend/device
+  hints are optional scheduler inputs only. They are not required graph fields,
+  not execution decisions, and not fallback choices; scheduler/admission policy
+  still owns candidate validation, warmed-runtime affinity, historical
+  diagnostics, exploration, and memory-fit ranking.
+- Standards conclusion: the plan remains standards-compliant after these
+  refinements. The main risks to avoid during implementation are duplicate
+  string parsing across crates, silent identity repair in projection or
+  node-engine, undocumented contract changes, graph hints bypassing scheduler
+  policy, and new logic added to files already past the decomposition-review
+  threshold.
+- Verification for this standards pass: `git status --short`, standards
+  review, plan diff review, and `git diff --check`.
 
 ### Traceability Links
 
