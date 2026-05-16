@@ -3,7 +3,7 @@
 ![banner_3](https://github.com/user-attachments/assets/32b9a8c3-39b1-4fdf-ae55-c0ea9d850929)
 
 
-Pantograph is a local-first headless framework with an optional GUI desktop app that provides a unified local inference API, node based workflows, system resource aware runtime schedualing, real-time observability and diagnostic tracing of Ai pipelines. Functionality is provided via language bindings for Python, C#, Elixir, or tge native Rust API surface. 
+Pantograph is a local-first headless framework with an optional GUI desktop app that provides a unified local inference API, node based workflows, system resource aware runtime schedualing, real-time observability and diagnostic tracing of Ai pipelines. Functionality is provided via language bindings for Python, C#, Elixir, or the native Rust API surface. 
 
 ## Quick Start
 
@@ -177,29 +177,6 @@ Integration boundary:
 - HTTP binding exports are opt-in frontend adapters for modular standalone GUI
   hosting (`frontend-http` in UniFFI and Rustler).
 - Recommended headless flow: `workflow_get_io` -> `workflow_preflight` -> `workflow_run`.
-
-Reference docs:
-
-- Contract: `docs/headless-embedding-api-v1.md`
-- Native bindings: `docs/headless-native-bindings.md`
-- Migration guide: `docs/headless-embedding-migration.md`
-- Service boundary ADR: `docs/adr/ADR-001-headless-embedding-service-boundary.md`
-- Implementation notes: `docs/headless-embedding-implementation-notes.md`
-
-## Current Milestone
-
-Current focus is making edge insertion feel complete in the desktop workflow editor.
-
-Done for this milestone means:
-
-- A user can insert a palette node onto an existing edge in the desktop app.
-- The inserted node lands on the intended edge without breaking surrounding graph state.
-- The resulting graph persists correctly through save and reload.
-- The interaction path is documented well enough to demo without explaining internal graph rules first.
-
-Current known limitation:
-
-- The workflow graph contract is moving faster than the user-facing demo narrative, so technical progress can be hard to evaluate from the outside.
 
 ## Project Structure
 
