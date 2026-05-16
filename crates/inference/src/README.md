@@ -13,6 +13,7 @@ details.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `backend/` | Backend trait definitions and concrete supported engine adapters such as llama.cpp, Candle, and PyTorch. |
+| `capability_availability.rs` | Typed runtime, package, dependency, model-capability, and runtime-trait availability facts with validated ids and bounded reason text for scheduler/provider projection. |
 | `device.rs` | Backend-local llama.cpp device inventory parsing, canonical inventory fact projection, and command-selector formatting. |
 | `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
@@ -95,6 +96,12 @@ Device and runtime-variant contracts live in `device_contracts/` so
 backend adapters can report facts while scheduler admission owns selection.
 The contracts reject invalid raw identifiers at the boundary instead of
 normalizing them to executable defaults.
+Capability availability facts live in `capability_availability.rs` so runtime,
+package, dependency, model-capability, and runtime-trait readiness can be
+reported once with typed unavailability states before scheduler ranking or
+graph-provider presentation. These facts are not a second diagnostic channel:
+callers must project them through owned scheduler, workflow, lifecycle, or
+port-option DTOs.
 Execution evidence normalization lives in `execution_evidence.rs` so package
 labels, backend hints, runtime capability facts, graph runtime requirements,
 and executable backend candidates stay separate before the scheduler ranks
@@ -129,6 +136,10 @@ backend is registered.
   candidates, but it must not rank candidates, reserve resources, read
   scheduler history, or turn package/dependency labels such as `diffusers`
   into selected runtime decisions.
+- Capability availability facts may report runtime, package, dependency,
+  model-capability, and runtime-trait selectability, but they must not rank
+  candidates, select runtimes, or encode UI disabled state in display strings.
+  Producers must use validated primitive ids and bounded single-line reasons.
 - Shared request/response types are append-only unless a coordinated breaking
   change is approved.
 - Image-generation execution plans carry explicit denoising scheduler intent as

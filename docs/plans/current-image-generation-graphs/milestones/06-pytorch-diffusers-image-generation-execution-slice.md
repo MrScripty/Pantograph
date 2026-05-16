@@ -2365,12 +2365,17 @@ readiness:
     label must not imply an executable Diffusers sidecar when only PyTorch is
     registered as the executable backend.
 - Ordered implementation slices required before worker-ready image generation:
-  - [ ] Add a shared typed availability contract for runtime/trait/package
+  - [x] Add a shared typed availability contract for runtime/trait/package
     capability facts. Required states include available, not installed, not
     implemented, unsupported platform, missing dependency, disabled by policy,
     missing model facts, requires runtime capability, and requires model
     capability. Project it to scheduler diagnostics and port-option rows
     through existing DTOs instead of adding a parallel diagnostic envelope.
+    - 2026-05-16 slice: added `inference::capability_availability` as a pure
+      DTO/validation boundary with typed subject kinds, the required
+      availability states, validated primitive ids, bounded single-line
+      reasons, serde round-trip coverage, and README ownership notes. No
+      scheduler ranking, UI projection, or fallback runtime path was added.
   - [ ] Extend `PortOption` and all Rust/TypeScript/interop mirrors with
     append-only disabled/unavailable fields and focused node tests. Provider
     rows must keep primitive option ids separate from presentation labels and

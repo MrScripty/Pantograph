@@ -24,6 +24,7 @@
 //! ```
 
 pub mod backend;
+pub mod capability_availability;
 pub mod config;
 pub mod constants;
 pub mod device;
@@ -56,6 +57,10 @@ pub use backend::{
     BackendRequestLifecycleFacts, BackendRequestLifecyclePhaseFacts, BackendStartupDeviceIntent,
     BackendStartupDeviceIntentError, BackendTaskCapability, ChatChunk, EmbeddingResult,
     InferenceBackend,
+};
+pub use capability_availability::{
+    CapabilityAvailabilityError, CapabilityAvailabilityFact, CapabilityAvailabilityId,
+    CapabilityAvailabilityReason, CapabilityAvailabilityState, CapabilityAvailabilitySubjectKind,
 };
 
 #[cfg(feature = "backend-llamacpp")]

@@ -4964,6 +4964,27 @@ Worker rules:
     validated Pumas artifact/root paths, reserved `diffusers` identity
     reconciliation, and typed runtime/trait input replacement for remaining
     generic `backend_key` discovery.
+- 2026-05-16 shared capability availability contract slice:
+  - Smallest useful vertical slice: add the shared inference-owned DTO and
+    validation contract for runtime, runtime-variant, runtime-trait, package,
+    dependency, and model-capability availability facts before any scheduler or
+    provider projection uses those facts.
+  - Allowed write set: `crates/inference/src/capability_availability.rs`,
+    `crates/inference/src/lib.rs`, `crates/inference/src/README.md`, and this
+    plan directory.
+  - No-fallback/no-legacy confirmation: the slice adds typed unavailable
+    states and validated fact values only. It does not rank candidates, select
+    runtimes, synthesize a fallback backend, create a pseudo-Diffusers runtime,
+    add a diagnostic side channel, or encode disabled provider state in labels
+    or metadata.
+  - Verification passed: `cargo fmt --manifest-path crates/inference/Cargo.toml`,
+    `cargo fmt --manifest-path crates/inference/Cargo.toml -- --check`,
+    `cargo test -p inference capability_availability --lib`, and
+    `git diff --check`.
+  - Remaining follow-up: project these facts through existing scheduler
+    diagnostics and port-option DTOs in later slices, then replace dependency
+    readiness and provider disabled-state paths without creating parallel
+    contracts.
 
 ### Traceability Links
 
