@@ -4407,6 +4407,19 @@ Worker rules:
   path where graph data or dependency metadata can select runtime execution
   outside scheduler/admission. It makes scheduler output the only source of
   truth for runtime selection.
+- 2026-05-16: Updated the Milestone 6 implementation staging after a
+  blast-radius review found stale graph `backend_key = pytorch` language and
+  an unclear write set for the new inference-node runtime input. The plan now
+  uses explicit graph `runtime = pytorch` request terminology, requires
+  workflow capability extraction to read only that graph-owned runtime input as
+  a hard scheduler requirement, and adds a dedicated graph runtime
+  input/projection slice before embedded-runtime technical-fit migration.
+- No-fallback/no-legacy confirmation: this update rejects preserving
+  `backend_key` as a graph-visible runtime-selection compatibility path.
+  Pumas `recommended_backend`, dependency metadata, node-engine forwarded
+  context, inference DTOs, gateway calls, and worker envelopes must still not
+  carry selected runtime values except through scheduler-produced execution
+  decisions.
 
 ### Traceability Links
 

@@ -107,17 +107,17 @@ PyTorch/diffusers and produce a retained image artifact.
   selectable runtime/backend when the executable backend is PyTorch.
 - [ ] Update workflow capability extraction so package-owned
   `recommended_backend` fields from Pumas facts do not become hard required
-  executable backends. Only explicit graph-owned backend constraints should
-  enter workflow runtime requirements; package recommendations should flow
-  through the inference-owned evidence boundary.
+  executable backends. Only the explicit graph-owned `runtime` input on an
+  inference node may become a hard scheduler runtime requirement; package
+  recommendations should flow through the inference-owned evidence boundary.
 - [ ] Keep node-engine dependency-context forwarding from becoming a backend
   decision path. Node-engine may carry model intent and host-installed planned
   inference decisions, but Pumas `recommended_backend` and dependency metadata
   must not be interpreted there as executable backend selection.
-- [ ] Add or update centralized normalization tests for graph
-  `backend_key = pytorch` and Pumas Diffusers package hints. `diffusers`
-  remains package/runtime capability evidence, not a graph-visible backend
-  preference.
+- [ ] Add or update centralized normalization tests for an explicit graph
+  `runtime = pytorch` request and Pumas Diffusers package hints. `diffusers`
+  remains package/runtime capability evidence, not a graph-visible runtime
+  request.
 - [ ] Add a general execution-evidence normalization boundary before replacing
   Diffusers mappings. This boundary belongs beside inference model/package
   contracts because it interprets Pumas/package facts, artifact kinds, task
@@ -1531,15 +1531,32 @@ Staged Option 3 implementation plan:
   runtime-selection paths from graph data, dependency metadata, or node
   execution context.
 - First implementation slice: add the typed evidence boundary plus focused
-  tests for Diffusers package facts, PyTorch capability facts, and graph
-  `backend_key = pytorch`. The allowed initial write set should be limited to
-  the new inference evidence module, PyTorch static capability facts and their
+  tests for Diffusers package facts, PyTorch capability facts, and an explicit
+  graph runtime request represented as typed evidence input
+  (`runtime = pytorch`). The allowed initial write set should be limited to the
+  new inference evidence module, PyTorch static capability facts and their
   focused tests if required to express Diffusers support, existing inference
   model/backend compatibility tests or fixtures, runtime-identity tests only if
   alias documentation needs clarification, and this plan. It should not edit
-  workflow-service admission, embedded-runtime technical fit, node-engine, or
-  gateway behavior until the boundary contract is pinned.
-- Second implementation slice: migrate embedded-runtime technical-fit
+  workflow-service admission, embedded-runtime technical fit, workflow-node
+  descriptors, node-engine, or gateway behavior until the boundary contract is
+  pinned.
+- Second implementation slice: add the optional inference-node `runtime` input
+  and scheduler-request projection. This slice should expose the graph input
+  in the workflow-node descriptor, update workflow capability/runtime
+  extraction to read only that explicit inference-node input as a hard
+  scheduler requirement, project it into `override_selection` or the canonical
+  scheduler request field, and add guard tests proving nested Pumas
+  `recommended_backend`, dependency metadata, and node-engine forwarded
+  context do not become runtime requirements. Allowed write set can include
+  `crates/workflow-nodes/src/processing/inference.rs`, workflow-node
+  descriptor tests, `crates/pantograph-workflow-service/src/capabilities.rs`,
+  focused workflow-service capability/preflight tests, graph registry or
+  persistence tests only if the new `runtime` port requires contract allowlist
+  updates, and this plan. It must not add graph runtime values to node-engine
+  inference request construction, inference DTOs, gateway calls, or worker
+  envelopes.
+- Third implementation slice: migrate embedded-runtime technical-fit
   candidate construction and dependency preflight to consume the boundary.
   Allowed write set can include
   `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
@@ -1548,7 +1565,7 @@ Staged Option 3 implementation plan:
   `crates/pantograph-embedded-runtime/src/model_dependency_descriptors.rs`,
   `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
   focused technical-fit/dependency tests, and this plan.
-- Third implementation slice: migrate workflow/runtime preflight and gateway
+- Fourth implementation slice: migrate workflow/runtime preflight and gateway
   diagnostics that currently maintain their own `diffusers` backend logic.
   This includes workflow-service required-backend extraction for nested
   package/Pumas `recommended_backend`, node-engine dependency-context forwarding
