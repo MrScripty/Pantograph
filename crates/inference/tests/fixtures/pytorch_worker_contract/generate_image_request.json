@@ -28,7 +28,7 @@
     "num_inference_steps": 8,
     "guidance_scale": 7.5,
     "seed": 42,
-    "scheduler": "euler",
+    "denoising_scheduler": "euler",
     "num_images_per_prompt": 1
   }
 }

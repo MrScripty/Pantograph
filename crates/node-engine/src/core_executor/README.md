@@ -108,8 +108,8 @@ stable public facade and dispatch owner.
   workflow artifact conversion path owns retention of the `image` body.
 - Canonical image-generation request construction reads optional sampling
   intent from `denoising_scheduler`. The old graph/API `scheduler` key is not a
-  compatibility alias; downstream inference DTOs may still use their internal
-  field names until the worker-envelope rename slice is completed.
+  compatibility alias; downstream inference DTOs and PyTorch image worker
+  envelopes use the same canonical field name.
 - Canonical `llm-inference` task/request compatibility checks should consume
   inference task registry request contracts instead of hard-coded backend names
   or raw task labels.

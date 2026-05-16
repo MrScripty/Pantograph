@@ -723,9 +723,9 @@ pub struct ImageGenerationRequest {
     /// Deterministic seed, if supplied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
-    /// Optional scheduler identifier.
+    /// Optional denoising scheduler option id.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub scheduler: Option<String>,
+    pub denoising_scheduler: Option<String>,
     /// Number of images to produce for the prompt.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub num_images_per_prompt: Option<u32>,
@@ -1388,7 +1388,7 @@ mod tests {
             num_inference_steps: Some(30),
             guidance_scale: Some(4.0),
             seed: Some(42),
-            scheduler: Some("flow_match_euler".to_string()),
+            denoising_scheduler: Some("flow_match_euler".to_string()),
             num_images_per_prompt: Some(1),
             init_image: None,
             mask_image: None,
@@ -1420,7 +1420,7 @@ mod tests {
             }],
             seed_used: Some(42),
             metadata: serde_json::json!({
-                "scheduler": "flow_match_euler"
+                "denoising_scheduler": "flow_match_euler"
             }),
         };
 
@@ -1431,7 +1431,7 @@ mod tests {
         assert_eq!(decoded.images.len(), 1);
         assert_eq!(decoded.images[0].mime_type, "image/png");
         assert_eq!(
-            decoded.metadata["scheduler"],
+            decoded.metadata["denoising_scheduler"],
             serde_json::json!("flow_match_euler")
         );
     }
@@ -1613,7 +1613,7 @@ mod tests {
                     num_inference_steps: Some(20),
                     guidance_scale: Some(7.5),
                     seed: Some(42),
-                    scheduler: Some("euler".to_string()),
+                    denoising_scheduler: Some("euler".to_string()),
                     num_images_per_prompt: Some(2),
                     init_image: None,
                     mask_image: None,
@@ -1638,9 +1638,10 @@ mod tests {
             serde_json::json!(20)
         );
         assert_eq!(
-            encoded["input"]["request"]["scheduler"],
+            encoded["input"]["request"]["denoising_scheduler"],
             serde_json::json!("euler")
         );
+        assert!(encoded["input"]["request"].get("scheduler").is_none());
         assert_eq!(decoded, request);
     }
 

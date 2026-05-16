@@ -155,7 +155,7 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
         num_inference_steps: Some(8),
         guidance_scale: Some(7.5),
         seed: Some(42),
-        scheduler: Some("euler".to_string()),
+        denoising_scheduler: Some("euler".to_string()),
         num_images_per_prompt: Some(1),
         init_image: None,
         mask_image: None,
@@ -236,6 +236,14 @@ fn test_python_worker_generate_image_contract_projects_planned_kwargs() {
                 .extract::<u32>()
                 .expect("steps should be an integer"),
             8
+        );
+        assert_eq!(
+            generation_kwargs
+                .get_item("denoising_scheduler")
+                .expect("denoising scheduler key should exist")
+                .extract::<String>()
+                .expect("denoising scheduler should be a string"),
+            "euler"
         );
     });
 }

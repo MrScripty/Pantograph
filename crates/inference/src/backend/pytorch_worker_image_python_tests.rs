@@ -167,7 +167,7 @@ fn test_python_worker_generate_image_from_envelope_returns_worker_response() {
         assert_eq!(success.result.images.len(), 1);
         assert_eq!(success.result.images[0].mime_type, "image/png");
         assert_eq!(success.result.seed_used, Some(42));
-        assert_eq!(success.result.metadata["scheduler"], "euler");
+        assert_eq!(success.result.metadata["denoising_scheduler"], "euler");
         assert_eq!(success.result.metadata["device"], "cpu");
     });
 }

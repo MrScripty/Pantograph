@@ -1362,7 +1362,7 @@ fn test_build_image_generation_execution_request_preserves_canonical_inputs() {
             assert_eq!(request.num_inference_steps, Some(12));
             assert_eq!(request.guidance_scale, Some(7.5));
             assert_eq!(request.seed, Some(42));
-            assert_eq!(request.scheduler.as_deref(), Some("euler"));
+            assert_eq!(request.denoising_scheduler.as_deref(), Some("euler"));
             assert_eq!(request.num_images_per_prompt, Some(2));
             assert_eq!(request.strength, Some(0.35));
             assert_eq!(request.extra_options, serde_json::Value::Null);
@@ -1392,7 +1392,7 @@ fn test_build_image_generation_execution_request_ignores_noncanonical_scheduler_
 
     match request.input {
         InferenceExecutionInput::ImageGeneration { request } => {
-            assert_eq!(request.scheduler, None);
+            assert_eq!(request.denoising_scheduler, None);
         }
         other => panic!("unexpected input variant: {other:?}"),
     }
@@ -1707,7 +1707,7 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     assert_eq!(captured[0].num_inference_steps, Some(12));
     assert_eq!(captured[0].guidance_scale, Some(7.5));
     assert_eq!(captured[0].seed, Some(42));
-    assert_eq!(captured[0].scheduler.as_deref(), Some("euler"));
+    assert_eq!(captured[0].denoising_scheduler.as_deref(), Some("euler"));
 
     let events = lifecycle_events.lock().expect("lifecycle events lock");
     assert_eq!(events.len(), 6);
@@ -4357,7 +4357,7 @@ impl InferenceBackend for MockTypedImageGenerationBackend {
             num_inference_steps: plan.num_inference_steps,
             guidance_scale: plan.guidance_scale,
             seed: plan.seed,
-            scheduler: plan.scheduler,
+            denoising_scheduler: plan.denoising_scheduler.as_ref().map(ToString::to_string),
             num_images_per_prompt: plan.num_images_per_prompt,
             init_image: None,
             mask_image: None,
@@ -4382,7 +4382,7 @@ fn mock_image_generation_result(request: &ImageGenerationRequest) -> ImageGenera
             height: request.height,
         }],
         seed_used: request.seed,
-        metadata: serde_json::json!({"scheduler": request.scheduler}),
+        metadata: serde_json::json!({"denoising_scheduler": request.denoising_scheduler}),
     }
 }
 

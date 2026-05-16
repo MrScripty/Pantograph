@@ -3968,6 +3968,45 @@ Worker rules:
   package scheduler component/class, but not the full set of runtime-valid
   replacement scheduler option ids; implementing a plural valid-options
   provider without that contract would violate the no-hardcoded-option rule.
+- 2026-05-15: Completed the denoising scheduler request/worker rename slice.
+  Smallest useful vertical slice: complete the canonical request-field rename
+  for image-generation denoising scheduler intent across Rust inference
+  request DTOs, node-engine request construction, planner diagnostics, PyTorch
+  image worker envelopes, Python image worker inputs, output metadata, and
+  worker fixtures. Allowed write set: `crates/inference/src/types.rs`,
+  `crates/inference/src/gateway.rs`, `crates/inference/src/gateway_tests.rs`,
+  `crates/inference/src/backend/mod.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_python_tests.rs`,
+  `crates/inference/src/backend/pytorch_image_generation_tests.rs`,
+  `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`,
+  `crates/inference/torch/worker.py`,
+  `crates/inference/torch/worker_image_contract.py`,
+  `crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_request.json`,
+  `crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_response.json`,
+  `crates/node-engine/src/core_executor/inference_nodes.rs`,
+  `crates/node-engine/src/core_executor/inference_tests.rs`, affected
+  READMEs, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because the old
+  image-generation sampling field name is no longer accepted by Rust request
+  DTOs or PyTorch image worker payloads, and node-engine still ignores
+  graph/API `scheduler` as a compatibility alias. Factual Diffusers/Pumas
+  component roles named `scheduler` remain package evidence, not executable
+  sampling intent.
+- Verification passed: `cargo test -p inference image_generation --lib`,
+  `cargo test -p inference --features backend-pytorch pytorch_worker_image
+  --lib`, `cargo test -p node-engine --features inference-nodes
+  image_generation --lib`, `cargo check -p inference`, `cargo check -p
+  node-engine --features inference-nodes`, `cargo fmt -p inference -p
+  node-engine -- --check`, code search for old image-generation request/worker
+  `scheduler` field consumers, and `git diff --check`.
+- Remaining follow-up: the Python worker still treats
+  `denoising_scheduler` swapping as reserved and ignores the value before
+  generation. The later worker execution-support slice must either apply the
+  validated value or reject unsupported explicit scheduler changes before
+  returning success.
 
 ### Traceability Links
 

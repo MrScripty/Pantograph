@@ -341,6 +341,10 @@ async fn run_image_request(
   or `ImageGenerationPlanningInput` built from the request, Pumas package
   facts, and the scheduler-owned backend/runtime/device decision. Streaming
   progress is not yet part of the facade.
+- Image-generation request and worker-envelope sampling intent uses
+  `denoising_scheduler`. The older overloaded `scheduler` field name is not a
+  request compatibility alias; source package facts may still use factual
+  component roles such as Diffusers `scheduler`.
 - `rerank()` accepts one query plus candidate documents and returns scored,
   ordered results; callers should treat response order, not input order, as
   authoritative.

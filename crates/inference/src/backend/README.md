@@ -228,6 +228,10 @@ fn create_backend() {
   free helpers and trait slot save/restore paths share those contracts after
   slot validation so request-id correlation and malformed metadata handling are
   identical for node-engine preparation and backend trait consumers.
+- PyTorch image-generation worker envelopes use `denoising_scheduler` for
+  optional sampling intent. Factual Diffusers component roles may still be
+  named `scheduler`, but worker request payloads must not accept the old
+  overloaded sampling field.
 - PyTorch persisted KV truncation crosses the embedded Python boundary through
   a versioned worker envelope and typed response decoder before the temporary
   file is read back. The adapter validates the temp path and token position,

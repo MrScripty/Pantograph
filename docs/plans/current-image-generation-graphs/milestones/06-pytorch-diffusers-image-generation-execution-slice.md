@@ -43,7 +43,7 @@ PyTorch/diffusers and produce a retained image artifact.
   `backend_key = pytorch` and Pumas Diffusers package hints. `diffusers`
   remains package/runtime capability evidence, not a graph-visible backend
   preference.
-- [ ] Rename image-generation sampling-scheduler fields to
+- [x] Rename image-generation sampling-scheduler fields to
   `denoising_scheduler` across graph ports, node-engine request construction,
   inference planner DTOs, worker envelopes, Python worker inputs, diagnostics,
   and fixtures. Keep any compatibility handling explicit and temporary; do not
@@ -450,6 +450,42 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   replacement scheduler option set, so the provider must wait for a compact
   Pumas/runtime-backed option contract or explicitly return only facts it can
   prove without hardcoded choices.
+
+2026-05-15 denoising scheduler request/worker rename slice:
+
+- Smallest useful vertical slice: complete the canonical request-field rename
+  for image-generation denoising scheduler intent across Rust inference
+  request DTOs, node-engine request construction, planner diagnostics, PyTorch
+  image worker envelopes, Python image worker inputs, output metadata, and
+  worker fixtures.
+- Allowed write set: `crates/inference/src/types.rs`,
+  `crates/inference/src/gateway.rs`, `crates/inference/src/gateway_tests.rs`,
+  `crates/inference/src/backend/mod.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_python_tests.rs`,
+  `crates/inference/src/backend/pytorch_image_generation_tests.rs`,
+  `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`,
+  `crates/inference/torch/worker.py`,
+  `crates/inference/torch/worker_image_contract.py`,
+  `crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_request.json`,
+  `crates/inference/tests/fixtures/pytorch_worker_contract/generate_image_response.json`,
+  `crates/node-engine/src/core_executor/inference_nodes.rs`,
+  `crates/node-engine/src/core_executor/inference_tests.rs`, affected
+  READMEs, and this plan directory.
+- No-fallback/no-legacy confirmation: the old image-generation sampling field
+  name is no longer accepted by Rust request DTOs or PyTorch image worker
+  payloads, and node-engine continues to ignore graph/API `scheduler` as a
+  compatibility alias. Factual Diffusers/Pumas component-role strings named
+  `scheduler` remain factual package evidence, not executable sampling intent.
+- Verification passed: `cargo test -p inference image_generation --lib`,
+  `cargo test -p inference --features backend-pytorch pytorch_worker_image
+  --lib`, `cargo test -p node-engine --features inference-nodes
+  image_generation --lib`, `cargo check -p inference`, `cargo check -p
+  node-engine --features inference-nodes`, `cargo fmt -p inference -p
+  node-engine -- --check`, code search for old image-generation request/worker
+  `scheduler` field consumers, and `git diff --check`.
 - Remaining follow-up: family-specific option-support tables still need to
   classify guidance scale, negative prompt, image count, scheduler override,
   dtype, and dimensions as accepted, ignored, or rejected per family.
@@ -475,10 +511,11 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 - Remaining follow-up: future img2img/inpaint and family-specific opaque
   option support needs explicit family option tables plus worker contract
   fields before these request fields can become executable.
-- Discovered issue: the planner and worker DTO can still carry a
-  `scheduler` override, but the current Python worker treats scheduler
+- Discovered issue: the planner and worker DTO now carry
+  `denoising_scheduler`, but the current Python worker treats scheduler
   swapping as reserved and deletes the value before generation. This means
-  existing scheduler tests prove DTO projection only, not execution semantics.
+  existing denoising scheduler tests prove DTO projection only, not execution
+  semantics.
   Do not broaden scheduler override support until a focused option-rule slice
   decides whether each family accepts, rejects, or explicitly reports ignored
   scheduler overrides, then updates the worker contract and diagnostics

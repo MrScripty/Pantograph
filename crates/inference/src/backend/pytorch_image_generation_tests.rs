@@ -43,7 +43,7 @@ fn test_image_generation_result_from_worker_response_maps_images() {
     assert_eq!(result.images[0].mime_type, "image/png");
     assert_eq!(result.images[0].data_base64, "iVBORw0KGgo=");
     assert_eq!(result.seed_used, Some(42));
-    assert_eq!(result.metadata["scheduler"], "euler");
+    assert_eq!(result.metadata["denoising_scheduler"], "euler");
 }
 
 #[test]

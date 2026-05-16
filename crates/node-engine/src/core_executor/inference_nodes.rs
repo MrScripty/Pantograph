@@ -954,7 +954,7 @@ pub(crate) fn build_image_generation_execution_request(
                     &["guidance_scale", "guidanceScale", "cfg_scale", "cfgScale"],
                 ),
                 seed: read_u64_with_task_options(inputs, &["seed"]),
-                scheduler: read_string_with_task_options(
+                denoising_scheduler: read_string_with_task_options(
                     inputs,
                     &["denoising_scheduler", "denoisingScheduler"],
                 ),

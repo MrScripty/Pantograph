@@ -19,7 +19,7 @@ IMAGE_GENERATION_PAYLOAD_KEYS = {
     "num_inference_steps",
     "guidance_scale",
     "seed",
-    "scheduler",
+    "denoising_scheduler",
     "num_images_per_prompt",
 }
 MODEL_REF_KEYS = {
@@ -109,7 +109,7 @@ def generate_image_kwargs_from_envelope(envelope):
         )
     device = _worker_device_or_auto(payload, "generate_image")
 
-    for key in ("negative_prompt", "scheduler"):
+    for key in ("negative_prompt", "denoising_scheduler"):
         value = payload.get(key)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"PyTorch worker generate_image payload.{key} must be a string")
@@ -139,7 +139,7 @@ def generate_image_kwargs_from_envelope(envelope):
         "num_inference_steps": steps,
         "guidance_scale": float(guidance_scale) if guidance_scale is not None else None,
         "seed": seed,
-        "scheduler": payload.get("scheduler"),
+        "denoising_scheduler": payload.get("denoising_scheduler"),
         "num_images_per_prompt": image_count,
     }
     return {

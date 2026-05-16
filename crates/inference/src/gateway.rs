@@ -2545,9 +2545,9 @@ fn typed_image_generation_option_diagnostics(
     push_image_option_diagnostic(
         &mut diagnostics,
         backend_key,
-        "image.scheduler",
-        request.scheduler.is_some(),
-        "typed image gateway forwards scheduler",
+        "image.denoising_scheduler",
+        request.denoising_scheduler.is_some(),
+        "typed image gateway forwards denoising_scheduler",
     );
     push_image_option_diagnostic(
         &mut diagnostics,

@@ -72,7 +72,7 @@ pub(super) struct PyTorchGenerateImageRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scheduler: Option<String>,
+    pub denoising_scheduler: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub num_images_per_prompt: Option<u32>,
 }
@@ -93,7 +93,7 @@ impl From<&ImageGenerationExecutionPlan> for PyTorchGenerateImageRequest {
             num_inference_steps: plan.num_inference_steps,
             guidance_scale: plan.guidance_scale,
             seed: plan.seed,
-            scheduler: plan.denoising_scheduler.as_ref().map(ToString::to_string),
+            denoising_scheduler: plan.denoising_scheduler.as_ref().map(ToString::to_string),
             num_images_per_prompt: plan.num_images_per_prompt,
         }
     }

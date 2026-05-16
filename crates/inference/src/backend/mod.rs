@@ -761,7 +761,7 @@ mod capability_tests {
                 num_inference_steps: None,
                 guidance_scale: None,
                 seed: None,
-                scheduler: None,
+                denoising_scheduler: None,
                 num_images_per_prompt: None,
                 init_image: None,
                 mask_image: None,

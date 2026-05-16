@@ -1489,7 +1489,7 @@ def generate_image(
     guidance_scale=None,
     seed=None,
     num_images_per_prompt=1,
-    scheduler=None,
+    denoising_scheduler=None,
     init_image=None,
     mask_image=None,
     strength=None,
@@ -1497,7 +1497,7 @@ def generate_image(
     **kwargs,
 ):
     """Generate one or more images from the loaded diffusion pipeline."""
-    del scheduler  # Reserved for later scheduler swapping support.
+    del denoising_scheduler  # Reserved for later scheduler swapping support.
 
     if _diffusion_pipeline is None:
         raise RuntimeError("No diffusion pipeline loaded. Call load_diffusion_model() first.")
@@ -1568,7 +1568,9 @@ def generate_image_from_envelope(envelope):
                     "artifact_entry_path": planned["artifact_entry_path"],
                     "family": planned["family"],
                     "pipeline_class": planned["pipeline_class"],
-                    "scheduler": planned["generation_kwargs"].get("scheduler"),
+                    "denoising_scheduler": planned["generation_kwargs"].get(
+                        "denoising_scheduler"
+                    ),
                     "device": planned["device"],
                 },
             },

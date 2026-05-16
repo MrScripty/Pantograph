@@ -25,7 +25,7 @@ fn image_request() -> ImageGenerationRequest {
         num_inference_steps: Some(8),
         guidance_scale: Some(7.5),
         seed: Some(42),
-        scheduler: Some("euler".to_string()),
+        denoising_scheduler: Some("euler".to_string()),
         num_images_per_prompt: Some(2),
         init_image: None,
         mask_image: None,
@@ -213,7 +213,7 @@ fn planner_reports_exact_missing_component_role_path() {
 fn planner_rejects_invalid_denoising_scheduler_option_id() {
     let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
     let request = ImageGenerationRequest {
-        scheduler: Some("EulerDiscreteScheduler".to_string()),
+        denoising_scheduler: Some("EulerDiscreteScheduler".to_string()),
         ..image_request()
     };
     let decision = backend_decision("pytorch");
