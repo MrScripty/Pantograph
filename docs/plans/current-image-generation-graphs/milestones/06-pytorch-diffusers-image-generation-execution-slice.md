@@ -9,25 +9,25 @@ PyTorch/diffusers and produce a retained image artifact.
   `ImageGenerationRequest`, Pumas package facts, graph/runtime hints,
   dependency readiness, backend capabilities, and device policy, then returns
   one explicit execution plan or a bounded diagnostic.
-- [ ] Consume the device resolution decision from Milestone 5 instead of
+- [x] Consume the device resolution decision from Milestone 5 instead of
   parsing raw device strings or auto-selecting devices inside image-generation
   planning.
-- [ ] Implement the planner in a focused inference module such as
+- [x] Implement the planner in a focused inference module such as
   `backend/pytorch/image_generation` or `image_generation_planner` and keep
   `pytorch.rs` as a facade over load/generate calls.
-- [ ] Keep planner parsing/validation synchronous and side-effect free. Async
+- [x] Keep planner parsing/validation synchronous and side-effect free. Async
   shells may gather Pumas facts, dependency readiness, and device facts before
   calling the planner.
-- [ ] Add a planned image-generation gateway boundary before end-to-end gateway
+- [x] Add a planned image-generation gateway boundary before end-to-end gateway
   wiring. The gateway must carry reduced package facts and the scheduler-owned
   `BackendExecutionDecision` into `ImageGenerationExecutionPlan`; it must not
   dispatch image generation from `ImageGenerationRequest` alone or infer
   backend/runtime/device/package decisions from request fields.
-- [ ] Add a first-class run-scoped workflow execution plan before successful
+- [x] Add a first-class run-scoped workflow execution plan before successful
   end-to-end image execution. The plan is produced by scheduler/admission,
   contains per-node reduced execution decisions, and is consumed by node
   execution without writing scheduler facts into graph inputs.
-- [ ] Project the workflow execution plan's image-generation node decision into
+- [x] Project the workflow execution plan's image-generation node decision into
   inference's `BackendExecutionDecision` at the composition boundary before
   calling `generate_image_from_planning_input`.
 - [ ] Verify backend runtime selection maps diffusion/image-generation package
@@ -122,20 +122,20 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Implement `PyTorchBackend::generate_image` using the existing Python
   worker diffusion load/generate path and typed worker request/response
   envelopes.
-- [ ] Change the Python worker image path to consume the validated Rust plan
+- [x] Change the Python worker image path to consume the validated Rust plan
   fields. It must not decide pipeline family, scheduler, custom-code trust, or
   device fallback on its own.
 - [x] Ensure the Python worker applies the validated `denoising_scheduler`
   decision or rejects unsupported explicit scheduler changes before returning
   success. Worker metadata must not report a scheduler value that was accepted
   by Rust but ignored by the worker.
-- [ ] Version or explicitly shape-check the Python worker image-generation
+- [x] Version or explicitly shape-check the Python worker image-generation
   envelope so Rust rejects unknown, missing, or incompatible worker request and
   response fields before trusting them.
-- [ ] Ensure worker calls use the existing process lifecycle owner and do not
+- [x] Ensure worker calls use the existing process lifecycle owner and do not
   introduce untracked `tokio::spawn`, unbounded queues, or blocking work while
   holding service locks.
-- [ ] Put PyTorch image-generation worker request/response translation in a
+- [x] Put PyTorch image-generation worker request/response translation in a
   focused helper or submodule so the backend facade remains readable and
   testable.
 - [ ] Add model-family adapters inside the PyTorch/diffusers bridge. Adapter
@@ -565,6 +565,37 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 - Remaining follow-up: future SDXL, FLUX, FLUX.2, Qwen Image, Lumina Image,
   GLM Image, Z-Image, and dtype-specific rules still need explicit table rows
   and fixtures before those families become executable.
+
+2026-05-15 milestone status reconciliation slice:
+
+- Smallest useful vertical slice: reconcile already-implemented Milestone 6
+  execution-boundary checklist items with the current codebase so remaining
+  work is not obscured by stale unchecked tasks.
+- Allowed write set: this plan directory only.
+- No-fallback/no-legacy confirmation: this slice does not change executable
+  code, introduce compatibility shims, or relax any planner/worker diagnostics.
+  The verified code paths still require planned image-generation context,
+  scheduler-owned backend/device decisions, Pumas package facts, and typed
+  worker envelopes before execution.
+- Verified completed boundaries:
+  `ImageGenerationExecutionPlan` carries `DeviceResolutionDecision`;
+  `image_generation_planner` remains synchronous and side-effect free;
+  `InferenceGateway::generate_image_from_planning_input` is the planned
+  gateway boundary; workflow-service owns `WorkflowExecutionPlan`;
+  embedded-runtime projects workflow node decisions to inference
+  `BackendExecutionDecision`; node-engine consumes
+  `PlannedInferenceDecisionContext`; PyTorch image worker translation lives in
+  focused Rust/Python helper modules with contract-version and unknown-field
+  checks.
+- Verification passed before this update: `cargo test -p inference
+  image_generation_planner --lib`, `cargo test -p inference
+  image_generation_family_rules --lib`, `cargo check -p inference`, `cargo fmt
+  -p inference -- --check`, and `git diff --check`.
+- Remaining follow-up: the raw `InferenceGateway::generate_image` path still
+  intentionally rejects unplanned image generation. Do not mark raw
+  `PyTorchBackend::generate_image` complete unless the task is explicitly
+  reworded to the planned `generate_image_from_plan` boundary or a future
+  slice can provide package/runtime/device facts without fallback behavior.
 
 2026-05-15 planner unsupported-option guardrail slice:
 

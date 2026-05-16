@@ -4074,6 +4074,34 @@ Worker rules:
 - Remaining follow-up: future SDXL, FLUX, FLUX.2, Qwen Image, Lumina Image,
   GLM Image, Z-Image, and dtype-specific rules still need explicit table rows
   and fixtures before those families become executable.
+- 2026-05-15: Completed a milestone status reconciliation slice. Smallest
+  useful vertical slice: reconcile already-implemented Milestone 6
+  execution-boundary checklist items with the current codebase so remaining
+  work is not obscured by stale unchecked tasks. Allowed write set: this plan
+  directory only.
+- The slice preserves the no-fallback/no-legacy rule because it changes only
+  plan status, and the verified code paths still require planned
+  image-generation context, scheduler-owned backend/device decisions, Pumas
+  package facts, and typed worker envelopes before execution. It does not add
+  compatibility shims or relax planner/worker diagnostics.
+- Verified completed boundaries: `ImageGenerationExecutionPlan` carries
+  `DeviceResolutionDecision`; `image_generation_planner` remains synchronous
+  and side-effect free; `InferenceGateway::generate_image_from_planning_input`
+  is the planned gateway boundary; workflow-service owns
+  `WorkflowExecutionPlan`; embedded-runtime projects workflow node decisions
+  to inference `BackendExecutionDecision`; node-engine consumes
+  `PlannedInferenceDecisionContext`; PyTorch image worker translation lives in
+  focused Rust/Python helper modules with contract-version and unknown-field
+  checks.
+- Verification passed before this update: `cargo test -p inference
+  image_generation_planner --lib`, `cargo test -p inference
+  image_generation_family_rules --lib`, `cargo check -p inference`, `cargo fmt
+  -p inference -- --check`, and `git diff --check`.
+- Remaining follow-up: the raw `InferenceGateway::generate_image` path still
+  intentionally rejects unplanned image generation. Do not mark raw
+  `PyTorchBackend::generate_image` complete unless the task is explicitly
+  reworded to the planned `generate_image_from_plan` boundary or a future
+  slice can provide package/runtime/device facts without fallback behavior.
 
 ### Traceability Links
 
