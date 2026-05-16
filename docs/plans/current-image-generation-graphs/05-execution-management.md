@@ -4113,6 +4113,43 @@ Worker rules:
   `PyTorchBackend::generate_image` complete unless the task is explicitly
   reworded to the planned `generate_image_from_plan` boundary or a future
   slice can provide package/runtime/device facts without fallback behavior.
+- 2026-05-15: Completed a plan/codebase blast-radius review after the
+  synchronous Option 3 execution-plan updates. Reviewed workflow-service
+  execution-plan admission, embedded-runtime plan projection and session
+  context installation, node-engine planned inference context and
+  image-generation node execution, inference image-generation planner/family
+  rules, runtime-registry selection policy boundaries, and dependency
+  preflight mappings.
+- Findings recorded in Milestone 6: selected Pumas model refs currently need a
+  canonical owner-boundary normalization slice before the value is used for
+  scheduler history or lifecycle diagnostics. The current admission helper can
+  double-prefix already-prefixed `pumas://models/...` values if left as raw
+  string composition. This must become a typed diagnostic, not a silent repair
+  in node-engine or the worker.
+- Additional refinement recorded in Milestone 6: selected backend/runtime/
+  device/model facts should move toward workflow-owned validated constructors
+  or newtypes while preserving the existing crate dependency direction. This
+  keeps workflow-service independent from inference DTOs but prevents invalid
+  selected facts from drifting through embedded-runtime into node-engine.
+- Additional refinement recorded in Milestone 6: package/dependency evidence
+  and execution backend keys need explicit type/name separation. `diffusers`
+  remains factual package, dependency, and capability evidence for PyTorch
+  eligibility, but it must not become a graph-visible or scheduler-selected
+  execution backend key through shared string helpers.
+- Maintainability findings: `node-engine` inference node execution,
+  runtime-registry technical-fit, inference image-generation planner, and the
+  workflow execution-plan DTO module are at or above the standards
+  decomposition-review threshold. Later implementation slices must keep new
+  scheduler policy, request shaping, model identity parsing, dependency
+  normalization, and diagnostics helpers in focused modules instead of growing
+  these broad files.
+- No-fallback/no-legacy confirmation: these plan updates do not add runtime
+  fallback, request-only image execution, graph-written scheduler facts,
+  worker-envelope scheduler policy, or frontend execution decisions. They
+  tighten the prerequisites for future slices so invalid model/backend/runtime
+  facts fail as typed diagnostics before execution.
+- Verification for this plan-only slice: read-only codebase inspection,
+  `git status --short`, plan diff review, and `git diff --check`.
 
 ### Traceability Links
 

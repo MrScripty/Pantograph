@@ -30,11 +30,31 @@ PyTorch/diffusers and produce a retained image artifact.
 - [x] Project the workflow execution plan's image-generation node decision into
   inference's `BackendExecutionDecision` at the composition boundary before
   calling `generate_image_from_planning_input`.
+- [ ] Canonicalize selected Pumas model identity at the execution-plan
+  admission/projection boundary before using it for scheduler history,
+  lifecycle diagnostics, runtime readiness, or worker dispatch. A selected
+  model value that is already a `pumas://models/...` ref must not be blindly
+  prefixed again; malformed refs, local paths, or ambiguous model/artifact
+  identities must fail with typed execution-plan diagnostics rather than being
+  repaired by inference nodes.
+- [ ] Add a focused execution-plan model-ref normalization test covering raw
+  model ids, already-prefixed Pumas refs, malformed refs, and projection into
+  `BackendExecutionDecision`. This slice is a prerequisite for using selected
+  model identity as scheduler history input.
+- [ ] Tighten selected-decision fact typing at the workflow execution-plan
+  boundary. Keep workflow-service independent from inference DTOs, but use
+  workflow-owned validated constructors or newtypes for selected backend key,
+  runtime id, runtime variant id, device id, and model ref so invalid selected
+  facts fail before node-engine receives runtime context.
 - [ ] Verify backend runtime selection maps diffusion/image-generation package
   facts and graph hints to PyTorch execution, preserving `diffusers` as the
   dependency and package capability label.
 - [ ] Replace scattered `diffusers` backend-key mappings that affect execution
   with calls into the single normalization boundary defined in Milestone 0.
+- [ ] Keep package/dependency keys and execution backend keys represented by
+  distinct function/type names. `diffusers` may remain factual package,
+  dependency, or capability evidence, but must not become a graph-visible or
+  scheduler-selected execution backend key through shared string helpers.
 - [ ] Audit existing dependency preflight, technical-fit, runtime capability,
   gateway, and workflow runtime preflight mappings so execution selection,
   runtime display, and dependency diagnostics do not each maintain conflicting
@@ -213,6 +233,11 @@ PyTorch/diffusers and produce a retained image artifact.
 - Mapping tests prove dependency preflight, technical fit, runtime preflight,
   and gateway execution all agree on the same task/artifact-aware execution
   backend decision while preserving `diffusers` display/dependency facts.
+- Execution-plan identity tests prove selected model refs are normalized once,
+  reject malformed/local-path values, and preserve already-prefixed Pumas refs
+  without producing `pumas://models/pumas://models/...`.
+- Normalization tests prove package/dependency labels such as `diffusers` are
+  not reused as scheduler-selected execution backend keys.
 - Planner tests prove unsupported pipeline family, missing component facts,
   incompatible denoising scheduler, invalid dimensions, unsupported options,
   unavailable dependency environment, unavailable device, and unacceptable
@@ -1355,6 +1380,15 @@ Standards compliance gates for every Option 3 slice:
 - Typed-error rule: public cross-crate constructors and projection helpers must
   expose typed errors/diagnostics and avoid `Result<T, String>` or stringly
   branch behavior.
+- Model-identity rule: selected model identity in execution plans must be
+  canonical and typed before it is used for scheduler history, diagnostics,
+  runtime readiness, or worker dispatch. Do not compose Pumas refs with string
+  prefixing in multiple layers; normalize once at the owner boundary or reject
+  the selected fact.
+- Dependency/backend separation rule: package/dependency evidence and
+  execution backend selection must use separate names/types. `diffusers`
+  package facts can drive PyTorch eligibility, but they must not become an
+  execution backend key or bypass scheduler-owned backend/runtime selection.
 - Documentation contract rule: a new execution-plan source module requires a
   README or ADR in the same slice. README content must document consumer
   expectations, serde shape, schema/version behavior, append-only evolution,
