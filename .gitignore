@@ -48,6 +48,7 @@ agent_plan.md
 # Local runtime diagnostics and artifact stores
 .pantograph/artifacts/
 .pantograph/*.sqlite
+.pantograph/*.sqlite-*
 
 # Project data directory (downloaded docs, vector embeddings, etc.)
 /data/
