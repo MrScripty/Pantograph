@@ -2225,3 +2225,43 @@ Standards compliance gates for every Option 3 slice:
   for dependency preflight, runtime display, gateway diagnostics, workflow
   runtime preflight, and any other path that may still carry conflicting
   `diffusers` display or dependency rules.
+
+2026-05-16 re-plan boundary after runtime evidence reconciliation:
+
+- Boundary: do not begin the next code slice until the remaining Milestone 6
+  audit/family/worker/artifact work is re-scoped. The remaining unchecked rows
+  are no longer isolated planner guardrails; they cross runtime identity,
+  workflow capability extraction, diagnostics fixtures, backend-owned
+  port-option facts, PyTorch worker readiness, path-root validation,
+  artifact-store retention, and family adapter ownership.
+- Audit findings from the post-slice search:
+  `pantograph-runtime-identity` still reserves `diffusers` as a canonical
+  runtime/backend spelling and display label for a potential real backend;
+  workflow capability extraction now uses only `llm-inference.runtime` as a
+  hard inference runtime requirement, but still scans generic `backend_key`
+  values for non-`llm-inference` node families and GGUF evidence; embedded
+  runtime diagnostics/metrics fixtures still mention observed `diffusers`
+  runtime ids; package/diffusers labels still appear correctly as evidence in
+  inference compatibility and execution-evidence tests.
+- Planning needed before code:
+  decide whether `diffusers` stays reserved in runtime identity only for a
+  future real executable backend or is removed from display/alias helpers until
+  such a backend exists; decide whether generic non-inference `backend_key`
+  extraction is still canonical for ONNX/audio/etc. or should be replaced by
+  family-specific runtime inputs; decide whether diagnostics/metrics fixtures
+  mentioning observed `diffusers` are stale pseudo-runtime fixtures or future
+  real-backend fixtures; define the compact Pumas/runtime fact source for
+  `llm-inference.denoising_scheduler` provider rows; define the approved
+  Pumas/model root contract for artifact path validation; define the
+  dependency-readiness owner for `diffusers`, `transformers`, `accelerate`,
+  `torch`, and Pillow before worker dispatch.
+- No-fallback/no-legacy confirmation: do not satisfy these rows by hardcoding
+  a denoising scheduler list, preserving pseudo-Diffusers runtime candidates,
+  restoring recursive inference `backend_key` selection, accepting local paths
+  without a root contract, or allowing the PyTorch worker to discover missing
+  dependencies as the first readiness signal.
+- Verification before this boundary: `cargo test -p inference
+  execution_evidence --lib`, `cargo test -p pantograph-embedded-runtime
+  technical_fit_execution_evidence --lib`, `cargo test -p
+  pantograph-embedded-runtime technical_fit --lib`, and targeted code search
+  for `diffusers`, `backend_key`, `recommended_backend`, and backend hints.

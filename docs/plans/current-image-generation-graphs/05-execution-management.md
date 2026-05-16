@@ -4865,6 +4865,36 @@ Worker rules:
   for dependency preflight, runtime display, gateway diagnostics, workflow
   runtime preflight, and any other path that may still carry conflicting
   `diffusers` display or dependency rules.
+- 2026-05-16 re-plan boundary after runtime evidence reconciliation:
+  remaining Milestone 6 rows now cross runtime identity, workflow capability
+  extraction, diagnostics fixtures, backend-owned port-option facts, PyTorch
+  worker readiness, path-root validation, artifact-store retention, and family
+  adapter ownership. Do not begin the next code slice until this work is
+  re-scoped.
+- Audit findings: `pantograph-runtime-identity` still reserves `diffusers` as
+  a canonical spelling/display label for a potential real backend; workflow
+  capability extraction now uses only `llm-inference.runtime` as a hard
+  inference runtime requirement but still scans generic `backend_key` values
+  for non-`llm-inference` node families and GGUF evidence; embedded-runtime
+  diagnostics/metrics fixtures still mention observed `diffusers` runtime ids;
+  package/diffusers labels still appear correctly as evidence in inference
+  compatibility and execution-evidence tests.
+- Planning needed: decide the reserved-runtime-identity policy for
+  `diffusers`, the future of generic non-inference `backend_key` extraction,
+  whether diagnostics/metrics `diffusers` runtime fixtures are stale or future
+  real-backend fixtures, the compact Pumas/runtime source for
+  `llm-inference.denoising_scheduler` provider rows, the approved Pumas/model
+  root contract for path validation, and the dependency-readiness owner for
+  `diffusers`, `transformers`, `accelerate`, `torch`, and Pillow.
+- No-fallback/no-legacy confirmation: do not hardcode denoising scheduler
+  lists, preserve pseudo-Diffusers runtime candidates, restore recursive
+  inference `backend_key` selection, accept local paths without a root
+  contract, or let the PyTorch worker be the first dependency-readiness signal.
+- Verification before this boundary: `cargo test -p inference
+  execution_evidence --lib`, `cargo test -p pantograph-embedded-runtime
+  technical_fit_execution_evidence --lib`, `cargo test -p
+  pantograph-embedded-runtime technical_fit --lib`, and targeted code search
+  for `diffusers`, `backend_key`, `recommended_backend`, and backend hints.
 
 ### Traceability Links
 
