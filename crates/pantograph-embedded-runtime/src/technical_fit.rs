@@ -22,14 +22,11 @@ use pantograph_runtime_registry::{
     RuntimeTechnicalFitWarmupState,
 };
 use pantograph_workflow_service::{
-    WorkflowDeviceResolutionDiagnostic, WorkflowDeviceResolutionDiagnosticCode,
-    WorkflowDeviceResolutionDiagnosticSeverity, WorkflowHost, WorkflowInferenceDeviceClass,
-    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind,
-    WorkflowRuntimeVariantCapability, WorkflowServiceError, WorkflowTechnicalFitCompatibilityIssue,
-    WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDecision,
-    WorkflowTechnicalFitDecisionCode, WorkflowTechnicalFitDeviceClass,
-    WorkflowTechnicalFitDeviceDiagnostic, WorkflowTechnicalFitDeviceDiagnosticCode,
-    WorkflowTechnicalFitDeviceDiagnosticSeverity, WorkflowTechnicalFitDevicePolicy,
+    WorkflowHost, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
+    WorkflowRuntimeSourceKind, WorkflowRuntimeVariantCapability, WorkflowServiceError,
+    WorkflowTechnicalFitCompatibilityIssue, WorkflowTechnicalFitCompatibilityReport,
+    WorkflowTechnicalFitDecision, WorkflowTechnicalFitDecisionCode,
+    WorkflowTechnicalFitDeviceClass, WorkflowTechnicalFitDevicePolicy,
     WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitObservedThroughputHint,
     WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
     WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest,
@@ -39,6 +36,13 @@ use pantograph_workflow_service::{
 use workflow_nodes::setup::PumasSelectorAccess;
 
 use crate::{workflow_runtime::unix_timestamp_ms, EmbeddedWorkflowHost};
+
+#[path = "technical_fit_diagnostics.rs"]
+mod technical_fit_diagnostics;
+use technical_fit_diagnostics::{
+    project_runtime_device_class, project_runtime_device_diagnostic,
+    project_workflow_device_diagnostic, project_workflow_runtime_variant_device_class,
+};
 
 const MAX_RUNTIME_TECHNICAL_FIT_COMPATIBILITY_ISSUES: usize = 32;
 const MAX_RUNTIME_TECHNICAL_FIT_CANDIDATES: usize = 512;
@@ -348,7 +352,7 @@ pub fn project_workflow_technical_fit_decision(
         device_diagnostics: decision
             .device_diagnostics
             .iter()
-            .map(project_device_diagnostic)
+            .map(project_runtime_device_diagnostic)
             .collect(),
         reasons: decision
             .reasons
@@ -1315,29 +1319,6 @@ fn project_device_class(
     }
 }
 
-fn project_runtime_device_class(
-    device_class: RuntimeTechnicalFitDeviceClass,
-) -> WorkflowTechnicalFitDeviceClass {
-    match device_class {
-        RuntimeTechnicalFitDeviceClass::Cpu => WorkflowTechnicalFitDeviceClass::Cpu,
-        RuntimeTechnicalFitDeviceClass::Cuda => WorkflowTechnicalFitDeviceClass::Cuda,
-        RuntimeTechnicalFitDeviceClass::Metal => WorkflowTechnicalFitDeviceClass::Metal,
-        RuntimeTechnicalFitDeviceClass::Mps => WorkflowTechnicalFitDeviceClass::Mps,
-    }
-}
-
-fn project_workflow_runtime_variant_device_class(
-    device_class: WorkflowInferenceDeviceClass,
-) -> Option<RuntimeTechnicalFitDeviceClass> {
-    match device_class {
-        WorkflowInferenceDeviceClass::Cpu => Some(RuntimeTechnicalFitDeviceClass::Cpu),
-        WorkflowInferenceDeviceClass::Cuda => Some(RuntimeTechnicalFitDeviceClass::Cuda),
-        WorkflowInferenceDeviceClass::Metal => Some(RuntimeTechnicalFitDeviceClass::Metal),
-        WorkflowInferenceDeviceClass::Mps => Some(RuntimeTechnicalFitDeviceClass::Mps),
-        WorkflowInferenceDeviceClass::Unknown => None,
-    }
-}
-
 fn project_resource_estimate(
     estimate: &RuntimeTechnicalFitResourceEstimate,
 ) -> WorkflowTechnicalFitResourceEstimate {
@@ -1356,194 +1337,6 @@ fn project_observed_throughput_hint(
         tokens_per_second_milli: hint.tokens_per_second_milli,
         images_per_second_milli: hint.images_per_second_milli,
         sample_count: hint.sample_count,
-    }
-}
-
-fn project_device_diagnostic(
-    diagnostic: &RuntimeTechnicalFitDeviceDiagnostic,
-) -> WorkflowTechnicalFitDeviceDiagnostic {
-    WorkflowTechnicalFitDeviceDiagnostic {
-        code: project_device_diagnostic_code(diagnostic.code),
-        severity: project_device_diagnostic_severity(diagnostic.severity),
-        message: diagnostic.message.clone(),
-        task_id: diagnostic.task_id.clone(),
-        runtime_id: diagnostic.runtime_id.clone(),
-        device_class: diagnostic.device_class.map(project_runtime_device_class),
-        device_id: diagnostic.device_id.clone(),
-        runtime_variant_id: diagnostic.runtime_variant_id.clone(),
-        backend_key: diagnostic.backend_key.clone(),
-        model_id: diagnostic.model_id.clone(),
-        evidence_key: diagnostic.evidence_key.clone(),
-        requested_runtime_key: diagnostic.requested_runtime_key.clone(),
-    }
-}
-
-fn project_device_diagnostic_code(
-    code: RuntimeTechnicalFitDeviceDiagnosticCode,
-) -> WorkflowTechnicalFitDeviceDiagnosticCode {
-    match code {
-        RuntimeTechnicalFitDeviceDiagnosticCode::InvalidDevicePolicy => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::InvalidDevicePolicy
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::InvalidDeviceId => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::InvalidDeviceId
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::InvalidRuntimeVariantId => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::InvalidRuntimeVariantId
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::InvalidBackendId => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::InvalidBackendId
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::CandidateUnavailable
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::NoValidCandidate
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::BackendIncompatible
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::CandidateSetOverflow => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::CandidateSetOverflow
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceUnsupportedTask => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceUnsupportedTask
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceBackendUnavailable => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceBackendUnavailable
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceMissingRuntimeCapability => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceMissingRuntimeCapability
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceBackendCompatibilityRejected => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceBackendCompatibilityRejected
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceGraphRuntimeUnsatisfied => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceGraphRuntimeUnsatisfied
-        }
-        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceNoAcceptedCandidate => {
-            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceNoAcceptedCandidate
-        }
-        _ => WorkflowTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
-    }
-}
-
-fn project_device_diagnostic_severity(
-    severity: RuntimeTechnicalFitDeviceDiagnosticSeverity,
-) -> WorkflowTechnicalFitDeviceDiagnosticSeverity {
-    match severity {
-        RuntimeTechnicalFitDeviceDiagnosticSeverity::Advisory => {
-            WorkflowTechnicalFitDeviceDiagnosticSeverity::Advisory
-        }
-        RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning => {
-            WorkflowTechnicalFitDeviceDiagnosticSeverity::Warning
-        }
-        RuntimeTechnicalFitDeviceDiagnosticSeverity::Error => {
-            WorkflowTechnicalFitDeviceDiagnosticSeverity::Error
-        }
-    }
-}
-
-fn project_workflow_device_diagnostic(
-    diagnostic: &WorkflowDeviceResolutionDiagnostic,
-) -> RuntimeTechnicalFitDeviceDiagnostic {
-    RuntimeTechnicalFitDeviceDiagnostic {
-        code: project_workflow_device_diagnostic_code(diagnostic.code),
-        severity: project_workflow_device_diagnostic_severity(diagnostic.severity),
-        message: diagnostic.message.clone(),
-        task_id: None,
-        runtime_id: None,
-        device_class: diagnostic
-            .device_class
-            .and_then(project_workflow_runtime_variant_device_class),
-        device_id: diagnostic.device_id.clone(),
-        runtime_variant_id: diagnostic.runtime_variant_id.clone(),
-        backend_key: diagnostic.backend_id.clone(),
-        model_id: None,
-        evidence_key: None,
-        requested_runtime_key: None,
-    }
-}
-
-fn project_workflow_device_diagnostic_code(
-    code: WorkflowDeviceResolutionDiagnosticCode,
-) -> RuntimeTechnicalFitDeviceDiagnosticCode {
-    match code {
-        WorkflowDeviceResolutionDiagnosticCode::Unknown
-        | WorkflowDeviceResolutionDiagnosticCode::NoValidCandidate => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate
-        }
-        WorkflowDeviceResolutionDiagnosticCode::InvalidDevicePolicy => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::InvalidDevicePolicy
-        }
-        WorkflowDeviceResolutionDiagnosticCode::InvalidDeviceId => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::InvalidDeviceId
-        }
-        WorkflowDeviceResolutionDiagnosticCode::InvalidRuntimeVariantId => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::InvalidRuntimeVariantId
-        }
-        WorkflowDeviceResolutionDiagnosticCode::InvalidBackendId => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::InvalidBackendId
-        }
-        WorkflowDeviceResolutionDiagnosticCode::CandidateUnavailable => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable
-        }
-        WorkflowDeviceResolutionDiagnosticCode::ExplicitDeviceUnavailable => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable
-        }
-        WorkflowDeviceResolutionDiagnosticCode::AmbiguousAutoResolution => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::AmbiguousAutoResolution
-        }
-        WorkflowDeviceResolutionDiagnosticCode::BackendIncompatible => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible
-        }
-        WorkflowDeviceResolutionDiagnosticCode::UnsupportedDeviceClass => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass
-        }
-        WorkflowDeviceResolutionDiagnosticCode::MissingRuntimeVariant => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant
-        }
-        WorkflowDeviceResolutionDiagnosticCode::LegacyDeviceRejected => {
-            RuntimeTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected
-        }
-    }
-}
-
-fn project_workflow_device_diagnostic_severity(
-    severity: WorkflowDeviceResolutionDiagnosticSeverity,
-) -> RuntimeTechnicalFitDeviceDiagnosticSeverity {
-    match severity {
-        WorkflowDeviceResolutionDiagnosticSeverity::Unknown
-        | WorkflowDeviceResolutionDiagnosticSeverity::Error => {
-            RuntimeTechnicalFitDeviceDiagnosticSeverity::Error
-        }
-        WorkflowDeviceResolutionDiagnosticSeverity::Advisory => {
-            RuntimeTechnicalFitDeviceDiagnosticSeverity::Advisory
-        }
-        WorkflowDeviceResolutionDiagnosticSeverity::Warning => {
-            RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning
-        }
     }
 }
 
@@ -1705,8 +1498,11 @@ mod tests {
     use super::*;
     use pantograph_workflow_service::{
         build_workflow_technical_fit_request, WorkflowBackendCapabilityFacts,
+        WorkflowDeviceResolutionDiagnostic, WorkflowDeviceResolutionDiagnosticCode,
+        WorkflowDeviceResolutionDiagnosticSeverity, WorkflowInferenceDeviceClass,
         WorkflowRuntimeReadinessState, WorkflowRuntimeRequirements,
-        WorkflowRuntimeVariantCapability,
+        WorkflowRuntimeVariantCapability, WorkflowTechnicalFitDeviceDiagnostic,
+        WorkflowTechnicalFitDeviceDiagnosticCode, WorkflowTechnicalFitDeviceDiagnosticSeverity,
     };
     use std::sync::Arc;
 
@@ -2312,20 +2108,21 @@ mod tests {
         ];
 
         for (runtime_code, workflow_code) in cases {
-            let projected = project_device_diagnostic(&RuntimeTechnicalFitDeviceDiagnostic {
-                code: runtime_code,
-                severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
-                message: "evidence diagnostic".to_string(),
-                task_id: Some("image_generation".to_string()),
-                runtime_id: Some("pytorch".to_string()),
-                device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
-                device_id: Some("cuda:0".to_string()),
-                runtime_variant_id: Some("pytorch.cuda".to_string()),
-                backend_key: Some("pytorch".to_string()),
-                model_id: Some("pumas://models/sdxl".to_string()),
-                evidence_key: Some("package_component.unet".to_string()),
-                requested_runtime_key: Some("pytorch".to_string()),
-            });
+            let projected =
+                project_runtime_device_diagnostic(&RuntimeTechnicalFitDeviceDiagnostic {
+                    code: runtime_code,
+                    severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+                    message: "evidence diagnostic".to_string(),
+                    task_id: Some("image_generation".to_string()),
+                    runtime_id: Some("pytorch".to_string()),
+                    device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+                    device_id: Some("cuda:0".to_string()),
+                    runtime_variant_id: Some("pytorch.cuda".to_string()),
+                    backend_key: Some("pytorch".to_string()),
+                    model_id: Some("pumas://models/sdxl".to_string()),
+                    evidence_key: Some("package_component.unet".to_string()),
+                    requested_runtime_key: Some("pytorch".to_string()),
+                });
 
             assert_eq!(projected.code, workflow_code);
             assert_eq!(projected.task_id.as_deref(), Some("image_generation"));

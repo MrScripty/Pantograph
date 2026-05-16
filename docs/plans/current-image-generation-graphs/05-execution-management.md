@@ -4634,11 +4634,23 @@ Worker rules:
   `cargo check -p pantograph-runtime-registry`, `cargo check -p
   pantograph-workflow-service`, `cargo check -p pantograph-embedded-runtime`,
   and `npm run typecheck`.
-- Deviation/follow-up: the field-copy projection remains in the existing
-  technical-fit modules because this slice only extends the shared DTO
-  contract. The next adapter implementation must not grow those files with
-  evidence mapping policy; add the focused `ExecutionEvidenceTechnicalFitAdapter`
-  mapping/projection module before wiring and deleting the old builders.
+- 2026-05-16 focused technical-fit diagnostics projection slice: smallest
+  useful vertical slice was to extract embedded-runtime diagnostic code,
+  severity, device-class, and attribution projection into
+  `technical_fit_diagnostics.rs` before the evidence adapter mapping table
+  grows. Allowed write set: `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+  `crates/pantograph-embedded-runtime/src/technical_fit_diagnostics.rs`,
+  `crates/pantograph-embedded-runtime/src/README.md`, and this plan directory.
+- No-fallback/no-legacy confirmation: this is a behavior-preserving ownership
+  refactor. It does not add adapter wiring, legacy candidate builders,
+  pseudo-Diffusers aliases, scheduler recovery paths, or worker dispatch.
+- Verification passed: focused embedded-runtime technical-fit tests,
+  `cargo check -p pantograph-embedded-runtime`, `cargo fmt -p
+  pantograph-embedded-runtime -- --check`, and `git diff --check`.
+- Remaining follow-up: implement the
+  `ExecutionEvidenceTechnicalFitAdapter` mapping table in a separate focused
+  module and then delete or reduce the old package-facts candidate builders
+  when the adapter is wired.
 
 ### Traceability Links
 

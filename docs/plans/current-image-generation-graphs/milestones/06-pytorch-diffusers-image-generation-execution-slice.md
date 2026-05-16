@@ -138,7 +138,7 @@ PyTorch/diffusers and produce a retained image artifact.
   evolution and `#[non_exhaustive]` where appropriate; projection code must
   match every known variant explicitly instead of collapsing new evidence
   diagnostics into message strings.
-- [ ] Keep the diagnostic mapping and attribution projection in focused modules
+- [x] Keep the diagnostic mapping and attribution projection in focused modules
   instead of growing already broad technical-fit files. Add or update module
   README/ADR traceability for runtime-registry, embedded-runtime, and
   workflow-service ownership changes, including wire-format defaults,
@@ -1949,3 +1949,18 @@ Standards compliance gates for every Option 3 slice:
   `ExecutionEvidenceTechnicalFitAdapter` mapping/projection module before
   wiring evidence into technical-fit. The current slice deliberately did not
   add adapter policy or preserve the old builders as a fallback path.
+
+2026-05-16 focused technical-fit diagnostics projection slice:
+
+- Smallest useful vertical slice: extract embedded-runtime diagnostic code,
+  severity, device-class, and attribution projection into
+  `technical_fit_diagnostics.rs` before the evidence adapter mapping table is
+  added. Allowed write set was embedded-runtime technical-fit files, the
+  embedded-runtime README, and this plan directory.
+- No-fallback/no-legacy confirmation: this is a behavior-preserving ownership
+  refactor only. It does not add adapter wiring, fallback candidates, legacy
+  compatibility aliases, pseudo-Diffusers runtime/backend keys, selector
+  recovery, or worker dispatch paths.
+- Verification passed: focused embedded-runtime technical-fit tests,
+  `cargo check -p pantograph-embedded-runtime`, `cargo fmt -p
+  pantograph-embedded-runtime -- --check`, and `git diff --check`.
