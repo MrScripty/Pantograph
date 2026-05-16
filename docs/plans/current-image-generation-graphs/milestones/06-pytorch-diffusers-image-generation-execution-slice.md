@@ -5,7 +5,7 @@ PyTorch/diffusers and produce a retained image artifact.
 
 **Tasks:**
 
-- [ ] Add an image-generation execution planner that consumes
+- [x] Add an image-generation execution planner that consumes
   `ImageGenerationRequest`, Pumas package facts, graph/runtime hints,
   dependency readiness, backend capabilities, and device policy, then returns
   one explicit execution plan or a bounded diagnostic.
@@ -344,9 +344,9 @@ PyTorch/diffusers and produce a retained image artifact.
   diagnostics.
 - [ ] Retain final generated image output through ArtifactStore and IO
   projections.
-- [ ] Ensure `image` and `results` outputs do not persist duplicate full image
+- [x] Ensure `image` and `results` outputs do not persist duplicate full image
   base64 bodies after artifact conversion.
-- [ ] Change node-engine image-generation output shaping so large generated
+- [x] Change node-engine image-generation output shaping so large generated
   bodies are not duplicated in `image` and `results` before artifact
   conversion. `results` should contain descriptors/metadata or compact
   summaries once artifacts exist.
@@ -2170,3 +2170,29 @@ Standards compliance gates for every Option 3 slice:
 - Remaining follow-up: this closes the selected-task consistency gap only.
   Dependency-environment readiness and path-root validation still need their
   own slices before real worker execution is considered complete.
+
+2026-05-16 milestone checklist reconciliation slice:
+
+- Smallest useful vertical slice: reconcile stale Milestone 6 checklist rows
+  for already-implemented planner and compact image-output behavior so the
+  remaining unchecked work reflects unresolved implementation rather than old
+  bookkeeping.
+- Allowed write set: this plan directory only.
+- No-fallback/no-legacy confirmation: this slice changes only plan status. It
+  does not change executable code, restore raw image generation, add fallback
+  backend/runtime selection, or weaken planner/node-engine diagnostics.
+- Verified completed boundaries: `plan_image_generation_execution` consumes
+  `ImageGenerationRequest`, Pumas package facts, and scheduler-owned
+  backend/device decisions to return either one `ImageGenerationExecutionPlan`
+  or typed diagnostics; node-engine planned image execution keeps the full
+  image body on the `image` output and projects compact image summaries through
+  `results` without duplicate `data_base64` bodies.
+- Verification passed: `cargo test -p inference image_generation_planner
+  --lib` passed in the immediately preceding planner slices, and this
+  reconciliation reran `cargo test -p node-engine --features
+  inference-nodes,pytorch-nodes
+  test_canonical_llm_image_generation_uses_planned_gateway_boundary --lib`.
+- Remaining follow-up: artifact-store retention still needs an end-to-end
+  retained-output workflow fixture. The top-level planner checklist remains a
+  contract umbrella; dependency readiness and full backend capability
+  projection still have their own unchecked rows.

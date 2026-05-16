@@ -4828,6 +4828,23 @@ Worker rules:
 - Remaining follow-up: dependency-environment readiness and path-root
   validation still need focused slices before real worker execution is
   considered complete.
+- 2026-05-16 milestone checklist reconciliation slice: smallest useful
+  vertical slice was to mark stale Milestone 6 checklist rows complete only
+  where current code and tests already prove the behavior: the
+  side-effect-free image-generation planner boundary and compact node-engine
+  image-output shaping.
+- Allowed write set: this plan directory only.
+- No-fallback/no-legacy confirmation: this slice changes plan status only. It
+  does not change executable code, restore raw image generation, add fallback
+  backend/runtime selection, or weaken planner/node-engine diagnostics.
+- Verification passed: `cargo test -p inference image_generation_planner
+  --lib` passed in the immediately preceding planner slices, and this
+  reconciliation reran `cargo test -p node-engine --features
+  inference-nodes,pytorch-nodes
+  test_canonical_llm_image_generation_uses_planned_gateway_boundary --lib`.
+- Remaining follow-up: artifact-store retention still needs an end-to-end
+  retained-output workflow fixture, and dependency readiness/full backend
+  capability projection remain unresolved checklist rows.
 
 ### Traceability Links
 
