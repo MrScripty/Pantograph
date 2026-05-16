@@ -75,11 +75,14 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Verify backend runtime selection maps diffusion/image-generation package
   facts and graph hints to PyTorch execution, preserving `diffusers` as the
   dependency and package capability label.
-- [ ] Treat graph/runtime hints as optional constraints or preferences only.
-  The scheduler/admission policy remains the owner of runtime selection among
-  valid candidates, including warmed-runtime affinity, historical diagnostics,
-  exploration, and memory-fit ranking. A graph hint must not bypass candidate
-  validation or become a fallback runtime choice.
+- [ ] Treat graph runtime requests as scheduler inputs, never execution
+  shortcuts. An omitted runtime on an inference node means runtime selection is
+  implicitly owned by scheduler/admission policy. An explicit graph runtime
+  request is a hard scheduler requirement: the scheduler must select that
+  runtime from validated executable candidates or emit a typed diagnostic that
+  explains why it cannot be used. Explicit runtime requests must not bypass
+  package/capability validation, memory-fit checks, or lifecycle diagnostics,
+  and they must not become fallback runtime choices.
 - [ ] Replace scattered `diffusers` backend-key mappings that affect execution
   with calls into the single normalization boundary defined in Milestone 0.
 - [ ] Keep package/dependency keys and execution backend keys represented by
@@ -1495,13 +1498,21 @@ Staged Option 3 implementation plan:
   warmed-runtime affinity, exploration before enough history exists,
   historical timing/failure weighting, memory-fit ranking, queue policy, and
   retry/reschedule decisions.
-- Graph hint semantics: graph `backend_key`, runtime hints, and explicit user
-  preferences are constraints or preferences fed into candidate validation.
-  They cannot create an executable candidate that package/capability facts do
-  not support and cannot bypass scheduler policy. If a graph explicitly asks
-  for `diffusers` while no executable Diffusers backend exists, the result is
-  a typed diagnostic with a hint to use PyTorch or leave runtime selection to
-  scheduler policy.
+- Graph runtime-request semantics: graph `runtime` / executable backend
+  inputs are scheduler inputs with typed intent, not execution decisions. If
+  the inference node omits the runtime, scheduler/admission policy chooses
+  among all validated executable candidates using memory fit, warmed-runtime
+  state, exploration policy, historical timing/failure diagnostics, and queue
+  policy. If the inference node explicitly requests a runtime, that request is
+  a hard scheduler requirement: scheduler/admission must use that runtime only
+  after normal candidate validation, or fail candidate selection with a typed
+  diagnostic and scheduler-ledger evidence. Explicit runtime requests cannot
+  create an executable candidate that package/capability facts do not support,
+  cannot bypass scheduler policy, and cannot be reinterpreted from nested
+  Pumas/package recommendations. If a graph explicitly asks for `diffusers`
+  while no executable Diffusers backend exists, the result is a typed
+  diagnostic with a hint to request PyTorch or omit the runtime so scheduler
+  policy can choose.
 - First implementation slice: add the typed evidence boundary plus focused
   tests for Diffusers package facts, PyTorch capability facts, and graph
   `backend_key = pytorch`. The allowed initial write set should be limited to

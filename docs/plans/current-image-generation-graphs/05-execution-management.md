@@ -4381,6 +4381,20 @@ Worker rules:
 - Verification for this plan-only update: `git status --short`, targeted plan
   duplicate-check, codebase blast-radius findings review, and `git diff
   --check`.
+- 2026-05-16: Clarified graph runtime request semantics in Milestone 6 after
+  scheduler-boundary review. An omitted inference-node runtime is not an
+  implicit default and does not request PyTorch, Diffusers, or any other
+  backend; it leaves runtime selection entirely to scheduler/admission policy.
+  An explicit graph runtime request is a hard scheduler requirement that must
+  be validated against executable candidates, package/capability facts,
+  memory-fit policy, and lifecycle diagnostics. The scheduler must either use
+  the requested runtime or fail candidate selection with a typed diagnostic and
+  ledger evidence; package metadata such as Pumas `recommended_backend` must
+  not be promoted into that explicit runtime request.
+- No-fallback/no-legacy confirmation: this clarification keeps graph runtime
+  intent as scheduler input only. It does not add runtime fallback behavior,
+  package-fact overrides, node-engine runtime selection, or execution shortcuts
+  outside scheduler/admission policy.
 
 ### Traceability Links
 
