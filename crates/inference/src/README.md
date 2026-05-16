@@ -16,6 +16,7 @@ details.
 | `capability_availability.rs` | Typed runtime, package, dependency, model-capability, runtime-trait, and dependency-readiness facts with validated ids, scoped scheduler proof, and bounded reason text for scheduler/provider projection. |
 | `device.rs` | Backend-local llama.cpp device inventory parsing, canonical inventory fact projection, and command-selector formatting. |
 | `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation. |
+| `dependency_requirements.rs` | Inference-owned runtime/package dependency requirement declarations that can project resolved states into dependency-readiness proof without probing environments or selecting runtimes. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
 | `execution_evidence.rs` | Side-effect-free normalization of model package facts, backend capability facts, runtime capability evidence, and graph runtime requirements into typed executable-candidate evidence without scheduler ranking. |
 | `execution_evidence_tests.rs` | Focused tests for execution evidence candidate and diagnostic normalization. |
@@ -107,6 +108,11 @@ runtime/package readiness proof can identify the runtime/backend, optional
 runtime variant, task scope, model-family scope, resolver owner, reason code,
 and bounded reason text without overloading primitive ids or relying on
 worker-side discovery.
+Runtime/package dependency requirement declarations live in
+`dependency_requirements.rs`. Inference owns the factual declaration that
+PyTorch/Diffusers image generation requires `diffusers`, `transformers`,
+`accelerate`, `torch`, and `pillow`; embedded-runtime or managed-runtime owns
+resolving those declarations into readiness facts.
 Execution evidence normalization lives in `execution_evidence.rs` so package
 labels, backend hints, runtime capability facts, graph runtime requirements,
 and executable backend candidates stay separate before the scheduler ranks
@@ -149,6 +155,10 @@ backend is registered.
   package/dependency readiness to a runtime/backend, runtime variant, task, and
   model family, but they must not rank candidates, select runtimes, probe the
   local environment, or substitute for scheduler/admission diagnostics.
+- Dependency requirement declarations are factual inputs. They may describe
+  required or optional package/dependency needs for a runtime/task, but they
+  must not inspect installed packages, infer backend keys from Pumas hints, or
+  decide candidate eligibility.
 - Shared request/response types are append-only unless a coordinated breaking
   change is approved.
 - Image-generation execution plans carry explicit denoising scheduler intent as

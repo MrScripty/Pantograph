@@ -27,6 +27,7 @@ pub mod backend;
 pub mod capability_availability;
 pub mod config;
 pub mod constants;
+pub mod dependency_requirements;
 pub mod device;
 pub mod device_contracts;
 pub mod embedding_runtime;
@@ -74,6 +75,10 @@ pub use backend::CandleBackend;
 pub use backend::PyTorchBackend;
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
+pub use dependency_requirements::{
+    pytorch_diffusers_image_generation_package_requirements, DependencyRequirementDeclaration,
+    DependencyRequirementNecessity,
+};
 pub use device::{
     list_llamacpp_devices, parse_llamacpp_device_inventory_facts, parse_llamacpp_device_listing,
     DeviceBackend, DeviceBackendParseError, LlamaCppDeviceInventoryFact,

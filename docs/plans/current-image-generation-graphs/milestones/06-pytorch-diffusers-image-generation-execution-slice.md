@@ -2472,9 +2472,20 @@ readiness:
            shape, optional-scope defaults, scoped-id validation, and projection
            back to `CapabilityAvailabilityFact`. No scheduler filtering,
            runtime selection, environment probing, or worker behavior changed.
-      2. Add inference-owned PyTorch/Diffusers image package requirement
+      2. [x] Add inference-owned PyTorch/Diffusers image package requirement
          declarations and tests proving they are factual declarations, not
          local probes or scheduler policy.
+         - 2026-05-16 slice: added
+           `inference::dependency_requirements` with typed
+           `DependencyRequirementDeclaration` and
+           `DependencyRequirementNecessity` contracts. The PyTorch/Diffusers
+           image-generation declaration lists required `diffusers`,
+           `transformers`, `accelerate`, `torch`, and `pillow` packages scoped
+           to `pytorch` and `image_generation`, and can project externally
+           resolved states into `DependencyReadinessFact`. Tests prove the
+           declarations are required package facts with validated ids and no
+           local probes, scheduler ranking, candidate filtering, or worker
+           dispatch.
       3. Add embedded-runtime readiness resolution from those declarations into
          typed facts and existing diagnostics.
       4. Attach dependency-readiness facts to runtime-registry/admission

@@ -5122,6 +5122,31 @@ Worker rules:
   - Remaining follow-up: add inference-owned PyTorch/Diffusers package
     requirement declarations as factual data, then resolve those declarations
     into readiness facts in embedded-runtime without adding scheduler policy.
+- 2026-05-16 PyTorch/Diffusers package-requirement declaration slice:
+  - Smallest useful vertical slice: declare the PyTorch/Diffusers
+    image-generation package requirements inside inference as typed factual
+    contract data before embedded-runtime resolves local readiness.
+  - Allowed write set: `crates/inference/src/dependency_requirements.rs`,
+    `crates/inference/src/lib.rs`, `crates/inference/src/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log.
+  - No-fallback/no-legacy confirmation: the slice declares required packages
+    only. It does not inspect installed packages, infer backend keys from Pumas
+    hints, choose runtimes, filter candidates, synthesize a Diffusers
+    executable runtime, dispatch workers, or preserve dependency-environment
+    fallback behavior.
+  - Implementation notes: added `DependencyRequirementDeclaration` and
+    `DependencyRequirementNecessity` plus
+    `pytorch_diffusers_image_generation_package_requirements()`, which declares
+    required `diffusers`, `transformers`, `accelerate`, `torch`, and `pillow`
+    packages scoped to `pytorch` and `image_generation`. The declaration can
+    project an externally resolved state into `DependencyReadinessFact`.
+  - Verification passed: `cargo fmt --manifest-path crates/inference/Cargo.toml`,
+    `cargo fmt --manifest-path crates/inference/Cargo.toml -- --check`,
+    `cargo test -p inference dependency_requirements --lib`, and
+    `git diff --check`.
+  - Remaining follow-up: implement embedded-runtime readiness resolution from
+    these declarations into typed readiness facts and existing diagnostics.
 
 ### Traceability Links
 
