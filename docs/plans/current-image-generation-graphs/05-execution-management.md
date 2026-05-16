@@ -4895,6 +4895,52 @@ Worker rules:
   technical_fit_execution_evidence --lib`, `cargo test -p
   pantograph-embedded-runtime technical_fit --lib`, and targeted code search
   for `diffusers`, `backend_key`, `recommended_backend`, and backend hints.
+- 2026-05-16 re-plan decisions for inference traits, runtime identity, and
+  readiness:
+  - Use the local Transformers checkout at
+    `/media/jeremy/OrangeCream/Linux Software/repos/reference/frameworks-libraries/transformers`
+    as the naming/convention reference for model/task traits, package
+    component names, and facts needed to use Transformers- and
+    Diffusers-family models. Diffusers is not image-generation-only; it can
+    describe image, text, audio, or future diffusion-model conventions.
+  - Keep `diffusers` as a user-facing source/package/capability/future-runtime
+    label, but make it scheduler-selectable only when a real executable
+    runtime registers installed and available `diffusers` capability facts.
+    Until then, represent it with typed unavailable/not implemented/not
+    installed/etc. facts that the scheduler cannot select and graph editors can
+    show disabled.
+  - Replace generic recursive `backend_key` discovery with explicit typed
+    runtime/trait inputs for each node family as those families move onto the
+    canonical scheduler path. `runtime` and future traits such as `device`,
+    `denoising_scheduler`, `dtype`, adapters, tokenizer/chat-template
+    variants, attention backend, pooling strategy, and audio voice remain
+    graph intent, then scheduler/admission reduces them into execution
+    decisions.
+  - Model unavailable-but-known runtimes/features explicitly with typed states:
+    available, not installed, not implemented, unsupported platform, missing
+    dependency, disabled by policy, missing model facts, requires runtime
+    capability, and requires model capability. The scheduler treats these as
+    non-selectable; providers may display them as disabled with reasons.
+  - Runtime and capability diagnostics must be runtime/candidate/trait scoped.
+    Scheduler-facing diagnostics identify the candidate runtime/backend and
+    non-selectable reason; provider-facing capability facts identify the trait
+    id, runtime/model scope, availability state, and disabled-display reason.
+  - Pumas/model "roots" are approved storage bases such as the Pumas
+    `shared-resources/models` tree. Worker execution must receive a typed
+    Pumas model/artifact ref, a validated root-relative artifact path, or a
+    resolved path that has already been checked against approved roots.
+    Arbitrary graph/user/local paths, traversal, and unapproved temp/download
+    paths fail before worker dispatch.
+  - Missing `diffusers`, `transformers`, `accelerate`, `torch`, Pillow, or
+    other runtime package dependencies must be reported by a readiness owner
+    before worker dispatch. The next planning slice must choose whether that
+    owner is embedded-runtime, inference backend capability facts, managed
+    runtime, or a PyTorch bridge preflight shell.
+- No-fallback/no-legacy confirmation: these decisions do not allow
+  pseudo-Diffusers runtime candidates, hardcoded frontend scheduler lists,
+  recursive inference `backend_key` selection, raw local-path execution,
+  worker-side dependency discovery as readiness policy, or direct graph-to-
+  inference runtime selection.
 
 ### Traceability Links
 

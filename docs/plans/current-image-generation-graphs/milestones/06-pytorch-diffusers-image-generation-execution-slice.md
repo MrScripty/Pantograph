@@ -2265,3 +2265,71 @@ Standards compliance gates for every Option 3 slice:
   technical_fit_execution_evidence --lib`, `cargo test -p
   pantograph-embedded-runtime technical_fit --lib`, and targeted code search
   for `diffusers`, `backend_key`, `recommended_backend`, and backend hints.
+
+2026-05-16 re-plan decisions for inference traits, runtime identity, and
+readiness:
+
+- Transformers/Diffusers naming decision: Pantograph uses the local
+  Transformers reference checkout at
+  `/media/jeremy/OrangeCream/Linux Software/repos/reference/frameworks-libraries/transformers`
+  as the naming and convention reference for model/task traits, package
+  component names, and what facts are needed to use Transformers- and
+  Diffusers-family models. Diffusers must not be treated as image-generation
+  only; it can describe image, text, audio, or future diffusion-model
+  conventions. Pantograph-owned Rust contracts still translate those
+  conventions into typed scheduler/runtime/device decisions before execution.
+- Diffusers identity decision: keep `diffusers` as a user-facing
+  source/package/capability/future-runtime label, but it is scheduler-selectable
+  only when a real executable runtime registers installed and available
+  capability facts for `diffusers`. Until then, `diffusers` may appear as
+  unavailable, not implemented, not installed, unsupported platform, missing
+  dependency, disabled by policy, or missing model/runtime facts, and those
+  states must be typed facts rather than hidden strings or fallback behavior.
+- Typed graph input decision: replace generic recursive `backend_key`
+  discovery with explicit typed runtime/trait inputs for each node family as
+  those families are brought onto the canonical scheduler path. `runtime`
+  remains graph-authored intent and is projected into scheduler/admission
+  requirements; future explicit traits such as `device`, `denoising_scheduler`,
+  `dtype`, adapter selection, tokenizer/chat-template variants, attention
+  backend, pooling strategy, audio voice, or other model/runtime-dependent
+  traits must follow the same typed-input pattern. Node composition should stay
+  low-boilerplate with hints/options, while explicit settings remain possible
+  and reproducible.
+- Availability contract decision: inference can expose traits or runtimes that
+  are intentionally present in the crate but not yet usable. These must be
+  represented as typed capability facts with precise availability, not removed
+  or selected. The scheduler must treat unavailable facts as non-selectable,
+  and graph/port-option providers may show them disabled with the reason.
+  Required availability states include at least available, not installed, not
+  implemented, unsupported platform, missing dependency, disabled by policy,
+  missing model facts, requires runtime capability, and requires model
+  capability.
+- Diagnostics contract decision: runtime and capability diagnostics must be
+  explicit about the runtime/candidate/capability they describe. Use
+  runtime-scoped diagnostics for scheduler/admission failures and capability
+  facts for graph editor/provider availability. The same source facts may feed
+  both surfaces, but the scheduler-facing diagnostic must identify the
+  candidate runtime/backend and non-selectable reason, while the provider-facing
+  fact must identify the trait id, runtime/model scope, availability state,
+  and disabled-display reason.
+- Pumas root/path decision: "roots" means approved filesystem/storage base
+  locations for Pumas-managed model artifacts, such as the Pumas
+  `shared-resources/models` tree. Worker execution must receive a typed Pumas
+  model/artifact reference, a validated root-relative artifact path, or a
+  resolved path that has already been checked against approved Pumas/model
+  roots. Arbitrary graph/user/local paths, path traversal, and unapproved
+  temporary/download paths must fail with typed diagnostics before worker
+  dispatch.
+- Dependency readiness decision: missing `diffusers`, `transformers`,
+  `accelerate`, `torch`, Pillow, or other runtime package dependencies must be
+  reported by a readiness owner before worker dispatch. The PyTorch worker must
+  not be the first component to discover these dependencies are missing. The
+  next planning slice must choose whether the readiness owner is
+  embedded-runtime, inference backend capability facts, managed runtime, or a
+  PyTorch bridge preflight shell, and must define the reduced typed facts
+  passed to scheduler/planner/gateway.
+- No-fallback/no-legacy confirmation: these decisions do not allow
+  pseudo-Diffusers runtime candidates, hardcoded frontend scheduler lists,
+  recursive inference `backend_key` selection, raw local-path execution,
+  worker-side dependency discovery as readiness policy, or direct graph-to-
+  inference runtime selection.
