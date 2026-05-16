@@ -2560,6 +2560,22 @@ readiness:
            non-blocking until production host package snapshots are wired and
            the planner/gateway missing-proof gate can be enabled without
            rejecting every current production candidate.
+         - 2026-05-16 package-readiness provider planning decision: use a
+           runtime-scoped package-readiness provider contract owned by
+           embedded-runtime as the production source for scheduler/admission
+           dependency proof. The provider is keyed by executable backend/runtime
+           identity and optional runtime variant/environment selector, consumes
+           inference-owned dependency declarations, and returns typed
+           `DependencyReadinessFact` values plus bounded provider diagnostics.
+           It must not reuse execution-time dependency-environment preflight,
+           graph node inputs, worker imports, or package-hint strings as
+           scheduler proof. The first implementation may resolve the default
+           PyTorch/Python environment only, but the contract must keep
+           environment identity explicit enough for a later managed
+           environment inventory objective. That later objective will model
+           runtime + environment + package inventory as first-class scheduler
+           evidence across venv/Conda/managed/remote runtimes without changing
+           scheduler policy call sites.
       6. Make image planner/gateway reject selected decisions that lack ready
          dependency proof before worker dispatch.
       7. Remove the legacy dependency-environment backend-key and fallback

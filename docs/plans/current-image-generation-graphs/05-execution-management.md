@@ -5357,6 +5357,30 @@ Worker rules:
     technical-fit calls to pass real readiness facts, then enable
     planner/gateway rejection for missing selected readiness proof before
     worker dispatch.
+- 2026-05-16 package-readiness provider planning decision:
+  - Decision: use the runtime-scoped package-readiness provider option now.
+    Embedded-runtime owns the host/provider contract; inference continues to
+    own dependency declarations; runtime-registry and scheduler admission only
+    consume typed readiness facts.
+  - Contract direction: provider input is keyed by executable backend/runtime
+    identity plus optional runtime variant/environment selector and dependency
+    declarations. Provider output is typed `DependencyReadinessFact` values
+    with bounded provider diagnostics for unavailable Python, missing packages,
+    unimplemented probes, unsupported platforms, invalid package ids, or
+    timeout/probe failures.
+  - No-fallback/no-legacy confirmation: do not adapt execution-time
+    dependency-environment preflight, graph node inputs, worker imports,
+    runtime display strings, or package hints into scheduler readiness proof.
+  - Later objective: promote managed environment inventory to a first-class
+    scheduler evidence model covering runtime + environment + package
+    inventory for venv, Conda, managed, and remote runtimes. The provider
+    contract should leave this path open without requiring scheduler policy
+    call-site churn.
+  - Next implementation slices: add the provider trait/DTO and focused
+    contract tests; implement the initial PyTorch/default-Python provider;
+    wire production `workflow_technical_fit_decision` to pass provider facts;
+    then add image planner/gateway rejection for selected decisions that lack
+    ready dependency proof.
 
 ### Traceability Links
 
