@@ -949,6 +949,19 @@ Update during implementation:
   constructs `PortOptionsQuery` without the newer required `context` field.
   That compile blocker is deferred to a separate test-fixture cleanup slice;
   the model-ref projection assertion remains an explicit follow-up.
+- 2026-05-15: Continued Milestone 6 with the embedded-runtime selected
+  model-ref projection coverage slice. The smallest useful vertical slice was
+  limited to fixing the stale embedded-runtime `PortOptionsQuery` test fixture
+  by passing an explicit absent context and adding a projection test proving a
+  raw selected model id accepted by workflow-service reaches
+  `BackendExecutionDecision` as the canonical `pumas://models/...` model ref.
+  The projection remains an adapter-only copy of validated workflow-service
+  identity; it does not re-parse, re-prefix, repair, or reinterpret raw model
+  strings. Verification passed:
+  `cargo fmt -p pantograph-embedded-runtime -- --check`,
+  `cargo test -p pantograph-embedded-runtime workflow_execution_plan_projection --lib`,
+  and
+  `cargo test -p pantograph-embedded-runtime puma_lib_option_and_dependency_resolver_agree_on_primary_file_path --lib`.
 
 ## Commit Cadence Notes
 
@@ -1151,6 +1164,10 @@ Worker rules:
   ids and already-prefixed `pumas://models/...` refs produce one canonical
   scheduler-history identity, while local paths, unsupported URI schemes, and
   malformed refs fail closed with typed execution-plan diagnostics.
+- Milestone 6 embedded-runtime projection coverage now proves the
+  workflow-service selected model-ref value reaches
+  `BackendExecutionDecision` in canonical `pumas://models/...` form without
+  projection-side repair or double-prefixing.
 
 ### Deviations
 
@@ -1195,12 +1212,10 @@ Worker rules:
   inspector behavior intact and introduced a focused
   `SavedGraphInspectionSnapshot.svelte`; a future split should extract the run
   artifact-details panel and saved-graph mode orchestration.
-- `cargo test -p pantograph-embedded-runtime workflow_execution_plan_projection --lib`
-  is currently blocked by an unrelated embedded-runtime fixture compile error:
-  `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`
-  constructs `PortOptionsQuery` without the required `context` field. The
-  selected model-ref normalization slice stayed inside workflow-service
-  ownership and did not repair that fixture in the same commit.
+- The selected model-ref normalization slice initially left embedded-runtime
+  projection verification blocked by a stale `PortOptionsQuery` fixture. The
+  following embedded-runtime projection slice repaired that fixture and added
+  the focused projection test without expanding execution behavior.
 
 ### Follow-Ups
 
@@ -1235,11 +1250,6 @@ Worker rules:
 - Continue Milestone 5 by rejecting explicit backend/runtime preferences that
   are task/model/platform incompatible, such as llama.cpp for diffusion image
   generation or MLX on Linux/Windows.
-- Continue Milestone 6 by fixing the embedded-runtime `PortOptionsQuery`
-  fixture context compile blocker, then add projection coverage proving the
-  validated workflow-service selected model ref reaches
-  `BackendExecutionDecision` without re-parsing, re-prefixing, repair, or
-  reinterpretation.
 
 ### Verification Summary
 

@@ -76,6 +76,32 @@ fn workflow_node_decision_projects_to_backend_execution_decision() {
 }
 
 #[test]
+fn workflow_node_decision_projects_canonicalized_raw_model_ref() {
+    let decision = WorkflowExecutionPlanNodeDecision::new(
+        "image-node-1",
+        "pytorch",
+        "pytorch-runtime",
+        "pytorch.cuda",
+        WorkflowInferenceDeviceClass::Cuda,
+        WorkflowInferenceTaskId::ImageGeneration,
+    )
+    .expect("valid node decision")
+    .with_selected_model_ref("stable-diffusion-xl")
+    .expect("raw selected model id should canonicalize at workflow boundary");
+
+    let backend_decision = project_workflow_node_decision_to_backend_execution_decision(&decision)
+        .expect("project backend decision");
+
+    assert_eq!(
+        backend_decision
+            .selected_model_ref
+            .as_ref()
+            .map(|model_ref| model_ref.model_id.as_str()),
+        Some("pumas://models/stable-diffusion-xl")
+    );
+}
+
+#[test]
 fn workflow_node_decision_rejects_invalid_backend_id() {
     let decision = WorkflowExecutionPlanNodeDecision::new(
         "image-node-1",

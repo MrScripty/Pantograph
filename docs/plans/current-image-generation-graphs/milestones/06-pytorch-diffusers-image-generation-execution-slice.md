@@ -52,13 +52,12 @@ PyTorch/diffusers and produce a retained image artifact.
   covering raw model ids, already-prefixed Pumas refs, malformed/local-path
   refs, and admission matching through the public constructor/admission
   boundary rather than private helper details.
-- [ ] Add focused embedded-runtime projection coverage proving the validated
+- [x] Add focused embedded-runtime projection coverage proving the validated
   workflow execution-plan model ref reaches `BackendExecutionDecision` without
   re-parsing, re-prefixing, repairing, or reinterpreting raw selected model
-  strings. This remains blocked until the unrelated
-  `PortOptionsQuery.context` fixture compile issue in
-  `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs` is
-  resolved.
+  strings. The slice also repaired the stale embedded-runtime
+  `PortOptionsQuery.context` fixture required to run the projection test
+  target.
 - [ ] Validate planned image execution identity consistency before the image
   planner returns an `ImageGenerationExecutionPlan`: the scheduler-selected
   model ref from `BackendExecutionDecision` must match the resolved Pumas

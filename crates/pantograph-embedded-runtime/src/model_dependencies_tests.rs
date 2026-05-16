@@ -452,6 +452,7 @@ async fn puma_lib_option_and_dependency_resolver_agree_on_primary_file_path() {
         search: Some("test-gguf".to_string()),
         limit: Some(10),
         offset: Some(0),
+        context: None,
     };
 
     let options = registry
