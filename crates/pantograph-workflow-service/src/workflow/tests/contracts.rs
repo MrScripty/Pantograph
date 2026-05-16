@@ -186,6 +186,66 @@ fn workflow_execution_plan_roundtrip_uses_snake_case() {
 }
 
 #[test]
+fn workflow_execution_plan_model_ref_constructor_canonicalizes_raw_model_id() {
+    let decision = WorkflowExecutionPlanNodeDecision::new(
+        "image-node-1",
+        "pytorch",
+        "pytorch",
+        "pytorch.cuda",
+        WorkflowInferenceDeviceClass::Cuda,
+        WorkflowInferenceTaskId::ImageGeneration,
+    )
+    .expect("valid execution-plan node decision")
+    .with_selected_model_ref("image/example/tiny-diffusion")
+    .expect("raw Pumas model id should be accepted");
+
+    assert_eq!(
+        decision.selected_model_ref(),
+        Some("pumas://models/image/example/tiny-diffusion")
+    );
+}
+
+#[test]
+fn workflow_execution_plan_model_ref_constructor_preserves_prefixed_ref() {
+    let decision = WorkflowExecutionPlanNodeDecision::new(
+        "image-node-1",
+        "pytorch",
+        "pytorch",
+        "pytorch.cuda",
+        WorkflowInferenceDeviceClass::Cuda,
+        WorkflowInferenceTaskId::ImageGeneration,
+    )
+    .expect("valid execution-plan node decision")
+    .with_selected_model_ref("pumas://models/image/example/tiny-diffusion")
+    .expect("prefixed Pumas model ref should be accepted");
+
+    assert_eq!(
+        decision.selected_model_ref(),
+        Some("pumas://models/image/example/tiny-diffusion")
+    );
+}
+
+#[test]
+fn workflow_execution_plan_model_ref_constructor_rejects_local_paths() {
+    let error = WorkflowExecutionPlanNodeDecision::new(
+        "image-node-1",
+        "pytorch",
+        "pytorch",
+        "pytorch.cuda",
+        WorkflowInferenceDeviceClass::Cuda,
+        WorkflowInferenceTaskId::ImageGeneration,
+    )
+    .expect("valid execution-plan node decision")
+    .with_selected_model_ref("/models/tiny-diffusion")
+    .expect_err("local paths must not be selected model refs");
+
+    assert!(matches!(
+        error,
+        WorkflowExecutionPlanError::InvalidSelectedModelRef { .. }
+    ));
+}
+
+#[test]
 fn workflow_execution_plan_deserialize_defaults_optional_decision_fields() {
     let payload = serde_json::json!({
         "schema_version": 1,
@@ -334,6 +394,80 @@ fn workflow_execution_plan_admission_builds_selected_node_decision() {
         node_decision.selected_model_ref(),
         Some("pumas://models/stable-diffusion-xl")
     );
+}
+
+#[test]
+fn workflow_execution_plan_admission_preserves_prefixed_pumas_model_ref() {
+    let decision = WorkflowTechnicalFitDecision {
+        selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+        selected_candidate_id: Some("candidate-pytorch-sdxl".to_string()),
+        selected_runtime_id: Some("pytorch-runtime".to_string()),
+        selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+        selected_backend_key: Some("pytorch".to_string()),
+        selected_model_id: Some("pumas://models/stable-diffusion-xl".to_string()),
+        selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+        selected_device_id: Some("cuda:0".to_string()),
+        ..WorkflowTechnicalFitDecision::default()
+    };
+    let models = vec![WorkflowCapabilityModel {
+        model_id: "stable-diffusion-xl".to_string(),
+        model_revision_or_hash: Some("sha256:model".to_string()),
+        model_type: Some("diffusion".to_string()),
+        node_ids: vec!["image-node-1".to_string()],
+        roles: vec!["image_generation".to_string()],
+    }];
+
+    let plan = build_workflow_execution_plan_from_admission(
+        "run-image-admission",
+        "workflow-image-admission",
+        &models,
+        Some(&decision),
+    )
+    .expect("build execution plan")
+    .expect("selected technical fit produces a plan");
+
+    let node_decision = plan
+        .node_decision("image-node-1")
+        .expect("image node decision");
+    assert_eq!(
+        node_decision.selected_model_ref(),
+        Some("pumas://models/stable-diffusion-xl")
+    );
+}
+
+#[test]
+fn workflow_execution_plan_admission_rejects_malformed_selected_model_ref() {
+    let decision = WorkflowTechnicalFitDecision {
+        selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+        selected_candidate_id: Some("candidate-pytorch-sdxl".to_string()),
+        selected_runtime_id: Some("pytorch-runtime".to_string()),
+        selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+        selected_backend_key: Some("pytorch".to_string()),
+        selected_model_id: Some("file:///tmp/stable-diffusion-xl".to_string()),
+        selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
+        selected_device_id: Some("cuda:0".to_string()),
+        ..WorkflowTechnicalFitDecision::default()
+    };
+    let models = vec![WorkflowCapabilityModel {
+        model_id: "stable-diffusion-xl".to_string(),
+        model_revision_or_hash: Some("sha256:model".to_string()),
+        model_type: Some("diffusion".to_string()),
+        node_ids: vec!["image-node-1".to_string()],
+        roles: vec!["image_generation".to_string()],
+    }];
+
+    let error = build_workflow_execution_plan_from_admission(
+        "run-image-admission",
+        "workflow-image-admission",
+        &models,
+        Some(&decision),
+    )
+    .expect_err("malformed selected model ref must fail closed");
+
+    assert!(matches!(
+        error,
+        WorkflowExecutionPlanError::InvalidSelectedModelRef { .. }
+    ));
 }
 
 #[test]

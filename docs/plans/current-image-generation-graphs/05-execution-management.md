@@ -927,6 +927,28 @@ Update during implementation:
   deviation: the first embedded-runtime compile caught a test-module import
   scope issue for `RuntimeVariantId`, and the first format check reported
   rustfmt-only wrapping; both were corrected and rerun.
+- 2026-05-15: Continued Milestone 6 with the selected model-ref normalization
+  slice. The smallest useful vertical slice was limited to workflow-service
+  execution-plan ownership: `WorkflowExecutionPlanModelRef` now parses selected
+  model identity once at the workflow-service boundary, canonicalizes raw
+  Pumas model ids to `pumas://models/...`, preserves already-prefixed Pumas
+  refs, rejects local paths and unsupported URI shapes, and maps invalid values
+  to typed `WorkflowExecutionPlanError::InvalidSelectedModelRef` diagnostics.
+  Admission compares capability model ids and selected technical-fit model ids
+  through the same canonical value object, so raw and prefixed forms match
+  without double-prefixing or downstream repair. The slice preserves the
+  no-fallback/no-legacy rule by failing invalid selected identity before
+  embedded-runtime projection, scheduler history, runtime readiness, or worker
+  dispatch can consume it. Verification passed:
+  `cargo test -p pantograph-workflow-service workflow_execution_plan --lib`,
+  `cargo check -p pantograph-workflow-service`,
+  and `cargo fmt -p pantograph-workflow-service -- --check`. Verification
+  deviation: `cargo test -p pantograph-embedded-runtime workflow_execution_plan_projection --lib`
+  could not reach projection coverage because an unrelated embedded-runtime
+  fixture in `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`
+  constructs `PortOptionsQuery` without the newer required `context` field.
+  That compile blocker is deferred to a separate test-fixture cleanup slice;
+  the model-ref projection assertion remains an explicit follow-up.
 
 ## Commit Cadence Notes
 
@@ -1124,6 +1146,11 @@ Worker rules:
   Pumas package facts with runtime capability/runtime-variant/device facts
   before selection, and incomplete Pumas candidate fragments are no longer
   selectable.
+- Milestone 6 workflow-service execution-plan admission now owns selected
+  model-ref normalization through a validated model-ref type. Raw Pumas model
+  ids and already-prefixed `pumas://models/...` refs produce one canonical
+  scheduler-history identity, while local paths, unsupported URI schemes, and
+  malformed refs fail closed with typed execution-plan diagnostics.
 
 ### Deviations
 
@@ -1168,6 +1195,12 @@ Worker rules:
   inspector behavior intact and introduced a focused
   `SavedGraphInspectionSnapshot.svelte`; a future split should extract the run
   artifact-details panel and saved-graph mode orchestration.
+- `cargo test -p pantograph-embedded-runtime workflow_execution_plan_projection --lib`
+  is currently blocked by an unrelated embedded-runtime fixture compile error:
+  `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`
+  constructs `PortOptionsQuery` without the required `context` field. The
+  selected model-ref normalization slice stayed inside workflow-service
+  ownership and did not repair that fixture in the same commit.
 
 ### Follow-Ups
 
@@ -1202,6 +1235,11 @@ Worker rules:
 - Continue Milestone 5 by rejecting explicit backend/runtime preferences that
   are task/model/platform incompatible, such as llama.cpp for diffusion image
   generation or MLX on Linux/Windows.
+- Continue Milestone 6 by fixing the embedded-runtime `PortOptionsQuery`
+  fixture context compile blocker, then add projection coverage proving the
+  validated workflow-service selected model ref reaches
+  `BackendExecutionDecision` without re-parsing, re-prefixing, repair, or
+  reinterpretation.
 
 ### Verification Summary
 

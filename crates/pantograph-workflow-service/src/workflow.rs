@@ -28,6 +28,7 @@ mod diagnostic_errors;
 mod diagnostics_api;
 mod execution_plan;
 mod execution_plan_admission;
+mod execution_plan_model_ref;
 mod graph_api;
 mod host;
 mod identity;
@@ -84,6 +85,9 @@ pub use self::execution_plan::{
     WORKFLOW_EXECUTION_PLAN_SCHEMA_VERSION,
 };
 pub(crate) use self::execution_plan_admission::build_workflow_execution_plan_from_admission;
+pub use self::execution_plan_model_ref::{
+    WorkflowExecutionPlanModelRef, WorkflowExecutionPlanModelRefError,
+};
 pub use self::host::{
     WorkflowHost, WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
 };

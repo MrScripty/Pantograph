@@ -30,31 +30,35 @@ PyTorch/diffusers and produce a retained image artifact.
 - [x] Project the workflow execution plan's image-generation node decision into
   inference's `BackendExecutionDecision` at the composition boundary before
   calling `generate_image_from_planning_input`.
-- [ ] Canonicalize selected Pumas model identity at the execution-plan
+- [x] Canonicalize selected Pumas model identity at the execution-plan
   admission/projection boundary before using it for scheduler history,
   lifecycle diagnostics, runtime readiness, or worker dispatch. A selected
   model value that is already a `pumas://models/...` ref must not be blindly
   prefixed again; malformed refs, local paths, or ambiguous model/artifact
   identities must fail with typed execution-plan diagnostics rather than being
   repaired by inference nodes.
-- [ ] Parse selected model identity once at the workflow execution-plan owner
+- [x] Parse selected model identity once at the workflow execution-plan owner
   boundary into a validated workflow-owned model-ref type, then project that
   validated value into inference. Embedded-runtime projection may adapt the
   type shape, but it must not re-parse, re-prefix, repair, or reinterpret raw
   selected model strings.
-- [ ] If the model-ref normalization slice introduces a new source module,
+- [x] If the model-ref normalization slice introduces a new source module,
   public constructor, or changed execution-plan boundary contract, update the
   owning README or add an ADR in the same commit. The documentation must state
   the parse-once invariant, accepted raw selected-fact forms, rejected local
   path/URI forms, append-only evolution rules, and scheduler-history identity
   semantics.
-- [ ] Add a focused execution-plan model-ref normalization test covering raw
-  model ids, already-prefixed Pumas refs, malformed refs, and projection into
-  `BackendExecutionDecision`. Write the first failing test before changing the
-  normalization implementation, and keep the test focused on the public
-  constructor/projection boundary rather than private helper details. This
-  slice is a prerequisite for using selected model identity as scheduler
-  history input.
+- [x] Add focused workflow-service execution-plan model-ref normalization tests
+  covering raw model ids, already-prefixed Pumas refs, malformed/local-path
+  refs, and admission matching through the public constructor/admission
+  boundary rather than private helper details.
+- [ ] Add focused embedded-runtime projection coverage proving the validated
+  workflow execution-plan model ref reaches `BackendExecutionDecision` without
+  re-parsing, re-prefixing, repairing, or reinterpreting raw selected model
+  strings. This remains blocked until the unrelated
+  `PortOptionsQuery.context` fixture compile issue in
+  `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs` is
+  resolved.
 - [ ] Validate planned image execution identity consistency before the image
   planner returns an `ImageGenerationExecutionPlan`: the scheduler-selected
   model ref from `BackendExecutionDecision` must match the resolved Pumas

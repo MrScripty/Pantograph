@@ -27,6 +27,7 @@ public exports out of the service crate.
 | `diagnostics_api.rs` | Diagnostics, scheduler timeline, scheduler estimate, run projection, I/O artifact, Library usage, trusted diagnostic event append, retention, and projection rebuild facade methods. |
 | `media_capability_contracts.rs` | Backend-owned media format capability and managed redistributable category/status DTOs. |
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
+| `execution_plan_model_ref.rs` | Parse-once selected Pumas model-ref value object for run execution plans, including raw model-id normalization and local-path/unsupported-URI rejection. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_execution_api.rs` | Workflow session creation and queued session run orchestration facade methods. |
 | `session_io_artifacts.rs` | Retained workflow/session I/O artifact metadata and small text/JSON ArtifactStore materialization helpers for diagnostics-ledger projection. |
@@ -384,6 +385,12 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   keyed by node id. The serialized shape is append-only; consumers must ignore
   later additive fields they do not need, but producers must continue to supply
   validated workflow/run ids and explicit selected node-decision facts.
+- Workflow execution-plan selected model refs are parsed once at the
+  workflow-service owner boundary. Raw Pumas model ids serialize as canonical
+  `pumas://models/...` refs, already-prefixed refs are preserved, and local
+  paths or unsupported URI schemes are rejected before embedded-runtime
+  projection, scheduler history, runtime readiness, or worker dispatch can
+  trust the value.
 - Workflow-run error handling records canonical diagnostic errors where
   possible, but secondary diagnostic append failures must not replace the
   original workflow execution, timeout, output-validation, artifact-conversion,

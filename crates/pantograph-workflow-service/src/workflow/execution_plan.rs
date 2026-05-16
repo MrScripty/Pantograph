@@ -4,6 +4,7 @@ use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::WorkflowExecutionPlanModelRef;
 use super::{WorkflowInferenceDeviceClass, WorkflowInferenceTaskId};
 
 pub const WORKFLOW_EXECUTION_PLAN_SCHEMA_VERSION: u32 = 1;
@@ -12,7 +13,6 @@ pub const WORKFLOW_EXECUTION_PLAN_MAX_DIAGNOSTICS: usize = 32;
 pub const WORKFLOW_EXECUTION_PLAN_MAX_POLICY_TRACE_IDS: usize = 32;
 
 const MAX_EXECUTION_PLAN_ID_LEN: usize = 128;
-const MAX_EXECUTION_PLAN_MODEL_REF_LEN: usize = 512;
 const MAX_EXECUTION_PLAN_DIAGNOSTIC_MESSAGE_LEN: usize = 512;
 
 /// Run-scoped workflow execution plan produced by scheduler admission.
@@ -162,7 +162,7 @@ pub struct WorkflowExecutionPlanNodeDecision {
     selected_device_class: WorkflowInferenceDeviceClass,
     selected_device_id: Option<String>,
     selected_task_id: WorkflowInferenceTaskId,
-    selected_model_ref: Option<String>,
+    selected_model_ref: Option<WorkflowExecutionPlanModelRef>,
     diagnostics: Vec<WorkflowExecutionPlanDiagnostic>,
     policy_trace_ids: Vec<String>,
 }
@@ -223,13 +223,9 @@ impl WorkflowExecutionPlanNodeDecision {
 
     pub fn with_selected_model_ref(
         mut self,
-        selected_model_ref: impl Into<String>,
+        selected_model_ref: impl AsRef<str>,
     ) -> Result<Self, WorkflowExecutionPlanError> {
-        self.selected_model_ref = Some(validate_required_text(
-            "selected_model_ref",
-            selected_model_ref.into(),
-            MAX_EXECUTION_PLAN_MODEL_REF_LEN,
-        )?);
+        self.selected_model_ref = Some(parse_selected_model_ref(selected_model_ref.as_ref())?);
         Ok(self)
     }
 
@@ -301,7 +297,9 @@ impl WorkflowExecutionPlanNodeDecision {
 
     #[must_use]
     pub fn selected_model_ref(&self) -> Option<&str> {
-        self.selected_model_ref.as_deref()
+        self.selected_model_ref
+            .as_ref()
+            .map(WorkflowExecutionPlanModelRef::as_str)
     }
 
     #[must_use]
@@ -481,6 +479,8 @@ pub enum WorkflowExecutionPlanError {
     AmbiguousNodeMapping { model_id: String, count: usize },
     #[error("selected model '{model_id}' maps to {count} inference tasks")]
     AmbiguousSelectedTask { model_id: String, count: usize },
+    #[error("selected model ref '{value}' is invalid: {message}")]
+    InvalidSelectedModelRef { value: String, message: String },
 }
 
 fn validate_required_text(
@@ -535,4 +535,15 @@ fn validate_selected_task_id(
     } else {
         Ok(())
     }
+}
+
+fn parse_selected_model_ref(
+    value: &str,
+) -> Result<WorkflowExecutionPlanModelRef, WorkflowExecutionPlanError> {
+    WorkflowExecutionPlanModelRef::parse(value).map_err(|error| {
+        WorkflowExecutionPlanError::InvalidSelectedModelRef {
+            value: value.to_string(),
+            message: error.to_string(),
+        }
+    })
 }

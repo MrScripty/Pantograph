@@ -4,7 +4,8 @@ use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitDev
 
 use super::{
     WorkflowCapabilityModel, WorkflowExecutionPlan, WorkflowExecutionPlanError,
-    WorkflowExecutionPlanNodeDecision, WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
+    WorkflowExecutionPlanModelRef, WorkflowExecutionPlanNodeDecision, WorkflowInferenceDeviceClass,
+    WorkflowInferenceTaskId,
 };
 
 pub(crate) fn build_workflow_execution_plan_from_admission(
@@ -22,7 +23,8 @@ pub(crate) fn build_workflow_execution_plan_from_admission(
     };
 
     let selected_model_id = selected_field(&decision.selected_model_id, "selected_model_id")?;
-    let selected_model = selected_capability_model(capability_models, selected_model_id)?;
+    let selected_model_ref = selected_model_ref(selected_model_id)?;
+    let selected_model = selected_capability_model(capability_models, &selected_model_ref)?;
     let node_id = selected_node_id(selected_model)?;
     let selected_task_id = selected_task_id(selected_model)?;
     let selected_device_class = selected_device_class(decision.selected_device_class)?;
@@ -42,7 +44,7 @@ pub(crate) fn build_workflow_execution_plan_from_admission(
         selected_device_class,
         selected_task_id,
     )?
-    .with_selected_model_ref(pumas_model_ref(selected_model_id))?
+    .with_selected_model_ref(selected_model_ref.as_str())?
     .with_policy_trace_ids(policy_trace_ids(selected_candidate_id, &decision))?;
 
     if let Some(selected_device_id) = decision.selected_device_id.as_deref() {
@@ -78,19 +80,22 @@ fn selected_field<'a>(
 
 fn selected_capability_model<'a>(
     models: &'a [WorkflowCapabilityModel],
-    selected_model_id: &str,
+    selected_model_ref: &WorkflowExecutionPlanModelRef,
 ) -> Result<&'a WorkflowCapabilityModel, WorkflowExecutionPlanError> {
     let matches = models
         .iter()
-        .filter(|model| model.model_id == selected_model_id)
+        .filter(|model| {
+            WorkflowExecutionPlanModelRef::parse(model.model_id.as_str())
+                .is_ok_and(|model_ref| &model_ref == selected_model_ref)
+        })
         .collect::<Vec<_>>();
     match matches.as_slice() {
         [] => Err(WorkflowExecutionPlanError::SelectedModelNotFound {
-            model_id: selected_model_id.to_string(),
+            model_id: selected_model_ref.as_str().to_string(),
         }),
         [model] => Ok(*model),
         _ => Err(WorkflowExecutionPlanError::AmbiguousSelectedModel {
-            model_id: selected_model_id.to_string(),
+            model_id: selected_model_ref.as_str().to_string(),
             count: matches.len(),
         }),
     }
@@ -176,6 +181,13 @@ fn policy_trace_ids(
     vec![format!("technical_fit_policy_v{}", trace.policy_version)]
 }
 
-fn pumas_model_ref(model_id: &str) -> String {
-    format!("pumas://models/{model_id}")
+fn selected_model_ref(
+    selected_model_id: &str,
+) -> Result<WorkflowExecutionPlanModelRef, WorkflowExecutionPlanError> {
+    WorkflowExecutionPlanModelRef::parse(selected_model_id).map_err(|error| {
+        WorkflowExecutionPlanError::InvalidSelectedModelRef {
+            value: selected_model_id.to_string(),
+            message: error.to_string(),
+        }
+    })
 }
