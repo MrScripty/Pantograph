@@ -2641,7 +2641,7 @@ async fn test_canonical_llm_pytorch_backend_key_dispatches_to_dependency_preflig
 
 #[cfg(all(feature = "inference-nodes", feature = "pytorch-nodes"))]
 #[tokio::test]
-async fn test_canonical_llm_pytorch_package_facts_dispatches_to_dependency_preflight() {
+async fn test_canonical_llm_package_facts_do_not_dispatch_to_dependency_preflight() {
     let fixture = include_str!(
         "../../../inference/tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
     );
@@ -2665,10 +2665,10 @@ async fn test_canonical_llm_pytorch_package_facts_dispatches_to_dependency_prefl
     let err = executor
         .execute_task("llm-inference-1", inputs, &context, &extensions)
         .await
-        .expect_err("canonical Transformers package facts should require dependency preflight");
+        .expect_err("package facts alone should not trigger dependency preflight");
     match err {
         NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("dependency resolver is not configured"));
+            assert!(message.contains("InferenceGateway not configured"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -3626,7 +3626,7 @@ fn test_build_model_dependency_request_uses_resolved_model_source_identity() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_build_model_dependency_request_uses_package_facts_before_llm_heuristics() {
+fn test_build_model_dependency_request_uses_package_facts_for_model_and_task_only() {
     let fixture = include_str!(
         "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
     );
@@ -3640,12 +3640,26 @@ fn test_build_model_dependency_request_uses_package_facts_before_llm_heuristics(
 
     let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
 
-    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
+    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     assert_eq!(
         request.task_type_primary.as_deref(),
         Some("text_generation")
     );
     assert_eq!(request.model_id.as_deref(), Some("llm/llama/tiny-gguf"));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_model_dependency_request_ignores_recommended_backend() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "recommended_backend".to_string(),
+        serde_json::json!("llamacpp"),
+    );
+
+    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+
+    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -3688,7 +3702,7 @@ fn test_build_model_dependency_request_uses_embedding_package_facts() {
 
     let request = build_model_dependency_request("llm-inference", "/tmp/embed.gguf", &inputs);
 
-    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
+    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     assert_eq!(request.task_type_primary.as_deref(), Some("embedding"));
     assert_eq!(
         request.model_id.as_deref(),
@@ -3712,7 +3726,7 @@ fn test_build_model_dependency_request_uses_rerank_package_facts() {
 
     let request = build_model_dependency_request("llm-inference", "/tmp/rerank.gguf", &inputs);
 
-    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
+    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     assert_eq!(request.task_type_primary.as_deref(), Some("reranking"));
     assert_eq!(
         request.model_id.as_deref(),

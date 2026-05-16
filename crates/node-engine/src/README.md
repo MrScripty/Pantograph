@@ -190,10 +190,10 @@ use node_engine::core_executor::CoreNodeExecutor;
   backend/model compatibility summaries. Malformed package-facts payloads are
   execution input errors, not silently omitted optional facts. Node-engine must
   not derive those summaries locally.
-- Canonical `llm-inference` routing may use resolved Pumas backend hints to
-  choose the PyTorch/Transformers dependency preflight path when no explicit
-  `backend_key` input is wired. Legacy `runtime_hint` fields are not backend
-  preference inputs. This is factual preflight routing only; runtime scheduling
+- Canonical `llm-inference` dependency preflight may use an explicit graph
+  `backend_key` input, but it must not interpret resolved Pumas backend hints
+  or `recommended_backend` metadata as executable backend selection. Legacy
+  `runtime_hint` fields are not backend preference inputs. Runtime scheduling
   and admission policy remain outside node-engine and inference.
 - Workflow dependency input resolution carries package-facts context from
   `puma-lib` model-reference edges into canonical inference inputs, so existing

@@ -81,9 +81,10 @@ stable public facade and dispatch owner.
 - Dependency preflight and model-reference construction stay in
   `dependency_preflight.rs` so runtime adapters share backend-key and
   dependency-state validation without growing dispatch code. Explicit
-  workflow/backend hints win, then resolved package facts may provide factual
-  backend/task/model inputs, and only sparse legacy graphs use backend-name
-  heuristics.
+  workflow/backend inputs are the only graph-owned backend signal here;
+  resolved package facts may provide factual task/model inputs, but
+  `recommended_backend` and package backend hints must not become executable
+  backend selection in node-engine.
 - Dependency preflight must not special-case retired direct inference node
   shapes such as `diffusion-inference`. Image-generation preflight enters
   through canonical `llm-inference` task metadata and resolved package facts.

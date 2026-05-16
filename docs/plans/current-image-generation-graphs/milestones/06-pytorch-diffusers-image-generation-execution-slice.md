@@ -165,7 +165,7 @@ PyTorch/diffusers and produce a retained image artifact.
   executable backends. Only the explicit graph-owned `runtime` input on an
   inference node may become a hard scheduler runtime requirement; package
   recommendations should flow through the inference-owned evidence boundary.
-- [ ] Keep node-engine dependency-context forwarding from becoming a backend
+- [x] Keep node-engine dependency-context forwarding from becoming a backend
   decision path. Node-engine may carry model intent and host-installed planned
   inference decisions, but Pumas `recommended_backend` and dependency metadata
   must not be interpreted there as executable backend selection.
@@ -2011,3 +2011,39 @@ Standards compliance gates for every Option 3 slice:
   runtime capability, gateway, workflow runtime preflight, and node-engine
   dependency-context paths so none of them maintain a conflicting Diffusers or
   package-hint backend-selection rule.
+
+2026-05-16 node-engine dependency-context backend-selection cleanup slice:
+
+- Smallest useful vertical slice: remove package-facts backend-hint and
+  `recommended_backend` interpretation from node-engine dependency preflight
+  and dependency-context forwarding while preserving package facts as typed
+  model/task evidence for inference requests and dependency requests.
+- Allowed write set: `crates/node-engine/src/core_executor.rs`,
+  `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+  `crates/node-engine/src/core_executor/inference_tests.rs`,
+  `crates/node-engine/src/engine/dependency_inputs.rs`,
+  `crates/node-engine/src/README.md`,
+  `crates/node-engine/src/core_executor/README.md`, and this plan directory.
+- No-fallback/no-legacy confirmation: node-engine no longer uses Pumas package
+  `backend_hints` or `recommended_backend` to choose dependency preflight,
+  task-validation diagnostics, or implicit graph context. Explicit graph
+  `backend_key` remains the only backend signal accepted by this node-engine
+  path until scheduler-owned execution decisions replace it.
+- Verification passed: `cargo test -p node-engine --features
+  inference-nodes,pytorch-nodes dependency_preflight --lib`, `cargo test -p
+  node-engine --features inference-nodes,pytorch-nodes
+  build_model_dependency_request --lib`, and `cargo test -p node-engine
+  resolve_dependency_inputs --lib`.
+- Broader verification discovered issue: `cargo test -p node-engine --features
+  inference-nodes,pytorch-nodes --lib` currently fails
+  `test_canonical_llm_image_generation_uses_planned_gateway_boundary` because
+  that test still sends explicit `denoising_scheduler = euler` while the
+  current image planner reports `unsupported_option` for explicit denoising
+  scheduler changes. This is not caused by package-hint backend selection and
+  should be handled in the planned denoising-scheduler option-support/gateway
+  diagnostics reconciliation work rather than by restoring node-engine backend
+  selection.
+- Remaining follow-up: complete the broader audit of dependency preflight,
+  runtime capability, gateway, workflow runtime preflight, and display
+  diagnostics so explicit scheduler execution decisions become the only
+  selected runtime/backend source end to end.

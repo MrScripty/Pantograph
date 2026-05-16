@@ -2,15 +2,13 @@ use std::collections::HashMap;
 
 use crate::types::{NodeId, WorkflowGraph};
 
-const MODEL_CONTEXT_KEYS: [&str; 12] = [
+const MODEL_CONTEXT_KEYS: [&str; 10] = [
     "model_path",
     "mmproj_path",
     "pumas_model_ref",
     "model_id",
     "model_type",
     "task_type_primary",
-    "backend_key",
-    "recommended_backend",
     "selected_binding_ids",
     "platform_context",
     "dependency_bindings",
@@ -174,6 +172,10 @@ mod tests {
                 ),
                 ("model_id".to_string(), serde_json::json!("family/model")),
                 ("backend_key".to_string(), serde_json::json!("llamacpp")),
+                (
+                    "recommended_backend".to_string(),
+                    serde_json::json!("llamacpp"),
+                ),
             ]),
         )]);
 
@@ -187,10 +189,8 @@ mod tests {
             inputs.get("model_id"),
             Some(&serde_json::json!("family/model"))
         );
-        assert_eq!(
-            inputs.get("backend_key"),
-            Some(&serde_json::json!("llamacpp"))
-        );
+        assert_eq!(inputs.get("backend_key"), None);
+        assert_eq!(inputs.get("recommended_backend"), None);
     }
 
     #[test]
@@ -305,6 +305,10 @@ mod tests {
                 ("pumas_model_ref".to_string(), model_ref.clone()),
                 ("model_id".to_string(), serde_json::json!("family/model")),
                 ("backend_key".to_string(), serde_json::json!("llamacpp")),
+                (
+                    "recommended_backend".to_string(),
+                    serde_json::json!("llamacpp"),
+                ),
             ]),
         )]);
 
@@ -319,10 +323,8 @@ mod tests {
             inputs.get("model_id"),
             Some(&serde_json::json!("family/model"))
         );
-        assert_eq!(
-            inputs.get("backend_key"),
-            Some(&serde_json::json!("llamacpp"))
-        );
+        assert_eq!(inputs.get("backend_key"), None);
+        assert_eq!(inputs.get("recommended_backend"), None);
     }
 
     #[test]

@@ -258,8 +258,7 @@ impl TaskExecutor for CoreTaskExecutor {
             "llm-inference" => {
                 let canonical_inputs = inputs_with_model_path_from_ref(&inputs)?;
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
-                let preferred_backend =
-                    preferred_or_package_facts_backend_key("llm-inference", &canonical_inputs);
+                let preferred_backend = preferred_backend_key("llm-inference", &canonical_inputs);
                 reject_contract_only_inference_task(
                     &canonical_inputs,
                     extensions,

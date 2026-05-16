@@ -11,7 +11,7 @@ use pantograph_runtime_identity::canonical_engine_backend_key;
 use inference::ModelArtifactKind;
 #[cfg(feature = "inference-nodes")]
 use inference::{
-    resolve_task_registry_entry, BackendHintLabel, InferenceCompatibilityIssueSummary,
+    resolve_task_registry_entry, InferenceCompatibilityIssueSummary,
     InferenceCompatibilityReportSummary, InferenceExecutionInputKind, InferenceLifecyclePhase,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, InferenceTaskId, ResolvedModelPackageFacts,
@@ -297,47 +297,14 @@ pub(crate) fn preferred_backend_key(
     _node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Option<String> {
-    if let Some(backend) = read_optional_input_string_aliases(
-        inputs,
-        &[
-            "backend_key",
-            "backendKey",
-            "recommended_backend",
-            "recommendedBackend",
-        ],
-    )
-    .or_else(|| {
-        inputs.get("pumas_model_ref").and_then(|model_ref| {
-            read_optional_string_aliases_from_value(
-                model_ref,
-                &[
-                    "backend_key",
-                    "backendKey",
-                    "recommended_backend",
-                    "recommendedBackend",
-                ],
-            )
-        })
-    })
-    .and_then(|value| canonical_backend_key(Some(value.as_str())))
+    if let Some(backend) =
+        read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
+            .and_then(|value| canonical_backend_key(Some(value.as_str())))
     {
         return Some(backend);
     }
 
     None
-}
-
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-pub(crate) fn preferred_or_package_facts_backend_key(
-    node_type: &str,
-    inputs: &HashMap<String, serde_json::Value>,
-) -> Option<String> {
-    let package_facts = read_resolved_model_package_facts_for_preflight(inputs);
-    preferred_backend_key(node_type, inputs).or_else(|| {
-        package_facts
-            .as_ref()
-            .and_then(backend_key_from_package_facts)
-    })
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -347,8 +314,8 @@ pub(crate) fn build_model_dependency_request(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelDependencyRequest {
     let package_facts = read_resolved_model_package_facts_for_preflight(inputs);
-    let backend_key = preferred_or_package_facts_backend_key(node_type, inputs)
-        .or_else(|| infer_backend_key(node_type, inputs));
+    let backend_key =
+        preferred_backend_key(node_type, inputs).or_else(|| infer_backend_key(node_type, inputs));
 
     let task_type_primary =
         read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
@@ -427,20 +394,6 @@ fn model_artifact_kind_label(kind: &ModelArtifactKind) -> &'static str {
 }
 
 #[cfg(feature = "inference-nodes")]
-fn backend_key_from_package_facts(facts: &ResolvedModelPackageFacts) -> Option<String> {
-    facts
-        .backend_hints
-        .accepted
-        .iter()
-        .find_map(|hint| canonical_backend_key(Some(backend_hint_engine_key(*hint))))
-}
-
-#[cfg(not(feature = "inference-nodes"))]
-fn backend_key_from_package_facts(_facts: &()) -> Option<String> {
-    None
-}
-
-#[cfg(feature = "inference-nodes")]
 fn task_type_primary_from_package_facts(
     facts: Option<&ResolvedModelPackageFacts>,
 ) -> Option<String> {
@@ -464,19 +417,6 @@ fn model_id_from_package_facts(facts: Option<&ResolvedModelPackageFacts>) -> Opt
 #[cfg(not(feature = "inference-nodes"))]
 fn model_id_from_package_facts(_facts: Option<&()>) -> Option<String> {
     None
-}
-
-#[cfg(feature = "inference-nodes")]
-fn backend_hint_engine_key(hint: BackendHintLabel) -> &'static str {
-    match hint {
-        BackendHintLabel::Transformers => "pytorch",
-        BackendHintLabel::LlamaCpp => "llama.cpp",
-        BackendHintLabel::Vllm => "vllm",
-        BackendHintLabel::Mlx => "mlx",
-        BackendHintLabel::Candle => "candle",
-        BackendHintLabel::Diffusers => "diffusers",
-        BackendHintLabel::OnnxRuntime => "onnx-runtime",
-    }
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -725,7 +665,7 @@ async fn enforce_dependency_preflight_inner(
     #[cfg_attr(not(feature = "inference-nodes"), allow(unused_variables))]
     lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
 ) -> Result<Option<ModelRefV2>> {
-    let llm_backend_key = preferred_or_package_facts_backend_key(node_type, inputs);
+    let llm_backend_key = preferred_backend_key(node_type, inputs);
     let should_preflight = node_type == "audio-generation"
         || (node_type == "llm-inference" && llm_backend_key.as_deref() == Some("pytorch"));
     if !should_preflight {
