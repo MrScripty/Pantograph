@@ -4049,6 +4049,31 @@ Worker rules:
 - Remaining follow-up: broader family option-support tables still need to
   classify guidance scale, negative prompt, image count, dtype, dimensions, and
   future supported scheduler overrides per image family.
+- 2026-05-15: Completed the image-generation family rules table slice.
+  Smallest useful vertical slice: move Stable Diffusion image-generation
+  required components and option-support policy out of the main planner and
+  into focused table-owned Rust rules. Allowed write set:
+  `crates/inference/src/image_generation_family_rules.rs`,
+  `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`,
+  `crates/inference/src/lib.rs`, `crates/inference/src/README.md`, and this
+  plan directory.
+- The slice preserves the no-fallback/no-legacy rule because unsupported image
+  families still produce `UnsupportedFamily`, and unsupported request traits
+  such as explicit `denoising_scheduler`, img2img/inpaint fields, and opaque
+  `extra_options` still produce typed `UnsupportedOption` diagnostics before
+  worker dispatch. The slice does not infer family from model names, add
+  generic Diffusers loading, or hardcode denoising scheduler option values.
+- Verification passed: `cargo test -p inference image_generation_planner
+  --lib` and `cargo test -p inference image_generation_family_rules --lib`.
+- Deviations/discovered issues: the main planner remains above the 500-line
+  decomposition review trigger after this extraction. It is smaller and has
+  less family policy mixed into it, but later slices should continue extracting
+  focused request-default, diagnostics, and resource-estimate helpers when they
+  touch those areas.
+- Remaining follow-up: future SDXL, FLUX, FLUX.2, Qwen Image, Lumina Image,
+  GLM Image, Z-Image, and dtype-specific rules still need explicit table rows
+  and fixtures before those families become executable.
 
 ### Traceability Links
 

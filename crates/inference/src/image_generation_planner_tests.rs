@@ -103,7 +103,12 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
     assert_eq!(plan.estimated_output_rgba_bytes, Some(2_097_152));
     assert_eq!(
         plan.required_components,
-        STABLE_DIFFUSION_REQUIRED_COMPONENTS.to_vec()
+        crate::image_generation_family_rules::image_generation_family_rules(
+            ImageGenerationFamilyLabel::StableDiffusion
+        )
+        .expect("stable diffusion rules")
+        .required_components
+        .to_vec()
     );
     let plan_json = serde_json::to_value(&plan).expect("plan should serialize");
     assert!(plan_json.get("denoising_scheduler").is_none());

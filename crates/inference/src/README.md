@@ -19,6 +19,7 @@ details.
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
 | `gateway_tests.rs` | Gateway lifecycle, request forwarding, runtime reuse, embedding prepare/restore, and mock-backend tests extracted from the production gateway facade. |
 | `gateway_tests/` | Behavior-focused child modules for oversized gateway test families. |
+| `image_generation_family_rules.rs` | Table-owned image-generation family requirements and option support used by the planner before worker execution. |
 | `image_generation_planner.rs` | Side-effect-free PyTorch/Diffusers image-generation planner contract that consumes Pumas package facts and scheduler-selected backend/device facts before worker execution. |
 | `image_generation_planner_tests.rs` | Focused tests for the side-effect-free image-generation planner contract. |
 | `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp`, plus temporary adapters into neutral managed-dependency DTOs. |
@@ -120,6 +121,9 @@ normalizing them to executable defaults.
   `DenoisingSchedulerOptionId`, a bounded lowercase primitive id. Display names
   and Diffusers/Pumas component class names must not be treated as executable
   option ids at the Rust planner boundary.
+- Image-generation family requirements and option support live in table-owned
+  Rust rules. The planner may consume those rules, but worker bridges must not
+  infer family support or silently ignore unsupported request traits.
 - Application-level runtime policy such as admission, reservation, retention,
   and eviction must not be implemented inside gateway or backend modules.
 - `device_contracts/` owns canonical device policy intent, concrete device

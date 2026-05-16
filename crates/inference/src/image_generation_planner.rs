@@ -7,6 +7,9 @@ use crate::device_contracts::{
     BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDeviceClass,
     InferenceDeviceId, RuntimeVariantId,
 };
+use crate::image_generation_family_rules::{
+    image_generation_family_rules, ImageGenerationFamilyRules,
+};
 use crate::model_contracts::{
     DiffusersComponentRole, ImageGenerationFamilyLabel, InferenceTaskId, PackageFactStatus,
     PumasModelRef, ResolvedModelPackageFacts,
@@ -17,15 +20,6 @@ const PYTORCH_BACKEND_ID: &str = "pytorch";
 const IMAGE_PLANNER_MIN_DIMENSION: u32 = 1;
 const IMAGE_PLANNER_BYTES_PER_RGBA_PIXEL: u64 = 4;
 const DENOISING_SCHEDULER_OPTION_ID_MAX_LEN: usize = 96;
-
-const STABLE_DIFFUSION_REQUIRED_COMPONENTS: &[DiffusersComponentRole] = &[
-    DiffusersComponentRole::PipelineIndex,
-    DiffusersComponentRole::Scheduler,
-    DiffusersComponentRole::Tokenizer,
-    DiffusersComponentRole::TextEncoder,
-    DiffusersComponentRole::Unet,
-    DiffusersComponentRole::Vae,
-];
 
 /// Side-effect-free inputs for canonical image-generation planning.
 #[derive(Debug, Clone, Copy)]
@@ -302,7 +296,7 @@ pub fn plan_image_generation_execution(
     validate_backend_decision(input.backend_decision, &mut diagnostics);
     validate_package_contract(input.package_facts, &mut diagnostics);
     validate_task_evidence(input.package_facts, &mut diagnostics);
-    validate_image_request(input.request, &mut diagnostics);
+    validate_image_request_shape(input.request, &mut diagnostics);
 
     let Some(diffusers) = input.package_facts.diffusers.as_ref() else {
         diagnostics.push(diagnostic(
@@ -322,13 +316,9 @@ pub fn plan_image_generation_execution(
     }
 
     let family = resolve_family(input.package_facts, &mut diagnostics);
-    let required_components = family
-        .and_then(|family| required_components_for_family(family, &mut diagnostics).map(Vec::from));
-    validate_required_components(
-        input.package_facts,
-        required_components.as_deref(),
-        &mut diagnostics,
-    );
+    let family_rules =
+        family.and_then(|family| family_rules_for_planning(family, &mut diagnostics));
+    validate_required_components(input.package_facts, family_rules, &mut diagnostics);
 
     let pipeline_class = diffusers.pipeline_class.as_deref().map(str::trim);
     if pipeline_class.is_none_or(str::is_empty) {
@@ -340,7 +330,13 @@ pub fn plan_image_generation_execution(
     }
 
     let estimated_output_rgba_bytes = estimate_output_rgba_bytes(input.request, &mut diagnostics);
-    let denoising_scheduler = validate_denoising_scheduler(input.request, &mut diagnostics);
+    let denoising_scheduler = validate_denoising_scheduler_id(input.request, &mut diagnostics);
+    validate_family_option_support(
+        family_rules,
+        input.request,
+        denoising_scheduler.as_ref(),
+        &mut diagnostics,
+    );
 
     if !diagnostics.is_empty() {
         return rejected(diagnostics);
@@ -360,11 +356,11 @@ pub fn plan_image_generation_execution(
             "Diffusers pipeline class is required for image-generation planning",
         )]);
     };
-    let Some(required_components) = required_components else {
+    let Some(family_rules) = family_rules else {
         return rejected(vec![diagnostic(
-            ImageGenerationPlannerDiagnosticCode::MissingComponentRole,
-            "package_facts.diffusers.components",
-            "Diffusers component roles are required for image-generation planning",
+            ImageGenerationPlannerDiagnosticCode::UnsupportedFamily,
+            "package_facts.diffusers.family_evidence",
+            "Diffusers image-generation planning requires supported family rules",
         )]);
     };
 
@@ -379,7 +375,7 @@ pub fn plan_image_generation_execution(
             device_decision: input.backend_decision.device_decision.clone(),
             family,
             pipeline_class: pipeline_class.to_string(),
-            required_components,
+            required_components: family_rules.required_components.to_vec(),
             prompt: input.request.prompt.clone(),
             negative_prompt: input.request.negative_prompt.clone(),
             width: input.request.width,
@@ -436,7 +432,7 @@ fn validate_task_evidence(
     }
 }
 
-fn validate_image_request(
+fn validate_image_request_shape(
     request: &ImageGenerationRequest,
     diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
 ) {
@@ -470,56 +466,48 @@ fn validate_image_request(
             "image-generation guidance scale must be finite when provided",
         ));
     }
-    validate_unsupported_option(
-        request.init_image.is_some(),
-        "request.init_image",
-        "init_image is reserved for later img2img support and is not supported by this planner slice",
-        diagnostics,
-    );
-    validate_unsupported_option(
-        request.mask_image.is_some(),
-        "request.mask_image",
-        "mask_image is reserved for later inpaint support and is not supported by this planner slice",
-        diagnostics,
-    );
-    validate_unsupported_option(
-        request.strength.is_some(),
-        "request.strength",
-        "strength is reserved for later img2img/inpaint support and is not supported by this planner slice",
-        diagnostics,
-    );
-    validate_unsupported_option(
-        !request.extra_options.is_null(),
-        "request.extra_options",
-        "image-generation extra_options require explicit family support and are not supported by this planner slice",
-        diagnostics,
-    );
 }
 
-fn validate_denoising_scheduler(
+fn validate_denoising_scheduler_id(
     request: &ImageGenerationRequest,
     diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
 ) -> Option<DenoisingSchedulerOptionId> {
-    request.denoising_scheduler.as_deref().and_then(|scheduler| {
-        match DenoisingSchedulerOptionId::parse(scheduler) {
-            Ok(option_id) => {
-                diagnostics.push(diagnostic(
-                    ImageGenerationPlannerDiagnosticCode::UnsupportedOption,
-                    "request.denoising_scheduler",
-                    "explicit denoising_scheduler changes require family/runtime support and are not supported by this planner slice",
-                ));
-                Some(option_id)
-            }
-            Err(error) => {
-                diagnostics.push(diagnostic(
-                    ImageGenerationPlannerDiagnosticCode::InvalidDenoisingSchedulerOptionId,
-                    "request.denoising_scheduler",
-                    error.to_string(),
-                ));
-                None
-            }
-        }
-    })
+    request
+        .denoising_scheduler
+        .as_deref()
+        .and_then(
+            |scheduler| match DenoisingSchedulerOptionId::parse(scheduler) {
+                Ok(option_id) => Some(option_id),
+                Err(error) => {
+                    diagnostics.push(diagnostic(
+                        ImageGenerationPlannerDiagnosticCode::InvalidDenoisingSchedulerOptionId,
+                        "request.denoising_scheduler",
+                        error.to_string(),
+                    ));
+                    None
+                }
+            },
+        )
+}
+
+fn validate_family_option_support(
+    family_rules: Option<&ImageGenerationFamilyRules>,
+    request: &ImageGenerationRequest,
+    denoising_scheduler: Option<&DenoisingSchedulerOptionId>,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) {
+    let Some(family_rules) = family_rules else {
+        return;
+    };
+    for unsupported in
+        family_rules.unsupported_request_options(request, denoising_scheduler.is_some())
+    {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::UnsupportedOption,
+            unsupported.field_path,
+            unsupported.message,
+        ));
+    }
 }
 
 fn validate_non_zero(
@@ -532,21 +520,6 @@ fn validate_non_zero(
             ImageGenerationPlannerDiagnosticCode::InvalidNumericOption,
             field_path,
             "numeric image-generation options must be greater than zero when provided",
-        ));
-    }
-}
-
-fn validate_unsupported_option(
-    requested: bool,
-    field_path: &'static str,
-    message: &'static str,
-    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
-) {
-    if requested {
-        diagnostics.push(diagnostic(
-            ImageGenerationPlannerDiagnosticCode::UnsupportedOption,
-            field_path,
-            message,
         ));
     }
 }
@@ -601,44 +574,34 @@ fn resolve_family(
     }
 }
 
-fn required_components_for_family(
+fn family_rules_for_planning(
     family: ImageGenerationFamilyLabel,
     diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
-) -> Option<&'static [DiffusersComponentRole]> {
-    match family {
-        ImageGenerationFamilyLabel::StableDiffusion => Some(STABLE_DIFFUSION_REQUIRED_COMPONENTS),
-        ImageGenerationFamilyLabel::StableDiffusionXl
-        | ImageGenerationFamilyLabel::Flux
-        | ImageGenerationFamilyLabel::Flux2
-        | ImageGenerationFamilyLabel::QwenImage
-        | ImageGenerationFamilyLabel::LuminaImage
-        | ImageGenerationFamilyLabel::GlmImage
-        | ImageGenerationFamilyLabel::ZImage
-        | ImageGenerationFamilyLabel::Unknown
-        | ImageGenerationFamilyLabel::Ambiguous => {
-            diagnostics.push(diagnostic(
-                ImageGenerationPlannerDiagnosticCode::UnsupportedFamily,
-                "package_facts.diffusers.family_evidence",
-                "this planner slice only supports Stable Diffusion family facts",
-            ));
-            None
-        }
+) -> Option<&'static ImageGenerationFamilyRules> {
+    let rules = image_generation_family_rules(family);
+    if rules.is_none() {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::UnsupportedFamily,
+            "package_facts.diffusers.family_evidence",
+            "this planner slice only supports Stable Diffusion family facts",
+        ));
     }
+    rules
 }
 
 fn validate_required_components(
     package_facts: &ResolvedModelPackageFacts,
-    required_components: Option<&[DiffusersComponentRole]>,
+    family_rules: Option<&ImageGenerationFamilyRules>,
     diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
 ) {
-    let Some(required_components) = required_components else {
+    let Some(family_rules) = family_rules else {
         return;
     };
     let Some(diffusers) = package_facts.diffusers.as_ref() else {
         return;
     };
 
-    for required in required_components {
+    for required in family_rules.required_components {
         let present = diffusers.components.iter().any(|component| {
             component.role == *required && component.status == PackageFactStatus::Present
         });
