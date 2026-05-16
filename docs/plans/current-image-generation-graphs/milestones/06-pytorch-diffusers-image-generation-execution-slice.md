@@ -83,6 +83,13 @@ PyTorch/diffusers and produce a retained image artifact.
   explains why it cannot be used. Explicit runtime requests must not bypass
   package/capability validation, memory-fit checks, or lifecycle diagnostics,
   and they must not become fallback runtime choices.
+- [ ] Add an optional `runtime` input to inference graph nodes for explicit
+  scheduler requirements. The input is only graph intent; it must be projected
+  into scheduler/admission request data and must never be passed directly from
+  the graph or node executor into inference execution. The inference crate
+  receives runtime selection exclusively through the scheduler-produced
+  execution decision so there is one source of truth and one runtime-selection
+  path.
 - [ ] Replace scattered `diffusers` backend-key mappings that affect execution
   with calls into the single normalization boundary defined in Milestone 0.
 - [ ] Keep package/dependency keys and execution backend keys represented by
@@ -1513,6 +1520,16 @@ Staged Option 3 implementation plan:
   while no executable Diffusers backend exists, the result is a typed
   diagnostic with a hint to request PyTorch or omit the runtime so scheduler
   policy can choose.
+- Single runtime-selection path: inference graph nodes need an optional
+  `runtime` input so workflows can express a hard scheduler requirement when
+  needed, but that graph value stops at scheduler/admission input projection.
+  Node-engine request construction, image/text/audio inference request DTOs,
+  worker envelopes, and inference gateway calls must not read graph runtime
+  values as execution selections. They must receive only the
+  scheduler-produced backend/runtime/device execution decision. This keeps the
+  scheduler as the sole runtime selection authority and prevents parallel
+  runtime-selection paths from graph data, dependency metadata, or node
+  execution context.
 - First implementation slice: add the typed evidence boundary plus focused
   tests for Diffusers package facts, PyTorch capability facts, and graph
   `backend_key = pytorch`. The allowed initial write set should be limited to

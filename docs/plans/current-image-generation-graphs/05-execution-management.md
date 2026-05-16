@@ -4395,6 +4395,18 @@ Worker rules:
   intent as scheduler input only. It does not add runtime fallback behavior,
   package-fact overrides, node-engine runtime selection, or execution shortcuts
   outside scheduler/admission policy.
+- 2026-05-16: Further clarified the single runtime-selection path. Inference
+  nodes require an optional `runtime` input for workflows that need to express
+  an explicit scheduler requirement. When omitted, scheduler/admission policy
+  chooses the runtime. When present, the value is projected only into
+  scheduler/admission input and must not be forwarded directly into inference
+  request DTOs, node-engine execution context, gateway calls, or worker
+  envelopes as the selected runtime. The inference crate receives runtime
+  selection exclusively from the scheduler-produced execution decision.
+- No-fallback/no-legacy confirmation: this update does not add a compatibility
+  path where graph data or dependency metadata can select runtime execution
+  outside scheduler/admission. It makes scheduler output the only source of
+  truth for runtime selection.
 
 ### Traceability Links
 
