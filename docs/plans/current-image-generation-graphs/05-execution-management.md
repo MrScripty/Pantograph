@@ -4766,6 +4766,31 @@ Worker rules:
   and `cargo test -p inference backend::compatibility --lib`.
 - Remaining follow-up: continue the broader package/dependency-key audit across
   runtime display, dependency diagnostics, and scheduler-selected backend facts.
+- 2026-05-16 gateway image option-diagnostic reconciliation slice: smallest
+  useful vertical slice was to align gateway-level image option diagnostics
+  with the current planned image-generation planner contract. Allowed write
+  set: `crates/inference/src/gateway.rs`,
+  `crates/inference/src/gateway_tests.rs`, and this plan directory.
+- No-fallback/no-legacy confirmation: known unsupported image-generation
+  traits are now reported as unsupported diagnostics instead of honored/mapped
+  gateway options. The slice does not restore raw image execution, accept
+  explicit denoising scheduler changes, route opaque image `extra_options`
+  around planner validation, add compatibility aliases, or change worker
+  envelopes.
+- Verification passed: `cargo test -p inference
+  test_execute_typed_with_lifecycle_records_planned_boundary_failure --lib`,
+  `cargo test -p inference
+  test_generate_image_from_planning_input_with_lifecycle_records_unsupported_option_code --lib`,
+  `cargo test -p inference gateway::tests --lib`, `cargo check -p
+  inference`, `cargo fmt -p inference -- --check`, and `git diff --check`.
+- Verification deviation: an attempted combined Cargo test command with two
+  positional test filters failed because Cargo accepts only one test-name
+  filter before `--`; the verification was rerun with the gateway module
+  filter and passed.
+- Remaining follow-up: support for denoising scheduler overrides,
+  img2img/inpaint fields, or image-specific opaque options still needs typed
+  family/runtime rules, provider rows where user-facing, and worker contract
+  fields before those values can execute.
 
 ### Traceability Links
 

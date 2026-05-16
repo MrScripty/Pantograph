@@ -1780,10 +1780,9 @@ impl InferenceGateway {
             InferenceExecutionInput::ImageGeneration { request } => {
                 let mut option_diagnostics =
                     typed_image_generation_option_diagnostics(&request, Some(&backend_key));
-                option_diagnostics.extend(extra_option_diagnostics(
+                option_diagnostics.extend(image_extra_option_diagnostics(
                     &request.extra_options,
                     Some(&backend_key),
-                    "image.extra_options",
                 ));
                 dedupe_option_diagnostics(&mut option_diagnostics);
                 let result = self.generate_image(request).await?;
@@ -2338,10 +2337,9 @@ fn typed_non_generation_option_diagnostics(
         }
         InferenceExecutionInput::ImageGeneration { request } => {
             let mut diagnostics = typed_image_generation_option_diagnostics(request, backend_key);
-            diagnostics.extend(extra_option_diagnostics(
+            diagnostics.extend(image_extra_option_diagnostics(
                 &request.extra_options,
                 backend_key,
-                "image.extra_options",
             ));
             diagnostics
         }
@@ -2505,6 +2503,7 @@ fn typed_image_generation_option_diagnostics(
         backend_key,
         "image.negative_prompt",
         request.negative_prompt.is_some(),
+        OptionSupportState::Honored,
         "typed image gateway forwards negative_prompt",
     );
     push_image_option_diagnostic(
@@ -2512,6 +2511,7 @@ fn typed_image_generation_option_diagnostics(
         backend_key,
         "image.width",
         request.width.is_some(),
+        OptionSupportState::Honored,
         "typed image gateway forwards width",
     );
     push_image_option_diagnostic(
@@ -2519,6 +2519,7 @@ fn typed_image_generation_option_diagnostics(
         backend_key,
         "image.height",
         request.height.is_some(),
+        OptionSupportState::Honored,
         "typed image gateway forwards height",
     );
     push_image_option_diagnostic(
@@ -2526,6 +2527,7 @@ fn typed_image_generation_option_diagnostics(
         backend_key,
         "image.num_inference_steps",
         request.num_inference_steps.is_some(),
+        OptionSupportState::Honored,
         "typed image gateway forwards num_inference_steps",
     );
     push_image_option_diagnostic(
@@ -2533,6 +2535,7 @@ fn typed_image_generation_option_diagnostics(
         backend_key,
         "image.guidance_scale",
         request.guidance_scale.is_some(),
+        OptionSupportState::Honored,
         "typed image gateway forwards guidance_scale",
     );
     push_image_option_diagnostic(
@@ -2540,6 +2543,7 @@ fn typed_image_generation_option_diagnostics(
         backend_key,
         "image.seed",
         request.seed.is_some(),
+        OptionSupportState::Honored,
         "typed image gateway forwards seed",
     );
     push_image_option_diagnostic(
@@ -2547,13 +2551,15 @@ fn typed_image_generation_option_diagnostics(
         backend_key,
         "image.denoising_scheduler",
         request.denoising_scheduler.is_some(),
-        "typed image gateway forwards denoising_scheduler",
+        OptionSupportState::Unsupported,
+        "planned image generation rejects explicit denoising_scheduler until family/runtime support can apply it",
     );
     push_image_option_diagnostic(
         &mut diagnostics,
         backend_key,
         "image.num_images_per_prompt",
         request.num_images_per_prompt.is_some(),
+        OptionSupportState::Honored,
         "typed image gateway forwards num_images_per_prompt",
     );
     push_image_option_diagnostic(
@@ -2561,21 +2567,24 @@ fn typed_image_generation_option_diagnostics(
         backend_key,
         "image.init_image",
         request.init_image.is_some(),
-        "typed image gateway forwards init_image presence",
+        OptionSupportState::Unsupported,
+        "planned image generation does not support init_image yet",
     );
     push_image_option_diagnostic(
         &mut diagnostics,
         backend_key,
         "image.mask_image",
         request.mask_image.is_some(),
-        "typed image gateway forwards mask_image presence",
+        OptionSupportState::Unsupported,
+        "planned image generation does not support mask_image yet",
     );
     push_image_option_diagnostic(
         &mut diagnostics,
         backend_key,
         "image.strength",
         request.strength.is_some(),
-        "typed image gateway forwards strength",
+        OptionSupportState::Unsupported,
+        "planned image generation does not support strength yet",
     );
     diagnostics
 }
@@ -2585,6 +2594,7 @@ fn push_image_option_diagnostic(
     backend_key: Option<&str>,
     option_path: &'static str,
     requested: bool,
+    state: OptionSupportState,
     message: &'static str,
 ) {
     if !requested {
@@ -2592,10 +2602,41 @@ fn push_image_option_diagnostic(
     }
     diagnostics.push(OptionCompatibilityDiagnostic {
         option_path: option_path.to_string(),
-        state: OptionSupportState::Honored,
+        state,
         backend_key: backend_key.map(ToOwned::to_owned),
         message: Some(message.to_string()),
     });
+}
+
+fn image_extra_option_diagnostics(
+    value: &serde_json::Value,
+    backend_key: Option<&str>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    match value {
+        serde_json::Value::Object(options) => {
+            let mut diagnostics = options
+                .keys()
+                .filter(|key| !key.trim().is_empty())
+                .map(|key| OptionCompatibilityDiagnostic {
+                    option_path: format!("image.extra_options.{key}"),
+                    state: OptionSupportState::Unsupported,
+                    backend_key: backend_key.map(ToOwned::to_owned),
+                    message: Some(
+                        "planned image generation rejects opaque extra_options until the option is modeled as a typed image trait".to_string(),
+                    ),
+                })
+                .collect::<Vec<_>>();
+            diagnostics.sort_by(|left, right| left.option_path.cmp(&right.option_path));
+            diagnostics
+        }
+        serde_json::Value::Null => Vec::new(),
+        _ => vec![OptionCompatibilityDiagnostic {
+            option_path: "image.extra_options".to_string(),
+            state: OptionSupportState::Unsupported,
+            backend_key: backend_key.map(ToOwned::to_owned),
+            message: Some("planned image generation extra_options must be an object".to_string()),
+        }],
+    }
 }
 
 fn extra_option_diagnostics(

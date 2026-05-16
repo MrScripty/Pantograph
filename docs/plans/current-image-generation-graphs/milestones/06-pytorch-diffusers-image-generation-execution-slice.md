@@ -322,7 +322,7 @@ PyTorch/diffusers and produce a retained image artifact.
   negative prompt, image count, denoising scheduler, dtype, and dimensions
   must be accepted, ignored, or rejected by typed family rules before
   execution.
-- [ ] Ensure gateway-level image option diagnostics are reconciled with planner
+- [x] Ensure gateway-level image option diagnostics are reconciled with planner
   diagnostics so users see one authoritative option-support answer.
 - [ ] Validate component source ambiguity per family. Families such as Z-Image
   and FLUX.2 must reject ambiguous VAE/text-encoder sources instead of trying
@@ -2086,3 +2086,38 @@ Standards compliance gates for every Option 3 slice:
   and `cargo test -p inference backend::compatibility --lib`.
 - Remaining follow-up: continue the broader package/dependency-key audit across
   runtime display, dependency diagnostics, and scheduler-selected backend facts.
+
+2026-05-16 gateway image option-diagnostic reconciliation slice:
+
+- Smallest useful vertical slice: align gateway-level image option diagnostics
+  with the current planned image-generation planner contract so known
+  unsupported image traits are not reported as honored or mapped before the
+  planned boundary rejects execution.
+- Allowed write set: `crates/inference/src/gateway.rs`,
+  `crates/inference/src/gateway_tests.rs`, and this plan directory.
+- No-fallback/no-legacy confirmation: this slice only changes diagnostic
+  projection for image-generation option support. It does not restore raw
+  image-generation execution, add request-only backend dispatch, introduce
+  compatibility aliases, accept explicit denoising scheduler changes, or route
+  opaque `extra_options` around planner validation.
+- Result: gateway option diagnostics now report explicit
+  `image.denoising_scheduler`, `image.init_image`, `image.mask_image`,
+  `image.strength`, and image-scoped opaque `extra_options` as unsupported
+  until those traits are modeled in family/runtime rules and worker contracts.
+  Supported current text-to-image fields such as width, seed, prompt-related
+  options, and image count continue to report honored when they are present.
+- Verification passed: `cargo test -p inference
+  test_execute_typed_with_lifecycle_records_planned_boundary_failure --lib`,
+  `cargo test -p inference
+  test_generate_image_from_planning_input_with_lifecycle_records_unsupported_option_code --lib`,
+  `cargo test -p inference gateway::tests --lib`, `cargo check -p
+  inference`, `cargo fmt -p inference -- --check`, and `git diff --check`.
+- Verification deviation: an attempted combined Cargo test command with two
+  positional test filters failed because Cargo accepts only one test-name
+  filter before `--`; the verification was rerun with the gateway module
+  filter and passed.
+- Remaining follow-up: planned lifecycle compatibility issues and option
+  diagnostics now agree for currently unsupported image traits, but future
+  support for denoising scheduler overrides, img2img/inpaint, or opaque
+  options still requires typed family option rules, provider rows where
+  user-facing, and worker envelope fields before those values can execute.

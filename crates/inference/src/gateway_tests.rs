@@ -2471,7 +2471,7 @@ async fn test_execute_typed_with_lifecycle_records_planned_boundary_failure() {
                 num_inference_steps: None,
                 guidance_scale: None,
                 seed: Some(42),
-                denoising_scheduler: None,
+                denoising_scheduler: Some("euler".to_string()),
                 num_images_per_prompt: None,
                 init_image: None,
                 mask_image: None,
@@ -2541,8 +2541,13 @@ async fn test_execute_typed_with_lifecycle_records_planned_boundary_failure() {
             && diagnostic.backend_key.as_deref() == Some("mock")
     }));
     assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "image.denoising_scheduler"
+            && diagnostic.state == OptionSupportState::Unsupported
+            && diagnostic.backend_key.as_deref() == Some("mock")
+    }));
+    assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "image.extra_options.safety_checker"
-            && diagnostic.state == OptionSupportState::Mapped
+            && diagnostic.state == OptionSupportState::Unsupported
     }));
     assert!(events[7].option_diagnostics.iter().any(|diagnostic| {
         diagnostic.option_path == "extra_options.audit"
