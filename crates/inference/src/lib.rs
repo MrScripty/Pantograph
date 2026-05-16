@@ -29,6 +29,7 @@ pub mod constants;
 pub mod device;
 pub mod device_contracts;
 pub mod embedding_runtime;
+pub mod execution_evidence;
 pub mod gateway;
 mod image_generation_family_rules;
 pub mod image_generation_planner;
@@ -80,6 +81,12 @@ pub use device_contracts::{
     RuntimeVariantCapability, RuntimeVariantId,
 };
 pub use embedding_runtime::{DedicatedEmbeddingRuntimeManager, LlamaCppEmbeddingRuntime};
+pub use execution_evidence::{
+    normalize_execution_evidence, ExecutionBackendCandidateEvidence, ExecutionEvidenceDiagnostic,
+    ExecutionEvidenceDiagnosticCode, ExecutionEvidenceDiagnosticSeverity, ExecutionEvidenceRecord,
+    ExecutionEvidenceReport, ExecutionEvidenceRequest, ExecutionEvidenceRole,
+    ExecutionEvidenceSource, GraphRuntimeRequirement, GraphRuntimeRequirementParseError,
+};
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,
     InferenceStartRequest, SharedGateway,

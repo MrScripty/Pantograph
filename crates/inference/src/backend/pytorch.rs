@@ -47,7 +47,7 @@ use crate::model_contracts::{
     resolve_task_registry_entry_from_evidence, GenerationOptions, InferenceModality,
     InferenceTaskId, ModelLoadSecurityPolicy, ModelValidationState, OptionCompatibilityDiagnostic,
     OptionSupportState, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
-    TaskEvidence, TaskRegistryEntry,
+    SupportTier, TaskEvidence, TaskModalitySignature, TaskRegistryEntry,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{
@@ -1014,7 +1014,7 @@ impl PyTorchBackend {
     pub fn static_capabilities() -> BackendCapabilities {
         BackendCapabilities {
             vision: false,
-            image_generation: false,
+            image_generation: true,
             embeddings: false,
             reranking: false,
             gpu: true,
@@ -1034,6 +1034,14 @@ impl PyTorchBackend {
                         vec![InferenceModality::Audio],
                         vec![InferenceModality::Text],
                     ),
+                    BackendTaskCapability {
+                        task_id: InferenceTaskId::ImageGeneration,
+                        support_tier: SupportTier::Experimental,
+                        modality_signature: TaskModalitySignature::new(
+                            vec![InferenceModality::Text],
+                            vec![InferenceModality::Image],
+                        ),
+                    },
                 ],
                 preprocessing: BackendComponentCapability::RequiresPackageComponent,
                 postprocessing: BackendComponentCapability::BackendManaged,
@@ -1041,8 +1049,12 @@ impl PyTorchBackend {
                     artifact_kinds: vec![
                         ModelArtifactKind::HfCompatibleDirectory,
                         ModelArtifactKind::Safetensors,
+                        ModelArtifactKind::DiffusersBundle,
                     ],
-                    backend_hints: vec![BackendHintLabel::Transformers],
+                    backend_hints: vec![
+                        BackendHintLabel::Transformers,
+                        BackendHintLabel::Diffusers,
+                    ],
                     custom_code: BackendFeatureSupport::Supported,
                 },
                 features: BackendFeatureCapabilityFacts {

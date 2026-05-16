@@ -154,6 +154,7 @@ fn test_backend_name() {
 fn test_capabilities() {
     let caps = PyTorchBackend::static_capabilities();
     assert!(!caps.vision);
+    assert!(caps.image_generation);
     assert!(!caps.embeddings);
     assert!(caps.gpu);
     assert!(caps.device_selection);
@@ -161,7 +162,18 @@ fn test_capabilities() {
     assert!(!caps.tool_calling);
     assert!(caps.supports_task(InferenceTaskId::TextGeneration));
     assert!(caps.supports_task(InferenceTaskId::AudioTranscription));
+    assert!(caps.supports_task(InferenceTaskId::ImageGeneration));
     assert!(!caps.supports_task(InferenceTaskId::Embedding));
+    assert!(caps
+        .facts
+        .model_sources
+        .artifact_kinds
+        .contains(&ModelArtifactKind::DiffusersBundle));
+    assert!(caps
+        .facts
+        .model_sources
+        .backend_hints
+        .contains(&BackendHintLabel::Diffusers));
     assert!(caps.facts.runtime_variants.iter().any(|variant| {
         variant.runtime_variant_id.as_str() == "pytorch.cpu"
             && variant.device_class == InferenceDeviceClass::Cpu

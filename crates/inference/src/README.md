@@ -16,6 +16,8 @@ details.
 | `device.rs` | Backend-local llama.cpp device inventory parsing, canonical inventory fact projection, and command-selector formatting. |
 | `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
+| `execution_evidence.rs` | Side-effect-free normalization of model package facts, backend capability facts, runtime capability evidence, and graph runtime requirements into typed executable-candidate evidence without scheduler ranking. |
+| `execution_evidence_tests.rs` | Focused tests for execution evidence candidate and diagnostic normalization. |
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
 | `gateway_tests.rs` | Gateway lifecycle, request forwarding, runtime reuse, embedding prepare/restore, and mock-backend tests extracted from the production gateway facade. |
 | `gateway_tests/` | Behavior-focused child modules for oversized gateway test families. |
@@ -93,6 +95,14 @@ Device and runtime-variant contracts live in `device_contracts/` so
 backend adapters can report facts while scheduler admission owns selection.
 The contracts reject invalid raw identifiers at the boundary instead of
 normalizing them to executable defaults.
+Execution evidence normalization lives in `execution_evidence.rs` so package
+labels, backend hints, runtime capability facts, graph runtime requirements,
+and executable backend candidates stay separate before the scheduler ranks
+them. Diffusers package evidence can produce a PyTorch executable candidate
+only when PyTorch capability facts advertise the matching task, artifact,
+backend hint, and runtime variant support; `diffusers` remains package,
+dependency, display, or capability evidence unless a real executable Diffusers
+backend is registered.
 
 ## Alternatives Rejected
 
@@ -115,6 +125,10 @@ normalizing them to executable defaults.
   are available.
 - Backend capability flags must reflect contract support, not aspirational
   future support.
+- Execution evidence normalization may enumerate validated executable backend
+  candidates, but it must not rank candidates, reserve resources, read
+  scheduler history, or turn package/dependency labels such as `diffusers`
+  into selected runtime decisions.
 - Shared request/response types are append-only unless a coordinated breaking
   change is approved.
 - Image-generation execution plans carry explicit denoising scheduler intent as

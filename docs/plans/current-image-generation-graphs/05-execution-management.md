@@ -4433,6 +4433,27 @@ Worker rules:
   scheduler-owned projection path, canonical scheduler ranking inside explicit
   runtime constraints, and typed diagnostics when package/capability/runtime
   facts cannot produce a valid selected decision.
+- 2026-05-16: Completed the first Milestone 6 execution-evidence
+  implementation slice. `crates/inference/src/execution_evidence.rs` now owns
+  synchronous package/backend/runtime/graph evidence normalization with typed
+  records, candidate evidence, graph runtime requirements, and bounded
+  diagnostics. PyTorch static capabilities now explicitly advertise
+  image-generation Diffusers bundle support and runtime variants before the
+  evidence boundary can emit a PyTorch executable candidate.
+- No-fallback/no-legacy confirmation: the slice does not treat `diffusers` as
+  an executable backend alias. An explicit graph `runtime = diffusers` request
+  produces no PyTorch candidate and returns a typed unsatisfied-runtime
+  diagnostic unless a real executable Diffusers backend exists in the backend
+  list. The evidence boundary does not rank candidates or pass graph runtime
+  data to inference execution.
+- Verification passed: `cargo test -p inference execution_evidence --lib`,
+  `cargo test -p inference --features backend-pytorch test_capabilities --lib`,
+  `cargo check -p inference`, `cargo fmt -p inference`,
+  `cargo fmt -p inference -- --check`, and `git diff --check`.
+- Remaining follow-up: embedded-runtime technical-fit, dependency preflight,
+  workflow/runtime preflight, and gateway diagnostics still need migration to
+  consume this evidence boundary before pseudo-Diffusers execution mappings can
+  be removed from those layers.
 
 ### Traceability Links
 

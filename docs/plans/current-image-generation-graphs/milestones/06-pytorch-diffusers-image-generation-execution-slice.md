@@ -114,11 +114,11 @@ PyTorch/diffusers and produce a retained image artifact.
   decision path. Node-engine may carry model intent and host-installed planned
   inference decisions, but Pumas `recommended_backend` and dependency metadata
   must not be interpreted there as executable backend selection.
-- [ ] Add or update centralized normalization tests for an explicit graph
+- [x] Add or update centralized normalization tests for an explicit graph
   `runtime = pytorch` request and Pumas Diffusers package hints. `diffusers`
   remains package/runtime capability evidence, not a graph-visible runtime
   request.
-- [ ] Add a general execution-evidence normalization boundary before replacing
+- [x] Add a general execution-evidence normalization boundary before replacing
   Diffusers mappings. This boundary belongs beside inference model/package
   contracts because it interprets Pumas/package facts, artifact kinds, task
   evidence, and backend hints; it must not live inside the image planner,
@@ -126,13 +126,13 @@ PyTorch/diffusers and produce a retained image artifact.
   itself. Shared runtime-identity helpers may continue to normalize stable
   backend id spelling, but they must not decide that one package/runtime
   evidence label selects another executable backend.
-- [ ] Model execution evidence with typed roles that keep these concepts
+- [x] Model execution evidence with typed roles that keep these concepts
   separate: executable backend candidate, dependency/package evidence,
   runtime capability evidence, graph preference/constraint, and display label.
   The same evidence model must be reusable for Transformers/PyTorch,
   GGUF/llama.cpp, ONNX Runtime, Candle embeddings, vLLM, MLX, and future
   runtimes. Diffusers image generation is only the first consumer.
-- [ ] Implement the Diffusers rule as data under that general boundary:
+- [x] Implement the Diffusers rule as data under that general boundary:
   package facts such as `artifact_kind = diffusers_bundle`, Diffusers package
   status, and Diffusers/backend hints can produce a PyTorch executable
   candidate only when PyTorch capability facts advertise the required
@@ -280,7 +280,7 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Return a terminal planning/readiness diagnostic when validation fails.
   Do not try alternate backends, generic Diffusers loading, default schedulers,
   CPU fallback, or alternate dependency environments.
-- [ ] Update PyTorch capability facts so image generation is advertised only
+- [x] Update PyTorch capability facts so image generation is advertised only
   when the PyTorch/diffusers execution path is actually available.
 - [ ] Ensure PyTorch worker loading uses Pumas-resolved diffusers-directory
   package facts.
@@ -1687,3 +1687,28 @@ Standards compliance gates for every Option 3 slice:
   parallel ranking algorithm or candidate-id based shortcut. Any required
   runtime-registry selector change is scheduler-policy work and needs its own
   focused tests plus README/ADR traceability when the public contract changes.
+
+2026-05-16 execution-evidence boundary implementation slice:
+
+- Smallest useful vertical slice: add the inference-owned
+  `execution_evidence` module, expose its typed candidate/evidence/diagnostic
+  contracts, and update PyTorch static capability facts so Diffusers
+  image-generation package facts can produce a PyTorch executable candidate
+  only through explicit backend capability support.
+- Allowed write set: `crates/inference/src/execution_evidence.rs`,
+  `crates/inference/src/execution_evidence_tests.rs`,
+  `crates/inference/src/lib.rs`, `crates/inference/src/backend/pytorch.rs`,
+  `crates/inference/src/backend/pytorch_tests.rs`,
+  `crates/inference/src/README.md`, and this plan directory.
+- No-fallback/no-legacy confirmation: `diffusers` remains package,
+  dependency, display, and capability evidence. The evidence boundary does not
+  alias an explicit graph `runtime = diffusers` request to PyTorch, does not
+  rank candidates, does not read scheduler history, does not reserve memory,
+  and does not pass graph runtime data into inference execution.
+- Verification passed: `cargo test -p inference execution_evidence --lib`,
+  `cargo test -p inference --features backend-pytorch test_capabilities --lib`,
+  `cargo check -p inference`, `cargo fmt -p inference`,
+  `cargo fmt -p inference -- --check`, and `git diff --check`.
+- Remaining follow-up: migrate embedded-runtime technical-fit and dependency
+  preflight to consume the new evidence boundary before removing scattered
+  pseudo-Diffusers execution mappings from those layers.
