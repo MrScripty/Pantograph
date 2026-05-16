@@ -191,7 +191,7 @@ fn map_execution_evidence_diagnostic_severity(
 ) -> RuntimeTechnicalFitDeviceDiagnosticSeverity {
     match severity {
         inference::ExecutionEvidenceDiagnosticSeverity::Info => {
-            RuntimeTechnicalFitDeviceDiagnosticSeverity::Advisory
+            RuntimeTechnicalFitDeviceDiagnosticSeverity::Error
         }
         inference::ExecutionEvidenceDiagnosticSeverity::Warning => {
             RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning

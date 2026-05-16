@@ -51,7 +51,7 @@ packages.
 | `task_executor/` | Behavior modules for RAG search, Puma-Lib metadata projection, dependency environment/preflight, and Python runtime execution used by the host executor facade. Puma-Lib execution refreshes selected `model_id` facts and non-empty selected-detail inference settings through the explicit Pumas selector-access role, and only owner access may enrich outputs with full package facts. Direct diffusion execution is retired from the host dispatcher; image generation enters through canonical inference task metadata. |
 | `task_executor_tests.rs` | Shared Pantograph host task-executor test fixtures and behavior-module index. |
 | `task_executor_tests/` | Focused task-executor behavior tests for dependency preflight/fallback, input helpers, Puma-Lib metadata rebinding through owner and selector-access roles, and Python runtime recorder/stream behavior. |
-| `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, advisory Pumas package-fact candidate projection from explicit selector-access owner facts, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
+| `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot assembly, inference execution-evidence projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
 | `technical_fit_diagnostics.rs` | Owns technical-fit diagnostic code, severity, device-class, and attribution projection between runtime-registry and workflow-service DTOs so evidence mapping policy can grow outside the broad technical-fit request builder. |
 | `technical_fit_execution_evidence.rs` | Owns the execution-evidence to technical-fit adapter contract, mapping inference-owned evidence reports into runtime-registry candidates and typed diagnostics without old package-hint fallback behavior. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
@@ -90,9 +90,10 @@ Pumas-specific dependency resolution.
 - Treat Pumas executable model facts as an upstream contract, not something
   Pantograph re-derives from projected metadata.
 - Treat Pumas package facts as advisory model-library facts. Pantograph derives
-  technical-fit candidates from those facts plus runtime/workflow context;
-  runtime id, residency, warmup, admission, and final selection state must still
-  come from the runtime registry or workflow scheduler layers.
+  technical-fit candidates from inference-owned execution evidence plus
+  runtime/workflow context; runtime id, residency, warmup, admission, and final
+  selection state must still come from the runtime registry or workflow
+  scheduler layers.
 - Diffusers package facts are dependency/model-source evidence for PyTorch image
   generation unless a real executable Diffusers backend is registered. The
   Python sidecar capability inventory must not advertise `diffusers` as a
@@ -149,9 +150,10 @@ The Python runtime bridge accepts canonical, Hugging Face, and legacy ASR task
 labels (`audio_transcription`, `automatic-speech-recognition`, and
 `audio-to-text`) at the PyTorch branch edge so dependency projection and saved
 workflow migration do not need separate label-specific execution branches.
-Pumas package-fact backend hints are projected into `pumas_package_facts`
-technical-fit candidates only after Pantograph validates the local package-fact
-shape; remote search tags and unavailable candidates remain
+Pumas package-fact backend hints are interpreted by inference-owned execution
+evidence normalization before embedded-runtime projects scheduler-facing
+technical-fit candidates. Remote search tags, unavailable candidates, rejected
+compatibility evidence, and no-accepted-candidate outcomes remain typed
 diagnostics/model-library facts rather than executable runtime candidates.
 Workflow-service facade methods exposed by this crate, including
 execution-session queue cancel, reprioritize, and push-front, must remain
@@ -705,9 +707,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   should not bypass that contract with a narrower core-gateway-only helper when
   additional producer facts such as the dedicated embedding sidecar are
   available.
-- Technical-fit candidate projection preserves bounded backend compatibility
-  summaries from Pumas package facts and backend capabilities so diagnostics
-  can explain rejected/degraded candidates without moving final runtime
-  selection policy into Pumas or inference.
+- Technical-fit candidate projection consumes inference execution-evidence
+  reports and preserves typed compatibility diagnostics so rejected/degraded
+  candidates can be explained without moving final runtime selection policy
+  into Pumas or inference.
 - If the descriptor contract changes, this directory must regenerate its README
   contract text and add ADR coverage if the compatibility boundary expands.

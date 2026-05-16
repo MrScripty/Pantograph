@@ -100,7 +100,7 @@ PyTorch/diffusers and produce a retained image artifact.
   gateway, and workflow runtime preflight mappings so execution selection,
   runtime display, and dependency diagnostics do not each maintain conflicting
   `diffusers` rules.
-- [ ] Replace embedded-runtime technical-fit candidate construction with an
+- [x] Replace embedded-runtime technical-fit candidate construction with an
   `ExecutionEvidenceTechnicalFitAdapter` boundary. The adapter must consume
   inference-owned `ExecutionEvidenceReport` values plus workflow runtime
   capability/readiness context and produce `RuntimeTechnicalFitCandidate`
@@ -1987,3 +1987,27 @@ Standards compliance gates for every Option 3 slice:
   remove that allowance, replace the current backend-package-facts candidate
   construction call site with the adapter, and delete or reduce the old direct
   candidate builders so they cannot remain as fallback behavior.
+
+2026-05-16 execution-evidence technical-fit adapter wiring slice:
+
+- Smallest useful vertical slice: replace the embedded-runtime
+  backend-package-facts technical-fit candidate construction call site with the
+  `ExecutionEvidenceTechnicalFitAdapter`, remove the staged `dead_code`
+  allowance, and delete the old direct package-hint/backend-compatibility
+  candidate builders.
+- Allowed write set: `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+  `crates/pantograph-embedded-runtime/src/technical_fit_execution_evidence.rs`,
+  `crates/pantograph-embedded-runtime/src/README.md`, and this plan directory.
+- No-fallback/no-legacy confirmation: canonical package-backed technical-fit
+  now builds scheduler candidates from inference execution evidence only.
+  Rejected evidence becomes typed diagnostic candidates, generic runtime
+  capability candidates are not left eligible as a fallback for model-bound
+  package evidence, and `diffusers` remains dependency/package evidence unless
+  a real executable backend registers it.
+- Verification passed: `cargo test -p pantograph-embedded-runtime
+  technical_fit --lib`, `cargo check -p pantograph-embedded-runtime`, `cargo
+  fmt -p pantograph-embedded-runtime -- --check`, and `git diff --check`.
+- Remaining follow-up: continue the Milestone 6 audit of dependency preflight,
+  runtime capability, gateway, workflow runtime preflight, and node-engine
+  dependency-context paths so none of them maintain a conflicting Diffusers or
+  package-hint backend-selection rule.
