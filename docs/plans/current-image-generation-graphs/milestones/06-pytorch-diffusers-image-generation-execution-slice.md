@@ -2395,6 +2395,89 @@ readiness:
     non-ready decisions; the PyTorch worker only receives already-approved
     execution envelopes. Remove canonical inference reliance on
     `dependency_environment` backend-hint/default backend selection.
+    - 2026-05-16 re-plan decision: remove the legacy behavior rather than
+      preserving it behind compatibility shims. The replacement owner split is:
+      inference declares typed runtime/package requirements for each task,
+      model family, and runtime bridge; embedded-runtime resolves local
+      installed/readiness facts for now; scheduler/admission consumes the
+      reduced typed readiness facts when selecting candidates; inference
+      planner/gateway rejects non-ready scheduler decisions; workers only
+      receive already-approved execution envelopes. A later managed-runtime
+      migration may move the local resolver behind managed-runtime, but graph,
+      scheduler, inference, and worker contracts must not change when that
+      ownership moves.
+    - Legacy removal map for this row:
+      - Remove canonical inference reliance on
+        `task_executor::dependency_environment::infer_backend_key`.
+      - Remove backend selection from Pumas package hints,
+        `recommended_backend`, `runtime_engine_hints`, dependency
+        requirements, or node-type defaults in dependency preflight.
+      - Remove `BackendHintLabel::Diffusers => "diffusers"` as an executable
+        backend selection path; `diffusers` remains package/source/future
+        runtime evidence until a real executable runtime registers available
+        facts.
+      - Remove local Python fallback allowances that let canonical inference
+        execute when dependency bindings or runtime packages are missing.
+      - Remove worker-side package discovery as the first readiness signal for
+        `diffusers`, `transformers`, `accelerate`, `torch`, Pillow, or future
+        runtime packages.
+    - Replacement contract shape:
+      - Add a typed dependency-readiness fact/projection using the shared
+        availability states and validated ids. Facts identify runtime/backend,
+        runtime variant when applicable, package/dependency id, task/family
+        scope when applicable, availability state, stable reason code, bounded
+        reason text, and resolver owner.
+      - Inference declares package requirements for PyTorch/Diffusers image
+        execution (`diffusers`, `transformers`, `accelerate`, `torch`, Pillow)
+        without probing the local Python environment.
+      - Embedded-runtime resolves those declarations into readiness facts using
+        installed/runtime state and existing diagnostic channels. It does not
+        rank candidates or select runtimes.
+      - Scheduler/admission treats unavailable dependency facts as
+        non-selectable candidate evidence. If an explicit graph runtime was
+        requested, the scheduler either selects that runtime with ready facts
+        or fails closed with diagnostics. If runtime is implicit, the scheduler
+        may choose among only ready candidates.
+      - Inference planner/gateway validates that the scheduler-selected runtime
+        carries ready dependency facts before building a worker envelope.
+    - Staged implementation plan:
+      1. Add the dependency-readiness DTO/projection and focused serde/default
+         tests without changing selection behavior.
+      2. Add inference-owned PyTorch/Diffusers image package requirement
+         declarations and tests proving they are factual declarations, not
+         local probes or scheduler policy.
+      3. Add embedded-runtime readiness resolution from those declarations into
+         typed facts and existing diagnostics.
+      4. Wire scheduler/admission candidate filtering to consume readiness
+         facts and fail candidate selection while emitting ledger diagnostics
+         when required dependencies are unavailable.
+      5. Make image planner/gateway reject non-ready scheduler decisions before
+         worker dispatch.
+      6. Remove the legacy dependency-environment backend-key and fallback
+         selection paths from canonical inference execution.
+      7. Retire `dependency-environment` from canonical inference execution or
+         restrict it to explicit diagnostic/tooling workflows that cannot
+         influence runtime selection.
+    - Required tests:
+      - Package hints, `recommended_backend`, runtime hints, dependency
+        requirements, and node-type defaults do not select executable
+        backends for canonical inference.
+      - `diffusers` package evidence does not become a scheduler-selectable
+        executable runtime unless a real executable runtime registers ready
+        facts.
+      - Missing `torch`, `diffusers`, `transformers`, `accelerate`, or Pillow
+        blocks before worker dispatch and records runtime-scoped diagnostics.
+      - Explicit graph runtime requirements fail closed when that runtime has
+        unavailable dependency facts.
+      - Implicit runtime selection skips unavailable candidates and only ranks
+        candidates with ready dependency facts.
+      - Worker tests prove missing packages are not first discovered inside the
+        PyTorch worker for canonical image generation.
+    - No-fallback/no-legacy confirmation: do not keep dependency-environment
+      backend selection as a fallback, do not alias Diffusers package evidence
+      to PyTorch or a pseudo-Diffusers executable runtime, and do not allow a
+      worker to be the first component to discover missing canonical runtime
+      packages.
   - [ ] Introduce a validated Pumas artifact/root path type or DTO at the
     workflow execution-plan/admission projection boundary and carry only that
     proof, a root-relative artifact path, or an already root-validated resolved

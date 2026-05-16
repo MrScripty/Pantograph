@@ -5019,6 +5019,41 @@ Worker rules:
     the backend-owned options providers, then add scheduler/admission tests
     proving unavailable rows are non-selectable without hiding the reason in
     metadata.
+- 2026-05-16 dependency-readiness legacy-removal re-plan slice:
+  - Smallest useful vertical slice: update Milestone 6 with the concrete
+    replacement plan for canonical inference dependency readiness after the
+    legacy boundary was identified.
+  - Allowed write set: this plan directory only.
+  - Decision: remove dependency-environment backend-key/default/hint fallback
+    behavior from canonical inference rather than preserving it. Inference
+    declares typed runtime/package requirements; embedded-runtime resolves
+    local installed/readiness facts for now; scheduler/admission consumes
+    reduced readiness facts; inference planner/gateway refuses non-ready
+    scheduler decisions; workers receive only already-approved execution
+    envelopes. A future managed-runtime resolver can replace the local
+    embedded-runtime resolver without changing graph, scheduler, inference, or
+    worker contracts.
+  - Legacy removal map recorded: remove backend selection from
+    `infer_backend_key`, package hints, `recommended_backend`,
+    `runtime_engine_hints`, dependency requirements, and node-type defaults;
+    remove `diffusers` as an executable backend mapping unless a real
+    executable runtime registers ready facts; remove local Python fallback
+    allowances for canonical inference; remove worker-side package discovery
+    as the first readiness signal.
+  - Staged implementation recorded: dependency-readiness DTO/projection,
+    inference-owned PyTorch/Diffusers package requirement declarations,
+    embedded-runtime readiness resolution, scheduler/admission filtering,
+    planner/gateway rejection of non-ready decisions, legacy fallback removal,
+    and retirement/restriction of `dependency-environment` from canonical
+    inference.
+  - No-fallback/no-legacy confirmation: the updated plan does not allow
+    compatibility shims, pseudo-Diffusers executable runtimes, direct graph-to-
+    inference runtime selection, dependency-environment fallback backend
+    selection, or worker-first dependency readiness discovery.
+  - Verification: docs-only diff review and `git diff --check`; no code tests
+    were run.
+  - Remaining follow-up: implement the staged replacement in thin slices,
+    starting with the dependency-readiness DTO/projection and tests.
 
 ### Traceability Links
 
