@@ -5095,6 +5095,33 @@ Worker rules:
     run because no source behavior changed.
   - Remaining follow-up: continue with the next Milestone 6 implementation
     slice after confirming only approved/dismissed untracked files remain.
+- 2026-05-16 dependency-readiness DTO/projection slice:
+  - Smallest useful vertical slice: add the inference-owned
+    dependency-readiness DTO/projection and focused contract tests before
+    scheduler filtering or embedded-runtime resolution consumes readiness
+    facts.
+  - Allowed write set: `crates/inference/src/capability_availability.rs`,
+    `crates/inference/src/lib.rs`, `crates/inference/src/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log.
+  - No-fallback/no-legacy confirmation: the slice adds typed scheduler proof
+    contracts only. It does not rank candidates, select runtimes, probe local
+    Python packages, infer backend keys, synthesize Diffusers as an executable
+    runtime, add worker discovery, or preserve dependency-environment fallback
+    behavior.
+  - Implementation notes: added `DependencyReadinessFact`,
+    `DependencyReadinessSubjectKind`, and `DependencyReadinessResolverOwner`
+    to `inference::capability_availability`, with runtime/backend id,
+    optional runtime variant, optional task, optional model family,
+    package/dependency id, availability state, resolver owner, reason code,
+    bounded reason text, and projection back to `CapabilityAvailabilityFact`.
+  - Verification passed: `cargo fmt --manifest-path crates/inference/Cargo.toml`,
+    `cargo fmt --manifest-path crates/inference/Cargo.toml -- --check`,
+    `cargo test -p inference capability_availability --lib`, and
+    `git diff --check`.
+  - Remaining follow-up: add inference-owned PyTorch/Diffusers package
+    requirement declarations as factual data, then resolve those declarations
+    into readiness facts in embedded-runtime without adding scheduler policy.
 
 ### Traceability Links
 

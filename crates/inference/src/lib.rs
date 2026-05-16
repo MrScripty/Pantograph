@@ -61,6 +61,7 @@ pub use backend::{
 pub use capability_availability::{
     CapabilityAvailabilityError, CapabilityAvailabilityFact, CapabilityAvailabilityId,
     CapabilityAvailabilityReason, CapabilityAvailabilityState, CapabilityAvailabilitySubjectKind,
+    DependencyReadinessFact, DependencyReadinessResolverOwner, DependencyReadinessSubjectKind,
 };
 
 #[cfg(feature = "backend-llamacpp")]

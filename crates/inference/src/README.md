@@ -13,7 +13,7 @@ details.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `backend/` | Backend trait definitions and concrete supported engine adapters such as llama.cpp, Candle, and PyTorch. |
-| `capability_availability.rs` | Typed runtime, package, dependency, model-capability, and runtime-trait availability facts with validated ids and bounded reason text for scheduler/provider projection. |
+| `capability_availability.rs` | Typed runtime, package, dependency, model-capability, runtime-trait, and dependency-readiness facts with validated ids, scoped scheduler proof, and bounded reason text for scheduler/provider projection. |
 | `device.rs` | Backend-local llama.cpp device inventory parsing, canonical inventory fact projection, and command-selector formatting. |
 | `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
@@ -102,6 +102,11 @@ reported once with typed unavailability states before scheduler ranking or
 graph-provider presentation. These facts are not a second diagnostic channel:
 callers must project them through owned scheduler, workflow, lifecycle, or
 port-option DTOs.
+Scoped dependency-readiness facts also live in `capability_availability.rs` so
+runtime/package readiness proof can identify the runtime/backend, optional
+runtime variant, task scope, model-family scope, resolver owner, reason code,
+and bounded reason text without overloading primitive ids or relying on
+worker-side discovery.
 Execution evidence normalization lives in `execution_evidence.rs` so package
 labels, backend hints, runtime capability facts, graph runtime requirements,
 and executable backend candidates stay separate before the scheduler ranks
@@ -140,6 +145,10 @@ backend is registered.
   model-capability, and runtime-trait selectability, but they must not rank
   candidates, select runtimes, or encode UI disabled state in display strings.
   Producers must use validated primitive ids and bounded single-line reasons.
+- Dependency-readiness facts are scheduler proof, not policy. They may scope
+  package/dependency readiness to a runtime/backend, runtime variant, task, and
+  model family, but they must not rank candidates, select runtimes, probe the
+  local environment, or substitute for scheduler/admission diagnostics.
 - Shared request/response types are append-only unless a coordinated breaking
   change is approved.
 - Image-generation execution plans carry explicit denoising scheduler intent as

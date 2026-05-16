@@ -10,6 +10,9 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
+use crate::device_contracts::{BackendId, RuntimeVariantId};
+use crate::model_contracts::InferenceTaskId;
+
 const CAPABILITY_AVAILABILITY_ID_MAX_LEN: usize = 96;
 const CAPABILITY_AVAILABILITY_REASON_MAX_LEN: usize = 240;
 
@@ -299,6 +302,193 @@ impl CapabilityAvailabilityFact {
     }
 }
 
+/// Dependency-readiness subject kinds that can be projected to availability facts.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DependencyReadinessSubjectKind {
+    /// A language/runtime package such as `torch`, `diffusers`, or Pillow.
+    Package,
+    /// A managed dependency entry such as a binary, library, or runtime asset.
+    Dependency,
+}
+
+impl DependencyReadinessSubjectKind {
+    /// Return the shared availability subject kind for this readiness subject.
+    #[must_use]
+    pub fn availability_subject_kind(self) -> CapabilityAvailabilitySubjectKind {
+        match self {
+            Self::Package => CapabilityAvailabilitySubjectKind::Package,
+            Self::Dependency => CapabilityAvailabilitySubjectKind::Dependency,
+        }
+    }
+}
+
+/// Owner that resolved one dependency-readiness fact.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DependencyReadinessResolverOwner {
+    /// The inference crate declared or validated the contract boundary.
+    Inference,
+    /// The embedded Pantograph runtime resolved local installed/readiness facts.
+    EmbeddedRuntime,
+    /// The managed-runtime owner resolved installed/readiness facts.
+    ManagedRuntime,
+    /// A runtime bridge resolved readiness for its owned runtime surface.
+    RuntimeBridge,
+}
+
+/// Scheduler-facing readiness proof for one runtime package or dependency.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct DependencyReadinessFact {
+    /// Package/dependency subject kind.
+    pub subject_kind: DependencyReadinessSubjectKind,
+    /// Executable runtime/backend this fact gates.
+    pub runtime_id: BackendId,
+    /// Concrete runtime variant this fact gates, when variant-specific.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variant_id: Option<RuntimeVariantId>,
+    /// Canonical task scope when the dependency is task-specific.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<InferenceTaskId>,
+    /// Model-family scope when the dependency is model-family-specific.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_family_id: Option<CapabilityAvailabilityId>,
+    /// Package/dependency id such as `torch` or `diffusers`.
+    pub dependency_id: CapabilityAvailabilityId,
+    /// Availability state for scheduler admission and provider projections.
+    pub state: CapabilityAvailabilityState,
+    /// Owner that resolved this fact.
+    pub resolver_owner: DependencyReadinessResolverOwner,
+    /// Stable reason code for diagnostics and UI rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<CapabilityAvailabilityId>,
+    /// Bounded single-line reason text for diagnostics and UI rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<CapabilityAvailabilityReason>,
+}
+
+impl DependencyReadinessFact {
+    /// Build a package-readiness proof from validated parts.
+    #[must_use]
+    pub fn package(
+        runtime_id: BackendId,
+        dependency_id: CapabilityAvailabilityId,
+        state: CapabilityAvailabilityState,
+        resolver_owner: DependencyReadinessResolverOwner,
+    ) -> Self {
+        Self::new(
+            DependencyReadinessSubjectKind::Package,
+            runtime_id,
+            dependency_id,
+            state,
+            resolver_owner,
+        )
+    }
+
+    /// Build a managed-dependency readiness proof from validated parts.
+    #[must_use]
+    pub fn dependency(
+        runtime_id: BackendId,
+        dependency_id: CapabilityAvailabilityId,
+        state: CapabilityAvailabilityState,
+        resolver_owner: DependencyReadinessResolverOwner,
+    ) -> Self {
+        Self::new(
+            DependencyReadinessSubjectKind::Dependency,
+            runtime_id,
+            dependency_id,
+            state,
+            resolver_owner,
+        )
+    }
+
+    fn new(
+        subject_kind: DependencyReadinessSubjectKind,
+        runtime_id: BackendId,
+        dependency_id: CapabilityAvailabilityId,
+        state: CapabilityAvailabilityState,
+        resolver_owner: DependencyReadinessResolverOwner,
+    ) -> Self {
+        Self {
+            subject_kind,
+            runtime_id,
+            runtime_variant_id: None,
+            task_id: None,
+            model_family_id: None,
+            dependency_id,
+            state,
+            resolver_owner,
+            reason_code: None,
+            reason: None,
+        }
+    }
+
+    /// Attach a runtime variant scope.
+    #[must_use]
+    pub fn with_runtime_variant_id(mut self, runtime_variant_id: RuntimeVariantId) -> Self {
+        self.runtime_variant_id = Some(runtime_variant_id);
+        self
+    }
+
+    /// Attach a task scope.
+    #[must_use]
+    pub fn with_task_id(mut self, task_id: InferenceTaskId) -> Self {
+        self.task_id = Some(task_id);
+        self
+    }
+
+    /// Attach a model-family scope.
+    #[must_use]
+    pub fn with_model_family_id(mut self, model_family_id: CapabilityAvailabilityId) -> Self {
+        self.model_family_id = Some(model_family_id);
+        self
+    }
+
+    /// Attach a stable reason code.
+    #[must_use]
+    pub fn with_reason_code(mut self, reason_code: CapabilityAvailabilityId) -> Self {
+        self.reason_code = Some(reason_code);
+        self
+    }
+
+    /// Attach bounded reason text.
+    #[must_use]
+    pub fn with_reason(mut self, reason: CapabilityAvailabilityReason) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    /// Return true when this dependency proof allows scheduler selection.
+    #[must_use]
+    pub fn is_ready(&self) -> bool {
+        self.state.is_selectable()
+    }
+
+    /// Project this scoped readiness proof to the shared availability primitive.
+    pub fn try_to_availability_fact(
+        &self,
+    ) -> Result<CapabilityAvailabilityFact, CapabilityAvailabilityError> {
+        let mut fact = CapabilityAvailabilityFact::new(
+            self.subject_kind.availability_subject_kind(),
+            self.dependency_id.clone(),
+            self.state,
+        )
+        .with_runtime_id(CapabilityAvailabilityId::parse(self.runtime_id.as_str())?);
+
+        if let Some(reason_code) = self.reason_code.clone() {
+            fact = fact.with_reason_code(reason_code);
+        }
+        if let Some(reason) = self.reason.clone() {
+            fact = fact.with_reason(reason);
+        }
+
+        Ok(fact)
+    }
+}
+
 /// Validation failure for capability availability contract values.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 #[non_exhaustive]
@@ -414,6 +604,14 @@ mod tests {
         CapabilityAvailabilityReason::parse(value).expect("valid availability reason")
     }
 
+    fn backend_id(value: &str) -> BackendId {
+        BackendId::parse(value).expect("valid backend id")
+    }
+
+    fn runtime_variant_id(value: &str) -> RuntimeVariantId {
+        RuntimeVariantId::parse(value).expect("valid runtime variant id")
+    }
+
     #[test]
     fn availability_state_selectable_only_for_available() {
         assert!(CapabilityAvailabilityState::Available.is_selectable());
@@ -509,6 +707,132 @@ mod tests {
             "state": "not_installed"
         }))
         .expect_err("invalid subject id must not deserialize");
+
+        assert!(error.to_string().contains("invalid identifier shape"));
+    }
+
+    #[test]
+    fn dependency_readiness_fact_serde_carries_scheduler_scope() {
+        let fact = DependencyReadinessFact::package(
+            backend_id("pytorch"),
+            availability_id("diffusers"),
+            CapabilityAvailabilityState::MissingDependency,
+            DependencyReadinessResolverOwner::EmbeddedRuntime,
+        )
+        .with_runtime_variant_id(runtime_variant_id("pytorch.cuda"))
+        .with_task_id(InferenceTaskId::ImageGeneration)
+        .with_model_family_id(availability_id("stable_diffusion"))
+        .with_reason_code(availability_id("python_package_not_installed"))
+        .with_reason(reason("Python package diffusers is not installed."));
+
+        let encoded = serde_json::to_value(&fact).expect("encode readiness fact");
+        assert_eq!(
+            encoded,
+            json!({
+                "subject_kind": "package",
+                "runtime_id": "pytorch",
+                "runtime_variant_id": "pytorch.cuda",
+                "task_id": "image_generation",
+                "model_family_id": "stable_diffusion",
+                "dependency_id": "diffusers",
+                "state": "missing_dependency",
+                "resolver_owner": "embedded_runtime",
+                "reason_code": "python_package_not_installed",
+                "reason": "Python package diffusers is not installed."
+            })
+        );
+
+        let decoded: DependencyReadinessFact =
+            serde_json::from_value(encoded).expect("decode readiness fact");
+        assert_eq!(decoded, fact);
+        assert!(!decoded.is_ready());
+    }
+
+    #[test]
+    fn dependency_readiness_fact_defaults_optional_scope() {
+        let decoded: DependencyReadinessFact = serde_json::from_value(json!({
+            "subject_kind": "dependency",
+            "runtime_id": "llama_cpp",
+            "dependency_id": "llama_cpp_binary",
+            "state": "available",
+            "resolver_owner": "managed_runtime"
+        }))
+        .expect("decode minimal readiness fact");
+
+        assert_eq!(
+            decoded.subject_kind,
+            DependencyReadinessSubjectKind::Dependency
+        );
+        assert_eq!(decoded.runtime_id.as_str(), "llama_cpp");
+        assert_eq!(decoded.dependency_id.as_str(), "llama_cpp_binary");
+        assert_eq!(
+            decoded.resolver_owner,
+            DependencyReadinessResolverOwner::ManagedRuntime
+        );
+        assert!(decoded.runtime_variant_id.is_none());
+        assert!(decoded.task_id.is_none());
+        assert!(decoded.model_family_id.is_none());
+        assert!(decoded.reason_code.is_none());
+        assert!(decoded.reason.is_none());
+        assert!(decoded.is_ready());
+    }
+
+    #[test]
+    fn dependency_readiness_projection_preserves_availability_fields() {
+        let fact = DependencyReadinessFact::package(
+            backend_id("pytorch"),
+            availability_id("torch"),
+            CapabilityAvailabilityState::Available,
+            DependencyReadinessResolverOwner::EmbeddedRuntime,
+        )
+        .with_reason_code(availability_id("package_ready"))
+        .with_reason(reason("Python package torch is ready."));
+
+        let availability = fact
+            .try_to_availability_fact()
+            .expect("project readiness fact");
+
+        assert_eq!(
+            availability.subject_kind,
+            CapabilityAvailabilitySubjectKind::Package
+        );
+        assert_eq!(availability.subject_id.as_str(), "torch");
+        assert_eq!(
+            availability.runtime_id.as_ref().unwrap().as_str(),
+            "pytorch"
+        );
+        assert_eq!(
+            availability.reason_code.as_ref().unwrap().as_str(),
+            "package_ready"
+        );
+        assert_eq!(
+            availability.reason.as_ref().unwrap().as_str(),
+            "Python package torch is ready."
+        );
+        assert!(availability.is_selectable());
+    }
+
+    #[test]
+    fn dependency_readiness_fact_deserialization_validates_scoped_ids() {
+        let error = serde_json::from_value::<DependencyReadinessFact>(json!({
+            "subject_kind": "package",
+            "runtime_id": "PyTorch",
+            "dependency_id": "diffusers",
+            "state": "available",
+            "resolver_owner": "embedded_runtime"
+        }))
+        .expect_err("invalid runtime id must fail");
+
+        assert!(error.to_string().contains("invalid identifier shape"));
+
+        let error = serde_json::from_value::<DependencyReadinessFact>(json!({
+            "subject_kind": "package",
+            "runtime_id": "pytorch",
+            "dependency_id": "Diffusers",
+            "state": "available",
+            "resolver_owner": "embedded_runtime"
+        }))
+        .expect_err("invalid dependency id must fail");
 
         assert!(error.to_string().contains("invalid identifier shape"));
     }

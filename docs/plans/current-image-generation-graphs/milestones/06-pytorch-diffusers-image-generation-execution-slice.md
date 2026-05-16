@@ -2461,8 +2461,17 @@ readiness:
         code cannot import it for backend selection, dependency readiness, or
         fallback execution.
     - Staged implementation plan:
-      1. Add the dependency-readiness DTO/projection and focused serde/default
+      1. [x] Add the dependency-readiness DTO/projection and focused serde/default
          tests without changing selection behavior.
+         - 2026-05-16 slice: added
+           `inference::DependencyReadinessFact` plus typed subject-kind and
+           resolver-owner enums. The contract scopes package/dependency
+           readiness to runtime/backend id, optional runtime variant, optional
+           task, optional model family, availability state, resolver owner,
+           reason code, and bounded reason text. Focused tests cover serde
+           shape, optional-scope defaults, scoped-id validation, and projection
+           back to `CapabilityAvailabilityFact`. No scheduler filtering,
+           runtime selection, environment probing, or worker behavior changed.
       2. Add inference-owned PyTorch/Diffusers image package requirement
          declarations and tests proving they are factual declarations, not
          local probes or scheduler policy.
