@@ -983,6 +983,22 @@ Update during implementation:
   Verification deviation: the first gateway-focused run exposed the stale
   explicit denoising-scheduler fixture in success tests; the fixture was
   corrected and the focused gateway tests passed.
+- 2026-05-15: Continued Milestone 6 with the workflow execution-plan selected
+  fact typing slice. The smallest useful vertical slice was limited to
+  workflow-service execution-plan DTOs, embedded-runtime projection tests, the
+  workflow README, and this plan. `execution_plan_selected_facts.rs` now owns
+  validated workflow-service newtypes for selected backend key, runtime id,
+  runtime variant id, and concrete selected device id. Invalid selected fact
+  shapes fail the workflow execution-plan constructor/deserializer with typed
+  `InvalidSelectedDecisionFact` errors before node-engine, embedded-runtime
+  projection, scheduler history, runtime readiness, or worker dispatch can
+  consume them. Workflow-service remains independent from inference DTOs; the
+  embedded-runtime projection still adapts validated workflow values into
+  inference `BackendExecutionDecision`. Verification passed:
+  `cargo fmt -p pantograph-workflow-service -p pantograph-embedded-runtime -- --check`,
+  `cargo test -p pantograph-workflow-service workflow_execution_plan --lib`,
+  and
+  `cargo test -p pantograph-embedded-runtime workflow_execution_plan_projection --lib`.
 
 ## Commit Cadence Notes
 
@@ -1193,6 +1209,11 @@ Worker rules:
   agree with resolved package facts before returning an
   `ImageGenerationExecutionPlan`; missing or mismatched image model identity
   produces typed planner diagnostics and no worker plan.
+- Milestone 6 workflow execution plans now validate selected backend key,
+  runtime id, runtime variant id, selected device id, and selected model ref at
+  the workflow-service owner boundary using workflow-owned value objects.
+  Embedded-runtime projection no longer has to catch malformed selected
+  backend/device facts as a normal execution path.
 
 ### Deviations
 

@@ -4,7 +4,10 @@ use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::WorkflowExecutionPlanModelRef;
+use super::{
+    WorkflowExecutionPlanBackendKey, WorkflowExecutionPlanDeviceId, WorkflowExecutionPlanModelRef,
+    WorkflowExecutionPlanRuntimeId, WorkflowExecutionPlanRuntimeVariantId,
+};
 use super::{WorkflowInferenceDeviceClass, WorkflowInferenceTaskId};
 
 pub const WORKFLOW_EXECUTION_PLAN_SCHEMA_VERSION: u32 = 1;
@@ -156,11 +159,11 @@ struct WorkflowExecutionPlanUnchecked {
 )]
 pub struct WorkflowExecutionPlanNodeDecision {
     node_id: String,
-    selected_backend_key: String,
-    selected_runtime_id: String,
-    selected_runtime_variant_id: String,
+    selected_backend_key: WorkflowExecutionPlanBackendKey,
+    selected_runtime_id: WorkflowExecutionPlanRuntimeId,
+    selected_runtime_variant_id: WorkflowExecutionPlanRuntimeVariantId,
     selected_device_class: WorkflowInferenceDeviceClass,
-    selected_device_id: Option<String>,
+    selected_device_id: Option<WorkflowExecutionPlanDeviceId>,
     selected_task_id: WorkflowInferenceTaskId,
     selected_model_ref: Option<WorkflowExecutionPlanModelRef>,
     diagnostics: Vec<WorkflowExecutionPlanDiagnostic>,
@@ -170,28 +173,17 @@ pub struct WorkflowExecutionPlanNodeDecision {
 impl WorkflowExecutionPlanNodeDecision {
     pub fn new(
         node_id: impl Into<String>,
-        selected_backend_key: impl Into<String>,
-        selected_runtime_id: impl Into<String>,
-        selected_runtime_variant_id: impl Into<String>,
+        selected_backend_key: impl AsRef<str>,
+        selected_runtime_id: impl AsRef<str>,
+        selected_runtime_variant_id: impl AsRef<str>,
         selected_device_class: WorkflowInferenceDeviceClass,
         selected_task_id: WorkflowInferenceTaskId,
     ) -> Result<Self, WorkflowExecutionPlanError> {
         let node_id = validate_required_text("node_id", node_id.into(), MAX_EXECUTION_PLAN_ID_LEN)?;
-        let selected_backend_key = validate_required_text(
-            "selected_backend_key",
-            selected_backend_key.into(),
-            MAX_EXECUTION_PLAN_ID_LEN,
-        )?;
-        let selected_runtime_id = validate_required_text(
-            "selected_runtime_id",
-            selected_runtime_id.into(),
-            MAX_EXECUTION_PLAN_ID_LEN,
-        )?;
-        let selected_runtime_variant_id = validate_required_text(
-            "selected_runtime_variant_id",
-            selected_runtime_variant_id.into(),
-            MAX_EXECUTION_PLAN_ID_LEN,
-        )?;
+        let selected_backend_key = parse_selected_backend_key(selected_backend_key.as_ref())?;
+        let selected_runtime_id = parse_selected_runtime_id(selected_runtime_id.as_ref())?;
+        let selected_runtime_variant_id =
+            parse_selected_runtime_variant_id(selected_runtime_variant_id.as_ref())?;
         validate_selected_device_class(selected_device_class)?;
         validate_selected_task_id(selected_task_id)?;
 
@@ -211,13 +203,9 @@ impl WorkflowExecutionPlanNodeDecision {
 
     pub fn with_selected_device_id(
         mut self,
-        selected_device_id: impl Into<String>,
+        selected_device_id: impl AsRef<str>,
     ) -> Result<Self, WorkflowExecutionPlanError> {
-        self.selected_device_id = Some(validate_required_text(
-            "selected_device_id",
-            selected_device_id.into(),
-            MAX_EXECUTION_PLAN_ID_LEN,
-        )?);
+        self.selected_device_id = Some(parse_selected_device_id(selected_device_id.as_ref())?);
         Ok(self)
     }
 
@@ -267,17 +255,17 @@ impl WorkflowExecutionPlanNodeDecision {
 
     #[must_use]
     pub fn selected_backend_key(&self) -> &str {
-        &self.selected_backend_key
+        self.selected_backend_key.as_str()
     }
 
     #[must_use]
     pub fn selected_runtime_id(&self) -> &str {
-        &self.selected_runtime_id
+        self.selected_runtime_id.as_str()
     }
 
     #[must_use]
     pub fn selected_runtime_variant_id(&self) -> &str {
-        &self.selected_runtime_variant_id
+        self.selected_runtime_variant_id.as_str()
     }
 
     #[must_use]
@@ -287,7 +275,9 @@ impl WorkflowExecutionPlanNodeDecision {
 
     #[must_use]
     pub fn selected_device_id(&self) -> Option<&str> {
-        self.selected_device_id.as_deref()
+        self.selected_device_id
+            .as_ref()
+            .map(WorkflowExecutionPlanDeviceId::as_str)
     }
 
     #[must_use]
@@ -471,6 +461,12 @@ pub enum WorkflowExecutionPlanError {
     },
     #[error("technical-fit decision is missing selected fact {field}")]
     MissingSelectedDecisionFact { field: &'static str },
+    #[error("selected decision fact '{field}' value '{value}' is invalid: {message}")]
+    InvalidSelectedDecisionFact {
+        field: &'static str,
+        value: String,
+        message: String,
+    },
     #[error("selected model '{model_id}' was not present in workflow capabilities")]
     SelectedModelNotFound { model_id: String },
     #[error("selected model '{model_id}' matched {count} workflow capability records")]
@@ -546,4 +542,45 @@ fn parse_selected_model_ref(
             message: error.to_string(),
         }
     })
+}
+
+fn parse_selected_backend_key(
+    value: &str,
+) -> Result<WorkflowExecutionPlanBackendKey, WorkflowExecutionPlanError> {
+    WorkflowExecutionPlanBackendKey::parse(value)
+        .map_err(|error| invalid_selected_decision_fact("selected_backend_key", value, error))
+}
+
+fn parse_selected_runtime_id(
+    value: &str,
+) -> Result<WorkflowExecutionPlanRuntimeId, WorkflowExecutionPlanError> {
+    WorkflowExecutionPlanRuntimeId::parse(value)
+        .map_err(|error| invalid_selected_decision_fact("selected_runtime_id", value, error))
+}
+
+fn parse_selected_runtime_variant_id(
+    value: &str,
+) -> Result<WorkflowExecutionPlanRuntimeVariantId, WorkflowExecutionPlanError> {
+    WorkflowExecutionPlanRuntimeVariantId::parse(value).map_err(|error| {
+        invalid_selected_decision_fact("selected_runtime_variant_id", value, error)
+    })
+}
+
+fn parse_selected_device_id(
+    value: &str,
+) -> Result<WorkflowExecutionPlanDeviceId, WorkflowExecutionPlanError> {
+    WorkflowExecutionPlanDeviceId::parse(value)
+        .map_err(|error| invalid_selected_decision_fact("selected_device_id", value, error))
+}
+
+fn invalid_selected_decision_fact(
+    field: &'static str,
+    value: &str,
+    error: impl std::error::Error,
+) -> WorkflowExecutionPlanError {
+    WorkflowExecutionPlanError::InvalidSelectedDecisionFact {
+        field,
+        value: value.to_string(),
+        message: error.to_string(),
+    }
 }

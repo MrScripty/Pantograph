@@ -28,6 +28,7 @@ public exports out of the service crate.
 | `media_capability_contracts.rs` | Backend-owned media format capability and managed redistributable category/status DTOs. |
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `execution_plan_model_ref.rs` | Parse-once selected Pumas model-ref value object for run execution plans, including raw model-id normalization and local-path/unsupported-URI rejection. |
+| `execution_plan_selected_facts.rs` | Workflow-owned selected backend/runtime/device fact value objects for run execution plans. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_execution_api.rs` | Workflow session creation and queued session run orchestration facade methods. |
 | `session_io_artifacts.rs` | Retained workflow/session I/O artifact metadata and small text/JSON ArtifactStore materialization helpers for diagnostics-ledger projection. |
@@ -391,6 +392,12 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   paths or unsupported URI schemes are rejected before embedded-runtime
   projection, scheduler history, runtime readiness, or worker dispatch can
   trust the value.
+- Workflow execution plans validate selected backend keys, runtime ids,
+  runtime variant ids, and concrete selected device ids as workflow-owned
+  values before node-engine or embedded-runtime projection can consume them.
+  Invalid backend/runtime/device shapes fail at the execution-plan owner
+  boundary as typed selected-decision fact errors instead of being repaired or
+  rediscovered by adapters.
 - Workflow-run error handling records canonical diagnostic errors where
   possible, but secondary diagnostic append failures must not replace the
   original workflow execution, timeout, output-validation, artifact-conversion,

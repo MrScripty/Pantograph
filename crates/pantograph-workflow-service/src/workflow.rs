@@ -29,6 +29,7 @@ mod diagnostics_api;
 mod execution_plan;
 mod execution_plan_admission;
 mod execution_plan_model_ref;
+mod execution_plan_selected_facts;
 mod graph_api;
 mod host;
 mod identity;
@@ -87,6 +88,10 @@ pub use self::execution_plan::{
 pub(crate) use self::execution_plan_admission::build_workflow_execution_plan_from_admission;
 pub use self::execution_plan_model_ref::{
     WorkflowExecutionPlanModelRef, WorkflowExecutionPlanModelRefError,
+};
+pub use self::execution_plan_selected_facts::{
+    WorkflowExecutionPlanBackendKey, WorkflowExecutionPlanDeviceId, WorkflowExecutionPlanRuntimeId,
+    WorkflowExecutionPlanRuntimeVariantId, WorkflowExecutionPlanSelectedFactError,
 };
 pub use self::host::{
     WorkflowHost, WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,

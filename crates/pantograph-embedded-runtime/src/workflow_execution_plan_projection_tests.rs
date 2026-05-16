@@ -4,15 +4,14 @@ use inference::{
 };
 use pantograph_workflow_service::{
     WorkflowExecutionPlan, WorkflowExecutionPlanDiagnostic, WorkflowExecutionPlanDiagnosticCode,
-    WorkflowExecutionPlanDiagnosticSeverity, WorkflowExecutionPlanNodeDecision,
-    WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
+    WorkflowExecutionPlanDiagnosticSeverity, WorkflowExecutionPlanError,
+    WorkflowExecutionPlanNodeDecision, WorkflowInferenceDeviceClass, WorkflowInferenceTaskId,
 };
 use pantograph_workflow_service::{WorkflowId, WorkflowRunId};
 
 use super::{
     project_workflow_execution_plan_to_planned_inference_context,
     project_workflow_node_decision_to_backend_execution_decision,
-    WorkflowExecutionPlanProjectionError,
 };
 
 fn workflow_node_decision() -> WorkflowExecutionPlanNodeDecision {
@@ -103,7 +102,7 @@ fn workflow_node_decision_projects_canonicalized_raw_model_ref() {
 
 #[test]
 fn workflow_node_decision_rejects_invalid_backend_id() {
-    let decision = WorkflowExecutionPlanNodeDecision::new(
+    let error = WorkflowExecutionPlanNodeDecision::new(
         "image-node-1",
         "llama.cpp",
         "llama-runtime",
@@ -111,20 +110,20 @@ fn workflow_node_decision_rejects_invalid_backend_id() {
         WorkflowInferenceDeviceClass::Cuda,
         WorkflowInferenceTaskId::ImageGeneration,
     )
-    .expect("workflow decision allows reduced backend key text");
-
-    let error = project_workflow_node_decision_to_backend_execution_decision(&decision)
-        .expect_err("invalid backend id should fail projection");
+    .expect_err("invalid backend id should fail at workflow boundary");
 
     assert!(matches!(
         error,
-        WorkflowExecutionPlanProjectionError::InvalidBackendId { .. }
+        WorkflowExecutionPlanError::InvalidSelectedDecisionFact {
+            field: "selected_backend_key",
+            ..
+        }
     ));
 }
 
 #[test]
 fn workflow_node_decision_rejects_invalid_device_id() {
-    let decision = WorkflowExecutionPlanNodeDecision::new(
+    let error = WorkflowExecutionPlanNodeDecision::new(
         "image-node-1",
         "pytorch",
         "pytorch-runtime",
@@ -134,14 +133,14 @@ fn workflow_node_decision_rejects_invalid_device_id() {
     )
     .expect("valid node decision")
     .with_selected_device_id("CUDA:0")
-    .expect("workflow decision only validates bounded text");
-
-    let error = project_workflow_node_decision_to_backend_execution_decision(&decision)
-        .expect_err("invalid device id should fail projection");
+    .expect_err("invalid device id should fail at workflow boundary");
 
     assert!(matches!(
         error,
-        WorkflowExecutionPlanProjectionError::InvalidDeviceId { .. }
+        WorkflowExecutionPlanError::InvalidSelectedDecisionFact {
+            field: "selected_device_id",
+            ..
+        }
     ));
 }
 

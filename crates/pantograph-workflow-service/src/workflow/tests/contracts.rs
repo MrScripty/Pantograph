@@ -246,6 +246,71 @@ fn workflow_execution_plan_model_ref_constructor_rejects_local_paths() {
 }
 
 #[test]
+fn workflow_execution_plan_rejects_invalid_selected_backend_key() {
+    let error = WorkflowExecutionPlanNodeDecision::new(
+        "image-node-1",
+        "llama.cpp",
+        "pytorch",
+        "pytorch.cuda",
+        WorkflowInferenceDeviceClass::Cuda,
+        WorkflowInferenceTaskId::ImageGeneration,
+    )
+    .expect_err("backend keys must be validated workflow-selected facts");
+
+    assert!(matches!(
+        error,
+        WorkflowExecutionPlanError::InvalidSelectedDecisionFact {
+            field: "selected_backend_key",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn workflow_execution_plan_rejects_invalid_selected_runtime_variant_id() {
+    let error = WorkflowExecutionPlanNodeDecision::new(
+        "image-node-1",
+        "pytorch",
+        "pytorch",
+        "pytorch/cuda",
+        WorkflowInferenceDeviceClass::Cuda,
+        WorkflowInferenceTaskId::ImageGeneration,
+    )
+    .expect_err("runtime variants must be validated workflow-selected facts");
+
+    assert!(matches!(
+        error,
+        WorkflowExecutionPlanError::InvalidSelectedDecisionFact {
+            field: "selected_runtime_variant_id",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn workflow_execution_plan_rejects_invalid_selected_device_id() {
+    let error = WorkflowExecutionPlanNodeDecision::new(
+        "image-node-1",
+        "pytorch",
+        "pytorch",
+        "pytorch.cuda",
+        WorkflowInferenceDeviceClass::Cuda,
+        WorkflowInferenceTaskId::ImageGeneration,
+    )
+    .expect("base node decision is valid")
+    .with_selected_device_id("CUDA:0")
+    .expect_err("selected device ids must be validated workflow-selected facts");
+
+    assert!(matches!(
+        error,
+        WorkflowExecutionPlanError::InvalidSelectedDecisionFact {
+            field: "selected_device_id",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn workflow_execution_plan_deserialize_defaults_optional_decision_fields() {
     let payload = serde_json::json!({
         "schema_version": 1,

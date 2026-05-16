@@ -67,7 +67,7 @@ PyTorch/diffusers and produce a retained image artifact.
   package facts as an implicit model decision. The execution-plan contract may
   keep selected model refs optional only for task families where the
   scheduler/admission decision is explicitly not model-bound.
-- [ ] Tighten selected-decision fact typing at the workflow execution-plan
+- [x] Tighten selected-decision fact typing at the workflow execution-plan
   boundary. Keep workflow-service independent from inference DTOs, but use
   workflow-owned validated constructors or newtypes for selected backend key,
   runtime id, runtime variant id, device id, and model ref so invalid selected
