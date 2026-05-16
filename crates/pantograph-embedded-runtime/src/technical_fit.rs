@@ -1246,7 +1246,7 @@ fn pumas_backend_hint_label_to_backend_key(label: inference::BackendHintLabel) -
         inference::BackendHintLabel::Vllm => Some("vllm".to_string()),
         inference::BackendHintLabel::Mlx => Some("mlx".to_string()),
         inference::BackendHintLabel::Candle => Some("candle".to_string()),
-        inference::BackendHintLabel::Diffusers => Some("diffusers".to_string()),
+        inference::BackendHintLabel::Diffusers => None,
         inference::BackendHintLabel::OnnxRuntime => Some("onnx_runtime".to_string()),
     }
 }
@@ -2495,6 +2495,42 @@ mod tests {
             .compatibility_issues
             .iter()
             .any(|issue| issue.kind == "missing_preprocessing_component"));
+    }
+
+    #[test]
+    fn pumas_package_facts_runtime_capability_path_does_not_emit_diffusers_backend_candidate() {
+        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+            include_str!(
+                "../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
+            ),
+        )
+        .expect("decode image generation package facts fixture");
+        let runtime_capabilities = vec![WorkflowRuntimeCapability {
+            runtime_id: "diffusers".to_string(),
+            display_name: "Diffusers".to_string(),
+            install_state: WorkflowRuntimeInstallState::SystemProvided,
+            available: true,
+            configured: true,
+            can_install: false,
+            can_remove: false,
+            source_kind: WorkflowRuntimeSourceKind::System,
+            selected: false,
+            readiness_state: Some(WorkflowRuntimeReadinessState::Ready),
+            selected_version: None,
+            supports_external_connection: false,
+            backend_capability_facts: None,
+            backend_keys: vec!["diffusers".to_string()],
+            missing_files: Vec::new(),
+            unavailable_reason: None,
+        }];
+
+        let candidates = runtime_candidates_from_pumas_package_facts_with_runtime_capabilities(
+            &[package_facts],
+            &runtime_capabilities,
+            None,
+        );
+
+        assert!(candidates.is_empty());
     }
 
     #[tokio::test]

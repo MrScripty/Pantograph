@@ -90,7 +90,7 @@ PyTorch/diffusers and produce a retained image artifact.
   receives runtime selection exclusively through the scheduler-produced
   execution decision so there is one source of truth and one runtime-selection
   path.
-- [ ] Replace scattered `diffusers` backend-key mappings that affect execution
+- [x] Replace scattered `diffusers` backend-key mappings that affect execution
   with calls into the single normalization boundary defined in Milestone 0.
 - [ ] Keep package/dependency keys and execution backend keys represented by
   distinct function/type names. `diffusers` may remain factual package,
@@ -1782,3 +1782,29 @@ Standards compliance gates for every Option 3 slice:
   consume the inference-owned evidence boundary so package facts, backend
   capability facts, explicit graph runtime requirements, and scheduler ranking
   share one normalization path.
+
+2026-05-16 Diffusers package-hint execution mapping retirement slice:
+
+- Smallest useful vertical slice: stop converting Pumas package
+  `BackendHintLabel::Diffusers` into a scheduler-visible executable backend
+  candidate in the runtime-capability-only technical-fit path.
+- Allowed write set: `crates/pantograph-embedded-runtime/src/technical_fit.rs`
+  and this plan directory.
+- No-fallback/no-legacy confirmation: this slice fails closed when only
+  package/runtime hint evidence says `diffusers`; it does not synthesize a
+  PyTorch candidate, keep a pseudo-Diffusers candidate, or preserve any
+  compatibility alias. Real executable backend candidates still come from the
+  backend-capability checked path.
+- Verification passed: `cargo test -p pantograph-embedded-runtime
+  pumas_package_facts_runtime_capability_path_does_not_emit_diffusers_backend_candidate
+  --lib`, `cargo test -p pantograph-embedded-runtime
+  pumas_package_facts_candidates_use_backend_compatibility_reports --lib`,
+  `cargo test -p pantograph-embedded-runtime
+  candle_image_generation_override_rejects_backend_incompatibility_without_selection
+  --lib`, `cargo test -p pantograph-embedded-runtime technical_fit --lib`,
+  `cargo check -p pantograph-embedded-runtime`, and `cargo fmt -p
+  pantograph-embedded-runtime -- --check`, and `git diff --check`.
+- Remaining follow-up: the backend-capability checked technical-fit path still
+  needs to consume the inference-owned execution-evidence report so accepted
+  PyTorch/Diffusers candidates and typed diagnostics share the same boundary as
+  inference execution evidence.

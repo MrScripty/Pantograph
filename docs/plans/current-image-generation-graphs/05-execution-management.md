@@ -4511,6 +4511,28 @@ Worker rules:
   pantograph-embedded-runtime -- --check`, and `git diff --check`.
 - Remaining follow-up: embedded-runtime technical-fit candidate construction
   still needs to consume the inference-owned execution-evidence boundary.
+- 2026-05-16: Completed the Diffusers package-hint execution mapping
+  retirement slice. Embedded-runtime technical-fit no longer converts Pumas
+  `BackendHintLabel::Diffusers` into a scheduler-visible executable backend
+  candidate in the runtime-capability-only path. Without backend capability
+  facts, Diffusers package hints remain evidence and produce no executable
+  candidate.
+- No-fallback/no-legacy confirmation: this slice fails closed instead of
+  preserving a pseudo-Diffusers candidate or aliasing Diffusers to PyTorch.
+  Real executable candidates still require the backend-capability checked path.
+- Verification passed: `cargo test -p pantograph-embedded-runtime
+  pumas_package_facts_runtime_capability_path_does_not_emit_diffusers_backend_candidate
+  --lib`, `cargo test -p pantograph-embedded-runtime
+  pumas_package_facts_candidates_use_backend_compatibility_reports --lib`,
+  `cargo test -p pantograph-embedded-runtime
+  candle_image_generation_override_rejects_backend_incompatibility_without_selection
+  --lib`, `cargo test -p pantograph-embedded-runtime technical_fit --lib`,
+  `cargo check -p pantograph-embedded-runtime`, and `cargo fmt -p
+  pantograph-embedded-runtime -- --check`, and `git diff --check`.
+- Remaining follow-up: the backend-capability checked technical-fit path still
+  needs to consume the inference-owned execution-evidence report so accepted
+  PyTorch/Diffusers candidates and typed diagnostics share the same boundary as
+  inference execution evidence.
 
 ### Traceability Links
 
