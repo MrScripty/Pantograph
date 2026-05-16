@@ -72,10 +72,10 @@ PyTorch/diffusers and produce a retained image artifact.
   workflow-owned validated constructors or newtypes for selected backend key,
   runtime id, runtime variant id, device id, and model ref so invalid selected
   facts fail before node-engine receives runtime context.
-- [ ] Verify backend runtime selection maps diffusion/image-generation package
+- [x] Verify backend runtime selection maps diffusion/image-generation package
   facts and graph hints to PyTorch execution, preserving `diffusers` as the
   dependency and package capability label.
-- [ ] Treat graph runtime requests as scheduler inputs, never execution
+- [x] Treat graph runtime requests as scheduler inputs, never execution
   shortcuts. An omitted runtime on an inference node means runtime selection is
   implicitly owned by scheduler/admission policy. An explicit graph runtime
   request is a hard scheduler requirement: the scheduler must select that
@@ -2196,3 +2196,32 @@ Standards compliance gates for every Option 3 slice:
   retained-output workflow fixture. The top-level planner checklist remains a
   contract umbrella; dependency readiness and full backend capability
   projection still have their own unchecked rows.
+
+2026-05-16 runtime evidence checklist reconciliation slice:
+
+- Smallest useful vertical slice: reconcile completed runtime-selection
+  checklist rows after verifying the inference execution-evidence boundary and
+  embedded-runtime technical-fit adapter now enforce the planned graph runtime
+  semantics.
+- Allowed write set: this plan directory only.
+- No-fallback/no-legacy confirmation: this slice changes only plan status. The
+  verified code path still treats graph runtime as scheduler/admission input,
+  not node-engine or worker execution input; `diffusers` remains package and
+  dependency evidence and is not aliased to PyTorch for an explicit graph
+  runtime request.
+- Verified completed boundaries: Diffusers image-generation package facts
+  produce a PyTorch executable candidate only when PyTorch backend capability
+  facts advertise Diffusers support; explicit `runtime = pytorch` filters to
+  the validated PyTorch candidate; explicit `runtime = diffusers` produces
+  typed diagnostics and no PyTorch alias; omitted runtime leaves validated
+  candidates for scheduler ranking.
+- Verification passed: `cargo test -p inference execution_evidence --lib`,
+  `cargo test -p pantograph-embedded-runtime technical_fit_execution_evidence
+  --lib`, and `cargo test -p pantograph-embedded-runtime technical_fit --lib`.
+- Verification deviation: the first two Cargo tests were launched in parallel
+  and one waited on Cargo's package/build lock. Both completed successfully,
+  and later Cargo verification in this session was run serially.
+- Remaining follow-up: the broader package/dependency-key audit remains open
+  for dependency preflight, runtime display, gateway diagnostics, workflow
+  runtime preflight, and any other path that may still carry conflicting
+  `diffusers` display or dependency rules.

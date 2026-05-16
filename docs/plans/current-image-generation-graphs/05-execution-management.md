@@ -4845,6 +4845,26 @@ Worker rules:
 - Remaining follow-up: artifact-store retention still needs an end-to-end
   retained-output workflow fixture, and dependency readiness/full backend
   capability projection remain unresolved checklist rows.
+- 2026-05-16 runtime evidence checklist reconciliation slice: smallest useful
+  vertical slice was to mark runtime-selection checklist rows complete after
+  verifying the inference execution-evidence boundary and embedded-runtime
+  technical-fit adapter enforce graph runtime semantics. Allowed write set:
+  this plan directory only.
+- No-fallback/no-legacy confirmation: this slice changes plan status only. The
+  verified code path still treats graph runtime as scheduler/admission input,
+  not node-engine or worker execution input; `diffusers` remains package and
+  dependency evidence and is not aliased to PyTorch for explicit graph runtime
+  requests.
+- Verification passed: `cargo test -p inference execution_evidence --lib`,
+  `cargo test -p pantograph-embedded-runtime technical_fit_execution_evidence
+  --lib`, and `cargo test -p pantograph-embedded-runtime technical_fit --lib`.
+- Verification deviation: the first two Cargo tests were launched in parallel
+  and one waited on Cargo's package/build lock. Both completed successfully,
+  and later Cargo verification in this session was run serially.
+- Remaining follow-up: the broader package/dependency-key audit remains open
+  for dependency preflight, runtime display, gateway diagnostics, workflow
+  runtime preflight, and any other path that may still carry conflicting
+  `diffusers` display or dependency rules.
 
 ### Traceability Links
 
