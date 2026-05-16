@@ -65,6 +65,7 @@ pub fn build_runtime_technical_fit_request_with_package_facts(
         runtime_capabilities,
         &[],
         package_facts,
+        &[],
     )
 }
 
@@ -74,6 +75,7 @@ pub fn build_runtime_technical_fit_request_with_backend_package_facts(
     runtime_capabilities: &[WorkflowRuntimeCapability],
     available_backends: &[inference::BackendInfo],
     package_facts: &[inference::ResolvedModelPackageFacts],
+    dependency_readiness_facts: &[inference::DependencyReadinessFact],
 ) -> RuntimeTechnicalFitRequest {
     let mut runtime_request = build_runtime_technical_fit_request(request, runtime_snapshot, &[]);
     runtime_request
@@ -83,6 +85,7 @@ pub fn build_runtime_technical_fit_request_with_backend_package_facts(
             available_backends,
             runtime_capabilities,
             package_facts,
+            dependency_readiness_facts,
             runtime_requirements_resource_estimate(&request.runtime_requirements),
         ));
     runtime_request_with_candidate_cap(runtime_request)
@@ -280,6 +283,7 @@ fn build_runtime_technical_fit_request_for_resolved_package_facts(
         runtime_capabilities,
         available_backends,
         package_facts,
+        &[],
     )
 }
 
@@ -545,6 +549,7 @@ fn runtime_candidates_from_execution_evidence(
     available_backends: &[inference::BackendInfo],
     runtime_capabilities: &[WorkflowRuntimeCapability],
     package_facts: &[inference::ResolvedModelPackageFacts],
+    dependency_readiness_facts: &[inference::DependencyReadinessFact],
     resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
 ) -> Vec<RuntimeTechnicalFitCandidate> {
     let graph_runtime_requirement = graph_runtime_requirement_from_request(request);
@@ -575,7 +580,7 @@ fn runtime_candidates_from_execution_evidence(
         adapt_execution_evidence_to_technical_fit(ExecutionEvidenceTechnicalFitAdapterInput {
             reports: &report_inputs,
             runtime_capabilities,
-            dependency_readiness_facts: &[],
+            dependency_readiness_facts,
             resource_estimate,
         });
 
@@ -1446,6 +1451,20 @@ mod tests {
         }
     }
 
+    fn pytorch_dependency_readiness_facts(
+        state: inference::CapabilityAvailabilityState,
+    ) -> Vec<inference::DependencyReadinessFact> {
+        inference::pytorch_diffusers_image_generation_package_requirements()
+            .into_iter()
+            .map(|declaration| {
+                declaration.to_readiness_fact(
+                    state,
+                    inference::DependencyReadinessResolverOwner::EmbeddedRuntime,
+                )
+            })
+            .collect()
+    }
+
     fn candidate_with_history_key(candidate_id: &str) -> RuntimeTechnicalFitCandidate {
         RuntimeTechnicalFitCandidate {
             candidate_id: candidate_id.to_string(),
@@ -2241,6 +2260,7 @@ mod tests {
             &[runtime_capability()],
             &backends,
             &[package_facts],
+            &[],
         );
 
         let llama = runtime_request
@@ -2324,6 +2344,7 @@ mod tests {
             &[],
             &backends,
             &[package_facts],
+            &[],
         );
 
         assert!(runtime_request.candidates.iter().any(|candidate| {
@@ -2674,6 +2695,7 @@ mod tests {
             &[runtime_capability()],
             &backends,
             &[package_facts],
+            &[],
         );
 
         assert_eq!(runtime_request.candidates.len(), 2);
@@ -2704,6 +2726,78 @@ mod tests {
                 .map(|report| report.status.as_str()),
             Some("accepted")
         );
+    }
+
+    #[test]
+    fn technical_fit_request_projects_dependency_readiness_into_pumas_candidates() {
+        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+            include_str!(
+                "../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
+            ),
+        )
+        .expect("decode image generation package facts fixture");
+        let mut capability = runtime_capability();
+        capability.runtime_id = "pytorch".to_string();
+        capability.display_name = "PyTorch".to_string();
+        capability.backend_keys = vec!["pytorch".to_string()];
+        if let Some(facts) = capability.backend_capability_facts.as_mut() {
+            facts.runtime_variants[0].runtime_variant_id = "pytorch.cuda".to_string();
+            facts.runtime_variants[0].diagnostics.clear();
+        }
+        let mut backend = backend_info(
+            "pytorch",
+            vec![inference::ModelArtifactKind::DiffusersBundle],
+            vec![inference::BackendHintLabel::Diffusers],
+        );
+        backend.capabilities.image_generation = true;
+        backend.capabilities.facts.tasks = vec![inference::BackendTaskCapability::stable(
+            inference::InferenceTaskId::ImageGeneration,
+            vec![inference::InferenceModality::Text],
+            vec![inference::InferenceModality::Image],
+        )];
+        let workflow_request = build_workflow_technical_fit_request(
+            "workflow-a",
+            &WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: None,
+                estimated_peak_ram_mb: None,
+                estimated_min_vram_mb: None,
+                estimated_min_ram_mb: None,
+                estimation_confidence: "fixture".to_string(),
+                required_models: vec!["image/stable-diffusion/tiny-sd".to_string()],
+                required_backends: vec!["pytorch".to_string()],
+                required_extensions: Vec::new(),
+            },
+            None,
+            None,
+            None,
+            None,
+        );
+        let dependency_readiness_facts =
+            pytorch_dependency_readiness_facts(inference::CapabilityAvailabilityState::Available);
+
+        let runtime_request = build_runtime_technical_fit_request_with_backend_package_facts(
+            &workflow_request,
+            None,
+            &[capability],
+            &[backend],
+            &[package_facts],
+            &dependency_readiness_facts,
+        );
+
+        let candidate = runtime_request
+            .candidates
+            .iter()
+            .find(|candidate| candidate.backend_key.as_deref() == Some("pytorch"))
+            .expect("pytorch candidate should exist");
+        assert_eq!(candidate.dependency_readiness.len(), 5);
+        assert!(candidate
+            .dependency_readiness
+            .iter()
+            .all(|fact| fact.state.is_ready()));
+        assert!(candidate
+            .dependency_readiness
+            .iter()
+            .any(|fact| fact.dependency_id == "diffusers"));
     }
 
     #[test]
@@ -2748,6 +2842,7 @@ mod tests {
             &[],
             &backends,
             &[package_facts],
+            &[],
         );
 
         let registry_decision = select_runtime_technical_fit(&runtime_request);
@@ -2819,6 +2914,7 @@ mod tests {
             &[],
             &backends,
             &[package_facts],
+            &[],
         );
 
         let registry_decision = select_runtime_technical_fit(&runtime_request);

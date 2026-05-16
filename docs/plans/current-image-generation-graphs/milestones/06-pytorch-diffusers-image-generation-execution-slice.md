@@ -2512,8 +2512,8 @@ readiness:
            Tests prove normalization preserves scoped dependency proof and that
            selected decisions carry the proof rather than relying on
            `supports_runtime_requirements` or device diagnostics. This is a
-         partial completion of stage 4 because workflow/admission execution
-         plans still need to carry the selected proof into inference.
+           partial completion of stage 4 because workflow/admission execution
+           plans still need to carry the selected proof into inference.
          - 2026-05-16 adapter projection slice: extended the
            embedded-runtime execution-evidence adapter input with supplied
            `inference::DependencyReadinessFact` values and projected matching
@@ -2524,6 +2524,16 @@ readiness:
            model-family scope, reason code, and reason text. This still leaves
            production host package snapshots and workflow/admission execution
            plan propagation for later slices; no scheduler filtering changed.
+         - 2026-05-16 request-builder proof input slice: extended
+           embedded-runtime technical-fit request construction so
+           `build_runtime_technical_fit_request_with_backend_package_facts`
+           receives explicit dependency-readiness facts and passes them to the
+           execution-evidence adapter. Focused coverage proves the
+           backend-checked Pumas candidate path carries PyTorch/Diffusers
+           readiness proof when the caller supplies it. Production
+           `workflow_technical_fit_decision` still passes an empty fact slice
+           until the host package snapshot source is wired; scheduler
+           filtering remains unchanged.
       5. Wire scheduler/admission candidate filtering to consume readiness
          proof and fail candidate selection while emitting ledger diagnostics
          when required dependencies are unavailable.

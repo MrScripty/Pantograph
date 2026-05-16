@@ -5239,6 +5239,30 @@ Worker rules:
     package readiness snapshots, carry selected proof through
     workflow/admission execution plans into inference, and then make
     scheduler filtering consume readiness proof.
+- 2026-05-16 technical-fit request dependency-readiness input slice:
+  - Smallest useful vertical slice: make backend-package-fact technical-fit
+    request construction accept explicit dependency-readiness facts and pass
+    them into the execution-evidence adapter.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log.
+  - No-fallback/no-legacy confirmation: callers now have an explicit proof
+    input for dependency readiness. The builder does not infer readiness from
+    package hints, runtime display strings, Python sidecar presence, legacy
+    dependency-environment checks, or worker package imports.
+  - Implementation notes:
+    `build_runtime_technical_fit_request_with_backend_package_facts` now
+    accepts a `&[inference::DependencyReadinessFact]` slice and passes it
+    through to the adapter. Existing production construction still supplies an
+    explicit empty slice until the host package snapshot source is wired.
+  - Verification passed: `cargo test -p pantograph-embedded-runtime
+    technical_fit_request_projects_dependency_readiness_into_pumas_candidates
+    --lib`.
+  - Remaining follow-up: wire a host-resolved Python package snapshot source so
+    production technical-fit calls pass real PyTorch/Diffusers package
+    readiness facts, then carry selected proof through workflow/admission
+    execution plans into inference.
 
 ### Traceability Links
 
