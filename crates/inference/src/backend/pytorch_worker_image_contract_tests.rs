@@ -155,7 +155,7 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
         num_inference_steps: Some(8),
         guidance_scale: Some(7.5),
         seed: Some(42),
-        denoising_scheduler: Some("euler".to_string()),
+        denoising_scheduler: None,
         num_images_per_prompt: Some(1),
         init_image: None,
         mask_image: None,

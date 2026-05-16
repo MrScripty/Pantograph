@@ -4026,9 +4026,29 @@ Worker rules:
   backend-pytorch test_image_generation_result_from_worker_response_maps_images
   --lib`, `cargo check -p inference`, `cargo fmt -p inference -- --check`, and
   `git diff --check`.
-- Remaining follow-up: planner/family option-support rules still need to reject
-  unsupported explicit `denoising_scheduler` values before worker dispatch when
-  the selected family/runtime cannot apply them.
+- Follow-up at this point: planner/family option-support rules still needed to
+  reject unsupported explicit `denoising_scheduler` values before worker
+  dispatch when the selected family/runtime cannot apply them. The next slice
+  resolves this for the current Stable Diffusion planner path.
+- 2026-05-15: Completed the denoising scheduler planner option-support slice.
+  Smallest useful vertical slice: reject explicit `denoising_scheduler` values
+  in the side-effect-free image-generation planner until family/runtime support
+  can actually apply scheduler changes. Allowed write set:
+  `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract_tests.rs`,
+  `crates/inference/src/README.md`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because the planner still
+  validates primitive option id shape, but valid explicit scheduler ids now
+  fail with `UnsupportedOption` before worker dispatch instead of being sent to
+  Python for backend-local recovery or silent default behavior.
+- Verification passed: `cargo test -p inference image_generation_planner
+  --lib`, `cargo test -p inference --features backend-pytorch
+  pytorch_worker_image --lib`, `cargo check -p inference`, `cargo fmt -p
+  inference -- --check`, and `git diff --check`.
+- Remaining follow-up: broader family option-support tables still need to
+  classify guidance scale, negative prompt, image count, dtype, dimensions, and
+  future supported scheduler overrides per image family.
 
 ### Traceability Links
 

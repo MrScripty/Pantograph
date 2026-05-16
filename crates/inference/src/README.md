@@ -345,8 +345,9 @@ async fn run_image_request(
   `denoising_scheduler`. The older overloaded `scheduler` field name is not a
   request compatibility alias; source package facts may still use factual
   component roles such as Diffusers `scheduler`. Explicit denoising scheduler
-  values must be applied by the worker or rejected; they must not be silently
-  dropped while returning success metadata.
+  values currently fail planner validation until family/runtime support can
+  apply them; workers must also reject unsupported values rather than silently
+  dropping them while returning success metadata.
 - `rerank()` accepts one query plus candidate documents and returns scored,
   ordered results; callers should treat response order, not input order, as
   authoritative.

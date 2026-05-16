@@ -500,22 +500,26 @@ fn validate_denoising_scheduler(
     request: &ImageGenerationRequest,
     diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
 ) -> Option<DenoisingSchedulerOptionId> {
-    request
-        .denoising_scheduler
-        .as_deref()
-        .and_then(
-            |scheduler| match DenoisingSchedulerOptionId::parse(scheduler) {
-                Ok(option_id) => Some(option_id),
-                Err(error) => {
-                    diagnostics.push(diagnostic(
-                        ImageGenerationPlannerDiagnosticCode::InvalidDenoisingSchedulerOptionId,
-                        "request.denoising_scheduler",
-                        error.to_string(),
-                    ));
-                    None
-                }
-            },
-        )
+    request.denoising_scheduler.as_deref().and_then(|scheduler| {
+        match DenoisingSchedulerOptionId::parse(scheduler) {
+            Ok(option_id) => {
+                diagnostics.push(diagnostic(
+                    ImageGenerationPlannerDiagnosticCode::UnsupportedOption,
+                    "request.denoising_scheduler",
+                    "explicit denoising_scheduler changes require family/runtime support and are not supported by this planner slice",
+                ));
+                Some(option_id)
+            }
+            Err(error) => {
+                diagnostics.push(diagnostic(
+                    ImageGenerationPlannerDiagnosticCode::InvalidDenoisingSchedulerOptionId,
+                    "request.denoising_scheduler",
+                    error.to_string(),
+                ));
+                None
+            }
+        }
+    })
 }
 
 fn validate_non_zero(

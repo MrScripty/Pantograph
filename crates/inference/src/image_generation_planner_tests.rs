@@ -25,7 +25,7 @@ fn image_request() -> ImageGenerationRequest {
         num_inference_steps: Some(8),
         guidance_scale: Some(7.5),
         seed: Some(42),
-        denoising_scheduler: Some("euler".to_string()),
+        denoising_scheduler: None,
         num_images_per_prompt: Some(2),
         init_image: None,
         mask_image: None,
@@ -99,20 +99,14 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
     assert_eq!(plan.runtime_variant_id.as_str(), "pytorch.diffusers");
     assert_eq!(plan.family, ImageGenerationFamilyLabel::StableDiffusion);
     assert_eq!(plan.pipeline_class, "StableDiffusionPipeline");
-    assert_eq!(
-        plan.denoising_scheduler
-            .as_ref()
-            .expect("scheduler should parse")
-            .as_str(),
-        "euler"
-    );
+    assert_eq!(plan.denoising_scheduler, None);
     assert_eq!(plan.estimated_output_rgba_bytes, Some(2_097_152));
     assert_eq!(
         plan.required_components,
         STABLE_DIFFUSION_REQUIRED_COMPONENTS.to_vec()
     );
     let plan_json = serde_json::to_value(&plan).expect("plan should serialize");
-    assert_eq!(plan_json["denoising_scheduler"], "euler");
+    assert!(plan_json.get("denoising_scheduler").is_none());
     assert!(plan_json.get("scheduler").is_none());
 }
 
@@ -227,6 +221,28 @@ fn planner_rejects_invalid_denoising_scheduler_option_id() {
     let diagnostics = rejected_diagnostics(&outcome);
     assert!(diagnostics.iter().any(|diagnostic| {
         diagnostic.code == ImageGenerationPlannerDiagnosticCode::InvalidDenoisingSchedulerOptionId
+            && diagnostic.field_path == "request.denoising_scheduler"
+    }));
+}
+
+#[test]
+fn planner_rejects_explicit_denoising_scheduler_until_family_support_exists() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = ImageGenerationRequest {
+        denoising_scheduler: Some("euler".to_string()),
+        ..image_request()
+    };
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::UnsupportedOption
             && diagnostic.field_path == "request.denoising_scheduler"
     }));
 }
