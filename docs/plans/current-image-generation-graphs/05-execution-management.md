@@ -4420,6 +4420,19 @@ Worker rules:
   context, inference DTOs, gateway calls, and worker envelopes must still not
   carry selected runtime values except through scheduler-produced execution
   decisions.
+- 2026-05-16: Completed a standards pass over the latest graph runtime
+  projection and execution-evidence staging against the Coding Standards. The
+  plan now explicitly requires README/ADR traceability for new evidence,
+  graph-runtime, workflow capability, embedded-runtime, and scheduler-policy
+  contract changes; keeps the evidence boundary synchronous unless real I/O is
+  introduced; adds a test-first vertical acceptance path for graph runtime
+  projection; and requires explicit runtime requests to constrain canonical
+  scheduler ranking instead of using a separate candidate-id override picker.
+- No-fallback/no-legacy confirmation: these standards refinements do not add
+  compatibility shims. They require typed graph runtime intent, one
+  scheduler-owned projection path, canonical scheduler ranking inside explicit
+  runtime constraints, and typed diagnostics when package/capability/runtime
+  facts cannot produce a valid selected decision.
 
 ### Traceability Links
 

@@ -1505,6 +1505,14 @@ Staged Option 3 implementation plan:
   warmed-runtime affinity, exploration before enough history exists,
   historical timing/failure weighting, memory-fit ranking, queue policy, and
   retry/reschedule decisions.
+- Explicit-runtime ranking rule: an explicit graph `runtime` request narrows
+  the scheduler candidate set to candidates that satisfy the requested runtime
+  after package/capability validation. It must then use the canonical scheduler
+  ranking path inside that constrained set. Do not add a separate
+  override-only picker that selects by candidate id, insertion order, or
+  ad-hoc priority; otherwise explicit runtime requests would bypass timing
+  history, warmed-runtime state, memory-fit ranking, and future scheduler
+  policy changes.
 - Graph runtime-request semantics: graph `runtime` / executable backend
   inputs are scheduler inputs with typed intent, not execution decisions. If
   the inference node omits the runtime, scheduler/admission policy chooses
@@ -1536,11 +1544,13 @@ Staged Option 3 implementation plan:
   (`runtime = pytorch`). The allowed initial write set should be limited to the
   new inference evidence module, PyTorch static capability facts and their
   focused tests if required to express Diffusers support, existing inference
-  model/backend compatibility tests or fixtures, runtime-identity tests only if
-  alias documentation needs clarification, and this plan. It should not edit
+  model/backend compatibility tests or fixtures, `crates/inference/src/README.md`
+  or an ADR documenting the new evidence boundary, runtime-identity tests only
+  if alias documentation needs clarification, and this plan. It should not edit
   workflow-service admission, embedded-runtime technical fit, workflow-node
   descriptors, node-engine, or gateway behavior until the boundary contract is
-  pinned.
+  pinned. The evidence boundary must be synchronous core logic unless a future
+  slice identifies real I/O that belongs in an async shell.
 - Second implementation slice: add the optional inference-node `runtime` input
   and scheduler-request projection. This slice should expose the graph input
   in the workflow-node descriptor, update workflow capability/runtime
@@ -1553,9 +1563,15 @@ Staged Option 3 implementation plan:
   descriptor tests, `crates/pantograph-workflow-service/src/capabilities.rs`,
   focused workflow-service capability/preflight tests, graph registry or
   persistence tests only if the new `runtime` port requires contract allowlist
-  updates, and this plan. It must not add graph runtime values to node-engine
-  inference request construction, inference DTOs, gateway calls, or worker
-  envelopes.
+  updates, owning module README or ADR updates required by the changed graph
+  and workflow capability contracts, and this plan. Before implementation,
+  add a failing vertical acceptance test through the real workflow graph
+  capability/preflight and scheduler-request projection path proving:
+  omitted `runtime` produces no hard override, explicit `runtime = pytorch`
+  produces the scheduler requirement, and nested package/dependency
+  `recommended_backend` does not. It must not add graph runtime values to
+  node-engine inference request construction, inference DTOs, gateway calls,
+  or worker envelopes.
 - Third implementation slice: migrate embedded-runtime technical-fit
   candidate construction and dependency preflight to consume the boundary.
   Allowed write set can include
@@ -1563,8 +1579,12 @@ Staged Option 3 implementation plan:
   `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
   `crates/pantograph-embedded-runtime/src/runtime_capabilities.rs`,
   `crates/pantograph-embedded-runtime/src/model_dependency_descriptors.rs`,
-  `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
-  focused technical-fit/dependency tests, and this plan.
+  `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`, focused
+  technical-fit/dependency tests, affected embedded-runtime README/ADR updates,
+  and this plan. If explicit runtime requirements require runtime-registry
+  selector changes, put those changes in a separate serial scheduler-policy
+  slice or explicitly extend this slice with `pantograph-runtime-registry`
+  ownership before implementation.
 - Fourth implementation slice: migrate workflow/runtime preflight and gateway
   diagnostics that currently maintain their own `diffusers` backend logic.
   This includes workflow-service required-backend extraction for nested
@@ -1621,6 +1641,11 @@ Standards compliance gates for every Option 3 slice:
   only as scheduler inputs. They are not execution decisions, are not required
   for ordinary inference graphs, and must produce typed diagnostics when they
   cannot be reconciled with canonical runtime/package facts.
+- Graph runtime contract rule: new inference-node runtime intent must be a
+  typed optional graph input projected into one scheduler-owned request field.
+  It must not be preserved through legacy `backend_key` compatibility paths,
+  dependency metadata forwarding, inference DTOs, gateway calls, or worker
+  envelopes. Omitted runtime means no explicit scheduler override.
 - Dependency/backend separation rule: package/dependency evidence and
   execution backend selection must use separate names/types. `diffusers`
   package facts can drive PyTorch eligibility, but they must not become an
@@ -1651,6 +1676,14 @@ Standards compliance gates for every Option 3 slice:
 - Security/path rule: any path-like model/package/artifact value crossing into
   execution-plan records must already be validated by the existing Pumas/model
   root validation boundary or rejected before worker execution.
-- Verification rule: each slice needs focused unit/contract tests, and the
-  first cross-layer implementation slice needs a vertical acceptance test
-  through the real node-engine/inference boundary.
+- Verification rule: each slice needs focused unit/contract tests. The first
+  graph-runtime projection slice needs a test-first vertical acceptance path
+  through real workflow graph capability/preflight and scheduler-request
+  projection. The first slice that changes node-engine or inference execution
+  behavior needs a separate vertical acceptance path through the real planned
+  node-engine/inference boundary.
+- Scheduler-policy rule: explicit runtime requirements constrain valid
+  scheduler candidates before canonical ranking; they must not create a
+  parallel ranking algorithm or candidate-id based shortcut. Any required
+  runtime-registry selector change is scheduler-policy work and needs its own
+  focused tests plus README/ADR traceability when the public contract changes.
