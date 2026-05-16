@@ -4216,6 +4216,25 @@ Worker rules:
   falling back to request-only image execution.
 - Verification for this plan-only update: `git status --short`, targeted
   codebase blast-radius inspection, plan diff review, and `git diff --check`.
+- 2026-05-15: Completed a standards iteration over the planned image identity
+  match gate against plan, Rust API, security, testing, documentation, async,
+  architecture, and decomposition standards.
+- Standards refinement recorded in Milestone 6: image-generation execution
+  must fail when the scheduler-selected model ref is missing, not only when it
+  differs from package facts. This prevents package facts from acting as an
+  implicit model-selection fallback while preserving optional selected model
+  refs only for task families whose scheduler/admission decision is explicitly
+  not model-bound.
+- Standards refinement recorded in Milestone 6: planned image identity tests
+  must cover both missing selected model refs and selected/package mismatch,
+  and both cases must return typed diagnostics with no worker dispatch.
+- Standards conclusion: the latest identity-match plan remains compliant if
+  implemented as a synchronous, typed validation step in the image planning or
+  execution-plan projection boundary, with no graph-input repair, no package
+  facts override, no node-engine scheduler policy, and no new logic added to
+  oversized modules without a focused extraction.
+- Verification for this standards pass: `git status --short`, standards
+  review, plan diff review, and `git diff --check`.
 
 ### Traceability Links
 
