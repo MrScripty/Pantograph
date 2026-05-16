@@ -53,6 +53,7 @@ packages.
 | `task_executor_tests/` | Focused task-executor behavior tests for dependency preflight/fallback, input helpers, Puma-Lib metadata rebinding through owner and selector-access roles, and Python runtime recorder/stream behavior. |
 | `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, advisory Pumas package-fact candidate projection from explicit selector-access owner facts, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
 | `technical_fit_diagnostics.rs` | Owns technical-fit diagnostic code, severity, device-class, and attribution projection between runtime-registry and workflow-service DTOs so evidence mapping policy can grow outside the broad technical-fit request builder. |
+| `technical_fit_execution_evidence.rs` | Owns the execution-evidence to technical-fit adapter contract, mapping inference-owned evidence reports into runtime-registry candidates and typed diagnostics without old package-hint fallback behavior. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke audio and ONNX Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |

@@ -106,7 +106,7 @@ PyTorch/diffusers and produce a retained image artifact.
   capability/readiness context and produce `RuntimeTechnicalFitCandidate`
   values and typed technical-fit diagnostics. It must not preserve the old
   direct package-hint/backend compatibility loops as fallback behavior.
-- [ ] Add an explicit diagnostics mapping table for the
+- [x] Add an explicit diagnostics mapping table for the
   `ExecutionEvidenceTechnicalFitAdapter`. Each inference-owned
   `ExecutionEvidenceDiagnostic` kind must map to one runtime-registry
   technical-fit diagnostic code with preserved attribution for task id,
@@ -150,7 +150,7 @@ PyTorch/diffusers and produce a retained image artifact.
   interop surfaces. Tests must cover every new diagnostic code and attribution
   field, unknown/omitted optional fields, and prove diagnostics survive
   projection without string matching.
-- [ ] Treat "no accepted execution-evidence candidate" as an explicit adapter
+- [x] Treat "no accepted execution-evidence candidate" as an explicit adapter
   outcome. Either add an inference-owned diagnostic code before mapping or
   synthesize one typed runtime-registry diagnostic in the adapter, but do not
   infer it only from an empty candidate list without a durable diagnostic code
@@ -1964,3 +1964,26 @@ Standards compliance gates for every Option 3 slice:
 - Verification passed: focused embedded-runtime technical-fit tests,
   `cargo check -p pantograph-embedded-runtime`, `cargo fmt -p
   pantograph-embedded-runtime -- --check`, and `git diff --check`.
+
+2026-05-16 execution-evidence technical-fit adapter contract slice:
+
+- Smallest useful vertical slice: add the internal
+  `technical_fit_execution_evidence.rs` adapter boundary without public
+  technical-fit wiring. The adapter consumes inference-owned
+  `ExecutionEvidenceReport` values plus minimal task/model context and
+  workflow runtime capability facts, then emits runtime-registry candidates
+  and typed diagnostics.
+- No-fallback/no-legacy confirmation: the adapter does not call old
+  package-hint builders, does not alias `runtime = diffusers` to PyTorch, and
+  emits an explicit `evidence_no_accepted_candidate` diagnostic when no
+  validated candidate survives.
+- Verification passed: `cargo test -p pantograph-embedded-runtime
+  technical_fit_execution_evidence --lib`, `cargo test -p
+  pantograph-embedded-runtime technical_fit --lib`, `cargo check -p
+  pantograph-embedded-runtime`, `cargo fmt -p pantograph-embedded-runtime
+  -- --check`, and `git diff --check`.
+- Deviation/follow-up: the adapter module has a staged `dead_code` allowance
+  because this slice stops before public wiring. The next wiring slice must
+  remove that allowance, replace the current backend-package-facts candidate
+  construction call site with the adapter, and delete or reduce the old direct
+  candidate builders so they cannot remain as fallback behavior.

@@ -39,6 +39,10 @@ use crate::{workflow_runtime::unix_timestamp_ms, EmbeddedWorkflowHost};
 
 #[path = "technical_fit_diagnostics.rs"]
 mod technical_fit_diagnostics;
+// Staged adapter contract; the next slice wires this module and removes the old builders.
+#[allow(dead_code)]
+#[path = "technical_fit_execution_evidence.rs"]
+mod technical_fit_execution_evidence;
 use technical_fit_diagnostics::{
     project_runtime_device_class, project_runtime_device_diagnostic,
     project_workflow_device_diagnostic, project_workflow_runtime_variant_device_class,

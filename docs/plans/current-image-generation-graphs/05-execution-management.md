@@ -4651,6 +4651,31 @@ Worker rules:
   `ExecutionEvidenceTechnicalFitAdapter` mapping table in a separate focused
   module and then delete or reduce the old package-facts candidate builders
   when the adapter is wired.
+- 2026-05-16 execution-evidence technical-fit adapter contract slice:
+  smallest useful vertical slice was to add the internal
+  `technical_fit_execution_evidence.rs` adapter without public wiring. The
+  adapter consumes inference-owned `ExecutionEvidenceReport` values plus
+  minimal task/model context and workflow runtime capability facts, then
+  emits runtime-registry candidates and typed diagnostics. Allowed write set:
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+  `crates/pantograph-embedded-runtime/src/technical_fit_execution_evidence.rs`,
+  `crates/pantograph-embedded-runtime/src/README.md`, and this plan directory.
+- No-fallback/no-legacy confirmation: the adapter maps validated executable
+  evidence to scheduler candidates and maps rejected evidence to typed
+  diagnostics. It does not call the old package-hint builders, does not alias
+  `runtime = diffusers` to PyTorch, and synthesizes an explicit
+  `evidence_no_accepted_candidate` diagnostic when no candidate survives.
+- Verification passed: `cargo test -p pantograph-embedded-runtime
+  technical_fit_execution_evidence --lib`, `cargo test -p
+  pantograph-embedded-runtime technical_fit --lib`, `cargo check -p
+  pantograph-embedded-runtime`, `cargo fmt -p pantograph-embedded-runtime
+  -- --check`, and `git diff --check`.
+- Deviation/follow-up: the new module has a narrow staged `dead_code`
+  allowance because this slice intentionally stops before public technical-fit
+  wiring. Remove that allowance in the wiring slice, replace the current
+  backend-package-facts candidate construction call site with the adapter, and
+  delete or reduce the old direct candidate builders so they cannot remain as
+  fallback behavior.
 
 ### Traceability Links
 
