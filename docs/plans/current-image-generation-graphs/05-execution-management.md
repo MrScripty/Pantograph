@@ -3295,7 +3295,7 @@ Worker rules:
 - Remaining follow-up: workflow/inference execution still needs to build the
   planning input from request, Pumas facts, readiness, executable candidates,
   history summaries, and the scheduler decision.
-- 2026-05-14 re-plan boundary before workflow async-shell wiring: the next
+- 2026-05-14 re-plan boundary before workflow execution-plan wiring: the next
   successful image-generation execution slice must connect the scheduler-owned
   `WorkflowTechnicalFitDecision` to node-engine image execution so
   `generate_image_from_planning_input` receives a reduced
@@ -3306,11 +3306,13 @@ Worker rules:
   without storing scheduler facts in workflow graph nodes, pushing Pumas facts
   through worker envelopes, or fragmenting runtime-selection policy across
   node-engine and embedded-runtime.
-- Standards constraint: this must be a narrow async-shell integration owned at
-  the workflow/embedded-runtime composition boundary. The inference planner and
-  gateway stay side-effect free below that boundary; node-engine must not
-  invent backend/runtime/device decisions from request fields, active backend
-  state, or graph hints.
+- Standards constraint: this must be a narrow execution-plan integration owned
+  at the workflow/embedded-runtime composition boundary. Planning/admission
+  helpers stay synchronous unless the slice actually performs I/O or awaits
+  already-owned runtime state. The inference planner and gateway stay side
+  effect free below that boundary; node-engine must not invent
+  backend/runtime/device decisions from request fields, active backend state,
+  or graph hints.
 - 2026-05-15 execution-plan architecture decision: Option 3 is now the target
   architecture. Scheduler/admission will produce a first-class per-run workflow
   execution plan containing per-node execution decisions. Node execution
@@ -3350,6 +3352,14 @@ Worker rules:
   a selected per-node execution-plan decision must fail with typed diagnostics
   instead of using active backend state, raw graph hints, request model strings,
   implicit `diffusers` aliases, or CPU/runtime fallback.
+- Async boundary decision: do not add async to Option 3 planning unless it is
+  needed for actual I/O, existing async runtime-state APIs, or durable writes
+  that cannot be performed synchronously at the owner boundary. The core
+  scheduler/admission projection and inference planner remain synchronous
+  deterministic functions over already-gathered facts. If a future slice needs
+  Pumas, dependency, runtime-registry, ledger-history, or artifact-store I/O,
+  that slice must keep awaits at the owning service boundary and pass reduced
+  typed facts into the synchronous planning core.
 - 2026-05-15 standards pass over Option 3 execution-plan update:
   reviewed `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
   `TESTING-STANDARDS.md`, `RUST-API-STANDARDS.md`, `RUST-ASYNC-STANDARDS.md`,
@@ -3360,9 +3370,10 @@ Worker rules:
      schema/version fields, typed ids/enums, bounded diagnostic arrays,
      `#[non_exhaustive]` where future extension is likely, and `Result`
      returning constructors/projection helpers for validated decisions.
-  2. Admission production must use a synchronous core helper inside an async
-     shell. It must not add untracked `tokio::spawn`, polling loops, unbounded
-     queues, or locks held across `.await`.
+  2. Admission production must use a synchronous core helper fed by
+     already-gathered facts. Async is allowed only at actual I/O or existing
+     async runtime-state boundaries, and those awaits must not hold locks or
+     introduce untracked `tokio::spawn`, polling loops, or unbounded queues.
   3. Projection from workflow execution-plan node decision to inference
      `BackendExecutionDecision` must parse/validate selected backend,
      runtime-variant, device, task, and model-ref fields and return typed

@@ -77,8 +77,10 @@ Reference repo findings used by this design:
 
 - Image-generation planning is a synchronous domain operation. It must not
   spawn tasks or own long-lived resources.
-- Pumas lookup, artifact reads/writes, and Python worker calls remain async or
-  process-boundary operations owned by existing service/runtime owners.
+- Pumas lookup, artifact reads/writes, and Python worker calls may be async or
+  process-boundary operations only when those owners actually need I/O or
+  awaitable runtime state. Do not make planner/admission functions async by
+  default; pass reduced facts into synchronous planning cores.
 - No new background task, timer, polling loop, or worker process lifecycle is
   introduced by this plan without adding an explicit owner, cancellation path,
   shutdown path, and deterministic cleanup tests.

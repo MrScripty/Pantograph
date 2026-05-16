@@ -891,7 +891,7 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   the planning input from request, Pumas facts, readiness, candidates, history,
   and scheduler decision facts.
 
-2026-05-14 re-plan boundary before workflow async-shell wiring:
+2026-05-14 re-plan boundary before workflow execution-plan wiring:
 
 - Boundary: the next successful image-generation execution slice must connect
   the scheduler-owned `WorkflowTechnicalFitDecision` to node-engine image
@@ -903,11 +903,13 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   without storing scheduler facts in workflow graph nodes, pushing Pumas facts
   through worker envelopes, or fragmenting runtime-selection policy across
   node-engine and embedded-runtime.
-- Standards constraint: this must be a narrow async-shell integration owned at
-  the workflow/embedded-runtime composition boundary. The inference planner and
-  gateway stay side-effect free below that boundary; node-engine must not
-  invent backend/runtime/device decisions from request fields, active backend
-  state, or graph hints.
+- Standards constraint: this must be a narrow execution-plan integration owned
+  at the workflow/embedded-runtime composition boundary. Planning/admission
+  helpers stay synchronous unless the slice actually performs I/O or awaits
+  already-owned runtime state. The inference planner and gateway stay side
+  effect free below that boundary; node-engine must not invent
+  backend/runtime/device decisions from request fields, active backend state,
+  or graph hints.
 
 2026-05-15 execution-plan architecture decision:
 
@@ -926,6 +928,14 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
   lacks a selected per-node decision, execution fails with typed diagnostics
   instead of using active backend state, raw graph hints, request model strings,
   implicit `diffusers` aliases, or CPU/runtime fallback.
+- Async boundary decision: do not add async to Option 3 planning unless it is
+  needed for actual I/O, existing async runtime-state APIs, or durable writes
+  that cannot be performed synchronously at the owner boundary. The core
+  scheduler/admission projection and inference planner remain synchronous
+  deterministic functions over already-gathered facts. If a future slice needs
+  Pumas, dependency, runtime-registry, ledger-history, or artifact-store I/O,
+  that slice must keep awaits at the owning service boundary and pass reduced
+  typed facts into the synchronous planning core.
 
 Staged Option 3 implementation plan:
 
@@ -987,10 +997,12 @@ Staged Option 3 implementation plan:
    - Store it as run-scoped execution context, not as saved workflow content.
      If persistence is needed for diagnostics or recovery, persist only the
      execution-plan record with explicit schema/version and source ids.
-   - Keep execution-plan production in a synchronous core helper fed by an
-     async shell that has already gathered runtime preflight and scheduler
-     facts. Do not introduce untracked background tasks, polling loops,
-     unbounded queues, or locks held across `.await`.
+   - Keep execution-plan production in a synchronous core helper fed by
+     already-gathered runtime preflight and scheduler facts. Add async only
+     when a slice demonstrably needs I/O or an existing async runtime-state
+     API; do not make admission/planning async by default. Do not introduce
+     untracked background tasks, polling loops, unbounded queues, or locks held
+     across `.await`.
    - If a later slice persists execution plans during admission, the durable
      write must be transactional or explicitly idempotent across cancellation
      points. Do not split admission, plan persistence, and active-run state into
