@@ -94,6 +94,32 @@ PyTorch/diffusers and produce a retained image artifact.
   `backend_key = pytorch` and Pumas Diffusers package hints. `diffusers`
   remains package/runtime capability evidence, not a graph-visible backend
   preference.
+- [ ] Add a general execution-evidence normalization boundary before replacing
+  Diffusers mappings. This boundary belongs beside inference model/package
+  contracts because it interprets Pumas/package facts, artifact kinds, task
+  evidence, and backend hints; it must not live inside the image planner,
+  PyTorch backend, node-engine, workflow-service, or the scheduler policy
+  itself. Shared runtime-identity helpers may continue to normalize stable
+  backend id spelling, but they must not decide that one package/runtime
+  evidence label selects another executable backend.
+- [ ] Model execution evidence with typed roles that keep these concepts
+  separate: executable backend candidate, dependency/package evidence,
+  runtime capability evidence, graph preference/constraint, and display label.
+  The same evidence model must be reusable for Transformers/PyTorch,
+  GGUF/llama.cpp, ONNX Runtime, Candle embeddings, vLLM, MLX, and future
+  runtimes. Diffusers image generation is only the first consumer.
+- [ ] Implement the Diffusers rule as data under that general boundary:
+  package facts such as `artifact_kind = diffusers_bundle`, Diffusers package
+  status, and Diffusers/backend hints can produce a PyTorch executable
+  candidate only when PyTorch capability facts advertise the required
+  Diffusers support. `diffusers` remains dependency/package/capability
+  evidence and must not be emitted as a scheduler-selected executable backend
+  key unless a real executable Diffusers backend is registered in the future.
+- [ ] Keep image/PyTorch-specific behavior inside the PyTorch/diffusers image
+  bridge after scheduler selection. The image planner may require a
+  scheduler-selected PyTorch backend and Diffusers package facts, but it must
+  not own package-hint-to-backend candidate normalization, runtime ranking,
+  warmed-runtime affinity, or historical scheduler policy.
 - [x] Rename image-generation sampling-scheduler fields to
   `denoising_scheduler` across graph ports, node-engine request construction,
   inference planner DTOs, worker envelopes, Python worker inputs, diagnostics,
@@ -1400,6 +1426,89 @@ Staged Option 3 implementation plan:
   fixture exists, proving the `image` port is retained as one media body and
   `results` remains compact after conversion.
 
+2026-05-15 execution-evidence normalization planning:
+
+- Objective: replace scattered `diffusers` executable-backend decisions with a
+  general execution-evidence normalization boundary that works for all model
+  families and runtimes. The immediate Diffusers/PyTorch case must be one row
+  in a broader evidence system, not a hidden image-generation or PyTorch-only
+  shortcut.
+- Architectural placement: create the evidence interpretation boundary beside
+  inference model/package contracts, for example an inference-owned
+  `execution_evidence` module or equivalently named submodule. That boundary
+  can consume `ResolvedModelPackageFacts`, artifact kind, task evidence,
+  backend hints, runtime capability facts, and optional graph constraints. It
+  must not live inside `image_generation_planner`, `backend/pytorch`,
+  node-engine, workflow-service, or the scheduler ranking algorithm.
+- Shared identity scope: `pantograph-runtime-identity` remains the owner for
+  spelling/alias normalization such as `torch -> pytorch` or
+  `llamacpp -> llama_cpp`. It must not own package-fact interpretation such as
+  "Diffusers package evidence can be executed by PyTorch"; that decision
+  depends on inference package contracts and backend capability facts.
+- General contract shape: the evidence boundary should return typed evidence
+  records with explicit roles instead of a single overloaded string. Required
+  roles are executable backend candidate, dependency/package evidence, runtime
+  capability evidence, graph preference/constraint, and display label. The
+  records must retain enough source detail for diagnostics without carrying
+  full Pumas facts into scheduler state.
+- General applicability: the first implementation must be shaped so later
+  rows can cover Transformers/PyTorch, GGUF/llama.cpp, ONNX Runtime bundles,
+  Candle embeddings, vLLM, MLX, Stable Audio, and remote runtimes without
+  changing scheduler APIs. A new runtime should add capability/evidence rows,
+  not fork image-generation logic.
+- Diffusers rule: Diffusers package evidence such as `diffusers_bundle`,
+  present Diffusers facts, `BackendHintLabel::Diffusers`, and
+  `recommended_backend = diffusers` may produce a PyTorch executable backend
+  candidate only when PyTorch runtime capability facts advertise Diffusers
+  support for the requested task/model shape. The emitted executable backend
+  key is `pytorch`; `diffusers` remains dependency/package/capability evidence.
+- Runtime-specific separation: PyTorch-specific image behavior starts only
+  after scheduler selection has produced a PyTorch `BackendExecutionDecision`.
+  The PyTorch/diffusers image bridge may validate pipeline family, components,
+  denoising scheduler support, device policy, dependency readiness, and worker
+  envelope fields, but it must not decide package-hint-to-backend mapping or
+  choose among valid runtimes.
+- Scheduler separation: the evidence boundary enumerates valid executable
+  candidates and their supporting facts. Scheduler policy still owns ranking,
+  warmed-runtime affinity, exploration before enough history exists,
+  historical timing/failure weighting, memory-fit ranking, queue policy, and
+  retry/reschedule decisions.
+- Graph hint semantics: graph `backend_key`, runtime hints, and explicit user
+  preferences are constraints or preferences fed into candidate validation.
+  They cannot create an executable candidate that package/capability facts do
+  not support and cannot bypass scheduler policy. If a graph explicitly asks
+  for `diffusers` while no executable Diffusers backend exists, the result is
+  a typed diagnostic with a hint to use PyTorch or leave runtime selection to
+  scheduler policy.
+- First implementation slice: add the typed evidence boundary plus focused
+  tests for Diffusers package facts, PyTorch capability facts, and graph
+  `backend_key = pytorch`. The allowed initial write set should be limited to
+  the new inference evidence module, existing inference model/backend
+  compatibility tests or fixtures, runtime-identity tests only if alias
+  documentation needs clarification, and this plan. It should not edit
+  workflow-service admission, embedded-runtime technical fit, node-engine, or
+  gateway behavior until the boundary contract is pinned.
+- Second implementation slice: migrate embedded-runtime technical-fit
+  candidate construction and dependency preflight to consume the boundary.
+  Allowed write set can include
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+  `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+  `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
+  focused technical-fit/dependency tests, and this plan.
+- Third implementation slice: migrate workflow/runtime preflight and gateway
+  diagnostics that currently maintain their own `diffusers` backend logic, then
+  add a cross-boundary guard search proving execution selectors do not treat
+  `diffusers` as a scheduler-selected backend key.
+- Out of scope for these normalization slices: actual PyTorch image worker
+  execution, model-family adapters, denoising scheduler provider rows,
+  artifact retention, end-to-end smoke generation, durable scheduler replay,
+  and new runtime ranking algorithms.
+- Re-plan trigger: stop before implementation if the only practical placement
+  for the evidence boundary would require workflow-service to depend on
+  inference DTOs, node-engine to depend on workflow-service, scheduler policy
+  to parse full package facts, or PyTorch-specific code to become the owner of
+  package-hint-to-backend interpretation.
+
 Standards compliance gates for every Option 3 slice:
 
 - Worktree hygiene: inspect `git status` before each slice and do not start
@@ -1443,6 +1552,11 @@ Standards compliance gates for every Option 3 slice:
   execution backend selection must use separate names/types. `diffusers`
   package facts can drive PyTorch eligibility, but they must not become an
   execution backend key or bypass scheduler-owned backend/runtime selection.
+- Execution-evidence boundary rule: package-fact-to-executable-backend mapping
+  must be centralized in a typed, inference-owned evidence boundary that is
+  reusable across runtimes and model families. Runtime-specific planners and
+  workers consume scheduler-selected decisions; they do not own candidate
+  discovery or ranking.
 - Documentation contract rule: a new execution-plan source module requires a
   README or ADR in the same slice. README content must document consumer
   expectations, serde shape, schema/version behavior, append-only evolution,

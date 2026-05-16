@@ -999,6 +999,20 @@ Update during implementation:
   `cargo test -p pantograph-workflow-service workflow_execution_plan --lib`,
   and
   `cargo test -p pantograph-embedded-runtime workflow_execution_plan_projection --lib`.
+- 2026-05-15: Added planning for the next Milestone 6 execution-evidence
+  normalization block. The plan now separates shared runtime identity
+  spelling from package-fact interpretation: `pantograph-runtime-identity`
+  continues to normalize backend/runtime aliases, while an inference-owned
+  evidence boundary will interpret package facts, artifact kinds, task
+  evidence, backend hints, runtime capabilities, and optional graph
+  constraints into typed execution evidence. Diffusers/PyTorch is planned as
+  one row in that general system: Diffusers evidence can make PyTorch eligible
+  when PyTorch capability facts support it, but `diffusers` remains a
+  dependency/package/capability label and must not become a scheduler-selected
+  executable backend key. The plan stages implementation into a contract slice,
+  embedded-runtime technical-fit/dependency-preflight migration slice, and
+  cross-boundary audit/diagnostics slice, with PyTorch image worker execution
+  and image-family adapters explicitly out of scope.
 
 ## Commit Cadence Notes
 
@@ -1064,6 +1078,10 @@ Worker rules:
   unavailability from auto-selection behavior.
 - Backend adapter candidate facts force scheduler ranking, queue policy, or
   learned placement decisions into the inference crate.
+- Execution-evidence normalization cannot be placed beside inference package
+  contracts without making workflow-service depend on inference DTOs,
+  node-engine depend on workflow-service, scheduler policy parse full package
+  facts, or PyTorch/image-specific code own package-hint-to-backend mapping.
 - Scheduler admission needs to inspect raw backend command strings to choose a
   backend/runtime/device.
 - A backend adapter requires a global runtime, untracked task, unbounded queue,
