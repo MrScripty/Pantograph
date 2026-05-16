@@ -4732,6 +4732,25 @@ Worker rules:
   runtime capability, gateway, workflow runtime preflight, and display
   diagnostics so explicit scheduler execution decisions become the only
   selected runtime/backend source end to end.
+- 2026-05-16 planned image-generation gateway test-contract cleanup slice:
+  smallest useful vertical slice was to align the node-engine planned
+  image-generation gateway success test with the current image planner contract
+  by removing the explicit `denoising_scheduler = euler` input from the success
+  path. Explicit denoising scheduler changes remain covered as planner
+  diagnostics until family/runtime support is implemented. Allowed write set:
+  `crates/node-engine/src/core_executor/inference_tests.rs` and this plan
+  directory.
+- No-fallback/no-legacy confirmation: this slice does not make the planner
+  accept unsupported scheduler changes, does not add a default scheduler, and
+  does not bypass planner diagnostics. It keeps successful planned execution on
+  currently supported canonical inputs only.
+- Verification passed: `cargo test -p node-engine --features
+  inference-nodes,pytorch-nodes test_canonical_llm_image_generation_uses_planned_gateway_boundary
+  --lib` and `cargo test -p node-engine --features inference-nodes,pytorch-nodes
+  --lib`.
+- Remaining follow-up: implement backend-owned denoising scheduler port options
+  and reconcile gateway-level image option diagnostics with planner diagnostics
+  before accepting explicit scheduler changes in successful planned execution.
 
 ### Traceability Links
 

@@ -1519,7 +1519,6 @@ async fn test_canonical_llm_image_generation_requires_planned_context() {
             "num_inference_steps": 12,
             "guidance_scale": 7.5,
             "seed": 42,
-            "denoising_scheduler": "euler",
             "num_images_per_prompt": 1
         }),
     );
@@ -1642,7 +1641,6 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
             "num_inference_steps": 12,
             "guidance_scale": 7.5,
             "seed": 42,
-            "denoising_scheduler": "euler",
             "num_images_per_prompt": 1
         }),
     );
@@ -1707,7 +1705,7 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     assert_eq!(captured[0].num_inference_steps, Some(12));
     assert_eq!(captured[0].guidance_scale, Some(7.5));
     assert_eq!(captured[0].seed, Some(42));
-    assert_eq!(captured[0].denoising_scheduler.as_deref(), Some("euler"));
+    assert_eq!(captured[0].denoising_scheduler, None);
 
     let events = lifecycle_events.lock().expect("lifecycle events lock");
     assert_eq!(events.len(), 6);
