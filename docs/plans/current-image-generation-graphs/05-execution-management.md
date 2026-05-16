@@ -4533,6 +4533,30 @@ Worker rules:
   needs to consume the inference-owned execution-evidence report so accepted
   PyTorch/Diffusers candidates and typed diagnostics share the same boundary as
   inference execution evidence.
+- 2026-05-16: Accepted Option 3 for the technical-fit replacement contract.
+  The next implementation work must add an embedded-runtime
+  `ExecutionEvidenceTechnicalFitAdapter` that consumes inference-owned
+  `ExecutionEvidenceReport` values and workflow runtime capability facts, then
+  emits runtime-registry `RuntimeTechnicalFitCandidate` values plus typed
+  technical-fit diagnostics. Inference owns package/backend compatibility
+  evidence; embedded-runtime owns runtime-capability projection; runtime
+  registry owns scheduler ranking and final selection.
+- Replacement/no-fallback rule: this adapter is not an additional path beside
+  existing package-hint/backend compatibility candidate construction. The
+  adapter must replace the old technical-fit builders for canonical inference
+  technical-fit, and the old direct builders must be deleted or reduced to
+  adapter-internal projection helpers when the adapter is wired. If evidence
+  produces no valid executable candidate, technical-fit returns typed
+  diagnostics and scheduler candidate selection fails; it must not recover by
+  using package hints, pseudo-Diffusers aliases, node-engine context, default
+  runtime choices, or the old compatibility loop.
+- Planned adapter stages: first add failing adapter tests for PyTorch/Diffusers
+  evidence, explicit `runtime = diffusers` rejection, omitted runtime
+  scheduler freedom, and no fallback candidates; second add the synchronous
+  adapter and diagnostic projection helpers without public wiring; third wire
+  technical-fit to the adapter and remove the old builders; fourth run focused
+  embedded-runtime technical-fit/runtime-capability tests, `cargo check -p
+  pantograph-embedded-runtime`, formatting, and `git diff --check`.
 
 ### Traceability Links
 

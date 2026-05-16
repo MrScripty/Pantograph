@@ -100,6 +100,12 @@ PyTorch/diffusers and produce a retained image artifact.
   gateway, and workflow runtime preflight mappings so execution selection,
   runtime display, and dependency diagnostics do not each maintain conflicting
   `diffusers` rules.
+- [ ] Replace embedded-runtime technical-fit candidate construction with an
+  `ExecutionEvidenceTechnicalFitAdapter` boundary. The adapter must consume
+  inference-owned `ExecutionEvidenceReport` values plus workflow runtime
+  capability/readiness context and produce `RuntimeTechnicalFitCandidate`
+  values and typed technical-fit diagnostics. It must not preserve the old
+  direct package-hint/backend compatibility loops as fallback behavior.
 - [x] Retire scheduler-visible pseudo-Diffusers runtime/backend paths unless a
   real executable Diffusers backend is registered. `diffusers` may remain a
   display/dependency/capability label, but `python_runtime_capabilities`,
@@ -1808,3 +1814,64 @@ Standards compliance gates for every Option 3 slice:
   needs to consume the inference-owned execution-evidence report so accepted
   PyTorch/Diffusers candidates and typed diagnostics share the same boundary as
   inference execution evidence.
+
+2026-05-16 Option 3 technical-fit adapter contract plan:
+
+- Decision: implement Option 3 as a replacement adapter in
+  `pantograph-embedded-runtime`, tentatively named
+  `ExecutionEvidenceTechnicalFitAdapter`. The adapter consumes
+  `inference::ExecutionEvidenceReport`, package facts, runtime capabilities,
+  resource estimates, and the optional graph runtime requirement already
+  projected through workflow capability data. It emits runtime-registry
+  `RuntimeTechnicalFitCandidate` values and
+  `RuntimeTechnicalFitDeviceDiagnostic` values.
+- Ownership: inference remains the owner of model/package/backend evidence and
+  compatibility normalization. Embedded-runtime owns only projection from
+  accepted evidence candidates into runtime-registry candidate shape by joining
+  with current `WorkflowRuntimeCapability` facts for runtime id, runtime
+  variant id, device class, readiness, residency, warmup, and resource estimate.
+  Runtime-registry remains the owner of scheduler ranking, history weighting,
+  memory-fit policy, and final selection.
+- Replacement rule: the adapter replaces
+  `runtime_candidates_from_pumas_package_facts_with_backend_capabilities`,
+  `runtime_candidates_from_pumas_package_facts_with_runtime_capabilities`, and
+  package-hint-to-backend candidate construction for canonical inference
+  technical-fit. The old candidate builders must be deleted or reduced to
+  adapter-internal projection helpers in the same slice that wires the adapter;
+  they must not remain as fallback paths.
+- Diagnostic contract: evidence diagnostics must map to blocking
+  technical-fit diagnostics when no valid candidate remains. Required mappings
+  include unsupported task, backend unavailable, missing runtime capability,
+  required package evidence unavailable, backend compatibility rejected, and
+  graph runtime requirement unsatisfied. Diagnostic records must preserve the
+  requested runtime key and executable backend key when present.
+- Explicit runtime contract: omitted graph `runtime` means no
+  `GraphRuntimeRequirement` is sent into the evidence boundary and scheduler
+  policy may choose among validated candidates. Explicit graph `runtime` is
+  parsed into `GraphRuntimeRequirement`; the adapter may only project evidence
+  candidates matching that requirement. If none match, it emits the typed
+  unsatisfied-runtime diagnostic and produces no selected candidate/fallback.
+- Implementation stages:
+  1. Add failing embedded-runtime tests for the adapter contract: Diffusers
+     package facts plus PyTorch backend facts produce a PyTorch technical-fit
+     candidate preserving `diffusers` as package evidence; explicit
+     `runtime = diffusers` produces a typed diagnostic and no candidate unless
+     a real Diffusers backend exists; omitted runtime lets multiple validated
+     executable candidates proceed to scheduler ranking; evidence rejection
+     does not create old package-hint fallback candidates.
+  2. Add the adapter module/function and diagnostic projection helpers without
+     wiring it into the public technical-fit request path. Keep it synchronous;
+     all required facts are already in memory.
+  3. Replace the current backend-package-facts candidate construction call site
+     with the adapter, delete the old direct candidate construction path, and
+     update README traceability. Do not keep a branch that runs the old builder
+     when evidence returns no candidates.
+  4. Run focused embedded-runtime technical-fit tests, runtime-capability tests
+     that guard no pseudo-Diffusers exposure, `cargo check -p
+     pantograph-embedded-runtime`, formatting, and `git diff --check`.
+- No-fallback/no-legacy confirmation: this plan explicitly rejects keeping
+  both systems. If the evidence boundary cannot produce a valid executable
+  candidate, technical-fit must return typed diagnostics and the scheduler must
+  fail candidate selection rather than using package hints, historical aliases,
+  default runtime choices, node-engine context, or direct backend compatibility
+  loops to recover old behavior.
