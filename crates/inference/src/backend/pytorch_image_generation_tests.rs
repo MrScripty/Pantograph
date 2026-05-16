@@ -3,7 +3,7 @@ use crate::device_contracts::{
     BackendId, DeviceResolutionDecision, InferenceDeviceClass, InferenceDeviceId,
     InferenceDevicePolicy, RuntimeVariantId,
 };
-use crate::image_generation_planner::ImageGenerationExecutionPlan;
+use crate::image_generation_planner::{DenoisingSchedulerOptionId, ImageGenerationExecutionPlan};
 use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel, PumasModelRef};
 
 #[test]
@@ -101,7 +101,9 @@ fn image_plan() -> ImageGenerationExecutionPlan {
         num_inference_steps: Some(8),
         guidance_scale: Some(7.5),
         seed: Some(42),
-        scheduler: Some("euler".to_string()),
+        denoising_scheduler: Some(
+            DenoisingSchedulerOptionId::parse("euler").expect("valid scheduler id"),
+        ),
         num_images_per_prompt: Some(1),
         estimated_output_rgba_bytes: Some(1_048_576),
     }

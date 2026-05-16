@@ -1,4 +1,7 @@
-use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::str::FromStr;
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::device_contracts::{
     BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDeviceClass,
@@ -13,6 +16,7 @@ use crate::types::ImageGenerationRequest;
 const PYTORCH_BACKEND_ID: &str = "pytorch";
 const IMAGE_PLANNER_MIN_DIMENSION: u32 = 1;
 const IMAGE_PLANNER_BYTES_PER_RGBA_PIXEL: u64 = 4;
+const DENOISING_SCHEDULER_OPTION_ID_MAX_LEN: usize = 96;
 
 const STABLE_DIFFUSION_REQUIRED_COMPONENTS: &[DiffusersComponentRole] = &[
     DiffusersComponentRole::PipelineIndex,
@@ -58,6 +62,159 @@ impl ImageGenerationPlanningOutcome {
     }
 }
 
+/// Error returned when an image denoising scheduler option id is invalid.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DenoisingSchedulerOptionIdError {
+    /// Option ids must not be blank.
+    Blank,
+    /// Option ids are bounded to keep graph and worker contracts small.
+    TooLong {
+        /// Maximum accepted byte length.
+        max_len: usize,
+        /// Actual byte length.
+        actual_len: usize,
+    },
+    /// Option ids use stable lowercase primitive ids, not display labels.
+    InvalidShape { value: String },
+}
+
+impl fmt::Display for DenoisingSchedulerOptionIdError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Blank => f.write_str("denoising_scheduler option id must not be blank"),
+            Self::TooLong {
+                max_len,
+                actual_len,
+            } => write!(
+                f,
+                "denoising_scheduler option id must be at most {max_len} bytes, got {actual_len}"
+            ),
+            Self::InvalidShape { value } => write!(
+                f,
+                "denoising_scheduler option id must be a lowercase primitive id, got {value}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for DenoisingSchedulerOptionIdError {}
+
+/// Stable primitive id for a denoising scheduler option.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[must_use]
+pub struct DenoisingSchedulerOptionId(String);
+
+impl DenoisingSchedulerOptionId {
+    /// Parse and validate a primitive denoising scheduler option id.
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, DenoisingSchedulerOptionIdError> {
+        let trimmed = value.as_ref().trim();
+        if trimmed.is_empty() {
+            return Err(DenoisingSchedulerOptionIdError::Blank);
+        }
+        if trimmed.len() > DENOISING_SCHEDULER_OPTION_ID_MAX_LEN {
+            return Err(DenoisingSchedulerOptionIdError::TooLong {
+                max_len: DENOISING_SCHEDULER_OPTION_ID_MAX_LEN,
+                actual_len: trimmed.len(),
+            });
+        }
+
+        let mut chars = trimmed.chars();
+        let Some(first) = chars.next() else {
+            return Err(DenoisingSchedulerOptionIdError::Blank);
+        };
+        if !first.is_ascii_lowercase() {
+            return Err(DenoisingSchedulerOptionIdError::InvalidShape {
+                value: trimmed.to_string(),
+            });
+        }
+
+        let mut previous_was_separator = false;
+        for ch in chars {
+            if ch.is_ascii_lowercase() || ch.is_ascii_digit() {
+                previous_was_separator = false;
+                continue;
+            }
+            if matches!(ch, '_' | '-' | '.') && !previous_was_separator {
+                previous_was_separator = true;
+                continue;
+            }
+            return Err(DenoisingSchedulerOptionIdError::InvalidShape {
+                value: trimmed.to_string(),
+            });
+        }
+
+        if previous_was_separator {
+            return Err(DenoisingSchedulerOptionIdError::InvalidShape {
+                value: trimmed.to_string(),
+            });
+        }
+
+        Ok(Self(trimmed.to_string()))
+    }
+
+    /// Borrow the validated id.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl AsRef<str> for DenoisingSchedulerOptionId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for DenoisingSchedulerOptionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for DenoisingSchedulerOptionId {
+    type Err = DenoisingSchedulerOptionIdError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<&str> for DenoisingSchedulerOptionId {
+    type Error = DenoisingSchedulerOptionIdError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<String> for DenoisingSchedulerOptionId {
+    type Error = DenoisingSchedulerOptionIdError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+impl Serialize for DenoisingSchedulerOptionId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for DenoisingSchedulerOptionId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::parse(value).map_err(serde::de::Error::custom)
+    }
+}
+
 /// Canonical Rust-owned image-generation plan consumed before worker execution.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -87,7 +244,7 @@ pub struct ImageGenerationExecutionPlan {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scheduler: Option<String>,
+    pub denoising_scheduler: Option<DenoisingSchedulerOptionId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub num_images_per_prompt: Option<u32>,
     /// Conservative RGBA output byte estimate when width, height, and count are known.
@@ -122,6 +279,7 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     MissingComponentRole,
     MissingPrompt,
     InvalidNumericOption,
+    InvalidDenoisingSchedulerOptionId,
     UnsupportedOption,
     ResourceEstimateOverflow,
 }
@@ -182,6 +340,7 @@ pub fn plan_image_generation_execution(
     }
 
     let estimated_output_rgba_bytes = estimate_output_rgba_bytes(input.request, &mut diagnostics);
+    let denoising_scheduler = validate_denoising_scheduler(input.request, &mut diagnostics);
 
     if !diagnostics.is_empty() {
         return rejected(diagnostics);
@@ -228,7 +387,7 @@ pub fn plan_image_generation_execution(
             num_inference_steps: input.request.num_inference_steps,
             guidance_scale: input.request.guidance_scale,
             seed: input.request.seed,
-            scheduler: input.request.scheduler.clone(),
+            denoising_scheduler,
             num_images_per_prompt: input.request.num_images_per_prompt,
             estimated_output_rgba_bytes,
         },
@@ -335,6 +494,25 @@ fn validate_image_request(
         "image-generation extra_options require explicit family support and are not supported by this planner slice",
         diagnostics,
     );
+}
+
+fn validate_denoising_scheduler(
+    request: &ImageGenerationRequest,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) -> Option<DenoisingSchedulerOptionId> {
+    request.scheduler.as_deref().and_then(|scheduler| {
+        match DenoisingSchedulerOptionId::parse(scheduler) {
+            Ok(option_id) => Some(option_id),
+            Err(error) => {
+                diagnostics.push(diagnostic(
+                    ImageGenerationPlannerDiagnosticCode::InvalidDenoisingSchedulerOptionId,
+                    "request.denoising_scheduler",
+                    error.to_string(),
+                ));
+                None
+            }
+        }
+    })
 }
 
 fn validate_non_zero(

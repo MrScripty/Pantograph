@@ -116,6 +116,10 @@ normalizing them to executable defaults.
   future support.
 - Shared request/response types are append-only unless a coordinated breaking
   change is approved.
+- Image-generation execution plans carry explicit denoising scheduler intent as
+  `DenoisingSchedulerOptionId`, a bounded lowercase primitive id. Display names
+  and Diffusers/Pumas component class names must not be treated as executable
+  option ids at the Rust planner boundary.
 - Application-level runtime policy such as admission, reservation, retention,
   and eviction must not be implemented inside gateway or backend modules.
 - `device_contracts/` owns canonical device policy intent, concrete device

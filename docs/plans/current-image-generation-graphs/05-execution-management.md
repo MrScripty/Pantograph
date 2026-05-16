@@ -3938,6 +3938,36 @@ Worker rules:
   `llm-inference.denoising_scheduler` backend provider once the option id
   validation and package/runtime fact source are wired. This slice only makes
   provider references visible to graph clients.
+- 2026-05-15: Completed the denoising scheduler option-id planner boundary
+  slice. Smallest useful vertical slice: add a validated
+  `DenoisingSchedulerOptionId` Rust contract, parse explicit
+  image-generation scheduler request values before producing an
+  `ImageGenerationExecutionPlan`, serialize the planned field as
+  `denoising_scheduler`, and project the typed id into the current PyTorch
+  worker envelope boundary. Allowed write set:
+  `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+  `crates/inference/src/backend/pytorch_image_generation_tests.rs`,
+  `crates/inference/src/gateway_tests.rs`, `crates/inference/src/lib.rs`,
+  `crates/inference/src/README.md`, and this plan directory.
+- The slice preserves the no-fallback/no-legacy rule because invalid explicit
+  scheduler option ids reject planning through typed diagnostics. It does not
+  invent or hardcode scheduler option rows, treat Diffusers class names as
+  executable option ids, add provider defaults, select a backend/runtime,
+  transport full Pumas facts through frontend state, or let worker execution
+  recover from invalid planner input.
+- Verification passed: `cargo test -p inference image_generation_planner
+  --lib`, `cargo test -p inference --features backend-pytorch
+  test_generate_image_envelope_from_plan_validates_worker_request --lib`,
+  `cargo test -p inference --features backend-pytorch pytorch_worker_image
+  --lib`, `cargo check -p inference`, `cargo fmt -p inference -- --check`,
+  and `git diff --check`.
+- Remaining follow-up: the real `llm-inference.denoising_scheduler` provider
+  still needs a factual option source. Current pinned Pumas facts expose the
+  package scheduler component/class, but not the full set of runtime-valid
+  replacement scheduler option ids; implementing a plural valid-options
+  provider without that contract would violate the no-hardcoded-option rule.
 
 ### Traceability Links
 

@@ -99,11 +99,21 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
     assert_eq!(plan.runtime_variant_id.as_str(), "pytorch.diffusers");
     assert_eq!(plan.family, ImageGenerationFamilyLabel::StableDiffusion);
     assert_eq!(plan.pipeline_class, "StableDiffusionPipeline");
+    assert_eq!(
+        plan.denoising_scheduler
+            .as_ref()
+            .expect("scheduler should parse")
+            .as_str(),
+        "euler"
+    );
     assert_eq!(plan.estimated_output_rgba_bytes, Some(2_097_152));
     assert_eq!(
         plan.required_components,
         STABLE_DIFFUSION_REQUIRED_COMPONENTS.to_vec()
     );
+    let plan_json = serde_json::to_value(&plan).expect("plan should serialize");
+    assert_eq!(plan_json["denoising_scheduler"], "euler");
+    assert!(plan_json.get("scheduler").is_none());
 }
 
 #[test]
@@ -197,6 +207,43 @@ fn planner_reports_exact_missing_component_role_path() {
         diagnostic.code == ImageGenerationPlannerDiagnosticCode::MissingComponentRole
             && diagnostic.field_path == "package_facts.diffusers.components.vae"
     }));
+}
+
+#[test]
+fn planner_rejects_invalid_denoising_scheduler_option_id() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = ImageGenerationRequest {
+        scheduler: Some("EulerDiscreteScheduler".to_string()),
+        ..image_request()
+    };
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::InvalidDenoisingSchedulerOptionId
+            && diagnostic.field_path == "request.denoising_scheduler"
+    }));
+}
+
+#[test]
+fn denoising_scheduler_option_id_round_trips_as_primitive_string() {
+    let option_id =
+        DenoisingSchedulerOptionId::parse("flow_match_euler").expect("valid scheduler option id");
+
+    let encoded = serde_json::to_string(&option_id).expect("scheduler id should encode");
+    let decoded: DenoisingSchedulerOptionId =
+        serde_json::from_str(&encoded).expect("scheduler id should decode");
+
+    assert_eq!(encoded, "\"flow_match_euler\"");
+    assert_eq!(decoded.as_str(), "flow_match_euler");
+    assert!(DenoisingSchedulerOptionId::parse("flow_match_euler.").is_err());
+    assert!(DenoisingSchedulerOptionId::parse("2m").is_err());
 }
 
 #[test]

@@ -161,7 +161,7 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
         num_inference_steps: Some(20),
         guidance_scale: Some(4.0),
         seed: Some(7),
-        scheduler: None,
+        denoising_scheduler: None,
         num_images_per_prompt: Some(1),
         estimated_output_rgba_bytes: Some(512_u64 * 512 * 4),
     }

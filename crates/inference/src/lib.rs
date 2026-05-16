@@ -84,10 +84,10 @@ pub use gateway::{
     InferenceStartRequest, SharedGateway,
 };
 pub use image_generation_planner::{
-    plan_image_generation_execution, ImageGenerationExecutionPlan,
-    ImageGenerationPlannerDiagnostic, ImageGenerationPlannerDiagnosticCode,
-    ImageGenerationPlannerDiagnosticSeverity, ImageGenerationPlanningInput,
-    ImageGenerationPlanningOutcome,
+    plan_image_generation_execution, DenoisingSchedulerOptionId, DenoisingSchedulerOptionIdError,
+    ImageGenerationExecutionPlan, ImageGenerationPlannerDiagnostic,
+    ImageGenerationPlannerDiagnosticCode, ImageGenerationPlannerDiagnosticSeverity,
+    ImageGenerationPlanningInput, ImageGenerationPlanningOutcome,
 };
 pub use managed_binaries::{
     resolve_managed_binary_command, ManagedBinaryFacadeError, ManagedBinaryKey,

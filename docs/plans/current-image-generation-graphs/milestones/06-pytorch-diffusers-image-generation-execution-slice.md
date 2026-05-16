@@ -81,7 +81,7 @@ PyTorch/diffusers and produce a retained image artifact.
   boundaries. Public constructors/projection helpers must return structured
   errors or bounded diagnostics, not `Result<T, String>` or string-matched
   control flow.
-- [ ] Model denoising scheduler option ids as validated typed values at Rust
+- [x] Model denoising scheduler option ids as validated typed values at Rust
   boundaries when the provider is added. Use stable primitive option ids for
   selected values and reserve display labels/descriptions for presentation
   only.
@@ -418,6 +418,38 @@ PyTorch image helper, and the planned gateway/backend boundary are implemented.
 - Verification passed: `cargo test -p inference
   planner_rejects_non_finite_guidance_scale --lib`, `cargo check -p
   inference`, `cargo fmt -p inference`, and `git diff --check`.
+
+2026-05-15 denoising scheduler option-id planner boundary slice:
+
+- Smallest useful vertical slice: add a validated
+  `DenoisingSchedulerOptionId` Rust contract, parse explicit image-generation
+  denoising scheduler request values before producing an
+  `ImageGenerationExecutionPlan`, and serialize the planned field as
+  `denoising_scheduler` instead of carrying untyped display/class strings in
+  the planner result.
+- Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`,
+  `crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+  `crates/inference/src/backend/pytorch_image_generation_tests.rs`,
+  `crates/inference/src/gateway_tests.rs`, `crates/inference/src/lib.rs`,
+  `crates/inference/src/README.md`, and this plan directory.
+- No-fallback/no-legacy confirmation: invalid scheduler option ids now reject
+  planning through a typed diagnostic. The slice does not invent scheduler
+  choices, hardcode provider option rows, derive scheduler ids from Diffusers
+  class names, pass Pumas facts through frontend state, choose a backend or
+  runtime, or let worker execution recover from invalid planner input.
+- Verification passed: `cargo test -p inference image_generation_planner
+  --lib`, `cargo test -p inference --features backend-pytorch
+  test_generate_image_envelope_from_plan_validates_worker_request --lib`,
+  `cargo test -p inference --features backend-pytorch pytorch_worker_image
+  --lib`, `cargo check -p inference`, `cargo fmt -p inference -- --check`,
+  and `git diff --check`.
+- Remaining follow-up: the actual `llm-inference.denoising_scheduler`
+  provider still needs a factual option source. Current pinned Pumas facts
+  expose the package scheduler component/class, but not the full runtime-valid
+  replacement scheduler option set, so the provider must wait for a compact
+  Pumas/runtime-backed option contract or explicitly return only facts it can
+  prove without hardcoded choices.
 - Remaining follow-up: family-specific option-support tables still need to
   classify guidance scale, negative prompt, image count, scheduler override,
   dtype, and dimensions as accepted, ignored, or rejected per family.

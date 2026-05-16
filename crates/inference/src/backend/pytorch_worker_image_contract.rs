@@ -93,7 +93,7 @@ impl From<&ImageGenerationExecutionPlan> for PyTorchGenerateImageRequest {
             num_inference_steps: plan.num_inference_steps,
             guidance_scale: plan.guidance_scale,
             seed: plan.seed,
-            scheduler: plan.scheduler.clone(),
+            scheduler: plan.denoising_scheduler.as_ref().map(ToString::to_string),
             num_images_per_prompt: plan.num_images_per_prompt,
         }
     }
