@@ -962,6 +962,27 @@ Update during implementation:
   `cargo test -p pantograph-embedded-runtime workflow_execution_plan_projection --lib`,
   and
   `cargo test -p pantograph-embedded-runtime puma_lib_option_and_dependency_resolver_agree_on_primary_file_path --lib`.
+- 2026-05-15: Continued Milestone 6 with the image-planner model identity
+  consistency gate. The smallest useful vertical slice was limited to
+  inference image planning and the tests that consume that public path. The
+  planner now rejects image-generation planning when
+  `BackendExecutionDecision.selected_model_ref` is missing or when the
+  scheduler-selected model ref does not match the resolved package-facts model
+  ref after deterministic `pumas://models/...` identity comparison. This keeps
+  package facts from becoming an implicit scheduler decision and fails with
+  typed planner diagnostics before worker dispatch. Gateway and PyTorch worker
+  image test helpers now provide the selected model ref explicitly; the
+  gateway planning success fixture was corrected to leave
+  `denoising_scheduler` unset because explicit scheduler changes remain an
+  unsupported option in the current planner slice. Verification passed:
+  `cargo fmt -p inference -- --check`,
+  `cargo test -p inference image_generation_planner --lib`,
+  `cargo test -p inference test_generate_image_from_planning_input --lib`,
+  and
+  `cargo test -p inference --features backend-pytorch test_pytorch_worker_generate_image_request_maps_from_validated_plan --lib`.
+  Verification deviation: the first gateway-focused run exposed the stale
+  explicit denoising-scheduler fixture in success tests; the fixture was
+  corrected and the focused gateway tests passed.
 
 ## Commit Cadence Notes
 
@@ -1168,6 +1189,10 @@ Worker rules:
   workflow-service selected model-ref value reaches
   `BackendExecutionDecision` in canonical `pumas://models/...` form without
   projection-side repair or double-prefixing.
+- Milestone 6 image planning now requires the scheduler-selected model ref to
+  agree with resolved package facts before returning an
+  `ImageGenerationExecutionPlan`; missing or mismatched image model identity
+  produces typed planner diagnostics and no worker plan.
 
 ### Deviations
 

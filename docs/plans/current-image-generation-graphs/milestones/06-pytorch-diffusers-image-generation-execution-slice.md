@@ -58,7 +58,7 @@ PyTorch/diffusers and produce a retained image artifact.
   strings. The slice also repaired the stale embedded-runtime
   `PortOptionsQuery.context` fixture required to run the projection test
   target.
-- [ ] Validate planned image execution identity consistency before the image
+- [x] Validate planned image execution identity consistency before the image
   planner returns an `ImageGenerationExecutionPlan`: the scheduler-selected
   model ref from `BackendExecutionDecision` must match the resolved Pumas
   package facts model ref used for worker dispatch. For image generation, a

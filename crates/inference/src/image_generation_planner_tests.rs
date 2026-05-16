@@ -52,7 +52,13 @@ fn backend_decision(backend_id: &str) -> BackendExecutionDecision {
         selected_device_id: Some(InferenceDeviceId::parse("cpu").expect("valid device id")),
         device_decision,
         selected_task_id: Some(InferenceTaskId::ImageGeneration),
-        selected_model_ref: None,
+        selected_model_ref: Some(PumasModelRef {
+            model_id: "pumas://models/image/stable-diffusion/tiny-sd".to_string(),
+            revision: None,
+            selected_artifact_id: None,
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        }),
         diagnostics: Vec::new(),
         selection_policy_trace: None,
     }
@@ -129,6 +135,52 @@ fn planner_rejects_missing_diffusers_facts_without_backend_fallback() {
     let codes = diagnostic_codes(&outcome);
     assert!(codes.contains(&ImageGenerationPlannerDiagnosticCode::MissingDiffusersEvidence));
     assert!(codes.contains(&ImageGenerationPlannerDiagnosticCode::UnsupportedTaskEvidence));
+}
+
+#[test]
+fn planner_rejects_missing_scheduler_selected_model_ref() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = image_request();
+    let mut decision = backend_decision("pytorch");
+    decision.selected_model_ref = None;
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::MissingSelectedModelRef
+            && diagnostic.field_path == "backend_decision.selected_model_ref"
+    }));
+}
+
+#[test]
+fn planner_rejects_scheduler_package_model_ref_mismatch() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = image_request();
+    let mut decision = backend_decision("pytorch");
+    decision.selected_model_ref = Some(PumasModelRef {
+        model_id: "pumas://models/image/stable-diffusion/other".to_string(),
+        revision: None,
+        selected_artifact_id: None,
+        selected_artifact_path: None,
+        migration_diagnostics: Vec::new(),
+    });
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::SelectedModelRefMismatch
+            && diagnostic.field_path == "backend_decision.selected_model_ref"
+    }));
 }
 
 #[test]

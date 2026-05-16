@@ -190,7 +190,7 @@ fn sample_image_generation_request() -> ImageGenerationRequest {
         num_inference_steps: Some(8),
         guidance_scale: Some(7.5),
         seed: Some(42),
-        denoising_scheduler: Some("euler".to_string()),
+        denoising_scheduler: None,
         num_images_per_prompt: Some(2),
         init_image: None,
         mask_image: None,
@@ -219,7 +219,13 @@ fn sample_image_backend_decision(backend_id: &str) -> BackendExecutionDecision {
         selected_device_id: Some(selected_device_id),
         device_decision,
         selected_task_id: Some(InferenceTaskId::ImageGeneration),
-        selected_model_ref: None,
+        selected_model_ref: Some(PumasModelRef {
+            model_id: "pumas://models/image/stable-diffusion/tiny-sd".to_string(),
+            revision: None,
+            selected_artifact_id: None,
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        }),
         diagnostics: Vec::new(),
         selection_policy_trace: None,
     }

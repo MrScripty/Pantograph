@@ -13,7 +13,7 @@ use crate::device_contracts::{
 use crate::image_generation_planner::{
     plan_image_generation_execution, ImageGenerationPlanningInput, ImageGenerationPlanningOutcome,
 };
-use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel};
+use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel, PumasModelRef};
 use crate::{ImageGenerationRequest, InferenceTaskId, ResolvedModelPackageFacts};
 use pyo3::prelude::*;
 use std::ffi::CString;
@@ -316,7 +316,13 @@ fn backend_decision() -> BackendExecutionDecision {
         selected_device_id: Some(selected_device_id),
         device_decision,
         selected_task_id: Some(InferenceTaskId::ImageGeneration),
-        selected_model_ref: None,
+        selected_model_ref: Some(PumasModelRef {
+            model_id: "pumas://models/image/stable-diffusion/tiny-sd".to_string(),
+            revision: None,
+            selected_artifact_id: None,
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        }),
         diagnostics: Vec::new(),
         selection_policy_trace: None,
     }

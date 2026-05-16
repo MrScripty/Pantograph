@@ -276,6 +276,8 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     InvalidDenoisingSchedulerOptionId,
     UnsupportedOption,
     ResourceEstimateOverflow,
+    MissingSelectedModelRef,
+    SelectedModelRefMismatch,
 }
 
 /// Planner diagnostic severity.
@@ -294,6 +296,11 @@ pub fn plan_image_generation_execution(
     let mut diagnostics = Vec::new();
 
     validate_backend_decision(input.backend_decision, &mut diagnostics);
+    validate_selected_model_ref(
+        input.backend_decision,
+        input.package_facts,
+        &mut diagnostics,
+    );
     validate_package_contract(input.package_facts, &mut diagnostics);
     validate_task_evidence(input.package_facts, &mut diagnostics);
     validate_image_request_shape(input.request, &mut diagnostics);
@@ -400,6 +407,41 @@ fn validate_backend_decision(
             "backend_decision.selected_backend_id",
             "image-generation planning requires an explicit PyTorch backend decision",
         ));
+    }
+}
+
+fn validate_selected_model_ref(
+    backend_decision: &BackendExecutionDecision,
+    package_facts: &ResolvedModelPackageFacts,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) {
+    let Some(selected_model_ref) = backend_decision.selected_model_ref.as_ref() else {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::MissingSelectedModelRef,
+            "backend_decision.selected_model_ref",
+            "image-generation planning requires a scheduler-selected model ref",
+        ));
+        return;
+    };
+
+    let selected_model_id = canonical_pumas_model_id(selected_model_ref);
+    let package_model_id = canonical_pumas_model_id(&package_facts.model_ref);
+    if selected_model_id != package_model_id {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::SelectedModelRefMismatch,
+            "backend_decision.selected_model_ref",
+            format!(
+                "scheduler-selected model ref '{selected_model_id}' does not match package facts model ref '{package_model_id}'"
+            ),
+        ));
+    }
+}
+
+fn canonical_pumas_model_id(model_ref: &PumasModelRef) -> String {
+    if model_ref.model_id.starts_with("pumas://models/") {
+        model_ref.model_id.clone()
+    } else {
+        format!("pumas://models/{}", model_ref.model_id)
     }
 }
 
