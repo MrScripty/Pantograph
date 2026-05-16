@@ -2503,6 +2503,17 @@ readiness:
          proving unavailable readiness cannot be hidden behind
          `supports_runtime_requirements`, device diagnostics, lifecycle
          diagnostics, or worker errors.
+         - 2026-05-16 contract-carriage slice: added a reduced
+           runtime-registry `RuntimeTechnicalFitDependencyReadinessFact`
+           contract and attached it to `RuntimeTechnicalFitCandidate` and
+           `RuntimeTechnicalFitDecision`. The selector copies the selected
+           candidate's dependency-readiness proof into the decision while
+           leaving ranking/filtering behavior unchanged for the next slice.
+           Tests prove normalization preserves scoped dependency proof and that
+           selected decisions carry the proof rather than relying on
+           `supports_runtime_requirements` or device diagnostics. This is a
+           partial completion of stage 4 because workflow/admission execution
+           plans still need to carry the selected proof into inference.
       5. Wire scheduler/admission candidate filtering to consume readiness
          proof and fail candidate selection while emitting ledger diagnostics
          when required dependencies are unavailable.

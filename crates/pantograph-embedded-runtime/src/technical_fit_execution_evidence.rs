@@ -105,6 +105,7 @@ pub(crate) fn adapt_execution_evidence_to_technical_fit(
                             resource_estimate: input.resource_estimate.clone(),
                             observed_throughput_hint: None,
                             device_diagnostics: variant_facts.device_diagnostics,
+                            dependency_readiness: Vec::new(),
                             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                             context_window_tokens: None,
                             residency_state: Some(runtime_capability_residency_state(capability)),

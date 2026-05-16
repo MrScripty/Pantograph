@@ -51,6 +51,7 @@ fn runtime_capability_candidate(candidate_id: &str) -> RuntimeTechnicalFitCandid
         resource_estimate: None,
         observed_throughput_hint: None,
         device_diagnostics: Vec::new(),
+        dependency_readiness: Vec::new(),
         source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
         context_window_tokens: Some(8192),
         residency_state: None,
@@ -109,6 +110,48 @@ fn runtime_capability_source_kind_rejects_retired_fallback_wire_value() {
 }
 
 #[test]
+fn selector_copies_dependency_readiness_proof_to_selected_decision() {
+    let mut candidate = runtime_capability_candidate("pytorch");
+    candidate.dependency_readiness = vec![RuntimeTechnicalFitDependencyReadinessFact {
+        subject_kind: RuntimeTechnicalFitDependencyReadinessSubjectKind::Package,
+        runtime_id: Some("pytorch".to_string()),
+        backend_key: Some("pytorch".to_string()),
+        runtime_variant_id: Some("pytorch.cuda".to_string()),
+        task_id: Some("image_generation".to_string()),
+        model_family_id: Some("stable_diffusion".to_string()),
+        dependency_id: "diffusers".to_string(),
+        state: RuntimeTechnicalFitDependencyReadinessState::Available,
+        resolver_owner: RuntimeTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime,
+        reason_code: None,
+        reason: None,
+    }];
+
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: empty_snapshot(),
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: Vec::new(),
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![candidate.clone()],
+        candidate_history_summaries: Vec::new(),
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selected_candidate_id.as_deref(),
+        Some(candidate.candidate_id.as_str())
+    );
+    assert_eq!(
+        decision.dependency_readiness,
+        candidate.dependency_readiness
+    );
+}
+
+#[test]
 fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
     let request = RuntimeTechnicalFitRequest {
         runtime_snapshot: empty_snapshot(),
@@ -160,6 +203,20 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
                 model_id: Some(" model-a ".to_string()),
                 evidence_key: Some(" compatibility_report ".to_string()),
                 requested_runtime_key: Some(" llama.cpp ".to_string()),
+            }],
+            dependency_readiness: vec![RuntimeTechnicalFitDependencyReadinessFact {
+                subject_kind: RuntimeTechnicalFitDependencyReadinessSubjectKind::Package,
+                runtime_id: Some(" llama.cpp ".to_string()),
+                backend_key: Some("llama.cpp".to_string()),
+                runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
+                task_id: Some(" image_generation ".to_string()),
+                model_family_id: Some(" stable_diffusion ".to_string()),
+                dependency_id: " torch ".to_string(),
+                state: RuntimeTechnicalFitDependencyReadinessState::Available,
+                resolver_owner:
+                    RuntimeTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime,
+                reason_code: Some(" ready ".to_string()),
+                reason: Some(" package is installed ".to_string()),
             }],
             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
             context_window_tokens: Some(8192),
@@ -294,6 +351,40 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
             .requested_runtime_key
             .as_deref(),
         Some("llama_cpp")
+    );
+    assert_eq!(normalized.candidates[0].dependency_readiness.len(), 1);
+    assert!(normalized.candidates[0].dependency_readiness[0]
+        .state
+        .is_ready());
+    assert_eq!(
+        normalized.candidates[0].dependency_readiness[0]
+            .runtime_id
+            .as_deref(),
+        Some("llama_cpp")
+    );
+    assert_eq!(
+        normalized.candidates[0].dependency_readiness[0]
+            .backend_key
+            .as_deref(),
+        Some("llama_cpp")
+    );
+    assert_eq!(
+        normalized.candidates[0].dependency_readiness[0]
+            .runtime_variant_id
+            .as_deref(),
+        Some("llama-cpp/linux-x64/cuda")
+    );
+    assert_eq!(
+        normalized.candidates[0].dependency_readiness[0]
+            .dependency_id
+            .as_str(),
+        "torch"
+    );
+    assert_eq!(
+        normalized.candidates[0].dependency_readiness[0]
+            .reason_code
+            .as_deref(),
+        Some("ready")
     );
     assert_eq!(
         normalized.candidates[0]
@@ -461,6 +552,19 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
             evidence_key: Some(" compatibility_report ".to_string()),
             requested_runtime_key: Some(" llama.cpp ".to_string()),
         }],
+        dependency_readiness: vec![RuntimeTechnicalFitDependencyReadinessFact {
+            subject_kind: RuntimeTechnicalFitDependencyReadinessSubjectKind::Package,
+            runtime_id: Some(" llama.cpp ".to_string()),
+            backend_key: Some("llama.cpp".to_string()),
+            runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
+            task_id: Some(" text_generation ".to_string()),
+            model_family_id: None,
+            dependency_id: " torch ".to_string(),
+            state: RuntimeTechnicalFitDependencyReadinessState::Available,
+            resolver_owner: RuntimeTechnicalFitDependencyReadinessResolverOwner::EmbeddedRuntime,
+            reason_code: Some(" ready ".to_string()),
+            reason: Some(" package is installed ".to_string()),
+        }],
         reasons: vec![RuntimeTechnicalFitReason::new(
             RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
             Some(" candidate-1 "),
@@ -532,6 +636,15 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
     assert_eq!(
         normalized.device_diagnostics[0].backend_key.as_deref(),
         Some("llama_cpp")
+    );
+    assert_eq!(normalized.dependency_readiness.len(), 1);
+    assert_eq!(
+        normalized.dependency_readiness[0].backend_key.as_deref(),
+        Some("llama_cpp")
+    );
+    assert_eq!(
+        normalized.dependency_readiness[0].dependency_id.as_str(),
+        "torch"
     );
     assert_eq!(
         normalized.reasons,
@@ -633,6 +746,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
@@ -653,6 +767,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
@@ -681,6 +796,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             reasons: vec![RuntimeTechnicalFitReason {
                 code: RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
                 candidate_id: Some("runtime-b".to_string()),
@@ -734,6 +850,7 @@ fn selector_rejects_ineligible_explicit_backend_override_without_selection() {
                 evidence_key: None,
                 requested_runtime_key: None,
             }],
+            dependency_readiness: Vec::new(),
             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
             context_window_tokens: Some(8192),
             residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
@@ -822,6 +939,7 @@ fn selector_honors_explicit_runtime_variant_override() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
@@ -842,6 +960,7 @@ fn selector_honors_explicit_runtime_variant_override() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
@@ -902,6 +1021,7 @@ fn selector_rejects_unmatched_runtime_variant_override_without_synthetic_candida
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
             context_window_tokens: Some(8192),
             residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
@@ -974,6 +1094,7 @@ fn selector_rejects_unavailable_explicit_device_without_cpu_fallback() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
             context_window_tokens: Some(8192),
             residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
@@ -1043,6 +1164,7 @@ fn selector_honors_explicit_device_when_candidate_facts_match() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
@@ -1063,6 +1185,7 @@ fn selector_honors_explicit_device_when_candidate_facts_match() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
@@ -1121,6 +1244,7 @@ fn selector_rejects_unmatched_override_without_synthetic_candidate() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
             context_window_tokens: Some(8192),
             residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
@@ -1196,6 +1320,7 @@ fn selector_uses_controlled_exploration_for_equal_ranked_auto_candidates() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -1216,6 +1341,7 @@ fn selector_uses_controlled_exploration_for_equal_ranked_auto_candidates() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -1406,6 +1532,7 @@ fn selector_rejects_when_required_context_is_missing() {
             resource_estimate: None,
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
+            dependency_readiness: Vec::new(),
             source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
             context_window_tokens: None,
             residency_state: None,
@@ -1477,6 +1604,7 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
@@ -1497,6 +1625,7 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Unloaded),
@@ -1577,6 +1706,7 @@ fn selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid() {
                 evidence_key: Some("pumas_package_facts".to_string()),
                 requested_runtime_key: None,
             }],
+            dependency_readiness: Vec::new(),
             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
             context_window_tokens: None,
             residency_state: None,
@@ -1659,6 +1789,7 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -1679,6 +1810,7 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -1750,6 +1882,7 @@ fn selector_rejects_unrankable_headroom_under_queue_pressure() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -1770,6 +1903,7 @@ fn selector_rejects_unrankable_headroom_under_queue_pressure() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -1858,6 +1992,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,
@@ -1878,6 +2013,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 resource_estimate: None,
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
+                dependency_readiness: Vec::new(),
                 source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFacts,
                 context_window_tokens: Some(8192),
                 residency_state: None,

@@ -5178,6 +5178,35 @@ Worker rules:
   - Remaining follow-up: attach dependency-readiness facts to
     runtime-registry/admission candidates and selected execution decisions as
     typed proof before scheduler filtering consumes them.
+- 2026-05-16 runtime-registry dependency-readiness proof-carriage slice:
+  - Smallest useful vertical slice: add typed dependency-readiness proof fields
+    to runtime-registry technical-fit candidates and selected decisions without
+    changing candidate eligibility or ranking yet.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/README.md`,
+    affected embedded-runtime technical-fit candidate/decision constructors,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log.
+  - No-fallback/no-legacy confirmation: readiness proof is now explicit
+    scheduler-facing candidate data and selected-decision data. This slice
+    does not treat readiness as `supports_runtime_requirements`, device
+    diagnostics, lifecycle diagnostics, Python worker discovery, backend-key
+    inference, or dependency-environment fallback behavior.
+  - Implementation notes: added
+    `RuntimeTechnicalFitDependencyReadinessFact` plus typed subject-kind,
+    state, and resolver-owner enums to runtime-registry. Candidate
+    normalization trims/canonicalizes proof scope, the selector copies proof
+    from the selected candidate into `RuntimeTechnicalFitDecision`, and
+    embedded-runtime constructors now initialize the new field explicitly.
+  - Verification passed: `cargo test -p pantograph-runtime-registry
+    technical_fit --lib` and `cargo test -p pantograph-embedded-runtime
+    technical_fit --lib`.
+  - Remaining follow-up: project real embedded-runtime
+    `DependencyReadinessFact` values into runtime-registry candidates, carry
+    selected proof through workflow/admission execution plans into inference,
+    then make scheduler filtering consume readiness proof.
 
 ### Traceability Links
 

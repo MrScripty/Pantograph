@@ -57,9 +57,10 @@ process ownership and app composition stay outside this crate.
   reservation release and runtime retention inspection paths.
 - `snapshot.rs`: deterministic machine-readable snapshot contracts for runtime
   state inspection.
-- `technical_fit.rs`: backend-owned technical-fit request, candidate, factor,
-  selector, and decision contracts that freeze selector inputs plus
-  machine-consumable reason codes before workflow integration lands.
+- `technical_fit.rs`: backend-owned technical-fit request, candidate,
+  dependency-readiness proof, factor, selector, and decision contracts that
+  freeze selector inputs plus machine-consumable reason codes before workflow
+  integration lands.
 - `technical_fit_tests.rs`: technical-fit normalization, override, residency,
   queue-pressure, budget-pressure, and selector rejection tests extracted from
   the production selector module.
@@ -142,10 +143,11 @@ process ownership and app composition stay outside this crate.
   `no_valid_candidate` diagnostic rather than relying on missing-state reasons
   alone.
 - Technical-fit candidate and decision DTOs carry runtime variant id, typed
-  selected device class/id, resource estimates, observed-throughput hints, and
-  bounded device diagnostics when producers provide those facts. The selector
-  copies selected candidate facts into the decision, but does not infer missing
-  device facts from backend keys or raw runtime strings.
+  selected device class/id, resource estimates, observed-throughput hints,
+  dependency-readiness proof, and bounded device diagnostics when producers
+  provide those facts. The selector copies selected candidate facts into the
+  decision, but does not infer missing device or dependency facts from backend
+  keys or raw runtime strings.
 - Technical-fit normalization, override, residency, queue-pressure,
   budget-pressure, and selector rejection tests stay in
   `technical_fit_tests.rs` so selector contracts stay separate from production
