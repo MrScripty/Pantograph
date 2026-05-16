@@ -261,6 +261,35 @@ fn planner_reports_exact_missing_component_role_path() {
 }
 
 #[test]
+fn planner_rejects_ambiguous_component_role_sources_without_heuristic_selection() {
+    let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let diffusers = facts.diffusers.as_mut().expect("diffusers facts");
+    let mut duplicate_vae = diffusers
+        .components
+        .iter()
+        .find(|component| component.role == DiffusersComponentRole::Vae)
+        .expect("fixture has VAE")
+        .clone();
+    duplicate_vae.relative_path = Some("vae_alt".to_string());
+    duplicate_vae.config_path = Some("vae_alt/config.json".to_string());
+    diffusers.components.push(duplicate_vae);
+    let request = image_request();
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::AmbiguousComponentRole
+            && diagnostic.field_path == "package_facts.diffusers.components.vae"
+    }));
+}
+
+#[test]
 fn planner_rejects_invalid_denoising_scheduler_option_id() {
     let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
     let request = ImageGenerationRequest {

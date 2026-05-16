@@ -278,6 +278,7 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     ResourceEstimateOverflow,
     MissingSelectedModelRef,
     SelectedModelRefMismatch,
+    AmbiguousComponentRole,
 }
 
 /// Planner diagnostic severity.
@@ -644,10 +645,14 @@ fn validate_required_components(
     };
 
     for required in family_rules.required_components {
-        let present = diffusers.components.iter().any(|component| {
-            component.role == *required && component.status == PackageFactStatus::Present
-        });
-        if !present {
+        let present = diffusers
+            .components
+            .iter()
+            .filter(|component| {
+                component.role == *required && component.status == PackageFactStatus::Present
+            })
+            .collect::<Vec<_>>();
+        if present.is_empty() {
             diagnostics.push(diagnostic(
                 ImageGenerationPlannerDiagnosticCode::MissingComponentRole,
                 format!(
@@ -656,6 +661,18 @@ fn validate_required_components(
                 ),
                 format!(
                     "Diffusers component role '{}' is required for the selected image family",
+                    role_label(*required)
+                ),
+            ));
+        } else if present.len() > 1 {
+            diagnostics.push(diagnostic(
+                ImageGenerationPlannerDiagnosticCode::AmbiguousComponentRole,
+                format!(
+                    "package_facts.diffusers.components.{}",
+                    role_label(*required)
+                ),
+                format!(
+                    "Diffusers component role '{}' resolved to multiple present sources for the selected image family",
                     role_label(*required)
                 ),
             ));

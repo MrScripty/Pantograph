@@ -4791,6 +4791,25 @@ Worker rules:
   img2img/inpaint fields, or image-specific opaque options still needs typed
   family/runtime rules, provider rows where user-facing, and worker contract
   fields before those values can execute.
+- 2026-05-16 planner component ambiguity guardrail slice: smallest useful
+  vertical slice was to reject multiple present Pumas/Diffusers component
+  sources for any required role in the selected supported image family.
+  Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`, and this plan
+  directory.
+- No-fallback/no-legacy confirmation: ambiguous required component facts now
+  fail with the typed `ambiguous_component_role` planner diagnostic. The
+  planner does not choose a component by order, string shape, model/display
+  name, or generic Diffusers behavior, and no alternate backend/runtime or
+  worker dispatch is attempted after ambiguity.
+- Verification passed: `cargo test -p inference
+  planner_rejects_ambiguous_component_role_sources_without_heuristic_selection
+  --lib`, `cargo test -p inference image_generation_planner --lib`, `cargo
+  check -p inference`, `cargo fmt -p inference -- --check`, and `git diff
+  --check`.
+- Remaining follow-up: FLUX, FLUX.2, Qwen Image, Lumina Image, GLM Image,
+  Z-Image, and SDXL remain unsupported until explicit family component
+  requirement rows and ambiguity fixtures are added for their package shapes.
 
 ### Traceability Links
 

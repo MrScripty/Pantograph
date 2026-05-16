@@ -324,7 +324,7 @@ PyTorch/diffusers and produce a retained image artifact.
   execution.
 - [x] Ensure gateway-level image option diagnostics are reconciled with planner
   diagnostics so users see one authoritative option-support answer.
-- [ ] Validate component source ambiguity per family. Families such as Z-Image
+- [x] Validate component source ambiguity per family. Families such as Z-Image
   and FLUX.2 must reject ambiguous VAE/text-encoder sources instead of trying
   to assemble components heuristically.
 - [ ] Use checked arithmetic for dimensions, image counts, estimated memory,
@@ -2121,3 +2121,31 @@ Standards compliance gates for every Option 3 slice:
   support for denoising scheduler overrides, img2img/inpaint, or opaque
   options still requires typed family option rules, provider rows where
   user-facing, and worker envelope fields before those values can execute.
+
+2026-05-16 planner component ambiguity guardrail slice:
+
+- Smallest useful vertical slice: make the side-effect-free
+  image-generation planner reject multiple present Pumas/Diffusers component
+  sources for any required role in the selected supported family.
+- Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`, and this plan
+  directory.
+- No-fallback/no-legacy confirmation: ambiguous component facts now produce
+  the typed `ambiguous_component_role` planner diagnostic. The planner does
+  not pick a source by order, model id, display name, path shape, or Diffusers
+  generic loading behavior, and it does not attempt alternate backends or
+  worker dispatch after ambiguity.
+- Result: Stable Diffusion, the only currently executable image family in this
+  planner slice, fails closed when a required role such as `vae` has multiple
+  present sources. Future executable families with multi-encoder or
+  role-specific component layouts must add explicit family requirement rows and
+  ambiguity fixtures before they execute.
+- Verification passed: `cargo test -p inference
+  planner_rejects_ambiguous_component_role_sources_without_heuristic_selection
+  --lib`, `cargo test -p inference image_generation_planner --lib`, `cargo
+  check -p inference`, `cargo fmt -p inference -- --check`, and `git diff
+  --check`.
+- Remaining follow-up: FLUX, FLUX.2, Qwen Image, Lumina Image, GLM Image,
+  Z-Image, and SDXL are still unsupported families; enabling them requires
+  explicit component-role requirement tables and ambiguity tests for their
+  package shapes.
