@@ -151,10 +151,15 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
                 code: RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
                 severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning,
                 message: " cuda runtime warmup pending ".to_string(),
+                task_id: Some(" image_generation ".to_string()),
+                runtime_id: Some(" llama.cpp ".to_string()),
                 device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
                 device_id: Some(" cuda:0 ".to_string()),
                 runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
                 backend_key: Some("llama.cpp".to_string()),
+                model_id: Some(" model-a ".to_string()),
+                evidence_key: Some(" compatibility_report ".to_string()),
+                requested_runtime_key: Some(" llama.cpp ".to_string()),
             }],
             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
             context_window_tokens: Some(8192),
@@ -261,6 +266,36 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
         Some("llama_cpp")
     );
     assert_eq!(
+        normalized.candidates[0].device_diagnostics[0]
+            .task_id
+            .as_deref(),
+        Some("image_generation")
+    );
+    assert_eq!(
+        normalized.candidates[0].device_diagnostics[0]
+            .runtime_id
+            .as_deref(),
+        Some("llama_cpp")
+    );
+    assert_eq!(
+        normalized.candidates[0].device_diagnostics[0]
+            .model_id
+            .as_deref(),
+        Some("model-a")
+    );
+    assert_eq!(
+        normalized.candidates[0].device_diagnostics[0]
+            .evidence_key
+            .as_deref(),
+        Some("compatibility_report")
+    );
+    assert_eq!(
+        normalized.candidates[0].device_diagnostics[0]
+            .requested_runtime_key
+            .as_deref(),
+        Some("llama_cpp")
+    );
+    assert_eq!(
         normalized.candidates[0]
             .compatibility_report
             .as_ref()
@@ -277,6 +312,78 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
             .model_id
             .as_deref(),
         Some("model-a")
+    );
+}
+
+#[test]
+fn technical_fit_device_diagnostic_evidence_codes_round_trip_with_optional_attribution() {
+    let evidence_codes = [
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceUnsupportedTask,
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceBackendUnavailable,
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceMissingRuntimeCapability,
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable,
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceBackendCompatibilityRejected,
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceGraphRuntimeUnsatisfied,
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceNoAcceptedCandidate,
+    ];
+
+    for code in evidence_codes {
+        let diagnostic = RuntimeTechnicalFitDeviceDiagnostic {
+            code,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "evidence rejected candidate".to_string(),
+            task_id: Some(" image_generation ".to_string()),
+            runtime_id: Some(" PyTorch ".to_string()),
+            device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+            device_id: Some(" cuda:0 ".to_string()),
+            runtime_variant_id: Some(" pytorch.cuda ".to_string()),
+            backend_key: Some(" PyTorch ".to_string()),
+            model_id: Some(" pumas://models/sdxl ".to_string()),
+            evidence_key: Some(" package_component.unet ".to_string()),
+            requested_runtime_key: Some(" PyTorch ".to_string()),
+        };
+
+        let value = serde_json::to_value(&diagnostic).expect("serialize diagnostic");
+        let round_trip: RuntimeTechnicalFitDeviceDiagnostic =
+            serde_json::from_value(value).expect("deserialize diagnostic");
+        let normalized = round_trip.normalized();
+
+        assert_eq!(normalized.code, code);
+        assert_eq!(normalized.task_id.as_deref(), Some("image_generation"));
+        assert_eq!(normalized.runtime_id.as_deref(), Some("pytorch"));
+        assert_eq!(normalized.backend_key.as_deref(), Some("pytorch"));
+        assert_eq!(normalized.model_id.as_deref(), Some("pumas://models/sdxl"));
+        assert_eq!(
+            normalized.evidence_key.as_deref(),
+            Some("package_component.unet")
+        );
+        assert_eq!(normalized.requested_runtime_key.as_deref(), Some("pytorch"));
+    }
+
+    let omitted_optional_fields: RuntimeTechnicalFitDeviceDiagnostic =
+        serde_json::from_value(serde_json::json!({
+            "code": "evidence_no_accepted_candidate",
+            "severity": "error",
+            "message": "no accepted candidate"
+        }))
+        .expect("deserialize diagnostic with omitted optional fields");
+
+    assert_eq!(
+        omitted_optional_fields.normalized(),
+        RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceNoAcceptedCandidate,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: "no accepted candidate".to_string(),
+            task_id: None,
+            runtime_id: None,
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: None,
+            backend_key: None,
+            model_id: None,
+            evidence_key: None,
+            requested_runtime_key: None,
+        }
     );
 }
 
@@ -344,10 +451,15 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
             code: RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning,
             message: " cuda runtime warmup pending ".to_string(),
+            task_id: Some(" text_generation ".to_string()),
+            runtime_id: Some(" llama.cpp ".to_string()),
             device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
             device_id: Some(" cuda:0 ".to_string()),
             runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
             backend_key: Some("llama.cpp".to_string()),
+            model_id: Some(" model-a ".to_string()),
+            evidence_key: Some(" compatibility_report ".to_string()),
+            requested_runtime_key: Some(" llama.cpp ".to_string()),
         }],
         reasons: vec![RuntimeTechnicalFitReason::new(
             RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
@@ -612,10 +724,15 @@ fn selector_rejects_ineligible_explicit_backend_override_without_selection() {
                 code: RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible,
                 severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
                 message: "llama.cpp cannot execute diffusion image generation".to_string(),
+                task_id: None,
+                runtime_id: Some("llama_cpp".to_string()),
                 device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
                 device_id: Some("cpu".to_string()),
                 runtime_variant_id: Some("llama_cpp/linux-x64/cpu".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
+                model_id: Some("image-model".to_string()),
+                evidence_key: None,
+                requested_runtime_key: None,
             }],
             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
             context_window_tokens: Some(8192),
@@ -663,10 +780,15 @@ fn selector_rejects_ineligible_explicit_backend_override_without_selection() {
             code: RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible,
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: "llama.cpp cannot execute diffusion image generation".to_string(),
+            task_id: None,
+            runtime_id: Some("llama_cpp".to_string()),
             device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
             device_id: Some("cpu".to_string()),
             runtime_variant_id: Some("llama_cpp/linux-x64/cpu".to_string()),
             backend_key: Some("llama_cpp".to_string()),
+            model_id: Some("image-model".to_string()),
+            evidence_key: None,
+            requested_runtime_key: None,
         }]
     );
 }
@@ -813,10 +935,15 @@ fn selector_rejects_unmatched_runtime_variant_override_without_synthetic_candida
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: "technical-fit could not satisfy the explicit runtime variant override"
                 .to_string(),
+            task_id: None,
+            runtime_id: Some("pytorch".to_string()),
             device_class: None,
             device_id: None,
             runtime_variant_id: Some("pytorch/linux-x64/cuda".to_string()),
             backend_key: Some("pytorch".to_string()),
+            model_id: None,
+            evidence_key: None,
+            requested_runtime_key: Some("pytorch".to_string()),
         }]
     );
 }
@@ -876,10 +1003,15 @@ fn selector_rejects_unavailable_explicit_device_without_cpu_fallback() {
             code: RuntimeTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable,
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: "technical-fit could not satisfy the explicit device policy".to_string(),
+            task_id: None,
+            runtime_id: None,
             device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
             device_id: Some("cuda:0".to_string()),
             runtime_variant_id: None,
             backend_key: None,
+            model_id: None,
+            evidence_key: None,
+            requested_runtime_key: None,
         }]
     );
 }
@@ -1308,10 +1440,15 @@ fn selector_rejects_when_required_context_is_missing() {
             code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: "technical-fit auto policy found no valid candidate".to_string(),
+            task_id: None,
+            runtime_id: None,
             device_class: None,
             device_id: None,
             runtime_variant_id: None,
             backend_key: None,
+            model_id: None,
+            evidence_key: None,
+            requested_runtime_key: None,
         }]
     );
 }
@@ -1391,10 +1528,15 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
             code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: "technical-fit auto policy found no valid candidate".to_string(),
+            task_id: None,
+            runtime_id: None,
             device_class: None,
             device_id: None,
             runtime_variant_id: None,
             backend_key: None,
+            model_id: None,
+            evidence_key: None,
+            requested_runtime_key: None,
         }]
     );
 }
@@ -1425,10 +1567,15 @@ fn selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid() {
                 code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts,
                 severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
                 message: "required model did not resolve to Pumas package facts".to_string(),
+                task_id: None,
+                runtime_id: None,
                 device_class: None,
                 device_id: None,
                 runtime_variant_id: None,
                 backend_key: None,
+                model_id: Some("model-a".to_string()),
+                evidence_key: Some("pumas_package_facts".to_string()),
+                requested_runtime_key: None,
             }],
             source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
             context_window_tokens: None,
@@ -1458,10 +1605,15 @@ fn selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid() {
             code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts,
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: "required model did not resolve to Pumas package facts".to_string(),
+            task_id: None,
+            runtime_id: None,
             device_class: None,
             device_id: None,
             runtime_variant_id: None,
             backend_key: None,
+            model_id: Some("model-a".to_string()),
+            evidence_key: Some("pumas_package_facts".to_string()),
+            requested_runtime_key: None,
         }]
     );
 }

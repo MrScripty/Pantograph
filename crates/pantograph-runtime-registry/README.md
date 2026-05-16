@@ -94,6 +94,10 @@ let snapshot = registry.snapshot();
   summaries from backend/model checks. The selector treats those as candidate
   facts and still uses `supports_runtime_requirements` plus legal factors for
   eligibility and ranking.
+- Technical-fit device diagnostics may carry structured attribution fields for
+  task, runtime, model, evidence, and requested runtime keys. Producers must use
+  typed diagnostic codes and fields for evidence failures instead of encoding
+  those meanings in free-form messages.
 - Runtime capability candidates are serialized as `runtime_capability_facts`.
   The retired fallback-named source value is not a supported contract alias.
 - Technical-fit selector output must not synthesize executable fallback

@@ -1,4 +1,4 @@
-use pantograph_runtime_identity::canonical_runtime_backend_key;
+use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use serde::{Deserialize, Serialize};
 
 use crate::workflow::{
@@ -151,6 +151,7 @@ pub enum WorkflowTechnicalFitDeviceDiagnosticSeverity {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowTechnicalFitDeviceDiagnosticCode {
     InvalidDevicePolicy,
@@ -167,6 +168,13 @@ pub enum WorkflowTechnicalFitDeviceDiagnosticCode {
     MissingModelPackageFacts,
     CandidateSetOverflow,
     LegacyDeviceRejected,
+    EvidenceUnsupportedTask,
+    EvidenceBackendUnavailable,
+    EvidenceMissingRuntimeCapability,
+    EvidenceRequiredPackageUnavailable,
+    EvidenceBackendCompatibilityRejected,
+    EvidenceGraphRuntimeUnsatisfied,
+    EvidenceNoAcceptedCandidate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -176,6 +184,10 @@ pub struct WorkflowTechnicalFitDeviceDiagnostic {
     pub severity: WorkflowTechnicalFitDeviceDiagnosticSeverity,
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_class: Option<WorkflowTechnicalFitDeviceClass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,
@@ -183,6 +195,12 @@ pub struct WorkflowTechnicalFitDeviceDiagnostic {
     pub runtime_variant_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_runtime_key: Option<String>,
 }
 
 impl WorkflowTechnicalFitDeviceDiagnostic {
@@ -191,10 +209,15 @@ impl WorkflowTechnicalFitDeviceDiagnostic {
             code: self.code,
             severity: self.severity,
             message: normalize_trimmed_string(Some(self.message.as_str())).unwrap_or_default(),
+            task_id: normalize_trimmed_string(self.task_id.as_deref()),
+            runtime_id: normalize_runtime_id(self.runtime_id.as_deref()),
             device_class: self.device_class,
             device_id: normalize_trimmed_string(self.device_id.as_deref()),
             runtime_variant_id: normalize_trimmed_string(self.runtime_variant_id.as_deref()),
             backend_key: normalize_backend_key(self.backend_key.as_deref()),
+            model_id: normalize_trimmed_string(self.model_id.as_deref()),
+            evidence_key: normalize_trimmed_string(self.evidence_key.as_deref()),
+            requested_runtime_key: normalize_backend_key(self.requested_runtime_key.as_deref()),
         }
     }
 }
@@ -1044,6 +1067,16 @@ fn normalize_backend_key(value: Option<&str>) -> Option<String> {
     }
 }
 
+fn normalize_runtime_id(value: Option<&str>) -> Option<String> {
+    let value = normalize_trimmed_string(value)?;
+    let normalized = canonical_runtime_id(&value);
+    if normalized.trim().is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
 fn normalize_string_list(values: &[String]) -> Vec<String> {
     let mut normalized = values
         .iter()
@@ -1374,10 +1407,15 @@ mod tests {
                 code: WorkflowTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable,
                 severity: WorkflowTechnicalFitDeviceDiagnosticSeverity::Error,
                 message: "CUDA device is not available".to_string(),
+                task_id: Some(" image_generation ".to_string()),
+                runtime_id: Some(" PyTorch ".to_string()),
                 device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
                 device_id: Some(" cuda:0 ".to_string()),
                 runtime_variant_id: Some("pytorch.cuda".to_string()),
                 backend_key: Some("pytorch".to_string()),
+                model_id: Some(" image/model ".to_string()),
+                evidence_key: Some(" runtime_variant ".to_string()),
+                requested_runtime_key: Some(" PyTorch ".to_string()),
             }],
             reasons: Vec::new(),
             selection_policy_trace: None,

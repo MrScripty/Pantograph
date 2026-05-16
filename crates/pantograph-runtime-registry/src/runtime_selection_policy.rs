@@ -34,10 +34,15 @@ impl RuntimeSelectionInputValidationError {
                 severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
                 message: "runtime-selection policy received an unnormalized technical-fit request"
                     .to_string(),
+                task_id: None,
+                runtime_id: None,
                 device_class: None,
                 device_id: None,
                 runtime_variant_id: None,
                 backend_key: None,
+                model_id: None,
+                evidence_key: None,
+                requested_runtime_key: None,
             },
         }
     }
@@ -345,10 +350,15 @@ fn candidate_summary_count_diagnostic() -> RuntimeTechnicalFitDeviceDiagnostic {
         code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
         severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
         message: "technical-fit candidate set is too large to summarize exactly".to_string(),
+        task_id: None,
+        runtime_id: None,
         device_class: None,
         device_id: None,
         runtime_variant_id: None,
         backend_key: None,
+        model_id: None,
+        evidence_key: None,
+        requested_runtime_key: None,
     }
 }
 
@@ -424,10 +434,15 @@ fn automatic_no_valid_candidate_diagnostics(
         code: RuntimeTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
         severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
         message: "technical-fit auto policy found no valid candidate".to_string(),
+        task_id: None,
+        runtime_id: None,
         device_class: None,
         device_id: None,
         runtime_variant_id: None,
         backend_key: None,
+        model_id: None,
+        evidence_key: None,
+        requested_runtime_key: None,
     }]
 }
 
@@ -440,10 +455,15 @@ fn unrankable_headroom_candidate_diagnostic(
         message:
             "technical-fit cannot rank candidate headroom because active reservation count exceeds the supported range"
                 .to_string(),
+        task_id: None,
+        runtime_id: candidate.runtime_id.clone(),
         device_class: candidate.device_class,
         device_id: candidate.selected_device_id.clone(),
         runtime_variant_id: candidate.runtime_variant_id.clone(),
         backend_key: candidate.backend_key.clone(),
+        model_id: candidate.model_id.clone(),
+        evidence_key: None,
+        requested_runtime_key: None,
     }
 }
 

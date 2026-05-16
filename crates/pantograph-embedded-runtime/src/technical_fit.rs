@@ -825,10 +825,15 @@ fn missing_model_package_facts_diagnostic(model_id: &str) -> RuntimeTechnicalFit
             "required model '{}' did not resolve to Pumas package facts for technical-fit planning",
             model_id
         ),
+        task_id: None,
+        runtime_id: None,
         device_class: None,
         device_id: None,
         runtime_variant_id: None,
         backend_key: None,
+        model_id: Some(model_id.to_string()),
+        evidence_key: Some("pumas_package_facts".to_string()),
+        requested_runtime_key: None,
     }
 }
 
@@ -865,10 +870,15 @@ fn candidate_set_overflow_diagnostic(
             "technical-fit candidate synthesis produced {} candidates, exceeding the documented cap of {}",
             candidate_count, MAX_RUNTIME_TECHNICAL_FIT_CANDIDATES
         ),
+        task_id: None,
+        runtime_id: None,
         device_class: None,
         device_id: None,
         runtime_variant_id: None,
         backend_key: None,
+        model_id: None,
+        evidence_key: Some("candidate_set".to_string()),
+        requested_runtime_key: None,
     }
 }
 
@@ -941,10 +951,15 @@ fn runtime_capability_variant_facts_from_variant(
             code: RuntimeTechnicalFitDeviceDiagnosticCode::UnsupportedDeviceClass,
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: "runtime variant reported an unsupported device class".to_string(),
+            task_id: None,
+            runtime_id: Some(capability.runtime_id.clone()),
             device_class: None,
             device_id: None,
             runtime_variant_id: Some(variant.runtime_variant_id.clone()),
             backend_key: capability.backend_keys.first().cloned(),
+            model_id: None,
+            evidence_key: Some("runtime_variant_device_class".to_string()),
+            requested_runtime_key: None,
         });
     }
 
@@ -967,10 +982,15 @@ fn missing_runtime_capability_diagnostic(
             "no runtime capability facts are available for backend '{}' while planning model '{}'",
             backend_key, model_id
         ),
+        task_id: None,
+        runtime_id: None,
         device_class: None,
         device_id: None,
         runtime_variant_id: None,
         backend_key: Some(backend_key.to_string()),
+        model_id: Some(model_id.to_string()),
+        evidence_key: Some("runtime_capability".to_string()),
+        requested_runtime_key: Some(backend_key.to_string()),
     }
 }
 
@@ -981,10 +1001,15 @@ fn missing_runtime_variant_diagnostic(
         code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingRuntimeVariant,
         severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
         message: "runtime capability did not report a runtime variant".to_string(),
+        task_id: None,
+        runtime_id: Some(capability.runtime_id.clone()),
         device_class: None,
         device_id: None,
         runtime_variant_id: None,
         backend_key: capability.backend_keys.first().cloned(),
+        model_id: None,
+        evidence_key: Some("runtime_variant".to_string()),
+        requested_runtime_key: None,
     }
 }
 
@@ -1341,10 +1366,15 @@ fn project_device_diagnostic(
         code: project_device_diagnostic_code(diagnostic.code),
         severity: project_device_diagnostic_severity(diagnostic.severity),
         message: diagnostic.message.clone(),
+        task_id: diagnostic.task_id.clone(),
+        runtime_id: diagnostic.runtime_id.clone(),
         device_class: diagnostic.device_class.map(project_runtime_device_class),
         device_id: diagnostic.device_id.clone(),
         runtime_variant_id: diagnostic.runtime_variant_id.clone(),
         backend_key: diagnostic.backend_key.clone(),
+        model_id: diagnostic.model_id.clone(),
+        evidence_key: diagnostic.evidence_key.clone(),
+        requested_runtime_key: diagnostic.requested_runtime_key.clone(),
     }
 }
 
@@ -1394,6 +1424,28 @@ fn project_device_diagnostic_code(
         RuntimeTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected => {
             WorkflowTechnicalFitDeviceDiagnosticCode::LegacyDeviceRejected
         }
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceUnsupportedTask => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceUnsupportedTask
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceBackendUnavailable => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceBackendUnavailable
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceMissingRuntimeCapability => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceMissingRuntimeCapability
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceBackendCompatibilityRejected => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceBackendCompatibilityRejected
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceGraphRuntimeUnsatisfied => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceGraphRuntimeUnsatisfied
+        }
+        RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceNoAcceptedCandidate => {
+            WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceNoAcceptedCandidate
+        }
+        _ => WorkflowTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
     }
 }
 
@@ -1420,12 +1472,17 @@ fn project_workflow_device_diagnostic(
         code: project_workflow_device_diagnostic_code(diagnostic.code),
         severity: project_workflow_device_diagnostic_severity(diagnostic.severity),
         message: diagnostic.message.clone(),
+        task_id: None,
+        runtime_id: None,
         device_class: diagnostic
             .device_class
             .and_then(project_workflow_runtime_variant_device_class),
         device_id: diagnostic.device_id.clone(),
         runtime_variant_id: diagnostic.runtime_variant_id.clone(),
         backend_key: diagnostic.backend_id.clone(),
+        model_id: None,
+        evidence_key: None,
+        requested_runtime_key: None,
     }
 }
 
@@ -2089,10 +2146,15 @@ mod tests {
                 code: RuntimeTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
                 severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Warning,
                 message: "cuda runtime warmup pending".to_string(),
+                task_id: Some("image_generation".to_string()),
+                runtime_id: Some("llama_cpp".to_string()),
                 device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
                 device_id: Some("cuda:0".to_string()),
                 runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
+                model_id: Some("llm/llama/tiny".to_string()),
+                evidence_key: Some("compatibility_report".to_string()),
+                requested_runtime_key: Some("llama_cpp".to_string()),
             }],
             reasons: vec![RuntimeTechnicalFitReason::new(
                 RuntimeTechnicalFitReasonCode::QueuePressure,
@@ -2163,10 +2225,15 @@ mod tests {
                     code: WorkflowTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
                     severity: WorkflowTechnicalFitDeviceDiagnosticSeverity::Warning,
                     message: "cuda runtime warmup pending".to_string(),
+                    task_id: Some("image_generation".to_string()),
+                    runtime_id: Some("llama_cpp".to_string()),
                     device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
                     device_id: Some("cuda:0".to_string()),
                     runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                     backend_key: Some("llama_cpp".to_string()),
+                    model_id: Some("llm/llama/tiny".to_string()),
+                    evidence_key: Some("compatibility_report".to_string()),
+                    requested_runtime_key: Some("llama_cpp".to_string()),
                 }],
                 reasons: vec![WorkflowTechnicalFitReason {
                     code: WorkflowTechnicalFitReasonCode::QueuePressure,
@@ -2209,6 +2276,67 @@ mod tests {
                 }],
             }
         );
+    }
+
+    #[test]
+    fn workflow_decision_projection_maps_all_evidence_diagnostic_codes() {
+        let cases = [
+            (
+                RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceUnsupportedTask,
+                WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceUnsupportedTask,
+            ),
+            (
+                RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceBackendUnavailable,
+                WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceBackendUnavailable,
+            ),
+            (
+                RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceMissingRuntimeCapability,
+                WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceMissingRuntimeCapability,
+            ),
+            (
+                RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable,
+                WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceRequiredPackageUnavailable,
+            ),
+            (
+                RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceBackendCompatibilityRejected,
+                WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceBackendCompatibilityRejected,
+            ),
+            (
+                RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceGraphRuntimeUnsatisfied,
+                WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceGraphRuntimeUnsatisfied,
+            ),
+            (
+                RuntimeTechnicalFitDeviceDiagnosticCode::EvidenceNoAcceptedCandidate,
+                WorkflowTechnicalFitDeviceDiagnosticCode::EvidenceNoAcceptedCandidate,
+            ),
+        ];
+
+        for (runtime_code, workflow_code) in cases {
+            let projected = project_device_diagnostic(&RuntimeTechnicalFitDeviceDiagnostic {
+                code: runtime_code,
+                severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+                message: "evidence diagnostic".to_string(),
+                task_id: Some("image_generation".to_string()),
+                runtime_id: Some("pytorch".to_string()),
+                device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
+                device_id: Some("cuda:0".to_string()),
+                runtime_variant_id: Some("pytorch.cuda".to_string()),
+                backend_key: Some("pytorch".to_string()),
+                model_id: Some("pumas://models/sdxl".to_string()),
+                evidence_key: Some("package_component.unet".to_string()),
+                requested_runtime_key: Some("pytorch".to_string()),
+            });
+
+            assert_eq!(projected.code, workflow_code);
+            assert_eq!(projected.task_id.as_deref(), Some("image_generation"));
+            assert_eq!(projected.runtime_id.as_deref(), Some("pytorch"));
+            assert_eq!(projected.model_id.as_deref(), Some("pumas://models/sdxl"));
+            assert_eq!(
+                projected.evidence_key.as_deref(),
+                Some("package_component.unet")
+            );
+            assert_eq!(projected.requested_runtime_key.as_deref(), Some("pytorch"));
+        }
     }
 
     #[test]
@@ -2268,10 +2396,15 @@ mod tests {
                     code: WorkflowTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,
                     severity: WorkflowTechnicalFitDeviceDiagnosticSeverity::Warning,
                     message: "cuda runtime warmup pending".to_string(),
+                    task_id: None,
+                    runtime_id: None,
                     device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
                     device_id: Some("cuda:0".to_string()),
                     runtime_variant_id: Some("llama_cpp.cuda".to_string()),
                     backend_key: Some("llama_cpp".to_string()),
+                    model_id: None,
+                    evidence_key: None,
+                    requested_runtime_key: None,
                 }],
                 reasons: vec![WorkflowTechnicalFitReason {
                     code: WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,

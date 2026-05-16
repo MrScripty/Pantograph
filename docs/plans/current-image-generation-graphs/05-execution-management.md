@@ -4609,6 +4609,36 @@ Worker rules:
   projection tests, public DTO tests, and binding/fixture round-trip tests for
   any exposed interop surface. The tests must prove every new code and
   attribution field survives projection without message-string parsing.
+- 2026-05-16 technical-fit diagnostic contract slice: smallest useful vertical
+  slice was the shared append-only diagnostic DTO extension needed before the
+  evidence adapter wiring. Allowed write set:
+  `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+  `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`,
+  `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+  `crates/pantograph-workflow-service/src/technical_fit.rs`,
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+  `src/services/workflow/types.ts`,
+  `crates/pantograph-workflow-service/tests/fixtures/technical_fit_contract.json`,
+  the three touched crate READMEs, and this plan directory.
+- No-fallback/no-legacy confirmation: this slice only adds typed
+  evidence-oriented diagnostic codes and structured attribution fields to the
+  canonical technical-fit contract. It does not add selector fallback behavior,
+  pseudo-Diffusers aliases, legacy compatibility shims, or worker dispatch
+  paths. Unknown future runtime-registry diagnostic codes remain fail-closed in
+  projection as `no_valid_candidate` until explicitly mapped.
+- Verification passed: `cargo test -p pantograph-runtime-registry
+  technical_fit --lib`, `cargo test -p pantograph-workflow-service
+  technical_fit --lib`, `cargo test -p pantograph-embedded-runtime
+  technical_fit --lib`, `cargo test -p pantograph-workflow-service
+  workflow_technical_fit_cross_layer_fixture_deserializes --test contract`,
+  `cargo check -p pantograph-runtime-registry`, `cargo check -p
+  pantograph-workflow-service`, `cargo check -p pantograph-embedded-runtime`,
+  and `npm run typecheck`.
+- Deviation/follow-up: the field-copy projection remains in the existing
+  technical-fit modules because this slice only extends the shared DTO
+  contract. The next adapter implementation must not grow those files with
+  evidence mapping policy; add the focused `ExecutionEvidenceTechnicalFitAdapter`
+  mapping/projection module before wiring and deleting the old builders.
 
 ### Traceability Links
 

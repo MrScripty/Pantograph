@@ -51,7 +51,7 @@ packages.
 | `task_executor/` | Behavior modules for RAG search, Puma-Lib metadata projection, dependency environment/preflight, and Python runtime execution used by the host executor facade. Puma-Lib execution refreshes selected `model_id` facts and non-empty selected-detail inference settings through the explicit Pumas selector-access role, and only owner access may enrich outputs with full package facts. Direct diffusion execution is retired from the host dispatcher; image generation enters through canonical inference task metadata. |
 | `task_executor_tests.rs` | Shared Pantograph host task-executor test fixtures and behavior-module index. |
 | `task_executor_tests/` | Focused task-executor behavior tests for dependency preflight/fallback, input helpers, Puma-Lib metadata rebinding through owner and selector-access roles, and Python runtime recorder/stream behavior. |
-| `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, advisory Pumas package-fact candidate projection from explicit selector-access owner facts, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
+| `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, advisory Pumas package-fact candidate projection from explicit selector-access owner facts, request projection into backend runtime-registry selector input, selector invocation, and decision plus diagnostic-attribution projection back to workflow-service contracts without moving policy into adapters. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke audio and ONNX Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
@@ -388,7 +388,9 @@ from current backend/package facts, not from legacy runtime hints.
   settings into variant preferences locally.
 - Technical-fit bridging preserves runtime variant ids, typed device class/id
   facts, resource estimates, observed-throughput hints, and bounded device
-  diagnostics from runtime-registry candidates and decisions. The bridge may
+  diagnostics from runtime-registry candidates and decisions. Diagnostic
+  attribution fields are copied from runtime-registry facts into workflow DTOs;
+  this crate must not infer evidence meaning from message text. The bridge may
   project closed enum values between crates, but it must not convert unknown
   backend-local device strings into selected facts.
 - Host runtime and diagnostics-ledger adapters consume canonical

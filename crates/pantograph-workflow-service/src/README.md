@@ -191,6 +191,9 @@ executor, the service fails closed.
 - Technical-fit decisions with error-severity device diagnostics are blocking
   runtime diagnostics, including explicit device requests that canonical
   planning cannot satisfy.
+- Technical-fit diagnostic DTOs carry scheduler-facing attribution fields from
+  runtime-registry decisions. Workflow-service normalizes and transports these
+  fields; it must not derive evidence meaning from diagnostic messages.
 - Execution-plan DTOs are correct-by-construction. Public builders and serde
   deserialization must reject missing selected node-decision facts, unknown
   task/device selections, oversized diagnostics, unsupported schema versions,

@@ -811,16 +811,30 @@ export type WorkflowTechnicalFitDeviceDiagnosticCode =
   | 'backend_incompatible'
   | 'unsupported_device_class'
   | 'missing_runtime_variant'
-  | 'legacy_device_rejected';
+  | 'missing_model_package_facts'
+  | 'candidate_set_overflow'
+  | 'legacy_device_rejected'
+  | 'evidence_unsupported_task'
+  | 'evidence_backend_unavailable'
+  | 'evidence_missing_runtime_capability'
+  | 'evidence_required_package_unavailable'
+  | 'evidence_backend_compatibility_rejected'
+  | 'evidence_graph_runtime_unsatisfied'
+  | 'evidence_no_accepted_candidate';
 
 export interface WorkflowTechnicalFitDeviceDiagnostic {
   code: WorkflowTechnicalFitDeviceDiagnosticCode;
   severity: WorkflowTechnicalFitDeviceDiagnosticSeverity;
   message: string;
+  task_id?: string | null;
+  runtime_id?: string | null;
   device_class?: WorkflowTechnicalFitDeviceClass | null;
   device_id?: string | null;
   runtime_variant_id?: string | null;
   backend_key?: string | null;
+  model_id?: string | null;
+  evidence_key?: string | null;
+  requested_runtime_key?: string | null;
 }
 
 export type WorkflowTechnicalFitSelectionMode = 'automatic' | 'explicit_override';

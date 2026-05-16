@@ -61,10 +61,15 @@
         "code": "candidate_unavailable",
         "severity": "warning",
         "message": "CUDA runtime warmup is pending",
+        "task_id": "image_generation",
+        "runtime_id": "pytorch",
         "device_class": "cuda",
         "device_id": "cuda:0",
         "runtime_variant_id": "pytorch.cuda",
-        "backend_key": "pytorch"
+        "backend_key": "pytorch",
+        "model_id": "pumas://models/juggernaut-x-v10-sdxl",
+        "evidence_key": "runtime_variant",
+        "requested_runtime_key": "pytorch"
       }
     ],
     "reasons": [

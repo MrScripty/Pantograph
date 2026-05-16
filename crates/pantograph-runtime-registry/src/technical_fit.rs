@@ -193,6 +193,7 @@ pub enum RuntimeTechnicalFitDeviceDiagnosticSeverity {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeTechnicalFitDeviceDiagnosticCode {
     InvalidDevicePolicy,
@@ -209,6 +210,13 @@ pub enum RuntimeTechnicalFitDeviceDiagnosticCode {
     MissingModelPackageFacts,
     CandidateSetOverflow,
     LegacyDeviceRejected,
+    EvidenceUnsupportedTask,
+    EvidenceBackendUnavailable,
+    EvidenceMissingRuntimeCapability,
+    EvidenceRequiredPackageUnavailable,
+    EvidenceBackendCompatibilityRejected,
+    EvidenceGraphRuntimeUnsatisfied,
+    EvidenceNoAcceptedCandidate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -218,6 +226,10 @@ pub struct RuntimeTechnicalFitDeviceDiagnostic {
     pub severity: RuntimeTechnicalFitDeviceDiagnosticSeverity,
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_class: Option<RuntimeTechnicalFitDeviceClass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,
@@ -225,6 +237,12 @@ pub struct RuntimeTechnicalFitDeviceDiagnostic {
     pub runtime_variant_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_runtime_key: Option<String>,
 }
 
 impl RuntimeTechnicalFitDeviceDiagnostic {
@@ -233,10 +251,15 @@ impl RuntimeTechnicalFitDeviceDiagnostic {
             code: self.code,
             severity: self.severity,
             message: normalize_trimmed_string(Some(self.message.as_str())).unwrap_or_default(),
+            task_id: normalize_trimmed_string(self.task_id.as_deref()),
+            runtime_id: normalize_runtime_id(self.runtime_id.as_deref()),
             device_class: self.device_class,
             device_id: normalize_trimmed_string(self.device_id.as_deref()),
             runtime_variant_id: normalize_trimmed_string(self.runtime_variant_id.as_deref()),
             backend_key: normalize_backend_key(self.backend_key.as_deref()),
+            model_id: normalize_trimmed_string(self.model_id.as_deref()),
+            evidence_key: normalize_trimmed_string(self.evidence_key.as_deref()),
+            requested_runtime_key: normalize_backend_key(self.requested_runtime_key.as_deref()),
         }
     }
 }
@@ -989,10 +1012,15 @@ pub(crate) fn explicit_device_unavailable_diagnostics(
         code: RuntimeTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable,
         severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
         message: "technical-fit could not satisfy the explicit device policy".to_string(),
+        task_id: None,
+        runtime_id: None,
         device_class: Some(*device_class),
         device_id: device_id.clone(),
         runtime_variant_id: None,
         backend_key: None,
+        model_id: None,
+        evidence_key: None,
+        requested_runtime_key: None,
     }]
 }
 
@@ -1047,10 +1075,15 @@ fn candidate_rejection_diagnostics(
         code: RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible,
         severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
         message,
+        task_id: None,
+        runtime_id: candidate.runtime_id.clone(),
         device_class: candidate.device_class,
         device_id: candidate.selected_device_id.clone(),
         runtime_variant_id: candidate.runtime_variant_id.clone(),
         backend_key: candidate.backend_key.clone(),
+        model_id: candidate.model_id.clone(),
+        evidence_key: None,
+        requested_runtime_key: None,
     }]
 }
 
@@ -1063,10 +1096,15 @@ fn synthetic_explicit_override_diagnostic(
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: "technical-fit could not satisfy the explicit runtime variant override"
                 .to_string(),
+            task_id: None,
+            runtime_id: override_selection.runtime_id.clone(),
             device_class: None,
             device_id: None,
             runtime_variant_id: override_selection.runtime_variant_id.clone(),
             backend_key: override_selection.backend_key.clone(),
+            model_id: override_selection.model_id.clone(),
+            evidence_key: None,
+            requested_runtime_key: override_selection.backend_key.clone(),
         }];
     }
 
@@ -1075,10 +1113,15 @@ fn synthetic_explicit_override_diagnostic(
             code: RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible,
             severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
             message: "technical-fit could not satisfy the explicit backend override".to_string(),
+            task_id: None,
+            runtime_id: override_selection.runtime_id.clone(),
             device_class: None,
             device_id: None,
             runtime_variant_id: None,
             backend_key: override_selection.backend_key.clone(),
+            model_id: override_selection.model_id.clone(),
+            evidence_key: None,
+            requested_runtime_key: override_selection.backend_key.clone(),
         }];
     }
 
@@ -1087,10 +1130,15 @@ fn synthetic_explicit_override_diagnostic(
         severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
         message: "technical-fit could not satisfy the explicit runtime or model override"
             .to_string(),
+        task_id: None,
+        runtime_id: override_selection.runtime_id.clone(),
         device_class: None,
         device_id: None,
         runtime_variant_id: None,
         backend_key: None,
+        model_id: override_selection.model_id.clone(),
+        evidence_key: None,
+        requested_runtime_key: override_selection.backend_key.clone(),
     }]
 }
 

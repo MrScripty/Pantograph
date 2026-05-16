@@ -117,7 +117,7 @@ PyTorch/diffusers and produce a retained image artifact.
   candidate must remain distinguishable; the adapter must not flatten them into
   a generic no-fit message or use a broad catch-all diagnostic except for
   genuinely unknown future non-exhaustive codes.
-- [ ] Extend technical-fit diagnostics as an append-only contract before wiring
+- [x] Extend technical-fit diagnostics as an append-only contract before wiring
   the evidence adapter. Prefer adding typed runtime-registry diagnostic codes
   and structured attribution fields, then project them through embedded-runtime
   and workflow-service, over encoding evidence meaning in diagnostic messages
@@ -129,7 +129,7 @@ PyTorch/diffusers and produce a retained image artifact.
   not introduce a parallel diagnostic envelope unless the existing
   `RuntimeTechnicalFitDeviceDiagnostic` shape cannot be evolved without
   breaking consumers.
-- [ ] Implement the diagnostic contract extension as a serial shared-contract
+- [x] Implement the diagnostic contract extension as a serial shared-contract
   slice before adapter wiring. Runtime-registry remains the source contract,
   embedded-runtime owns projection into workflow-service DTOs, and any exposed
   Tauri/UniFFI/Rustler/frontend mirrors or JSON fixtures must be updated in the
@@ -143,7 +143,7 @@ PyTorch/diffusers and produce a retained image artifact.
   README/ADR traceability for runtime-registry, embedded-runtime, and
   workflow-service ownership changes, including wire-format defaults,
   append-only evolution rules, and the no message-string parsing invariant.
-- [ ] Add contract and projection tests for the diagnostic extension before
+- [x] Add contract and projection tests for the diagnostic extension before
   adapter wiring: runtime-registry serde/default/normalization tests,
   embedded-runtime runtime-to-workflow projection tests, workflow-service
   public DTO tests, and fixture or binding mirror tests for any exposed
@@ -1924,3 +1924,28 @@ Standards compliance gates for every Option 3 slice:
   fail candidate selection rather than using package hints, historical aliases,
   default runtime choices, node-engine context, or direct backend compatibility
   loops to recover old behavior.
+
+2026-05-16 technical-fit diagnostic contract slice:
+
+- Smallest useful vertical slice: extend the canonical technical-fit diagnostic
+  DTOs with evidence-oriented codes and attribution fields before wiring the
+  replacement evidence adapter. Allowed write set was runtime-registry
+  technical-fit DTO/policy/tests, workflow-service technical-fit DTO and
+  contract fixture, embedded-runtime projection/tests, the TypeScript workflow
+  mirror, crate READMEs, and this plan directory.
+- No-fallback/no-legacy confirmation: the slice only adds structured diagnostic
+  capacity and projection. It does not add fallback candidates, legacy
+  compatibility aliases, pseudo-Diffusers execution keys, selector recovery, or
+  worker dispatch paths.
+- Verification passed: `cargo test -p pantograph-runtime-registry
+  technical_fit --lib`, `cargo test -p pantograph-workflow-service
+  technical_fit --lib`, `cargo test -p pantograph-embedded-runtime
+  technical_fit --lib`, `cargo test -p pantograph-workflow-service
+  workflow_technical_fit_cross_layer_fixture_deserializes --test contract`,
+  `cargo check -p pantograph-runtime-registry`, `cargo check -p
+  pantograph-workflow-service`, `cargo check -p pantograph-embedded-runtime`,
+  and `npm run typecheck`.
+- Remaining follow-up: implement the focused
+  `ExecutionEvidenceTechnicalFitAdapter` mapping/projection module before
+  wiring evidence into technical-fit. The current slice deliberately did not
+  add adapter policy or preserve the old builders as a fallback path.
