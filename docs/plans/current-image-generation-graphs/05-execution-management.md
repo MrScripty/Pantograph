@@ -4491,6 +4491,26 @@ Worker rules:
   and typed diagnostics. Embedded-runtime technical-fit, dependency preflight,
   workflow/runtime preflight, and gateway diagnostics still need migration to
   consume the inference-owned execution-evidence boundary.
+- 2026-05-16: Completed the pseudo-Diffusers sidecar capability retirement
+  slice. Embedded-runtime Python sidecar runtime capabilities now advertise
+  PyTorch, ONNX Runtime, and Stable Audio only; `diffusers` no longer appears
+  as a selectable Python-sidecar runtime/backend for PyTorch image-generation
+  execution. Runtime capability projection still allows a future real
+  executable Diffusers backend to appear from actual backend capability facts.
+- No-fallback/no-legacy confirmation: this slice removes the pseudo runtime
+  instead of aliasing it to PyTorch. Diffusers remains dependency/model-source
+  evidence until a real backend registers it as an executable backend key.
+- Verification passed: `cargo test -p pantograph-embedded-runtime
+  python_runtime_capabilities_report_python_backed_engines --lib`, `cargo test
+  -p pantograph-embedded-runtime
+  python_runtime_capabilities_keep_unavailable_reason --lib`, `cargo test -p
+  pantograph-embedded-runtime
+  host_runtime_capabilities_allow_real_diffusers_backend_registration --lib`,
+  `cargo test -p pantograph-embedded-runtime runtime_capabilities --lib`,
+  `cargo check -p pantograph-embedded-runtime`, and `cargo fmt -p
+  pantograph-embedded-runtime -- --check`, and `git diff --check`.
+- Remaining follow-up: embedded-runtime technical-fit candidate construction
+  still needs to consume the inference-owned execution-evidence boundary.
 
 ### Traceability Links
 

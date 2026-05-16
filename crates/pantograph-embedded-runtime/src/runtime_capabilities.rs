@@ -25,8 +25,7 @@ use pantograph_workflow_service::{
     WorkflowTaskModalitySignature, WorkflowTaskRequestContract, WorkflowTaskStreamingSupport,
 };
 
-const PYTHON_SIDECAR_RUNTIME_IDS: &[&str] =
-    &["pytorch", "diffusers", "onnx-runtime", "stable_audio"];
+const PYTHON_SIDECAR_RUNTIME_IDS: &[&str] = &["pytorch", "onnx-runtime", "stable_audio"];
 
 pub fn managed_runtime_capabilities(
     runtimes: &[inference::ManagedRuntimeSnapshot],
@@ -1160,7 +1159,7 @@ mod tests {
             "pytorch",
         );
 
-        assert_eq!(capabilities.len(), 4);
+        assert_eq!(capabilities.len(), 3);
 
         let pytorch = capabilities
             .iter()
@@ -1174,11 +1173,10 @@ mod tests {
         assert!(pytorch.backend_keys.contains(&"pytorch".to_string()));
         assert!(pytorch.backend_keys.contains(&"torch".to_string()));
 
-        let diffusion = capabilities
+        assert!(!capabilities
             .iter()
-            .find(|capability| capability.runtime_id == "diffusers")
-            .expect("diffusers capability");
-        assert!(diffusion.backend_keys.contains(&"diffusers".to_string()));
+            .any(|capability| capability.runtime_id == "diffusers"
+                || capability.backend_keys.iter().any(|key| key == "diffusers")));
 
         let onnx = capabilities
             .iter()
@@ -1202,7 +1200,7 @@ mod tests {
             "llama_cpp",
         );
 
-        assert_eq!(capabilities.len(), 4);
+        assert_eq!(capabilities.len(), 3);
         for capability in capabilities {
             assert!(!capability.available);
             assert!(!capability.configured);
@@ -1424,36 +1422,48 @@ mod tests {
     #[test]
     fn host_runtime_capabilities_do_not_duplicate_python_sidecar_backends() {
         let capabilities = host_runtime_capabilities(
-            &[
-                inference::BackendInfo {
-                    name: "Torch".to_string(),
-                    backend_key: "torch".to_string(),
-                    description: "Transformers through Python".to_string(),
-                    capabilities: BackendCapabilities::default(),
-                    default_start_mode: BackendDefaultStartMode::Inference,
-                    active: false,
-                    available: true,
-                    unavailable_reason: None,
-                    can_install: false,
-                    runtime_binary_id: None,
-                },
-                inference::BackendInfo {
-                    name: "Diffusers".to_string(),
-                    backend_key: "diffusers".to_string(),
-                    description: "Diffusers through Python".to_string(),
-                    capabilities: BackendCapabilities::default(),
-                    default_start_mode: BackendDefaultStartMode::Inference,
-                    active: false,
-                    available: true,
-                    unavailable_reason: None,
-                    can_install: false,
-                    runtime_binary_id: None,
-                },
-            ],
+            &[inference::BackendInfo {
+                name: "Torch".to_string(),
+                backend_key: "torch".to_string(),
+                description: "Transformers through Python".to_string(),
+                capabilities: BackendCapabilities::default(),
+                default_start_mode: BackendDefaultStartMode::Inference,
+                active: false,
+                available: true,
+                unavailable_reason: None,
+                can_install: false,
+                runtime_binary_id: None,
+            }],
             "pytorch",
         );
 
         assert!(capabilities.is_empty());
+    }
+
+    #[test]
+    fn host_runtime_capabilities_allow_real_diffusers_backend_registration() {
+        let capabilities = host_runtime_capabilities(
+            &[inference::BackendInfo {
+                name: "Diffusers".to_string(),
+                backend_key: "diffusers".to_string(),
+                description: "Dedicated Diffusers backend".to_string(),
+                capabilities: BackendCapabilities::default(),
+                default_start_mode: BackendDefaultStartMode::Inference,
+                active: false,
+                available: true,
+                unavailable_reason: None,
+                can_install: false,
+                runtime_binary_id: None,
+            }],
+            "diffusers",
+        );
+
+        assert_eq!(capabilities.len(), 1);
+        assert_eq!(capabilities[0].runtime_id, "diffusers");
+        assert!(capabilities[0]
+            .backend_keys
+            .contains(&"diffusers".to_string()));
+        assert!(capabilities[0].selected);
     }
 
     #[test]

@@ -91,6 +91,10 @@ Pumas-specific dependency resolution.
   technical-fit candidates from those facts plus runtime/workflow context;
   runtime id, residency, warmup, admission, and final selection state must still
   come from the runtime registry or workflow scheduler layers.
+- Diffusers package facts are dependency/model-source evidence for PyTorch image
+  generation unless a real executable Diffusers backend is registered. The
+  Python sidecar capability inventory must not advertise `diffusers` as a
+  selectable runtime/backend for PyTorch execution.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

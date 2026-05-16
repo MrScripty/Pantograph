@@ -100,7 +100,7 @@ PyTorch/diffusers and produce a retained image artifact.
   gateway, and workflow runtime preflight mappings so execution selection,
   runtime display, and dependency diagnostics do not each maintain conflicting
   `diffusers` rules.
-- [ ] Retire scheduler-visible pseudo-Diffusers runtime/backend paths unless a
+- [x] Retire scheduler-visible pseudo-Diffusers runtime/backend paths unless a
   real executable Diffusers backend is registered. `diffusers` may remain a
   display/dependency/capability label, but `python_runtime_capabilities`,
   runtime capability projection, and tests must not advertise `diffusers` as a
@@ -1755,3 +1755,30 @@ Standards compliance gates for every Option 3 slice:
   candidates and typed diagnostics, and embedded-runtime technical-fit,
   dependency preflight, workflow/runtime preflight, and gateway diagnostics
   still need migration to consume the inference-owned evidence boundary.
+
+2026-05-16 pseudo-Diffusers sidecar capability retirement slice:
+
+- Smallest useful vertical slice: remove `diffusers` from the static Python
+  sidecar runtime capability inventory while preserving the ability for a
+  future real executable Diffusers backend to appear from actual backend
+  capability facts.
+- Allowed write set: `crates/pantograph-embedded-runtime/src/runtime_capabilities.rs`,
+  `crates/pantograph-embedded-runtime/src/README.md`, and this plan directory.
+- No-fallback/no-legacy confirmation: this slice does not alias Diffusers to
+  PyTorch, does not add a compatibility runtime, and does not hide scheduler
+  failure behind a fallback. Diffusers remains dependency/model-source evidence
+  for PyTorch image generation unless a real backend registers `diffusers` as
+  its executable backend key.
+- Verification passed: `cargo test -p pantograph-embedded-runtime
+  python_runtime_capabilities_report_python_backed_engines --lib`, `cargo test
+  -p pantograph-embedded-runtime
+  python_runtime_capabilities_keep_unavailable_reason --lib`, `cargo test -p
+  pantograph-embedded-runtime
+  host_runtime_capabilities_allow_real_diffusers_backend_registration --lib`,
+  `cargo test -p pantograph-embedded-runtime runtime_capabilities --lib`,
+  `cargo check -p pantograph-embedded-runtime`, and `cargo fmt -p
+  pantograph-embedded-runtime -- --check`, and `git diff --check`.
+- Remaining follow-up: technical-fit candidate construction still needs to
+  consume the inference-owned evidence boundary so package facts, backend
+  capability facts, explicit graph runtime requirements, and scheduler ranking
+  share one normalization path.
