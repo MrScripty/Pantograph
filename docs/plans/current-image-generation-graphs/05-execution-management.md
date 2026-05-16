@@ -5335,6 +5335,28 @@ Worker rules:
   - Remaining follow-up: wire host-resolved Python package readiness facts
     into production technical-fit requests, then add the image
     planner/gateway missing-proof rejection before worker dispatch.
+- 2026-05-16 host package-readiness source re-plan boundary:
+  - Boundary found after the runtime-registry readiness filtering slice:
+    production `workflow_technical_fit_decision` still passes an explicit
+    empty dependency-readiness slice, and there is no current
+    standards-compliant host package inventory source to replace it.
+  - Existing Python/dependency-environment paths are execution-time,
+    node-input-shaped, and legacy/fallback-oriented. Using them as scheduler
+    readiness proof would pass Pumas facts or runtime package state through
+    the wrong owner boundary and would make worker/dependency preflight a
+    hidden scheduler input.
+  - What needs planning: define the host-owned package-readiness source that
+    observes Python package availability for scheduler admission, including
+    ownership (`embedded-runtime` host adapter vs inference declaration owner),
+    probe timing/caching, timeout/error behavior, package-name normalization,
+    environment selection, diagnostics attribution, and how unavailable or
+    unimplemented probes are represented without falling back to worker
+    discovery.
+  - Implementation must remain staged: first add the host package-readiness
+    provider contract and focused tests, then wire production
+    technical-fit calls to pass real readiness facts, then enable
+    planner/gateway rejection for missing selected readiness proof before
+    worker dispatch.
 
 ### Traceability Links
 
