@@ -364,6 +364,26 @@ fn planner_rejects_non_pytorch_backend_decision_without_diffusers_alias() {
 }
 
 #[test]
+fn planner_rejects_scheduler_decision_for_non_image_task() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = image_request();
+    let mut decision = backend_decision("pytorch");
+    decision.selected_task_id = Some(InferenceTaskId::TextGeneration);
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::SelectedTaskMismatch
+            && diagnostic.field_path == "backend_decision.selected_task_id"
+    }));
+}
+
+#[test]
 fn planner_rejects_invalid_dimensions_before_resource_estimate() {
     let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
     let request = ImageGenerationRequest {

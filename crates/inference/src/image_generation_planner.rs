@@ -279,6 +279,7 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     MissingSelectedModelRef,
     SelectedModelRefMismatch,
     AmbiguousComponentRole,
+    SelectedTaskMismatch,
 }
 
 /// Planner diagnostic severity.
@@ -407,6 +408,14 @@ fn validate_backend_decision(
             ImageGenerationPlannerDiagnosticCode::UnsupportedBackend,
             "backend_decision.selected_backend_id",
             "image-generation planning requires an explicit PyTorch backend decision",
+        ));
+    }
+
+    if backend_decision.selected_task_id != Some(InferenceTaskId::ImageGeneration) {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::SelectedTaskMismatch,
+            "backend_decision.selected_task_id",
+            "image-generation planning requires a scheduler-selected image_generation task",
         ));
     }
 }

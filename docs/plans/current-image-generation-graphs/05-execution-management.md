@@ -4810,6 +4810,24 @@ Worker rules:
 - Remaining follow-up: FLUX, FLUX.2, Qwen Image, Lumina Image, GLM Image,
   Z-Image, and SDXL remain unsupported until explicit family component
   requirement rows and ambiguity fixtures are added for their package shapes.
+- 2026-05-16 planner selected-task guardrail slice: smallest useful vertical
+  slice was to require the scheduler-owned `BackendExecutionDecision` consumed
+  by image planning to select `image_generation` explicitly before producing
+  an image execution plan. Allowed write set:
+  `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`, and this plan
+  directory.
+- No-fallback/no-legacy confirmation: mismatched or missing selected task facts
+  now fail with typed `selected_task_mismatch` diagnostics. The planner does
+  not repair scheduler decisions from request fields, package task evidence,
+  active backend state, graph hints, or worker behavior.
+- Verification passed: `cargo test -p inference
+  planner_rejects_scheduler_decision_for_non_image_task --lib`, `cargo test
+  -p inference image_generation_planner --lib`, `cargo check -p inference`,
+  `cargo fmt -p inference -- --check`, and `git diff --check`.
+- Remaining follow-up: dependency-environment readiness and path-root
+  validation still need focused slices before real worker execution is
+  considered complete.
 
 ### Traceability Links
 

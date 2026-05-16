@@ -2149,3 +2149,24 @@ Standards compliance gates for every Option 3 slice:
   Z-Image, and SDXL are still unsupported families; enabling them requires
   explicit component-role requirement tables and ambiguity tests for their
   package shapes.
+
+2026-05-16 planner selected-task guardrail slice:
+
+- Smallest useful vertical slice: require the scheduler-owned
+  `BackendExecutionDecision` consumed by image planning to select
+  `image_generation` explicitly before producing an image execution plan.
+- Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+  `crates/inference/src/image_generation_planner_tests.rs`, and this plan
+  directory.
+- No-fallback/no-legacy confirmation: a mismatched or missing selected task now
+  fails with the typed `selected_task_mismatch` planner diagnostic. The
+  planner does not repair the scheduler decision from the request task, package
+  task evidence, active backend state, or graph hints, and it does not dispatch
+  to worker execution after a mismatch.
+- Verification passed: `cargo test -p inference
+  planner_rejects_scheduler_decision_for_non_image_task --lib`, `cargo test
+  -p inference image_generation_planner --lib`, `cargo check -p inference`,
+  `cargo fmt -p inference -- --check`, and `git diff --check`.
+- Remaining follow-up: this closes the selected-task consistency gap only.
+  Dependency-environment readiness and path-root validation still need their
+  own slices before real worker execution is considered complete.
