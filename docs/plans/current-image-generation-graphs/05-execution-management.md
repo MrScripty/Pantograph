@@ -5147,6 +5147,37 @@ Worker rules:
     `git diff --check`.
   - Remaining follow-up: implement embedded-runtime readiness resolution from
     these declarations into typed readiness facts and existing diagnostics.
+- 2026-05-16 embedded-runtime dependency-readiness resolver slice:
+  - Smallest useful vertical slice: add a pure embedded-runtime resolver that
+    maps inference-owned dependency declarations plus host-observed Python
+    package state into typed dependency-readiness facts.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/dependency_readiness.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log.
+  - No-fallback/no-legacy confirmation: the slice resolves supplied facts
+    only. It does not probe Python, install packages, infer backend keys,
+    select runtimes, rank candidates, filter scheduler candidates, synthesize
+    Diffusers as an executable runtime, dispatch workers, or preserve
+    dependency-environment fallback behavior.
+  - Implementation notes: added `PythonPackageReadinessSnapshot` and
+    `resolve_python_package_readiness()`. The resolver emits
+    `DependencyReadinessFact` values for available packages, missing packages,
+    unavailable Python runtime state, and unsupported non-package declarations
+    using typed availability states, stable reason codes, bounded reason text,
+    and `EmbeddedRuntime` resolver ownership.
+  - Verification passed: `cargo fmt --manifest-path
+    crates/pantograph-embedded-runtime/Cargo.toml`,
+    `cargo fmt --manifest-path crates/pantograph-embedded-runtime/Cargo.toml
+    -- --check`, `cargo test -p pantograph-embedded-runtime
+    dependency_readiness --lib`, and `git diff --check`. Initial test run
+    failed on a test-helper iterator signature mismatch; the helper was fixed
+    and the same focused test passed.
+  - Remaining follow-up: attach dependency-readiness facts to
+    runtime-registry/admission candidates and selected execution decisions as
+    typed proof before scheduler filtering consumes them.
 
 ### Traceability Links
 

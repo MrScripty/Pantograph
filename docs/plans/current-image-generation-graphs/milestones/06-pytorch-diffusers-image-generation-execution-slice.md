@@ -2486,8 +2486,18 @@ readiness:
            declarations are required package facts with validated ids and no
            local probes, scheduler ranking, candidate filtering, or worker
            dispatch.
-      3. Add embedded-runtime readiness resolution from those declarations into
+      3. [x] Add embedded-runtime readiness resolution from those declarations into
          typed facts and existing diagnostics.
+         - 2026-05-16 slice: added
+           `pantograph-embedded-runtime::dependency_readiness` as a pure
+           resolver from inference-owned dependency declarations plus a
+           host-observed Python package snapshot into
+           `DependencyReadinessFact` values. The resolver reports available
+           packages, missing packages, unavailable Python runtime state, and
+           unsupported declaration kinds with typed availability states, stable
+           reason codes, and bounded reason text. It does not probe Python,
+           install packages, rank candidates, select runtimes, or attach facts
+           to scheduler candidates yet.
       4. Attach dependency-readiness facts to runtime-registry/admission
          candidates and selected execution decisions as typed proof. Add tests
          proving unavailable readiness cannot be hidden behind

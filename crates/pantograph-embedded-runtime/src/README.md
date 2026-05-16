@@ -19,6 +19,7 @@ packages.
 | `embedded_workflow_host.rs` | Owns the embedded workflow host implementation that adapts host runtime, model metadata, runtime capabilities, session loading, inspection, technical-fit, and workflow runs into workflow-service contracts. |
 | `embedded_workflow_host_helpers.rs` | Owns embedded workflow host helper logic for runtime reservations, retention hints, workflow I/O binding, and data-graph terminal output shaping. |
 | `embedded_workflow_service_api.rs` | Owns embedded-runtime public workflow, session, queue, inspection, and keep-alive facade methods that forward into the workflow service. |
+| `dependency_readiness.rs` | Owns embedded-runtime projection from inference-owned dependency requirement declarations plus host-observed Python package snapshots into typed dependency-readiness facts without probing environments, ranking candidates, or selecting runtimes. |
 | `lib_tests.rs` | Legacy embedded-runtime facade, host, registry, and workflow-session tests extracted from the root facade file. |
 | `lib_tests/data_graph_execution_tests.rs` | Embedded data-graph execution integration tests split out of the legacy root test module. |
 | `lib_tests/edit_session_execution_tests.rs` | Embedded edit-session graph execution integration tests split out of the legacy root test module. |
