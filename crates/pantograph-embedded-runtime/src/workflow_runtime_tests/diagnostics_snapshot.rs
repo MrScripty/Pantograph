@@ -183,7 +183,7 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
             runtime_error: Some("runtime capability probe failed".to_string()),
             trace_runtime_metrics_override: Some(WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("pytorch".to_string()),
-                observed_runtime_ids: vec!["pytorch".to_string(), "diffusers".to_string()],
+                observed_runtime_ids: vec!["pytorch".to_string(), "pytorch.diffusers".to_string()],
                 runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
                 model_target: Some("/models/sidecar.safetensors".to_string()),
                 warmup_started_at_ms: Some(5),
@@ -273,7 +273,7 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
     );
     assert_eq!(
         snapshot.runtime.trace_runtime_metrics.observed_runtime_ids,
-        vec!["pytorch".to_string(), "diffusers".to_string()]
+        vec!["pytorch".to_string(), "pytorch.diffusers".to_string()]
     );
 
     let registry_runtime = registry

@@ -117,9 +117,10 @@ assert!(aliases.contains(&"torch".to_string()));
 - The canonical runtime-id producer contract currently covers known values such
   as `llama_cpp`, `llama.cpp.embedding`, `pytorch`, `onnx-runtime`,
   `stable_audio`, `diffusers`, `candle`, `vllm`, and `mlx`.
-- `vllm` and `mlx` are identity/display contracts for roadmap runtime families.
-  They do not imply a registered runtime, installed binary, scheduler policy,
-  or executable backend implementation.
+- `diffusers`, `vllm`, and `mlx` are identity/display contracts for reserved
+  or roadmap runtime families. They do not imply a registered runtime,
+  installed binary, scheduler policy, Python sidecar, or executable backend
+  implementation.
 - Backend-key alias sets are additive and are intended for capability matching,
   diagnostics lookup, and registry reconciliation rather than as a transport for
   lifecycle state.

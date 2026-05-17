@@ -113,16 +113,16 @@ fn trace_runtime_metrics_with_observed_runtime_ids_preserves_all_runtime_ids() {
         },
         Some("/tmp/model.onnx"),
         &[
-            "diffusers".to_string(),
+            "stable_audio".to_string(),
             "onnx-runtime".to_string(),
-            "diffusers".to_string(),
+            "stable_audio".to_string(),
         ],
     );
 
     assert_eq!(metrics.runtime_id.as_deref(), Some("onnx-runtime"));
     assert_eq!(
         metrics.observed_runtime_ids,
-        vec!["onnx-runtime".to_string(), "diffusers".to_string()]
+        vec!["onnx-runtime".to_string(), "stable_audio".to_string()]
     );
     assert_eq!(metrics.model_target.as_deref(), Some("/tmp/model.onnx"));
 }

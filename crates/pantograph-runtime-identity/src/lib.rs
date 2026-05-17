@@ -113,7 +113,7 @@ pub fn runtime_display_name(runtime_id: &str) -> Option<&'static str> {
         "llama.cpp.embedding" => Some("Dedicated embedding runtime"),
         "candle" => Some("Candle"),
         "pytorch" => Some("PyTorch (Python sidecar)"),
-        "diffusers" => Some("Diffusers (Python sidecar)"),
+        "diffusers" => Some("Diffusers (reserved runtime)"),
         "onnx-runtime" => Some("ONNX Runtime (Python sidecar)"),
         "stable_audio" => Some("Stable Audio (Python sidecar)"),
         "vllm" => Some("vLLM (external runtime)"),
@@ -246,6 +246,10 @@ mod tests {
         assert_eq!(
             runtime_display_name("onnx-runtime"),
             Some("ONNX Runtime (Python sidecar)")
+        );
+        assert_eq!(
+            runtime_display_name("diffusers"),
+            Some("Diffusers (reserved runtime)")
         );
         assert_eq!(
             runtime_display_name("vllm"),

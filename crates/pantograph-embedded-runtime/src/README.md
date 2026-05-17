@@ -103,6 +103,9 @@ Pumas-specific dependency resolution.
   generation unless a real executable Diffusers backend is registered. The
   Python sidecar capability inventory must not advertise `diffusers` as a
   selectable runtime/backend for PyTorch execution.
+- Runtime diagnostics and metrics fixtures must not report bare `diffusers` as
+  an observed executable runtime. Use `pytorch` for the executable runtime and
+  `pytorch.diffusers` only where a runtime-variant distinction is needed.
 - `puma-lib` execution should emit canonical Pumas model refs and resolved
   package-facts JSON when the Pumas API is available so downstream canonical
   inference nodes can validate and forward those facts without scraping option

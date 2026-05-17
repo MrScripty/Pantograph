@@ -2776,11 +2776,18 @@ readiness:
       the root-relative artifact path option; a later Pumas/model root
       inventory can add already root-validated resolved-path proof without
       changing worker-envelope call sites.
-  - [ ] Reconcile reserved `diffusers` runtime identity and diagnostics
+  - [x] Reconcile reserved `diffusers` runtime identity and diagnostics
     fixtures: preserve the canonical spelling only as package/source/future
     runtime identity, remove or mark misleading sidecar display strings until a
     real executable runtime registers, and ensure diagnostics/metrics fixtures
     distinguish package evidence from observed executable runtimes.
+    - 2026-05-17 reserved Diffusers identity cleanup slice: kept
+      `diffusers` as a canonical reserved runtime spelling, changed its
+      display label so it no longer claims a Python sidecar implementation,
+      and removed bare `diffusers` from embedded-runtime diagnostics/metrics
+      fixtures that represented observed executable runtime ids. PyTorch image
+      execution continues to use `pytorch` as the executable runtime and
+      `pytorch.diffusers` only as runtime-variant context.
   - [ ] Replace remaining generic recursive `backend_key` discovery for each
     node family as that family moves onto canonical scheduler-owned inference
     execution. Do not create a new broad scanner; add explicit typed runtime or

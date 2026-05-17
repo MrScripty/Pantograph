@@ -5693,6 +5693,43 @@ Worker rules:
     diagnostics fixtures, then continue replacing remaining generic recursive
     `backend_key` discovery with explicit typed runtime/trait inputs per
     family.
+- 2026-05-17 reserved Diffusers runtime identity cleanup slice:
+  - Smallest useful vertical slice: keep `diffusers` as a reserved canonical
+    runtime spelling without presenting it as an implemented Python sidecar,
+    and remove bare `diffusers` from diagnostics/metrics fixtures that model
+    observed executable runtime ids.
+  - Allowed write set: `crates/pantograph-runtime-identity/src/lib.rs`,
+    `crates/pantograph-runtime-identity/src/README.md`,
+    `crates/pantograph-embedded-runtime/src/workflow_runtime_tests/diagnostics_snapshot.rs`,
+    `crates/pantograph-embedded-runtime/src/workflow_runtime_tests/metrics.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory. The untracked root proposal markdown file was ignored per user
+    instruction.
+  - No-fallback/no-legacy confirmation: this keeps `diffusers` reserved for a
+    future real executable runtime but does not advertise a selectable
+    Diffusers sidecar, create a pseudo-runtime candidate, alias Diffusers
+    package evidence to PyTorch, or change scheduler selection. Current
+    PyTorch image execution remains `pytorch` with `pytorch.diffusers` used
+    only as runtime-variant context.
+  - Implementation notes: changed the runtime identity display label from
+    `Diffusers (Python sidecar)` to `Diffusers (reserved runtime)`, documented
+    that reserved identities do not imply installation or implementation, and
+    replaced stale bare `diffusers` observed-runtime fixture values with
+    `pytorch.diffusers` or another implemented runtime id depending on the
+    test purpose.
+  - Verification passed: `cargo test -p pantograph-runtime-identity`; `cargo
+    test -p pantograph-embedded-runtime diagnostics_snapshot --lib`; `cargo
+    test -p pantograph-embedded-runtime
+    trace_runtime_metrics_with_observed_runtime_ids --lib`; `cargo check -p
+    pantograph-runtime-identity`; `cargo check -p
+    pantograph-embedded-runtime`; `cargo fmt --manifest-path
+    crates/pantograph-runtime-identity/Cargo.toml -- --check`.
+  - Verification deviation: parallel Cargo verification waited on package and
+    build locks; all focused commands completed successfully.
+  - Remaining follow-up: continue replacing remaining generic recursive
+    `backend_key` discovery with explicit typed runtime/trait inputs per
+    family, then resume the PyTorch worker/family adapter implementation
+    rows.
 
 ### Traceability Links
 
