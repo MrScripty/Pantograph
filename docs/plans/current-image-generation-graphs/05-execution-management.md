@@ -5730,6 +5730,45 @@ Worker rules:
     `backend_key` discovery with explicit typed runtime/trait inputs per
     family, then resume the PyTorch worker/family adapter implementation
     rows.
+- 2026-05-17 workflow-service runtime requirement extraction slice:
+  - Smallest useful vertical slice: remove workflow-service's generic
+    recursive `backend_key` discovery from scheduler runtime-requirement
+    extraction and replace it with node-family explicit runtime requirements.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/capabilities.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, and this plan
+    directory. The untracked root proposal markdown file was ignored per user
+    instruction.
+  - No-fallback/no-legacy confirmation: package facts, Pumas hints,
+    dependency bindings, dependency-environment tooling inputs, GGUF paths, and
+    arbitrary nested node metadata no longer become hard scheduler backend
+    requirements. Canonical inference uses only the graph-authored optional
+    `llm-inference.runtime` input as a scheduler requirement; dedicated
+    `onnx-inference` and `audio-generation` node families map from their node
+    type rather than mutable `backend_key` payload strings.
+  - Implementation notes: replaced `extract_backend_keys_from_value` with
+    `extract_node_family_runtime_requirement`, removed GGUF evidence routing
+    from workflow-service backend extraction, and documented that runtime
+    requirement extraction must not scan arbitrary node JSON.
+  - Focused tests added/updated: capability tests now prove Pumas package
+    backend evidence, nested unknown-node backend keys, and
+    dependency-environment backend keys are ignored for scheduler runtime
+    requirements, while `llm-inference.runtime`, `onnx-inference`, and
+    `audio-generation` still produce explicit required backend values.
+  - Verification passed: `cargo fmt --manifest-path
+    crates/pantograph-workflow-service/Cargo.toml`; `cargo test -p
+    pantograph-workflow-service extract_required_backends --lib`; `cargo
+    check -p pantograph-workflow-service`; `cargo fmt --manifest-path
+    crates/pantograph-workflow-service/Cargo.toml -- --check`.
+  - Audit result: focused search found no remaining generic backend-key value
+    scanner in workflow-service, embedded-runtime, inference, node-engine, or
+    workflow-nodes. Remaining `backend_key` fields are DTO/event/runtime
+    identity fields, explicit dependency-environment tooling data, Pumas
+    package facts, tests, or backend-local diagnostics rather than scheduler
+    recursive discovery.
+  - Remaining follow-up: resume Milestone 6 PyTorch/Diffusers bridge work with
+    the image/PyTorch-specific behavior kept after scheduler selection, then
+    continue family adapter and worker artifact retention rows.
 
 ### Traceability Links
 

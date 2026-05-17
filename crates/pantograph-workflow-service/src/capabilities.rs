@@ -261,11 +261,7 @@ pub fn extract_model_usages(nodes: &[StoredGraphNode]) -> Vec<ModelUsage> {
 pub fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
     let mut out = HashSet::new();
     for node in nodes {
-        if node.node_type() == "llm-inference" {
-            extract_inference_runtime_requirement(node.data(), &mut out);
-        } else {
-            extract_backend_keys_from_value(node.data(), &mut out, false);
-        }
+        extract_node_family_runtime_requirement(node, &mut out);
     }
     let mut backends = out.into_iter().collect::<Vec<_>>();
     backends.sort();
@@ -548,76 +544,17 @@ fn extract_inference_runtime_requirement(value: &serde_json::Value, out: &mut Ha
     }
 }
 
-fn extract_backend_keys_from_value(
-    value: &serde_json::Value,
-    out: &mut HashSet<String>,
-    gguf_context: bool,
-) {
-    match value {
-        serde_json::Value::Object(map) => {
-            let gguf_context = gguf_context || object_has_gguf_artifact_evidence(map);
-            if gguf_context {
-                out.insert("llama_cpp".to_string());
-            }
-            for (key, child) in map {
-                if key.eq_ignore_ascii_case("backend_key") || key.eq_ignore_ascii_case("backendKey")
-                {
-                    if let Some(raw) = child.as_str() {
-                        let canonical_backend_key = canonical_runtime_backend_key(raw);
-                        if !canonical_backend_key.is_empty()
-                            && (!gguf_context || canonical_backend_key == "llama_cpp")
-                        {
-                            out.insert(canonical_backend_key);
-                        }
-                    }
-                }
-                extract_backend_keys_from_value(child, out, gguf_context);
-            }
+fn extract_node_family_runtime_requirement(node: &StoredGraphNode, out: &mut HashSet<String>) {
+    match node.node_type() {
+        "llm-inference" => extract_inference_runtime_requirement(node.data(), out),
+        "onnx-inference" => {
+            out.insert("onnx-runtime".to_string());
         }
-        serde_json::Value::Array(values) => {
-            for child in values {
-                extract_backend_keys_from_value(child, out, gguf_context);
-            }
+        "audio-generation" => {
+            out.insert("stable_audio".to_string());
         }
         _ => {}
     }
-}
-
-fn object_has_gguf_artifact_evidence(map: &serde_json::Map<String, serde_json::Value>) -> bool {
-    for (key, value) in map {
-        if key.eq_ignore_ascii_case("artifact_kind") || key.eq_ignore_ascii_case("artifactKind") {
-            if value
-                .as_str()
-                .is_some_and(|candidate| candidate.eq_ignore_ascii_case("gguf"))
-            {
-                return true;
-            }
-        }
-
-        if key.eq_ignore_ascii_case("tags") {
-            if value.as_array().into_iter().flatten().any(|tag| {
-                tag.as_str()
-                    .is_some_and(|candidate| candidate.eq_ignore_ascii_case("gguf"))
-            }) {
-                return true;
-            }
-        }
-
-        if matches!(
-            key.as_str(),
-            "model_path"
-                | "modelPath"
-                | "entry_path"
-                | "entryPath"
-                | "selected_artifact_path"
-                | "selectedArtifactPath"
-        ) && value.as_str().is_some_and(path_has_gguf_extension)
-        {
-            return true;
-        }
-    }
-
-    false
 }
 
 fn path_has_gguf_extension(path: &str) -> bool {
@@ -790,13 +727,13 @@ mod tests {
             StoredGraphNode {
                 id: "n4".to_string(),
                 node_type: "onnx-inference".to_string(),
-                data: serde_json::json!({"backend_key": "onnxruntime"}),
+                data: serde_json::json!({}),
                 position: StoredPosition::default(),
             },
             StoredGraphNode {
                 id: "n5".to_string(),
                 node_type: "audio-generation".to_string(),
-                data: serde_json::json!({"backend_key": "Stable Audio"}),
+                data: serde_json::json!({}),
                 position: StoredPosition::default(),
             },
         ];
@@ -881,7 +818,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_required_backends_routes_gguf_evidence_to_llamacpp() {
+    fn extract_required_backends_ignores_puma_package_backend_evidence() {
         let nodes = vec![StoredGraphNode {
             id: "puma".to_string(),
             node_type: "puma-lib".to_string(),
@@ -898,10 +835,44 @@ mod tests {
             position: StoredPosition::default(),
         }];
 
-        assert_eq!(
-            extract_required_backends(&nodes),
-            vec!["llama_cpp".to_string()]
-        );
+        assert!(extract_required_backends(&nodes).is_empty());
+    }
+
+    #[test]
+    fn extract_required_backends_ignores_nested_backend_keys_on_unknown_nodes() {
+        let nodes = vec![StoredGraphNode {
+            id: "custom".to_string(),
+            node_type: "custom-tool".to_string(),
+            data: serde_json::json!({
+                "backend_key": "pytorch",
+                "nested": {
+                    "backendKey": "llama.cpp",
+                    "dependency_bindings": [{
+                        "backend_key": "stable_audio"
+                    }]
+                }
+            }),
+            position: StoredPosition::default(),
+        }];
+
+        assert!(extract_required_backends(&nodes).is_empty());
+    }
+
+    #[test]
+    fn extract_required_backends_ignores_dependency_environment_backend_key() {
+        let nodes = vec![StoredGraphNode {
+            id: "deps".to_string(),
+            node_type: "dependency-environment".to_string(),
+            data: serde_json::json!({
+                "backend_key": "pytorch",
+                "dependency_requirements": {
+                    "backend_key": "pytorch"
+                }
+            }),
+            position: StoredPosition::default(),
+        }];
+
+        assert!(extract_required_backends(&nodes).is_empty());
     }
 
     #[test]

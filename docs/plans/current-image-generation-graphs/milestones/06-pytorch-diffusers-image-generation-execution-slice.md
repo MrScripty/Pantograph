@@ -92,14 +92,23 @@ PyTorch/diffusers and produce a retained image artifact.
   path.
 - [x] Replace scattered `diffusers` backend-key mappings that affect execution
   with calls into the single normalization boundary defined in Milestone 0.
-- [ ] Keep package/dependency keys and execution backend keys represented by
+- [x] Keep package/dependency keys and execution backend keys represented by
   distinct function/type names. `diffusers` may remain factual package,
   dependency, or capability evidence, but must not become a graph-visible or
   scheduler-selected execution backend key through shared string helpers.
-- [ ] Audit existing dependency preflight, technical-fit, runtime capability,
+- [x] Audit existing dependency preflight, technical-fit, runtime capability,
   gateway, and workflow runtime preflight mappings so execution selection,
   runtime display, and dependency diagnostics do not each maintain conflicting
   `diffusers` rules.
+  - 2026-05-17: workflow-service runtime requirement extraction no longer
+    recursively scans arbitrary node JSON for `backend_key`, Pumas package
+    hints, dependency bindings, or GGUF paths. It now reads only the
+    graph-authored `llm-inference.runtime` input for canonical inference hard
+    scheduler requirements and uses explicit node-family constants for
+    dedicated `onnx-inference` and `audio-generation` nodes. Focused audit
+    search found no remaining generic backend-key value scanner in
+    workflow-service, embedded-runtime, inference, node-engine, or
+    workflow-nodes.
 - [x] Replace embedded-runtime technical-fit candidate construction with an
   `ExecutionEvidenceTechnicalFitAdapter` boundary. The adapter must consume
   inference-owned `ExecutionEvidenceReport` values plus workflow runtime
@@ -2814,11 +2823,17 @@ readiness:
       fixtures that represented observed executable runtime ids. PyTorch image
       execution continues to use `pytorch` as the executable runtime and
       `pytorch.diffusers` only as runtime-variant context.
-  - [ ] Replace remaining generic recursive `backend_key` discovery for each
+  - [x] Replace remaining generic recursive `backend_key` discovery for each
     node family as that family moves onto canonical scheduler-owned inference
     execution. Do not create a new broad scanner; add explicit typed runtime or
     trait inputs per family and fail closed with diagnostics when the typed
     contract is absent or invalid.
+    - 2026-05-17 workflow-service slice: removed the broad recursive
+      backend-key scanner from `capabilities.rs`; `puma-lib` package facts,
+      dependency-environment tooling inputs, unknown nodes, and nested metadata
+      no longer become scheduler required-backend values. Remaining
+      graph-visible runtime selection for canonical inference is the typed
+      optional `runtime` input that scheduler/admission interprets.
 - Standards-compliance requirements for the ordered slices:
   - Shared contracts are serial integration-owner work. Availability facts,
     `PortOption` disabled state, dependency-readiness facts, validated

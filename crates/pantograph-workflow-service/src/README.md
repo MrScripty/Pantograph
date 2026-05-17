@@ -118,6 +118,13 @@ selected-run Network facts without reconstructing scheduler or diagnostics
 payload state.
 Workflow backend task capability DTOs now carry optional
 `WorkflowTaskRequestContract` payload metadata projected from backend facts.
+Workflow runtime requirement extraction is intentionally node-family explicit:
+canonical `llm-inference` reads only the graph-authored `runtime` input as a
+hard scheduler requirement, while dedicated legacy node families such as
+`onnx-inference` and `audio-generation` map from their node type. The workflow
+service must not recursively scan arbitrary node JSON for `backend_key`, Pumas
+package hints, dependency bindings, or GGUF paths when building scheduler
+runtime requirements.
 Workflow technical-fit and run execution-plan DTOs now carry reduced
 dependency-readiness proof as scheduler/admission evidence. The proof is
 transported as workflow-owned DTOs only; this crate does not infer package
