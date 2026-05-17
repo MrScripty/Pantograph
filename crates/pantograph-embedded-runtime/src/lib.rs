@@ -25,6 +25,7 @@ mod node_execution;
 mod node_execution_diagnostics;
 mod node_execution_ledger;
 mod node_io_artifacts;
+pub mod package_readiness_provider;
 pub mod python_runtime;
 mod python_runtime_execution;
 pub mod rag;
@@ -135,3 +136,6 @@ pub(crate) struct EmbeddedWorkflowHost {
 #[cfg(test)]
 #[path = "lib_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod package_readiness_provider_tests;

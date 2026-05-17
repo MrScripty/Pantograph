@@ -5449,6 +5449,47 @@ Worker rules:
   - Remaining follow-up: implement the provider trait/DTO and focused contract
     tests as the next validated slice, then wire production technical-fit to
     pass real provider facts.
+- 2026-05-17 package-readiness provider contract implementation slice:
+  - Smallest useful vertical slice: add the embedded-runtime
+    package-readiness provider trait/DTO contract and fake probe-runner tests
+    without production technical-fit wiring.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/package_readiness_provider.rs`,
+    `crates/pantograph-embedded-runtime/src/package_readiness_provider_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory. The untracked root proposal markdown file was ignored per user
+    instruction.
+  - No-fallback/no-legacy confirmation: the provider consumes
+    inference-owned dependency declarations and fake probe outcomes only. It
+    does not call `task_executor::dependency_environment`, inspect graph node
+    inputs, infer readiness from package hints/display labels, run worker
+    imports, select or rank runtimes, create runtimes, or dispatch workers.
+  - Implementation notes: added `PackageReadinessProviderRequest`,
+    `PackageReadinessEnvironmentSelector`, typed probe requests/outcomes,
+    provider diagnostics, and `PackageReadinessProvider<R>`. Request-local
+    dedupe is keyed by executable backend key, scheduler runtime id, runtime
+    variant, environment selector, and sorted package dependency ids.
+    Non-package declarations are projected through the pure resolver without
+    triggering an empty Python probe.
+  - Focused tests added: fake-runner coverage for available package facts,
+    missing package diagnostics, unavailable Python diagnostics, unsupported
+    dependency kind without probe fallback, invalid package id diagnostics,
+    timeout/probe failure projection, typed scope projection, and request-local
+    dedupe for reordered declarations.
+  - Standards notes: kept the production provider module under the 500-line
+    target by moving focused tests to an adjacent test module and updated the
+    embedded-runtime source README for ownership traceability.
+  - Verification passed: `cargo fmt --manifest-path
+    crates/pantograph-embedded-runtime/Cargo.toml`; `cargo fmt
+    --manifest-path crates/pantograph-embedded-runtime/Cargo.toml --
+    --check`; `cargo test -p pantograph-embedded-runtime
+    package_readiness_provider --lib`; `cargo check -p
+    pantograph-embedded-runtime`.
+  - Remaining follow-up: implement the real no-shell Python probe runner with
+    typed process diagnostics, then wire production
+    `workflow_technical_fit_decision` to collect provider facts and pass them
+    into existing technical-fit request construction.
 
 ### Traceability Links
 

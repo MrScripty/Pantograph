@@ -2636,6 +2636,22 @@ readiness:
            backend key, provider projection tests must explicitly prove the
            backend-key/runtime-id/environment fields are mapped intentionally
            and do not spread the existing `runtime_id`/`backend_key` ambiguity.
+         - 2026-05-17 provider trait/DTO slice: added
+          `pantograph-embedded-runtime::package_readiness_provider` as the
+          focused runtime-scoped provider contract plus fake-runner contract
+          tests. The provider request separates executable backend key,
+          scheduler runtime id, optional runtime variant id, typed package
+          environment selector, and inference-owned dependency declarations.
+          Provider output is typed dependency-readiness facts plus bounded
+          provider diagnostics for missing packages, unavailable Python,
+          unsupported dependency kinds, invalid package ids, timeouts, and
+          probe failures. Request-local dedupe is keyed by backend/runtime/
+          variant/environment/dependency set, non-package declarations do not
+          trigger empty Python probes, and the provider does not import
+          `task_executor::dependency_environment`, inspect graph inputs, call
+          worker package imports, select runtimes, rank candidates, or dispatch
+          workers. This slice intentionally stops before the real no-shell
+          Python probe runner and before production technical-fit wiring.
       6. Make image planner/gateway reject selected decisions that lack ready
          dependency proof before worker dispatch.
       7. Remove the legacy dependency-environment backend-key and fallback
@@ -2667,6 +2683,11 @@ readiness:
         missing package, unavailable Python, unsupported dependency kind,
         invalid/unprobeable package id, timeout/probe failure, request-local
         dedupe, and production technical-fit propagation of provider facts.
+        - 2026-05-17 status: provider contract tests now cover available
+          packages, missing package, unavailable Python, unsupported dependency
+          kind, invalid package id, timeout/probe failure, and request-local
+          dedupe. Production technical-fit propagation of provider facts
+          remains for the next wiring slice.
     - No-fallback/no-legacy confirmation: do not keep dependency-environment
       backend selection as a fallback, do not alias Diffusers package evidence
       to PyTorch or a pseudo-Diffusers executable runtime, and do not allow a
