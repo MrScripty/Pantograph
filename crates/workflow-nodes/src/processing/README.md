@@ -15,6 +15,8 @@ adapters such as the Python runtime.
 | `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
 | `inference.rs` | Declares the canonical `llm-inference` graph contract for text/chat, embedding, rerank, audio transcription, image generation, model refs, package facts, and graph-visible generated-image output. |
+| `inference_denoising_options.rs` | Provides backend-owned, Pumas-fact-derived options for the canonical `llm-inference.denoising_scheduler` port when the model-library feature is enabled. |
+| `inference_denoising_options_tests.rs` | Focused model-library tests for the denoising scheduler provider and Pumas missing-evidence diagnostics. |
 
 ## Problem
 Workflow graphs need stable processing-node contracts across Rust, Python, and
@@ -48,6 +50,10 @@ decisions are the only source of selected runtime facts.
 The old descriptor-local `base_url`/model generation config has been removed;
 generation and task options must flow through canonical graph ports and typed
 inference requests.
+The `llm-inference.denoising_scheduler` input uses a backend-owned
+`PortOptionsProvider` instead of frontend hardcoded scheduler choices. Provider
+rows are fact projections only: they may show unavailable scheduler classes for
+graph authoring, but explicit scheduler acceptance remains a planner decision.
 `expand_settings.rs` follows the same contract-first rule: model-specific
 settings stay graph-visible as matching optional input/output ports while the
 schema itself still passes through unchanged for downstream inference merging.
@@ -78,6 +84,9 @@ instead of hiding behind generic JSON ports.
 - Canonical `llm-inference` image-generation descriptors must expose the first
   generated image on the `image` output while keeping the full typed result
   envelope on `results`.
+- Denoising scheduler option rows must come from backend-owned providers and
+  Pumas package facts. They must not write executable defaults into graph data
+  or bypass planner diagnostics.
 - JSON-filter configuration defaults remain the derived empty-path/empty-default
   contract so descriptor consumers and task construction share one default
   shape.

@@ -194,6 +194,24 @@ impl PumasSelectorAccess {
             }
         }
     }
+
+    pub async fn resolve_model_package_facts(
+        &self,
+        model_id: &str,
+    ) -> pumas_library::Result<pumas_library::models::ResolvedModelPackageFacts> {
+        match self {
+            Self::Owner(api) => api.resolve_model_package_facts(model_id).await,
+            Self::LocalClient(_) => Err(pumas_library::PumasError::InvalidParams {
+                message:
+                    "local-client Pumas selector access does not provide full package facts yet"
+                        .to_string(),
+            }),
+            Self::ReadOnly(_) => Err(pumas_library::PumasError::InvalidParams {
+                message: "read-only Pumas selector access does not provide full package facts"
+                    .to_string(),
+            }),
+        }
+    }
 }
 
 #[cfg(feature = "model-library")]

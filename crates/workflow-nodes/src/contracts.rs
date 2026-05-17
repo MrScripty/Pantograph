@@ -928,6 +928,20 @@ mod tests {
         let serialized = serde_json::to_value(model_path).expect("provider serialization");
         assert_eq!(serialized["options_provider"]["node_type"], "puma-lib");
         assert_eq!(serialized["options_provider"]["port_id"], "model_path");
+
+        let llm_inference = contracts
+            .iter()
+            .find(|contract| contract.node_type.as_str() == "llm-inference")
+            .expect("llm-inference contract");
+        let denoising_scheduler = llm_inference
+            .input(&port_id("denoising_scheduler").expect("denoising scheduler port id"))
+            .expect("denoising scheduler input");
+        let provider = denoising_scheduler
+            .options_provider
+            .as_ref()
+            .expect("denoising scheduler provider");
+        assert_eq!(provider.node_type.as_str(), "llm-inference");
+        assert_eq!(provider.port_id.as_str(), "denoising_scheduler");
     }
 
     #[test]

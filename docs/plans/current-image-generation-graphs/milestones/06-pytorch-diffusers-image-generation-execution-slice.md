@@ -241,10 +241,17 @@ PyTorch/diffusers and produce a retained image artifact.
   boundaries when the provider is added. Use stable primitive option ids for
   selected values and reserve display labels/descriptions for presentation
   only.
-- [ ] Add backend-owned port options for `llm-inference.denoising_scheduler`
+- [x] Add backend-owned port options for `llm-inference.denoising_scheduler`
   so graph editors can present valid denoising/sampling schedulers from
   model/package/runtime facts. The frontend must not hardcode the allowed
   denoising scheduler list.
+  - 2026-05-17: `workflow-nodes` now registers a backend-owned
+    `PortOptionsProvider` for `llm-inference.denoising_scheduler` behind the
+    model-library feature. It resolves selected-model context to Pumas package
+    facts, projects recognized Diffusers scheduler components to stable
+    primitive option ids, marks explicit scheduler rows unavailable until the
+    planner supports executable overrides, and returns typed metadata
+    diagnostics when selected-model context or Diffusers evidence is missing.
 - [x] Wire provider-backed `selection-input` behavior so fact-dependent options
   are displayed without silently writing executable defaults into graph data.
   Missing or stale selected values should render as unset/stale UI state and
@@ -265,16 +272,19 @@ PyTorch/diffusers and produce a retained image artifact.
   cache key must include node type, port id, provider context, and package-facts
   cursor/runtime facts; the current Pumas model-list cache is not sufficient
   for denoising scheduler choices.
-- [ ] Keep `PortOptionsProvider` generic for other selectable inference traits
+- [x] Keep `PortOptionsProvider` generic for other selectable inference traits
   whose valid values are backend/model/runtime dependent. Promote a trait to a
   first-class port/provider only when it is user-facing, fact-dependent, and
   diagnostics/reproducibility relevant; keep long-tail model knobs in
   `expand-settings`.
-- [ ] Keep `expand-settings` out of the canonical denoising scheduler path.
+- [x] Keep `expand-settings` out of the canonical denoising scheduler path.
   It may continue to expose long-tail model/runtime knobs, but first-class
   image traits with reproducibility or diagnostic impact must use typed ports,
   backend validation, stable option ids, and planner diagnostics instead of
   display-label-to-value normalization.
+  - 2026-05-17: the denoising scheduler provider was added as a normal
+    `PortOptionsProvider` without changing the generic provider trait or
+    routing through `expand-settings`.
 - [ ] Implement `PyTorchBackend::generate_image` using the existing Python
   worker diffusion load/generate path and typed worker request/response
   envelopes.
@@ -422,6 +432,22 @@ PyTorch/diffusers and produce a retained image artifact.
 - Provider cache tests prove denoising scheduler options are keyed by node type,
   port id, selected model/package-facts cursor, and backend/runtime context so
   model changes cannot reuse stale option lists.
+- 2026-05-17 denoising scheduler provider verification passed: `cargo fmt
+  --manifest-path crates/workflow-nodes/Cargo.toml`, `cargo test -p
+  workflow-nodes --features model-library inference_denoising_options --lib`,
+  `cargo test -p workflow-nodes --features model-library
+  builtin_contracts_preserve_registered_port_options_provider_refs --lib`,
+  `cargo check -p workflow-nodes`, `cargo check -p workflow-nodes --features
+  model-library`, and `cargo fmt --manifest-path
+  crates/workflow-nodes/Cargo.toml -- --check`.
+  - Discovered issue/follow-up: the current Pumas imported Diffusers fixture
+    can resolve full package facts without `diffusers` evidence, so the
+    provider returns a `missing_diffusers_evidence` metadata diagnostic instead
+    of manufacturing selectable rows. Later Pumas/library work should ensure
+    imported Diffusers bundles expose scheduler/component evidence through the
+    full package-facts path and, for shared/local-client access, expose the
+    same facts without requiring Pantograph to infer them from paths or
+    summaries.
 - Planner tests prove overflow-prone dimensions/counts/resource estimates are
   rejected without allocation or worker calls.
 - Path validation tests prove worker execution rejects model/package paths

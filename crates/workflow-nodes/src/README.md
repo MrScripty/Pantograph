@@ -49,6 +49,9 @@ Registered `PortOptionsProvider` entries are projected into canonical port
 contracts as `options_provider` references. The provider registry remains the
 source of truth for whether a port has backend-owned authoring options; node
 descriptors do not duplicate option lists or package/runtime facts.
+The canonical `llm-inference.denoising_scheduler` provider follows this rule:
+it projects Pumas package facts into query-time option rows and leaves explicit
+override acceptance to the image planner.
 
 ## Alternatives Rejected
 - Put all node implementations in one file: rejected because node families have

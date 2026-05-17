@@ -7,6 +7,10 @@ mod dependency_environment;
 mod depth_estimation;
 mod expand_settings;
 mod inference;
+#[cfg(feature = "model-library")]
+mod inference_denoising_options;
+#[cfg(all(test, feature = "model-library"))]
+mod inference_denoising_options_tests;
 mod json_filter;
 mod onnx_inference;
 mod unload_model;
