@@ -1,7 +1,7 @@
 use super::*;
 
 impl TauriTaskExecutor {
-    pub(super) fn parse_requirements_fallback(
+    pub(super) fn parse_dependency_requirements_input(
         inputs: &HashMap<String, serde_json::Value>,
     ) -> Option<node_engine::ModelDependencyRequirements> {
         let raw = Self::read_optional_input_value_aliases(
@@ -38,7 +38,7 @@ impl TauriTaskExecutor {
             .unwrap_or_default()
     }
 
-    pub(super) fn fallback_platform_context_from_key(
+    pub(super) fn platform_context_from_requirement_key(
         platform_key: &str,
     ) -> Option<serde_json::Value> {
         let normalized = platform_key.trim();
@@ -104,28 +104,13 @@ impl TauriTaskExecutor {
         }
     }
 
-    pub(super) fn infer_backend_key(node_type: &str) -> Option<String> {
-        match node_type {
-            "audio-generation" => Some("stable_audio".to_string()),
-            "onnx-inference" => Some("onnx-runtime".to_string()),
-            _ => Some("pytorch".to_string()),
-        }
-    }
-
-    pub(super) fn preferred_backend_key(
-        _node_type: &str,
+    pub(super) fn explicit_backend_key(
         inputs: &HashMap<String, serde_json::Value>,
-        requirements: Option<&ModelDependencyRequirements>,
     ) -> Option<String> {
         Self::canonical_backend_key(
             Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
                 .as_deref(),
         )
-        .or_else(|| {
-            Self::canonical_backend_key(
-                requirements.as_ref().and_then(|r| r.backend_key.as_deref()),
-            )
-        })
     }
 
     pub(super) fn build_model_dependency_request(
@@ -133,16 +118,13 @@ impl TauriTaskExecutor {
         model_path: &str,
         inputs: &HashMap<String, serde_json::Value>,
     ) -> ModelDependencyRequest {
-        let requirements = Self::parse_requirements_fallback(inputs);
+        let requirements = Self::parse_dependency_requirements_input(inputs);
         let package_facts = Self::read_resolved_model_package_facts_for_preflight(inputs);
-        let backend_key = Self::preferred_backend_key(node_type, inputs, None)
-            .or_else(|| Self::backend_key_from_package_facts(package_facts.as_ref()))
-            .or_else(|| {
-                Self::canonical_backend_key(
-                    requirements.as_ref().and_then(|r| r.backend_key.as_deref()),
-                )
-            })
-            .or_else(|| Self::infer_backend_key(node_type));
+        let backend_key = if node_type == "dependency-environment" {
+            Self::explicit_backend_key(inputs)
+        } else {
+            None
+        };
 
         let task_type_primary = Self::read_optional_input_string_aliases(
             inputs,
@@ -161,7 +143,7 @@ impl TauriTaskExecutor {
         .or_else(|| {
             requirements
                 .as_ref()
-                .and_then(|r| Self::fallback_platform_context_from_key(&r.platform_key))
+                .and_then(|r| Self::platform_context_from_requirement_key(&r.platform_key))
         });
 
         let mut selected_binding_ids = Self::read_input_selected_binding_ids(inputs);
@@ -203,14 +185,6 @@ impl TauriTaskExecutor {
         .and_then(|raw| serde_json::from_value(raw).ok())
     }
 
-    fn backend_key_from_package_facts(
-        facts: Option<&inference::ResolvedModelPackageFacts>,
-    ) -> Option<String> {
-        facts?.backend_hints.accepted.iter().find_map(|hint| {
-            Self::canonical_backend_key(Some(Self::backend_hint_engine_key(*hint)))
-        })
-    }
-
     fn task_type_primary_from_package_facts(
         facts: Option<&inference::ResolvedModelPackageFacts>,
     ) -> Option<String> {
@@ -227,18 +201,6 @@ impl TauriTaskExecutor {
             .filter(|model_id| !model_id.trim().is_empty())
     }
 
-    fn backend_hint_engine_key(hint: inference::BackendHintLabel) -> &'static str {
-        match hint {
-            inference::BackendHintLabel::Transformers => "pytorch",
-            inference::BackendHintLabel::LlamaCpp => "llama.cpp",
-            inference::BackendHintLabel::Vllm => "vllm",
-            inference::BackendHintLabel::Mlx => "mlx",
-            inference::BackendHintLabel::Candle => "candle",
-            inference::BackendHintLabel::Diffusers => "diffusers",
-            inference::BackendHintLabel::OnnxRuntime => "onnx-runtime",
-        }
-    }
-
     pub(super) fn python_runtime_handles_node(node_type: &str) -> bool {
         match node_type {
             "audio-generation" | "onnx-inference" => true,
@@ -251,22 +213,6 @@ impl TauriTaskExecutor {
             .map(|mode| mode.trim().to_lowercase())
             .filter(|mode| mode == "auto" || mode == "manual")
             .unwrap_or_else(|| "auto".to_string())
-    }
-
-    pub(super) fn allows_local_python_fallback(status: &ModelDependencyStatus) -> bool {
-        if status.state == DependencyState::Unresolved
-            && status.code.as_deref() == Some("no_dependency_bindings")
-        {
-            return true;
-        }
-
-        status.state == DependencyState::Missing
-            && !status.bindings.is_empty()
-            && status.bindings.iter().all(|binding| {
-                binding.state == DependencyState::Missing
-                    && binding.code.as_deref() == Some("requirements_missing")
-                    && binding.failed_requirements.is_empty()
-            })
     }
 
     pub(super) fn canonical_requirement_fingerprint(
@@ -658,23 +604,6 @@ impl TauriTaskExecutor {
                     node_type, e
                 ))
             })?;
-
-        if Self::allows_local_python_fallback(&status) {
-            let resolved = resolver.resolve_model_ref(request, Some(requirements)).await.map_err(
-                |e| {
-                    NodeEngineError::ExecutionFailed(format!(
-                        "Dependency preflight failed to resolve model_ref for local Python fallback: {}",
-                        e
-                    ))
-                },
-            )?;
-            if let Some(ref model_ref) = resolved {
-                model_ref
-                    .validate()
-                    .map_err(NodeEngineError::ExecutionFailed)?;
-            }
-            return Ok(resolved);
-        }
 
         if status.state != DependencyState::Ready {
             let payload = serde_json::json!({

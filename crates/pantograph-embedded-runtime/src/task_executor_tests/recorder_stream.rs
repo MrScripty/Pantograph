@@ -9,7 +9,7 @@ async fn python_runtime_recorder_tracks_backend_and_environment_identity() {
     let mut adapter_response = HashMap::new();
     adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
-        requests,
+        requests: requests.clone(),
         response: adapter_response,
     });
 
@@ -52,12 +52,25 @@ async fn python_runtime_recorder_tracks_backend_and_environment_identity() {
         "model_path".to_string(),
         serde_json::json!("/tmp/model.onnx"),
     );
-    inputs.insert("backend_key".to_string(), serde_json::json!("onnxruntime"));
+    inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
 
     executor
         .execute_task("onnx-inference-1", inputs, &Context::new(), &extensions)
         .await
         .expect("onnx execution should succeed");
+
+    let recorded = requests.lock().expect("recording lock");
+    assert_eq!(recorded.len(), 1);
+    assert!(recorded[0].inputs.get("backend_key").is_none());
+    assert_eq!(
+        recorded[0]
+            .inputs
+            .get("model_ref")
+            .and_then(|value| value.get("engine"))
+            .and_then(|value| value.as_str()),
+        Some("onnx-runtime")
+    );
+    drop(recorded);
 
     let metadata = recorder.snapshot().expect("python runtime metadata");
     assert_eq!(
@@ -76,6 +89,30 @@ async fn python_runtime_recorder_tracks_backend_and_environment_identity() {
     assert!(!metadata.snapshot.active);
     assert_eq!(metadata.model_target.as_deref(), Some("/tmp/model.onnx"));
     assert_eq!(metadata.health_assessment, None);
+}
+
+#[test]
+fn python_runtime_backend_id_uses_model_ref_engine_before_node_default() {
+    let inputs = HashMap::from([
+        ("backend_key".to_string(), serde_json::json!("pytorch")),
+        (
+            "model_ref".to_string(),
+            serde_json::json!({
+                "engine": "onnx-runtime",
+                "modelId": "model-a",
+                "modelPath": "/tmp/model.onnx",
+                "taskTypePrimary": "text-to-audio",
+                "dependencyBindings": [],
+                "dependencyRequirementsId": null,
+                "contractVersion": 2
+            }),
+        ),
+    ]);
+
+    assert_eq!(
+        TauriTaskExecutor::python_runtime_backend_id("audio-generation", &inputs),
+        "onnx-runtime"
+    );
 }
 
 #[tokio::test]

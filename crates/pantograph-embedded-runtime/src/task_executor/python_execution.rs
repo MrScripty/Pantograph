@@ -94,13 +94,6 @@ impl TauriTaskExecutor {
         node_type: &str,
         inputs: &HashMap<String, serde_json::Value>,
     ) -> String {
-        if let Some(backend_key) =
-            Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
-                .and_then(|value| Self::canonical_backend_key(Some(&value)))
-        {
-            return backend_key;
-        }
-
         if let Some(engine) = inputs
             .get("model_ref")
             .and_then(|value| value.get("engine"))
@@ -219,7 +212,7 @@ impl TauriTaskExecutor {
     }
 
     pub(super) fn promote_runtime_metadata(inputs: &mut HashMap<String, serde_json::Value>) {
-        for key in ["task_type_primary", "model_type", "backend_key"] {
+        for key in ["task_type_primary", "model_type"] {
             let nested = inputs.get("_data").and_then(|data| data.get(key)).cloned();
             let Some(value) = nested.or_else(|| Self::read_optional_input_value(inputs, key))
             else {
@@ -344,6 +337,8 @@ impl TauriTaskExecutor {
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
         let mut runtime_inputs = inputs.clone();
+        runtime_inputs.remove("backend_key");
+        runtime_inputs.remove("backendKey");
         Self::apply_inference_setting_defaults(&mut runtime_inputs);
         Self::promote_runtime_metadata(&mut runtime_inputs);
         if let Some(model_ref) = self

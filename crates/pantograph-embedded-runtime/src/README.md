@@ -53,7 +53,7 @@ packages.
 | `task_executor.rs` | Hosts the Pantograph-specific task executor facade, construction, extension keys, and node-type dispatch while preserving core-node fallthrough. |
 | `task_executor/` | Behavior modules for RAG search, Puma-Lib metadata projection, dependency environment/preflight, and Python runtime execution used by the host executor facade. Puma-Lib execution refreshes selected `model_id` facts and non-empty selected-detail inference settings through the explicit Pumas selector-access role, and only owner access may enrich outputs with full package facts. Direct diffusion execution is retired from the host dispatcher; image generation enters through canonical inference task metadata. |
 | `task_executor_tests.rs` | Shared Pantograph host task-executor test fixtures and behavior-module index. |
-| `task_executor_tests/` | Focused task-executor behavior tests for dependency preflight/fallback, input helpers, Puma-Lib metadata rebinding through owner and selector-access roles, and Python runtime recorder/stream behavior. |
+| `task_executor_tests/` | Focused task-executor behavior tests for dependency preflight fail-closed behavior, input helpers, Puma-Lib metadata rebinding through owner and selector-access roles, and Python runtime recorder/stream behavior. |
 | `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot assembly, inference execution-evidence projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
 | `technical_fit_diagnostics.rs` | Owns technical-fit diagnostic code, severity, device-class, and attribution projection between runtime-registry and workflow-service DTOs so evidence mapping policy can grow outside the broad technical-fit request builder. |
 | `technical_fit_execution_evidence.rs` | Owns the execution-evidence to technical-fit adapter contract, mapping inference-owned evidence reports plus supplied dependency-readiness facts into runtime-registry candidates and typed diagnostics without old package-hint fallback behavior. |
@@ -177,8 +177,14 @@ Workflow session load no longer starts llama.cpp from this crate with a raw
 runtime/device decision path supplies a selected runtime, the helper fails
 closed with a runtime diagnostic instead of launching a backend-owned fallback.
 Dependency-environment preflight ignores legacy `runtime_hint` as a backend
-preference input. Backend requirements must come from current backend/package
-facts until typed backend preference intent is wired end to end.
+preference input, and canonical Python-backed execution no longer derives
+backend selection from explicit `backend_key` fields, Pumas package hints,
+dependency requirements, or node-type defaults. The explicit
+`dependency-environment` node may still pass an authored backend key for
+diagnostic/tooling workflows, but backend requirements must arrive through
+typed scheduler/admission decisions before they can influence canonical
+inference execution. Python runtime adapter dispatch strips legacy backend-key
+inputs and records runtime identity from the resolved model ref or node family.
 Embedded host llama.cpp model-path detection follows the same rule and does
 not accept `runtime_hint` as evidence that an inference node targets llama.cpp.
 Embedding workflow helpers also detect non-embedding llama.cpp inference nodes
@@ -343,7 +349,7 @@ from current backend/package facts, not from legacy runtime hints.
   production host execution for Python-backed nodes, RAG-backed nodes, and core
   executor fallthrough.
 - Task-executor test coverage stays split under `task_executor_tests/` by
-  dependency preflight/fallback, input helper, Puma-Lib, and Python
+  dependency preflight fail-closed, input helper, Puma-Lib, and Python
   recorder/stream behavior so runtime execution changes remain reviewable by
   behavior family.
 - Pantograph host task-executor behavior stays grouped by execution family:

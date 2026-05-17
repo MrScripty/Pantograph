@@ -2690,11 +2690,28 @@ readiness:
            gateway planning tests now use ready scheduler proof rather than an
            empty proof vector. The gate does not probe packages, inspect graph
            inputs, select runtimes, or fall back to worker-side discovery.
-      7. Remove the legacy dependency-environment backend-key and fallback
+      7. [x] Remove the legacy dependency-environment backend-key and fallback
          selection paths from canonical inference execution.
-      8. Retire `dependency-environment` from canonical inference execution or
+         - 2026-05-17 embedded-runtime dependency preflight fail-closed slice:
+           removed canonical backend selection from dependency preflight
+           request construction for `backend_key` inputs, Pumas package
+           backend hints, dependency-requirement backend keys, and node-type
+           defaults. Package facts remain model/task evidence only, and
+           dependency-requirement data may still supply non-selection
+           diagnostic/tooling context. Canonical Python-backed execution now
+           strips legacy backend-key fields before adapter dispatch and records
+           runtime identity from the resolved model ref or node family.
+      8. [x] Retire `dependency-environment` from canonical inference execution or
          restrict it to explicit diagnostic/tooling workflows that cannot
          influence runtime selection.
+         - 2026-05-17 embedded-runtime dependency preflight fail-closed slice:
+           kept the `dependency-environment` node as an explicit
+           diagnostic/tooling workflow step that can emit dependency
+           requirements, status, and environment refs, but prevented its
+           backend-key paths from influencing canonical Python-backed
+           inference. Missing dependency bindings or missing runtime packages
+           now block before adapter execution instead of resolving a local
+           Python fallback model ref.
     - Required tests:
       - Package hints, `recommended_backend`, runtime hints, dependency
         requirements, and node-type defaults do not select executable
@@ -2729,6 +2746,11 @@ readiness:
           coverage proving PyTorch/Diffusers readiness facts are collected from
           a provider and supplied to the technical-fit path; the selected
           decision missing-proof gate remains for a later slice.
+        - 2026-05-17 status: task-executor tests now prove canonical
+          dependency preflight ignores explicit backend-key inputs, package
+          backend hints, dependency-requirement backend keys, and node-type
+          defaults, and that no-bindings or missing-runtime-package statuses
+          block before Python adapter dispatch.
     - No-fallback/no-legacy confirmation: do not keep dependency-environment
       backend selection as a fallback, do not alias Diffusers package evidence
       to PyTorch or a pseudo-Diffusers executable runtime, and do not allow a

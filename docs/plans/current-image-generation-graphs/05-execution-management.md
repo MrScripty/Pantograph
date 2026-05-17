@@ -5592,6 +5592,54 @@ Worker rules:
     inference`; `cargo check -p pantograph-embedded-runtime`.
   - Remaining follow-up: remove the legacy dependency-environment
     backend-key/fallback selection paths from canonical inference execution.
+- 2026-05-17 embedded-runtime dependency preflight fail-closed slice:
+  - Smallest useful vertical slice: remove legacy backend selection and local
+    Python fallback execution from embedded-runtime dependency preflight while
+    keeping the explicit `dependency-environment` node as diagnostic/tooling
+    workflow support.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/task_executor.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor/python_execution.rs`,
+    focused task-executor tests, embedded-runtime task-executor README notes,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory. The untracked root proposal markdown file was ignored per user
+    instruction.
+  - No-fallback/no-legacy confirmation: canonical Python-backed execution no
+    longer selects backend keys from explicit `backend_key` inputs, Pumas
+    package backend hints, dependency-requirement backend keys, node-type
+    defaults, or local Python fallback allowances. Missing dependency
+    bindings and missing runtime packages now block before Python adapter
+    dispatch. The explicit `dependency-environment` node may still pass an
+    authored backend key for diagnostic/tooling workflows, but that path does
+    not dispatch canonical inference execution.
+  - Implementation notes: request construction now treats Pumas package facts
+    as model/task evidence only, strips legacy backend-key fields before
+    Python adapter dispatch, derives Python runtime lifecycle identity from
+    the resolved model ref or node family, and removes the fallback branch
+    that resolved a model ref after non-ready dependency status.
+  - Focused tests added/updated: renamed the dependency fallback tests to
+    fail-closed tests; added coverage that canonical preflight ignores
+    explicit backend keys; updated package/requirements tests to assert no
+    backend selection; added runtime recorder coverage proving legacy
+    backend-key inputs are stripped and model-ref engine owns runtime
+    identity.
+  - Verification passed: `cargo fmt --manifest-path
+    crates/pantograph-embedded-runtime/Cargo.toml`; `cargo test -p
+    pantograph-embedded-runtime input_helpers --lib`; `cargo test -p
+    pantograph-embedded-runtime dependency_fail_closed --lib`; `cargo test -p
+    pantograph-embedded-runtime recorder_stream --lib`; `cargo test -p
+    pantograph-embedded-runtime task_executor --lib`; `cargo test -p
+    pantograph-embedded-runtime technical_fit_package_readiness --lib`;
+    `cargo fmt --manifest-path crates/pantograph-embedded-runtime/Cargo.toml
+    -- --check`; `cargo check -p pantograph-embedded-runtime`.
+  - Verification deviation: an intermediate parallel run of focused Cargo
+    tests waited on Cargo package/build locks; the relevant broader
+    `task_executor` test suite was rerun serially and passed.
+  - Remaining follow-up: continue Milestone 6 with validated Pumas
+    artifact/root path proof, reserved `diffusers` runtime identity fixture
+    cleanup, and remaining explicit typed runtime/trait input replacement for
+    node families not yet on scheduler-owned execution.
 
 ### Traceability Links
 

@@ -45,29 +45,17 @@ async fn onnx_nodes_fail_fast_when_environment_ref_is_not_ready() {
 }
 
 #[tokio::test]
-async fn python_nodes_allow_execution_when_no_dependency_bindings_are_available() {
+async fn python_nodes_block_when_no_dependency_bindings_are_available() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
-    let mut adapter_response = HashMap::new();
-    adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: requests.clone(),
-        response: adapter_response,
+        response: HashMap::new(),
     });
-
-    let resolved_model_ref = ModelRefV2 {
-        contract_version: 2,
-        engine: "onnx-runtime".to_string(),
-        model_id: "audio/imported/tiny-tts".to_string(),
-        model_path: "/tmp/external/tiny-tts.onnx".to_string(),
-        task_type_primary: "text-to-audio".to_string(),
-        dependency_bindings: Vec::new(),
-        dependency_requirements_id: Some("requirements-onnx".to_string()),
-    };
 
     let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
         requirements: make_requirements(DependencyValidationState::Resolved),
         status: make_status(DependencyState::Unresolved, Some("no_dependency_bindings")),
-        model_ref: Some(resolved_model_ref),
+        model_ref: None,
     });
     let (executor, extensions) = test_executor(adapter, resolver);
 
@@ -82,54 +70,33 @@ async fn python_nodes_allow_execution_when_no_dependency_bindings_are_available(
         serde_json::json!("paper lantern in the rain"),
     );
 
-    let outputs = executor
+    let err = executor
         .execute_task("onnx-inference-2", inputs, &Context::new(), &extensions)
         .await
-        .expect("python nodes should execute without dependency bindings");
-    assert_eq!(
-        outputs.get("audio"),
-        Some(&serde_json::json!("base64-audio"))
-    );
+        .expect_err("python nodes should block without dependency bindings");
 
-    let recorded = requests.lock().expect("recording lock");
-    assert_eq!(recorded.len(), 1);
-    let request = &recorded[0];
-    assert_eq!(request.node_type, "onnx-inference");
-    assert!(request.env_ids.is_empty());
-    assert_eq!(
-        request
-            .inputs
-            .get("model_ref")
-            .and_then(|value| value.get("modelPath"))
-            .and_then(|value| value.as_str()),
-        Some("/tmp/external/tiny-tts.onnx")
-    );
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Dependency preflight blocked execution"));
+            assert!(message.contains("no_dependency_bindings"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+    assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }
 
 #[tokio::test]
-async fn python_nodes_allow_execution_when_bindings_are_missing_only_runtime_packages() {
+async fn python_nodes_block_when_bindings_are_missing_runtime_packages() {
     let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
-    let mut adapter_response = HashMap::new();
-    adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: requests.clone(),
-        response: adapter_response,
+        response: HashMap::new(),
     });
-
-    let resolved_model_ref = ModelRefV2 {
-        contract_version: 2,
-        engine: "onnx-runtime".to_string(),
-        model_id: "audio/imported/tiny-tts".to_string(),
-        model_path: "/tmp/external/tiny-tts.onnx".to_string(),
-        task_type_primary: "text-to-audio".to_string(),
-        dependency_bindings: Vec::new(),
-        dependency_requirements_id: Some("requirements-onnx".to_string()),
-    };
 
     let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
         requirements: make_requirements(DependencyValidationState::Resolved),
         status: make_missing_binding_status("requirements_missing"),
-        model_ref: Some(resolved_model_ref),
+        model_ref: None,
     });
     let (executor, extensions) = test_executor(adapter, resolver);
 
@@ -144,26 +111,17 @@ async fn python_nodes_allow_execution_when_bindings_are_missing_only_runtime_pac
         serde_json::json!("paper lantern in the rain"),
     );
 
-    let outputs = executor
+    let err = executor
         .execute_task("onnx-inference-3", inputs, &Context::new(), &extensions)
         .await
-        .expect("python nodes should execute when only runtime packages are missing");
-    assert_eq!(
-        outputs.get("audio"),
-        Some(&serde_json::json!("base64-audio"))
-    );
+        .expect_err("python nodes should block when runtime packages are missing");
 
-    let recorded = requests.lock().expect("recording lock");
-    assert_eq!(recorded.len(), 1);
-    let request = &recorded[0];
-    assert_eq!(request.node_type, "onnx-inference");
-    assert!(request.env_ids.is_empty());
-    assert_eq!(
-        request
-            .inputs
-            .get("model_ref")
-            .and_then(|value| value.get("engine"))
-            .and_then(|value| value.as_str()),
-        Some("onnx-runtime")
-    );
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Dependency preflight blocked execution"));
+            assert!(message.contains("requirements_missing"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+    assert_eq!(requests.lock().expect("recording lock").len(), 0);
 }

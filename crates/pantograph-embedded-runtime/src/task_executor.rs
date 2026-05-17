@@ -13,9 +13,8 @@ use async_trait::async_trait;
 use chrono::Utc;
 use node_engine::{
     core_executor::resolve_node_type, extension_keys, Context, DependencyState, EventSink,
-    ExecutorExtensions, ModelDependencyRequest, ModelDependencyRequirements,
-    ModelDependencyResolver, ModelDependencyStatus, NodeEngineError, Result, TaskExecutor,
-    WorkflowEvent,
+    ExecutorExtensions, ModelDependencyRequest, ModelDependencyResolver, ModelDependencyStatus,
+    NodeEngineError, Result, TaskExecutor, WorkflowEvent,
 };
 use pantograph_runtime_identity::canonical_engine_backend_key;
 

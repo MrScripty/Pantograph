@@ -16,14 +16,14 @@ fn canonical_backend_key_accepts_llama_cpp_alias() {
 }
 
 #[test]
-fn preferred_backend_key_ignores_legacy_runtime_hint() {
+fn explicit_backend_key_ignores_legacy_runtime_hint() {
     let inputs = HashMap::from([
         ("backend_key".to_string(), serde_json::json!("pytorch")),
         ("runtime_hint".to_string(), serde_json::json!("llamacpp")),
     ]);
 
     assert_eq!(
-        TauriTaskExecutor::preferred_backend_key("llm-inference", &inputs, None),
+        TauriTaskExecutor::explicit_backend_key(&inputs),
         Some("pytorch".to_string())
     );
 }
@@ -288,8 +288,8 @@ fn write_imported_diffusion_metadata(
     .unwrap();
 }
 
-#[path = "task_executor_tests/dependency_fallback.rs"]
-mod dependency_fallback;
+#[path = "task_executor_tests/dependency_fail_closed.rs"]
+mod dependency_fail_closed;
 #[path = "task_executor_tests/dependency_preflight.rs"]
 mod dependency_preflight;
 #[path = "task_executor_tests/input_helpers.rs"]
