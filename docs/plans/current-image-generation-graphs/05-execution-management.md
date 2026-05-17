@@ -5419,6 +5419,23 @@ Worker rules:
     runners for contract behavior and must isolate or serialize environment
     variables, temp paths, cache state, and subprocess-related global state so
     the suite does not depend on the developer machine's Python environment.
+  - Codebase blast-radius update: add the provider as a new focused
+    embedded-runtime module, likely `package_readiness_provider.rs`, and keep
+    `dependency_readiness.rs` as pure declaration/snapshot projection.
+    `technical_fit.rs` may call a small helper to collect provider facts, but
+    must not own provider DTOs, probe orchestration, subprocess behavior, or
+    dedupe/cache state. The provider should wrap existing Python executable
+    resolution into typed diagnostics instead of leaking `Result<T, String>`
+    from `python_runtime.rs`. It should build readiness once per
+    backend/runtime/variant/environment/dependency set and project those facts
+    onto candidates, not probe per candidate. The fake probe runner and
+    provider contract tests must land before the real Python runner.
+  - Regression guardrails: the provider must not import or call
+    `task_executor::dependency_environment`, worker package imports, or graph
+    input fallback data. Projection tests must prove backend key, scheduler
+    runtime id, runtime variant, and environment selector mapping is
+    intentional so the existing `runtime_id`/`backend_key` ambiguity does not
+    spread into the provider API.
   - No-fallback/no-legacy confirmation: this remains a replacement path. The
     legacy dependency-environment backend-key/default/hint selection behavior
     still must be removed from canonical inference rather than kept as a

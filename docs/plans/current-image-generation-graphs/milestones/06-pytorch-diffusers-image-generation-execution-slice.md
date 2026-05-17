@@ -2615,6 +2615,27 @@ readiness:
            probes must isolate or serialize that state; unit tests should use a
            fake probe runner so the contract suite does not depend on the
            developer machine's installed Python packages.
+         - 2026-05-17 codebase blast-radius review update: implement the
+           provider as a new focused embedded-runtime module, likely
+           `package_readiness_provider.rs`, while keeping
+           `dependency_readiness.rs` as the pure declaration/snapshot-to-fact
+           projection module. `technical_fit.rs` may call a small helper to
+           collect provider facts and pass them into existing technical-fit
+           request construction, but must not absorb provider DTOs, probe
+           orchestration, subprocess handling, or cache/dedupe state. The
+           provider should wrap existing Python executable resolution behind
+           typed provider diagnostics instead of leaking `Result<T, String>`
+           from `python_runtime.rs`. Readiness should be built once per
+           backend/runtime/variant/environment/dependency set and then
+           projected onto matching candidates; do not probe per candidate.
+           Add the fake probe runner and provider contract tests before the
+           real Python runner. Treat any direct provider dependency on
+           `task_executor::dependency_environment`, worker package imports, or
+           graph input fallback data as a regression. Because the current
+           execution-evidence adapter matches readiness using executable
+           backend key, provider projection tests must explicitly prove the
+           backend-key/runtime-id/environment fields are mapped intentionally
+           and do not spread the existing `runtime_id`/`backend_key` ambiguity.
       6. Make image planner/gateway reject selected decisions that lack ready
          dependency proof before worker dispatch.
       7. Remove the legacy dependency-environment backend-key and fallback
