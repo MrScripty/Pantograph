@@ -4,9 +4,10 @@
 
 Pantograph uses Pumas Library as the canonical owner of model identity, model
 storage, selected artifact metadata, package facts, and library availability.
-Pantograph does not own model files or model-library roots. Pantograph should
-trust Pumas-provided artifact references instead of rediscovering, inferring, or
-validating Pumas storage layout from local paths.
+Pantograph does not own model files, model-library roots, or external-reference
+asset resolution. Pantograph should trust Pumas-provided artifact references
+instead of rediscovering, inferring, or validating Pumas storage layout from
+local paths.
 
 Pantograph's image-generation execution path now requires a clean handoff from
 Pumas package facts to a PyTorch/Diffusers worker load target:
@@ -36,7 +37,7 @@ image/stable-diffusion/tiny-sd
 is useful for stable identity and diagnostics, but it does not by itself answer:
 
 - whether the artifact is currently materialized locally;
-- which Pumas library root owns it;
+- which Pumas library root or external-reference record owns it;
 - whether the artifact is a loadable directory or a pending/missing artifact;
 - whether the selected artifact id/path still matches the current model record;
 - what exact local path should be passed to a runtime worker;
@@ -44,9 +45,10 @@ is useful for stable identity and diagnostics, but it does not by itself answer:
   Diffusers bundle.
 
 Pantograph should not solve this by configuring Pumas roots and joining paths.
-That would duplicate Pumas ownership. It should also not pass a Pumas handle to
-the Python worker and let the worker resolve it. That would move library
-resolution and diagnostics into the wrong layer.
+That would duplicate Pumas ownership and would not handle Pumas-supported
+external-reference assets correctly. Pantograph should also not pass a Pumas
+handle to the Python worker and let the worker resolve it. That would move
+library resolution and diagnostics into the wrong layer.
 
 ## Goal
 
@@ -83,29 +85,15 @@ pub async fn resolve_model_artifact_load_target(
 ) -> Result<ResolveModelArtifactLoadTargetResponse>;
 ```
 
-Proposed request shape:
+Proposed request shape, using existing Pumas contracts:
 
 ```rust
 pub struct ResolveModelArtifactLoadTargetRequest {
     pub model_ref: PumasModelRef,
-    pub artifact_ref: PumasArtifactRef,
-    pub expected_artifact_kind: Option<PumasArtifactKind>,
+    pub expected_artifact_kind: Option<PackageArtifactKind>,
+    pub caller_observed_entry_path: Option<String>,
+    pub caller_observed_package_facts_contract_version: Option<u32>,
     pub consumer: PumasArtifactConsumer,
-}
-
-pub struct PumasArtifactRef {
-    pub selected_artifact_id: Option<String>,
-    pub selected_artifact_path: Option<String>,
-    pub entry_path: Option<String>,
-}
-
-pub enum PumasArtifactKind {
-    DiffusersBundle,
-    HfCompatibleDirectory,
-    Gguf,
-    Onnx,
-    Safetensors,
-    Other(String),
 }
 
 pub struct PumasArtifactConsumer {
@@ -115,36 +103,36 @@ pub struct PumasArtifactConsumer {
 }
 ```
 
-Exact names can change. The important part is that Pantograph sends Pumas the
-model identity, selected artifact identity, and expected artifact kind, then
-Pumas returns a typed outcome.
+Exact names can change. The important part is that Pantograph sends exactly one
+authoritative selected-artifact reference: `PumasModelRef`, including its
+existing `selected_artifact_id` and `selected_artifact_path` fields when a
+specific artifact was selected. `caller_observed_entry_path` and
+`caller_observed_package_facts_contract_version` are stale-check inputs only;
+they must not override the selected artifact encoded in `PumasModelRef`.
+
+This proposal intentionally does not introduce parallel artifact DTOs such as a
+new `PumasArtifactKind` or `PumasArtifactRef`. Pumas should reuse
+`PackageArtifactKind`, `PumasModelRef`, and existing model-library selector
+state contracts unless a new type has deliberately different semantics.
 
 ## Proposed Response Shape
 
 ```rust
 pub struct ResolveModelArtifactLoadTargetResponse {
-    pub status: PumasArtifactLoadTargetStatus,
+    pub artifact_state: ModelArtifactState,
+    pub entry_path_state: ModelEntryPathState,
     pub target: Option<PumasArtifactLoadTarget>,
     pub diagnostics: Vec<PumasArtifactLoadTargetDiagnostic>,
 }
 
-pub enum PumasArtifactLoadTargetStatus {
-    Ready,
-    NotDownloaded,
-    MissingArtifact,
-    StaleSelection,
-    ArtifactKindMismatch,
-    InvalidArtifact,
-    Unavailable,
-}
-
 pub struct PumasArtifactLoadTarget {
     pub model_ref: PumasModelRef,
-    pub artifact_ref: PumasArtifactRef,
-    pub artifact_kind: PumasArtifactKind,
+    pub artifact_kind: PackageArtifactKind,
     pub local_load_path: String,
     pub load_path_kind: PumasArtifactLoadPathKind,
     pub library_root_id: Option<String>,
+    pub storage_kind: Option<String>,
+    pub validation_state: Option<String>,
     pub content_fingerprint: Option<String>,
     pub package_facts_contract_version: Option<u32>,
 }
@@ -164,7 +152,9 @@ pub enum PumasArtifactLoadTargetDiagnosticCode {
     MissingModel,
     MissingSelectedArtifact,
     SelectedArtifactMismatch,
-    ArtifactNotDownloaded,
+    ArtifactMissing,
+    ArtifactPartial,
+    ArtifactNeedsDetail,
     ArtifactPathMissing,
     ArtifactPathNotLoadable,
     ArtifactKindMismatch,
@@ -174,16 +164,26 @@ pub enum PumasArtifactLoadTargetDiagnosticCode {
 }
 ```
 
-The response should be serde-stable and append-only. Pantograph can map these
-diagnostics into its scheduler/readiness/planner diagnostics without parsing
-message text.
+The response should be serde-stable and append-only. Pantograph can map
+`ModelArtifactState`, `ModelEntryPathState`, and these diagnostics into its
+scheduler/readiness/planner diagnostics without parsing message text.
+
+If Pumas wants a convenience status field in addition to the existing state
+fields, it should be derived from `ModelArtifactState` and
+`ModelEntryPathState`, not replace them. Pantograph needs the original state
+fidelity for partial downloads, stale facts, ambiguous artifacts, and
+needs-detail cases.
 
 ## Contract Rules
 
-- Pumas owns resolving model refs, selected artifact refs, library roots, and
-  local filesystem load paths.
+- Pumas owns resolving model refs, selected artifact refs, library roots,
+  external-reference asset records, and local filesystem load paths.
 - Pumas owns whether the selected artifact is currently loadable.
-- Pumas owns validating that `local_load_path` is inside Pumas-managed storage.
+- Pumas owns validating that `local_load_path` is a Pumas-approved local path
+  for the selected artifact. That path may be inside Pumas-managed storage or
+  may be an approved external-reference asset. The response should expose
+  `storage_kind` and validation state so consumers do not assume all load
+  targets live under one library root.
 - Pumas owns checking whether the artifact kind matches the caller's expected
   artifact kind.
 - Pumas should return typed unavailable states instead of throwing opaque
@@ -191,7 +191,7 @@ message text.
 - Pantograph should not join root paths, scan directories, infer from file
   names, or repair selected artifact refs.
 - Pantograph should pass the resolved `local_load_path` to runtime workers only
-  after Pumas returns `status = Ready`.
+  after Pumas returns ready artifact and entry-path states with a target.
 - Runtime workers should not receive Pumas roots or call Pumas directly.
 
 ## Diffusers Image Generation Use Case
@@ -200,13 +200,12 @@ For Pantograph image generation, the request would look conceptually like:
 
 ```rust
 ResolveModelArtifactLoadTargetRequest {
-    model_ref: scheduler_selected_model_ref,
-    artifact_ref: PumasArtifactRef {
-        selected_artifact_id: package_facts.model_ref.selected_artifact_id,
-        selected_artifact_path: package_facts.model_ref.selected_artifact_path,
-        entry_path: Some(package_facts.artifact.entry_path),
-    },
-    expected_artifact_kind: Some(PumasArtifactKind::DiffusersBundle),
+    model_ref: scheduler_selected_model_ref_with_selected_artifact,
+    expected_artifact_kind: Some(PackageArtifactKind::DiffusersBundle),
+    caller_observed_entry_path: Some(package_facts.artifact.entry_path),
+    caller_observed_package_facts_contract_version: Some(
+        package_facts.package_facts_contract_version,
+    ),
     consumer: PumasArtifactConsumer {
         consumer_name: "pantograph".to_string(),
         task_kind: Some("image_generation".to_string()),
@@ -219,9 +218,10 @@ If ready, Pumas returns:
 
 ```rust
 PumasArtifactLoadTarget {
-    artifact_kind: PumasArtifactKind::DiffusersBundle,
+    artifact_kind: PackageArtifactKind::DiffusersBundle,
     local_load_path: "/.../Pumas-Library/shared-resources/models/image/...".to_string(),
     load_path_kind: PumasArtifactLoadPathKind::Directory,
+    storage_kind: Some("library_managed".to_string()),
     ...
 }
 ```
@@ -232,32 +232,72 @@ state.
 
 ## Availability Semantics
 
-`Ready` means the target is currently loadable as requested. For
-`DiffusersBundle`, that means the target path is a local directory and Pumas
-recognizes it as the selected Diffusers artifact.
+The resolver should map directly to existing Pumas model-library states:
 
-`NotDownloaded` means the model or selected artifact is known but not locally
-materialized. Pantograph can report this as a readiness failure or ask the user
-to download/install the artifact through Pumas-owned flows.
+- `ModelArtifactState::Ready` and a ready/loadable entry path means the target
+  is currently loadable as requested. For `PackageArtifactKind::DiffusersBundle`,
+  that means the target path is a Pumas-approved local directory and Pumas
+  recognizes it as the selected Diffusers artifact.
+- `ModelArtifactState::Missing` means the model or selected artifact is known
+  but not locally materialized, or the selected artifact cannot be found.
+- `ModelArtifactState::Partial` means some required artifact content is present
+  but incomplete. Pantograph should treat this as not ready and surface the
+  diagnostic without attempting a partial load.
+- `ModelArtifactState::Invalid` means Pumas can locate the artifact but package
+  validation does not consider it loadable.
+- `ModelArtifactState::Ambiguous` means Pumas cannot identify one exact selected
+  artifact. Pantograph should fail the workflow and refresh or ask the user to
+  select an artifact explicitly.
+- `ModelArtifactState::NeedsDetail` means Pumas has only summary/index state and
+  must perform or schedule detail resolution before it can return a load target.
+- `ModelArtifactState::Stale` means the caller's observed facts or selected
+  artifact no longer match Pumas' current model record.
 
-`StaleSelection` means the selected artifact id/path supplied by Pantograph no
-longer matches Pumas' current model record. Pantograph should fail the workflow
-and refresh Pumas facts rather than silently selecting another artifact.
+`ModelEntryPathState` should be returned alongside `ModelArtifactState` so
+Pantograph can distinguish a missing artifact from a missing, stale, ambiguous,
+or invalid load path.
 
-`ArtifactKindMismatch` means the artifact exists, but not as the requested kind.
-For example, Pantograph requested a Diffusers directory but the selected
-artifact is GGUF.
+An expected-kind mismatch is an additional diagnostic over the state fields:
+the artifact may exist, but if Pantograph requested a Diffusers directory and
+the selected artifact is GGUF, Pumas should return an
+`ArtifactKindMismatch` diagnostic and no load target.
 
-`InvalidArtifact` means Pumas can locate the artifact but package validation
-does not consider it loadable.
+## Authority And Stale Checks
+
+`PumasModelRef` is the authoritative selected-artifact reference in the request.
+If `model_ref.selected_artifact_id` or `model_ref.selected_artifact_path` is
+present, Pumas should resolve exactly that artifact or return typed diagnostics.
+
+`caller_observed_entry_path` and
+`caller_observed_package_facts_contract_version` are optional observations from
+Pantograph's cached package facts. They exist only to help Pumas return precise
+stale-facts diagnostics. They must not select a different artifact, repair the
+request, or override `PumasModelRef`.
+
+If the caller-observed entry path disagrees with the selected artifact resolved
+from `PumasModelRef`, Pumas should return `ModelArtifactState::Stale` or a
+specific `SelectedArtifactMismatch` diagnostic rather than silently switching to
+either side.
 
 ## Staged Implementation
 
 ### Stage 1: Read-Only Resolver
 
 Add the request/response DTOs and implement lookup from existing Pumas indexed
-model records, selected artifact metadata, and package facts. Do not trigger
-downloads or repairs from this API.
+model records, selected artifact metadata, package facts, and external-reference
+asset records. Do not trigger downloads or repairs from this API.
+
+This implementation should not simply wrap `resolve_model_package_facts` or
+`resolve_model_execution_descriptor`. Current executable APIs are model-level
+and may choose a primary file or directory; this resolver needs an exact
+selected-artifact contract. It also needs lower-level lookup or explicit error
+translation so normal unavailable states such as missing, partial, invalid,
+needs-detail, and stale return typed responses instead of opaque errors.
+
+Expose the resolver through the surfaces Pantograph actually consumes:
+`ModelLibrary`, the Pumas API/RPC state, `PumasLocalClient`, and
+`PumasReadOnlyLibrary` if read-only consumers need load-target checks without
+owning lifecycle.
 
 ### Stage 2: Pantograph Integration
 
@@ -268,21 +308,30 @@ in the host/runtime integration layer that already has Pumas access.
 ### Stage 3: Materialization Hooks
 
 If Pumas later supports managed download/materialization, the same API can
-return `NotDownloaded` plus actionable metadata or a separate materialization
-handle. Pantograph still should not perform path repair.
+return the existing not-materialized state plus actionable metadata or a
+separate materialization handle. Pantograph still should not perform path
+repair.
 
 ## Test Expectations
 
 Pumas should add tests for:
 
-- valid Diffusers bundle returns a `Ready` directory load target;
-- valid GGUF artifact returns a `Ready` file load target when requested as GGUF;
+- valid Diffusers bundle returns `ModelArtifactState::Ready`, a ready entry
+  path state, and a directory load target;
+- valid GGUF artifact returns `ModelArtifactState::Ready`, a ready entry path
+  state, and a file load target when requested as GGUF;
 - requesting Diffusers for a GGUF artifact returns `ArtifactKindMismatch`;
 - missing selected artifact id/path returns `MissingSelectedArtifact`;
-- stale selected artifact returns `StaleSelection`;
-- known but not downloaded model returns `NotDownloaded`;
+- stale selected artifact returns `ModelArtifactState::Stale` plus a precise
+  stale/mismatch diagnostic;
+- known but not downloaded model returns `ModelArtifactState::Missing` or the
+  existing Pumas state that represents not materialized;
+- partially downloaded artifacts return `ModelArtifactState::Partial`;
+- summary-only artifacts return `ModelArtifactState::NeedsDetail`;
 - invalid package facts return `InvalidPackageFacts` or `InvalidArtifact`;
-- local load path is never returned outside Pumas-managed storage;
+- external-reference assets can return a Pumas-approved local load path with
+  `storage_kind` and validation state; tests must not require all paths to live
+  under the Pumas library root;
 - serde fixtures round-trip the request and response shapes.
 
 Pantograph should add tests after the API exists for:
@@ -296,7 +345,8 @@ Pantograph should add tests after the API exists for:
 
 - Pantograph can request a load target for a selected Pumas artifact without
   knowing Pumas library roots.
-- Pumas returns typed load-target readiness diagnostics.
+- Pumas returns typed load-target readiness diagnostics while preserving
+  existing `ModelArtifactState` and `ModelEntryPathState` fidelity.
 - Pantograph passes only Pumas-approved local load targets to workers.
 - No Pantograph code joins Pumas root paths or infers load paths from model ids,
   artifact names, package hints, or filesystem scans.
