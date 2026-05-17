@@ -1458,7 +1458,15 @@ fn planned_image_generation_decision(
         selected_task_id: Some(InferenceTaskId::ImageGeneration),
         selected_model_ref: Some(package_facts.model_ref.clone()),
         diagnostics: Vec::new(),
-        dependency_readiness: Vec::new(),
+        dependency_readiness: inference::pytorch_diffusers_image_generation_package_requirements()
+            .into_iter()
+            .map(|declaration| {
+                declaration.to_readiness_fact(
+                    inference::CapabilityAvailabilityState::Available,
+                    inference::DependencyReadinessResolverOwner::EmbeddedRuntime,
+                )
+            })
+            .collect(),
         selection_policy_trace: None,
     }
 }
@@ -4362,7 +4370,7 @@ impl InferenceBackend for MockTypedImageGenerationBackend {
         plan: ImageGenerationExecutionPlan,
     ) -> std::result::Result<ImageGenerationResult, BackendError> {
         let request = ImageGenerationRequest {
-            model: plan.artifact_entry_path,
+            model: plan.artifact_entry_path.to_string(),
             prompt: plan.prompt,
             negative_prompt: plan.negative_prompt,
             width: plan.width,

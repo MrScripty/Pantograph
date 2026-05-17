@@ -115,6 +115,10 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
 
     assert_eq!(plan.model_ref.model_id, "image/stable-diffusion/tiny-sd");
     assert_eq!(plan.backend_id.as_str(), "pytorch");
+    assert_eq!(
+        plan.artifact_entry_path.as_str(),
+        "image/stable-diffusion/tiny-sd"
+    );
     assert_eq!(plan.runtime_variant_id.as_str(), "pytorch.diffusers");
     assert_eq!(plan.family, ImageGenerationFamilyLabel::StableDiffusion);
     assert_eq!(plan.pipeline_class, "StableDiffusionPipeline");
@@ -130,8 +134,49 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
         .to_vec()
     );
     let plan_json = serde_json::to_value(&plan).expect("plan should serialize");
+    assert_eq!(
+        plan_json.get("artifact_entry_path"),
+        Some(&serde_json::json!("image/stable-diffusion/tiny-sd"))
+    );
     assert!(plan_json.get("denoising_scheduler").is_none());
     assert!(plan_json.get("scheduler").is_none());
+}
+
+#[test]
+fn planner_rejects_absolute_artifact_entry_path_before_worker_dispatch() {
+    let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    facts.artifact.entry_path = "/tmp/image/stable-diffusion/tiny-sd".to_string();
+    let request = image_request();
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::InvalidArtifactEntryPath
+            && diagnostic.field_path == "package_facts.artifact.entry_path"
+    }));
+}
+
+#[test]
+fn planner_rejects_traversing_artifact_entry_path_before_worker_dispatch() {
+    let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    facts.artifact.entry_path = "image/../tiny-sd".to_string();
+    let request = image_request();
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    assert!(diagnostic_codes(&outcome)
+        .contains(&ImageGenerationPlannerDiagnosticCode::InvalidArtifactEntryPath));
 }
 
 #[test]

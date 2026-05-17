@@ -330,8 +330,14 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Use checked arithmetic for dimensions, image counts, estimated memory,
   and artifact size calculations. Reject overflow or unacceptable estimates
   through typed planner diagnostics.
-- [ ] Validate Pumas-provided paths and artifact entry paths against the
+- [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
+  - 2026-05-17: image-generation execution now accepts only validated
+    root-relative Pumas artifact entry paths before worker-envelope
+    construction and rejects local/absolute/traversing/URI-shaped artifact
+    paths with planner diagnostics. Already root-validated resolved absolute
+    paths remain a later Pumas root-inventory extension point, not an
+    executable fallback.
 - [ ] Return a terminal planning/readiness diagnostic when validation fails.
   Do not try alternate backends, generic Diffusers loading, default schedulers,
   CPU fallback, or alternate dependency environments.
@@ -2756,10 +2762,20 @@ readiness:
       to PyTorch or a pseudo-Diffusers executable runtime, and do not allow a
       worker to be the first component to discover missing canonical runtime
       packages.
-  - [ ] Introduce a validated Pumas artifact/root path type or DTO at the
+  - [x] Introduce a validated Pumas artifact/root path type or DTO at the
     workflow execution-plan/admission projection boundary and carry only that
     proof, a root-relative artifact path, or an already root-validated resolved
     path into inference and worker envelopes.
+    - 2026-05-17 root-relative artifact path slice: added
+      `inference::PumasArtifactEntryPath` as a validated root-relative,
+      non-traversing artifact entry path. Image planning now rejects empty,
+      absolute/local, traversing, URI-shaped, control-character, and overlong
+      artifact entry paths with typed planner diagnostics before producing an
+      execution plan. The PyTorch image worker request carries the same
+      validated type while preserving the JSON string wire shape. This covers
+      the root-relative artifact path option; a later Pumas/model root
+      inventory can add already root-validated resolved-path proof without
+      changing worker-envelope call sites.
   - [ ] Reconcile reserved `diffusers` runtime identity and diagnostics
     fixtures: preserve the canonical spelling only as package/source/future
     runtime identity, remove or mark misleading sidecar display strings until a

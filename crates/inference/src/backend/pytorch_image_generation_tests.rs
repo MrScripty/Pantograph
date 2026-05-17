@@ -4,7 +4,9 @@ use crate::device_contracts::{
     InferenceDevicePolicy, RuntimeVariantId,
 };
 use crate::image_generation_planner::{DenoisingSchedulerOptionId, ImageGenerationExecutionPlan};
-use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel, PumasModelRef};
+use crate::model_contracts::{
+    DiffusersComponentRole, ImageGenerationFamilyLabel, PumasArtifactEntryPath, PumasModelRef,
+};
 
 #[test]
 fn test_generate_image_envelope_from_plan_validates_worker_request() {
@@ -17,7 +19,7 @@ fn test_generate_image_envelope_from_plan_validates_worker_request() {
     assert_eq!(envelope.payload.model_ref.model_id, "image/example/tiny-sd");
     assert_eq!(
         envelope.payload.artifact_entry_path,
-        "image/example/tiny-sd"
+        PumasArtifactEntryPath::parse("image/example/tiny-sd").expect("valid artifact path")
     );
     assert_eq!(envelope.payload.pipeline_class, "StableDiffusionPipeline");
     assert_eq!(
@@ -78,7 +80,8 @@ fn image_plan() -> ImageGenerationExecutionPlan {
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
         },
-        artifact_entry_path: "image/example/tiny-sd".to_string(),
+        artifact_entry_path: PumasArtifactEntryPath::parse("image/example/tiny-sd")
+            .expect("valid artifact path"),
         backend_id: BackendId::parse("pytorch").expect("valid backend id"),
         runtime_variant_id,
         selected_device_class: InferenceDeviceClass::Cpu,

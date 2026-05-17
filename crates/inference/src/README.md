@@ -29,7 +29,7 @@ details.
 | `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp`, plus temporary adapters into neutral managed-dependency DTOs. |
 | `managed_media_dependencies.rs` | Transitional media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling while lease ownership moves behind the neutral managed-dependency boundary. |
 | `managed_redistributables/` | Compatibility re-exports for media redistributable APIs now owned by `pantograph-managed-dependencies`, plus neutral status projection helpers for inference callers. |
-| `model_contracts.rs` | Transformers-aligned model/package/task facts, generation defaults, Pumas package-facts summary snapshots, and model-library update feeds consumed by inference without taking runtime-selection policy. |
+| `model_contracts.rs` | Transformers-aligned model/package/task facts, generation defaults, validated root-relative Pumas artifact entry paths, Pumas package-facts summary snapshots, and model-library update feeds consumed by inference without taking runtime-selection policy. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes, including the managed-binary launch error tag consumed before backend startup errors are classified. |
 | `runtime_load.rs` | Pure runtime-load phase DTOs, command-fact projection, active-runtime descriptors, and managed-runtime readiness errors shared by llama.cpp startup owners. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
@@ -168,6 +168,11 @@ backend is registered.
 - Image-generation family requirements and option support live in table-owned
   Rust rules. The planner may consume those rules, but worker bridges must not
   infer family support or silently ignore unsupported request traits.
+- Image-generation execution plans carry `PumasArtifactEntryPath` for artifact
+  entry paths. The type accepts only root-relative, non-traversing Pumas
+  artifact paths before worker-envelope construction; absolute local paths,
+  unsupported URI schemes, control characters, and traversal segments are
+  planner diagnostics, not worker-discovery failures.
 - Application-level runtime policy such as admission, reservation, retention,
   and eviction must not be implemented inside gateway or backend modules.
 - `device_contracts/` owns canonical device policy intent, concrete device

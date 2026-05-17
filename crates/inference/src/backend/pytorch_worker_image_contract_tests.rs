@@ -13,7 +13,9 @@ use crate::device_contracts::{
 use crate::image_generation_planner::{
     plan_image_generation_execution, ImageGenerationPlanningInput, ImageGenerationPlanningOutcome,
 };
-use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel, PumasModelRef};
+use crate::model_contracts::{
+    DiffusersComponentRole, ImageGenerationFamilyLabel, PumasArtifactEntryPath, PumasModelRef,
+};
 use crate::{ImageGenerationRequest, InferenceTaskId, ResolvedModelPackageFacts};
 use pyo3::prelude::*;
 use std::ffi::CString;
@@ -180,7 +182,8 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
     );
     assert_eq!(
         worker_request.artifact_entry_path,
-        "image/stable-diffusion/tiny-sd"
+        PumasArtifactEntryPath::parse("image/stable-diffusion/tiny-sd")
+            .expect("valid artifact path")
     );
     assert_eq!(
         worker_request.family,
@@ -324,7 +327,15 @@ fn backend_decision() -> BackendExecutionDecision {
             migration_diagnostics: Vec::new(),
         }),
         diagnostics: Vec::new(),
-        dependency_readiness: Vec::new(),
+        dependency_readiness: crate::pytorch_diffusers_image_generation_package_requirements()
+            .into_iter()
+            .map(|declaration| {
+                declaration.to_readiness_fact(
+                    crate::CapabilityAvailabilityState::Available,
+                    crate::DependencyReadinessResolverOwner::EmbeddedRuntime,
+                )
+            })
+            .collect(),
         selection_policy_trace: None,
     }
 }

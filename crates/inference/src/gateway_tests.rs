@@ -21,7 +21,8 @@ use crate::image_generation_planner::{
 use crate::model_contracts::{
     CacheGenerationOptions, DiffusersComponentRole, GenerationOptions, ImageGenerationFamilyLabel,
     InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions, OptionSupportState,
-    PumasModelRef, ResolvedModelPackageFacts, SamplingGenerationOptions, StoppingGenerationOptions,
+    PumasArtifactEntryPath, PumasModelRef, ResolvedModelPackageFacts, SamplingGenerationOptions,
+    StoppingGenerationOptions,
 };
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
@@ -126,10 +127,11 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
             model_id: "mock-image-model".to_string(),
             revision: Some("main".to_string()),
             selected_artifact_id: Some("diffusers".to_string()),
-            selected_artifact_path: Some("/models/mock-image-model".to_string()),
+            selected_artifact_path: Some("image/mock-image-model".to_string()),
             migration_diagnostics: Vec::new(),
         },
-        artifact_entry_path: "/models/mock-image-model".to_string(),
+        artifact_entry_path: PumasArtifactEntryPath::parse("image/mock-image-model")
+            .expect("valid artifact path"),
         backend_id: BackendId::parse("pytorch").expect("valid backend id"),
         runtime_variant_id: runtime_variant_id.clone(),
         selected_device_class: InferenceDeviceClass::Cuda,

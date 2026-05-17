@@ -6,8 +6,10 @@
 //! admission, and policy decisions.
 
 use std::collections::BTreeMap;
+use std::fmt;
+use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 /// Current inference package-facts contract version.
@@ -79,6 +81,150 @@ pub struct PumasModelRef {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub migration_diagnostics: Vec<ModelRefMigrationDiagnostic>,
 }
+
+const MAX_PUMAS_ARTIFACT_ENTRY_PATH_LEN: usize = 1024;
+
+/// Root-relative artifact entry path resolved by Pumas before worker dispatch.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[must_use]
+pub struct PumasArtifactEntryPath(String);
+
+impl PumasArtifactEntryPath {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, PumasArtifactEntryPathError> {
+        let raw = value.as_ref().trim();
+        if raw.is_empty() {
+            return Err(PumasArtifactEntryPathError::Missing);
+        }
+        if raw.len() > MAX_PUMAS_ARTIFACT_ENTRY_PATH_LEN {
+            return Err(PumasArtifactEntryPathError::TooLong {
+                max_len: MAX_PUMAS_ARTIFACT_ENTRY_PATH_LEN,
+            });
+        }
+        if raw.chars().any(char::is_control) {
+            return Err(PumasArtifactEntryPathError::InvalidCharacters);
+        }
+        if raw.contains("://") {
+            return Err(PumasArtifactEntryPathError::UnsupportedUri);
+        }
+        if raw.starts_with(['/', '\\', '~']) || raw.contains('\\') {
+            return Err(PumasArtifactEntryPathError::LocalPath);
+        }
+
+        let mut saw_segment = false;
+        for segment in raw.split('/') {
+            if segment.is_empty() {
+                return Err(PumasArtifactEntryPathError::InvalidSegment);
+            }
+            if matches!(segment, "." | "..") {
+                return Err(PumasArtifactEntryPathError::LocalPath);
+            }
+            saw_segment = true;
+        }
+
+        if !saw_segment {
+            return Err(PumasArtifactEntryPathError::Missing);
+        }
+
+        Ok(Self(raw.to_string()))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for PumasArtifactEntryPath {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for PumasArtifactEntryPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for PumasArtifactEntryPath {
+    type Err = PumasArtifactEntryPathError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<&str> for PumasArtifactEntryPath {
+    type Error = PumasArtifactEntryPathError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<String> for PumasArtifactEntryPath {
+    type Error = PumasArtifactEntryPathError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+impl Serialize for PumasArtifactEntryPath {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for PumasArtifactEntryPath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::parse(value).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PumasArtifactEntryPathError {
+    Missing,
+    TooLong { max_len: usize },
+    InvalidCharacters,
+    UnsupportedUri,
+    LocalPath,
+    InvalidSegment,
+}
+
+impl fmt::Display for PumasArtifactEntryPathError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Missing => f.write_str("Pumas artifact entry path is required"),
+            Self::TooLong { max_len } => write!(
+                f,
+                "Pumas artifact entry path exceeds maximum length {max_len}"
+            ),
+            Self::InvalidCharacters => {
+                f.write_str("Pumas artifact entry path contains invalid characters")
+            }
+            Self::UnsupportedUri => {
+                f.write_str("Pumas artifact entry path must not use a URI scheme")
+            }
+            Self::LocalPath => f.write_str(
+                "Pumas artifact entry path must be root-relative and must not traverse roots",
+            ),
+            Self::InvalidSegment => {
+                f.write_str("Pumas artifact entry path contains an invalid segment")
+            }
+        }
+    }
+}
+
+impl std::error::Error for PumasArtifactEntryPathError {}
 
 /// Diagnostic produced while converting a legacy model reference to a Pumas ref.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

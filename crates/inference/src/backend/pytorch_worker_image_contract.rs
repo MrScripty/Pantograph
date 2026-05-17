@@ -7,7 +7,9 @@ use super::pytorch_worker_contract::{
 use crate::backend::BackendError;
 use crate::device_contracts::InferenceDeviceId;
 use crate::image_generation_planner::ImageGenerationExecutionPlan;
-use crate::model_contracts::{DiffusersComponentRole, ImageGenerationFamilyLabel, PumasModelRef};
+use crate::model_contracts::{
+    DiffusersComponentRole, ImageGenerationFamilyLabel, PumasArtifactEntryPath, PumasModelRef,
+};
 
 #[allow(dead_code)]
 pub(super) fn validate_generate_image_envelope(
@@ -24,11 +26,6 @@ pub(super) fn validate_generate_image_envelope(
             "Unexpected PyTorch worker operation {:?} for image generation",
             envelope.operation
         )));
-    }
-    if envelope.payload.artifact_entry_path.trim().is_empty() {
-        return Err(BackendError::Config(
-            "PyTorch worker generate_image envelope requires an artifact_entry_path".to_string(),
-        ));
     }
     if envelope.payload.pipeline_class.trim().is_empty() {
         return Err(BackendError::Config(
@@ -52,7 +49,7 @@ pub(super) fn validate_generate_image_envelope(
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(super) struct PyTorchGenerateImageRequest {
     pub model_ref: PumasModelRef,
-    pub artifact_entry_path: String,
+    pub artifact_entry_path: PumasArtifactEntryPath,
     pub family: ImageGenerationFamilyLabel,
     pub pipeline_class: String,
     pub required_components: Vec<DiffusersComponentRole>,

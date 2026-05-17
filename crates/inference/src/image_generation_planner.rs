@@ -12,7 +12,7 @@ use crate::image_generation_family_rules::{
 };
 use crate::model_contracts::{
     DiffusersComponentRole, ImageGenerationFamilyLabel, InferenceTaskId, PackageFactStatus,
-    PumasModelRef, ResolvedModelPackageFacts,
+    PumasArtifactEntryPath, PumasModelRef, ResolvedModelPackageFacts,
 };
 use crate::types::ImageGenerationRequest;
 
@@ -214,7 +214,7 @@ impl<'de> Deserialize<'de> for DenoisingSchedulerOptionId {
 #[serde(rename_all = "snake_case")]
 pub struct ImageGenerationExecutionPlan {
     pub model_ref: PumasModelRef,
-    pub artifact_entry_path: String,
+    pub artifact_entry_path: PumasArtifactEntryPath,
     pub backend_id: BackendId,
     pub runtime_variant_id: RuntimeVariantId,
     pub selected_device_class: InferenceDeviceClass,
@@ -282,6 +282,7 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     DependencyReadinessUnavailable,
     AmbiguousComponentRole,
     SelectedTaskMismatch,
+    InvalidArtifactEntryPath,
 }
 
 /// Planner diagnostic severity.
@@ -305,6 +306,7 @@ pub fn plan_image_generation_execution(
         input.package_facts,
         &mut diagnostics,
     );
+    let artifact_entry_path = validate_artifact_entry_path(input.package_facts, &mut diagnostics);
     validate_dependency_readiness_proof(input.backend_decision, &mut diagnostics);
     validate_package_contract(input.package_facts, &mut diagnostics);
     validate_task_evidence(input.package_facts, &mut diagnostics);
@@ -379,7 +381,7 @@ pub fn plan_image_generation_execution(
     ImageGenerationPlanningOutcome::Planned {
         plan: ImageGenerationExecutionPlan {
             model_ref: input.package_facts.model_ref.clone(),
-            artifact_entry_path: input.package_facts.artifact.entry_path.clone(),
+            artifact_entry_path,
             backend_id: input.backend_decision.selected_backend_id.clone(),
             runtime_variant_id: input.backend_decision.selected_runtime_variant_id.clone(),
             selected_device_class: input.backend_decision.selected_device_class,
@@ -399,6 +401,26 @@ pub fn plan_image_generation_execution(
             num_images_per_prompt: input.request.num_images_per_prompt,
             estimated_output_rgba_bytes,
         },
+    }
+}
+
+fn validate_artifact_entry_path(
+    package_facts: &ResolvedModelPackageFacts,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) -> PumasArtifactEntryPath {
+    match PumasArtifactEntryPath::parse(&package_facts.artifact.entry_path) {
+        Ok(path) => path,
+        Err(error) => {
+            diagnostics.push(diagnostic(
+                ImageGenerationPlannerDiagnosticCode::InvalidArtifactEntryPath,
+                "package_facts.artifact.entry_path",
+                format!(
+                    "image-generation planning requires a validated root-relative Pumas artifact entry path: {error}"
+                ),
+            ));
+            PumasArtifactEntryPath::parse("__invalid_artifact_entry_path__")
+                .expect("static sentinel artifact path is valid")
+        }
     }
 }
 

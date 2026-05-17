@@ -5640,6 +5640,59 @@ Worker rules:
     artifact/root path proof, reserved `diffusers` runtime identity fixture
     cleanup, and remaining explicit typed runtime/trait input replacement for
     node families not yet on scheduler-owned execution.
+- 2026-05-17 root-relative Pumas artifact path slice:
+  - Smallest useful vertical slice: add a validated root-relative Pumas
+    artifact entry path type at the inference planner/worker boundary so image
+    generation rejects unsafe artifact paths before worker-envelope
+    construction.
+  - Allowed write set: `crates/inference/src/model_contracts.rs`,
+    `crates/inference/src/image_generation_planner.rs`,
+    `crates/inference/src/backend/pytorch_worker_image_contract.rs`,
+    focused inference planner/PyTorch image contract/gateway tests,
+    `crates/inference/src/lib.rs`, `crates/inference/src/README.md`,
+    the single node-engine planned-image test fixture that consumes
+    `ImageGenerationExecutionPlan`, and this plan directory. The untracked
+    root proposal markdown file was ignored per user instruction.
+  - No-fallback/no-legacy confirmation: the planner accepts only validated
+    root-relative Pumas artifact entry paths for image execution plans and
+    rejects absolute local paths, traversal, URI-shaped paths, control
+    characters, empty values, and overlong paths with typed diagnostics. It
+    does not pass raw graph/user paths to the worker, infer roots in the
+    worker, or add a resolved-path fallback.
+  - Implementation notes: added `PumasArtifactEntryPath` as a serde string
+    value object; changed `ImageGenerationExecutionPlan` and
+    `PyTorchGenerateImageRequest` to carry the validated type; kept the JSON
+    wire shape unchanged; and updated the planned node-engine image test to
+    consume the typed path.
+  - Focused tests added/updated: planner success serialization now proves the
+    artifact path remains a primitive string; new planner tests reject
+    absolute and traversing artifact entry paths; PyTorch worker request tests
+    map from the validated plan; gateway and node-engine planned-image tests
+    use root-relative artifact paths and ready dependency proof.
+  - Verification passed: `cargo fmt --manifest-path crates/inference/Cargo.toml`;
+    `cargo test -p inference image_generation_planner --lib`; `cargo test -p
+    inference --features backend-pytorch pytorch_worker_image_contract --lib`;
+    `cargo test -p inference --features backend-pytorch
+    pytorch_image_generation --lib`; `cargo fmt --manifest-path
+    crates/inference/Cargo.toml -- --check`; `cargo test -p node-engine
+    --features inference-nodes,pytorch-nodes
+    test_canonical_llm_image_generation_uses_planned_gateway_boundary --lib`;
+    `cargo check -p node-engine --features inference-nodes,pytorch-nodes`;
+    `cargo check -p inference --features backend-pytorch`; `cargo test -p
+    inference generate_image_from_planning_input --lib`; `cargo test -p
+    inference gateway::tests --lib`.
+  - Verification deviation: initial PyTorch image test filters were run
+    without the `backend-pytorch` feature and selected zero tests; they were
+    rerun with the feature enabled. The first
+    `pytorch_worker_image_contract` run exposed a stale empty
+    dependency-readiness fixture and was fixed by carrying ready scheduler
+    proof. A node-engine planned-image test also needed the same ready proof
+    fixture update. Intermediate parallel Cargo commands waited on package and
+    build locks.
+  - Remaining follow-up: reconcile reserved `diffusers` runtime identity and
+    diagnostics fixtures, then continue replacing remaining generic recursive
+    `backend_key` discovery with explicit typed runtime/trait inputs per
+    family.
 
 ### Traceability Links
 
