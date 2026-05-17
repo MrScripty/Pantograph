@@ -5526,6 +5526,44 @@ Worker rules:
   - Remaining follow-up: wire `workflow_technical_fit_decision` to collect
     package-readiness provider facts through this runner, then enable the
     selected-decision missing-proof gate before worker dispatch.
+- 2026-05-17 production technical-fit package-readiness collection slice:
+  - Smallest useful vertical slice: wire production
+    `workflow_technical_fit_decision` to collect package-readiness provider
+    facts and pass them into existing technical-fit request construction
+    without enabling the later planner/gateway missing-proof rejection gate.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit_package_readiness.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory. The untracked root proposal markdown file was ignored per user
+    instruction.
+  - No-fallback/no-legacy confirmation: the collection helper consumes
+    inference execution evidence and package-readiness provider output only.
+    It does not call `task_executor::dependency_environment`, inspect graph
+    node inputs as package readiness, infer readiness from Pumas hints/display
+    labels, import worker modules, select or rank runtimes, create runtimes,
+    or dispatch workers.
+  - Implementation notes: added a focused `technical_fit_package_readiness`
+    module. It normalizes package facts through inference execution evidence,
+    creates provider requests only for validated PyTorch image-generation
+    candidates, dedupes identical backend/runtime/environment/dependency
+    requests before provider resolution, and returns dependency-readiness facts
+    to the existing execution-evidence adapter. Production collection is
+    skipped when required Pumas package facts are already missing so
+    technical-fit fails on that typed model-facts diagnostic without launching
+    package probes.
+  - Focused tests added: a fake provider snapshot proves
+    PyTorch/Diffusers package facts produce ready dependency-readiness facts
+    through the new technical-fit collection helper without launching Python.
+  - Verification passed: `cargo fmt --manifest-path
+    crates/pantograph-embedded-runtime/Cargo.toml -- --check`; `cargo test
+    -p pantograph-embedded-runtime technical_fit_package_readiness --lib`;
+    `cargo test -p pantograph-embedded-runtime technical_fit --lib`; `cargo
+    check -p pantograph-embedded-runtime`.
+  - Remaining follow-up: enable the image planner/gateway selected-decision
+    missing-proof gate before worker dispatch, then remove legacy
+    dependency-environment backend-key/fallback selection from canonical
+    inference execution.
 
 ### Traceability Links
 

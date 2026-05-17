@@ -2665,6 +2665,19 @@ readiness:
           dependency-environment preflight, graph inputs, worker imports,
           runtime ranking, candidate selection, or worker dispatch, and it is
           still not wired into production technical-fit calls in this slice.
+        - 2026-05-17 production technical-fit readiness collection slice:
+          added `technical_fit_package_readiness.rs` and wired
+          `workflow_technical_fit_decision` to collect package-readiness facts
+          through `PackageReadinessProvider<ProcessPythonPackageReadinessProbeRunner>`
+          before building runtime-registry technical-fit requests. The helper
+          normalizes package facts through inference execution evidence,
+          creates provider requests only for validated PyTorch image-generation
+          candidates, dedupes identical backend/runtime/environment/dependency
+          requests before provider resolution, and passes returned readiness
+          facts into the existing execution-evidence adapter. The slice does
+          not enable the image planner/gateway missing-proof gate and does not
+          call dependency-environment preflight, worker imports, graph inputs,
+          runtime ranking, or worker dispatch.
       6. Make image planner/gateway reject selected decisions that lack ready
          dependency proof before worker dispatch.
       7. Remove the legacy dependency-environment backend-key and fallback
@@ -2699,8 +2712,10 @@ readiness:
         - 2026-05-17 status: provider contract tests now cover available
           packages, missing package, unavailable Python, unsupported dependency
           kind, invalid package id, timeout/probe failure, and request-local
-          dedupe. Production technical-fit propagation of provider facts
-          remains for the next wiring slice.
+          dedupe. Production technical-fit collection now has focused helper
+          coverage proving PyTorch/Diffusers readiness facts are collected from
+          a provider and supplied to the technical-fit path; the selected
+          decision missing-proof gate remains for a later slice.
     - No-fallback/no-legacy confirmation: do not keep dependency-environment
       backend selection as a fallback, do not alias Diffusers package evidence
       to PyTorch or a pseudo-Diffusers executable runtime, and do not allow a

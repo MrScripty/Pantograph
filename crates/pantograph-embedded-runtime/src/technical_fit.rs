@@ -47,6 +47,8 @@ use crate::{workflow_runtime::unix_timestamp_ms, EmbeddedWorkflowHost};
 mod technical_fit_diagnostics;
 #[path = "technical_fit_execution_evidence.rs"]
 mod technical_fit_execution_evidence;
+#[path = "technical_fit_package_readiness.rs"]
+mod technical_fit_package_readiness;
 use technical_fit_diagnostics::{
     project_runtime_device_class, project_runtime_device_diagnostic,
     project_workflow_device_diagnostic, project_workflow_runtime_variant_device_class,
@@ -55,6 +57,7 @@ use technical_fit_execution_evidence::{
     adapt_execution_evidence_to_technical_fit, ExecutionEvidenceTechnicalFitAdapterInput,
     ExecutionEvidenceTechnicalFitReport,
 };
+use technical_fit_package_readiness::dependency_readiness_facts_for_technical_fit;
 
 const MAX_RUNTIME_TECHNICAL_FIT_COMPATIBILITY_ISSUES: usize = 32;
 const MAX_RUNTIME_TECHNICAL_FIT_CANDIDATES: usize = 512;
@@ -110,12 +113,33 @@ pub(crate) async fn workflow_technical_fit_decision(
     let package_facts =
         resolve_required_model_package_facts(host, &request.runtime_requirements.required_models)
             .await;
+    let dependency_readiness_facts = if missing_required_model_package_fact_candidates(
+        &request.runtime_requirements.required_models,
+        &package_facts,
+    )
+    .is_empty()
+    {
+        let package_readiness_provider =
+            crate::package_readiness_provider::PackageReadinessProvider::new(
+                crate::python_package_readiness_probe::ProcessPythonPackageReadinessProbeRunner::default(),
+            );
+        dependency_readiness_facts_for_technical_fit(
+            &package_readiness_provider,
+            request,
+            &available_backends,
+            &package_facts,
+        )
+        .await
+    } else {
+        Vec::new()
+    };
     let runtime_request = build_runtime_technical_fit_request_for_resolved_package_facts(
         request,
         runtime_snapshot,
         &runtime_capabilities,
         &available_backends,
         &package_facts,
+        &dependency_readiness_facts,
     );
     let runtime_request = runtime_request_with_history_summaries(host, runtime_request, request)?;
     let decision = select_runtime_technical_fit(&runtime_request);
@@ -263,6 +287,7 @@ fn build_runtime_technical_fit_request_for_resolved_package_facts(
     runtime_capabilities: &[WorkflowRuntimeCapability],
     available_backends: &[inference::BackendInfo],
     package_facts: &[inference::ResolvedModelPackageFacts],
+    dependency_readiness_facts: &[inference::DependencyReadinessFact],
 ) -> RuntimeTechnicalFitRequest {
     let missing_package_fact_candidates = missing_required_model_package_fact_candidates(
         &request.runtime_requirements.required_models,
@@ -289,7 +314,7 @@ fn build_runtime_technical_fit_request_for_resolved_package_facts(
         runtime_capabilities,
         available_backends,
         package_facts,
-        &[],
+        dependency_readiness_facts,
     )
 }
 
@@ -2717,6 +2742,7 @@ mod tests {
             &workflow_request,
             None,
             &[runtime_capability()],
+            &[],
             &[],
             &[],
         );
