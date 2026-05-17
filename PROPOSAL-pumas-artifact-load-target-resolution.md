@@ -131,8 +131,8 @@ pub struct PumasArtifactLoadTarget {
     pub local_load_path: String,
     pub load_path_kind: PumasArtifactLoadPathKind,
     pub library_root_id: Option<String>,
-    pub storage_kind: Option<String>,
-    pub validation_state: Option<String>,
+    pub storage_kind: StorageKind,
+    pub validation_state: AssetValidationState,
     pub content_fingerprint: Option<String>,
     pub package_facts_contract_version: Option<u32>,
 }
@@ -158,6 +158,7 @@ pub enum PumasArtifactLoadTargetDiagnosticCode {
     ArtifactPathMissing,
     ArtifactPathNotLoadable,
     ArtifactKindMismatch,
+    InvalidArtifact,
     InvalidPackageFacts,
     StalePackageFacts,
     LibraryUnavailable,
@@ -181,9 +182,9 @@ needs-detail cases.
 - Pumas owns whether the selected artifact is currently loadable.
 - Pumas owns validating that `local_load_path` is a Pumas-approved local path
   for the selected artifact. That path may be inside Pumas-managed storage or
-  may be an approved external-reference asset. The response should expose
-  `storage_kind` and validation state so consumers do not assume all load
-  targets live under one library root.
+  may be an approved external-reference asset. The ready target should expose
+  typed `StorageKind` and `AssetValidationState` values so consumers do not
+  assume all load targets live under one library root.
 - Pumas owns checking whether the artifact kind matches the caller's expected
   artifact kind.
 - Pumas should return typed unavailable states instead of throwing opaque
@@ -221,7 +222,8 @@ PumasArtifactLoadTarget {
     artifact_kind: PackageArtifactKind::DiffusersBundle,
     local_load_path: "/.../Pumas-Library/shared-resources/models/image/...".to_string(),
     load_path_kind: PumasArtifactLoadPathKind::Directory,
-    storage_kind: Some("library_managed".to_string()),
+    storage_kind: StorageKind::LibraryManaged,
+    validation_state: AssetValidationState::Valid,
     ...
 }
 ```
@@ -257,6 +259,14 @@ The resolver should map directly to existing Pumas model-library states:
 Pantograph can distinguish a missing artifact from a missing, stale, ambiguous,
 or invalid load path.
 
+The resolver may need resolver-specific derivation for
+`ModelArtifactState::Missing` and related states. The existing selector
+projection may derive ready, partial, invalid, stale, ambiguous, and
+needs-detail states from metadata and download fields without covering every
+exact selected-artifact load-target case. The resolver implementation should
+not assume the selector projection already covers every state needed at this
+execution boundary.
+
 An expected-kind mismatch is an additional diagnostic over the state fields:
 the artifact may exist, but if Pantograph requested a Diffusers directory and
 the selected artifact is GGUF, Pumas should return an
@@ -267,6 +277,11 @@ the selected artifact is GGUF, Pumas should return an
 `PumasModelRef` is the authoritative selected-artifact reference in the request.
 If `model_ref.selected_artifact_id` or `model_ref.selected_artifact_path` is
 present, Pumas should resolve exactly that artifact or return typed diagnostics.
+If both are absent, Pumas may resolve the model only when the model has exactly
+one unambiguous loadable artifact for the requested kind. Missing selected
+artifact fields should become `MissingSelectedArtifact` only when exact artifact
+identity is required, when multiple artifacts could match, or when the
+artifact-kind request cannot be resolved without ambiguity.
 
 `caller_observed_entry_path` and
 `caller_observed_package_facts_contract_version` are optional observations from
@@ -321,7 +336,8 @@ Pumas should add tests for:
 - valid GGUF artifact returns `ModelArtifactState::Ready`, a ready entry path
   state, and a file load target when requested as GGUF;
 - requesting Diffusers for a GGUF artifact returns `ArtifactKindMismatch`;
-- missing selected artifact id/path returns `MissingSelectedArtifact`;
+- missing selected artifact id/path returns `MissingSelectedArtifact` when
+  exact artifact identity is required or the model has ambiguous artifacts;
 - stale selected artifact returns `ModelArtifactState::Stale` plus a precise
   stale/mismatch diagnostic;
 - known but not downloaded model returns `ModelArtifactState::Missing` or the
@@ -330,8 +346,8 @@ Pumas should add tests for:
 - summary-only artifacts return `ModelArtifactState::NeedsDetail`;
 - invalid package facts return `InvalidPackageFacts` or `InvalidArtifact`;
 - external-reference assets can return a Pumas-approved local load path with
-  `storage_kind` and validation state; tests must not require all paths to live
-  under the Pumas library root;
+  typed `StorageKind` and `AssetValidationState`; tests must not require all
+  paths to live under the Pumas library root;
 - serde fixtures round-trip the request and response shapes.
 
 Pantograph should add tests after the API exists for:
