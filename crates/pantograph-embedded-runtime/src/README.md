@@ -59,6 +59,7 @@ packages.
 | `technical_fit_execution_evidence.rs` | Owns the execution-evidence to technical-fit adapter contract, mapping inference-owned evidence reports plus supplied dependency-readiness facts into runtime-registry candidates and typed diagnostics without old package-hint fallback behavior. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke audio and ONNX Python workers without linking Python in-process. |
+| `python_package_readiness_probe.rs` | Owns the no-shell default-host Python package-readiness probe runner used by the runtime-scoped package-readiness provider, including bounded timeout/output handling and typed provider diagnostics. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime snapshot-to-capability projection, host-runtime, dedicated-embedding, Python-sidecar and roadmap vLLM/MLX capability builders, task request-contract projection, and capability-to-lifecycle projection. |
 | `runtime_config.rs` | Owns embedded-runtime configuration and initialization error contracts re-exported by the crate facade. |

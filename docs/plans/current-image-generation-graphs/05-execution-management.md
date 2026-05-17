@@ -5490,6 +5490,42 @@ Worker rules:
     typed process diagnostics, then wire production
     `workflow_technical_fit_decision` to collect provider facts and pass them
     into existing technical-fit request construction.
+- 2026-05-17 no-shell Python package-readiness probe runner slice:
+  - Smallest useful vertical slice: add the real default-host Python package
+    probe runner behind the package-readiness provider trait without wiring it
+    into production technical-fit requests.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/python_package_readiness_probe.rs`,
+    `crates/pantograph-embedded-runtime/src/lib.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, and this plan
+    directory. The untracked root proposal markdown file was ignored per user
+    instruction.
+  - No-fallback/no-legacy confirmation: the runner uses inference-owned
+    package ids and the typed provider request only. It does not call
+    `task_executor::dependency_environment`, read graph node inputs, infer
+    package readiness from Pumas hints/display labels, import worker modules,
+    select or rank runtimes, create runtimes, or dispatch workers.
+  - Implementation notes: added `ProcessPythonPackageReadinessProbeRunner`
+    with explicit `python -I -c <script> <package ids>` args, no shell,
+    `kill_on_drop`, bounded timeout, bounded stdout/stderr capture, typed
+    process diagnostics, package-id safety validation before launch, JSON
+    parsing into `PythonPackageReadinessSnapshot`, and explicit
+    `ProbeNotImplemented` for managed Python environments that the current
+    host inventory cannot resolve yet.
+  - Focused tests added: no-shell command shaping, valid JSON parsing,
+    invalid JSON diagnostics, explicit Python environment rejection without
+    process launch, and invalid package-id rejection without process launch.
+    The tests do not require local Python packages to be installed.
+  - Verification passed: `cargo fmt --manifest-path
+    crates/pantograph-embedded-runtime/Cargo.toml`; `cargo fmt
+    --manifest-path crates/pantograph-embedded-runtime/Cargo.toml --
+    --check`; `cargo test -p pantograph-embedded-runtime
+    python_package_readiness_probe --lib`; `cargo test -p
+    pantograph-embedded-runtime package_readiness_provider --lib`; `cargo
+    check -p pantograph-embedded-runtime`.
+  - Remaining follow-up: wire `workflow_technical_fit_decision` to collect
+    package-readiness provider facts through this runner, then enable the
+    selected-decision missing-proof gate before worker dispatch.
 
 ### Traceability Links
 

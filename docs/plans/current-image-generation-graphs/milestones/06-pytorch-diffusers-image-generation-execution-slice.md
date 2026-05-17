@@ -2636,7 +2636,7 @@ readiness:
            backend key, provider projection tests must explicitly prove the
            backend-key/runtime-id/environment fields are mapped intentionally
            and do not spread the existing `runtime_id`/`backend_key` ambiguity.
-         - 2026-05-17 provider trait/DTO slice: added
+        - 2026-05-17 provider trait/DTO slice: added
           `pantograph-embedded-runtime::package_readiness_provider` as the
           focused runtime-scoped provider contract plus fake-runner contract
           tests. The provider request separates executable backend key,
@@ -2652,6 +2652,19 @@ readiness:
           worker package imports, select runtimes, rank candidates, or dispatch
           workers. This slice intentionally stops before the real no-shell
           Python probe runner and before production technical-fit wiring.
+        - 2026-05-17 no-shell Python probe runner slice: added
+          `pantograph-embedded-runtime::python_package_readiness_probe` as the
+          real process-backed default-host Python package probe runner behind
+          the provider trait. The runner uses explicit `tokio::process`
+          command args, `kill_on_drop`, a bounded timeout, bounded stdout/stderr
+          capture, typed `PythonUnavailable`, `InvalidPackageId`,
+          `ProbeNotImplemented`, `ProbeTimedOut`, and `ProbeProcessFailed`
+          diagnostics, and validates package ids before process launch. It
+          rejects explicit managed Python environments as not implemented until
+          managed environment inventory exists. The runner does not call
+          dependency-environment preflight, graph inputs, worker imports,
+          runtime ranking, candidate selection, or worker dispatch, and it is
+          still not wired into production technical-fit calls in this slice.
       6. Make image planner/gateway reject selected decisions that lack ready
          dependency proof before worker dispatch.
       7. Remove the legacy dependency-environment backend-key and fallback
