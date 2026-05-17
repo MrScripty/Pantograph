@@ -222,7 +222,7 @@ PumasArtifactLoadTarget {
     artifact_kind: PackageArtifactKind::DiffusersBundle,
     local_load_path: "/.../Pumas-Library/shared-resources/models/image/...".to_string(),
     load_path_kind: PumasArtifactLoadPathKind::Directory,
-    storage_kind: StorageKind::LibraryManaged,
+    storage_kind: StorageKind::LibraryOwned,
     validation_state: AssetValidationState::Valid,
     ...
 }
