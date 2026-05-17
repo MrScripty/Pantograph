@@ -2596,6 +2596,25 @@ readiness:
            dependency ids as package/distribution ids or fail typed/closed when
            a package cannot be safely probed; do not infer readiness from
            imports, display labels, package hints, or Pumas advisory facts.
+         - 2026-05-17 standards compliance tightening: provider DTOs must use
+           validated domain types at the boundary (`BackendId`,
+           `RuntimeVariantId`, `CapabilityAvailabilityId`, and a typed
+           environment selector) rather than raw `String` fields for internal
+           APIs. Fallible provider operations must return a specific typed
+           error/diagnostic enum, not `Result<T, String>` or `anyhow`, and
+           public provider return values should be `#[must_use]` where
+           ignoring readiness would be a correctness bug. Keep normalization,
+           request shaping, dedupe-key construction, and fact projection
+           synchronous and side-effect-free; only the outer Python process
+           probe may be async. The provider must not create a runtime, spawn
+           untracked background tasks, or hold any sync/async lock while
+           awaiting a probe. Any subprocess probe must use `tokio::process`
+           with explicit args, `kill_on_drop`, timeout handling, bounded
+           stdout/stderr capture, and typed process-status diagnostics. Tests
+           that touch environment variables, temp paths, caches, or process
+           probes must isolate or serialize that state; unit tests should use a
+           fake probe runner so the contract suite does not depend on the
+           developer machine's installed Python packages.
       6. Make image planner/gateway reject selected decisions that lack ready
          dependency proof before worker dispatch.
       7. Remove the legacy dependency-environment backend-key and fallback

@@ -5405,6 +5405,20 @@ Worker rules:
     and dependency set, and no locks held across awaits. It must check
     inference-owned dependency ids as package/distribution ids or fail
     typed/closed when a dependency cannot be safely probed.
+  - Standards tightening: implement provider DTOs with validated domain types
+    (`BackendId`, `RuntimeVariantId`, `CapabilityAvailabilityId`, and a typed
+    environment selector) instead of raw internal strings. Provider failures
+    must be typed error/diagnostic enums, not `Result<T, String>` or `anyhow`.
+    Keep request normalization, dedupe-key construction, and fact projection
+    synchronous; only the subprocess probe boundary should be async. The
+    provider must not create a Tokio runtime, spawn untracked tasks, or hold
+    locks while awaiting Python. Subprocess execution must use explicit args,
+    `kill_on_drop`, timeout handling, bounded stdout/stderr capture, and typed
+    process-status diagnostics.
+  - Test isolation requirement: focused provider tests must use fake probe
+    runners for contract behavior and must isolate or serialize environment
+    variables, temp paths, cache state, and subprocess-related global state so
+    the suite does not depend on the developer machine's Python environment.
   - No-fallback/no-legacy confirmation: this remains a replacement path. The
     legacy dependency-environment backend-key/default/hint selection behavior
     still must be removed from canonical inference rather than kept as a
