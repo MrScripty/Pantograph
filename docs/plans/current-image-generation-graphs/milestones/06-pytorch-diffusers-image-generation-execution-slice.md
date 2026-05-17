@@ -2576,6 +2576,26 @@ readiness:
            runtime + environment + package inventory as first-class scheduler
            evidence across venv/Conda/managed/remote runtimes without changing
            scheduler policy call sites.
+         - 2026-05-17 provider contract review update: implement the provider
+           in a focused embedded-runtime module rather than growing
+           `technical_fit.rs`. The input contract must name executable backend
+           key, scheduler runtime id, runtime variant id, and package-readiness
+           environment selector separately so `runtime_id`/`backend_key`
+           ambiguity cannot become part of the API. Provider diagnostics must
+           be typed enums/DTOs, not strings, and must cover unavailable Python,
+           missing packages, unsupported dependency kinds, invalid package ids,
+           unimplemented probes, unsupported platforms, timeouts, and probe
+           process failures. The first provider may use only the default host
+           Python/PyTorch environment, but it must still carry an explicit
+           environment selector so the later managed-environment inventory can
+           replace the source without changing scheduler policy call sites.
+           Python probing must use a fixed no-shell command/script, bounded
+           timeout, bounded output capture, request-local dedupe/cache keyed by
+           backend/runtime/variant/environment/dependency set, and no locks
+           held across awaits. Package checks must use inference-owned
+           dependency ids as package/distribution ids or fail typed/closed when
+           a package cannot be safely probed; do not infer readiness from
+           imports, display labels, package hints, or Pumas advisory facts.
       6. Make image planner/gateway reject selected decisions that lack ready
          dependency proof before worker dispatch.
       7. Remove the legacy dependency-environment backend-key and fallback
@@ -2603,6 +2623,10 @@ readiness:
         candidates with ready dependency facts.
       - Worker tests prove missing packages are not first discovered inside the
         PyTorch worker for canonical image generation.
+      - Package-readiness provider contract tests cover available packages,
+        missing package, unavailable Python, unsupported dependency kind,
+        invalid/unprobeable package id, timeout/probe failure, request-local
+        dedupe, and production technical-fit propagation of provider facts.
     - No-fallback/no-legacy confirmation: do not keep dependency-environment
       backend selection as a fallback, do not alias Diffusers package evidence
       to PyTorch or a pseudo-Diffusers executable runtime, and do not allow a

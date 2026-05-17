@@ -5381,6 +5381,43 @@ Worker rules:
     wire production `workflow_technical_fit_decision` to pass provider facts;
     then add image planner/gateway rejection for selected decisions that lack
     ready dependency proof.
+- 2026-05-17 package-readiness provider codebase review update:
+  - Smallest useful vertical slice: update the provider plan after reviewing
+    the current proof path, legacy dependency paths, Python runtime adapter,
+    inference planner/gateway, runtime-registry filtering, and standards blast
+    radius.
+  - Allowed write set: this plan directory only.
+  - Findings accepted: the provider direction is standards-compliant only if
+    it remains a focused embedded-runtime host-observation module and does not
+    grow `technical_fit.rs`, reuse `dependency-environment`, parse diagnostics
+    strings, or infer package readiness from imports, Pumas package hints,
+    display labels, graph inputs, worker failures, or Python sidecar presence.
+  - Contract tightening: provider input must separate executable backend key,
+    scheduler runtime id, runtime variant id, and package-readiness
+    environment selector. Provider output remains typed
+    `DependencyReadinessFact` values plus typed bounded provider diagnostics
+    for unavailable Python, missing packages, unsupported dependency kinds,
+    invalid package ids, unimplemented probes, unsupported platforms, timeouts,
+    and probe process failures.
+  - Probe policy: the first PyTorch/default-Python implementation must use a
+    fixed no-shell Python probe, bounded timeout, bounded output capture,
+    request-local dedupe/cache keyed by backend/runtime/variant/environment
+    and dependency set, and no locks held across awaits. It must check
+    inference-owned dependency ids as package/distribution ids or fail
+    typed/closed when a dependency cannot be safely probed.
+  - No-fallback/no-legacy confirmation: this remains a replacement path. The
+    legacy dependency-environment backend-key/default/hint selection behavior
+    still must be removed from canonical inference rather than kept as a
+    compatibility shim.
+  - Required focused tests added to the plan: provider available-package,
+    missing-package, unavailable-Python, unsupported-kind, invalid/unprobeable
+    package id, timeout/probe-failure, request-local dedupe, and production
+    technical-fit propagation tests.
+  - Verification: docs-only plan review and targeted codebase inspection; no
+    code tests were run.
+  - Remaining follow-up: implement the provider trait/DTO and focused contract
+    tests as the next validated slice, then wire production technical-fit to
+    pass real provider facts.
 
 ### Traceability Links
 
