@@ -278,6 +278,8 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     ResourceEstimateOverflow,
     MissingSelectedModelRef,
     SelectedModelRefMismatch,
+    MissingDependencyReadinessProof,
+    DependencyReadinessUnavailable,
     AmbiguousComponentRole,
     SelectedTaskMismatch,
 }
@@ -303,6 +305,7 @@ pub fn plan_image_generation_execution(
         input.package_facts,
         &mut diagnostics,
     );
+    validate_dependency_readiness_proof(input.backend_decision, &mut diagnostics);
     validate_package_contract(input.package_facts, &mut diagnostics);
     validate_task_evidence(input.package_facts, &mut diagnostics);
     validate_image_request_shape(input.request, &mut diagnostics);
@@ -445,6 +448,59 @@ fn validate_selected_model_ref(
             ),
         ));
     }
+}
+
+fn validate_dependency_readiness_proof(
+    backend_decision: &BackendExecutionDecision,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) {
+    if backend_decision.selected_backend_id.as_str() != PYTORCH_BACKEND_ID {
+        return;
+    }
+
+    for declaration in crate::pytorch_diffusers_image_generation_package_requirements() {
+        let fact = backend_decision
+            .dependency_readiness
+            .iter()
+            .find(|fact| dependency_readiness_matches(&declaration, fact, backend_decision));
+        let Some(fact) = fact else {
+            diagnostics.push(diagnostic(
+                ImageGenerationPlannerDiagnosticCode::MissingDependencyReadinessProof,
+                "backend_decision.dependency_readiness",
+                format!(
+                    "image-generation planning requires scheduler dependency-readiness proof for '{}'",
+                    declaration.dependency_id
+                ),
+            ));
+            continue;
+        };
+
+        if !fact.is_ready() {
+            diagnostics.push(diagnostic(
+                ImageGenerationPlannerDiagnosticCode::DependencyReadinessUnavailable,
+                "backend_decision.dependency_readiness",
+                format!(
+                    "image-generation dependency '{}' is not ready for selected backend '{}'",
+                    fact.dependency_id, backend_decision.selected_backend_id
+                ),
+            ));
+        }
+    }
+}
+
+fn dependency_readiness_matches(
+    declaration: &crate::DependencyRequirementDeclaration,
+    fact: &crate::DependencyReadinessFact,
+    backend_decision: &BackendExecutionDecision,
+) -> bool {
+    fact.subject_kind == declaration.subject_kind
+        && fact.runtime_id == backend_decision.selected_backend_id
+        && fact.dependency_id == declaration.dependency_id
+        && fact.task_id == declaration.task_id
+        && declaration
+            .runtime_variant_id
+            .as_ref()
+            .is_none_or(|variant| fact.runtime_variant_id.as_ref() == Some(variant))
 }
 
 fn canonical_pumas_model_id(model_ref: &PumasModelRef) -> String {

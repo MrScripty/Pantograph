@@ -227,9 +227,21 @@ fn sample_image_backend_decision(backend_id: &str) -> BackendExecutionDecision {
             migration_diagnostics: Vec::new(),
         }),
         diagnostics: Vec::new(),
-        dependency_readiness: Vec::new(),
+        dependency_readiness: sample_image_dependency_readiness(),
         selection_policy_trace: None,
     }
+}
+
+fn sample_image_dependency_readiness() -> Vec<crate::DependencyReadinessFact> {
+    crate::pytorch_diffusers_image_generation_package_requirements()
+        .into_iter()
+        .map(|declaration| {
+            declaration.to_readiness_fact(
+                crate::CapabilityAvailabilityState::Available,
+                crate::DependencyReadinessResolverOwner::EmbeddedRuntime,
+            )
+        })
+        .collect()
 }
 
 #[async_trait]

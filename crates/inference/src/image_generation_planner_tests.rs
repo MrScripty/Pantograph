@@ -60,9 +60,21 @@ fn backend_decision(backend_id: &str) -> BackendExecutionDecision {
             migration_diagnostics: Vec::new(),
         }),
         diagnostics: Vec::new(),
-        dependency_readiness: Vec::new(),
+        dependency_readiness: ready_dependency_readiness(),
         selection_policy_trace: None,
     }
+}
+
+fn ready_dependency_readiness() -> Vec<crate::DependencyReadinessFact> {
+    crate::pytorch_diffusers_image_generation_package_requirements()
+        .into_iter()
+        .map(|declaration| {
+            declaration.to_readiness_fact(
+                crate::CapabilityAvailabilityState::Available,
+                crate::DependencyReadinessResolverOwner::EmbeddedRuntime,
+            )
+        })
+        .collect()
 }
 
 fn diagnostic_codes(
@@ -120,6 +132,45 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
     let plan_json = serde_json::to_value(&plan).expect("plan should serialize");
     assert!(plan_json.get("denoising_scheduler").is_none());
     assert!(plan_json.get("scheduler").is_none());
+}
+
+#[test]
+fn planner_rejects_missing_dependency_readiness_proof() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = image_request();
+    let mut decision = backend_decision("pytorch");
+    decision.dependency_readiness.clear();
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    assert!(diagnostic_codes(&outcome)
+        .contains(&ImageGenerationPlannerDiagnosticCode::MissingDependencyReadinessProof));
+}
+
+#[test]
+fn planner_rejects_unavailable_dependency_readiness_proof() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = image_request();
+    let mut decision = backend_decision("pytorch");
+    let mut declarations = crate::pytorch_diffusers_image_generation_package_requirements();
+    let unavailable_declaration = declarations.remove(0);
+    decision.dependency_readiness[0] = unavailable_declaration.to_readiness_fact(
+        crate::CapabilityAvailabilityState::NotInstalled,
+        crate::DependencyReadinessResolverOwner::EmbeddedRuntime,
+    );
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        backend_decision: &decision,
+    });
+
+    assert!(diagnostic_codes(&outcome)
+        .contains(&ImageGenerationPlannerDiagnosticCode::DependencyReadinessUnavailable));
 }
 
 #[test]

@@ -2678,8 +2678,18 @@ readiness:
           not enable the image planner/gateway missing-proof gate and does not
           call dependency-environment preflight, worker imports, graph inputs,
           runtime ranking, or worker dispatch.
-      6. Make image planner/gateway reject selected decisions that lack ready
+      6. [x] Make image planner/gateway reject selected decisions that lack ready
          dependency proof before worker dispatch.
+         - 2026-05-17 image planner missing-proof gate slice: extended the
+           side-effect-free image-generation planner to require ready
+           scheduler-carried PyTorch/Diffusers dependency-readiness proof for
+           `diffusers`, `transformers`, `accelerate`, `torch`, and `pillow`
+           before producing an execution plan. Missing proof now returns typed
+           `missing_dependency_readiness_proof` diagnostics, unavailable proof
+           returns typed `dependency_readiness_unavailable` diagnostics, and
+           gateway planning tests now use ready scheduler proof rather than an
+           empty proof vector. The gate does not probe packages, inspect graph
+           inputs, select runtimes, or fall back to worker-side discovery.
       7. Remove the legacy dependency-environment backend-key and fallback
          selection paths from canonical inference execution.
       8. Retire `dependency-environment` from canonical inference execution or
@@ -2694,6 +2704,9 @@ readiness:
         facts.
       - Missing `torch`, `diffusers`, `transformers`, `accelerate`, or Pillow
         blocks before worker dispatch and records runtime-scoped diagnostics.
+        - 2026-05-17 status: image-generation planner tests now cover missing
+          scheduler dependency-readiness proof and unavailable dependency
+          proof before worker dispatch.
       - Scheduler candidate and selected decision fixtures carry explicit
         dependency-readiness proof for selected PyTorch/Diffusers execution;
         diagnostic-only readiness is rejected as insufficient.

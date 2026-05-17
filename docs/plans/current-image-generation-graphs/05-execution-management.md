@@ -5564,6 +5564,34 @@ Worker rules:
     missing-proof gate before worker dispatch, then remove legacy
     dependency-environment backend-key/fallback selection from canonical
     inference execution.
+- 2026-05-17 image planner dependency-readiness proof gate slice:
+  - Smallest useful vertical slice: make side-effect-free image-generation
+    planning reject scheduler-selected backend decisions that do not carry
+    ready PyTorch/Diffusers dependency-readiness proof before worker dispatch.
+  - Allowed write set: `crates/inference/src/image_generation_planner.rs`,
+    `crates/inference/src/image_generation_planner_tests.rs`,
+    `crates/inference/src/gateway_tests.rs`,
+    `crates/inference/src/README.md`, and this plan directory. The untracked
+    root proposal markdown file was ignored per user instruction.
+  - No-fallback/no-legacy confirmation: the planner validates
+    scheduler-carried dependency-readiness proof only. It does not probe
+    packages, read graph node inputs, infer readiness from Pumas hints/display
+    labels, import worker modules, select or rank runtimes, or let the PyTorch
+    worker become the first missing-package detector.
+  - Implementation notes: added typed planner diagnostics for missing
+    dependency-readiness proof and unavailable dependency-readiness proof.
+    The proof gate checks the inference-owned PyTorch/Diffusers image
+    dependency declarations against `BackendExecutionDecision.dependency_readiness`
+    before building `ImageGenerationExecutionPlan`.
+  - Focused tests added/updated: planner acceptance and gateway planning
+    fixtures now carry ready proof; new planner tests reject empty proof and
+    not-installed proof before worker dispatch.
+  - Verification passed: `cargo fmt --manifest-path crates/inference/Cargo.toml`;
+    `cargo test -p inference image_generation_planner --lib`; `cargo test -p
+    inference generate_image_from_planning_input --lib`; `cargo check -p
+    inference`; `cargo check -p pantograph-embedded-runtime`.
+  - Remaining follow-up: remove the legacy dependency-environment
+    backend-key/fallback selection paths from canonical inference execution.
 
 ### Traceability Links
 

@@ -24,7 +24,7 @@ details.
 | `gateway_tests.rs` | Gateway lifecycle, request forwarding, runtime reuse, embedding prepare/restore, and mock-backend tests extracted from the production gateway facade. |
 | `gateway_tests/` | Behavior-focused child modules for oversized gateway test families. |
 | `image_generation_family_rules.rs` | Table-owned image-generation family requirements and option support used by the planner before worker execution. |
-| `image_generation_planner.rs` | Side-effect-free PyTorch/Diffusers image-generation planner contract that consumes Pumas package facts and scheduler-selected backend/device facts before worker execution. |
+| `image_generation_planner.rs` | Side-effect-free PyTorch/Diffusers image-generation planner contract that consumes Pumas package facts plus scheduler-selected backend/device/dependency-readiness proof before worker execution. |
 | `image_generation_planner_tests.rs` | Focused tests for the side-effect-free image-generation planner contract. |
 | `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp`, plus temporary adapters into neutral managed-dependency DTOs. |
 | `managed_media_dependencies.rs` | Transitional media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling while lease ownership moves behind the neutral managed-dependency boundary. |
