@@ -7,8 +7,10 @@ use crate::device_contracts::{
     BackendExecutionDecision, BackendId, DeviceResolutionDecision, InferenceDeviceClass,
     InferenceDeviceId, RuntimeVariantId,
 };
-use crate::image_generation_family_rules::{
-    image_generation_family_rules, ImageGenerationFamilyRules,
+use crate::image_generation_family_adapters::{
+    resolve_image_generation_family_adapter, ImageGenerationFamilyAdapter,
+    ImageGenerationFamilyAdapterDiagnostic, ImageGenerationFamilyAdapterDiagnosticCode,
+    ImageGenerationFamilyAdapterResolution,
 };
 use crate::model_contracts::{
     DiffusersComponentRole, ImageGenerationFamilyLabel, InferenceTaskId, PackageFactStatus,
@@ -329,10 +331,25 @@ pub fn plan_image_generation_execution(
         ));
     }
 
-    let family = resolve_family(input.package_facts, &mut diagnostics);
-    let family_rules =
-        family.and_then(|family| family_rules_for_planning(family, &mut diagnostics));
-    validate_required_components(input.package_facts, family_rules, &mut diagnostics);
+    let family_adapter = match resolve_image_generation_family_adapter(input.package_facts) {
+        ImageGenerationFamilyAdapterResolution::Resolved(adapter) => Some(adapter),
+        ImageGenerationFamilyAdapterResolution::Rejected(adapter_diagnostics) => {
+            diagnostics.extend(
+                adapter_diagnostics
+                    .into_iter()
+                    .map(planner_diagnostic_from_family_adapter),
+            );
+            None
+        }
+    };
+    if let Some(adapter) = family_adapter {
+        diagnostics.extend(
+            adapter
+                .validate_required_components(input.package_facts)
+                .into_iter()
+                .map(planner_diagnostic_from_family_adapter),
+        );
+    }
 
     let pipeline_class = diffusers.pipeline_class.as_deref().map(str::trim);
     if pipeline_class.is_none_or(str::is_empty) {
@@ -346,7 +363,7 @@ pub fn plan_image_generation_execution(
     let estimated_output_rgba_bytes = estimate_output_rgba_bytes(input.request, &mut diagnostics);
     let denoising_scheduler = validate_denoising_scheduler_id(input.request, &mut diagnostics);
     validate_family_option_support(
-        family_rules,
+        family_adapter,
         input.request,
         denoising_scheduler.as_ref(),
         &mut diagnostics,
@@ -356,7 +373,7 @@ pub fn plan_image_generation_execution(
         return rejected(diagnostics);
     }
 
-    let Some(family) = family else {
+    let Some(family_adapter) = family_adapter else {
         return rejected(vec![diagnostic(
             ImageGenerationPlannerDiagnosticCode::MissingFamilyEvidence,
             "package_facts.diffusers.family_evidence",
@@ -370,14 +387,6 @@ pub fn plan_image_generation_execution(
             "Diffusers pipeline class is required for image-generation planning",
         )]);
     };
-    let Some(family_rules) = family_rules else {
-        return rejected(vec![diagnostic(
-            ImageGenerationPlannerDiagnosticCode::UnsupportedFamily,
-            "package_facts.diffusers.family_evidence",
-            "Diffusers image-generation planning requires supported family rules",
-        )]);
-    };
-
     ImageGenerationPlanningOutcome::Planned {
         plan: ImageGenerationExecutionPlan {
             model_ref: input.package_facts.model_ref.clone(),
@@ -387,9 +396,9 @@ pub fn plan_image_generation_execution(
             selected_device_class: input.backend_decision.selected_device_class,
             selected_device_id: input.backend_decision.selected_device_id.clone(),
             device_decision: input.backend_decision.device_decision.clone(),
-            family,
+            family: family_adapter.family(),
             pipeline_class: pipeline_class.to_string(),
-            required_components: family_rules.required_components.to_vec(),
+            required_components: family_adapter.required_components().to_vec(),
             prompt: input.request.prompt.clone(),
             negative_prompt: input.request.negative_prompt.clone(),
             width: input.request.width,
@@ -621,16 +630,16 @@ fn validate_denoising_scheduler_id(
 }
 
 fn validate_family_option_support(
-    family_rules: Option<&ImageGenerationFamilyRules>,
+    family_adapter: Option<ImageGenerationFamilyAdapter>,
     request: &ImageGenerationRequest,
     denoising_scheduler: Option<&DenoisingSchedulerOptionId>,
     diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
 ) {
-    let Some(family_rules) = family_rules else {
+    let Some(family_adapter) = family_adapter else {
         return;
     };
     for unsupported in
-        family_rules.unsupported_request_options(request, denoising_scheduler.is_some())
+        family_adapter.unsupported_request_options(request, denoising_scheduler.is_some())
     {
         diagnostics.push(diagnostic(
             ImageGenerationPlannerDiagnosticCode::UnsupportedOption,
@@ -651,119 +660,6 @@ fn validate_non_zero(
             field_path,
             "numeric image-generation options must be greater than zero when provided",
         ));
-    }
-}
-
-fn resolve_family(
-    package_facts: &ResolvedModelPackageFacts,
-    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
-) -> Option<ImageGenerationFamilyLabel> {
-    let families = package_facts
-        .diffusers
-        .as_ref()
-        .map(|diffusers| {
-            diffusers
-                .family_evidence
-                .iter()
-                .filter_map(|evidence| match evidence.family {
-                    ImageGenerationFamilyLabel::Unknown | ImageGenerationFamilyLabel::Ambiguous => {
-                        None
-                    }
-                    family => Some(family),
-                })
-                .fold(
-                    Vec::<ImageGenerationFamilyLabel>::new(),
-                    |mut families, family| {
-                        if !families.contains(&family) {
-                            families.push(family);
-                        }
-                        families
-                    },
-                )
-        })
-        .unwrap_or_default();
-
-    match families.as_slice() {
-        [] => {
-            diagnostics.push(diagnostic(
-                ImageGenerationPlannerDiagnosticCode::MissingFamilyEvidence,
-                "package_facts.diffusers.family_evidence",
-                "Diffusers image-generation planning requires concrete family evidence",
-            ));
-            None
-        }
-        [family] => Some(*family),
-        _ => {
-            diagnostics.push(diagnostic(
-                ImageGenerationPlannerDiagnosticCode::AmbiguousFamilyEvidence,
-                "package_facts.diffusers.family_evidence",
-                "Diffusers image-generation family evidence must resolve to one family",
-            ));
-            None
-        }
-    }
-}
-
-fn family_rules_for_planning(
-    family: ImageGenerationFamilyLabel,
-    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
-) -> Option<&'static ImageGenerationFamilyRules> {
-    let rules = image_generation_family_rules(family);
-    if rules.is_none() {
-        diagnostics.push(diagnostic(
-            ImageGenerationPlannerDiagnosticCode::UnsupportedFamily,
-            "package_facts.diffusers.family_evidence",
-            "this planner slice only supports Stable Diffusion family facts",
-        ));
-    }
-    rules
-}
-
-fn validate_required_components(
-    package_facts: &ResolvedModelPackageFacts,
-    family_rules: Option<&ImageGenerationFamilyRules>,
-    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
-) {
-    let Some(family_rules) = family_rules else {
-        return;
-    };
-    let Some(diffusers) = package_facts.diffusers.as_ref() else {
-        return;
-    };
-
-    for required in family_rules.required_components {
-        let present = diffusers
-            .components
-            .iter()
-            .filter(|component| {
-                component.role == *required && component.status == PackageFactStatus::Present
-            })
-            .collect::<Vec<_>>();
-        if present.is_empty() {
-            diagnostics.push(diagnostic(
-                ImageGenerationPlannerDiagnosticCode::MissingComponentRole,
-                format!(
-                    "package_facts.diffusers.components.{}",
-                    role_label(*required)
-                ),
-                format!(
-                    "Diffusers component role '{}' is required for the selected image family",
-                    role_label(*required)
-                ),
-            ));
-        } else if present.len() > 1 {
-            diagnostics.push(diagnostic(
-                ImageGenerationPlannerDiagnosticCode::AmbiguousComponentRole,
-                format!(
-                    "package_facts.diffusers.components.{}",
-                    role_label(*required)
-                ),
-                format!(
-                    "Diffusers component role '{}' resolved to multiple present sources for the selected image family",
-                    role_label(*required)
-                ),
-            ));
-        }
     }
 }
 
@@ -796,6 +692,34 @@ fn estimate_output_rgba_bytes(
     estimate
 }
 
+fn planner_diagnostic_from_family_adapter(
+    diagnostic: ImageGenerationFamilyAdapterDiagnostic,
+) -> ImageGenerationPlannerDiagnostic {
+    let code = match diagnostic.code {
+        ImageGenerationFamilyAdapterDiagnosticCode::MissingFamilyEvidence => {
+            ImageGenerationPlannerDiagnosticCode::MissingFamilyEvidence
+        }
+        ImageGenerationFamilyAdapterDiagnosticCode::AmbiguousFamilyEvidence => {
+            ImageGenerationPlannerDiagnosticCode::AmbiguousFamilyEvidence
+        }
+        ImageGenerationFamilyAdapterDiagnosticCode::UnsupportedFamily => {
+            ImageGenerationPlannerDiagnosticCode::UnsupportedFamily
+        }
+        ImageGenerationFamilyAdapterDiagnosticCode::MissingComponentRole => {
+            ImageGenerationPlannerDiagnosticCode::MissingComponentRole
+        }
+        ImageGenerationFamilyAdapterDiagnosticCode::AmbiguousComponentRole => {
+            ImageGenerationPlannerDiagnosticCode::AmbiguousComponentRole
+        }
+    };
+    ImageGenerationPlannerDiagnostic {
+        code,
+        severity: ImageGenerationPlannerDiagnosticSeverity::Error,
+        field_path: diagnostic.field_path,
+        message: diagnostic.message,
+    }
+}
+
 fn rejected(diagnostics: Vec<ImageGenerationPlannerDiagnostic>) -> ImageGenerationPlanningOutcome {
     ImageGenerationPlanningOutcome::Rejected { diagnostics }
 }
@@ -810,27 +734,6 @@ fn diagnostic(
         severity: ImageGenerationPlannerDiagnosticSeverity::Error,
         field_path: field_path.into(),
         message: message.into(),
-    }
-}
-
-fn role_label(role: DiffusersComponentRole) -> &'static str {
-    match role {
-        DiffusersComponentRole::PipelineIndex => "pipeline_index",
-        DiffusersComponentRole::Scheduler => "scheduler",
-        DiffusersComponentRole::Tokenizer => "tokenizer",
-        DiffusersComponentRole::Tokenizer2 => "tokenizer2",
-        DiffusersComponentRole::TextEncoder => "text_encoder",
-        DiffusersComponentRole::TextEncoder2 => "text_encoder2",
-        DiffusersComponentRole::TextEncoder3 => "text_encoder3",
-        DiffusersComponentRole::ImageProcessor => "image_processor",
-        DiffusersComponentRole::Processor => "processor",
-        DiffusersComponentRole::Unet => "unet",
-        DiffusersComponentRole::Transformer => "transformer",
-        DiffusersComponentRole::Vae => "vae",
-        DiffusersComponentRole::Controlnet => "controlnet",
-        DiffusersComponentRole::Adapter => "adapter",
-        DiffusersComponentRole::Weights => "weights",
-        DiffusersComponentRole::GenerationConfig => "generation_config",
     }
 }
 

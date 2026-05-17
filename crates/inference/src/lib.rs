@@ -33,6 +33,7 @@ pub mod device_contracts;
 pub mod embedding_runtime;
 pub mod execution_evidence;
 pub mod gateway;
+mod image_generation_family_adapters;
 mod image_generation_family_rules;
 pub mod image_generation_planner;
 pub mod kv_cache;

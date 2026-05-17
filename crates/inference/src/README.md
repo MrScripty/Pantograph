@@ -23,6 +23,7 @@ details.
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
 | `gateway_tests.rs` | Gateway lifecycle, request forwarding, runtime reuse, embedding prepare/restore, and mock-backend tests extracted from the production gateway facade. |
 | `gateway_tests/` | Behavior-focused child modules for oversized gateway test families. |
+| `image_generation_family_adapters.rs` | Internal PyTorch/Diffusers family-adapter resolver that turns Pumas family/component facts into a supported image family bridge or exact missing/ambiguous-facts diagnostics after scheduler selection. |
 | `image_generation_family_rules.rs` | Table-owned image-generation family requirements and option support used by the planner before worker execution. |
 | `image_generation_planner.rs` | Side-effect-free PyTorch/Diffusers image-generation planner contract that consumes Pumas package facts plus scheduler-selected backend/device/dependency-readiness proof before worker execution. |
 | `image_generation_planner_tests.rs` | Focused tests for the side-effect-free image-generation planner contract. |

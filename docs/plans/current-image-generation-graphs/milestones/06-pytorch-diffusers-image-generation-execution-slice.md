@@ -203,11 +203,16 @@ PyTorch/diffusers and produce a retained image artifact.
   Diffusers support. `diffusers` remains dependency/package/capability
   evidence and must not be emitted as a scheduler-selected executable backend
   key unless a real executable Diffusers backend is registered in the future.
-- [ ] Keep image/PyTorch-specific behavior inside the PyTorch/diffusers image
+- [x] Keep image/PyTorch-specific behavior inside the PyTorch/diffusers image
   bridge after scheduler selection. The image planner may require a
   scheduler-selected PyTorch backend and Diffusers package facts, but it must
   not own package-hint-to-backend candidate normalization, runtime ranking,
   warmed-runtime affinity, or historical scheduler policy.
+  - 2026-05-17: inference now keeps family-specific PyTorch/Diffusers bridge
+    behavior behind `image_generation_family_adapters`; scheduler-facing
+    package-hint normalization remains in `execution_evidence`, and planner
+    validation only consumes the scheduler-selected backend decision plus
+    package facts.
 - [x] Rename image-generation sampling-scheduler fields to
   `denoising_scheduler` across graph ports, node-engine request construction,
   inference planner DTOs, worker envelopes, Python worker inputs, diagnostics,
@@ -313,19 +318,29 @@ PyTorch/diffusers and produce a retained image artifact.
 - [x] Put PyTorch image-generation worker request/response translation in a
   focused helper or submodule so the backend facade remains readable and
   testable.
-- [ ] Add model-family adapters inside the PyTorch/diffusers bridge. Adapter
+- [x] Add model-family adapters inside the PyTorch/diffusers bridge. Adapter
   selection must use package facts such as pipeline family/class and component
   layout, not model id or display-name string matching.
+  - 2026-05-17: added an internal
+    `image_generation_family_adapters` resolver. The current adapter supports
+    Stable Diffusion from Pumas Diffusers family/component facts and does not
+    inspect model ids or display names.
 - [x] Implement family requirements as explicit table data or small typed
   requirement structs, not as scattered `match` arms mixed with worker calls.
 - [ ] Implement component-role extraction from Pumas facts before adapter
   selection. Extraction maps `ProcessorComponentFacts` and Transformers
   evidence into `ImageGenerationComponentRole` values and diagnostics.
-- [ ] Implement adapter selection in two stages: first resolve family/variant
+- [x] Implement adapter selection in two stages: first resolve family/variant
   from Pumas facts, then validate that the resolved family requirements match
   the request and package components.
-- [ ] Add a missing-facts report that lists the exact absent or ambiguous facts
+- [x] Add a missing-facts report that lists the exact absent or ambiguous facts
   needed from Pumas for a family to be supported.
+  - 2026-05-17: adapter resolution first resolves one concrete family from
+    `package_facts.diffusers.family_evidence`, then the resolved adapter
+    validates required component roles. Adapter diagnostics preserve exact
+    `package_facts.diffusers.family_evidence` and
+    `package_facts.diffusers.components.<role>` paths before the planner maps
+    them into public planner diagnostics.
 - [ ] Use Transformers task/config/generation names as the external naming
   reference where they fit Pantograph's Rust contracts.
 - [ ] Use ComfyUI and InvokeAI as reference implementations for diffusion

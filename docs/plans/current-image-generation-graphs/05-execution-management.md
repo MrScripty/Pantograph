@@ -5769,6 +5769,45 @@ Worker rules:
   - Remaining follow-up: resume Milestone 6 PyTorch/Diffusers bridge work with
     the image/PyTorch-specific behavior kept after scheduler selection, then
     continue family adapter and worker artifact retention rows.
+- 2026-05-17 image-generation family adapter slice:
+  - Smallest useful vertical slice: add an internal PyTorch/Diffusers
+    family-adapter resolver and route the image-generation planner through it
+    without changing scheduler selection, worker execution, or package-fact
+    production.
+  - Allowed write set: `crates/inference/src/image_generation_family_adapters.rs`,
+    `crates/inference/src/image_generation_planner.rs`,
+    `crates/inference/src/lib.rs`, `crates/inference/src/README.md`, focused
+    inference tests, and this plan directory. The untracked root proposal
+    markdown file was ignored per user instruction.
+  - No-fallback/no-legacy confirmation: adapter resolution consumes only
+    Pumas Diffusers family/component facts after the scheduler-selected
+    backend decision reaches the planner. It does not normalize package hints
+    into executable candidates, rank runtimes, inspect model ids or display
+    names, pick warmed runtimes, call the worker, or try alternate families
+    after a validation error.
+  - Implementation notes: added `image_generation_family_adapters` with a
+    two-stage resolver: first resolve exactly one supported family from
+    `package_facts.diffusers.family_evidence`, then validate required
+    component roles for that adapter. The planner maps the adapter's internal
+    exact missing/ambiguous-facts diagnostics into the existing public planner
+    diagnostic contract.
+  - Focused tests added/updated: adapter tests cover Stable Diffusion
+    resolution and exact missing VAE component reporting; existing planner
+    tests continue to cover ambiguous family evidence, unsupported families,
+    exact missing component role paths, ambiguous component sources, option
+    rejection, and no Diffusers backend aliasing.
+  - Verification passed: `cargo fmt --manifest-path crates/inference/Cargo.toml`;
+    `cargo test -p inference image_generation_family_adapters --lib`; `cargo
+    test -p inference image_generation_planner --lib`; `cargo check -p
+    inference`; `cargo fmt --manifest-path crates/inference/Cargo.toml --
+    --check`.
+  - Verification deviation: the two focused Cargo test commands were started
+    in parallel and one waited on Cargo package/build locks; both completed
+    successfully.
+  - Remaining follow-up: continue component-role extraction from richer Pumas
+    processor/Transformers facts when available, then wire PyTorch worker
+    loading to the Pumas-resolved Diffusers directory and retained artifact
+    output.
 
 ### Traceability Links
 
