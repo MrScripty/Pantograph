@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::ffi::CString;
 
+use pyo3::types::PyDict;
+
 use super::pytorch_worker_contract::{
     PyTorchAudioTranscriptionRequest, PyTorchAudioTranscriptionResult, PyTorchClearKvCacheRequest,
     PyTorchGenerateTextRequest, PyTorchGenerateTextResult, PyTorchGetLoadedInfoRequest,
@@ -98,10 +100,62 @@ worker_transformers = types.ModuleType("worker_transformers")
 worker_transformers.apply_compatibility_shims = _noop
 sys.modules["worker_transformers"] = worker_transformers
 
+worker_image_contract = types.ModuleType("worker_image_contract")
+worker_image_contract.generate_image_kwargs_from_envelope = lambda envelope: {}
+sys.modules["worker_image_contract"] = worker_image_contract
+
 worker_contract = types.ModuleType("worker_contract")
 worker_contract.AUTOMATIC_SPEECH_RECOGNITION_LOADER = "automatic_speech_recognition"
 worker_contract.CAUSAL_LM_LOADER = "causal_lm"
 worker_contract.GENERATE_TEXT_STREAM_OPERATION = "generate_text_stream"
+
+def _decode_worker_envelope(envelope):
+    decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
+    request_id = "unknown"
+    if isinstance(decoded, dict):
+        request_id = str(decoded.get("request_id") or request_id)
+    return decoded, request_id
+
+def _worker_success_response_json(
+    request_id,
+    result,
+    option_diagnostics=None,
+    resource_observation=None,
+):
+    response = {
+        "status": "ok",
+        "request_id": request_id,
+        "result": result,
+    }
+    if option_diagnostics:
+        response["option_diagnostics"] = option_diagnostics
+    if resource_observation is not None:
+        response["resource_observation"] = resource_observation
+    return json.dumps(response)
+
+def _worker_error_response_json(
+    request_id,
+    kind,
+    message,
+    canonical_code,
+    resource_observation=None,
+):
+    response = {
+        "status": "error",
+        "request_id": request_id,
+        "error": {
+            "kind": kind,
+            "message": str(message),
+            "canonical_code": canonical_code,
+        },
+    }
+    if resource_observation is not None:
+        response["resource_observation"] = resource_observation
+    return json.dumps(response)
+
+worker_contract.decode_worker_envelope = _decode_worker_envelope
+worker_contract.worker_success_response_json = _worker_success_response_json
+worker_contract.worker_error_response_json = _worker_error_response_json
 
 def _load_kwargs(envelope):
     decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
@@ -1571,6 +1625,88 @@ fn test_python_worker_shutdown_from_envelope_returns_structured_success() {
             serde_json::json!("req-shutdown-001")
         );
         assert_eq!(response["result"]["shutdown"], serde_json::json!(true));
+    });
+}
+
+#[test]
+fn test_python_worker_response_helpers_emit_success_contract() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+        let locals = PyDict::new(py);
+        locals
+            .set_item("worker_contract", module)
+            .expect("worker_contract module should bind");
+        let source = CString::new(
+            r#"
+response_json = worker_contract.worker_success_response_json(
+    "req-helper-ok",
+    {"initialized": True},
+    resource_observation={
+        "peak_ram_bytes": 4096,
+        "sources": [{
+            "metric_kind": "peak_ram_bytes",
+            "source_kind": "os_process_rss",
+        }],
+    },
+)
+"#,
+        )
+        .expect("helper test source should not contain nul bytes");
+        py.run(&source, Some(&locals), Some(&locals))
+            .expect("success helper should return JSON response");
+        let response_json: String = locals
+            .get_item("response_json")
+            .expect("response_json lookup should succeed")
+            .expect("response_json should exist")
+            .extract()
+            .expect("response_json should be a string");
+        let response: serde_json::Value =
+            serde_json::from_str(&response_json).expect("success response should be JSON");
+
+        assert_eq!(response["status"], serde_json::json!("ok"));
+        assert_eq!(response["request_id"], serde_json::json!("req-helper-ok"));
+        assert_eq!(response["result"]["initialized"], serde_json::json!(true));
+        assert_eq!(
+            response["resource_observation"]["peak_ram_bytes"],
+            serde_json::json!(4096)
+        );
+    });
+}
+
+#[test]
+fn test_python_worker_response_helpers_emit_error_contract() {
+    Python::with_gil(|py| {
+        let module = load_worker_contract_module(py);
+
+        let response_json = module
+            .call_method1(
+                "worker_error_response_json",
+                (
+                    "req-helper-error",
+                    "invalid_request",
+                    "invalid envelope",
+                    "pytorch_worker_invalid_request",
+                ),
+            )
+            .and_then(|value| value.extract::<String>())
+            .expect("error helper should return JSON response");
+        let response: serde_json::Value =
+            serde_json::from_str(&response_json).expect("error response should be JSON");
+
+        assert_eq!(response["status"], serde_json::json!("error"));
+        assert_eq!(
+            response["request_id"],
+            serde_json::json!("req-helper-error")
+        );
+        assert_eq!(
+            response["error"]["kind"],
+            serde_json::json!("invalid_request")
+        );
+        assert_eq!(
+            response["error"]["canonical_code"],
+            serde_json::json!("pytorch_worker_invalid_request")
+        );
+        assert!(response.get("resource_observation").is_none());
     });
 }
 

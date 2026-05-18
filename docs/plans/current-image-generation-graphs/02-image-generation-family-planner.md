@@ -703,6 +703,35 @@ Staged implementation:
    PyTorch worker success/failure envelope with optional resource observation
    and update Python worker shape checks before adding task-specific
    producers.
+   - 2026-05-18: completed the response-helper extraction sub-slice. The
+     Python worker now builds success and error responses through
+     `worker_contract.py` helpers, including a single optional
+     `resource_observation` attachment point for the later typed envelope
+     extension. `worker.py` no longer hand-builds per-operation JSON
+     success/error response dictionaries across init, shutdown, load,
+     generate text, image generation, audio transcription, unload, stream
+     setup, and KV operations. This sub-slice intentionally does not add Rust
+     `PyTorchWorkerSuccess`/`PyTorchWorkerFailure.resource_observation` fields
+     or backend telemetry producers.
+   - Discovered issue resolved: the generic PyTorch worker module test harness
+     did not register a stub `worker_image_contract` module even though
+     `worker.py` imports it at module load. The harness now provides that stub
+     so generic worker response tests cover the real module import boundary.
+   - No-fallback/no-legacy confirmation: this is a contract-construction
+     extraction only. It preserves existing response shapes and error kinds,
+     does not infer or synthesize resource telemetry, and leaves typed
+     telemetry decoding/projection for the next Rust envelope sub-slice.
+   - Verification: `cargo test -p inference --features backend-pytorch
+     test_python_worker_response_helpers --lib`, `cargo test -p inference
+     --features backend-pytorch
+     test_python_worker_shutdown_from_envelope_returns_structured_success
+     --lib`, `cargo test -p inference --features backend-pytorch
+     test_python_worker_generate_image_from_envelope_returns_worker_response
+     --lib`, `cargo test -p inference --features backend-pytorch
+     pytorch_worker_generate_text_success_response_returns_text --lib`, and
+     `cargo test -p inference --features backend-pytorch pytorch_worker
+     --lib`, `cargo check -p inference --features backend-pytorch`, `cargo
+     fmt --all -- --check`, and `git diff --check` for the allowed write set.
 7. [ ] Extend node-engine inference task result/event plumbing to forward the
    observation without interpreting metric sources.
 8. [ ] Extend embedded-runtime projection into inference diagnostics and

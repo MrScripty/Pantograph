@@ -58,6 +58,7 @@ from worker_contract import (
     AUTOMATIC_SPEECH_RECOGNITION_LOADER,
     CAUSAL_LM_LOADER,
     clear_kv_cache_kwargs_from_envelope,
+    decode_worker_envelope,
     GENERATE_TEXT_STREAM_OPERATION,
     generate_text_kwargs_from_envelope,
     get_loaded_info_kwargs_from_envelope,
@@ -69,6 +70,8 @@ from worker_contract import (
     transcribe_audio_kwargs_from_envelope,
     truncate_kv_cache_kwargs_from_envelope,
     unload_model_kwargs_from_envelope,
+    worker_error_response_json,
+    worker_success_response_json,
 )
 from worker_image_contract import generate_image_kwargs_from_envelope
 
@@ -100,71 +103,47 @@ def init_worker_from_envelope(envelope):
     """Validate worker initialization from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         init_worker_kwargs_from_envelope(decoded)
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": {"initialized": True},
-        })
+        return worker_success_response_json(request_id, {"initialized": True})
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_init_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_init_request",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_init_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_init_internal",
+        )
 
 
 def shutdown_worker_from_envelope(envelope):
     """Clear all worker-owned model state from the Rust worker envelope."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         shutdown_worker_kwargs_from_envelope(decoded)
         shutdown_worker()
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": {"shutdown": True},
-        })
+        return worker_success_response_json(request_id, {"shutdown": True})
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_shutdown_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_shutdown_request",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_shutdown_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_shutdown_internal",
+        )
 
 
 def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
@@ -325,32 +304,23 @@ def load_transformers_model_from_envelope(envelope):
     """Load a Transformers model from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         kwargs = load_transformers_model_kwargs_from_envelope(decoded)
         if not kwargs.get("model_path"):
             raise ValueError("PyTorch worker load envelope missing payload.entry_path")
         loader = kwargs.pop("loader", CAUSAL_LM_LOADER)
         _validate_transformers_loader(loader)
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_load_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_load_request",
+        )
 
     try:
         info = _load_transformers_model_from_kwargs(loader, kwargs)
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": info,
-        })
+        return worker_success_response_json(request_id, info)
     except RuntimeError as exc:
         message = str(exc)
         if "trust policy is closed" in message:
@@ -359,35 +329,21 @@ def load_transformers_model_from_envelope(envelope):
         else:
             kind = "model_load_failed"
             canonical_code = "pytorch_worker_model_load_failed"
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": kind,
-                "message": message,
-                "canonical_code": canonical_code,
-            },
-        })
+        return worker_error_response_json(request_id, kind, message, canonical_code)
     except (FileNotFoundError, ValueError, OSError, ImportError) as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "model_load_failed",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_model_load_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "model_load_failed",
+            exc,
+            "pytorch_worker_model_load_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "model_load_failed",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_model_load_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "model_load_failed",
+            exc,
+            "pytorch_worker_model_load_failed",
+        )
 
 
 def _validate_transformers_loader(loader):
@@ -415,327 +371,222 @@ def generate_text_from_envelope(envelope):
     """Generate text from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         kwargs = generate_text_kwargs_from_envelope(decoded)
         text = generate(**kwargs)
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": {"text": text},
-        })
+        return worker_success_response_json(request_id, {"text": text})
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_generate_text_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_generate_text_request",
+        )
     except RuntimeError as exc:
         message = str(exc)
         kind = "runtime_unavailable" if "No model loaded" in message else "generation_failed"
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": kind,
-                "message": message,
-                "canonical_code": "pytorch_worker_generate_text_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            kind,
+            message,
+            "pytorch_worker_generate_text_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_generate_text_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_generate_text_internal",
+        )
 
 
 def unload_model_from_envelope(envelope):
     """Unload the active model from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         unload_model_kwargs_from_envelope(decoded)
         unload_model()
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": {"unloaded": True},
-        })
+        return worker_success_response_json(request_id, {"unloaded": True})
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_unload_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_unload_request",
+        )
     except RuntimeError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "generation_failed",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_unload_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "generation_failed",
+            exc,
+            "pytorch_worker_unload_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_unload_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_unload_internal",
+        )
 
 
 def get_loaded_info_from_envelope(envelope):
     """Return loaded model info from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         get_loaded_info_kwargs_from_envelope(decoded)
         info = get_loaded_info()
         if info is None:
             raise RuntimeError("No model loaded. Call load_model() first.")
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": info,
-        })
+        return worker_success_response_json(request_id, info)
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_get_loaded_info_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_get_loaded_info_request",
+        )
     except RuntimeError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "runtime_unavailable",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_loaded_info_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "runtime_unavailable",
+            exc,
+            "pytorch_worker_kv_loaded_info_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_loaded_info_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_kv_loaded_info_internal",
+        )
 
 
 def clear_live_kv_cache_from_envelope(envelope):
     """Clear live KV state from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         clear_kv_cache_kwargs_from_envelope(decoded)
         result = clear_live_kv_cache()
         cleared = bool(result.get("cleared")) if isinstance(result, dict) else False
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": {"cleared": cleared},
-        })
+        return worker_success_response_json(request_id, {"cleared": cleared})
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_clear_kv_cache_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_clear_kv_cache_request",
+        )
     except RuntimeError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "generation_failed",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_clear_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "generation_failed",
+            exc,
+            "pytorch_worker_kv_clear_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_clear_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_kv_clear_internal",
+        )
 
 
 def save_live_kv_cache_from_envelope(envelope):
     """Persist live KV state from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         kwargs = save_kv_cache_kwargs_from_envelope(decoded)
         result = save_live_kv_cache(**kwargs)
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": result,
-        })
+        return worker_success_response_json(request_id, result)
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_save_kv_cache_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_save_kv_cache_request",
+        )
     except RuntimeError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "generation_failed",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_save_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "generation_failed",
+            exc,
+            "pytorch_worker_kv_save_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_save_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_kv_save_internal",
+        )
 
 
 def restore_live_kv_cache_from_envelope(envelope):
     """Restore live KV state from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         kwargs = restore_kv_cache_kwargs_from_envelope(decoded)
         result = restore_live_kv_cache(**kwargs)
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": result,
-        })
+        return worker_success_response_json(request_id, result)
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_restore_kv_cache_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_restore_kv_cache_request",
+        )
     except RuntimeError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "generation_failed",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_restore_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "generation_failed",
+            exc,
+            "pytorch_worker_kv_restore_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_restore_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_kv_restore_internal",
+        )
 
 
 def truncate_kv_cache_file_from_envelope(envelope):
     """Truncate persisted KV state from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         kwargs = truncate_kv_cache_kwargs_from_envelope(decoded)
         result = truncate_kv_cache_file(**kwargs)
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": result,
-        })
+        return worker_success_response_json(request_id, result)
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_truncate_kv_cache_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_truncate_kv_cache_request",
+        )
     except RuntimeError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "generation_failed",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_truncate_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "generation_failed",
+            exc,
+            "pytorch_worker_kv_truncate_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_kv_truncate_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_kv_truncate_internal",
+        )
 
 
 def generate_text_stream_from_envelope(envelope):
@@ -751,98 +602,68 @@ def generate_text_stream_setup_from_envelope(envelope):
     """Validate streaming generation setup and return a worker response JSON."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         generate_text_kwargs_from_envelope(
             decoded,
             expected_operation=GENERATE_TEXT_STREAM_OPERATION,
         )
         if _model is None:
             raise RuntimeError("No model loaded. Call load_model() first.")
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": {"ready": True},
-        })
+        return worker_success_response_json(request_id, {"ready": True})
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_generate_text_stream_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_generate_text_stream_request",
+        )
     except RuntimeError as exc:
         message = str(exc)
         kind = "runtime_unavailable" if "No model loaded" in message else "generation_failed"
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": kind,
-                "message": message,
-                "canonical_code": "pytorch_worker_generate_text_stream_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            kind,
+            message,
+            "pytorch_worker_generate_text_stream_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_generate_text_stream_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_generate_text_stream_internal",
+        )
 
 
 def transcribe_audio_from_envelope(envelope):
     """Transcribe audio from the Rust worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         kwargs = transcribe_audio_kwargs_from_envelope(decoded)
         result = transcribe_audio(**kwargs)
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": result,
-        })
+        return worker_success_response_json(request_id, result)
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_audio_transcription_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_audio_transcription_request",
+        )
     except RuntimeError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "generation_failed",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_audio_transcription_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "generation_failed",
+            exc,
+            "pytorch_worker_audio_transcription_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_audio_transcription_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_audio_transcription_internal",
+        )
 
 
 def load_model(
@@ -1557,16 +1378,13 @@ def generate_image_from_envelope(envelope):
     """Generate an image from the Rust-planned worker envelope contract."""
     request_id = "unknown"
     try:
-        decoded = json.loads(envelope) if isinstance(envelope, str) else envelope
-        if isinstance(decoded, dict):
-            request_id = str(decoded.get("request_id") or request_id)
+        decoded, request_id = decode_worker_envelope(envelope)
         planned = generate_image_kwargs_from_envelope(decoded)
         load_diffusion_model(planned["local_load_path"], device=planned["device"])
         result = generate_image(**planned["generation_kwargs"])
-        return json.dumps({
-            "status": "ok",
-            "request_id": request_id,
-            "result": {
+        return worker_success_response_json(
+            request_id,
+            {
                 "images": result.get("images", []),
                 "seed_used": result.get("seed_used"),
                 "metadata": {
@@ -1579,17 +1397,14 @@ def generate_image_from_envelope(envelope):
                     "device": planned["device"],
                 },
             },
-        })
+        )
     except ValueError as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "invalid_request",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_invalid_generate_image_request",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "invalid_request",
+            exc,
+            "pytorch_worker_invalid_generate_image_request",
+        )
     except RuntimeError as exc:
         message = str(exc)
         kind = (
@@ -1597,25 +1412,19 @@ def generate_image_from_envelope(envelope):
             if "No diffusion pipeline loaded" in message
             else "generation_failed"
         )
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": kind,
-                "message": message,
-                "canonical_code": "pytorch_worker_generate_image_failed",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            kind,
+            message,
+            "pytorch_worker_generate_image_failed",
+        )
     except Exception as exc:
-        return json.dumps({
-            "status": "error",
-            "request_id": request_id,
-            "error": {
-                "kind": "internal",
-                "message": str(exc),
-                "canonical_code": "pytorch_worker_generate_image_internal",
-            },
-        })
+        return worker_error_response_json(
+            request_id,
+            "internal",
+            exc,
+            "pytorch_worker_generate_image_internal",
+        )
 
 
 def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0,

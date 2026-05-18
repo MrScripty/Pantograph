@@ -24,6 +24,57 @@ SUPPORTED_TRANSFORMERS_LOADERS = {
 }
 
 
+def decode_worker_envelope(envelope):
+    """Decode a worker envelope and return it with the best request id."""
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    request_id = "unknown"
+    if isinstance(envelope, dict):
+        request_id = str(envelope.get("request_id") or request_id)
+    return envelope, request_id
+
+
+def worker_success_response_json(
+    request_id,
+    result,
+    option_diagnostics=None,
+    resource_observation=None,
+):
+    """Build a canonical worker success response JSON string."""
+    response = {
+        "status": "ok",
+        "request_id": request_id,
+        "result": result,
+    }
+    if option_diagnostics:
+        response["option_diagnostics"] = option_diagnostics
+    if resource_observation is not None:
+        response["resource_observation"] = resource_observation
+    return json.dumps(response)
+
+
+def worker_error_response_json(
+    request_id,
+    kind,
+    message,
+    canonical_code,
+    resource_observation=None,
+):
+    """Build a canonical worker error response JSON string."""
+    response = {
+        "status": "error",
+        "request_id": request_id,
+        "error": {
+            "kind": kind,
+            "message": str(message),
+            "canonical_code": canonical_code,
+        },
+    }
+    if resource_observation is not None:
+        response["resource_observation"] = resource_observation
+    return json.dumps(response)
+
+
 def _is_canonical_device_id(value):
     if not value or not value[0].isascii() or not value[0].islower():
         return False
