@@ -6528,6 +6528,45 @@ Worker rules:
     canonical typed resource-observation contracts and adapter-local typed
     translation where external runtimes lack structured telemetry.
   - Verification for this documentation slice: `git diff --check`.
+- 2026-05-18 resource-observation post-review blast-radius update:
+  - Smallest useful vertical slice: fold the latest codebase-review findings
+    into the accepted resource-observation plan before implementation starts.
+    This is documentation-only and does not change contracts or runtime
+    behavior.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - Codebase blast-radius findings: embedded-runtime diagnostic projection
+    currently only persists `InferenceExecutionDiagnosticObservedPayload` when
+    known bounded fields are present, so resource telemetry needs a diagnostic
+    payload and persistability-gate slice before terminal payload wiring;
+    `InferenceRequestLifecycleEvent` is constructed outside `gateway.rs` in
+    node-engine, embedded-runtime, and tests, so the builder/context migration
+    must be shared; the existing process spawner owns untracked
+    stdout/stderr/monitor `tokio::spawn` tasks and must not be copied by the
+    resource sampler; legacy OOM parser cleanup targets are
+    `inference::server`, `inference::embedding_runtime`, and
+    `backend::llamacpp_support`; the Python worker repeats JSON response
+    envelope construction and needs a local helper before resource telemetry
+    is added; runtime-registry history projection still needs memory/OOM facts
+    before scheduler ranking can consume persisted diagnostics-ledger memory
+    history.
+  - Plan updates made: the staged resource-observation design now makes
+    diagnostic projection an explicit slice before terminal
+    `RunTerminalPayload.resource_observation`, broadens lifecycle builder
+    migration across gateway/node-engine/embedded-runtime/tests, records the
+    tracked monitor lifecycle requirement as separate from current process
+    spawner cleanup, names the legacy OOM cleanup targets, requires Python
+    worker response helper extraction before telemetry, and keeps
+    runtime-registry memory/OOM history projection before ranking activation.
+  - No-fallback/no-legacy confirmation: these refinements do not preserve old
+    terminal string parsing, incidental metadata, image-only telemetry, or
+    fragmented scheduler history. Legacy string checks may remain only as
+    adapter-local external-runtime translation that immediately emits typed
+    memory-failure facts and bounded diagnostics.
+  - Verification for this documentation slice: `git diff --check`.
 
 ### Traceability Links
 

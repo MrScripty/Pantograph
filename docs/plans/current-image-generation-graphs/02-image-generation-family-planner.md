@@ -495,6 +495,44 @@ Standards-compliance refinement:
   the same slice with API consumer contract, structured producer contract,
   unsupported behavior, and revisit triggers.
 
+Post-review implementation refinement:
+
+- Treat diagnostic projection as a first-class slice, not incidental plumbing.
+  `pantograph-embedded-runtime` currently persists
+  `InferenceExecutionDiagnosticObservedPayload` only when its known bounded
+  diagnostic fields are present. Adding resource observations to lifecycle
+  events without extending that diagnostic payload and persistability gate
+  would let telemetry exist in lifecycle status while silently skipping the
+  diagnostic projection used by history and operator inspection. Add the
+  diagnostic payload field, validation, truncation/bounding, and projection
+  tests before terminal `RunTerminalPayload.resource_observation` wiring.
+- Make the lifecycle builder/context a shared contract migration, not a
+  `gateway.rs`-only helper. Node-engine, embedded-runtime, and tests also
+  construct `InferenceRequestLifecycleEvent` directly. The builder/default
+  constructor slice must migrate external constructors before telemetry fields
+  become required or semantically meaningful, so the event contract remains
+  easy to evolve and existing tests do not copy field lists.
+- Keep resource monitoring independent from the current process-spawner task
+  pattern. `StdProcessSpawner` uses untracked stdout/stderr/monitor
+  `tokio::spawn` tasks today; resource sampling must not copy that style.
+  Resource monitors need their own tracked guard/cancellation design and may
+  expose future process-spawner cleanup as a separate follow-up rather than
+  coupling this telemetry slice to a broad process lifecycle rewrite.
+- Name the legacy OOM cleanup targets explicitly: `inference::server`,
+  `inference::embedding_runtime`, and `backend::llamacpp_support`. Each must
+  either stop parsing log text because structured telemetry exists, or keep
+  parsing as a narrow external-runtime adapter translation that immediately
+  emits typed memory-failure facts and bounded diagnostics. Do not let these
+  strings flow into workflow terminal events, scheduler policy, or runtime
+  history as text-derived behavior.
+- Extract Python worker response helpers before adding resource telemetry to
+  operation responses. The Python worker currently hand-builds repeated JSON
+  success/error envelopes across operations. Add a small worker-local response
+  builder that preserves the current contract and attaches optional resource
+  observation in one place, then update Rust/Python fixture tests. Avoid
+  adding per-operation telemetry dictionaries that would drift across text,
+  image, audio, KV, load, unload, and health paths.
+
 ### Resource Monitor Platform Design
 
 Resource monitoring should follow the repository's cross-platform pattern:
@@ -556,31 +594,43 @@ Staged implementation:
 2. [ ] Extract a small inference lifecycle event builder/context and update
    lifecycle tests before adding telemetry fields. This prevents
    resource-observation wiring from expanding the existing `gateway.rs`
-   repeated constructor and `too_many_arguments` pattern.
-3. [ ] Add `resource_monitor` factory/modules with a `sysinfo` process-RSS
+   repeated constructor and `too_many_arguments` pattern and migrates
+   node-engine/embedded-runtime test constructors to the same event-building
+   boundary.
+3. [ ] Extend `InferenceExecutionDiagnosticObservedPayload` and
+   embedded-runtime diagnostic projection with bounded resource-observation
+   fields and persistability-gate coverage. This slice proves lifecycle-event
+   resource observations cannot be silently dropped before terminal payload
+   projection is implemented.
+4. [ ] Add `resource_monitor` factory/modules with a `sysinfo` process-RSS
    first implementation, Linux/macOS/Windows/unsupported gates for proven
    platform gaps, and tests proving the neutral API compiles without
    scattering `cfg()` through business logic.
-4. [ ] Extend `InferenceRequestLifecycleEvent` to carry
+5. [ ] Extend `InferenceRequestLifecycleEvent` to carry
    `InferenceExecutionResourceObservation` for all task families. Image
    generation is one consumer, not the contract owner.
-5. [ ] Extend the generic PyTorch worker success/failure envelope with
-   optional resource observation and update Python worker shape checks before
-   adding task-specific producers.
-6. [ ] Extend node-engine inference task result/event plumbing to forward the
+6. [ ] Extract Python worker response helpers, then extend the generic
+   PyTorch worker success/failure envelope with optional resource observation
+   and update Python worker shape checks before adding task-specific
+   producers.
+7. [ ] Extend node-engine inference task result/event plumbing to forward the
    observation without interpreting metric sources.
-7. [ ] Extend embedded-runtime projection into inference diagnostics and
+8. [ ] Extend embedded-runtime projection into inference diagnostics and
    `RunTerminalPayload.resource_observation`, including mapping tests for
    peak RAM, peak VRAM, explicit OOM, source/availability diagnostics, and
    unavailable metrics that should not be persisted as fake terminal values.
-8. [ ] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
+9. [ ] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
    shared process RSS where supported, and managed runtime structured
    telemetry. Each producer slice must include focused tests/fixtures for its
    source and availability states.
-9. [ ] Extend runtime-registry candidate history DTOs and embedded-runtime
+10. [ ] Remove or explicitly confine legacy OOM string parsing in
+    `inference::server`, `inference::embedding_runtime`, and
+    `backend::llamacpp_support` behind typed adapter-local memory failure
+    translation.
+11. [ ] Extend runtime-registry candidate history DTOs and embedded-runtime
    history projection with observed memory and OOM fields already computed by
    diagnostics-ledger.
-10. [ ] Activate scheduler history weighting only after observations are
+12. [ ] Activate scheduler history weighting only after observations are
     available in runtime-selection history and the existing five-completed-run
     threshold per valid runtime candidate is enforced.
 

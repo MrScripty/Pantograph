@@ -583,6 +583,21 @@ PyTorch/diffusers and produce a retained image artifact.
     `backend/llamacpp_support.rs`, or runtime-registry technical-fit modules
     must extract focused helpers or record an explicit decomposition review;
     telemetry work must not add new `too_many_arguments` allowances.
+  - 2026-05-18 post-review blast-radius update: diagnostic payload projection
+    is a first-class slice before terminal payload wiring. Extend
+    `InferenceExecutionDiagnosticObservedPayload` and the embedded-runtime
+    persistability gate before attaching observations to
+    `RunTerminalPayload.resource_observation`, so resource telemetry is not
+    silently dropped from inference diagnostics. The lifecycle builder/context
+    migration must cover direct constructors in gateway, node-engine,
+    embedded-runtime, and tests before telemetry fields are added. Resource
+    monitoring must use a tracked guard/cancellation owner and must not copy
+    the current untracked process-spawner `tokio::spawn` pattern. Legacy OOM
+    cleanup targets are explicit: `inference::server`,
+    `inference::embedding_runtime`, and `backend::llamacpp_support`. Extract a
+    Python worker response helper before adding telemetry to operation
+    envelopes, and keep runtime-registry memory/OOM history projection ahead
+    of scheduler ranking activation.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
