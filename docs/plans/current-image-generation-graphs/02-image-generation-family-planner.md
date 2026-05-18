@@ -259,9 +259,19 @@ Staged implementation plan:
      1. Replace runtime-registry reservation requirements and admission
         failures with typed byte-valued estimate/claim contracts and focused
         admission tests.
+        - 2026-05-18: completed for runtime-registry. Admission budgets now
+          carry typed resource budget rows, reservation requirements carry
+          typed byte-valued resource claims, admission failures report byte
+          fields, and reservation accounting/underflow errors use byte labels.
      2. Project embedded-runtime workflow requirements into that typed
         reservation contract with checked MiB-to-byte conversion until the
         upstream workflow requirement contract is replaced.
+        - 2026-05-18: completed the embedded-runtime projection shim for the
+          current workflow requirement contract. It converts the existing
+          workflow MiB estimates into typed runtime-registry byte claims with
+          checked arithmetic and returns `WorkflowServiceError::Internal` on
+          conversion overflow rather than saturating or silently omitting the
+          claim.
      3. Extend runtime snapshots with reduced typed admission budget and active
         claim facts so selection policy remains pure and testable.
      4. Filter/diagnose technical-fit candidates against typed peak memory

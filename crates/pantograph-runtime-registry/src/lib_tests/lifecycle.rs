@@ -111,9 +111,10 @@ fn register_runtime_without_new_budget_preserves_existing_budget() {
     let registry = RuntimeRegistry::new();
     registry.register_runtime(
         RuntimeRegistration::new("llama.cpp", "llama.cpp").with_admission_budget(
-            RuntimeAdmissionBudget::new(Some(4096), Some(8192))
-                .with_safety_margin_ram_mb(256)
-                .with_safety_margin_vram_mb(1024),
+            RuntimeAdmissionBudget::from_resources(vec![
+                ram_budget_mib(Some(4096)).with_safety_margin_bytes(ram_mib(256)),
+                vram_budget_mib(Some(8192)).with_safety_margin_bytes(vram_mib(1024)),
+            ]),
         ),
     );
 
@@ -138,12 +139,7 @@ fn register_runtime_without_new_budget_preserves_existing_budget() {
             usage_profile: None,
             model_id: None,
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_vram_mb: Some(7200),
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: Some(4096),
-                estimated_min_ram_mb: None,
-            }),
+            requirements: Some(reservation_requirements(vec![vram_claim_mib(7200)])),
             retention_hint: RuntimeRetentionHint::Ephemeral,
         })
         .expect_err("preserved vram budget should still reject oversized request");
@@ -153,11 +149,11 @@ fn register_runtime_without_new_budget_preserves_existing_budget() {
         RuntimeRegistryError::AdmissionRejected {
             runtime_id: "llama_cpp".to_string(),
             failure: RuntimeAdmissionFailure::InsufficientVram {
-                requested_mb: 7200,
-                available_mb: 7168,
-                reserved_mb: 0,
-                total_mb: 8192,
-                safety_margin_mb: 1024,
+                requested_bytes: vram_mib(7200),
+                available_bytes: vram_mib(7168),
+                reserved_bytes: 0,
+                total_bytes: vram_mib(8192),
+                safety_margin_bytes: vram_mib(1024),
             },
         }
     );

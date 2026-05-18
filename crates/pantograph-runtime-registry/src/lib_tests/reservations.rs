@@ -95,8 +95,12 @@ fn acquire_reservation_reuses_existing_owner_binding() {
 fn owner_reservation_reuse_recomputes_admission_against_other_claims_only() {
     let registry = RuntimeRegistry::new();
     registry.register_runtime(
-        RuntimeRegistration::new("budget-runtime", "budget-runtime")
-            .with_admission_budget(RuntimeAdmissionBudget::new(Some(1024), Some(1024))),
+        RuntimeRegistration::new("budget-runtime", "budget-runtime").with_admission_budget(
+            RuntimeAdmissionBudget::from_resources(vec![
+                ram_budget_mib(Some(1024)),
+                vram_budget_mib(Some(1024)),
+            ]),
+        ),
     );
     registry
         .transition_runtime(
@@ -115,12 +119,7 @@ fn owner_reservation_reuse_recomputes_admission_against_other_claims_only() {
             usage_profile: None,
             model_id: Some("model-a".to_string()),
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_ram_mb: Some(700),
-                estimated_peak_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimated_min_vram_mb: None,
-            }),
+            requirements: Some(reservation_requirements(vec![ram_claim_mib(700)])),
             retention_hint: RuntimeRetentionHint::Ephemeral,
         })
         .expect("first reservation");
@@ -133,12 +132,7 @@ fn owner_reservation_reuse_recomputes_admission_against_other_claims_only() {
             usage_profile: None,
             model_id: Some("model-b".to_string()),
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_ram_mb: Some(200),
-                estimated_peak_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimated_min_vram_mb: None,
-            }),
+            requirements: Some(reservation_requirements(vec![ram_claim_mib(200)])),
             retention_hint: RuntimeRetentionHint::Ephemeral,
         })
         .expect("second reservation");
@@ -151,12 +145,7 @@ fn owner_reservation_reuse_recomputes_admission_against_other_claims_only() {
             usage_profile: None,
             model_id: Some("model-a-v2".to_string()),
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_ram_mb: Some(824),
-                estimated_peak_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimated_min_vram_mb: None,
-            }),
+            requirements: Some(reservation_requirements(vec![ram_claim_mib(824)])),
             retention_hint: RuntimeRetentionHint::KeepAlive,
         })
         .expect("owner reuse should exclude existing claim when rechecking admission");

@@ -475,6 +475,14 @@ PyTorch/diffusers and produce a retained image artifact.
     reservation/admission contract in runtime-registry; later slices can expose
     reduced budget/claim facts in snapshots and make pure technical-fit
     selection reject over-budget candidates before runtime selection.
+  - 2026-05-18 typed admission/reservation contract slice: runtime-registry
+    admission now uses typed byte-valued budget rows and reservation claims,
+    and admission failures report bytes instead of MB fields. Embedded-runtime
+    projects current workflow MiB estimates into typed runtime-registry byte
+    claims with checked arithmetic until the upstream workflow requirement
+    contract is replaced. Remaining memory-policy work: expose reduced budget
+    and active claim facts in runtime snapshots, then make technical-fit
+    selection reject over-budget candidates through typed diagnostics.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

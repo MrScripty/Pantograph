@@ -6320,6 +6320,45 @@ Worker rules:
     not keep old fields as compatibility aliases or call mutable registry
     admission from the pure technical-fit selector.
   - Verification passed: `git diff --check`.
+- 2026-05-18 typed admission/reservation contract slice:
+  - Smallest useful vertical slice: replace runtime-registry
+    admission/reservation MB contracts with typed byte-valued resource budget
+    rows and reservation claims, plus the minimal embedded-runtime projection
+    needed to compile callers against the new contract.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/admission.rs`,
+    `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/lib_tests.rs`,
+    `crates/pantograph-runtime-registry/src/lib_tests/admission.rs`,
+    `crates/pantograph-runtime-registry/src/lib_tests/lifecycle.rs`,
+    `crates/pantograph-runtime-registry/src/lib_tests/reservations.rs`,
+    `crates/pantograph-embedded-runtime/src/embedded_workflow_host.rs`,
+    `crates/pantograph-embedded-runtime/src/embedded_workflow_host_helpers.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/host_helper_tests.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: the touched runtime-registry boundary
+    no longer accepts MB-shaped admission budgets, reservation requirements,
+    reservation claims, or admission failure payloads. Embedded-runtime
+    converts the still-upstream workflow MiB requirement fields into typed byte
+    claims with checked arithmetic; overflow fails with a typed workflow
+    service error instead of saturation, omission, or a fallback claim.
+  - Focused tests updated: runtime-registry admission/reservation tests assert
+    byte-valued budget math, admission failures, accounting overflow, and
+    budget underflow; embedded host helper tests assert checked projection into
+    typed runtime-registry claims and updated error mapping.
+  - Verification passed: `cargo test -p pantograph-runtime-registry admission
+    --lib`; `cargo test -p pantograph-embedded-runtime host_helper --lib`;
+    `cargo test -p pantograph-runtime-registry --lib`; `cargo fmt --all --
+    --check`; `git diff --check`.
+  - Verification deviation: the first `cargo fmt --all -- --check` run
+    reported formatting changes only; `cargo fmt --all` was applied before
+    final verification.
+  - Remaining follow-up: expose reduced typed admission budget and active claim
+    facts in runtime snapshots so the pure technical-fit selector can reject
+    over-budget candidates before selection.
 
 ### Traceability Links
 

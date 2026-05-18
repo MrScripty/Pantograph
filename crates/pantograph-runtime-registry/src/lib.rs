@@ -18,7 +18,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use admission::{
-    RuntimeAdmissionBudget, RuntimeAdmissionFailure, RuntimeReservationRequirements,
+    RuntimeAdmissionBudget, RuntimeAdmissionFailure, RuntimeAdmissionResourceBudget,
+    RuntimeAdmissionResourceKind, RuntimeReservationRequirements, RuntimeReservationResourceClaim,
 };
 pub use observation::{observed_runtime_status_from_lifecycle, RuntimeObservation};
 use pantograph_runtime_identity::canonical_runtime_id;
@@ -100,14 +101,14 @@ pub enum RuntimeRegistryError {
     },
 
     #[error(
-        "runtime '{runtime_id}' admission budget underflowed for {resource_kind}: total={total_mb}MB safety_margin={safety_margin_mb}MB reserved={reserved_mb}MB"
+        "runtime '{runtime_id}' admission budget underflowed for {resource_kind}: total={total_bytes} bytes safety_margin={safety_margin_bytes} bytes reserved={reserved_bytes} bytes"
     )]
     ResourceBudgetUnderflow {
         runtime_id: String,
         resource_kind: &'static str,
-        total_mb: u64,
-        safety_margin_mb: u64,
-        reserved_mb: u64,
+        total_bytes: u64,
+        safety_margin_bytes: u64,
+        reserved_bytes: u64,
     },
 }
 
@@ -299,7 +300,8 @@ impl RuntimeRegistry {
             return Err(RuntimeRegistryError::ReservationRejected(runtime_id));
         }
 
-        let claim = RuntimeReservationClaim::from_requirements(request.requirements.as_ref());
+        let claim =
+            reservation_claim_from_requirements(&runtime_id, request.requirements.as_ref())?;
         if let Some(failure) = admission_failure(record, claim, &guard.reservations, None)? {
             return Err(RuntimeRegistryError::AdmissionRejected {
                 runtime_id,
@@ -699,54 +701,64 @@ fn admission_failure(
         return Ok(None);
     };
 
-    if let Some(requested_ram_mb) = claim.ram_mb {
-        let reserved_ram_mb = total_reserved_resource_mb(
+    if let Some(requested_ram_bytes) = claim.ram_bytes {
+        let resource_kind = RuntimeAdmissionResourceKind::RamBytes.resource_label();
+        let reserved_ram_bytes = total_reserved_resource_bytes(
             &record.runtime_id,
-            "ram_mb",
+            resource_kind,
             reservations,
             excluded_reservation_id,
-            |reservation| reservation.claim.ram_mb,
+            |reservation| reservation.claim.ram_bytes,
         )?;
-        let available_ram_mb = available_budget_mb(
+        let ram_budget = budget.resource_budget(RuntimeAdmissionResourceKind::RamBytes);
+        let available_ram_bytes = available_budget_bytes(
             &record.runtime_id,
-            "ram_mb",
-            budget.total_ram_mb,
-            budget.safety_margin_ram_mb,
-            reserved_ram_mb,
+            resource_kind,
+            ram_budget,
+            reserved_ram_bytes,
         )?;
-        if requested_ram_mb > available_ram_mb {
+        if requested_ram_bytes > available_ram_bytes {
             return Ok(Some(RuntimeAdmissionFailure::InsufficientRam {
-                requested_mb: requested_ram_mb,
-                available_mb: available_ram_mb,
-                reserved_mb: reserved_ram_mb,
-                total_mb: budget.total_ram_mb.unwrap_or(0),
-                safety_margin_mb: budget.safety_margin_ram_mb,
+                requested_bytes: requested_ram_bytes,
+                available_bytes: available_ram_bytes,
+                reserved_bytes: reserved_ram_bytes,
+                total_bytes: ram_budget
+                    .and_then(|budget| budget.total_bytes)
+                    .unwrap_or(0),
+                safety_margin_bytes: ram_budget
+                    .map(|budget| budget.safety_margin_bytes)
+                    .unwrap_or(0),
             }));
         }
     }
 
-    if let Some(requested_vram_mb) = claim.vram_mb {
-        let reserved_vram_mb = total_reserved_resource_mb(
+    if let Some(requested_vram_bytes) = claim.vram_bytes {
+        let resource_kind = RuntimeAdmissionResourceKind::VramBytes.resource_label();
+        let reserved_vram_bytes = total_reserved_resource_bytes(
             &record.runtime_id,
-            "vram_mb",
+            resource_kind,
             reservations,
             excluded_reservation_id,
-            |reservation| reservation.claim.vram_mb,
+            |reservation| reservation.claim.vram_bytes,
         )?;
-        let available_vram_mb = available_budget_mb(
+        let vram_budget = budget.resource_budget(RuntimeAdmissionResourceKind::VramBytes);
+        let available_vram_bytes = available_budget_bytes(
             &record.runtime_id,
-            "vram_mb",
-            budget.total_vram_mb,
-            budget.safety_margin_vram_mb,
-            reserved_vram_mb,
+            resource_kind,
+            vram_budget,
+            reserved_vram_bytes,
         )?;
-        if requested_vram_mb > available_vram_mb {
+        if requested_vram_bytes > available_vram_bytes {
             return Ok(Some(RuntimeAdmissionFailure::InsufficientVram {
-                requested_mb: requested_vram_mb,
-                available_mb: available_vram_mb,
-                reserved_mb: reserved_vram_mb,
-                total_mb: budget.total_vram_mb.unwrap_or(0),
-                safety_margin_mb: budget.safety_margin_vram_mb,
+                requested_bytes: requested_vram_bytes,
+                available_bytes: available_vram_bytes,
+                reserved_bytes: reserved_vram_bytes,
+                total_bytes: vram_budget
+                    .and_then(|budget| budget.total_bytes)
+                    .unwrap_or(0),
+                safety_margin_bytes: vram_budget
+                    .map(|budget| budget.safety_margin_bytes)
+                    .unwrap_or(0),
             }));
         }
     }
@@ -774,7 +786,7 @@ fn validate_reservation_request(
         ));
     }
 
-    let claim = RuntimeReservationClaim::from_requirements(requirements);
+    let claim = reservation_claim_from_requirements(runtime_id, requirements)?;
     if let Some(failure) =
         admission_failure(record, claim, &state.reservations, existing_reservation_id)?
     {
@@ -787,12 +799,60 @@ fn validate_reservation_request(
     Ok(())
 }
 
-fn total_reserved_resource_mb<F>(
+fn reservation_claim_from_requirements(
+    runtime_id: &str,
+    requirements: Option<&RuntimeReservationRequirements>,
+) -> Result<RuntimeReservationClaim, RuntimeRegistryError> {
+    let Some(requirements) = requirements else {
+        return Ok(RuntimeReservationClaim::default());
+    };
+
+    let mut claim = RuntimeReservationClaim::default();
+    for resource_claim in &requirements.claims {
+        match resource_claim.kind {
+            RuntimeAdmissionResourceKind::RamBytes => {
+                claim.ram_bytes = Some(add_optional_resource_claim_bytes(
+                    runtime_id,
+                    RuntimeAdmissionResourceKind::RamBytes.resource_label(),
+                    claim.ram_bytes,
+                    resource_claim.bytes,
+                )?);
+            }
+            RuntimeAdmissionResourceKind::VramBytes => {
+                claim.vram_bytes = Some(add_optional_resource_claim_bytes(
+                    runtime_id,
+                    RuntimeAdmissionResourceKind::VramBytes.resource_label(),
+                    claim.vram_bytes,
+                    resource_claim.bytes,
+                )?);
+            }
+        }
+    }
+
+    Ok(claim)
+}
+
+fn add_optional_resource_claim_bytes(
+    runtime_id: &str,
+    resource_kind: &'static str,
+    current_bytes: Option<u64>,
+    additional_bytes: u64,
+) -> Result<u64, RuntimeRegistryError> {
+    current_bytes
+        .unwrap_or(0)
+        .checked_add(additional_bytes)
+        .ok_or_else(|| RuntimeRegistryError::ResourceAccountingOverflow {
+            runtime_id: runtime_id.to_string(),
+            resource_kind,
+        })
+}
+
+fn total_reserved_resource_bytes<F>(
     runtime_id: &str,
     resource_kind: &'static str,
     reservations: &BTreeMap<u64, RuntimeReservationRecord>,
     excluded_reservation_id: Option<u64>,
-    claim_mb: F,
+    claim_bytes: F,
 ) -> Result<u64, RuntimeRegistryError>
 where
     F: Fn(&RuntimeReservationRecord) -> Option<u64>,
@@ -801,9 +861,9 @@ where
         .values()
         .filter(|reservation| reservation.runtime_id == runtime_id)
         .filter(|reservation| Some(reservation.reservation_id) != excluded_reservation_id)
-        .filter_map(claim_mb)
-        .try_fold(0_u64, |total, claim_mb| {
-            total.checked_add(claim_mb).ok_or_else(|| {
+        .filter_map(claim_bytes)
+        .try_fold(0_u64, |total, claim_bytes| {
+            total.checked_add(claim_bytes).ok_or_else(|| {
                 RuntimeRegistryError::ResourceAccountingOverflow {
                     runtime_id: runtime_id.to_string(),
                     resource_kind,
@@ -812,30 +872,32 @@ where
         })
 }
 
-fn available_budget_mb(
+fn available_budget_bytes(
     runtime_id: &str,
     resource_kind: &'static str,
-    total_mb: Option<u64>,
-    safety_margin_mb: u64,
-    reserved_mb: u64,
+    budget: Option<&RuntimeAdmissionResourceBudget>,
+    reserved_bytes: u64,
 ) -> Result<u64, RuntimeRegistryError> {
-    let total_mb = total_mb.unwrap_or(u64::MAX);
-    let after_safety = total_mb.checked_sub(safety_margin_mb).ok_or_else(|| {
+    let total_bytes = budget
+        .and_then(|budget| budget.total_bytes)
+        .unwrap_or(u64::MAX);
+    let safety_margin_bytes = budget.map(|budget| budget.safety_margin_bytes).unwrap_or(0);
+    let after_safety = total_bytes
+        .checked_sub(safety_margin_bytes)
+        .ok_or_else(|| RuntimeRegistryError::ResourceBudgetUnderflow {
+            runtime_id: runtime_id.to_string(),
+            resource_kind,
+            total_bytes,
+            safety_margin_bytes,
+            reserved_bytes,
+        })?;
+    after_safety.checked_sub(reserved_bytes).ok_or_else(|| {
         RuntimeRegistryError::ResourceBudgetUnderflow {
             runtime_id: runtime_id.to_string(),
             resource_kind,
-            total_mb,
-            safety_margin_mb,
-            reserved_mb,
-        }
-    })?;
-    after_safety.checked_sub(reserved_mb).ok_or_else(|| {
-        RuntimeRegistryError::ResourceBudgetUnderflow {
-            runtime_id: runtime_id.to_string(),
-            resource_kind,
-            total_mb,
-            safety_margin_mb,
-            reserved_mb,
+            total_bytes,
+            safety_margin_bytes,
+            reserved_bytes,
         }
     })
 }
@@ -846,7 +908,7 @@ fn update_existing_reservation_from_request(
     request: RuntimeReservationRequest,
 ) -> Result<RuntimeReservationLease, RuntimeRegistryError> {
     let runtime_id = canonical_runtime_id(&request.runtime_id);
-    let claim = RuntimeReservationClaim::from_requirements(request.requirements.as_ref());
+    let claim = reservation_claim_from_requirements(&runtime_id, request.requirements.as_ref())?;
     let record = state
         .runtimes
         .get(&runtime_id)

@@ -143,7 +143,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             &WorkflowHost::workflow_capabilities(self, workflow_id)
                 .await?
                 .runtime_requirements,
-        );
+        )?;
         let trimmed_usage_profile = Self::trimmed_optional(usage_profile);
         let reservation_request = runtime_registry::active_runtime_reservation_request(
             runtime_registry,

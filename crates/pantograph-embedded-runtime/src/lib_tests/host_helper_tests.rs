@@ -1,10 +1,13 @@
 use super::*;
 use crate::embedded_workflow_host_helpers::unresolved_llamacpp_device_decision_error;
 
+const MIB: u64 = 1024 * 1024;
+
 #[test]
 fn reservation_requirements_returns_none_when_workflow_estimate_is_unknown() {
     assert_eq!(
-        EmbeddedWorkflowHost::reservation_requirements(&WorkflowRuntimeRequirements::default()),
+        EmbeddedWorkflowHost::reservation_requirements(&WorkflowRuntimeRequirements::default())
+            .expect("unknown estimates should not fail"),
         None
     );
 }
@@ -24,10 +27,14 @@ fn reservation_requirements_maps_workflow_memory_estimates() {
         })
         .expect("requirements should be forwarded when estimates exist");
 
-    assert_eq!(requirements.estimated_peak_vram_mb, Some(2048));
-    assert_eq!(requirements.estimated_peak_ram_mb, Some(1024));
-    assert_eq!(requirements.estimated_min_vram_mb, Some(1536));
-    assert_eq!(requirements.estimated_min_ram_mb, Some(768));
+    let requirements = requirements.expect("claims");
+    assert_eq!(
+        requirements.claims,
+        vec![
+            pantograph_runtime_registry::RuntimeReservationResourceClaim::vram_bytes(2048 * MIB),
+            pantograph_runtime_registry::RuntimeReservationResourceClaim::ram_bytes(1024 * MIB),
+        ]
+    );
 }
 
 #[test]
@@ -36,11 +43,11 @@ fn runtime_registry_admission_errors_map_to_runtime_not_ready() {
         RuntimeRegistryError::AdmissionRejected {
             runtime_id: "pytorch".to_string(),
             failure: pantograph_runtime_registry::RuntimeAdmissionFailure::InsufficientRam {
-                requested_mb: 1024,
-                available_mb: 0,
-                reserved_mb: 2048,
-                total_mb: 2048,
-                safety_margin_mb: 0,
+                requested_bytes: 1024 * MIB,
+                available_bytes: 0,
+                reserved_bytes: 2048 * MIB,
+                total_bytes: 2048 * MIB,
+                safety_margin_bytes: 0,
             },
         },
     );
@@ -81,9 +88,9 @@ fn runtime_registry_resource_accounting_errors_map_to_internal() {
         RuntimeRegistryError::ResourceBudgetUnderflow {
             runtime_id: "pytorch".to_string(),
             resource_kind: "vram",
-            total_mb: 1,
-            safety_margin_mb: 2,
-            reserved_mb: 0,
+            total_bytes: 1,
+            safety_margin_bytes: 2,
+            reserved_bytes: 0,
         },
     );
 

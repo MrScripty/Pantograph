@@ -5,7 +5,9 @@ fn admission_budget_rejects_reservations_that_exceed_remaining_vram() {
     let registry = RuntimeRegistry::new();
     registry.register_runtime(
         RuntimeRegistration::new("llama.cpp", "llama.cpp").with_admission_budget(
-            RuntimeAdmissionBudget::new(None, Some(8192)).with_safety_margin_vram_mb(1024),
+            RuntimeAdmissionBudget::from_resources(vec![
+                vram_budget_mib(Some(8192)).with_safety_margin_bytes(vram_mib(1024))
+            ]),
         ),
     );
     registry
@@ -25,12 +27,7 @@ fn admission_budget_rejects_reservations_that_exceed_remaining_vram() {
             usage_profile: None,
             model_id: Some("model-a".to_string()),
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_vram_mb: Some(6144),
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: Some(4096),
-                estimated_min_ram_mb: None,
-            }),
+            requirements: Some(reservation_requirements(vec![vram_claim_mib(6144)])),
             retention_hint: RuntimeRetentionHint::Ephemeral,
         })
         .expect("first reservation should fit available vram");
@@ -43,12 +40,7 @@ fn admission_budget_rejects_reservations_that_exceed_remaining_vram() {
             usage_profile: None,
             model_id: Some("model-b".to_string()),
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_vram_mb: Some(2048),
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: Some(1024),
-                estimated_min_ram_mb: None,
-            }),
+            requirements: Some(reservation_requirements(vec![vram_claim_mib(2048)])),
             retention_hint: RuntimeRetentionHint::Ephemeral,
         })
         .expect_err("second reservation should exceed remaining vram");
@@ -58,11 +50,11 @@ fn admission_budget_rejects_reservations_that_exceed_remaining_vram() {
         RuntimeRegistryError::AdmissionRejected {
             runtime_id: "llama_cpp".to_string(),
             failure: RuntimeAdmissionFailure::InsufficientVram {
-                requested_mb: 2048,
-                available_mb: 1024,
-                reserved_mb: 6144,
-                total_mb: 8192,
-                safety_margin_mb: 1024,
+                requested_bytes: vram_mib(2048),
+                available_bytes: vram_mib(1024),
+                reserved_bytes: vram_mib(6144),
+                total_bytes: vram_mib(8192),
+                safety_margin_bytes: vram_mib(1024),
             },
         }
     );
@@ -72,8 +64,9 @@ fn admission_budget_rejects_reservations_that_exceed_remaining_vram() {
 fn can_acquire_reservation_reports_admission_failure_without_creating_reservation() {
     let registry = RuntimeRegistry::new();
     registry.register_runtime(
-        RuntimeRegistration::new("llama.cpp", "llama.cpp")
-            .with_admission_budget(RuntimeAdmissionBudget::new(None, Some(4096))),
+        RuntimeRegistration::new("llama.cpp", "llama.cpp").with_admission_budget(
+            RuntimeAdmissionBudget::from_resources(vec![vram_budget_mib(Some(4096))]),
+        ),
     );
     registry
         .transition_runtime(
@@ -92,12 +85,7 @@ fn can_acquire_reservation_reports_admission_failure_without_creating_reservatio
             usage_profile: Some("interactive".to_string()),
             model_id: Some("model-blocked".to_string()),
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_vram_mb: Some(8192),
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: Some(4096),
-                estimated_min_ram_mb: None,
-            }),
+            requirements: Some(reservation_requirements(vec![vram_claim_mib(8192)])),
             retention_hint: RuntimeRetentionHint::Ephemeral,
         })
         .expect_err("dry-run admission check should reject oversized request");
@@ -121,7 +109,9 @@ fn admission_budget_uses_peak_ram_claim_and_release_restores_capacity() {
     let registry = RuntimeRegistry::new();
     registry.register_runtime(
         RuntimeRegistration::new("pytorch", "PyTorch").with_admission_budget(
-            RuntimeAdmissionBudget::new(Some(4096), None).with_safety_margin_ram_mb(512),
+            RuntimeAdmissionBudget::from_resources(vec![
+                ram_budget_mib(Some(4096)).with_safety_margin_bytes(ram_mib(512))
+            ]),
         ),
     );
     registry
@@ -141,12 +131,7 @@ fn admission_budget_uses_peak_ram_claim_and_release_restores_capacity() {
             usage_profile: Some("interactive".to_string()),
             model_id: Some("model-ram-a".to_string()),
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: Some(3584),
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: Some(1024),
-            }),
+            requirements: Some(reservation_requirements(vec![ram_claim_mib(3584)])),
             retention_hint: RuntimeRetentionHint::KeepAlive,
         })
         .expect("peak ram claim should fit exactly");
@@ -159,12 +144,7 @@ fn admission_budget_uses_peak_ram_claim_and_release_restores_capacity() {
             usage_profile: None,
             model_id: Some("model-ram-b".to_string()),
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: Some(1),
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: Some(1),
-            }),
+            requirements: Some(reservation_requirements(vec![ram_claim_mib(1)])),
             retention_hint: RuntimeRetentionHint::Ephemeral,
         })
         .expect_err("no ram should remain after first reservation");
@@ -174,11 +154,11 @@ fn admission_budget_uses_peak_ram_claim_and_release_restores_capacity() {
         RuntimeRegistryError::AdmissionRejected {
             runtime_id: "pytorch".to_string(),
             failure: RuntimeAdmissionFailure::InsufficientRam {
-                requested_mb: 1,
-                available_mb: 0,
-                reserved_mb: 3584,
-                total_mb: 4096,
-                safety_margin_mb: 512,
+                requested_bytes: ram_mib(1),
+                available_bytes: 0,
+                reserved_bytes: ram_mib(3584),
+                total_bytes: ram_mib(4096),
+                safety_margin_bytes: ram_mib(512),
             },
         }
     );
@@ -195,12 +175,7 @@ fn admission_budget_uses_peak_ram_claim_and_release_restores_capacity() {
             usage_profile: None,
             model_id: Some("model-ram-c".to_string()),
             pin_runtime: false,
-            requirements: Some(RuntimeReservationRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: Some(1024),
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: Some(512),
-            }),
+            requirements: Some(reservation_requirements(vec![ram_claim_mib(1024)])),
             retention_hint: RuntimeRetentionHint::Ephemeral,
         })
         .expect("released capacity should admit a new reservation");
@@ -222,8 +197,8 @@ fn reserved_resource_accounting_overflow_returns_typed_error() {
             retention_hint: RuntimeRetentionHint::Ephemeral,
             created_at_ms: 0,
             claim: RuntimeReservationClaim {
-                ram_mb: Some(u64::MAX),
-                vram_mb: None,
+                ram_bytes: Some(u64::MAX),
+                vram_bytes: None,
             },
         },
     );
@@ -240,39 +215,42 @@ fn reserved_resource_accounting_overflow_returns_typed_error() {
             retention_hint: RuntimeRetentionHint::Ephemeral,
             created_at_ms: 0,
             claim: RuntimeReservationClaim {
-                ram_mb: Some(1),
-                vram_mb: None,
+                ram_bytes: Some(1),
+                vram_bytes: None,
             },
         },
     );
 
-    let err = total_reserved_resource_mb("pytorch", "ram_mb", &reservations, None, |reservation| {
-        reservation.claim.ram_mb
-    })
-    .expect_err("reserved resource accounting should reject overflow");
+    let err =
+        total_reserved_resource_bytes("pytorch", "ram_bytes", &reservations, None, |reservation| {
+            reservation.claim.ram_bytes
+        })
+        .expect_err("reserved resource accounting should reject overflow");
 
     assert_eq!(
         err,
         RuntimeRegistryError::ResourceAccountingOverflow {
             runtime_id: "pytorch".to_string(),
-            resource_kind: "ram_mb",
+            resource_kind: "ram_bytes",
         }
     );
 }
 
 #[test]
 fn available_budget_underflow_returns_typed_error() {
-    let err = available_budget_mb("pytorch", "ram_mb", Some(1024), 1536, 0)
+    let budget = RuntimeAdmissionResourceBudget::ram_bytes(Some(ram_mib(1024)))
+        .with_safety_margin_bytes(ram_mib(1536));
+    let err = available_budget_bytes("pytorch", "ram_bytes", Some(&budget), 0)
         .expect_err("safety margin above total budget should fail");
 
     assert_eq!(
         err,
         RuntimeRegistryError::ResourceBudgetUnderflow {
             runtime_id: "pytorch".to_string(),
-            resource_kind: "ram_mb",
-            total_mb: 1024,
-            safety_margin_mb: 1536,
-            reserved_mb: 0,
+            resource_kind: "ram_bytes",
+            total_bytes: ram_mib(1024),
+            safety_margin_bytes: ram_mib(1536),
+            reserved_bytes: 0,
         }
     );
 }
