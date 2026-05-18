@@ -3797,6 +3797,27 @@ Worker rules:
   diff --check`. Remaining follow-up: add the true image-generation workflow
   fixture/smoke test once the Pumas selected-artifact fixture can resolve a
   load target without Pantograph fallback synthesis.
+- 2026-05-17: Completed the stream artifact checked-arithmetic slice.
+  Smallest useful vertical slice: replace remaining `saturating_add` range and
+  implicit sequence math in embedded-runtime stream artifactization with
+  checked arithmetic. Overflow now fails the media artifactization path before
+  appending a chunk and returns the existing redacted failed media event rather
+  than clamping byte ranges or reusing a saturated sequence value. Allowed
+  write set was
+  `crates/pantograph-embedded-runtime/src/task_executor/stream_artifacts.rs`
+  and plan docs. This preserves the no-fallback/no-legacy rule because it only
+  changes invalid artifact metadata progression from silent saturation to
+  explicit failure; it does not alter scheduler policy, backend/runtime
+  selection, worker envelopes, model facts, saved workflow fixtures, lockfiles,
+  generated files, or media retention ownership. Verification passed: `cargo
+  test -p pantograph-embedded-runtime stream_artifact_progress`, `cargo test
+  -p pantograph-embedded-runtime
+  stream_artifactizer_redacts_media_chunk_when_byte_range_overflows`, `cargo
+  test -p pantograph-embedded-runtime recorder_stream`, `cargo check -p
+  pantograph-embedded-runtime`, `cargo fmt --manifest-path
+  crates/pantograph-embedded-runtime/Cargo.toml`, and `git diff --check`.
+  Remaining follow-up: the broader checked-arithmetic milestone still needs a
+  scheduler/runtime memory-estimate review before it can be marked complete.
 - 2026-05-15: Completed the planner checked-resource-estimate verification
   slice. Added focused inference planner coverage proving overflow-prone width,
   height, and image-count combinations return

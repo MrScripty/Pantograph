@@ -369,6 +369,12 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Use checked arithmetic for dimensions, image counts, estimated memory,
   and artifact size calculations. Reject overflow or unacceptable estimates
   through typed planner diagnostics.
+  - 2026-05-17: stream artifact byte-range and implicit sequence progression
+    now use checked arithmetic and fail closed before appending media chunks
+    when overflow would occur. This removes silent clamping for retained
+    artifact range metadata. Remaining scope for this checklist item:
+    scheduler/runtime memory estimates and any other planner-side artifact
+    size limits must be verified before marking complete.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

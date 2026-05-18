@@ -66,7 +66,8 @@ impl StreamArtifactizer {
             &media_type,
             &relationship,
         )?;
-        let byte_range_end_exclusive = byte_range_start.saturating_add(body.len() as u64);
+        let (byte_range_end_exclusive, next_sequence) =
+            checked_stream_artifact_progress(byte_range_start, body.len(), sequence)?;
 
         let record = self
             .workflow_service
@@ -80,7 +81,7 @@ impl StreamArtifactizer {
         {
             let mut streams = self.streams.lock().ok()?;
             let state = streams.get_mut(&key)?;
-            state.next_sequence = sequence.saturating_add(1);
+            state.next_sequence = next_sequence;
             state.available_byte_length = byte_range_end_exclusive;
             state.stream_handle = Some(record.stream_handle.clone());
         }
@@ -328,6 +329,17 @@ fn default_media_type(payload_kind: ArtifactPayloadKind) -> String {
     .to_string()
 }
 
+fn checked_stream_artifact_progress(
+    byte_range_start: u64,
+    body_len: usize,
+    sequence: u64,
+) -> Option<(u64, u64)> {
+    let body_len = u64::try_from(body_len).ok()?;
+    let byte_range_end_exclusive = byte_range_start.checked_add(body_len)?;
+    let next_sequence = sequence.checked_add(1)?;
+    Some((byte_range_end_exclusive, next_sequence))
+}
+
 fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> ArtifactFormatMetadata {
     match payload_kind {
         ArtifactPayloadKind::Audio => ArtifactFormatMetadata {
@@ -390,5 +402,70 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             conversion_command_id: None,
             conversion_dependencies: Vec::new(),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        checked_stream_artifact_progress, redacted_failed_media_chunk, MediaStreamKey,
+        MediaStreamState, StreamArtifactizer,
+    };
+    use pantograph_workflow_service::WorkflowService;
+    use std::sync::Arc;
+
+    #[test]
+    fn stream_artifact_progress_rejects_byte_range_overflow() {
+        assert_eq!(checked_stream_artifact_progress(u64::MAX, 1, 0), None);
+    }
+
+    #[test]
+    fn stream_artifact_progress_rejects_sequence_overflow() {
+        assert_eq!(checked_stream_artifact_progress(0, 1, u64::MAX), None);
+    }
+
+    #[test]
+    fn stream_artifactizer_redacts_media_chunk_when_byte_range_overflows() {
+        let artifactizer = StreamArtifactizer::new(Arc::new(WorkflowService::new()));
+        let key = MediaStreamKey::new("exec-overflow", "task-overflow", "audio");
+        artifactizer
+            .streams
+            .lock()
+            .expect("stream state lock")
+            .insert(
+                key,
+                MediaStreamState {
+                    artifact_id: "artifact-overflow".to_string(),
+                    stream_handle: Some("stream-overflow".to_string()),
+                    next_sequence: 0,
+                    available_byte_length: u64::MAX,
+                },
+            );
+
+        let chunk = artifactizer.artifactize_chunk(
+            "task-overflow",
+            "exec-overflow",
+            "audio",
+            serde_json::json!({
+                "type": "audio_chunk",
+                "audio_base64": "AA==",
+            }),
+        );
+
+        assert!(chunk.get("audio_base64").is_none());
+        assert_eq!(chunk["lifecycle_state"], "failed");
+        assert_eq!(chunk["artifact_error"], "stream artifactization failed");
+    }
+
+    #[test]
+    fn redacted_failed_media_chunk_removes_image_base64() {
+        let chunk = redacted_failed_media_chunk(serde_json::json!({
+            "image_base64": "AA==",
+            "other": true
+        }));
+
+        assert!(chunk.get("image_base64").is_none());
+        assert_eq!(chunk["other"], true);
+        assert_eq!(chunk["lifecycle_state"], "failed");
     }
 }
