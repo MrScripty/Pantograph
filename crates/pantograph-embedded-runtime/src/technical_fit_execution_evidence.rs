@@ -5,6 +5,7 @@ use pantograph_runtime_registry::{
     RuntimeTechnicalFitDependencyReadinessState, RuntimeTechnicalFitDependencyReadinessSubjectKind,
     RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
     RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitResourceEstimate,
+    RuntimeTechnicalFitResourceEstimateKind,
 };
 use pantograph_workflow_service::WorkflowRuntimeCapability;
 
@@ -27,7 +28,7 @@ pub(crate) struct ExecutionEvidenceTechnicalFitAdapterInput<'a> {
     pub(crate) reports: &'a [ExecutionEvidenceTechnicalFitReport<'a>],
     pub(crate) runtime_capabilities: &'a [WorkflowRuntimeCapability],
     pub(crate) dependency_readiness_facts: &'a [inference::DependencyReadinessFact],
-    pub(crate) resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
+    pub(crate) resource_estimates: Vec<RuntimeTechnicalFitResourceEstimate>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -113,7 +114,7 @@ pub(crate) fn adapt_execution_evidence_to_technical_fit(
                             model_id: Some(candidate.model_id.clone()),
                             device_class: variant_facts.device_class,
                             selected_device_id: None,
-                            resource_estimate: input.resource_estimate.clone(),
+                            resource_estimates: input.resource_estimates.clone(),
                             observed_throughput_hint: None,
                             device_diagnostics: variant_facts.device_diagnostics,
                             dependency_readiness,
@@ -545,6 +546,13 @@ mod tests {
             .collect()
     }
 
+    fn peak_vram_estimate(value_bytes: u64) -> RuntimeTechnicalFitResourceEstimate {
+        RuntimeTechnicalFitResourceEstimate::available(
+            RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes,
+            value_bytes,
+        )
+    }
+
     #[test]
     fn adapter_projects_pytorch_diffusers_evidence_candidate() {
         let package = diffusers_package();
@@ -562,12 +570,7 @@ mod tests {
                 reports: &reports,
                 runtime_capabilities: &runtime_capabilities,
                 dependency_readiness_facts: &[],
-                resource_estimate: Some(RuntimeTechnicalFitResourceEstimate {
-                    estimated_peak_vram_mb: Some(4096),
-                    estimated_peak_ram_mb: Some(8192),
-                    estimated_min_vram_mb: Some(2048),
-                    estimated_min_ram_mb: Some(4096),
-                }),
+                resource_estimates: vec![peak_vram_estimate(4096_u64 * 1024 * 1024)],
             });
 
         assert!(output.diagnostics.is_empty());
@@ -625,7 +628,7 @@ mod tests {
                 reports: &reports,
                 runtime_capabilities: &runtime_capabilities,
                 dependency_readiness_facts: &dependency_readiness_facts,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
             });
 
         assert!(output.diagnostics.is_empty());
@@ -662,7 +665,7 @@ mod tests {
                 reports: &reports,
                 runtime_capabilities: &runtime_capabilities,
                 dependency_readiness_facts: &[],
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
             });
 
         assert!(output.candidates.is_empty());
@@ -697,7 +700,7 @@ mod tests {
                 reports: &reports,
                 runtime_capabilities: &[],
                 dependency_readiness_facts: &[],
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
             });
 
         assert!(output.candidates.is_empty());
@@ -747,7 +750,7 @@ mod tests {
                 reports: &reports,
                 runtime_capabilities: &runtime_capabilities,
                 dependency_readiness_facts: &[],
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
             });
 
         let codes = output

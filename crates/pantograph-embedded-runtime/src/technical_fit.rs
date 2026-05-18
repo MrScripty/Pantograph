@@ -20,9 +20,12 @@ use pantograph_runtime_registry::{
     RuntimeTechnicalFitHistoryThresholdState, RuntimeTechnicalFitObservedThroughputHint,
     RuntimeTechnicalFitOverride, RuntimeTechnicalFitPolicyPhase, RuntimeTechnicalFitReason,
     RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
-    RuntimeTechnicalFitResourceEstimate, RuntimeTechnicalFitResourcePressure,
+    RuntimeTechnicalFitResourceEstimate, RuntimeTechnicalFitResourceEstimateDiagnostic,
+    RuntimeTechnicalFitResourceEstimateDiagnosticCode,
+    RuntimeTechnicalFitResourceEstimateDiagnosticSeverity, RuntimeTechnicalFitResourceEstimateKind,
+    RuntimeTechnicalFitResourceEstimateState, RuntimeTechnicalFitResourcePressure,
     RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitSelectionPolicyTrace,
-    RuntimeTechnicalFitWarmupState,
+    RuntimeTechnicalFitUnavailableResourceEstimateState, RuntimeTechnicalFitWarmupState,
 };
 use pantograph_workflow_service::{
     WorkflowHost, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
@@ -37,7 +40,11 @@ use pantograph_workflow_service::{
     WorkflowTechnicalFitObservedThroughputHint, WorkflowTechnicalFitPolicyPhase,
     WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
     WorkflowTechnicalFitRequest, WorkflowTechnicalFitResourceEstimate,
-    WorkflowTechnicalFitSelectionMode, WorkflowTechnicalFitSelectionPolicyTrace,
+    WorkflowTechnicalFitResourceEstimateDiagnostic,
+    WorkflowTechnicalFitResourceEstimateDiagnosticCode,
+    WorkflowTechnicalFitResourceEstimateDiagnosticSeverity,
+    WorkflowTechnicalFitResourceEstimateKind, WorkflowTechnicalFitSelectionMode,
+    WorkflowTechnicalFitSelectionPolicyTrace, WorkflowTechnicalFitUnavailableResourceEstimateState,
 };
 use workflow_nodes::setup::PumasSelectorAccess;
 
@@ -95,7 +102,7 @@ pub fn build_runtime_technical_fit_request_with_backend_package_facts(
             runtime_capabilities,
             package_facts,
             dependency_readiness_facts,
-            runtime_requirements_resource_estimate(&request.runtime_requirements),
+            runtime_requirements_resource_estimates(&request.runtime_requirements),
         ));
     runtime_request_with_candidate_cap(runtime_request)
 }
@@ -338,7 +345,7 @@ pub fn build_runtime_technical_fit_request(
         legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
         candidates: runtime_capability_candidates(
             runtime_capabilities,
-            runtime_requirements_resource_estimate(&request.runtime_requirements),
+            runtime_requirements_resource_estimates(&request.runtime_requirements),
         ),
         candidate_history_summaries: Vec::new(),
         resource_pressure: project_resource_pressure(
@@ -375,10 +382,11 @@ pub fn project_workflow_technical_fit_decision(
             .selected_device_class
             .map(project_runtime_device_class),
         selected_device_id: decision.selected_device_id.clone(),
-        resource_estimate: decision
-            .resource_estimate
-            .as_ref()
-            .map(project_resource_estimate),
+        resource_estimates: decision
+            .resource_estimates
+            .iter()
+            .map(project_resource_estimate)
+            .collect(),
         observed_throughput_hint: decision
             .observed_throughput_hint
             .as_ref()
@@ -583,12 +591,12 @@ fn project_compatibility_issue(
 
 fn runtime_capability_candidates(
     runtime_capabilities: &[WorkflowRuntimeCapability],
-    resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
+    resource_estimates: Vec<RuntimeTechnicalFitResourceEstimate>,
 ) -> Vec<RuntimeTechnicalFitCandidate> {
     runtime_capabilities
         .iter()
         .flat_map(|capability| {
-            let resource_estimate = resource_estimate.clone();
+            let resource_estimates = resource_estimates.clone();
             let backend_key = capability
                 .backend_keys
                 .first()
@@ -614,7 +622,7 @@ fn runtime_capability_candidates(
                         model_id: None,
                         device_class: runtime_variant_facts.device_class,
                         selected_device_id: None,
-                        resource_estimate: resource_estimate.clone(),
+                        resource_estimates: resource_estimates.clone(),
                         observed_throughput_hint: None,
                         device_diagnostics: runtime_variant_facts.device_diagnostics,
                         dependency_readiness: Vec::new(),
@@ -667,7 +675,7 @@ fn runtime_candidates_from_execution_evidence(
     runtime_capabilities: &[WorkflowRuntimeCapability],
     package_facts: &[inference::ResolvedModelPackageFacts],
     dependency_readiness_facts: &[inference::DependencyReadinessFact],
-    resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
+    resource_estimates: Vec<RuntimeTechnicalFitResourceEstimate>,
 ) -> Vec<RuntimeTechnicalFitCandidate> {
     let graph_runtime_requirement = graph_runtime_requirement_from_request(request);
     let prepared_reports = package_facts
@@ -698,7 +706,7 @@ fn runtime_candidates_from_execution_evidence(
             reports: &report_inputs,
             runtime_capabilities,
             dependency_readiness_facts,
-            resource_estimate,
+            resource_estimates,
         });
 
     output
@@ -765,7 +773,7 @@ fn execution_evidence_diagnostic_candidate(
         model_id,
         device_class: None,
         selected_device_id: None,
-        resource_estimate: None,
+        resource_estimates: Vec::new(),
         observed_throughput_hint: None,
         device_diagnostics: vec![diagnostic],
         dependency_readiness: Vec::new(),
@@ -809,7 +817,7 @@ fn missing_model_package_facts_candidate(model_id: &str) -> RuntimeTechnicalFitC
         model_id: Some(model_id.to_string()),
         device_class: None,
         selected_device_id: None,
-        resource_estimate: None,
+        resource_estimates: Vec::new(),
         observed_throughput_hint: None,
         device_diagnostics: vec![missing_model_package_facts_diagnostic(model_id)],
         dependency_readiness: Vec::new(),
@@ -853,7 +861,7 @@ fn candidate_set_overflow_candidate(candidate_count: usize) -> RuntimeTechnicalF
         model_id: None,
         device_class: None,
         selected_device_id: None,
-        resource_estimate: None,
+        resource_estimates: Vec::new(),
         observed_throughput_hint: None,
         device_diagnostics: vec![candidate_set_overflow_diagnostic(candidate_count)],
         dependency_readiness: Vec::new(),
@@ -1291,11 +1299,136 @@ fn project_device_class(
 fn project_resource_estimate(
     estimate: &RuntimeTechnicalFitResourceEstimate,
 ) -> WorkflowTechnicalFitResourceEstimate {
-    WorkflowTechnicalFitResourceEstimate {
-        estimated_peak_vram_mb: estimate.estimated_peak_vram_mb,
-        estimated_peak_ram_mb: estimate.estimated_peak_ram_mb,
-        estimated_min_vram_mb: estimate.estimated_min_vram_mb,
-        estimated_min_ram_mb: estimate.estimated_min_ram_mb,
+    let kind = project_resource_estimate_kind(estimate.kind());
+    if estimate.state() == RuntimeTechnicalFitResourceEstimateState::Available {
+        if let Some(value_bytes) = estimate.value_bytes() {
+            return WorkflowTechnicalFitResourceEstimate::available(kind, value_bytes);
+        }
+        return WorkflowTechnicalFitResourceEstimate::unavailable(
+            kind,
+            WorkflowTechnicalFitUnavailableResourceEstimateState::NotAvailable,
+            vec![WorkflowTechnicalFitResourceEstimateDiagnostic::error(
+                WorkflowTechnicalFitResourceEstimateDiagnosticCode::InvalidInput,
+                "resource_estimates.value_bytes",
+                "available runtime resource estimate did not include a byte value",
+            )],
+        );
+    }
+
+    WorkflowTechnicalFitResourceEstimate::unavailable(
+        kind,
+        project_unavailable_resource_estimate_state(estimate.state()),
+        estimate
+            .diagnostics()
+            .iter()
+            .map(project_resource_estimate_diagnostic)
+            .collect(),
+    )
+}
+
+fn project_resource_estimate_kind(
+    kind: RuntimeTechnicalFitResourceEstimateKind,
+) -> WorkflowTechnicalFitResourceEstimateKind {
+    match kind {
+        RuntimeTechnicalFitResourceEstimateKind::OutputRgbaBytes => {
+            WorkflowTechnicalFitResourceEstimateKind::OutputRgbaBytes
+        }
+        RuntimeTechnicalFitResourceEstimateKind::VaeWorkingMemoryBytes => {
+            WorkflowTechnicalFitResourceEstimateKind::VaeWorkingMemoryBytes
+        }
+        RuntimeTechnicalFitResourceEstimateKind::ModelResidencyBytes => {
+            WorkflowTechnicalFitResourceEstimateKind::ModelResidencyBytes
+        }
+        RuntimeTechnicalFitResourceEstimateKind::RuntimeOverheadBytes => {
+            WorkflowTechnicalFitResourceEstimateKind::RuntimeOverheadBytes
+        }
+        RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes => {
+            WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes
+        }
+        RuntimeTechnicalFitResourceEstimateKind::PeakRamBytes => {
+            WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes
+        }
+        _ => unreachable!("unsupported runtime resource estimate kind"),
+    }
+}
+
+fn project_unavailable_resource_estimate_state(
+    state: RuntimeTechnicalFitResourceEstimateState,
+) -> WorkflowTechnicalFitUnavailableResourceEstimateState {
+    match state {
+        RuntimeTechnicalFitResourceEstimateState::Available => {
+            WorkflowTechnicalFitUnavailableResourceEstimateState::NotAvailable
+        }
+        RuntimeTechnicalFitResourceEstimateState::NotAvailable => {
+            WorkflowTechnicalFitUnavailableResourceEstimateState::NotAvailable
+        }
+        RuntimeTechnicalFitResourceEstimateState::NotImplemented => {
+            WorkflowTechnicalFitUnavailableResourceEstimateState::NotImplemented
+        }
+        RuntimeTechnicalFitResourceEstimateState::InsufficientFacts => {
+            WorkflowTechnicalFitUnavailableResourceEstimateState::InsufficientFacts
+        }
+        RuntimeTechnicalFitResourceEstimateState::Overflow => {
+            WorkflowTechnicalFitUnavailableResourceEstimateState::Overflow
+        }
+        RuntimeTechnicalFitResourceEstimateState::UnsupportedFamily => {
+            WorkflowTechnicalFitUnavailableResourceEstimateState::UnsupportedFamily
+        }
+        RuntimeTechnicalFitResourceEstimateState::UnsupportedRuntime => {
+            WorkflowTechnicalFitUnavailableResourceEstimateState::UnsupportedRuntime
+        }
+        _ => unreachable!("unsupported runtime resource estimate state"),
+    }
+}
+
+fn project_resource_estimate_diagnostic(
+    diagnostic: &RuntimeTechnicalFitResourceEstimateDiagnostic,
+) -> WorkflowTechnicalFitResourceEstimateDiagnostic {
+    WorkflowTechnicalFitResourceEstimateDiagnostic {
+        code: project_resource_estimate_diagnostic_code(diagnostic.code),
+        severity: project_resource_estimate_diagnostic_severity(diagnostic.severity),
+        field_path: diagnostic.field_path.clone(),
+        message: diagnostic.message.clone(),
+    }
+}
+
+fn project_resource_estimate_diagnostic_code(
+    code: RuntimeTechnicalFitResourceEstimateDiagnosticCode,
+) -> WorkflowTechnicalFitResourceEstimateDiagnosticCode {
+    match code {
+        RuntimeTechnicalFitResourceEstimateDiagnosticCode::ArithmeticOverflow => {
+            WorkflowTechnicalFitResourceEstimateDiagnosticCode::ArithmeticOverflow
+        }
+        RuntimeTechnicalFitResourceEstimateDiagnosticCode::InvalidInput => {
+            WorkflowTechnicalFitResourceEstimateDiagnosticCode::InvalidInput
+        }
+        RuntimeTechnicalFitResourceEstimateDiagnosticCode::InsufficientFacts => {
+            WorkflowTechnicalFitResourceEstimateDiagnosticCode::InsufficientFacts
+        }
+        RuntimeTechnicalFitResourceEstimateDiagnosticCode::NotAvailable => {
+            WorkflowTechnicalFitResourceEstimateDiagnosticCode::NotAvailable
+        }
+        RuntimeTechnicalFitResourceEstimateDiagnosticCode::NotImplemented => {
+            WorkflowTechnicalFitResourceEstimateDiagnosticCode::NotImplemented
+        }
+        RuntimeTechnicalFitResourceEstimateDiagnosticCode::UnsupportedFamily => {
+            WorkflowTechnicalFitResourceEstimateDiagnosticCode::UnsupportedFamily
+        }
+        RuntimeTechnicalFitResourceEstimateDiagnosticCode::UnsupportedRuntime => {
+            WorkflowTechnicalFitResourceEstimateDiagnosticCode::UnsupportedRuntime
+        }
+        _ => unreachable!("unsupported runtime resource estimate diagnostic code"),
+    }
+}
+
+fn project_resource_estimate_diagnostic_severity(
+    severity: RuntimeTechnicalFitResourceEstimateDiagnosticSeverity,
+) -> WorkflowTechnicalFitResourceEstimateDiagnosticSeverity {
+    match severity {
+        RuntimeTechnicalFitResourceEstimateDiagnosticSeverity::Error => {
+            WorkflowTechnicalFitResourceEstimateDiagnosticSeverity::Error
+        }
+        _ => unreachable!("unsupported runtime resource estimate diagnostic severity"),
     }
 }
 
@@ -1335,16 +1468,45 @@ fn project_resource_pressure(
     }
 }
 
-fn runtime_requirements_resource_estimate(
+fn runtime_requirements_resource_estimates(
     requirements: &pantograph_workflow_service::WorkflowRuntimeRequirements,
-) -> Option<RuntimeTechnicalFitResourceEstimate> {
-    RuntimeTechnicalFitResourceEstimate {
-        estimated_peak_vram_mb: requirements.estimated_peak_vram_mb,
-        estimated_peak_ram_mb: requirements.estimated_peak_ram_mb,
-        estimated_min_vram_mb: requirements.estimated_min_vram_mb,
-        estimated_min_ram_mb: requirements.estimated_min_ram_mb,
+) -> Vec<RuntimeTechnicalFitResourceEstimate> {
+    let mut estimates = Vec::new();
+    if let Some(peak_vram_mb) = requirements.estimated_peak_vram_mb {
+        estimates.push(runtime_requirements_mb_estimate(
+            RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes,
+            peak_vram_mb,
+            "runtime_requirements.estimated_peak_vram_mb",
+        ));
     }
-    .normalized()
+    if let Some(peak_ram_mb) = requirements.estimated_peak_ram_mb {
+        estimates.push(runtime_requirements_mb_estimate(
+            RuntimeTechnicalFitResourceEstimateKind::PeakRamBytes,
+            peak_ram_mb,
+            "runtime_requirements.estimated_peak_ram_mb",
+        ));
+    }
+    estimates
+}
+
+fn runtime_requirements_mb_estimate(
+    kind: RuntimeTechnicalFitResourceEstimateKind,
+    value_mb: u64,
+    field_path: &'static str,
+) -> RuntimeTechnicalFitResourceEstimate {
+    const BYTES_PER_MIB: u64 = 1024 * 1024;
+    match value_mb.checked_mul(BYTES_PER_MIB) {
+        Some(value_bytes) => RuntimeTechnicalFitResourceEstimate::available(kind, value_bytes),
+        None => RuntimeTechnicalFitResourceEstimate::unavailable(
+            kind,
+            RuntimeTechnicalFitUnavailableResourceEstimateState::Overflow,
+            vec![RuntimeTechnicalFitResourceEstimateDiagnostic::error(
+                RuntimeTechnicalFitResourceEstimateDiagnosticCode::ArithmeticOverflow,
+                field_path,
+                "runtime requirement memory estimate overflowed while converting MiB to bytes",
+            )],
+        ),
+    }
 }
 
 fn project_selection_mode(
@@ -1582,6 +1744,27 @@ mod tests {
             .collect()
     }
 
+    fn runtime_peak_vram_estimate(value_bytes: u64) -> RuntimeTechnicalFitResourceEstimate {
+        RuntimeTechnicalFitResourceEstimate::available(
+            RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes,
+            value_bytes,
+        )
+    }
+
+    fn workflow_peak_vram_estimate(value_bytes: u64) -> WorkflowTechnicalFitResourceEstimate {
+        WorkflowTechnicalFitResourceEstimate::available(
+            WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+            value_bytes,
+        )
+    }
+
+    fn workflow_peak_ram_estimate(value_bytes: u64) -> WorkflowTechnicalFitResourceEstimate {
+        WorkflowTechnicalFitResourceEstimate::available(
+            WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes,
+            value_bytes,
+        )
+    }
+
     fn candidate_with_history_key(candidate_id: &str) -> RuntimeTechnicalFitCandidate {
         RuntimeTechnicalFitCandidate {
             candidate_id: candidate_id.to_string(),
@@ -1591,7 +1774,7 @@ mod tests {
             model_id: Some("pumas://models/juggernaut-xl".to_string()),
             device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
             selected_device_id: Some("cuda:0".to_string()),
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
@@ -1736,10 +1919,10 @@ mod tests {
         );
         assert_eq!(
             runtime_request.candidates[0]
-                .resource_estimate
-                .as_ref()
-                .and_then(|estimate| estimate.estimated_peak_vram_mb),
-            Some(4096)
+                .resource_estimates
+                .first()
+                .and_then(RuntimeTechnicalFitResourceEstimate::value_bytes),
+            Some(4096_u64 * 1024 * 1024)
         );
         assert_eq!(
             runtime_request.candidates[0].device_diagnostics[0].code,
@@ -1758,6 +1941,35 @@ mod tests {
                 estimated_peak_vram_mb: Some(4096),
                 estimated_peak_ram_mb: Some(8192),
             })
+        );
+    }
+
+    #[test]
+    fn runtime_requirements_resource_estimates_emit_typed_overflow_diagnostic() {
+        let estimates = runtime_requirements_resource_estimates(&WorkflowRuntimeRequirements {
+            estimated_peak_vram_mb: Some(u64::MAX),
+            estimated_peak_ram_mb: None,
+            estimated_min_vram_mb: None,
+            estimated_min_ram_mb: None,
+            estimation_confidence: "fixture".to_string(),
+            required_models: Vec::new(),
+            required_backends: Vec::new(),
+            required_extensions: Vec::new(),
+        });
+
+        assert_eq!(estimates.len(), 1);
+        assert_eq!(
+            estimates[0].kind(),
+            RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes
+        );
+        assert_eq!(
+            estimates[0].state(),
+            RuntimeTechnicalFitResourceEstimateState::Overflow
+        );
+        assert_eq!(estimates[0].value_bytes(), None);
+        assert_eq!(
+            estimates[0].diagnostics()[0].code,
+            RuntimeTechnicalFitResourceEstimateDiagnosticCode::ArithmeticOverflow
         );
     }
 
@@ -1920,12 +2132,7 @@ mod tests {
             selected_model_id: Some("model-a".to_string()),
             selected_device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
             selected_device_id: Some("cuda:0".to_string()),
-            resource_estimate: Some(RuntimeTechnicalFitResourceEstimate {
-                estimated_peak_vram_mb: Some(4096),
-                estimated_peak_ram_mb: Some(8192),
-                estimated_min_vram_mb: Some(2048),
-                estimated_min_ram_mb: Some(4096),
-            }),
+            resource_estimates: vec![runtime_peak_vram_estimate(4096_u64 * 1024 * 1024)],
             observed_throughput_hint: Some(RuntimeTechnicalFitObservedThroughputHint {
                 tokens_per_second_milli: None,
                 images_per_second_milli: Some(125),
@@ -2000,12 +2207,7 @@ mod tests {
                 selected_model_id: Some("model-a".to_string()),
                 selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
                 selected_device_id: Some("cuda:0".to_string()),
-                resource_estimate: Some(WorkflowTechnicalFitResourceEstimate {
-                    estimated_peak_vram_mb: Some(4096),
-                    estimated_peak_ram_mb: Some(8192),
-                    estimated_min_vram_mb: Some(2048),
-                    estimated_min_ram_mb: Some(4096),
-                }),
+                resource_estimates: vec![workflow_peak_vram_estimate(4096_u64 * 1024 * 1024)],
                 observed_throughput_hint: Some(WorkflowTechnicalFitObservedThroughputHint {
                     tokens_per_second_milli: None,
                     images_per_second_milli: Some(125),
@@ -2177,12 +2379,10 @@ mod tests {
                 selected_model_id: None,
                 selected_device_class: Some(WorkflowTechnicalFitDeviceClass::Cuda),
                 selected_device_id: None,
-                resource_estimate: Some(WorkflowTechnicalFitResourceEstimate {
-                    estimated_peak_vram_mb: Some(4096),
-                    estimated_peak_ram_mb: Some(8192),
-                    estimated_min_vram_mb: Some(2048),
-                    estimated_min_ram_mb: Some(4096),
-                }),
+                resource_estimates: vec![
+                    workflow_peak_vram_estimate(4096_u64 * 1024 * 1024),
+                    workflow_peak_ram_estimate(8192_u64 * 1024 * 1024),
+                ],
                 observed_throughput_hint: None,
                 device_diagnostics: vec![WorkflowTechnicalFitDeviceDiagnostic {
                     code: WorkflowTechnicalFitDeviceDiagnosticCode::CandidateUnavailable,

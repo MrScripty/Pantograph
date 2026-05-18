@@ -6199,6 +6199,44 @@ Worker rules:
   - Remaining follow-up: update workflow-service and embedded-runtime
     technical-fit mirrors/projections to the same typed estimate records before
     running broader cross-crate checks.
+- 2026-05-18 workflow/embedded technical-fit estimate projection slice:
+  - Smallest useful vertical slice: replace downstream workflow-service and
+    embedded-runtime technical-fit projection with the runtime-registry typed
+    `resource_estimates` contract while leaving scheduler admission/ranking for
+    the later memory-policy slices.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/lib.rs`,
+    affected workflow-service technical-fit/preflight tests,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit_execution_evidence.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: workflow-service and embedded-runtime
+    no longer construct or project the old singular technical-fit
+    `resource_estimate` optional MB-field shape. Embedded-runtime converts
+    runtime-requirement peak RAM/VRAM inputs into typed byte estimates with
+    checked arithmetic, and overflow is represented as a typed diagnostic
+    rather than saturation, omission, `0`, or confidence-string control flow.
+  - Focused tests added/updated: workflow-service serde coverage proves typed
+    estimate states serialize without legacy MB fields; embedded-runtime
+    technical-fit tests prove runtime-registry estimates project into workflow
+    decisions, execution-evidence candidates retain typed estimate vectors, and
+    MiB-to-byte overflow emits a typed estimate diagnostic.
+  - Verification passed: `cargo test -p pantograph-runtime-registry
+    technical_fit --lib`; `cargo test -p pantograph-workflow-service
+    technical_fit --lib`; `cargo test -p pantograph-embedded-runtime
+    technical_fit --lib`; `cargo fmt --all -- --check`; `git diff --check`.
+  - Verification deviation: the first embedded-runtime focused test run
+    exposed stale single-estimate expectations after the contract replacement;
+    the expectations were updated to assert the new multi-estimate
+    `peak_vram_bytes`/`peak_ram_bytes` behavior and the focused suite then
+    passed.
+  - Remaining follow-up: update candidate admission to consume typed
+    `peak_vram_bytes`/`peak_ram_bytes` estimates and current pressure, then add
+    timing/memory/OOM history capture for the later scheduler ranking policy.
 - 2026-05-17 small-model Pumas load-target smoke path slice:
   - Smallest useful vertical slice: update the embedded-runtime Puma-Lib Tiny
     SD Turbo-style imported Diffusers fixture so it includes a selected

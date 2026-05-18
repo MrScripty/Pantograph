@@ -208,6 +208,14 @@ Staged implementation plan:
      `resource_estimate` optional MB-field contract was removed from this
      boundary. Workflow-service and embedded-runtime mirrors remain the next
      serial projection slices before this shared-contract stage is complete.
+   - 2026-05-18 workflow/embedded projection slice: workflow-service now
+     mirrors typed technical-fit estimate records and embedded-runtime projects
+     runtime-registry estimates without reintroducing optional MB fields.
+     Runtime-requirement peak RAM/VRAM estimates are converted to byte-valued
+     typed records with checked arithmetic; overflow emits a typed estimate
+     diagnostic instead of being saturated, omitted, or converted through a
+     confidence string. Scheduler admission and history-backed ranking remain
+     later staged work.
 2. [x] Move existing output-size checked arithmetic into the shared estimate shape
    and add tests proving overflow is diagnostic-backed.
    - 2026-05-17: `ImageGenerationExecutionPlan` now carries typed

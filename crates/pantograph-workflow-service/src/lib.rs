@@ -71,7 +71,12 @@ pub use technical_fit::{
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitPolicyPhase,
     WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
     WorkflowTechnicalFitRequest, WorkflowTechnicalFitResourceEstimate,
+    WorkflowTechnicalFitResourceEstimateDiagnostic,
+    WorkflowTechnicalFitResourceEstimateDiagnosticCode,
+    WorkflowTechnicalFitResourceEstimateDiagnosticSeverity,
+    WorkflowTechnicalFitResourceEstimateKind, WorkflowTechnicalFitResourceEstimateState,
     WorkflowTechnicalFitSelectionMode, WorkflowTechnicalFitSelectionPolicyTrace,
+    WorkflowTechnicalFitUnavailableResourceEstimateState,
 };
 pub use trace::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,

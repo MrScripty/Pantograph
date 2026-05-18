@@ -452,6 +452,14 @@ PyTorch/diffusers and produce a retained image artifact.
     diagnostics. The old registry `resource_estimate` optional MB-field shape
     was removed; workflow-service and embedded-runtime projection remain before
     the shared technical-fit estimate replacement is complete.
+  - 2026-05-18 workflow/embedded technical-fit estimate projection slice:
+    workflow-service mirrors the typed estimate record contract and
+    embedded-runtime projects runtime-registry estimates into workflow
+    decisions without optional MB-field compatibility. Runtime-requirement
+    peak RAM/VRAM inputs now become byte-valued typed estimates through
+    checked arithmetic, and overflow produces a typed estimate diagnostic.
+    Candidate admission and history-backed scheduler ranking remain later
+    memory-policy slices.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

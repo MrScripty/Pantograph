@@ -108,7 +108,7 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
             selected_model_id: None,
             selected_device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),

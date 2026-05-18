@@ -91,30 +91,166 @@ impl WorkflowTechnicalFitDevicePolicy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WorkflowTechnicalFitResourceEstimateKind {
+    OutputRgbaBytes,
+    VaeWorkingMemoryBytes,
+    ModelResidencyBytes,
+    RuntimeOverheadBytes,
+    PeakVramBytes,
+    PeakRamBytes,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WorkflowTechnicalFitResourceEstimateState {
+    Available,
+    NotAvailable,
+    NotImplemented,
+    InsufficientFacts,
+    Overflow,
+    UnsupportedFamily,
+    UnsupportedRuntime,
+}
+
+impl WorkflowTechnicalFitResourceEstimateState {
+    pub fn is_available(self) -> bool {
+        self == Self::Available
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WorkflowTechnicalFitUnavailableResourceEstimateState {
+    NotAvailable,
+    NotImplemented,
+    InsufficientFacts,
+    Overflow,
+    UnsupportedFamily,
+    UnsupportedRuntime,
+}
+
+impl From<WorkflowTechnicalFitUnavailableResourceEstimateState>
+    for WorkflowTechnicalFitResourceEstimateState
+{
+    fn from(state: WorkflowTechnicalFitUnavailableResourceEstimateState) -> Self {
+        match state {
+            WorkflowTechnicalFitUnavailableResourceEstimateState::NotAvailable => {
+                Self::NotAvailable
+            }
+            WorkflowTechnicalFitUnavailableResourceEstimateState::NotImplemented => {
+                Self::NotImplemented
+            }
+            WorkflowTechnicalFitUnavailableResourceEstimateState::InsufficientFacts => {
+                Self::InsufficientFacts
+            }
+            WorkflowTechnicalFitUnavailableResourceEstimateState::Overflow => Self::Overflow,
+            WorkflowTechnicalFitUnavailableResourceEstimateState::UnsupportedFamily => {
+                Self::UnsupportedFamily
+            }
+            WorkflowTechnicalFitUnavailableResourceEstimateState::UnsupportedRuntime => {
+                Self::UnsupportedRuntime
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WorkflowTechnicalFitResourceEstimateDiagnosticCode {
+    ArithmeticOverflow,
+    InvalidInput,
+    InsufficientFacts,
+    NotAvailable,
+    NotImplemented,
+    UnsupportedFamily,
+    UnsupportedRuntime,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WorkflowTechnicalFitResourceEstimateDiagnosticSeverity {
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowTechnicalFitResourceEstimateDiagnostic {
+    pub code: WorkflowTechnicalFitResourceEstimateDiagnosticCode,
+    pub severity: WorkflowTechnicalFitResourceEstimateDiagnosticSeverity,
+    pub field_path: String,
+    pub message: String,
+}
+
+impl WorkflowTechnicalFitResourceEstimateDiagnostic {
+    pub fn error(
+        code: WorkflowTechnicalFitResourceEstimateDiagnosticCode,
+        field_path: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            code,
+            severity: WorkflowTechnicalFitResourceEstimateDiagnosticSeverity::Error,
+            field_path: field_path.into(),
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowTechnicalFitResourceEstimate {
+    kind: WorkflowTechnicalFitResourceEstimateKind,
+    state: WorkflowTechnicalFitResourceEstimateState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_peak_vram_mb: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_peak_ram_mb: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_min_vram_mb: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_min_ram_mb: Option<u64>,
+    value_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    diagnostics: Vec<WorkflowTechnicalFitResourceEstimateDiagnostic>,
 }
 
 impl WorkflowTechnicalFitResourceEstimate {
-    pub fn normalized(&self) -> Option<Self> {
-        if self.estimated_peak_vram_mb.is_none()
-            && self.estimated_peak_ram_mb.is_none()
-            && self.estimated_min_vram_mb.is_none()
-            && self.estimated_min_ram_mb.is_none()
-        {
-            None
-        } else {
-            Some(self.clone())
+    pub fn available(kind: WorkflowTechnicalFitResourceEstimateKind, value_bytes: u64) -> Self {
+        Self {
+            kind,
+            state: WorkflowTechnicalFitResourceEstimateState::Available,
+            value_bytes: Some(value_bytes),
+            diagnostics: Vec::new(),
         }
+    }
+
+    pub fn unavailable(
+        kind: WorkflowTechnicalFitResourceEstimateKind,
+        state: WorkflowTechnicalFitUnavailableResourceEstimateState,
+        diagnostics: Vec<WorkflowTechnicalFitResourceEstimateDiagnostic>,
+    ) -> Self {
+        Self {
+            kind,
+            state: state.into(),
+            value_bytes: None,
+            diagnostics,
+        }
+    }
+
+    pub fn kind(&self) -> WorkflowTechnicalFitResourceEstimateKind {
+        self.kind
+    }
+
+    pub fn state(&self) -> WorkflowTechnicalFitResourceEstimateState {
+        self.state
+    }
+
+    pub fn value_bytes(&self) -> Option<u64> {
+        self.value_bytes
+    }
+
+    pub fn diagnostics(&self) -> &[WorkflowTechnicalFitResourceEstimateDiagnostic] {
+        &self.diagnostics
     }
 }
 
@@ -586,8 +722,8 @@ pub struct WorkflowTechnicalFitDecision {
     pub selected_device_class: Option<WorkflowTechnicalFitDeviceClass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resource_estimate: Option<WorkflowTechnicalFitResourceEstimate>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_estimates: Vec<WorkflowTechnicalFitResourceEstimate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observed_throughput_hint: Option<WorkflowTechnicalFitObservedThroughputHint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -619,10 +755,7 @@ impl WorkflowTechnicalFitDecision {
             selected_model_id: normalize_trimmed_string(self.selected_model_id.as_deref()),
             selected_device_class: self.selected_device_class,
             selected_device_id: normalize_trimmed_string(self.selected_device_id.as_deref()),
-            resource_estimate: self
-                .resource_estimate
-                .as_ref()
-                .and_then(WorkflowTechnicalFitResourceEstimate::normalized),
+            resource_estimates: self.resource_estimates.clone(),
             observed_throughput_hint: self
                 .observed_throughput_hint
                 .as_ref()
@@ -1331,7 +1464,7 @@ mod tests {
             selected_model_id: Some(" model-a ".to_string()),
             selected_device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
@@ -1441,6 +1574,36 @@ mod tests {
     }
 
     #[test]
+    fn workflow_technical_fit_resource_estimates_use_typed_states_without_legacy_mb_fields() {
+        let available = WorkflowTechnicalFitResourceEstimate::available(
+            WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+            4096_u64 * 1024 * 1024,
+        );
+        let unavailable = WorkflowTechnicalFitResourceEstimate::unavailable(
+            WorkflowTechnicalFitResourceEstimateKind::ModelResidencyBytes,
+            WorkflowTechnicalFitUnavailableResourceEstimateState::InsufficientFacts,
+            vec![WorkflowTechnicalFitResourceEstimateDiagnostic::error(
+                WorkflowTechnicalFitResourceEstimateDiagnosticCode::InsufficientFacts,
+                "package_facts.model_residency_bytes",
+                "model residency estimate requires package facts",
+            )],
+        );
+
+        let value = serde_json::to_value(vec![available, unavailable])
+            .expect("resource estimates should serialize");
+        let estimates = value.as_array().expect("estimates serialize as array");
+
+        assert_eq!(estimates[0]["kind"], "peak_vram_bytes");
+        assert_eq!(estimates[0]["state"], "available");
+        assert_eq!(estimates[0]["value_bytes"], 4096_u64 * 1024 * 1024);
+        assert!(estimates[0].get("estimated_peak_vram_mb").is_none());
+        assert_eq!(estimates[1]["kind"], "model_residency_bytes");
+        assert_eq!(estimates[1]["state"], "insufficient_facts");
+        assert_eq!(estimates[1]["diagnostics"][0]["code"], "insufficient_facts");
+        assert!(estimates[1].get("estimated_peak_ram_mb").is_none());
+    }
+
+    #[test]
     fn technical_fit_preflight_blocks_missing_candidate_selected_backend() {
         let decision = WorkflowTechnicalFitDecision {
             selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
@@ -1451,7 +1614,7 @@ mod tests {
             selected_model_id: None,
             selected_device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
@@ -1490,7 +1653,7 @@ mod tests {
             selected_model_id: Some("image/model".to_string()),
             selected_device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: vec![WorkflowTechnicalFitDeviceDiagnostic {
                 code: WorkflowTechnicalFitDeviceDiagnosticCode::ExplicitDeviceUnavailable,
@@ -1542,7 +1705,7 @@ mod tests {
             selected_model_id: Some("llm/model".to_string()),
             selected_device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
@@ -1580,7 +1743,7 @@ mod tests {
             selected_model_id: Some("vlm/qwen".to_string()),
             selected_device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
