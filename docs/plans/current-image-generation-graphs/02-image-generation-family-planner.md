@@ -244,6 +244,31 @@ Staged implementation plan:
    pressure before selection. Explicit runtime/device requirements must fail
    with diagnostics when they cannot fit; omitted requirements let the
    scheduler choose among valid candidates.
+   - 2026-05-18 re-plan boundary: the next code slice cannot safely make
+     admission consume typed estimates while `RuntimeReservationRequirements`,
+     `RuntimeAdmissionBudget`, and admission failure payloads still use
+     separate MB-shaped fields and runtime snapshots omit budget/claim facts.
+     The accepted path is option 3: replace the reservation/admission contract
+     with typed byte-valued estimate/claim facts, expose only reduced typed
+     budget and active claim facts in runtime snapshots, then make the
+     technical-fit selector reject over-budget candidates before selection.
+     Do not bridge typed estimates into the old MB reservation fields, keep
+     both contracts active, or call registry admission from the selector as an
+     implicit side-effect.
+   - Option 3 staged implementation:
+     1. Replace runtime-registry reservation requirements and admission
+        failures with typed byte-valued estimate/claim contracts and focused
+        admission tests.
+     2. Project embedded-runtime workflow requirements into that typed
+        reservation contract with checked MiB-to-byte conversion until the
+        upstream workflow requirement contract is replaced.
+     3. Extend runtime snapshots with reduced typed admission budget and active
+        claim facts so selection policy remains pure and testable.
+     4. Filter/diagnose technical-fit candidates against typed peak memory
+        estimates, current reservations, safety margins, and explicit
+        runtime/device requirements.
+     5. Replace the upstream workflow runtime-requirement MB fields with the
+        shared typed estimate contract in a later serial contract slice.
 6. [ ] Persist observed timing and memory/OOM facts. History-backed memory and
    timing ranking starts only after every valid runtime candidate for the same
    workflow/model/runtime key has at least five completed runs; before that,

@@ -466,6 +466,15 @@ PyTorch/diffusers and produce a retained image artifact.
     `peak_vram_bytes`/`peak_ram_bytes` estimates and current loaded-runtime
     pressure, leaving memory admission/reservation failure diagnostics for the
     next memory-policy slice.
+  - 2026-05-18 memory admission re-plan boundary: do not implement the next
+    admission slice by translating typed estimates back into the old
+    runtime-registry MB reservation fields. Runtime-registry admission,
+    reservation requirements, admission budgets, failure payloads, runtime
+    snapshots, and technical-fit selector inputs must move to one typed
+    byte-valued estimate/claim path. The first code slice should replace the
+    reservation/admission contract in runtime-registry; later slices can expose
+    reduced budget/claim facts in snapshots and make pure technical-fit
+    selection reject over-budget candidates before runtime selection.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

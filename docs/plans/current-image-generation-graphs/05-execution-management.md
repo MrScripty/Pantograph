@@ -6297,6 +6297,29 @@ Worker rules:
   - Remaining follow-up: implement the memory-policy admission/reservation
     slice so explicit runtime/device requirements fail with typed diagnostics
     when typed estimates and current pressure cannot fit.
+- 2026-05-18 memory admission re-plan boundary:
+  - Finding: the next memory-policy code slice crosses a contract boundary.
+    Runtime-registry admission and reservation still use MB-shaped
+    `RuntimeReservationRequirements`/`RuntimeAdmissionBudget` fields, while
+    technical-fit candidates now use typed byte-valued estimates. Runtime
+    snapshots also do not expose reduced admission budget or active claim facts,
+    so a pure selector cannot reject over-budget candidates yet.
+  - Options considered:
+    1. Translate typed estimates back into existing MB reservation fields.
+       Rejected because it preserves the legacy contract and creates a second
+       source of truth.
+    2. Add typed fields beside the MB fields. Rejected because it fragments
+       admission reasoning and creates ambiguous precedence rules.
+    3. Replace admission/reservation with typed byte-valued estimate and claim
+       facts, expose reduced budget/claim facts in snapshots, then make
+       technical-fit selection consume those facts. Accepted because it keeps
+       scheduler policy pure, keeps runtime selection easy to change, and
+       removes the legacy MB path instead of shimming it.
+  - No-fallback/no-legacy confirmation: the next code slices must remove the
+    old reservation/admission MB contract from each touched boundary. They must
+    not keep old fields as compatibility aliases or call mutable registry
+    admission from the pure technical-fit selector.
+  - Verification passed: `git diff --check`.
 
 ### Traceability Links
 
