@@ -352,14 +352,30 @@ PyTorch/diffusers and produce a retained image artifact.
     `package_facts.diffusers.family_evidence` and
     `package_facts.diffusers.components.<role>` paths before the planner maps
     them into public planner diagnostics.
-- [ ] Use Transformers task/config/generation names as the external naming
+- [x] Use Transformers task/config/generation names as the external naming
   reference where they fit Pantograph's Rust contracts.
-- [ ] Use ComfyUI and InvokeAI as reference implementations for diffusion
+  - 2026-05-17: reference review confirmed `model_type`, `architectures`,
+    `auto_map`, `trust_remote_code`, and generation-config conventions remain
+    the right Pumas-facing evidence names. Pantograph keeps those as input
+    facts for Rust-owned planner contracts rather than exposing Transformers
+    Python APIs through graph nodes or scheduler decisions.
+- [x] Use ComfyUI and InvokeAI as reference implementations for diffusion
   family taxonomy and required-component validation, including SD/SDXL, FLUX,
   FLUX.2, qwen-image, lumina-image, glm-image, and z-image patterns.
-- [ ] Keep reference-derived logic behind Pantograph-owned Rust planner types
+  - 2026-05-17: reference review found ComfyUI family listings and detector
+    evidence for SD/SDXL, FLUX, FLUX.2, Lumina Image, Qwen Image, and Z-Image;
+    ComfyUI encoder/tokenizer selection evidence for Lumina, Qwen Image, FLUX,
+    FLUX.2, and Z-Image; and InvokeAI taxonomy/variant notes for SD, SDXL,
+    FLUX, FLUX.2 Klein variants, and Z-Image. GLM Image remains Pumas-owned
+    family evidence until local executable references are stronger.
+- [x] Keep reference-derived logic behind Pantograph-owned Rust planner types
   and Pumas package facts; do not mirror ComfyUI/InvokeAI graph/runtime
   architecture.
+  - 2026-05-17: reference-derived findings are recorded as requirements for
+    Pumas package facts, Pantograph family labels/variants, typed component
+    roles, provider-backed scheduler option ids, and planner diagnostics only.
+    Pantograph must not copy ComfyUI's node graph, state-dict scanner,
+    sampler runtime, or InvokeAI's model manager/invocation/UI architecture.
 - [ ] Validate denoising scheduler, dimensions, negative prompt, guidance
   scale, image count, dtype, device policy, dependency environment, and
   required package components before calling the worker.

@@ -3862,6 +3862,30 @@ Worker rules:
   and `git diff --check`. Remaining follow-up: executable support for those
   families still requires explicit family rules, component requirements,
   option-support tables, and runtime worker support in later slices.
+- 2026-05-17: Completed the image-family reference documentation slice.
+  Inspected local Transformers, ComfyUI, and InvokeAI reference repositories
+  for naming and taxonomy evidence only. Findings recorded in
+  `02-image-generation-family-planner.md`: Transformers remains the naming
+  reference for `model_type`, `architectures`, `auto_map`,
+  `trust_remote_code`, and generation-config facts; ComfyUI confirms SD/SDXL,
+  FLUX, FLUX.2, Lumina Image, Qwen Image, and Z-Image as distinct families
+  with family-specific detector and encoder/tokenizer evidence; InvokeAI
+  confirms taxonomy/variant conventions for SD, SDXL, FLUX, FLUX.2 Klein, and
+  Z-Image and reinforces that new families require separate taxonomy,
+  validation, loading, denoise, scheduler, metadata, and test concerns. This
+  documentation slice does not change source, tests, worker envelopes,
+  scheduler policy, Pumas DTOs, generated files, lockfiles, saved workflow
+  fixtures, or runtime behavior. It preserves the no-fallback/no-legacy rule by
+  recording reference-derived knowledge only as requirements for Pumas package
+  facts, Pantograph-owned Rust planner labels/variants/component roles,
+  provider-backed scheduler option ids, and planner diagnostics. Verification
+  performed: targeted `sed`/`rg` reads over
+  `/media/jeremy/OrangeCream/Linux Software/repos/reference/frameworks-libraries/transformers`,
+  `/media/jeremy/OrangeCream/Linux Software/repos/reference/ai-systems/ComfyUI`,
+  `/media/jeremy/OrangeCream/Linux Software/repos/reference/ai-systems/InvokeAI`,
+  plus `git diff --check`. Remaining follow-up: executable support for any new
+  family still requires explicit Pantograph family rules and Pumas facts in
+  later implementation slices.
 - 2026-05-15: Completed the planner checked-resource-estimate verification
   slice. Added focused inference planner coverage proving overflow-prone width,
   height, and image-count combinations return

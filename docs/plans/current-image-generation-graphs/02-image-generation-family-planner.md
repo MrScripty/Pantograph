@@ -65,13 +65,39 @@ Reference repo findings used by this design:
   uses `model_type`, `architectures`, `auto_map`, and `trust_remote_code`
   evidence as model-definition signals. Pantograph should use equivalent facts
   from Pumas but keep Rust-owned planner contracts.
-- ComfyUI's `supported_models.py` and `model_detection.py` show that diffusion
-  support is family-specific, with distinct latent formats, text encoders,
-  dtype support, memory factors, and sampling defaults.
-- InvokeAI's `NEW_MODEL_INTEGRATION.md` and model loaders show that adding a
-  family should touch taxonomy, config/fact validation, model loading,
-  invocation/request shaping, sampling behavior, and metadata in a deliberate
-  sequence.
+- ComfyUI's README lists SD1.x/SD2.x, SDXL/Turbo, FLUX, Lumina Image 2.0,
+  Qwen Image, FLUX.2, and Z-Image as distinct image-model families rather than
+  one generic Diffusers path. `comfy/model_detection.py` then identifies
+  family-specific transformer evidence such as FLUX versus FLUX.2 keys, Lumina
+  2 `cap_embedder`/`noise_refiner` keys, and Qwen Image `txt_norm` keys.
+  Pantograph should use these as reference evidence for Pumas producer facts,
+  not as runtime state-dict scanning inside Pantograph.
+- ComfyUI's text-encoder loader shows that family support depends on concrete
+  encoder/tokenizer pairings: Lumina uses Gemma-family encoders, Qwen Image
+  uses Qwen Image encoder/tokenizer paths, FLUX uses T5/CLIP-style handling,
+  FLUX.2 Klein uses Qwen3 or Mistral-style encoder variants, and Z-Image can
+  use Qwen3 encoder/tokenizer facts. Pumas facts should expose those component
+  roles explicitly so Pantograph can validate them without directory-name or
+  model-id guessing.
+- ComfyUI's sampler registry treats scheduler names as a bounded set such as
+  `simple`, `sgm_uniform`, `karras`, `exponential`, `ddim_uniform`, `beta`,
+  `normal`, `linear_quadratic`, and `kl_optimal`. Pantograph should keep
+  denoising scheduler choices as validated primitive ids provided by backend
+  port options, not display-label strings or graph-local defaults.
+- InvokeAI's model-integration guide names `StableDiffusion1`,
+  `StableDiffusion2`, `StableDiffusionXL`, `Flux`, `Flux2`, `SD3`, and
+  `ZImage` as taxonomy values, and records Flux2 variants such as Klein4B,
+  Klein9B, and Klein9BBase. It also calls out Qwen3 encoder implementations
+  for FLUX.2 Klein and Z-Image and CLIP embeddings for SDXL/SD3. These are
+  useful conventions for Pumas facts and Pantograph family variants, but they
+  must not make Pantograph mirror InvokeAI's model manager, invocation graph,
+  metadata, or UI architecture.
+- InvokeAI's new-model guide shows that a new diffusion family requires
+  taxonomy, config/fact validation, component loading, denoise invocation
+  shaping, scheduler handling, metadata, and tests as separate concerns.
+  Pantograph should preserve the same separation of concerns through Pumas
+  facts, scheduler decisions, planner rules, worker envelopes, and artifact
+  retention rather than a monolithic family loader.
 
 ## Concurrency And Lifecycle Review
 
