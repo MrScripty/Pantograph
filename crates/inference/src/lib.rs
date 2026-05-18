@@ -45,6 +45,7 @@ pub mod managed_runtime;
 pub mod model_contracts;
 pub mod process;
 pub mod resource_estimates;
+pub mod resource_monitor;
 pub mod resource_observation;
 pub mod runtime_load;
 pub mod server;
@@ -188,6 +189,10 @@ pub use resource_estimates::{
     InferenceResourceEstimateDiagnosticCode, InferenceResourceEstimateDiagnosticSeverity,
     InferenceResourceEstimateError, InferenceResourceEstimateKind, InferenceResourceEstimateState,
     InferenceUnavailableResourceEstimateState,
+};
+pub use resource_monitor::{
+    default_runtime_resource_monitor, RuntimeResourceMonitor, RuntimeResourceMonitorError,
+    RuntimeResourceMonitorGuard, PROCESS_RSS_MONITOR_THREAD_NAME, PROCESS_RSS_SAMPLE_INTERVAL,
 };
 pub use resource_observation::{
     InferenceExecutionResourceObservation, InferenceExecutionResourceObservationError,

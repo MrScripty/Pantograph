@@ -665,10 +665,34 @@ Staged implementation:
      --lib`, `cargo test -p pantograph-embedded-runtime inference_diagnostic
      --lib`, `cargo check -p pantograph-embedded-runtime`, `cargo fmt --all
      -- --check`, and `git diff --check`.
-4. [ ] Add `resource_monitor` factory/modules with a `sysinfo` process-RSS
+4. [x] Add `resource_monitor` factory/modules with a `sysinfo` process-RSS
    first implementation, Linux/macOS/Windows/unsupported gates for proven
    platform gaps, and tests proving the neutral API compiles without
    scattering `cfg()` through business logic.
+   - 2026-05-18: completed the first resource-monitor implementation slice.
+     `inference::resource_monitor` now owns a platform-neutral
+     `RuntimeResourceMonitor` contract, default factory, `#[must_use]`
+     monitor guard, typed lifecycle errors, and a process-RSS sampler backed by
+     the existing `sysinfo` dependency. Platform selection is isolated in the
+     resource-monitor platform module with Linux/macOS/Windows files selecting
+     the shared `sysinfo` process-RSS implementation and unsupported targets
+     returning typed `unsupported_platform` availability facts.
+   - No-fallback/no-legacy confirmation: unobservable process RSS is reported
+     as an explicit `PeakRamBytes` availability fact sourced from
+     `OsProcessRss`; it is not converted to zero, inferred as VRAM, or used as
+     scheduler policy. The monitor reports host RAM only and keeps CUDA/MPS or
+     managed-runtime device telemetry for later backend-owned producer slices.
+   - Lifecycle/concurrency confirmation: the process-RSS sampler is owned by a
+     `#[must_use]` guard, uses named constants for thread name and interval,
+     refreshes only the target PID, stops through an atomic cancellation flag,
+     joins on `finish`, and performs synchronous cleanup in `Drop`. This slice
+     does not copy the existing untracked `tokio::spawn` process-spawner
+     pattern and does not wire monitors into async execution paths.
+   - Verification: `cargo test -p inference resource_monitor --lib`, `cargo
+     test -p inference process_rss --lib`, `cargo check -p inference`, `cargo
+     check -p inference --no-default-features`, `cargo check -p inference
+     --all-features`, `cargo fmt --all`, `cargo fmt --all -- --check`, and
+     `git diff --cached --check`.
 5. [x] Extend `InferenceRequestLifecycleEvent` to carry
    `InferenceExecutionResourceObservation` for all task families. Image
    generation is one consumer, not the contract owner.

@@ -179,6 +179,11 @@ selection must use supported runtimes through Pumas model references.
   peak RAM, peak VRAM, memory-failure kind, metric source attribution, and
   explicit metric unavailability. It is a producer contract only; schedulers
   and workflow ledgers consume projected facts in their own owning crates.
+- `resource_monitor::default_runtime_resource_monitor()` provides the
+  platform-neutral resource monitor factory. Its first implementation samples
+  process RSS with the existing `sysinfo` dependency and reports host RAM only
+  as `os_process_rss`; unsupported or unobservable metrics are returned as
+  typed availability facts instead of fallback zeros.
 - Stable generation behavior belongs in typed `GenerationOptions` groups.
   Backend-local generation escape hatches are limited to
   `backend_extensions` keys scoped as `<backend-or-adapter>:<option>`, and
