@@ -304,9 +304,11 @@ PyTorch/diffusers and produce a retained image artifact.
   - 2026-05-17: the denoising scheduler provider was added as a normal
     `PortOptionsProvider` without changing the generic provider trait or
     routing through `expand-settings`.
-- [ ] Implement `PyTorchBackend::generate_image` using the existing Python
+- [x] Implement planned PyTorch image generation using the existing Python
   worker diffusion load/generate path and typed worker request/response
-  envelopes.
+  envelopes. Completed through `PyTorchBackend::generate_image_from_plan`;
+  the raw `generate_image` path remains explicitly unsupported because image
+  execution now requires a validated `ImageGenerationExecutionPlan`.
 - [x] Change the Python worker image path to consume the validated Rust plan
   fields. It must not decide pipeline family, scheduler, custom-code trust, or
   device fallback on its own.
@@ -332,9 +334,13 @@ PyTorch/diffusers and produce a retained image artifact.
     inspect model ids or display names.
 - [x] Implement family requirements as explicit table data or small typed
   requirement structs, not as scattered `match` arms mixed with worker calls.
-- [ ] Implement component-role extraction from Pumas facts before adapter
+- [x] Implement component-role extraction from Pumas facts before adapter
   selection. Extraction maps `ProcessorComponentFacts` and Transformers
   evidence into `ImageGenerationComponentRole` values and diagnostics.
+  Completed through Pumas-provided typed Diffusers component facts:
+  family adapter validation now reads `DiffusersComponentRole` values from
+  `ResolvedModelPackageFacts`, reports exact role paths, and rejects missing
+  or ambiguous required roles before worker dispatch.
 - [x] Implement adapter selection in two stages: first resolve family/variant
   from Pumas facts, then validate that the resolved family requirements match
   the request and package components.
@@ -391,9 +397,13 @@ PyTorch/diffusers and produce a retained image artifact.
     validation states, and empty/control-character load paths before worker
     dispatch. Pantograph still does not join Pumas paths or synthesize local
     load targets.
-- [ ] Return a terminal planning/readiness diagnostic when validation fails.
+- [x] Return a terminal planning/readiness diagnostic when validation fails.
   Do not try alternate backends, generic Diffusers loading, default schedulers,
   CPU fallback, or alternate dependency environments.
+  Completed through the side-effect-free planner/gateway boundary: backend,
+  model-ref, artifact path/load-target, task, package contract, family,
+  component, option, resource-estimate, and dependency-readiness failures
+  produce typed planner diagnostics and prevent worker dispatch.
 - [x] Update PyTorch capability facts so image generation is advertised only
   when the PyTorch/diffusers execution path is actually available.
 - [x] Ensure PyTorch worker loading uses Pumas-resolved diffusers-directory
@@ -410,9 +420,13 @@ PyTorch/diffusers and produce a retained image artifact.
     selected-artifact rows do not contain the selected artifact path; this is
     recorded as a Pumas fixture/index follow-up and Pantograph intentionally
     does not synthesize a fallback target.
-- [ ] Ensure dependency/runtime readiness reports missing `diffusers`,
+- [x] Ensure dependency/runtime readiness reports missing `diffusers`,
   `transformers`, `accelerate`, `torch`, or Pillow as explicit readiness
   diagnostics.
+  Completed through inference-owned PyTorch/Diffusers package declarations,
+  embedded-runtime package readiness provider/probe facts, scheduler candidate
+  filtering diagnostics, selected-decision readiness proof, and the planner
+  missing/unavailable dependency proof gate.
 - [x] Retain final generated image output through ArtifactStore and IO
   projections. Completed 2026-05-17: embedded runtime node I/O projection now
   decodes valid base64 on the canonical `image` port into a retained
@@ -2479,7 +2493,7 @@ readiness:
       normalization and rendered disabled option rows. Focused tests verify
       serde defaults, typed disabled-state serialization, metadata separation,
       stale-response handling, and selected disabled rows remaining visible.
-  - [ ] Replace canonical inference dependency readiness with a single owner:
+  - [x] Replace canonical inference dependency readiness with a single owner:
     inference declares runtime/package dependency requirements; embedded-runtime
     or managed-runtime resolves installed/readiness facts; scheduler/admission
     consumes reduced readiness facts; inference planner/gateway refuses

@@ -3818,6 +3818,31 @@ Worker rules:
   crates/pantograph-embedded-runtime/Cargo.toml`, and `git diff --check`.
   Remaining follow-up: the broader checked-arithmetic milestone still needs a
   scheduler/runtime memory-estimate review before it can be marked complete.
+- 2026-05-17: Completed the Milestone 6 checklist reconciliation slice after
+  the load-target, dependency-readiness, planned PyTorch worker, and artifact
+  retention implementation slices. Marked the canonical planned PyTorch image
+  path complete through `PyTorchBackend::generate_image_from_plan` while
+  explicitly keeping raw `generate_image` unsupported so unplanned image
+  execution cannot bypass scheduler/Pumas/load-target proof. Marked typed
+  component-role validation complete through Pumas Diffusers component facts
+  and family-adapter diagnostics. Marked terminal planner/readiness
+  diagnostics complete because planner/gateway validation failures now reject
+  execution with typed diagnostics instead of trying alternate backends,
+  default schedulers, CPU fallback, generic Diffusers loading, or alternate
+  dependency environments. Marked dependency/runtime readiness complete through
+  inference-owned PyTorch/Diffusers package declarations, embedded-runtime
+  readiness provider/probe facts, scheduler selected-decision proof, and the
+  planner missing/unavailable readiness gate. This is a plan-only
+  reconciliation; no source, test, config, lockfile, generated file, workflow
+  fixture, scheduler policy, runtime behavior, worker envelope, or saved
+  workflow behavior changed. Verification re-run for the implemented behavior:
+  `cargo test -p inference pytorch_image_generation --features
+  backend-pytorch`, `cargo test -p inference generate_image_from_planning_input
+  --features backend-pytorch`, `cargo test -p inference
+  image_generation_family_adapters --features backend-pytorch`, and `git diff
+  --check`. Remaining Milestone 6 follow-ups stay open for memory-estimate
+  checked arithmetic review, bounded model smoke fixture, and additional
+  family-shaped Pumas fact fixtures.
 - 2026-05-15: Completed the planner checked-resource-estimate verification
   slice. Added focused inference planner coverage proving overflow-prone width,
   height, and image-count combinations return
