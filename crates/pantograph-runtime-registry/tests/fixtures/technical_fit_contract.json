@@ -55,12 +55,18 @@
         "model_id": "pumas://models/juggernaut-x-v10-sdxl",
         "device_class": "cuda",
         "selected_device_id": "cuda:0",
-        "resource_estimate": {
-          "estimated_peak_vram_mb": 8192,
-          "estimated_peak_ram_mb": 16384,
-          "estimated_min_vram_mb": 4096,
-          "estimated_min_ram_mb": 8192
-        },
+        "resource_estimates": [
+          {
+            "kind": "peak_vram_bytes",
+            "state": "available",
+            "value_bytes": 8589934592
+          },
+          {
+            "kind": "peak_ram_bytes",
+            "state": "available",
+            "value_bytes": 17179869184
+          }
+        ],
         "observed_throughput_hint": {
           "images_per_second_milli": 125,
           "sample_count": 4
@@ -84,9 +90,7 @@
     "resource_pressure": {
       "queued_run_count": 1,
       "loaded_runtime_count": 1,
-      "loaded_runtime_capacity": 2,
-      "estimated_peak_vram_mb": 8192,
-      "estimated_peak_ram_mb": 16384
+      "loaded_runtime_capacity": 2
     }
   },
   "selected_decision": {
@@ -98,12 +102,18 @@
     "selected_model_id": "pumas://models/juggernaut-x-v10-sdxl",
     "selected_device_class": "cuda",
     "selected_device_id": "cuda:0",
-    "resource_estimate": {
-      "estimated_peak_vram_mb": 8192,
-      "estimated_peak_ram_mb": 16384,
-      "estimated_min_vram_mb": 4096,
-      "estimated_min_ram_mb": 8192
-    },
+    "resource_estimates": [
+      {
+        "kind": "peak_vram_bytes",
+        "state": "available",
+        "value_bytes": 8589934592
+      },
+      {
+        "kind": "peak_ram_bytes",
+        "state": "available",
+        "value_bytes": 17179869184
+      }
+    ],
     "observed_throughput_hint": {
       "images_per_second_milli": 125,
       "sample_count": 4

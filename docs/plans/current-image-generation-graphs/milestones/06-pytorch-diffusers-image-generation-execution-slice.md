@@ -460,6 +460,12 @@ PyTorch/diffusers and produce a retained image artifact.
     checked arithmetic, and overflow produces a typed estimate diagnostic.
     Candidate admission and history-backed scheduler ranking remain later
     memory-policy slices.
+  - 2026-05-18 scheduler pressure contract slice: runtime-registry removed
+    peak RAM/VRAM MB estimates from `RuntimeTechnicalFitResourcePressure`.
+    Budget-pressure ranking activation now reads typed candidate
+    `peak_vram_bytes`/`peak_ram_bytes` estimates and current loaded-runtime
+    pressure, leaving memory admission/reservation failure diagnostics for the
+    next memory-policy slice.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

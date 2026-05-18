@@ -490,10 +490,6 @@ pub struct RuntimeTechnicalFitResourcePressure {
     pub loaded_runtime_count: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loaded_runtime_capacity: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_peak_vram_mb: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_peak_ram_mb: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

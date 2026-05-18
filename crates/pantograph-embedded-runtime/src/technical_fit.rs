@@ -348,11 +348,7 @@ pub fn build_runtime_technical_fit_request(
             runtime_requirements_resource_estimates(&request.runtime_requirements),
         ),
         candidate_history_summaries: Vec::new(),
-        resource_pressure: project_resource_pressure(
-            request.queue_pressure.as_ref(),
-            request.runtime_requirements.estimated_peak_vram_mb,
-            request.runtime_requirements.estimated_peak_ram_mb,
-        ),
+        resource_pressure: project_resource_pressure(request.queue_pressure.as_ref()),
     })
 }
 
@@ -1444,23 +1440,17 @@ fn project_observed_throughput_hint(
 
 fn project_resource_pressure(
     queue_pressure: Option<&WorkflowTechnicalFitQueuePressure>,
-    estimated_peak_vram_mb: Option<u64>,
-    estimated_peak_ram_mb: Option<u64>,
 ) -> Option<RuntimeTechnicalFitResourcePressure> {
     let pressure = RuntimeTechnicalFitResourcePressure {
         queued_run_count: queue_pressure.and_then(|pressure| pressure.total_queued_run_count),
         loaded_runtime_count: queue_pressure.and_then(|pressure| pressure.loaded_runtime_count),
         loaded_runtime_capacity: queue_pressure
             .and_then(|pressure| pressure.loaded_runtime_capacity),
-        estimated_peak_vram_mb,
-        estimated_peak_ram_mb,
     };
 
     if pressure.queued_run_count.is_none()
         && pressure.loaded_runtime_count.is_none()
         && pressure.loaded_runtime_capacity.is_none()
-        && pressure.estimated_peak_vram_mb.is_none()
-        && pressure.estimated_peak_ram_mb.is_none()
     {
         None
     } else {
@@ -1938,8 +1928,6 @@ mod tests {
                 queued_run_count: Some(3),
                 loaded_runtime_count: Some(1),
                 loaded_runtime_capacity: Some(4),
-                estimated_peak_vram_mb: Some(4096),
-                estimated_peak_ram_mb: Some(8192),
             })
         );
     }

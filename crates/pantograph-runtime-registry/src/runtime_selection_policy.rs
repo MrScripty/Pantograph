@@ -13,7 +13,8 @@ use crate::technical_fit::{
     RuntimeTechnicalFitDevicePolicy, RuntimeTechnicalFitFactor,
     RuntimeTechnicalFitHistoryThresholdState, RuntimeTechnicalFitPolicyPhase,
     RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
-    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitSelectionMode,
+    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourceEstimateKind,
+    RuntimeTechnicalFitResourceEstimateState, RuntimeTechnicalFitSelectionMode,
     RuntimeTechnicalFitSelectionPolicyTrace, RuntimeTechnicalFitWarmupState,
 };
 
@@ -870,12 +871,25 @@ fn queue_pressure_applies(request: &RuntimeTechnicalFitRequest) -> bool {
 
 fn budget_pressure_applies(request: &RuntimeTechnicalFitRequest) -> bool {
     uses_factor(request, RuntimeTechnicalFitFactor::BudgetPressure)
-        && request.resource_pressure.as_ref().is_some_and(|pressure| {
-            pressure.estimated_peak_vram_mb.is_some()
-                || pressure.estimated_peak_ram_mb.is_some()
-                || pressure
-                    .loaded_runtime_count
-                    .zip(pressure.loaded_runtime_capacity)
-                    .is_some_and(|(count, capacity)| count >= capacity)
-        })
+        && (request.resource_pressure.as_ref().is_some_and(|pressure| {
+            pressure
+                .loaded_runtime_count
+                .zip(pressure.loaded_runtime_capacity)
+                .is_some_and(|(count, capacity)| count >= capacity)
+        }) || request
+            .candidates
+            .iter()
+            .any(candidate_has_available_peak_memory_estimate))
+}
+
+fn candidate_has_available_peak_memory_estimate(candidate: &RuntimeTechnicalFitCandidate) -> bool {
+    candidate.resource_estimates.iter().any(|estimate| {
+        estimate.state() == RuntimeTechnicalFitResourceEstimateState::Available
+            && matches!(
+                estimate.kind(),
+                RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes
+                    | RuntimeTechnicalFitResourceEstimateKind::PeakRamBytes
+            )
+            && estimate.value_bytes().is_some()
+    })
 }

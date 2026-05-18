@@ -216,6 +216,12 @@ Staged implementation plan:
      diagnostic instead of being saturated, omitted, or converted through a
      confidence string. Scheduler admission and history-backed ranking remain
      later staged work.
+   - 2026-05-18 scheduler pressure contract slice: runtime-registry
+     `RuntimeTechnicalFitResourcePressure` now represents only current queue
+     and loaded-runtime pressure. Candidate budget-pressure ranking is
+     activated from typed candidate `peak_vram_bytes`/`peak_ram_bytes`
+     estimates plus current pressure, so the old pressure-level peak MB
+     estimate fields are no longer accepted as a second source of truth.
 2. [x] Move existing output-size checked arithmetic into the shared estimate shape
    and add tests proving overflow is diagnostic-backed.
    - 2026-05-17: `ImageGenerationExecutionPlan` now carries typed
@@ -230,6 +236,10 @@ Staged implementation plan:
 4. [ ] Project reduced estimate facts into scheduler-facing
    `BackendExecutionCandidate` data. Do not pass full Pumas package facts or
    worker envelopes through the scheduler.
+   - 2026-05-18: budget-pressure selection now consumes typed candidate
+     `peak_vram_bytes`/`peak_ram_bytes` estimate presence for ranking
+     activation. Full admission/reservation diagnostics remain in the next
+     memory-policy slice.
 5. [ ] Make scheduler admission consume memory estimates and current resource
    pressure before selection. Explicit runtime/device requirements must fail
    with diagnostics when they cannot fit; omitted requirements let the

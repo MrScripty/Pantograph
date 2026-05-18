@@ -6267,6 +6267,36 @@ Worker rules:
   - Remaining follow-up: the broad checked-memory item remains open for the
     staged resource-estimate contract/admission work; broader final release
     validation still needs the Milestone 8 test/build sweep.
+- 2026-05-18 scheduler pressure typed-estimate ranking slice:
+  - Smallest useful vertical slice: remove the remaining legacy peak RAM/VRAM
+    MB fields from runtime-registry resource pressure and make existing
+    budget-pressure ranking activate from typed candidate memory estimates.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/tests/fixtures/technical_fit_contract.json`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: resource pressure no longer carries
+    legacy estimate fields. The scheduler uses typed candidate
+    `peak_vram_bytes`/`peak_ram_bytes` records and current loaded-runtime
+    pressure for budget-pressure ranking activation, with memory admission and
+    reservation diagnostics deferred to the next memory-policy slice.
+  - Focused tests/fixtures updated: runtime-registry technical-fit tests cover
+    budget-pressure ranking with typed candidate estimates, the registry
+    contract fixture omits legacy pressure estimate fields, and embedded
+    projection tests assert current-pressure-only request projection.
+  - Verification passed: `cargo test -p pantograph-runtime-registry
+    technical_fit --lib`; `cargo test -p pantograph-runtime-registry --test
+    technical_fit_contract`; `cargo test -p pantograph-embedded-runtime
+    technical_fit --lib`.
+  - Remaining follow-up: implement the memory-policy admission/reservation
+    slice so explicit runtime/device requirements fail with typed diagnostics
+    when typed estimates and current pressure cannot fit.
 
 ### Traceability Links
 

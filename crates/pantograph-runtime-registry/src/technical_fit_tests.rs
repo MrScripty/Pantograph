@@ -428,8 +428,6 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
             queued_run_count: Some(2),
             loaded_runtime_count: Some(1),
             loaded_runtime_capacity: Some(2),
-            estimated_peak_vram_mb: Some(4096),
-            estimated_peak_ram_mb: Some(8192),
         }),
     };
 
@@ -2002,8 +2000,6 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
             queued_run_count: Some(4),
             loaded_runtime_count: Some(2),
             loaded_runtime_capacity: Some(4),
-            estimated_peak_vram_mb: None,
-            estimated_peak_ram_mb: None,
         }),
     });
 
@@ -2095,8 +2091,6 @@ fn selector_rejects_unrankable_headroom_under_queue_pressure() {
             queued_run_count: Some(4),
             loaded_runtime_count: Some(2),
             loaded_runtime_capacity: Some(4),
-            estimated_peak_vram_mb: None,
-            estimated_peak_ram_mb: None,
         }),
     });
 
@@ -2165,7 +2159,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimates: Vec::new(),
+                resource_estimates: vec![peak_vram_estimate(4096_u64 * 1024 * 1024)],
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -2186,7 +2180,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimates: Vec::new(),
+                resource_estimates: vec![peak_vram_estimate(4096_u64 * 1024 * 1024)],
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -2205,8 +2199,6 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
             queued_run_count: Some(0),
             loaded_runtime_count: Some(2),
             loaded_runtime_capacity: Some(2),
-            estimated_peak_vram_mb: Some(4096),
-            estimated_peak_ram_mb: Some(8192),
         }),
     });
 
