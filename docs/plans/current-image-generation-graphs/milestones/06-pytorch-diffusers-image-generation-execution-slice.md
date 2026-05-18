@@ -419,6 +419,16 @@ PyTorch/diffusers and produce a retained image artifact.
     timing and memory ranking remains gated until every valid runtime
     candidate for the same workflow/model/runtime key has at least five
     completed runs.
+  - 2026-05-17 inference resource-estimate contract slice: added
+    inference-owned resource estimate kinds, explicit estimate states, typed
+    diagnostics, and constructor validation. The contract can represent
+    available byte estimates and non-available states such as overflow,
+    insufficient facts, unsupported family/runtime, not available, and not
+    implemented without using `0`, `None`, saturation, or confidence strings
+    as control-flow sentinels. Remaining scope: project the contract through
+    runtime-registry/workflow technical-fit, move the existing output RGBA
+    estimate into this shape, add side-effect-free family/runtime calculators,
+    and wire scheduler admission/history.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

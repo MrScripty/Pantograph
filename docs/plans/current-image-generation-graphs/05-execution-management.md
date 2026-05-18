@@ -6082,6 +6082,30 @@ Worker rules:
     calculator, candidate-projection, scheduler-admission, and observed
     memory/timing ledger slices before marking the Milestone 6 checked-memory
     checklist item complete.
+- 2026-05-17 inference resource-estimate contract slice:
+  - Smallest useful vertical slice: add the inference-owned resource-estimate
+    contract foundation before moving image output-size or runtime memory
+    estimates onto it.
+  - Allowed write set: `crates/inference/src/resource_estimates.rs`,
+    `crates/inference/src/lib.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. The unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: the new contract uses explicit
+    estimate states and typed diagnostics for overflow, insufficient facts,
+    unavailable, unimplemented, and unsupported estimates. It does not encode
+    missing estimates as `0`, use `None` as a scheduler decision state, add
+    PyTorch-only memory heuristics, or alter scheduler ranking.
+  - Focused tests added: inference serde/constructor tests prove available
+    estimates carry byte values, non-available estimates serialize without
+    sentinel values, and non-available construction rejects the available
+    state.
+  - Verification passed: `cargo test -p inference resource_estimate --lib`.
+  - Remaining follow-up: add runtime-registry/workflow technical-fit
+    projection for the same typed estimate states before closing the first
+    staged memory-estimate contract item, then move existing output RGBA
+    estimate arithmetic into this shape.
 - 2026-05-17 small-model Pumas load-target smoke path slice:
   - Smallest useful vertical slice: update the embedded-runtime Puma-Lib Tiny
     SD Turbo-style imported Diffusers fixture so it includes a selected

@@ -183,21 +183,27 @@ InvokeAI invocation or model-manager architecture.
 
 Staged implementation plan:
 
-1. Add inference/runtime resource-estimate DTOs and diagnostics with the states
+1. [ ] Add inference/runtime resource-estimate DTOs and diagnostics with the states
    above. This is a contract slice only; it must not change scheduler ranking.
-2. Move existing output-size checked arithmetic into the shared estimate shape
+   - 2026-05-17: inference now exposes `InferenceResourceEstimate`,
+     `InferenceResourceEstimateState`, estimate kinds, and typed estimate
+     diagnostics. The contract represents unavailable/overflow/unsupported
+     estimates as states with diagnostics rather than numeric sentinel values.
+     Runtime-registry projection remains before this stage is complete;
+     scheduler ranking remains later staged work.
+2. [ ] Move existing output-size checked arithmetic into the shared estimate shape
    and add tests proving overflow is diagnostic-backed.
-3. Add side-effect-free family/runtime calculators for estimates that can be
+3. [ ] Add side-effect-free family/runtime calculators for estimates that can be
    computed from already-available facts. Unknown or unimplemented estimates
    must be explicit states, not `0`, silent omission, or saturated values.
-4. Project reduced estimate facts into scheduler-facing
+4. [ ] Project reduced estimate facts into scheduler-facing
    `BackendExecutionCandidate` data. Do not pass full Pumas package facts or
    worker envelopes through the scheduler.
-5. Make scheduler admission consume memory estimates and current resource
+5. [ ] Make scheduler admission consume memory estimates and current resource
    pressure before selection. Explicit runtime/device requirements must fail
    with diagnostics when they cannot fit; omitted requirements let the
    scheduler choose among valid candidates.
-6. Persist observed timing and memory/OOM facts. History-backed memory and
+6. [ ] Persist observed timing and memory/OOM facts. History-backed memory and
    timing ranking starts only after every valid runtime candidate for the same
    workflow/model/runtime key has at least five completed runs; before that,
    policy uses current facts and controlled exploration.
