@@ -64,7 +64,6 @@ async fn default_capabilities_derive_runtime_requirements_from_workflow() {
                         "node_type": "text-input",
                         "data": {
                             "model_id": "model-a",
-                            "backend_key": "llamacpp",
                             "embedding": true
                         },
                         "position": { "x": 0.0, "y": 0.0 }
@@ -104,10 +103,7 @@ async fn default_capabilities_derive_runtime_requirements_from_workflow() {
         response.runtime_requirements.required_models,
         vec!["model-a"]
     );
-    assert_eq!(
-        response.runtime_requirements.required_backends,
-        vec!["llama_cpp"]
-    );
+    assert!(response.runtime_requirements.required_backends.is_empty());
     assert_eq!(
         response.runtime_requirements.required_extensions,
         vec!["inference_gateway".to_string(), "pumas_api".to_string()]

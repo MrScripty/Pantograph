@@ -317,14 +317,13 @@ Staged implementation plan:
           runtime_requirements_resource_estimates --lib`, `cargo check -p
           pantograph-embedded-runtime`, `cargo fmt --all -- --check`, and
           `git diff --check`.
-        - Discovered issue: `cargo test -p pantograph-workflow-service
-          workflow_capabilities --lib` still fails because
-          `default_capabilities_derive_runtime_requirements_from_workflow`
-          expects `required_backends == ["llama_cpp"]` for a `text-input`
-          workflow node whose backend extraction currently returns no required
-          backend. This is outside the typed resource-estimate contract slice
-          and should be handled with a focused backend-extraction fixture
-          review rather than folded into memory-policy work.
+        - 2026-05-18 follow-up cleanup: resolved the stale
+          backend-extraction fixture. `text-input` no longer carries incidental
+          `backend_key` metadata in the default-capabilities fixture, and the
+          test now asserts no hard backend requirement unless the canonical
+          typed runtime input path supplies one. Verification: `cargo test -p
+          pantograph-workflow-service workflow_capabilities --lib`,
+          `cargo fmt --all -- --check`, and `git diff --check`.
 6. [ ] Persist observed timing and memory/OOM facts. History-backed memory and
    timing ranking starts only after every valid runtime candidate for the same
    workflow/model/runtime key has at least five completed runs; before that,

@@ -520,11 +520,11 @@ PyTorch/diffusers and produce a retained image artifact.
     `cargo test -p pantograph-embedded-runtime host_helper --lib`, `cargo test
     -p pantograph-embedded-runtime runtime_requirements_resource_estimates
     --lib`, `cargo check -p pantograph-embedded-runtime`, `cargo fmt --all --
-    --check`, and `git diff --check`. Discovered issue:
-    `cargo test -p pantograph-workflow-service workflow_capabilities --lib`
-    still fails on a pre-existing backend-extraction expectation for a
-    `text-input` node and should be resolved in a separate backend
-    capability/extraction slice.
+    --check`, and `git diff --check`. Follow-up cleanup completed
+    2026-05-18: the stale `text-input` fixture no longer carries incidental
+    `backend_key` metadata, and `cargo test -p pantograph-workflow-service
+    workflow_capabilities --lib` now verifies that no hard backend requirement
+    is inferred without the canonical typed runtime input path.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
