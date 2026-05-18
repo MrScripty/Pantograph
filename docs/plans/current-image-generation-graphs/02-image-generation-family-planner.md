@@ -274,6 +274,11 @@ Staged implementation plan:
           claim.
      3. Extend runtime snapshots with reduced typed admission budget and active
         claim facts so selection policy remains pure and testable.
+        - 2026-05-18: completed for runtime-registry snapshots. Runtime
+          snapshots now expose typed admission budget rows and per-active
+          reservation byte claims without workflow, Pumas, or worker envelope
+          details. Technical-fit selection can consume these immutable facts in
+          the next slice without calling mutable registry admission.
      4. Filter/diagnose technical-fit candidates against typed peak memory
         estimates, current reservations, safety margins, and explicit
         runtime/device requirements.

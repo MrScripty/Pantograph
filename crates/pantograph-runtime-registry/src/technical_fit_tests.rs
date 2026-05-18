@@ -74,6 +74,8 @@ fn runtime_snapshot(
         last_error: None,
         last_transition_at_ms: 123,
         active_reservation_ids: (0..active_reservation_count as u64).collect(),
+        active_reservation_claims: Vec::new(),
+        admission_budget: None,
         models: Vec::new(),
     }
 }

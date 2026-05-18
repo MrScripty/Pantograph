@@ -10,7 +10,7 @@ impl RuntimeRegistry {
         let mut runtimes = guard
             .runtimes
             .values()
-            .map(runtime_snapshot)
+            .map(|record| runtime_snapshot_with_reservations(record, &guard.reservations))
             .collect::<Vec<_>>();
         runtimes.sort_by(|left, right| left.runtime_id.cmp(&right.runtime_id));
 
@@ -117,6 +117,40 @@ impl RuntimeRegistry {
 }
 
 pub(super) fn runtime_snapshot(record: &RuntimeRegistryRecord) -> RuntimeRegistryRuntimeSnapshot {
+    runtime_snapshot_with_claims(record, Vec::new())
+}
+
+pub(super) fn runtime_snapshot_with_reservations(
+    record: &RuntimeRegistryRecord,
+    reservations: &BTreeMap<u64, RuntimeReservationRecord>,
+) -> RuntimeRegistryRuntimeSnapshot {
+    let mut active_reservation_claims = record
+        .active_reservations
+        .iter()
+        .filter_map(|reservation_id| {
+            let reservation = reservations.get(reservation_id)?;
+            let mut claims = Vec::new();
+            if let Some(ram_bytes) = reservation.claim.ram_bytes {
+                claims.push(RuntimeReservationResourceClaim::ram_bytes(ram_bytes));
+            }
+            if let Some(vram_bytes) = reservation.claim.vram_bytes {
+                claims.push(RuntimeReservationResourceClaim::vram_bytes(vram_bytes));
+            }
+            Some(RuntimeActiveReservationClaim {
+                reservation_id: *reservation_id,
+                claims,
+            })
+        })
+        .collect::<Vec<_>>();
+    active_reservation_claims.sort_by(|left, right| left.reservation_id.cmp(&right.reservation_id));
+
+    runtime_snapshot_with_claims(record, active_reservation_claims)
+}
+
+fn runtime_snapshot_with_claims(
+    record: &RuntimeRegistryRecord,
+    active_reservation_claims: Vec<RuntimeActiveReservationClaim>,
+) -> RuntimeRegistryRuntimeSnapshot {
     let mut backend_keys = record.backend_keys.iter().cloned().collect::<Vec<_>>();
     backend_keys.sort();
 
@@ -139,6 +173,8 @@ pub(super) fn runtime_snapshot(record: &RuntimeRegistryRecord) -> RuntimeRegistr
         last_error: record.last_error.clone(),
         last_transition_at_ms: record.last_transition_at_ms,
         active_reservation_ids,
+        active_reservation_claims,
+        admission_budget: record.admission_budget.clone(),
         models,
     }
 }

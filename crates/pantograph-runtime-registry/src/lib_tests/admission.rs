@@ -182,6 +182,55 @@ fn admission_budget_uses_peak_ram_claim_and_release_restores_capacity() {
 }
 
 #[test]
+fn runtime_snapshot_exposes_reduced_admission_budget_and_active_claims() {
+    let registry = RuntimeRegistry::new();
+    let admission_budget = RuntimeAdmissionBudget::from_resources(vec![
+        ram_budget_mib(Some(2048)).with_safety_margin_bytes(ram_mib(128)),
+        vram_budget_mib(Some(4096)).with_safety_margin_bytes(vram_mib(256)),
+    ]);
+    registry.register_runtime(
+        RuntimeRegistration::new("pytorch", "PyTorch")
+            .with_admission_budget(admission_budget.clone()),
+    );
+    registry
+        .transition_runtime(
+            "pytorch",
+            RuntimeTransition::Ready {
+                runtime_instance_id: Some("runtime-snapshot".to_string()),
+            },
+        )
+        .expect("ready transition");
+
+    let lease = registry
+        .acquire_reservation(RuntimeReservationRequest {
+            runtime_id: "pytorch".to_string(),
+            workflow_id: "wf-snapshot".to_string(),
+            reservation_owner_id: None,
+            usage_profile: None,
+            model_id: Some("model-snapshot".to_string()),
+            pin_runtime: false,
+            requirements: Some(reservation_requirements(vec![
+                ram_claim_mib(1024),
+                vram_claim_mib(1536),
+            ])),
+            retention_hint: RuntimeRetentionHint::Ephemeral,
+        })
+        .expect("reservation should fit budget");
+
+    let snapshot = registry.snapshot();
+    assert_eq!(snapshot.runtimes.len(), 1);
+    let runtime = &snapshot.runtimes[0];
+    assert_eq!(runtime.admission_budget, Some(admission_budget));
+    assert_eq!(
+        runtime.active_reservation_claims,
+        vec![RuntimeActiveReservationClaim {
+            reservation_id: lease.reservation_id,
+            claims: vec![ram_claim_mib(1024), vram_claim_mib(1536)],
+        }]
+    );
+}
+
+#[test]
 fn reserved_resource_accounting_overflow_returns_typed_error() {
     let mut reservations = BTreeMap::new();
     reservations.insert(

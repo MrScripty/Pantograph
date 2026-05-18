@@ -6359,6 +6359,36 @@ Worker rules:
   - Remaining follow-up: expose reduced typed admission budget and active claim
     facts in runtime snapshots so the pure technical-fit selector can reject
     over-budget candidates before selection.
+- 2026-05-18 runtime snapshot admission-facts slice:
+  - Smallest useful vertical slice: expose reduced typed admission budget and
+    active reservation claim facts on runtime-registry snapshots without
+    changing technical-fit selection behavior.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/snapshot.rs`,
+    `crates/pantograph-runtime-registry/src/registry_queries.rs`,
+    `crates/pantograph-runtime-registry/src/lib.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/lib_tests/admission.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: snapshots expose only typed byte
+    budget rows and typed active reservation claims. They do not revive MB
+    fields, pass full workflow/Pumas facts through runtime selection, or call
+    mutable admission during technical-fit ranking.
+  - Focused tests added/updated: runtime-registry snapshot coverage proves
+    typed admission budget and per-active-reservation byte claims are present;
+    technical-fit test snapshot builders were updated for the appended snapshot
+    fields.
+  - Verification passed: `cargo test -p pantograph-runtime-registry
+    runtime_snapshot_exposes_reduced_admission_budget_and_active_claims
+    --lib`; `cargo test -p pantograph-runtime-registry --lib`; `cargo test -p
+    pantograph-runtime-registry --test technical_fit_contract`; `cargo fmt
+    --all -- --check`.
+  - Remaining follow-up: make technical-fit candidate eligibility consume the
+    typed snapshot budget/claim facts and emit typed diagnostics for
+    over-budget candidates before selection.
 
 ### Traceability Links
 

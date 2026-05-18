@@ -483,6 +483,12 @@ PyTorch/diffusers and produce a retained image artifact.
     contract is replaced. Remaining memory-policy work: expose reduced budget
     and active claim facts in runtime snapshots, then make technical-fit
     selection reject over-budget candidates through typed diagnostics.
+  - 2026-05-18 runtime snapshot admission-facts slice: runtime-registry
+    snapshots now carry typed admission budget rows and per-active-reservation
+    byte claims as reduced immutable scheduler facts. They do not include full
+    workflow metadata, Pumas facts, or worker envelopes. Remaining
+    memory-policy work: make technical-fit selection consume these facts and
+    reject over-budget candidates before runtime selection.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

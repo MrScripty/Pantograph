@@ -29,7 +29,9 @@ pub use reservation::{RuntimeReservationLease, RuntimeReservationRequest, Runtim
 pub use retention::{
     RuntimeRetentionDecision, RuntimeRetentionDisposition, RuntimeRetentionReason,
 };
-pub use snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
+pub use snapshot::{
+    RuntimeActiveReservationClaim, RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot,
+};
 use state::RuntimeTransition as Transition;
 pub use state::{
     RuntimeModelResidencyRecord, RuntimeRegistryRecord, RuntimeRegistryStatus, RuntimeTransition,
