@@ -437,6 +437,14 @@ PyTorch/diffusers and produce a retained image artifact.
     rejects planning with `ResourceEstimateOverflow` and also records the
     shared estimate diagnostic/state instead of returning a saturated or
     omitted numeric estimate.
+  - 2026-05-17 technical-fit estimate replan decision: use replacement option
+    3 for the next shared-contract boundary. Typed resource estimate records
+    must replace runtime-registry/workflow technical-fit optional MB fields and
+    `estimation_confidence` strings instead of being adapted into them or
+    added beside them. The next implementation stages must remove old
+    technical-fit estimate fields from each boundary they touch, update tests
+    and fixtures in the same slice, and keep scheduler ranking unchanged until
+    the typed candidate/admission slices are ready.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

@@ -188,6 +188,13 @@ Blast-radius limits:
   backend adapters may publish typed estimates and explicit unavailable states,
   but the scheduler owns fit decisions, reservations, retries, rescheduling,
   termination after retry exhaustion, and learned memory/timing policy.
+- Typed estimate records are the replacement contract for scheduler-facing
+  resource estimates. Runtime-registry, workflow-service, and embedded-runtime
+  technical-fit DTOs must remove the legacy singular `resource_estimate`
+  object with optional MB fields and confidence strings rather than adapting
+  typed states into it. During staged replacement there must be one canonical
+  source of truth per boundary; do not keep legacy and typed estimates side by
+  side as selectable inputs.
 - Scheduler policy must never depend on raw backend strings or local runtime
   paths. Parse workflow/backend/device input once into validated contract
   types, then rank typed candidates.

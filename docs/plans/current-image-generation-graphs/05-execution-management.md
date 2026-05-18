@@ -6133,6 +6133,45 @@ Worker rules:
   - Remaining follow-up: project typed estimate states through
     runtime-registry/workflow technical-fit and add family/runtime calculators
     for estimates beyond output RGBA bytes.
+- 2026-05-17 technical-fit resource-estimate replan slice:
+  - Decision: use option 3, replacing the old technical-fit estimate contract
+    with typed resource estimate records across runtime-registry,
+    workflow-service, and embedded-runtime.
+  - Rejected options:
+    - Minimal adapter into old optional MB fields and confidence strings,
+      because it would preserve the legacy contract and lose typed state
+      details such as overflow versus insufficient facts.
+    - Appending typed estimates beside old fields, because it would create two
+      sources of truth and fragment scheduler/admission reasoning.
+    - Waiting for richer Pumas/runtime facts before contract replacement,
+      because the typed contract can already represent `insufficient_facts`,
+      `not_available`, and `not_implemented` while later facts mature.
+  - Planned replacement stages:
+    1. Runtime-registry contract slice: replace
+       `RuntimeTechnicalFitResourceEstimate` optional MB fields with typed
+       estimate records/states/diagnostics and update registry serde,
+       normalization, technical-fit, and selection tests. Do not change
+       ranking policy in this slice.
+    2. Workflow-service mirror slice: replace
+       `WorkflowTechnicalFitResourceEstimate` and runtime-requirement estimate
+       confidence strings with the same typed record shape, update public DTO
+       tests/fixtures, and remove legacy estimate field construction.
+    3. Embedded-runtime projection slice: project typed workflow/runtime
+       estimates without converting them through optional MB/confidence fields,
+       update adapter tests, and remove legacy projection helpers.
+    4. Candidate/admission slice: project reduced typed estimates into
+       scheduler-facing candidate facts, then make admission consume typed
+       `peak_vram_bytes`/`peak_ram_bytes` estimates and current pressure with
+       typed diagnostics.
+    5. History slice: persist observed timing and memory/OOM facts and keep
+       history-backed ranking gated until every valid runtime candidate for the
+       same workflow/model/runtime key has at least five completed runs.
+  - No-fallback/no-legacy confirmation: the replacement must remove old
+    technical-fit estimate fields from each touched boundary instead of
+    preserving compatibility shims. Missing or unavailable estimates must use
+    typed states, not `None`, `0`, saturation, or confidence-string control
+    flow.
+  - Verification passed: `git diff --check`.
 - 2026-05-17 small-model Pumas load-target smoke path slice:
   - Smallest useful vertical slice: update the embedded-runtime Puma-Lib Tiny
     SD Turbo-style imported Diffusers fixture so it includes a selected

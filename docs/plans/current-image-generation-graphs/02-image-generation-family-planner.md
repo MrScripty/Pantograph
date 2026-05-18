@@ -183,8 +183,10 @@ InvokeAI invocation or model-manager architecture.
 
 Staged implementation plan:
 
-1. [ ] Add inference/runtime resource-estimate DTOs and diagnostics with the states
-   above. This is a contract slice only; it must not change scheduler ranking.
+1. [ ] Replace the old technical-fit resource estimate contract with typed
+   inference/runtime resource-estimate DTOs and diagnostics using the states
+   above. This is a shared contract slice; it must not change scheduler
+   ranking.
    - 2026-05-17: inference now exposes `InferenceResourceEstimate`,
      `InferenceResourceEstimateState`, estimate kinds, and typed estimate
      diagnostics. The contract represents unavailable/overflow/unsupported
@@ -193,6 +195,13 @@ Staged implementation plan:
      so callers cannot build an unavailable estimate with the available state.
      Runtime-registry projection remains before this stage is complete;
      scheduler ranking remains later staged work.
+   - 2026-05-17 replan decision: use replacement option 3. Runtime-registry,
+     workflow-service, and embedded-runtime technical-fit contracts must move
+     to typed estimate records and remove the old singular
+     `resource_estimate` shape with optional MB fields and
+     `estimation_confidence` string control flow. Do not bridge the new
+     contract into old fields as a compatibility path and do not keep both
+     shapes as competing sources of truth.
 2. [x] Move existing output-size checked arithmetic into the shared estimate shape
    and add tests proving overflow is diagnostic-backed.
    - 2026-05-17: `ImageGenerationExecutionPlan` now carries typed
