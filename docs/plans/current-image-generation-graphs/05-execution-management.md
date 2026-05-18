@@ -6037,13 +6037,14 @@ Worker rules:
   - Verification deviation: several Cargo commands were started in parallel
     and waited on Cargo package/build locks; they completed successfully after
     Cargo serialized the build.
-  - Discovered issue/follow-up: the current Pantograph/Pumas imported
-    Diffusers test fixture can hydrate package facts but Pumas
-    `resolve_model_artifact_load_target` reports `ArtifactMissing` because the
-    indexed selected-artifact row does not contain the selected artifact path.
-    Keep this as a Pumas fixture/index follow-up; Pantograph behavior remains
-    fail-closed with no synthesized target. Retained artifact output remains
-    the next open execution slice.
+  - Discovered issue/follow-up: the then-current Pantograph/Pumas imported
+    Diffusers test fixture could hydrate package facts but Pumas
+    `resolve_model_artifact_load_target` reported `ArtifactMissing` because
+    the indexed selected-artifact row did not contain the selected artifact
+    identity. Pantograph behavior remained fail-closed with no synthesized
+    target. This fixture gap was resolved by the later 2026-05-17 small-model
+    smoke path slice; retained artifact output remains handled by the earlier
+    artifact-retention slice.
 - 2026-05-17 memory policy planning slice:
   - Smallest useful vertical slice: plan the remaining checked-memory and
     artifact-size work as a cross-runtime scheduler/inference contract before
@@ -6081,6 +6082,36 @@ Worker rules:
     calculator, candidate-projection, scheduler-admission, and observed
     memory/timing ledger slices before marking the Milestone 6 checked-memory
     checklist item complete.
+- 2026-05-17 small-model Pumas load-target smoke path slice:
+  - Smallest useful vertical slice: update the embedded-runtime Puma-Lib Tiny
+    SD Turbo-style imported Diffusers fixture so it includes a selected
+    `diffusers` artifact id and proves Puma-Lib emits a Pumas-approved
+    artifact load target before any Juggernaut attempt.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/puma_lib.rs`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. The modified and untracked root proposal markdown
+    files were ignored because they are unrelated to this slice.
+  - No-fallback/no-legacy confirmation: the fixture now lets Pumas own the
+    selected artifact identity and load-target resolution. Pantograph still
+    does not join Pumas paths, synthesize missing load targets, ask workers to
+    resolve library state, or continue when Pumas reports an artifact as
+    missing, ambiguous, stale, or invalid.
+  - Implementation notes: added `selected_artifact_id = diffusers` to the
+    imported Diffusers fixture metadata and tightened the Puma-Lib execution
+    test to require `resolved_model_artifact_load_target` with
+    `diffusers_bundle`, directory load path, `external_reference` storage,
+    `valid` validation state, and the selected artifact id in the returned
+    Pumas model ref.
+  - Focused tests added/updated:
+    `puma_lib_execution_rebinds_stale_model_path_from_model_id` now covers the
+    small-model fixture load-target path.
+  - Verification passed: `cargo test -p pantograph-embedded-runtime puma_lib
+    --lib`.
+  - Remaining follow-up: the broad checked-memory item remains open for the
+    staged resource-estimate contract/admission work; broader final release
+    validation still needs the Milestone 8 test/build sweep.
 
 ### Traceability Links
 

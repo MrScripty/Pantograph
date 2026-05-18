@@ -444,11 +444,11 @@ PyTorch/diffusers and produce a retained image artifact.
     planned image execution requires `resolved_model_artifact_load_target`
     alongside package facts, and `puma-lib` asks Pumas selector access for
     `resolve_model_artifact_load_target` when full package facts are available.
-    Existing Pumas imported-bundle test fixtures currently resolve package
-    facts but report `ArtifactMissing` for load targets because their indexed
-    selected-artifact rows do not contain the selected artifact path; this is
-    recorded as a Pumas fixture/index follow-up and Pantograph intentionally
-    does not synthesize a fallback target.
+    2026-05-17 smoke-path update: the Tiny SD Turbo-style imported Diffusers
+    fixture now carries a selected artifact id and resolves a Pumas-approved
+    external-reference directory load target through Puma-Lib execution.
+    Pantograph still does not synthesize a fallback target when Pumas reports
+    a selected artifact as missing or ambiguous.
 - [x] Ensure dependency/runtime readiness reports missing `diffusers`,
   `transformers`, `accelerate`, `torch`, or Pillow as explicit readiness
   diagnostics.
@@ -468,8 +468,17 @@ PyTorch/diffusers and produce a retained image artifact.
   bodies are not duplicated in `image` and `results` before artifact
   conversion. `results` should contain descriptors/metadata or compact
   summaries once artifacts exist.
-- [ ] Add a small model smoke path using Tiny SD Turbo or another bounded
+- [x] Add a small model smoke path using Tiny SD Turbo or another bounded
   fixture before attempting Juggernaut.
+  - 2026-05-17: added a Puma-Lib Tiny SD Turbo-style imported Diffusers
+    fixture smoke path. The fixture declares the selected `diffusers` artifact
+    id, Pumas rebuilds/validates the external-reference model, Puma-Lib emits
+    full package facts, and Puma-Lib also emits a
+    `resolved_model_artifact_load_target` with `artifact_kind =
+    diffusers_bundle`, `load_path_kind = directory`, `storage_kind =
+    external_reference`, `validation_state = valid`, and the Pumas model ref's
+    selected artifact id. This is a bounded fixture smoke path, not a
+    Juggernaut run and not a synthesized Pantograph path.
 - [x] Add model-family fixtures or table-driven tests for Pumas facts shaped
   like z-image turbo, qwen-image, lumina-image, glm-image, and FLUX.2 where
   available. These tests should validate routing/request construction and may

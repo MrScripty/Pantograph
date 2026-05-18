@@ -98,9 +98,34 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
             .and_then(|value| value.get("entry_path")),
         Some(&serde_json::json!(bundle_root.display().to_string()))
     );
-    assert!(
-        outputs.get("resolved_model_artifact_load_target").is_none(),
-        "Puma-Lib fixture currently lacks an indexed selected-artifact row; Pantograph must not synthesize a load target"
+    let load_target = outputs
+        .get("resolved_model_artifact_load_target")
+        .expect("Puma-Lib should provide a selected-artifact load target");
+    assert_eq!(
+        load_target.get("artifact_kind"),
+        Some(&serde_json::json!("diffusers_bundle"))
+    );
+    assert_eq!(
+        load_target.get("local_load_path"),
+        Some(&serde_json::json!(bundle_root.display().to_string()))
+    );
+    assert_eq!(
+        load_target.get("load_path_kind"),
+        Some(&serde_json::json!("directory"))
+    );
+    assert_eq!(
+        load_target.get("storage_kind"),
+        Some(&serde_json::json!("external_reference"))
+    );
+    assert_eq!(
+        load_target.get("validation_state"),
+        Some(&serde_json::json!("valid"))
+    );
+    assert_eq!(
+        load_target
+            .get("model_ref")
+            .and_then(|value| value.get("selected_artifact_id")),
+        Some(&serde_json::json!("diffusers"))
     );
 }
 

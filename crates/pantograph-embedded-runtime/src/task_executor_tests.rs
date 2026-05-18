@@ -270,6 +270,7 @@ fn write_imported_diffusion_metadata(
             "storage_kind": "external_reference",
             "bundle_format": "diffusers_directory",
             "pipeline_class": "StableDiffusionPipeline",
+            "selected_artifact_id": "diffusers",
             "import_state": "ready",
             "validation_state": "valid",
             "pipeline_tag": "text-to-image",
