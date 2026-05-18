@@ -753,6 +753,28 @@ Staged implementation:
      fmt --all -- --check`, and `git diff --check` for the allowed write set.
 7. [ ] Extend node-engine inference task result/event plumbing to forward the
    observation without interpreting metric sources.
+   - 2026-05-18 re-plan boundary: this item is ambiguous after the lifecycle
+     event contract decision. The implemented canonical transport for resource
+     observations is `InferenceRequestLifecycleEvent`, and node-engine already
+     forwards the host-owned lifecycle sink into `InferenceGateway` for typed
+     canonical inference paths without interpreting lifecycle payloads. Adding
+     resource fields to `InferenceExecutionResult` or node outputs here would
+     reintroduce a second telemetry path and conflict with the plan's
+     lifecycle-first/no-fallback rule.
+   - Clean options to resolve the boundary:
+     1. Treat item 7 as already satisfied for node-engine because the canonical
+        forwarding path is the lifecycle sink and keep the next implementation
+        slice in inference gateway/backend producers.
+     2. Rename item 7 to a focused verification slice that adds a node-engine
+        test proving canonical inference execution passes lifecycle events
+        with arbitrary event payloads through without interpretation, without
+        adding result DTO fields.
+     3. Re-plan to make `InferenceExecutionResult` carry resource observations
+        as a second transport, then update node-engine outputs and gateway
+        projection. This is rejected by the current plan because it widens
+        every result variant and duplicates lifecycle telemetry ownership.
+   - Recommended resolution: option 1 or option 2. Do not implement option 3
+     unless the lifecycle-event transport decision is explicitly reversed.
 8. [ ] Extend embedded-runtime projection into inference diagnostics and
    `RunTerminalPayload.resource_observation`, including mapping tests for
    peak RAM, peak VRAM, explicit OOM, source/availability diagnostics, and
