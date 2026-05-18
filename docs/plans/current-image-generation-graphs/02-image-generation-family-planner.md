@@ -447,6 +447,54 @@ Codebase review refinement:
   exposes timing/queue fields only; memory ranking must not silently ignore the
   persisted memory facts.
 
+Standards-compliance refinement:
+
+- Standards reviewed for this slice: `PLAN-STANDARDS.md`,
+  `CODING-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+  `TESTING-STANDARDS.md`, `DEPENDENCY-STANDARDS.md`,
+  `CROSS-PLATFORM-STANDARDS.md`, `INTEROP-STANDARDS.md`,
+  `DOCUMENTATION-STANDARDS.md`, and Rust-specific API, async,
+  cross-platform, security, and dependency standards.
+- Build resource observation DTOs as correct-by-construction contracts. Public
+  or cross-crate enums/structs must use explicit serde casing, additive
+  evolution, typed errors, and validation constructors where raw producer
+  input crosses a crate, process, or language boundary. Avoid raw strings for
+  metric kinds, source kinds, availability kinds, failure kinds, and runtime
+  attribution.
+- Bound diagnostic payloads. Source and availability collections must have a
+  documented maximum, deterministic ordering, and de-duplication rules so a
+  noisy runtime cannot create unbounded lifecycle events. Do not include raw
+  process output, absolute local paths, environment values, or binary payloads
+  in resource observations.
+- Keep sampling overhead explicit. Any process-RSS sampler must use named
+  interval and sample-count/timeout constants, refresh only the target process
+  when the chosen API supports it, and report typed `not_available` or
+  `not_implemented` instead of spinning or widening scope. Full-system refresh
+  or expensive polling requires a written justification in the implementation
+  slice.
+- Own monitor lifecycle with a single execution owner. Sampling loops, if
+  needed, must return a `#[must_use]` guard or equivalent handle, keep the
+  `JoinHandle`/cancellation owner in the backend/runtime execution shell, and
+  prove finish/cancel/drop cleanup in focused tests. No untracked
+  `tokio::spawn`, no blocking work inside async request paths without
+  `spawn_blocking`, and no locks held across awaits.
+- Preserve dependency ownership. The first implementation uses the existing
+  `sysinfo` dependency already owned by `inference`; new OS/API dependencies
+  are forbidden unless `sysinfo` is proven insufficient, the dependency owner
+  is the narrowest crate that executes it, the transitive cost is recorded, and
+  any platform-specific or heavy dependency is feature-gated when appropriate.
+- Treat existing threshold-crossing files as extraction risks. `gateway.rs`,
+  `server.rs`, `embedding_runtime.rs`, `backend/llamacpp_support.rs`, and
+  runtime-registry technical-fit modules already exceed the decomposition
+  review threshold. Slices touching them must extract focused helpers or record
+  why a narrow edit is safer; do not add new `too_many_arguments` allowances
+  for telemetry wiring.
+- Update module documentation when ownership changes. New `src/` directories,
+  public resource-observation contracts, worker envelope changes, runtime
+  monitor modules, or host-facing projections require README or ADR updates in
+  the same slice with API consumer contract, structured producer contract,
+  unsupported behavior, and revisit triggers.
+
 ### Resource Monitor Platform Design
 
 Resource monitoring should follow the repository's cross-platform pattern:
@@ -540,6 +588,7 @@ Verification for this staged design should include:
 
 - `cargo test -p inference resource_observation --lib`
 - `cargo test -p inference resource_monitor --lib`
+- `cargo test -p inference process_rss --lib`
 - `cargo test -p inference lifecycle --lib`
 - `cargo test -p inference pytorch_worker --lib`
 - `cargo test -p node-engine inference_resource_observation --lib`
@@ -555,6 +604,14 @@ the OS modules are implemented:
 - `cargo check --workspace --target x86_64-unknown-linux-gnu`
 - `cargo check --workspace --target x86_64-pc-windows-msvc`
 - `cargo check --workspace --target aarch64-apple-darwin`
+
+Dependency and feature verification is required when implementation changes
+Cargo manifests or feature contracts:
+
+- `cargo tree -p inference -i sysinfo`
+- `cargo tree -p inference --depth 1`
+- `cargo check -p inference --no-default-features`
+- `cargo check -p inference --all-features`
 
 ## Standards Guardrails
 

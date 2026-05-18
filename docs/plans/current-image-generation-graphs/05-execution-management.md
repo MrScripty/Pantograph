@@ -6491,6 +6491,43 @@ Worker rules:
     with memory/OOM fields before ranking uses diagnostics-ledger memory
     history.
   - Verification for this documentation slice: `git diff --check`.
+- 2026-05-18 resource-observation standards iteration:
+  - Smallest useful vertical slice: iterate the accepted resource-observation
+    plan against the coding standards and current codebase blast radius before
+    starting implementation. This is documentation-only and does not change
+    contracts or runtime behavior.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - Standards reviewed: plan execution/worktree hygiene, Rust API
+    correct-by-construction contracts, sync-core/async-shell boundaries,
+    platform module isolation, dependency ownership, bounded diagnostics,
+    interop envelope validation, lifecycle ownership, testing isolation, and
+    documentation traceability.
+  - Codebase blast-radius findings: `gateway.rs`, `server.rs`,
+    `embedding_runtime.rs`, `backend/llamacpp_support.rs`, and
+    runtime-registry technical-fit modules are threshold-crossing files that
+    require decomposition review before telemetry edits; `ProcessHandle::pid`
+    and the existing `sysinfo` dependency support a dependency-minimizing
+    process-RSS slice; current OOM string detection exists only as legacy
+    adapter-local translation points and must not become scheduler or workflow
+    policy.
+  - Plan updates made: resource observation DTOs must be typed, bounded,
+    de-duplicated, deterministically ordered, and free of raw process output or
+    local paths; process sampling must have named interval/limit constants,
+    target-process refresh where possible, tracked cancellation/`JoinHandle`
+    ownership, and finish/cancel/drop cleanup tests; new platform dependencies
+    require proof that `sysinfo` is insufficient plus dependency-tree and
+    feature-contract verification; new source directories and host-facing
+    contracts require README or ADR updates in the same slice.
+  - No-fallback/no-legacy confirmation: these refinements reject compatibility
+    shims, terminal string parsing, unbounded diagnostic metadata, scheduler OS
+    probes, and image-only resource telemetry. They require replacement with
+    canonical typed resource-observation contracts and adapter-local typed
+    translation where external runtimes lack structured telemetry.
+  - Verification for this documentation slice: `git diff --check`.
 
 ### Traceability Links
 

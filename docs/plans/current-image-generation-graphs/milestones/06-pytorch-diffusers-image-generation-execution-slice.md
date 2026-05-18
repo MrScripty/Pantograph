@@ -569,6 +569,20 @@ PyTorch/diffusers and produce a retained image artifact.
     workflow terminal string matching. Extend runtime-registry candidate
     history with observed memory/OOM fields before scheduler history ranking
     consumes those persisted diagnostics-ledger facts.
+  - 2026-05-18 standards iteration update: resource observation
+    implementation slices must use correct-by-construction DTOs with typed
+    bounded source/availability facts, deterministic de-duplication, and no
+    raw process output or local paths in lifecycle diagnostics. Process-RSS
+    sampling must have named interval/limit constants, a single lifecycle
+    owner, tracked cancellation/`JoinHandle` cleanup, and focused tests for
+    finish/cancel/drop behavior. New platform/API dependencies are forbidden
+    unless the existing `sysinfo` path is proven insufficient and dependency
+    ownership, transitive cost, feature gating, and no-default/all-features
+    checks are recorded. Any slice touching existing threshold-crossing files
+    such as `gateway.rs`, `server.rs`, `embedding_runtime.rs`,
+    `backend/llamacpp_support.rs`, or runtime-registry technical-fit modules
+    must extract focused helpers or record an explicit decomposition review;
+    telemetry work must not add new `too_many_arguments` allowances.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
