@@ -186,6 +186,7 @@ pub use resource_estimates::{
     InferenceResourceEstimate, InferenceResourceEstimateDiagnostic,
     InferenceResourceEstimateDiagnosticCode, InferenceResourceEstimateDiagnosticSeverity,
     InferenceResourceEstimateError, InferenceResourceEstimateKind, InferenceResourceEstimateState,
+    InferenceUnavailableResourceEstimateState,
 };
 pub use runtime_load::{
     managed_runtime_load_facts_from_snapshot, LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode,

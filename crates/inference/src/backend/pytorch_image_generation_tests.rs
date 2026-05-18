@@ -9,6 +9,7 @@ use crate::model_contracts::{
     ModelValidationState, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
     PumasArtifactLoadTarget, PumasModelRef,
 };
+use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 
 #[test]
 fn test_generate_image_envelope_from_plan_validates_worker_request() {
@@ -127,6 +128,9 @@ fn image_plan() -> ImageGenerationExecutionPlan {
             DenoisingSchedulerOptionId::parse("euler").expect("valid scheduler id"),
         ),
         num_images_per_prompt: Some(1),
-        estimated_output_rgba_bytes: Some(1_048_576),
+        resource_estimates: vec![InferenceResourceEstimate::available(
+            InferenceResourceEstimateKind::OutputRgbaBytes,
+            1_048_576,
+        )],
     }
 }

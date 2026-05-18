@@ -34,6 +34,34 @@ impl InferenceResourceEstimateState {
     }
 }
 
+/// Non-available estimate states accepted by the infallible constructor.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum InferenceUnavailableResourceEstimateState {
+    NotAvailable,
+    NotImplemented,
+    InsufficientFacts,
+    Overflow,
+    UnsupportedFamily,
+    UnsupportedRuntime,
+}
+
+impl From<InferenceUnavailableResourceEstimateState> for InferenceResourceEstimateState {
+    fn from(state: InferenceUnavailableResourceEstimateState) -> Self {
+        match state {
+            InferenceUnavailableResourceEstimateState::NotAvailable => Self::NotAvailable,
+            InferenceUnavailableResourceEstimateState::NotImplemented => Self::NotImplemented,
+            InferenceUnavailableResourceEstimateState::InsufficientFacts => Self::InsufficientFacts,
+            InferenceUnavailableResourceEstimateState::Overflow => Self::Overflow,
+            InferenceUnavailableResourceEstimateState::UnsupportedFamily => Self::UnsupportedFamily,
+            InferenceUnavailableResourceEstimateState::UnsupportedRuntime => {
+                Self::UnsupportedRuntime
+            }
+        }
+    }
+}
+
 /// Stable diagnostic code for resource-estimate production.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -93,8 +121,6 @@ pub enum InferenceResourceEstimateError {
     AvailableEstimateHasDiagnostics,
     #[error("non-available resource estimates must not carry a value")]
     NonAvailableEstimateHasValue,
-    #[error("non-available resource estimates must not use the available state")]
-    NonAvailableEstimateUsesAvailableState,
 }
 
 /// Resource estimate with an explicit state and optional byte value.
@@ -121,18 +147,15 @@ impl InferenceResourceEstimate {
 
     pub fn unavailable(
         kind: InferenceResourceEstimateKind,
-        state: InferenceResourceEstimateState,
+        state: InferenceUnavailableResourceEstimateState,
         diagnostics: Vec<InferenceResourceEstimateDiagnostic>,
-    ) -> Result<Self, InferenceResourceEstimateError> {
-        if state.is_available() {
-            return Err(InferenceResourceEstimateError::NonAvailableEstimateUsesAvailableState);
-        }
-        Ok(Self {
+    ) -> Self {
+        Self {
             kind,
-            state,
+            state: state.into(),
             value_bytes: None,
             diagnostics,
-        })
+        }
     }
 
     #[must_use]
@@ -207,10 +230,9 @@ mod tests {
         );
         let estimate = InferenceResourceEstimate::unavailable(
             InferenceResourceEstimateKind::OutputRgbaBytes,
-            InferenceResourceEstimateState::Overflow,
+            InferenceUnavailableResourceEstimateState::Overflow,
             vec![diagnostic],
-        )
-        .expect("overflow estimate should build");
+        );
 
         let encoded = serde_json::to_value(&estimate).expect("estimate should encode");
         assert_eq!(encoded.get("value_bytes"), None);
@@ -223,17 +245,17 @@ mod tests {
     }
 
     #[test]
-    fn non_available_resource_estimate_rejects_available_state() {
-        let error = InferenceResourceEstimate::unavailable(
+    fn unavailable_resource_estimate_constructor_excludes_available_state() {
+        let estimate = InferenceResourceEstimate::unavailable(
             InferenceResourceEstimateKind::PeakVramBytes,
-            InferenceResourceEstimateState::Available,
+            InferenceUnavailableResourceEstimateState::InsufficientFacts,
             Vec::new(),
-        )
-        .expect_err("available state is not a non-available estimate");
+        );
 
         assert_eq!(
-            error,
-            InferenceResourceEstimateError::NonAvailableEstimateUsesAvailableState
+            estimate.state(),
+            InferenceResourceEstimateState::InsufficientFacts
         );
+        assert_eq!(estimate.value_bytes(), None);
     }
 }

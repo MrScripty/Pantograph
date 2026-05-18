@@ -189,10 +189,18 @@ Staged implementation plan:
      `InferenceResourceEstimateState`, estimate kinds, and typed estimate
      diagnostics. The contract represents unavailable/overflow/unsupported
      estimates as states with diagnostics rather than numeric sentinel values.
+     The follow-up output RGBA migration tightened non-available construction
+     so callers cannot build an unavailable estimate with the available state.
      Runtime-registry projection remains before this stage is complete;
      scheduler ranking remains later staged work.
-2. [ ] Move existing output-size checked arithmetic into the shared estimate shape
+2. [x] Move existing output-size checked arithmetic into the shared estimate shape
    and add tests proving overflow is diagnostic-backed.
+   - 2026-05-17: `ImageGenerationExecutionPlan` now carries typed
+     `resource_estimates` instead of the legacy
+     `estimated_output_rgba_bytes: Option<u64>` field. Output RGBA estimates
+     use `available` with byte values when dimensions/count are known,
+     `insufficient_facts` when width or height is omitted, and `overflow` with
+     a planner rejection diagnostic when checked arithmetic fails.
 3. [ ] Add side-effect-free family/runtime calculators for estimates that can be
    computed from already-available facts. Unknown or unimplemented estimates
    must be explicit states, not `0`, silent omission, or saturated values.

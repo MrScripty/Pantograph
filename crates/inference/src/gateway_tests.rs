@@ -25,6 +25,7 @@ use crate::model_contracts::{
     PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
     SamplingGenerationOptions, StoppingGenerationOptions,
 };
+use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, DepthEstimationRequest, EncodedAudio,
@@ -183,7 +184,10 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
         seed: Some(7),
         denoising_scheduler: None,
         num_images_per_prompt: Some(1),
-        estimated_output_rgba_bytes: Some(512_u64 * 512 * 4),
+        resource_estimates: vec![InferenceResourceEstimate::available(
+            InferenceResourceEstimateKind::OutputRgbaBytes,
+            512_u64 * 512 * 4,
+        )],
     }
 }
 

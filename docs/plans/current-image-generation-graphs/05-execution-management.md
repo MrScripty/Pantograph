@@ -6106,6 +6106,33 @@ Worker rules:
     projection for the same typed estimate states before closing the first
     staged memory-estimate contract item, then move existing output RGBA
     estimate arithmetic into this shape.
+- 2026-05-17 output RGBA estimate migration slice:
+  - Smallest useful vertical slice: replace the image execution plan's
+    optional `estimated_output_rgba_bytes` field with the new typed
+    `resource_estimates` contract for the existing output-size estimate only.
+  - Allowed write set: `crates/inference/src/resource_estimates.rs`,
+    `crates/inference/src/lib.rs`,
+    `crates/inference/src/image_generation_planner.rs`,
+    `crates/inference/src/image_generation_planner_tests.rs`,
+    `crates/inference/src/gateway_tests.rs`,
+    `crates/inference/src/backend/pytorch_image_generation_tests.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log.
+  - No-fallback/no-legacy confirmation: the old optional estimate field is
+    removed rather than mirrored. Known output estimates use
+    `available(value_bytes)`, missing width/height uses an explicit
+    `insufficient_facts` state, and overflow produces typed planner and
+    resource-estimate diagnostics instead of saturation, `0`, or silent
+    omission.
+  - Focused tests updated: image planner tests assert available and
+    insufficient-facts estimate states, overflow remains diagnostic-backed,
+    and gateway/PyTorch plan fixtures use the typed estimate contract.
+  - Verification passed: `cargo test -p inference image_generation --lib` and
+    `cargo test -p inference resource_estimate --lib`.
+  - Remaining follow-up: project typed estimate states through
+    runtime-registry/workflow technical-fit and add family/runtime calculators
+    for estimates beyond output RGBA bytes.
 - 2026-05-17 small-model Pumas load-target smoke path slice:
   - Smallest useful vertical slice: update the embedded-runtime Puma-Lib Tiny
     SD Turbo-style imported Diffusers fixture so it includes a selected

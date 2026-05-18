@@ -17,6 +17,11 @@ use crate::model_contracts::{
     ModelValidationState, PackageFactStatus, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
     PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
 };
+use crate::resource_estimates::{
+    InferenceResourceEstimate, InferenceResourceEstimateDiagnostic,
+    InferenceResourceEstimateDiagnosticCode, InferenceResourceEstimateKind,
+    InferenceUnavailableResourceEstimateState,
+};
 use crate::types::ImageGenerationRequest;
 
 const PYTORCH_BACKEND_ID: &str = "pytorch";
@@ -247,9 +252,8 @@ pub struct ImageGenerationExecutionPlan {
     pub denoising_scheduler: Option<DenoisingSchedulerOptionId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub num_images_per_prompt: Option<u32>,
-    /// Conservative RGBA output byte estimate when width, height, and count are known.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_output_rgba_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_estimates: Vec<InferenceResourceEstimate>,
 }
 
 /// Stable planner diagnostic.
@@ -368,7 +372,7 @@ pub fn plan_image_generation_execution(
         ));
     }
 
-    let estimated_output_rgba_bytes = estimate_output_rgba_bytes(input.request, &mut diagnostics);
+    let resource_estimates = estimate_output_rgba_bytes(input.request, &mut diagnostics);
     let denoising_scheduler = validate_denoising_scheduler_id(input.request, &mut diagnostics);
     validate_family_option_support(
         family_adapter,
@@ -417,7 +421,7 @@ pub fn plan_image_generation_execution(
             seed: input.request.seed,
             denoising_scheduler,
             num_images_per_prompt: input.request.num_images_per_prompt,
-            estimated_output_rgba_bytes,
+            resource_estimates,
         },
     }
 }
@@ -756,16 +760,32 @@ fn validate_non_zero(
 fn estimate_output_rgba_bytes(
     request: &ImageGenerationRequest,
     diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
-) -> Option<u64> {
+) -> Vec<InferenceResourceEstimate> {
     let (Some(width), Some(height)) = (request.width, request.height) else {
-        return None;
+        return vec![InferenceResourceEstimate::unavailable(
+            InferenceResourceEstimateKind::OutputRgbaBytes,
+            InferenceUnavailableResourceEstimateState::InsufficientFacts,
+            vec![InferenceResourceEstimateDiagnostic::error(
+                InferenceResourceEstimateDiagnosticCode::InsufficientFacts,
+                "request.width/request.height",
+                "image-generation output byte estimate requires explicit width and height",
+            )],
+        )];
     };
     let count = request.num_images_per_prompt.unwrap_or(1);
     if width < IMAGE_PLANNER_MIN_DIMENSION
         || height < IMAGE_PLANNER_MIN_DIMENSION
         || count < IMAGE_PLANNER_MIN_DIMENSION
     {
-        return None;
+        return vec![InferenceResourceEstimate::unavailable(
+            InferenceResourceEstimateKind::OutputRgbaBytes,
+            InferenceUnavailableResourceEstimateState::InsufficientFacts,
+            vec![InferenceResourceEstimateDiagnostic::error(
+                InferenceResourceEstimateDiagnosticCode::InvalidInput,
+                "request.width/request.height/request.num_images_per_prompt",
+                "image-generation output byte estimate requires positive dimensions and image count",
+            )],
+        )];
     }
 
     let estimate = u64::from(width)
@@ -773,13 +793,29 @@ fn estimate_output_rgba_bytes(
         .and_then(|pixels| pixels.checked_mul(u64::from(count)))
         .and_then(|pixels| pixels.checked_mul(IMAGE_PLANNER_BYTES_PER_RGBA_PIXEL));
     if estimate.is_none() {
+        let message = "image-generation output byte estimate overflowed";
         diagnostics.push(diagnostic(
             ImageGenerationPlannerDiagnosticCode::ResourceEstimateOverflow,
             "request.width/request.height/request.num_images_per_prompt",
-            "image-generation output byte estimate overflowed",
+            message,
         ));
+        return vec![InferenceResourceEstimate::unavailable(
+            InferenceResourceEstimateKind::OutputRgbaBytes,
+            InferenceUnavailableResourceEstimateState::Overflow,
+            vec![InferenceResourceEstimateDiagnostic::error(
+                InferenceResourceEstimateDiagnosticCode::ArithmeticOverflow,
+                "request.width/request.height/request.num_images_per_prompt",
+                message,
+            )],
+        )];
     }
-    estimate
+    match estimate {
+        Some(value_bytes) => vec![InferenceResourceEstimate::available(
+            InferenceResourceEstimateKind::OutputRgbaBytes,
+            value_bytes,
+        )],
+        None => Vec::new(),
+    }
 }
 
 fn planner_diagnostic_from_family_adapter(

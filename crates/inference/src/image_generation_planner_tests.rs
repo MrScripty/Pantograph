@@ -1,6 +1,7 @@
 use super::*;
 use crate::device_contracts::{InferenceDevicePolicy, RuntimeVariantId};
 use crate::model_contracts::ModelStorageKind;
+use crate::resource_estimates::{InferenceResourceEstimateKind, InferenceResourceEstimateState};
 use crate::types::EncodedImage;
 
 fn package_fixture(name: &str) -> ResolvedModelPackageFacts {
@@ -143,7 +144,16 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
     assert_eq!(plan.family, ImageGenerationFamilyLabel::StableDiffusion);
     assert_eq!(plan.pipeline_class, "StableDiffusionPipeline");
     assert_eq!(plan.denoising_scheduler, None);
-    assert_eq!(plan.estimated_output_rgba_bytes, Some(2_097_152));
+    assert_eq!(plan.resource_estimates.len(), 1);
+    assert_eq!(
+        plan.resource_estimates[0].kind(),
+        InferenceResourceEstimateKind::OutputRgbaBytes
+    );
+    assert_eq!(
+        plan.resource_estimates[0].state(),
+        InferenceResourceEstimateState::Available
+    );
+    assert_eq!(plan.resource_estimates[0].value_bytes(), Some(2_097_152));
     assert_eq!(
         plan.required_components,
         crate::image_generation_family_rules::image_generation_family_rules(
@@ -629,6 +639,37 @@ fn planner_rejects_invalid_dimensions_before_resource_estimate() {
 
     assert!(diagnostic_codes(&outcome)
         .contains(&ImageGenerationPlannerDiagnosticCode::InvalidNumericOption));
+}
+
+#[test]
+fn planner_records_insufficient_output_size_facts_without_sentinel_estimate() {
+    let facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let request = ImageGenerationRequest {
+        height: None,
+        ..image_request()
+    };
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
+        backend_decision: &decision,
+    });
+
+    let ImageGenerationPlanningOutcome::Planned { plan } = outcome else {
+        panic!("expected plan with non-available output-size estimate");
+    };
+    assert_eq!(plan.resource_estimates.len(), 1);
+    assert_eq!(
+        plan.resource_estimates[0].kind(),
+        InferenceResourceEstimateKind::OutputRgbaBytes
+    );
+    assert_eq!(
+        plan.resource_estimates[0].state(),
+        InferenceResourceEstimateState::InsufficientFacts
+    );
+    assert_eq!(plan.resource_estimates[0].value_bytes(), None);
 }
 
 #[test]

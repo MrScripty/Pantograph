@@ -429,6 +429,14 @@ PyTorch/diffusers and produce a retained image artifact.
     runtime-registry/workflow technical-fit, move the existing output RGBA
     estimate into this shape, add side-effect-free family/runtime calculators,
     and wire scheduler admission/history.
+  - 2026-05-17 output RGBA estimate migration slice: replaced
+    `ImageGenerationExecutionPlan.estimated_output_rgba_bytes` with typed
+    `resource_estimates`. Successful plans now carry an `output_rgba_bytes`
+    `available` estimate when width/height/count are known and an
+    `insufficient_facts` estimate when dimensions are omitted. Overflow still
+    rejects planning with `ResourceEstimateOverflow` and also records the
+    shared estimate diagnostic/state instead of returning a saturated or
+    omitted numeric estimate.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
