@@ -202,6 +202,12 @@ Staged implementation plan:
      `estimation_confidence` string control flow. Do not bridge the new
      contract into old fields as a compatibility path and do not keep both
      shapes as competing sources of truth.
+   - 2026-05-18 runtime-registry contract slice: runtime-registry technical-fit
+     candidates and decisions now carry `resource_estimates` as typed estimate
+     records with explicit states and diagnostics. The old singular
+     `resource_estimate` optional MB-field contract was removed from this
+     boundary. Workflow-service and embedded-runtime mirrors remain the next
+     serial projection slices before this shared-contract stage is complete.
 2. [x] Move existing output-size checked arithmetic into the shared estimate shape
    and add tests proving overflow is diagnostic-backed.
    - 2026-05-17: `ImageGenerationExecutionPlan` now carries typed

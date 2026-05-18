@@ -6172,6 +6172,33 @@ Worker rules:
     typed states, not `None`, `0`, saturation, or confidence-string control
     flow.
   - Verification passed: `git diff --check`.
+- 2026-05-18 runtime-registry technical-fit estimate contract slice:
+  - Smallest useful vertical slice: replace the runtime-registry
+    technical-fit candidate/decision estimate contract with typed estimate
+    records while leaving workflow-service and embedded-runtime mirrors for the
+    next serial projection slices.
+  - Allowed write set:
+    `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `crates/pantograph-runtime-registry/src/lib.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: the registry no longer exposes the old
+    singular `resource_estimate` optional MB-field shape on technical-fit
+    candidates or decisions. It uses typed `resource_estimates` records with
+    explicit states and diagnostics and does not adapt those records into old
+    fields or preserve both shapes.
+  - Focused tests updated: runtime-registry technical-fit tests prove typed
+    estimate state serde does not emit legacy MB fields, request normalization
+    preserves typed estimate records, and selected decisions copy typed
+    estimates from candidates.
+  - Verification passed: `cargo test -p pantograph-runtime-registry
+    technical_fit --lib`.
+  - Remaining follow-up: update workflow-service and embedded-runtime
+    technical-fit mirrors/projections to the same typed estimate records before
+    running broader cross-crate checks.
 - 2026-05-17 small-model Pumas load-target smoke path slice:
   - Smallest useful vertical slice: update the embedded-runtime Puma-Lib Tiny
     SD Turbo-style imported Diffusers fixture so it includes a selected

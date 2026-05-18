@@ -133,30 +133,164 @@ impl RuntimeTechnicalFitDevicePolicy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeTechnicalFitResourceEstimateKind {
+    OutputRgbaBytes,
+    VaeWorkingMemoryBytes,
+    ModelResidencyBytes,
+    RuntimeOverheadBytes,
+    PeakVramBytes,
+    PeakRamBytes,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeTechnicalFitResourceEstimateState {
+    Available,
+    NotAvailable,
+    NotImplemented,
+    InsufficientFacts,
+    Overflow,
+    UnsupportedFamily,
+    UnsupportedRuntime,
+}
+
+impl RuntimeTechnicalFitResourceEstimateState {
+    pub fn is_available(self) -> bool {
+        self == Self::Available
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeTechnicalFitUnavailableResourceEstimateState {
+    NotAvailable,
+    NotImplemented,
+    InsufficientFacts,
+    Overflow,
+    UnsupportedFamily,
+    UnsupportedRuntime,
+}
+
+impl From<RuntimeTechnicalFitUnavailableResourceEstimateState>
+    for RuntimeTechnicalFitResourceEstimateState
+{
+    fn from(state: RuntimeTechnicalFitUnavailableResourceEstimateState) -> Self {
+        match state {
+            RuntimeTechnicalFitUnavailableResourceEstimateState::NotAvailable => Self::NotAvailable,
+            RuntimeTechnicalFitUnavailableResourceEstimateState::NotImplemented => {
+                Self::NotImplemented
+            }
+            RuntimeTechnicalFitUnavailableResourceEstimateState::InsufficientFacts => {
+                Self::InsufficientFacts
+            }
+            RuntimeTechnicalFitUnavailableResourceEstimateState::Overflow => Self::Overflow,
+            RuntimeTechnicalFitUnavailableResourceEstimateState::UnsupportedFamily => {
+                Self::UnsupportedFamily
+            }
+            RuntimeTechnicalFitUnavailableResourceEstimateState::UnsupportedRuntime => {
+                Self::UnsupportedRuntime
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeTechnicalFitResourceEstimateDiagnosticCode {
+    ArithmeticOverflow,
+    InvalidInput,
+    InsufficientFacts,
+    NotAvailable,
+    NotImplemented,
+    UnsupportedFamily,
+    UnsupportedRuntime,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RuntimeTechnicalFitResourceEstimateDiagnosticSeverity {
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeTechnicalFitResourceEstimateDiagnostic {
+    pub code: RuntimeTechnicalFitResourceEstimateDiagnosticCode,
+    pub severity: RuntimeTechnicalFitResourceEstimateDiagnosticSeverity,
+    pub field_path: String,
+    pub message: String,
+}
+
+impl RuntimeTechnicalFitResourceEstimateDiagnostic {
+    pub fn error(
+        code: RuntimeTechnicalFitResourceEstimateDiagnosticCode,
+        field_path: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            code,
+            severity: RuntimeTechnicalFitResourceEstimateDiagnosticSeverity::Error,
+            field_path: field_path.into(),
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeTechnicalFitResourceEstimate {
+    kind: RuntimeTechnicalFitResourceEstimateKind,
+    state: RuntimeTechnicalFitResourceEstimateState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_peak_vram_mb: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_peak_ram_mb: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_min_vram_mb: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub estimated_min_ram_mb: Option<u64>,
+    value_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    diagnostics: Vec<RuntimeTechnicalFitResourceEstimateDiagnostic>,
 }
 
 impl RuntimeTechnicalFitResourceEstimate {
-    pub fn normalized(&self) -> Option<Self> {
-        if self.estimated_peak_vram_mb.is_none()
-            && self.estimated_peak_ram_mb.is_none()
-            && self.estimated_min_vram_mb.is_none()
-            && self.estimated_min_ram_mb.is_none()
-        {
-            None
-        } else {
-            Some(self.clone())
+    pub fn available(kind: RuntimeTechnicalFitResourceEstimateKind, value_bytes: u64) -> Self {
+        Self {
+            kind,
+            state: RuntimeTechnicalFitResourceEstimateState::Available,
+            value_bytes: Some(value_bytes),
+            diagnostics: Vec::new(),
         }
+    }
+
+    pub fn unavailable(
+        kind: RuntimeTechnicalFitResourceEstimateKind,
+        state: RuntimeTechnicalFitUnavailableResourceEstimateState,
+        diagnostics: Vec<RuntimeTechnicalFitResourceEstimateDiagnostic>,
+    ) -> Self {
+        Self {
+            kind,
+            state: state.into(),
+            value_bytes: None,
+            diagnostics,
+        }
+    }
+
+    pub fn kind(&self) -> RuntimeTechnicalFitResourceEstimateKind {
+        self.kind
+    }
+
+    pub fn state(&self) -> RuntimeTechnicalFitResourceEstimateState {
+        self.state
+    }
+
+    pub fn value_bytes(&self) -> Option<u64> {
+        self.value_bytes
+    }
+
+    pub fn diagnostics(&self) -> &[RuntimeTechnicalFitResourceEstimateDiagnostic] {
+        &self.diagnostics
     }
 }
 
@@ -378,8 +512,8 @@ pub struct RuntimeTechnicalFitCandidate {
     pub device_class: Option<RuntimeTechnicalFitDeviceClass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_estimates: Vec<RuntimeTechnicalFitResourceEstimate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observed_throughput_hint: Option<RuntimeTechnicalFitObservedThroughputHint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -427,10 +561,7 @@ impl RuntimeTechnicalFitCandidate {
             model_id,
             device_class: self.device_class,
             selected_device_id: normalize_trimmed_string(self.selected_device_id.as_deref()),
-            resource_estimate: self
-                .resource_estimate
-                .as_ref()
-                .and_then(RuntimeTechnicalFitResourceEstimate::normalized),
+            resource_estimates: self.resource_estimates.clone(),
             observed_throughput_hint: self
                 .observed_throughput_hint
                 .as_ref()
@@ -788,8 +919,8 @@ pub struct RuntimeTechnicalFitDecision {
     pub selected_device_class: Option<RuntimeTechnicalFitDeviceClass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_device_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resource_estimate: Option<RuntimeTechnicalFitResourceEstimate>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_estimates: Vec<RuntimeTechnicalFitResourceEstimate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observed_throughput_hint: Option<RuntimeTechnicalFitObservedThroughputHint>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -821,10 +952,7 @@ impl RuntimeTechnicalFitDecision {
             selected_model_id: normalize_trimmed_string(self.selected_model_id.as_deref()),
             selected_device_class: self.selected_device_class,
             selected_device_id: normalize_trimmed_string(self.selected_device_id.as_deref()),
-            resource_estimate: self
-                .resource_estimate
-                .as_ref()
-                .and_then(RuntimeTechnicalFitResourceEstimate::normalized),
+            resource_estimates: self.resource_estimates.clone(),
             observed_throughput_hint: self
                 .observed_throughput_hint
                 .as_ref()
@@ -1048,7 +1176,7 @@ pub(crate) fn decision_from_candidate_with_trace(
         selected_model_id: candidate.model_id.clone(),
         selected_device_class: candidate.device_class,
         selected_device_id: candidate.selected_device_id.clone(),
-        resource_estimate: candidate.resource_estimate.clone(),
+        resource_estimates: candidate.resource_estimates.clone(),
         observed_throughput_hint: candidate.observed_throughput_hint.clone(),
         device_diagnostics: candidate.device_diagnostics.clone(),
         dependency_readiness: candidate.dependency_readiness.clone(),
@@ -1075,7 +1203,7 @@ pub(crate) fn unselected_decision_with_device_diagnostics(
         selected_model_id: None,
         selected_device_class: None,
         selected_device_id: None,
-        resource_estimate: None,
+        resource_estimates: Vec::new(),
         observed_throughput_hint: None,
         device_diagnostics,
         dependency_readiness: Vec::new(),

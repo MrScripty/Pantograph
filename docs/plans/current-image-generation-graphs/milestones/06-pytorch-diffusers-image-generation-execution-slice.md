@@ -445,6 +445,13 @@ PyTorch/diffusers and produce a retained image artifact.
     technical-fit estimate fields from each boundary they touch, update tests
     and fixtures in the same slice, and keep scheduler ranking unchanged until
     the typed candidate/admission slices are ready.
+  - 2026-05-18 runtime-registry technical-fit estimate contract slice:
+    runtime-registry candidates and decisions now use `resource_estimates`
+    typed records with explicit `available`, `insufficient_facts`, `overflow`,
+    unavailable, unimplemented, and unsupported states plus bounded
+    diagnostics. The old registry `resource_estimate` optional MB-field shape
+    was removed; workflow-service and embedded-runtime projection remain before
+    the shared technical-fit estimate replacement is complete.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

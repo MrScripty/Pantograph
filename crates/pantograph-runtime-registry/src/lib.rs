@@ -47,9 +47,12 @@ pub use technical_fit::{
     RuntimeTechnicalFitHistoryThresholdState, RuntimeTechnicalFitObservedThroughputHint,
     RuntimeTechnicalFitOverride, RuntimeTechnicalFitPolicyPhase, RuntimeTechnicalFitReason,
     RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
-    RuntimeTechnicalFitResourceEstimate, RuntimeTechnicalFitResourcePressure,
+    RuntimeTechnicalFitResourceEstimate, RuntimeTechnicalFitResourceEstimateDiagnostic,
+    RuntimeTechnicalFitResourceEstimateDiagnosticCode,
+    RuntimeTechnicalFitResourceEstimateDiagnosticSeverity, RuntimeTechnicalFitResourceEstimateKind,
+    RuntimeTechnicalFitResourceEstimateState, RuntimeTechnicalFitResourcePressure,
     RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitSelectionPolicyTrace,
-    RuntimeTechnicalFitWarmupState,
+    RuntimeTechnicalFitUnavailableResourceEstimateState, RuntimeTechnicalFitWarmupState,
 };
 pub use warmup::{RuntimeWarmupDecision, RuntimeWarmupDisposition, RuntimeWarmupReason};
 

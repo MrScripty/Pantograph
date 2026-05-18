@@ -12,6 +12,45 @@ fn deserialize_source_kind(
     RuntimeTechnicalFitCandidateSourceKind::deserialize(serde::de::value::StrDeserializer::new(raw))
 }
 
+#[test]
+fn technical_fit_resource_estimates_use_typed_states_without_legacy_mb_fields() {
+    let estimate = RuntimeTechnicalFitResourceEstimate::unavailable(
+        RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes,
+        RuntimeTechnicalFitUnavailableResourceEstimateState::InsufficientFacts,
+        vec![RuntimeTechnicalFitResourceEstimateDiagnostic::error(
+            RuntimeTechnicalFitResourceEstimateDiagnosticCode::InsufficientFacts,
+            "candidate.model_residency",
+            "model residency facts are not available",
+        )],
+    );
+
+    let encoded = serde_json::to_value(&estimate).expect("estimate should serialize");
+    assert_eq!(
+        encoded.get("kind"),
+        Some(&serde_json::json!("peak_vram_bytes"))
+    );
+    assert_eq!(
+        encoded.get("state"),
+        Some(&serde_json::json!("insufficient_facts"))
+    );
+    assert!(encoded.get("value_bytes").is_none());
+    assert!(encoded.get("estimated_peak_vram_mb").is_none());
+    assert!(encoded.get("estimated_peak_ram_mb").is_none());
+
+    let decoded: RuntimeTechnicalFitResourceEstimate =
+        serde_json::from_value(encoded).expect("estimate should deserialize");
+    assert_eq!(
+        decoded.kind(),
+        RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes
+    );
+    assert_eq!(
+        decoded.state(),
+        RuntimeTechnicalFitResourceEstimateState::InsufficientFacts
+    );
+    assert_eq!(decoded.value_bytes(), None);
+    assert_eq!(decoded.diagnostics().len(), 1);
+}
+
 fn empty_snapshot() -> RuntimeRegistrySnapshot {
     RuntimeRegistrySnapshot {
         generated_at_ms: 123,
@@ -48,7 +87,7 @@ fn runtime_capability_candidate(candidate_id: &str) -> RuntimeTechnicalFitCandid
         runtime_variant_id: None,
         device_class: None,
         selected_device_id: None,
-        resource_estimate: None,
+        resource_estimates: Vec::new(),
         observed_throughput_hint: None,
         device_diagnostics: Vec::new(),
         dependency_readiness: Vec::new(),
@@ -61,6 +100,13 @@ fn runtime_capability_candidate(candidate_id: &str) -> RuntimeTechnicalFitCandid
         compatibility_issue_count: 0,
         compatibility_issues: Vec::new(),
     }
+}
+
+fn peak_vram_estimate(value_bytes: u64) -> RuntimeTechnicalFitResourceEstimate {
+    RuntimeTechnicalFitResourceEstimate::available(
+        RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes,
+        value_bytes,
+    )
 }
 
 fn dependency_readiness_fact(
@@ -321,12 +367,7 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
             runtime_variant_id: Some(" llama-cpp/linux-x64/cuda ".to_string()),
             device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
             selected_device_id: Some(" cuda:0 ".to_string()),
-            resource_estimate: Some(RuntimeTechnicalFitResourceEstimate {
-                estimated_peak_vram_mb: Some(4096),
-                estimated_peak_ram_mb: Some(8192),
-                estimated_min_vram_mb: Some(2048),
-                estimated_min_ram_mb: Some(4096),
-            }),
+            resource_estimates: vec![peak_vram_estimate(4096_u64 * 1024 * 1024)],
             observed_throughput_hint: Some(RuntimeTechnicalFitObservedThroughputHint {
                 tokens_per_second_milli: None,
                 images_per_second_milli: Some(125),
@@ -439,11 +480,12 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
         Some("cuda:0")
     );
     assert_eq!(
-        normalized.candidates[0]
-            .resource_estimate
-            .as_ref()
-            .and_then(|estimate| estimate.estimated_peak_vram_mb),
-        Some(4096)
+        normalized.candidates[0].resource_estimates[0].kind(),
+        RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes
+    );
+    assert_eq!(
+        normalized.candidates[0].resource_estimates[0].value_bytes(),
+        Some(4096_u64 * 1024 * 1024)
     );
     assert_eq!(
         normalized.candidates[0]
@@ -669,12 +711,7 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
         selected_model_id: Some(" model-a ".to_string()),
         selected_device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
         selected_device_id: Some(" cuda:0 ".to_string()),
-        resource_estimate: Some(RuntimeTechnicalFitResourceEstimate {
-            estimated_peak_vram_mb: Some(4096),
-            estimated_peak_ram_mb: Some(8192),
-            estimated_min_vram_mb: None,
-            estimated_min_ram_mb: None,
-        }),
+        resource_estimates: vec![peak_vram_estimate(4096_u64 * 1024 * 1024)],
         observed_throughput_hint: Some(RuntimeTechnicalFitObservedThroughputHint {
             tokens_per_second_milli: Some(33000),
             images_per_second_milli: None,
@@ -762,11 +799,8 @@ fn technical_fit_decision_normalizes_selected_identifiers() {
     );
     assert_eq!(normalized.selected_device_id.as_deref(), Some("cuda:0"));
     assert_eq!(
-        normalized
-            .resource_estimate
-            .as_ref()
-            .and_then(|estimate| estimate.estimated_peak_vram_mb),
-        Some(4096)
+        normalized.resource_estimates[0].value_bytes(),
+        Some(4096_u64 * 1024 * 1024)
     );
     assert_eq!(
         normalized
@@ -885,7 +919,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -906,7 +940,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -935,7 +969,7 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
             selected_model_id: None,
             selected_device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
@@ -976,7 +1010,7 @@ fn selector_rejects_ineligible_explicit_backend_override_without_selection() {
             model_id: Some("image-model".to_string()),
             device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
             selected_device_id: Some("cpu".to_string()),
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: vec![RuntimeTechnicalFitDeviceDiagnostic {
                 code: RuntimeTechnicalFitDeviceDiagnosticCode::BackendIncompatible,
@@ -1078,7 +1112,7 @@ fn selector_honors_explicit_runtime_variant_override() {
                 model_id: None,
                 device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
                 selected_device_id: Some("cpu".to_string()),
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -1099,7 +1133,7 @@ fn selector_honors_explicit_runtime_variant_override() {
                 model_id: None,
                 device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
                 selected_device_id: Some("cuda:0".to_string()),
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -1160,7 +1194,7 @@ fn selector_rejects_unmatched_runtime_variant_override_without_synthetic_candida
             model_id: None,
             device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
             selected_device_id: Some("cpu".to_string()),
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
@@ -1233,7 +1267,7 @@ fn selector_rejects_unavailable_explicit_device_without_cpu_fallback() {
             model_id: None,
             device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
             selected_device_id: Some("cpu".to_string()),
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
@@ -1303,7 +1337,7 @@ fn selector_honors_explicit_device_when_candidate_facts_match() {
                 model_id: None,
                 device_class: Some(RuntimeTechnicalFitDeviceClass::Cpu),
                 selected_device_id: Some("cpu".to_string()),
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -1324,7 +1358,7 @@ fn selector_honors_explicit_device_when_candidate_facts_match() {
                 model_id: None,
                 device_class: Some(RuntimeTechnicalFitDeviceClass::Cuda),
                 selected_device_id: Some("cuda:0".to_string()),
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -1383,7 +1417,7 @@ fn selector_rejects_unmatched_override_without_synthetic_candidate() {
             runtime_variant_id: None,
             device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
@@ -1459,7 +1493,7 @@ fn selector_uses_controlled_exploration_for_equal_ranked_auto_candidates() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -1480,7 +1514,7 @@ fn selector_uses_controlled_exploration_for_equal_ranked_auto_candidates() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -1671,7 +1705,7 @@ fn selector_rejects_when_required_context_is_missing() {
             runtime_variant_id: None,
             device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: Vec::new(),
             dependency_readiness: Vec::new(),
@@ -1743,7 +1777,7 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -1764,7 +1798,7 @@ fn selector_rejects_required_backend_candidate_without_fallback_selection() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -1832,7 +1866,7 @@ fn selector_surfaces_scoped_candidate_diagnostics_when_no_candidate_is_valid() {
             runtime_variant_id: None,
             device_class: None,
             selected_device_id: None,
-            resource_estimate: None,
+            resource_estimates: Vec::new(),
             observed_throughput_hint: None,
             device_diagnostics: vec![RuntimeTechnicalFitDeviceDiagnostic {
                 code: RuntimeTechnicalFitDeviceDiagnosticCode::MissingModelPackageFacts,
@@ -1928,7 +1962,7 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -1949,7 +1983,7 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -2021,7 +2055,7 @@ fn selector_rejects_unrankable_headroom_under_queue_pressure() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -2042,7 +2076,7 @@ fn selector_rejects_unrankable_headroom_under_queue_pressure() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -2131,7 +2165,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
@@ -2152,7 +2186,7 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 runtime_variant_id: None,
                 device_class: None,
                 selected_device_id: None,
-                resource_estimate: None,
+                resource_estimates: Vec::new(),
                 observed_throughput_hint: None,
                 device_diagnostics: Vec::new(),
                 dependency_readiness: Vec::new(),
