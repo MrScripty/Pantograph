@@ -171,6 +171,54 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
 }
 
 #[test]
+fn planner_accepts_supported_transformers_dtype_evidence() {
+    let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    facts.transformers = Some(crate::model_contracts::TransformersPackageEvidence {
+        config_status: PackageFactStatus::Present,
+        torch_dtype: Some("torch.float16".to_string()),
+        generation_config_status: PackageFactStatus::Present,
+        ..Default::default()
+    });
+    let request = image_request();
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
+        backend_decision: &decision,
+    });
+
+    assert!(outcome.is_planned());
+}
+
+#[test]
+fn planner_rejects_unsupported_transformers_dtype_before_worker_dispatch() {
+    let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    facts.transformers = Some(crate::model_contracts::TransformersPackageEvidence {
+        config_status: PackageFactStatus::Present,
+        torch_dtype: Some("int8".to_string()),
+        generation_config_status: PackageFactStatus::Present,
+        ..Default::default()
+    });
+    let request = image_request();
+    let decision = backend_decision("pytorch");
+
+    let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+        request: &request,
+        package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
+        backend_decision: &decision,
+    });
+
+    let diagnostics = rejected_diagnostics(&outcome);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ImageGenerationPlannerDiagnosticCode::UnsupportedDtype
+            && diagnostic.field_path == "package_facts.transformers.torch_dtype"
+    }));
+}
+
+#[test]
 fn planner_rejects_absolute_artifact_entry_path_before_worker_dispatch() {
     let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
     facts.artifact.entry_path = "/tmp/image/stable-diffusion/tiny-sd".to_string();

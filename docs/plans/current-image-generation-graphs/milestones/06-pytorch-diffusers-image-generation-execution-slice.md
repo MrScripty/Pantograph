@@ -376,9 +376,18 @@ PyTorch/diffusers and produce a retained image artifact.
     roles, provider-backed scheduler option ids, and planner diagnostics only.
     Pantograph must not copy ComfyUI's node graph, state-dict scanner,
     sampler runtime, or InvokeAI's model manager/invocation/UI architecture.
-- [ ] Validate denoising scheduler, dimensions, negative prompt, guidance
+- [x] Validate denoising scheduler, dimensions, negative prompt, guidance
   scale, image count, dtype, device policy, dependency environment, and
   required package components before calling the worker.
+  - 2026-05-17 dtype validation slice: the image-generation planner now
+    validates explicit Transformers `torch_dtype`/`dtype` package evidence
+    against family-owned PyTorch/Diffusers dtype rules before producing a
+    worker plan. Supported Stable Diffusion evidence accepts Transformers
+    float32, float16, and bfloat16 spellings; unsupported explicit dtypes such
+    as int8 produce typed `UnsupportedDtype` planner diagnostics. Missing
+    dtype evidence remains non-blocking until Pumas provides it because dtype
+    is not yet a graph/runtime override in this slice; no unsupported dtype is
+    silently coerced or passed around as a fallback.
 - [x] Validate option support per family. For example, guidance scale,
   negative prompt, image count, denoising scheduler, dtype, and dimensions
   must be accepted, ignored, or rejected by typed family rules before
@@ -515,8 +524,9 @@ PyTorch/diffusers and produce a retained image artifact.
   not reused as scheduler-selected execution backend keys.
 - Planner tests prove unsupported pipeline family, missing component facts,
   incompatible denoising scheduler, invalid dimensions, unsupported options,
-  unavailable dependency environment, unavailable device, and unacceptable
-  resource estimates fail with diagnostics and no fallback attempt.
+  unsupported explicit Transformers dtype evidence, unavailable dependency
+  environment, unavailable device, and unacceptable resource estimates fail
+  with diagnostics and no fallback attempt.
 - Planner tests cover component-role extraction from Pumas facts and reject
   missing or ambiguous family evidence.
 - Planner tests cover generation-default merge order: request value,

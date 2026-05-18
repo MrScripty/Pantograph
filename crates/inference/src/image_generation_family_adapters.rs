@@ -69,6 +69,10 @@ impl ImageGenerationFamilyAdapter {
         }
         diagnostics
     }
+
+    pub(crate) fn supports_transformers_dtype(&self, dtype: &str) -> bool {
+        self.rules.supports_transformers_dtype(dtype)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

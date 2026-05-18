@@ -10,6 +10,8 @@ const STABLE_DIFFUSION_REQUIRED_COMPONENTS: &[DiffusersComponentRole] = &[
     DiffusersComponentRole::Vae,
 ];
 
+const STABLE_DIFFUSION_SUPPORTED_TRANSFORMERS_DTYPES: &[&str] = &["float32", "float16", "bfloat16"];
+
 const STABLE_DIFFUSION_OPTION_RULES: ImageGenerationFamilyOptionRules =
     ImageGenerationFamilyOptionRules {
         supports_negative_prompt: true,
@@ -28,6 +30,7 @@ const STABLE_DIFFUSION_OPTION_RULES: ImageGenerationFamilyOptionRules =
 static STABLE_DIFFUSION_RULES: ImageGenerationFamilyRules = ImageGenerationFamilyRules {
     family: ImageGenerationFamilyLabel::StableDiffusion,
     required_components: STABLE_DIFFUSION_REQUIRED_COMPONENTS,
+    supported_transformers_dtypes: STABLE_DIFFUSION_SUPPORTED_TRANSFORMERS_DTYPES,
     options: STABLE_DIFFUSION_OPTION_RULES,
 };
 
@@ -35,6 +38,7 @@ static STABLE_DIFFUSION_RULES: ImageGenerationFamilyRules = ImageGenerationFamil
 pub(crate) struct ImageGenerationFamilyRules {
     pub(crate) family: ImageGenerationFamilyLabel,
     pub(crate) required_components: &'static [DiffusersComponentRole],
+    supported_transformers_dtypes: &'static [&'static str],
     options: ImageGenerationFamilyOptionRules,
 }
 
@@ -116,6 +120,14 @@ impl ImageGenerationFamilyRules {
 
         unsupported
     }
+
+    pub(crate) fn supports_transformers_dtype(&self, dtype: &str) -> bool {
+        normalize_transformers_dtype(dtype).is_some_and(|normalized| {
+            self.supported_transformers_dtypes
+                .iter()
+                .any(|supported| *supported == normalized)
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,6 +179,15 @@ fn push_unsupported(
             field_path,
             message,
         });
+    }
+}
+
+fn normalize_transformers_dtype(dtype: &str) -> Option<String> {
+    let normalized = dtype.trim().to_ascii_lowercase().replace('_', "");
+    match normalized.strip_prefix("torch.") {
+        Some(dtype) if !dtype.is_empty() => Some(dtype.to_string()),
+        _ if !normalized.is_empty() => Some(normalized),
+        _ => None,
     }
 }
 
@@ -256,5 +277,9 @@ mod tests {
             rules.unsupported_request_options(&image_request(), false),
             Vec::new()
         );
+        assert!(rules.supports_transformers_dtype("float32"));
+        assert!(rules.supports_transformers_dtype("torch.float16"));
+        assert!(rules.supports_transformers_dtype("bfloat16"));
+        assert!(!rules.supports_transformers_dtype("int8"));
     }
 }

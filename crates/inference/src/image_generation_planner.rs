@@ -281,6 +281,7 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     InvalidNumericOption,
     InvalidDenoisingSchedulerOptionId,
     UnsupportedOption,
+    UnsupportedDtype,
     ResourceEstimateOverflow,
     MissingSelectedModelRef,
     SelectedModelRefMismatch,
@@ -355,6 +356,7 @@ pub fn plan_image_generation_execution(
                 .into_iter()
                 .map(planner_diagnostic_from_family_adapter),
         );
+        validate_transformers_dtype(adapter, input.package_facts, &mut diagnostics);
     }
 
     let pipeline_class = diffusers.pipeline_class.as_deref().map(str::trim);
@@ -699,6 +701,42 @@ fn validate_family_option_support(
             unsupported.message,
         ));
     }
+}
+
+fn validate_transformers_dtype(
+    family_adapter: ImageGenerationFamilyAdapter,
+    package_facts: &ResolvedModelPackageFacts,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) {
+    let Some((field_path, dtype)) = selected_transformers_dtype(package_facts) else {
+        return;
+    };
+
+    if !family_adapter.supports_transformers_dtype(dtype) {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::UnsupportedDtype,
+            field_path,
+            format!(
+                "PyTorch/Diffusers image-generation planning does not support Transformers dtype '{dtype}' for the selected image family"
+            ),
+        ));
+    }
+}
+
+fn selected_transformers_dtype(
+    package_facts: &ResolvedModelPackageFacts,
+) -> Option<(&'static str, &str)> {
+    let transformers = package_facts.transformers.as_ref()?;
+    transformers
+        .torch_dtype
+        .as_deref()
+        .map(|dtype| ("package_facts.transformers.torch_dtype", dtype))
+        .or_else(|| {
+            transformers
+                .dtype
+                .as_deref()
+                .map(|dtype| ("package_facts.transformers.dtype", dtype))
+        })
 }
 
 fn validate_non_zero(
