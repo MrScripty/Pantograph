@@ -862,6 +862,13 @@ used by Pumas for the selector snapshot path.
   package-facts contract version 2. The next Pantograph slice can consume that
   pinned producer contract for image-family planner diagnostics without a
   local compatibility bridge.
+- 2026-05-17 P6 artifact load-target resolver pin: Pantograph pins
+  `pumas-library` to Pumas commit `8444b50df28c3e2bd8db58fb3645fa4dd8664b27`,
+  which contains the accepted Pumas-owned artifact load-target resolver needed
+  for the PyTorch/Diffusers worker-loading plan. Pantograph must consume this
+  resolver as the authoritative source for worker load paths and must not join
+  Pumas paths, infer artifact paths from model directories, or ask workers to
+  resolve model-library state.
 
 ## Implementation Sequencing
 

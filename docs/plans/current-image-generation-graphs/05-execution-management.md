@@ -5837,12 +5837,39 @@ Worker rules:
     src/components/nodes/workflow/selectionInputState.test.ts`; `npm run
     typecheck`.
   - Verification deviation: none.
-  - Remaining follow-up: Pumas accepted artifact load-target resolver is
-    available locally at `8444b50d`, but the configured Git remote still
-    advertises `f63ef180` on `main`; do not pin or consume the new API until
-    the accepted Pumas commit is published or another standards-compliant pin
-    is available. Then wire PyTorch worker loading to the Pumas-resolved
-    Diffusers directory and continue retained artifact output.
+  - Remaining follow-up: pin Pantograph to the accepted Pumas artifact
+    load-target resolver commit, then wire PyTorch worker loading to the
+    Pumas-resolved Diffusers directory and continue retained artifact output.
+- 2026-05-17 Pumas artifact load-target dependency pin slice:
+  - Smallest useful vertical slice: move the workspace `pumas-library`
+    dependency pin from the package-facts handoff commit to the accepted Pumas
+    artifact load-target resolver commit required by the PyTorch/Diffusers
+    worker-loading plan.
+  - Allowed write set: root `Cargo.toml`, `Cargo.lock`, and this plan
+    directory. The modified and untracked root proposal markdown files were
+    ignored because they are unrelated to this slice.
+  - No-fallback/no-legacy confirmation: Pantograph now depends on Pumas-owned
+    artifact load-target resolution instead of joining Pumas paths locally,
+    asking the Python worker to resolve model-library state, or preserving a
+    local compatibility bridge around older model-level descriptor APIs.
+  - Implementation notes: updated the root workspace Pumas dependency to
+    `8444b50df28c3e2bd8db58fb3645fa4dd8664b27` and regenerated `Cargo.lock`
+    with the exact requested revision. The dependency source remains the
+    canonical GitHub repository. Lockfile generation used a temporary Cargo Git
+    CLI `insteadOf` override against the local clean Pumas checkout because the
+    requested commit was present locally but the configured remote branch still
+    advertised `f63ef180` during verification.
+  - Focused tests added/updated: no new behavior tests were needed for the
+    dependency pin itself; verification compiled the Pantograph crates that
+    consume Pumas model-library and embedded-runtime contracts.
+  - Verification passed: `cargo check -p pantograph-embedded-runtime`; `cargo
+    check -p workflow-nodes --features model-library`; `git diff --check`.
+  - Verification deviation: a direct `cargo update -p pumas-library
+    --manifest-path Cargo.toml` could not fetch the requested revision from the
+    configured GitHub URL in this environment, so the lockfile was generated
+    through Cargo's Git CLI path with a one-command local checkout override.
+  - Remaining follow-up: wire PyTorch worker loading to the Pumas-resolved
+    Diffusers directory and retained artifact output.
 
 ### Traceability Links
 
