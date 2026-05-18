@@ -258,6 +258,14 @@ Update during implementation:
   special handling for legacy `runtime_hint`. Edge insert prioritization and
   KV-cache memory-impact backend-change detection now use current backend/model
   fields instead of treating `runtime_hint` as a runtime/backend signal.
+- 2026-05-18: Designed the execution-resource observation replacement path.
+  Resource telemetry is now planned as inference-owned typed DTOs plus
+  platform-specific monitor modules gated behind thin `cfg()` files. Linux,
+  macOS, Windows, unsupported-target, PyTorch worker, and managed-runtime
+  producers must report normalized observations or typed unavailable states;
+  scheduler, workflow-service, and node-engine must not parse terminal error
+  text, read artifact cache policy as measured memory, or import OS-specific
+  monitor code.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

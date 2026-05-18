@@ -371,6 +371,138 @@ Staged implementation plan:
         This keeps terminal events smaller but fragments the scheduler-history
         source of truth and complicates exact workflow/task/model/runtime
         attribution.
+   - 2026-05-18 clean design decision: implement option 3 as a typed
+     replacement contract with platform-specific resource collectors isolated
+     behind inference-owned monitor modules. Do not parse terminal error text,
+     do not treat cache policy as observed runtime memory, and do not add OS
+     or backend-specific measurement code to scheduler, workflow-service, or
+     node-engine business logic.
+
+### Execution Resource Observation Contract
+
+Resource observation is runtime execution telemetry, not model-library facts,
+artifact retention policy, or scheduler pressure state. The canonical contract
+should be introduced at the inference execution boundary and projected upward
+without changing ownership:
+
+| Layer | Responsibility |
+| ----- | -------------- |
+| `inference` | Owns `InferenceExecutionResourceObservation`, memory metric kinds, memory failure kinds, observation-source ids, and platform/backend monitor implementations. |
+| `node-engine` | Carries the typed observation on inference task results or lifecycle events without interpreting OS/runtime details. |
+| `pantograph-embedded-runtime` | Projects node-engine/inference observations into workflow-service terminal payloads and diagnostics attribution. |
+| `pantograph-workflow-service` | Records the already-typed observation on `RunTerminalPayload.resource_observation`; it does not derive memory facts from errors. |
+| Scheduler/runtime-registry | Reads reduced history summaries later. It never imports platform monitor modules or calls OS probes directly. |
+
+The inference contract should use typed fields rather than a generic metadata
+map:
+
+- `peak_ram_bytes: Option<u64>` for process or backend-reported host RAM
+  high-water marks.
+- `peak_vram_bytes: Option<u64>` for device memory high-water marks.
+- `memory_failure_kind: Option<InferenceMemoryFailureKind>` with at least
+  `out_of_memory`.
+- `sources: Vec<InferenceResourceObservationSource>` so diagnostics can say
+  whether a value came from a PyTorch CUDA counter, PyTorch MPS counter,
+  managed runtime structured telemetry, or OS process RSS. Sources are bounded
+  typed ids, not free-form labels.
+- `availability: Vec<InferenceResourceObservationAvailability>` for metrics
+  the runtime knows about but cannot report on the current platform, such as
+  `not_available`, `not_implemented`, `runtime_not_installed`, or
+  `unsupported_device`.
+
+Unavailable metrics must not be converted to zero, omitted as silent success,
+or backfilled from unrelated policy values. Absence is acceptable only when the
+producer explicitly does not claim that metric; unavailable states are required
+when a backend/runtime advertises the metric concept but cannot currently
+produce it.
+
+### Resource Monitor Platform Design
+
+Resource monitoring should follow the repository's cross-platform pattern:
+shared contracts and factories in platform-neutral modules, with `cfg()` kept
+inside thin platform modules. The rest of the crate calls a neutral API such as
+`RuntimeResourceMonitor::start()` / `finish()` or
+`observe_execution_resources(...)` and receives typed observations.
+
+Planned module shape:
+
+| Module | Gate | Responsibility |
+| ------ | ---- | -------------- |
+| `inference::resource_observation` | none | Public typed DTOs, validation, source/availability enums, and merge rules for backend plus OS observations. |
+| `inference::resource_monitor` | none | Trait/factory for monitor lifecycle, no scheduler policy. |
+| `inference::resource_monitor::linux` | `#[cfg(target_os = "linux")]` | Process RSS high-water observation from `/proc` or another Linux-owned API when the process id is known. No GPU assumptions. |
+| `inference::resource_monitor::macos` | `#[cfg(target_os = "macos")]` | macOS process memory observation through an explicit platform API when accepted; MPS memory still comes from PyTorch/MPS telemetry when available. |
+| `inference::resource_monitor::windows` | `#[cfg(target_os = "windows")]` | Windows process memory observation through a narrow Windows API wrapper if the dependency/unsafe boundary is accepted; otherwise returns typed `not_implemented`. |
+| `inference::resource_monitor::unsupported` | fallback cfg for unsupported targets | Compiles the neutral contract and reports typed unsupported/not-implemented availability. |
+| PyTorch worker telemetry | runtime/backend capability, not OS cfg only | CUDA/MPS/CPU counters returned in the worker envelope when PyTorch exposes them. CUDA is runtime/device availability, not a Linux-only assumption. |
+| Managed runtime telemetry | runtime adapter owned | Structured binary/API telemetry when available. Free-form logs may be interpreted only inside the runtime adapter and must be emitted as typed facts or diagnostics before crossing crate boundaries. |
+
+CUDA, MPS, Metal, ROCm, MLX, vLLM, llama.cpp, and future runtimes must be
+modeled as runtime/backend capabilities layered over platform collectors. For
+example, PyTorch CUDA telemetry can be available on Linux or Windows, while
+PyTorch MPS is macOS-specific. The scheduler only sees normalized runtime
+variant/device ids plus observed bytes and failure kind.
+
+Collector lifecycle rules:
+
+- Observation starts at the smallest execution boundary that owns the runtime
+  call, such as `generate_image_from_plan`, text generation, embedding
+  execution, or managed binary request execution.
+- Monitors must have deterministic cleanup and must not spawn unbounded
+  polling loops. If a sampling loop is needed for process RSS, it must be
+  bounded, cancellable, owned by the backend/runtime execution shell, and
+  covered by cleanup tests.
+- Backend-native counters should be preferred over OS process RSS for device
+  memory. OS RSS is a host RAM signal and must not be labeled as VRAM.
+- Metrics from different sources may be merged only by typed metric kind and
+  source precedence. Conflicting values should keep the maximum observed value
+  for peak metrics and record both sources for diagnostics.
+- OOM reporting is typed by the backend/runtime adapter. Existing string
+  detection inside backend support must either be replaced by structured
+  backend errors or confined to the adapter that owns the external process
+  contract; workflow terminal code must not string-match it.
+
+Staged implementation:
+
+1. [ ] Add the inference-owned execution-resource observation DTOs and
+   validation tests. This slice is shared-contract only and should not wire
+   scheduler ranking.
+2. [ ] Add `resource_monitor` factory/modules with Linux/macOS/Windows/
+   unsupported gates and tests proving the neutral API compiles without
+   scattering `cfg()` through business logic.
+3. [ ] Extend inference execution results or lifecycle events to carry
+   `InferenceExecutionResourceObservation` for all task families. Image
+   generation is one consumer, not the contract owner.
+4. [ ] Extend node-engine inference task result/event plumbing to forward the
+   observation without interpreting metric sources.
+5. [ ] Extend embedded-runtime projection into
+   `RunTerminalPayload.resource_observation`, including mapping tests for
+   peak RAM, peak VRAM, explicit OOM, and unavailable metrics that should not
+   be persisted as fake values.
+6. [ ] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
+   OS process RSS where supported, and managed runtime structured telemetry.
+   Each producer slice must include focused tests/fixtures for its source and
+   availability states.
+7. [ ] Activate scheduler history weighting only after observations are
+   available in runtime-selection history and the existing five-completed-run
+   threshold per valid runtime candidate is enforced.
+
+Verification for this staged design should include:
+
+- `cargo test -p inference resource_observation --lib`
+- `cargo test -p inference resource_monitor --lib`
+- `cargo test -p node-engine inference_resource_observation --lib`
+- `cargo test -p pantograph-embedded-runtime resource_observation --lib`
+- `cargo test -p pantograph-workflow-service diagnostics --lib`
+- `cargo fmt --all -- --check`
+- `git diff --check`
+
+Cross-target compile checks should be added to CI or local release gates when
+the OS modules are implemented:
+
+- `cargo check --workspace --target x86_64-unknown-linux-gnu`
+- `cargo check --workspace --target x86_64-pc-windows-msvc`
+- `cargo check --workspace --target aarch64-apple-darwin`
 
 ## Standards Guardrails
 
