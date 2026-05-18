@@ -1561,6 +1561,7 @@ def generate_image_from_envelope(envelope):
         if isinstance(decoded, dict):
             request_id = str(decoded.get("request_id") or request_id)
         planned = generate_image_kwargs_from_envelope(decoded)
+        load_diffusion_model(planned["local_load_path"], device=planned["device"])
         result = generate_image(**planned["generation_kwargs"])
         return json.dumps({
             "status": "ok",
@@ -1569,7 +1570,7 @@ def generate_image_from_envelope(envelope):
                 "images": result.get("images", []),
                 "seed_used": result.get("seed_used"),
                 "metadata": {
-                    "artifact_entry_path": planned["artifact_entry_path"],
+                    "artifact_load_target": planned["artifact_load_target"],
                     "family": planned["family"],
                     "pipeline_class": planned["pipeline_class"],
                     "denoising_scheduler": planned["generation_kwargs"].get(

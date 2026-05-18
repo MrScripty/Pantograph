@@ -20,9 +20,10 @@ use crate::image_generation_planner::{
 };
 use crate::model_contracts::{
     CacheGenerationOptions, DiffusersComponentRole, GenerationOptions, ImageGenerationFamilyLabel,
-    InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions, OptionSupportState,
-    PumasArtifactEntryPath, PumasModelRef, ResolvedModelPackageFacts, SamplingGenerationOptions,
-    StoppingGenerationOptions,
+    InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions, ModelArtifactKind,
+    ModelStorageKind, ModelValidationState, OptionSupportState, PumasArtifactEntryPath,
+    PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
+    SamplingGenerationOptions, StoppingGenerationOptions,
 };
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
@@ -132,6 +133,23 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
         },
         artifact_entry_path: PumasArtifactEntryPath::parse("image/mock-image-model")
             .expect("valid artifact path"),
+        artifact_load_target: PumasArtifactLoadTarget {
+            model_ref: PumasModelRef {
+                model_id: "mock-image-model".to_string(),
+                revision: Some("main".to_string()),
+                selected_artifact_id: Some("diffusers".to_string()),
+                selected_artifact_path: Some("image/mock-image-model".to_string()),
+                migration_diagnostics: Vec::new(),
+            },
+            artifact_kind: ModelArtifactKind::DiffusersBundle,
+            local_load_path: "/pumas/models/image/mock-image-model".to_string(),
+            load_path_kind: PumasArtifactLoadPathKind::Directory,
+            library_root_id: Some("test-root".to_string()),
+            storage_kind: ModelStorageKind::LibraryOwned,
+            validation_state: ModelValidationState::Valid,
+            content_fingerprint: None,
+            package_facts_contract_version: Some(2),
+        },
         backend_id: BackendId::parse("pytorch").expect("valid backend id"),
         runtime_variant_id: runtime_variant_id.clone(),
         selected_device_class: InferenceDeviceClass::Cuda,
@@ -180,6 +198,20 @@ fn image_generation_package_fixture(name: &str) -> ResolvedModelPackageFacts {
         other => panic!("unknown package fixture: {other}"),
     };
     serde_json::from_str(raw).expect("package fixture should decode")
+}
+
+fn sample_artifact_load_target(facts: &ResolvedModelPackageFacts) -> PumasArtifactLoadTarget {
+    PumasArtifactLoadTarget {
+        model_ref: facts.model_ref.clone(),
+        artifact_kind: ModelArtifactKind::DiffusersBundle,
+        local_load_path: "/pumas/models/image/stable-diffusion/tiny-sd".to_string(),
+        load_path_kind: PumasArtifactLoadPathKind::Directory,
+        library_root_id: Some("test-root".to_string()),
+        storage_kind: ModelStorageKind::LibraryOwned,
+        validation_state: ModelValidationState::Valid,
+        content_fingerprint: None,
+        package_facts_contract_version: Some(facts.package_facts_contract_version),
+    }
 }
 
 fn sample_image_generation_request() -> ImageGenerationRequest {
@@ -1148,6 +1180,7 @@ async fn test_generate_image_from_planning_input_plans_and_forwards() {
         .generate_image_from_planning_input(ImageGenerationPlanningInput {
             request: &request,
             package_facts: &facts,
+            artifact_load_target: &sample_artifact_load_target(&facts),
             backend_decision: &decision,
         })
         .await
@@ -1176,6 +1209,7 @@ async fn test_generate_image_from_planning_input_with_lifecycle_records_planned_
             ImageGenerationPlanningInput {
                 request: &request,
                 package_facts: &facts,
+                artifact_load_target: &sample_artifact_load_target(&facts),
                 backend_decision: &decision,
             },
             Some("run-a:image-node-1:image_generation".to_string()),
@@ -1233,6 +1267,7 @@ async fn test_generate_image_from_planning_input_with_lifecycle_records_planner_
             ImageGenerationPlanningInput {
                 request: &request,
                 package_facts: &facts,
+                artifact_load_target: &sample_artifact_load_target(&facts),
                 backend_decision: &decision,
             },
             Some("run-a:image-node-1:image_generation".to_string()),
@@ -1290,6 +1325,7 @@ async fn test_generate_image_from_planning_input_with_lifecycle_records_unsuppor
             ImageGenerationPlanningInput {
                 request: &request,
                 package_facts: &facts,
+                artifact_load_target: &sample_artifact_load_target(&facts),
                 backend_decision: &decision,
             },
             Some("run-a:image-node-1:image_generation".to_string()),
@@ -1324,6 +1360,7 @@ async fn test_generate_image_from_planning_input_returns_planner_diagnostics() {
         .generate_image_from_planning_input(ImageGenerationPlanningInput {
             request: &request,
             package_facts: &facts,
+            artifact_load_target: &sample_artifact_load_target(&facts),
             backend_decision: &decision,
         })
         .await

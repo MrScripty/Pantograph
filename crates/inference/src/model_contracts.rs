@@ -272,6 +272,36 @@ pub enum ModelValidationState {
     Unknown,
 }
 
+/// Pumas-approved local load target shape for a selected artifact.
+///
+/// This mirrors the Pumas resolver response target closely enough for
+/// inference planning without making the inference crate depend on Pumas
+/// library internals.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PumasArtifactLoadTarget {
+    pub model_ref: PumasModelRef,
+    pub artifact_kind: ModelArtifactKind,
+    pub local_load_path: String,
+    pub load_path_kind: PumasArtifactLoadPathKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub library_root_id: Option<String>,
+    pub storage_kind: ModelStorageKind,
+    pub validation_state: ModelValidationState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_facts_contract_version: Option<u32>,
+}
+
+/// Filesystem shape Pumas approved for runtime loading.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PumasArtifactLoadPathKind {
+    Directory,
+    File,
+}
+
 /// Input or output modality used by task signatures.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

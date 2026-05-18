@@ -13,8 +13,9 @@ use crate::image_generation_family_adapters::{
     ImageGenerationFamilyAdapterResolution,
 };
 use crate::model_contracts::{
-    DiffusersComponentRole, ImageGenerationFamilyLabel, InferenceTaskId, PackageFactStatus,
-    PumasArtifactEntryPath, PumasModelRef, ResolvedModelPackageFacts,
+    DiffusersComponentRole, ImageGenerationFamilyLabel, InferenceTaskId, ModelArtifactKind,
+    ModelValidationState, PackageFactStatus, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
+    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
 };
 use crate::types::ImageGenerationRequest;
 
@@ -30,6 +31,8 @@ pub struct ImageGenerationPlanningInput<'a> {
     pub request: &'a ImageGenerationRequest,
     /// Current Pumas package facts for the selected model artifact.
     pub package_facts: &'a ResolvedModelPackageFacts,
+    /// Pumas-approved selected-artifact load target for runtime worker loading.
+    pub artifact_load_target: &'a PumasArtifactLoadTarget,
     /// Scheduler-owned backend/runtime/device decision.
     pub backend_decision: &'a BackendExecutionDecision,
 }
@@ -217,6 +220,7 @@ impl<'de> Deserialize<'de> for DenoisingSchedulerOptionId {
 pub struct ImageGenerationExecutionPlan {
     pub model_ref: PumasModelRef,
     pub artifact_entry_path: PumasArtifactEntryPath,
+    pub artifact_load_target: PumasArtifactLoadTarget,
     pub backend_id: BackendId,
     pub runtime_variant_id: RuntimeVariantId,
     pub selected_device_class: InferenceDeviceClass,
@@ -282,6 +286,7 @@ pub enum ImageGenerationPlannerDiagnosticCode {
     SelectedModelRefMismatch,
     MissingDependencyReadinessProof,
     DependencyReadinessUnavailable,
+    InvalidArtifactLoadTarget,
     AmbiguousComponentRole,
     SelectedTaskMismatch,
     InvalidArtifactEntryPath,
@@ -309,6 +314,7 @@ pub fn plan_image_generation_execution(
         &mut diagnostics,
     );
     let artifact_entry_path = validate_artifact_entry_path(input.package_facts, &mut diagnostics);
+    validate_artifact_load_target(input, &mut diagnostics);
     validate_dependency_readiness_proof(input.backend_decision, &mut diagnostics);
     validate_package_contract(input.package_facts, &mut diagnostics);
     validate_task_evidence(input.package_facts, &mut diagnostics);
@@ -391,6 +397,7 @@ pub fn plan_image_generation_execution(
         plan: ImageGenerationExecutionPlan {
             model_ref: input.package_facts.model_ref.clone(),
             artifact_entry_path,
+            artifact_load_target: input.artifact_load_target.clone(),
             backend_id: input.backend_decision.selected_backend_id.clone(),
             runtime_variant_id: input.backend_decision.selected_runtime_variant_id.clone(),
             selected_device_class: input.backend_decision.selected_device_class,
@@ -410,6 +417,51 @@ pub fn plan_image_generation_execution(
             num_images_per_prompt: input.request.num_images_per_prompt,
             estimated_output_rgba_bytes,
         },
+    }
+}
+
+fn validate_artifact_load_target(
+    input: ImageGenerationPlanningInput<'_>,
+    diagnostics: &mut Vec<ImageGenerationPlannerDiagnostic>,
+) {
+    let target = input.artifact_load_target;
+    if canonical_pumas_model_id(&target.model_ref)
+        != canonical_pumas_model_id(&input.package_facts.model_ref)
+    {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::InvalidArtifactLoadTarget,
+            "artifact_load_target.model_ref",
+            "Pumas artifact load target model ref must match package facts model ref",
+        ));
+    }
+    if target.artifact_kind != ModelArtifactKind::DiffusersBundle {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::InvalidArtifactLoadTarget,
+            "artifact_load_target.artifact_kind",
+            "image-generation planning requires a Pumas-resolved Diffusers bundle load target",
+        ));
+    }
+    if target.load_path_kind != PumasArtifactLoadPathKind::Directory {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::InvalidArtifactLoadTarget,
+            "artifact_load_target.load_path_kind",
+            "Diffusers image-generation worker loading requires a directory load target",
+        ));
+    }
+    if target.validation_state != ModelValidationState::Valid {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::InvalidArtifactLoadTarget,
+            "artifact_load_target.validation_state",
+            "Pumas artifact load target must be valid before worker dispatch",
+        ));
+    }
+    let local_load_path = target.local_load_path.trim();
+    if local_load_path.is_empty() || local_load_path.chars().any(char::is_control) {
+        diagnostics.push(diagnostic(
+            ImageGenerationPlannerDiagnosticCode::InvalidArtifactLoadTarget,
+            "artifact_load_target.local_load_path",
+            "Pumas artifact load target must include a non-empty local load path",
+        ));
     }
 }
 

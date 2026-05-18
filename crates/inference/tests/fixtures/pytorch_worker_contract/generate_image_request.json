@@ -9,7 +9,17 @@
     "model_ref": {
       "model_id": "image/stable-diffusion/tiny-sd"
     },
-    "artifact_entry_path": "image/stable-diffusion/tiny-sd",
+    "artifact_load_target": {
+      "model_ref": {
+        "model_id": "image/stable-diffusion/tiny-sd"
+      },
+      "artifact_kind": "diffusers_bundle",
+      "local_load_path": "/pumas/models/image/stable-diffusion/tiny-sd",
+      "load_path_kind": "directory",
+      "storage_kind": "library_owned",
+      "validation_state": "valid",
+      "package_facts_contract_version": 2
+    },
     "family": "stable_diffusion",
     "pipeline_class": "StableDiffusionPipeline",
     "required_components": [

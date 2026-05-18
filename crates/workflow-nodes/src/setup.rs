@@ -212,6 +212,17 @@ impl PumasSelectorAccess {
             }),
         }
     }
+
+    pub async fn resolve_model_artifact_load_target(
+        &self,
+        request: pumas_library::models::ResolveModelArtifactLoadTargetRequest,
+    ) -> pumas_library::Result<pumas_library::models::ResolveModelArtifactLoadTargetResponse> {
+        match self {
+            Self::Owner(api) => api.resolve_model_artifact_load_target(request).await,
+            Self::LocalClient(client) => client.resolve_model_artifact_load_target(request).await,
+            Self::ReadOnly(library) => library.resolve_model_artifact_load_target(request),
+        }
+    }
 }
 
 #[cfg(feature = "model-library")]

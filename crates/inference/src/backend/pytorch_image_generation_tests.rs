@@ -5,7 +5,9 @@ use crate::device_contracts::{
 };
 use crate::image_generation_planner::{DenoisingSchedulerOptionId, ImageGenerationExecutionPlan};
 use crate::model_contracts::{
-    DiffusersComponentRole, ImageGenerationFamilyLabel, PumasArtifactEntryPath, PumasModelRef,
+    DiffusersComponentRole, ImageGenerationFamilyLabel, ModelArtifactKind, ModelStorageKind,
+    ModelValidationState, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
+    PumasArtifactLoadTarget, PumasModelRef,
 };
 
 #[test]
@@ -18,8 +20,8 @@ fn test_generate_image_envelope_from_plan_validates_worker_request() {
     assert_eq!(envelope.request_id, "req-image-plan");
     assert_eq!(envelope.payload.model_ref.model_id, "image/example/tiny-sd");
     assert_eq!(
-        envelope.payload.artifact_entry_path,
-        PumasArtifactEntryPath::parse("image/example/tiny-sd").expect("valid artifact path")
+        envelope.payload.artifact_load_target.local_load_path,
+        "/pumas/models/image/example/tiny-sd"
     );
     assert_eq!(envelope.payload.pipeline_class, "StableDiffusionPipeline");
     assert_eq!(
@@ -82,6 +84,23 @@ fn image_plan() -> ImageGenerationExecutionPlan {
         },
         artifact_entry_path: PumasArtifactEntryPath::parse("image/example/tiny-sd")
             .expect("valid artifact path"),
+        artifact_load_target: PumasArtifactLoadTarget {
+            model_ref: PumasModelRef {
+                model_id: "image/example/tiny-sd".to_string(),
+                revision: None,
+                selected_artifact_id: None,
+                selected_artifact_path: None,
+                migration_diagnostics: Vec::new(),
+            },
+            artifact_kind: ModelArtifactKind::DiffusersBundle,
+            local_load_path: "/pumas/models/image/example/tiny-sd".to_string(),
+            load_path_kind: PumasArtifactLoadPathKind::Directory,
+            library_root_id: Some("test-root".to_string()),
+            storage_kind: ModelStorageKind::LibraryOwned,
+            validation_state: ModelValidationState::Valid,
+            content_fingerprint: None,
+            package_facts_contract_version: Some(2),
+        },
         backend_id: BackendId::parse("pytorch").expect("valid backend id"),
         runtime_variant_id,
         selected_device_class: InferenceDeviceClass::Cpu,

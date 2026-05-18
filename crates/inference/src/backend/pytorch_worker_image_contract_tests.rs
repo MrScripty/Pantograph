@@ -14,7 +14,8 @@ use crate::image_generation_planner::{
     plan_image_generation_execution, ImageGenerationPlanningInput, ImageGenerationPlanningOutcome,
 };
 use crate::model_contracts::{
-    DiffusersComponentRole, ImageGenerationFamilyLabel, PumasArtifactEntryPath, PumasModelRef,
+    DiffusersComponentRole, ImageGenerationFamilyLabel, ModelArtifactKind, ModelStorageKind,
+    ModelValidationState, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
 };
 use crate::{ImageGenerationRequest, InferenceTaskId, ResolvedModelPackageFacts};
 use pyo3::prelude::*;
@@ -45,6 +46,20 @@ fn load_worker_image_contract_module<'py>(py: Python<'py>) -> Bound<'py, pyo3::t
         c"worker_image_contract",
     )
     .expect("worker_image_contract module should load")
+}
+
+fn artifact_load_target(facts: &ResolvedModelPackageFacts) -> PumasArtifactLoadTarget {
+    PumasArtifactLoadTarget {
+        model_ref: facts.model_ref.clone(),
+        artifact_kind: ModelArtifactKind::DiffusersBundle,
+        local_load_path: "/pumas/models/image/stable-diffusion/tiny-sd".to_string(),
+        load_path_kind: PumasArtifactLoadPathKind::Directory,
+        library_root_id: Some("test-root".to_string()),
+        storage_kind: ModelStorageKind::LibraryOwned,
+        validation_state: ModelValidationState::Valid,
+        content_fingerprint: None,
+        package_facts_contract_version: Some(facts.package_facts_contract_version),
+    }
 }
 
 #[test]
@@ -168,6 +183,7 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
     let ImageGenerationPlanningOutcome::Planned { plan } = outcome else {
@@ -181,9 +197,8 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
         "image/stable-diffusion/tiny-sd"
     );
     assert_eq!(
-        worker_request.artifact_entry_path,
-        PumasArtifactEntryPath::parse("image/stable-diffusion/tiny-sd")
-            .expect("valid artifact path")
+        worker_request.artifact_load_target.local_load_path,
+        "/pumas/models/image/stable-diffusion/tiny-sd"
     );
     assert_eq!(
         worker_request.family,
@@ -222,8 +237,17 @@ fn test_python_worker_generate_image_contract_projects_planned_kwargs() {
         let generation_kwargs = projected
             .get_item("generation_kwargs")
             .expect("generation kwargs should exist");
+        let local_load_path = projected
+            .get_item("local_load_path")
+            .expect("local load path key should exist")
+            .extract::<String>()
+            .expect("local load path should be a string");
 
         assert_eq!(device, "cpu");
+        assert_eq!(
+            local_load_path,
+            "/pumas/models/image/stable-diffusion/tiny-sd"
+        );
         assert_eq!(
             generation_kwargs
                 .get_item("prompt")

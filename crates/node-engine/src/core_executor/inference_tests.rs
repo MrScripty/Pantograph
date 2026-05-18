@@ -24,9 +24,10 @@ use inference::{
     InferenceBackend, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
     InferenceExecutionInput, InferenceLifecyclePhase, InferenceRequestLifecycleEvent,
     InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink, InferenceTaskId,
-    InferenceUsage, LengthGenerationOptions, ProcessSpawner, PumasModelRef, RerankRequest,
-    RerankResponse, RerankResult, ResolvedModelPackageFacts, RuntimeVariantId,
-    SamplingGenerationOptions,
+    InferenceUsage, LengthGenerationOptions, ModelArtifactKind, ModelStorageKind,
+    ModelValidationState, ProcessSpawner, PumasArtifactLoadPathKind, PumasArtifactLoadTarget,
+    PumasModelRef, RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts,
+    RuntimeVariantId, SamplingGenerationOptions,
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
@@ -1434,6 +1435,23 @@ fn image_generation_package_facts_fixture() -> ResolvedModelPackageFacts {
 }
 
 #[cfg(feature = "inference-nodes")]
+fn image_generation_artifact_load_target(
+    package_facts: &ResolvedModelPackageFacts,
+) -> PumasArtifactLoadTarget {
+    PumasArtifactLoadTarget {
+        model_ref: package_facts.model_ref.clone(),
+        artifact_kind: ModelArtifactKind::DiffusersBundle,
+        local_load_path: "/pumas/models/image/stable-diffusion/tiny-sd".to_string(),
+        load_path_kind: PumasArtifactLoadPathKind::Directory,
+        library_root_id: Some("test-root".to_string()),
+        storage_kind: ModelStorageKind::LibraryOwned,
+        validation_state: ModelValidationState::Valid,
+        content_fingerprint: None,
+        package_facts_contract_version: Some(package_facts.package_facts_contract_version),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
 fn planned_image_generation_decision(
     package_facts: &ResolvedModelPackageFacts,
 ) -> BackendExecutionDecision {
@@ -1617,6 +1635,61 @@ async fn test_canonical_llm_image_generation_requires_package_facts_for_planned_
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_canonical_llm_image_generation_requires_artifact_load_target_for_planned_execution() {
+    let package_facts = image_generation_package_facts_fixture();
+    let raw_image_requests = Arc::new(Mutex::new(Vec::new()));
+    let planned_image_requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedImageGenerationBackend {
+            raw_image_requests: raw_image_requests.clone(),
+            planned_image_requests: planned_image_requests.clone(),
+        }),
+        "mock",
+    ));
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("image_generation"),
+    );
+    inputs.insert(
+        "prompt".to_string(),
+        serde_json::json!("paint a quiet lake"),
+    );
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+
+    let executor = CoreTaskExecutor::new()
+        .with_gateway(gateway)
+        .with_execution_id("run-image".to_string());
+    let context = graph_flow::Context::new();
+    let extensions =
+        planned_image_generation_extensions("run-image", "llm-inference-1", &package_facts);
+    let error = executor
+        .execute_task("llm-inference-1", inputs, &context, &extensions)
+        .await
+        .expect_err("image generation must require Pumas artifact load target");
+
+    assert!(error
+        .to_string()
+        .contains("resolved_model_artifact_load_target"));
+    assert!(raw_image_requests
+        .lock()
+        .expect("raw image requests lock")
+        .is_empty());
+    assert!(planned_image_requests
+        .lock()
+        .expect("planned image requests lock")
+        .is_empty());
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     let package_facts = image_generation_package_facts_fixture();
     let raw_image_requests = Arc::new(Mutex::new(Vec::new()));
@@ -1656,6 +1729,11 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     inputs.insert(
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+    inputs.insert(
+        "resolved_model_artifact_load_target".to_string(),
+        serde_json::to_value(image_generation_artifact_load_target(&package_facts))
+            .expect("artifact load target json"),
     );
 
     let executor = CoreTaskExecutor::new()
@@ -1706,7 +1784,7 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     assert_eq!(captured.len(), 1);
     assert_eq!(
         captured[0].model,
-        package_facts.artifact.entry_path.as_str()
+        image_generation_artifact_load_target(&package_facts).local_load_path
     );
     assert_eq!(captured[0].negative_prompt.as_deref(), Some("blur"));
     assert_eq!(captured[0].width, Some(512));
@@ -4370,7 +4448,7 @@ impl InferenceBackend for MockTypedImageGenerationBackend {
         plan: ImageGenerationExecutionPlan,
     ) -> std::result::Result<ImageGenerationResult, BackendError> {
         let request = ImageGenerationRequest {
-            model: plan.artifact_entry_path.to_string(),
+            model: plan.artifact_load_target.local_load_path,
             prompt: plan.prompt,
             negative_prompt: plan.negative_prompt,
             width: plan.width,

@@ -483,6 +483,26 @@ fn parse_resolved_model_package_facts(
 }
 
 #[cfg(feature = "inference-nodes")]
+fn parse_resolved_model_artifact_load_target(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<Option<inference::PumasArtifactLoadTarget>> {
+    let Some((key, value)) =
+        read_optional_input_value(inputs, "resolved_model_artifact_load_target")
+            .map(|value| ("resolved_model_artifact_load_target", value))
+            .or_else(|| {
+                read_optional_input_value(inputs, "artifact_load_target")
+                    .map(|value| ("artifact_load_target", value))
+            })
+    else {
+        return Ok(None);
+    };
+
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(|error| NodeEngineError::ExecutionFailed(format!("Invalid {key} input: {error}")))
+}
+
+#[cfg(feature = "inference-nodes")]
 pub(crate) async fn execute_embedding_inference(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
@@ -826,6 +846,13 @@ pub(crate) async fn execute_image_generation_inference(
                     .to_string(),
             )
         })?;
+    let artifact_load_target =
+        parse_resolved_model_artifact_load_target(inputs)?.ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "Image generation requires resolved_model_artifact_load_target for planned execution"
+                    .to_string(),
+            )
+        })?;
     let image_request = match &request.input {
         inference::InferenceExecutionInput::ImageGeneration { request } => request,
         other => {
@@ -837,6 +864,7 @@ pub(crate) async fn execute_image_generation_inference(
     let planning_input = inference::ImageGenerationPlanningInput {
         request: image_request,
         package_facts,
+        artifact_load_target: &artifact_load_target,
         backend_decision,
     };
     let image_result = if let Some(lifecycle_sink) = inference_lifecycle_sink(extensions) {

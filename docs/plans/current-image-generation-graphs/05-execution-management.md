@@ -5870,6 +5870,68 @@ Worker rules:
     through Cargo's Git CLI path with a one-command local checkout override.
   - Remaining follow-up: wire PyTorch worker loading to the Pumas-resolved
     Diffusers directory and retained artifact output.
+- 2026-05-17 Pumas artifact load-target worker-loading slice:
+  - Smallest useful vertical slice: carry the Pumas artifact load-target
+    contract from `puma-lib`/node-engine into the image-generation planner and
+    PyTorch worker envelope, then make the Python worker load the resolved
+    Diffusers directory before generation.
+  - Allowed write set: inference model/planner/worker contracts, Python image
+    worker envelope handling, focused inference fixtures/tests,
+    node-engine planned image input/context forwarding/tests,
+    workflow-nodes Pumas selector access, embedded-runtime `puma-lib` Pumas
+    resolver wiring/tests, and this plan directory. The modified/untracked
+    root proposal markdown files were ignored because they are unrelated to
+    this slice.
+  - No-fallback/no-legacy confirmation: Pantograph now requires a
+    Pumas-resolved load target for planned image execution and passes only
+    that approved target into the PyTorch worker. It does not join Pumas paths,
+    ask the Python worker to resolve model-library state, infer roots from
+    graph inputs, or synthesize a target when Pumas reports the selected
+    artifact is not ready.
+  - Implementation notes: added inference-owned `PumasArtifactLoadTarget` and
+    `PumasArtifactLoadPathKind` mirrors for the Pumas response target, extended
+    `ImageGenerationPlanningInput` and `ImageGenerationExecutionPlan` with the
+    target, and added planner diagnostics for invalid target model ref,
+    artifact kind, path kind, validation state, and local load path. The
+    PyTorch worker envelope now carries `artifact_load_target`; the Python
+    worker validates it and calls `load_diffusion_model(local_load_path, ...)`
+    before generation. Node-engine planned image execution requires
+    `resolved_model_artifact_load_target`, and `puma-lib` uses
+    `PumasSelectorAccess::resolve_model_artifact_load_target` when full package
+    facts are available.
+  - Focused tests added/updated: inference planner, gateway, PyTorch worker
+    Rust/Python contract tests, PyTorch worker fixture, model-contract serde
+    coverage for the Pumas target wire shape, node-engine planned image
+    success/fail-closed tests, dependency-context forwarding tests, and
+    `puma-lib` selector tests. The `puma-lib` fixture test now explicitly
+    records that the current imported-bundle fixture lacks an indexed
+    selected-artifact row and therefore must not produce a synthesized target.
+  - Verification passed: `cargo fmt --manifest-path crates/inference/Cargo.toml`;
+    `cargo fmt --manifest-path crates/node-engine/Cargo.toml`; `cargo fmt
+    --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`; `cargo fmt
+    --manifest-path crates/workflow-nodes/Cargo.toml`; `cargo test -p
+    inference image_generation_planner --features backend-pytorch`; `cargo
+    test -p inference pytorch_worker_image --features backend-pytorch`; `cargo
+    test -p inference generate_image_from_planning_input --features
+    backend-pytorch`; `cargo test -p inference
+    pumas_artifact_load_target_decodes_existing_pumas_wire_shape --features
+    backend-pytorch`; `cargo test -p node-engine
+    test_canonical_llm_image_generation --features inference-nodes,pytorch-nodes`;
+    `cargo test -p node-engine dependency_inputs --features
+    inference-nodes,pytorch-nodes`; `cargo test -p pantograph-embedded-runtime
+    puma_lib`; `cargo check -p inference --features backend-pytorch`; `cargo
+    check -p node-engine --features inference-nodes,pytorch-nodes`; `cargo
+    check -p pantograph-embedded-runtime`.
+  - Verification deviation: several Cargo commands were started in parallel
+    and waited on Cargo package/build locks; they completed successfully after
+    Cargo serialized the build.
+  - Discovered issue/follow-up: the current Pantograph/Pumas imported
+    Diffusers test fixture can hydrate package facts but Pumas
+    `resolve_model_artifact_load_target` reports `ArtifactMissing` because the
+    indexed selected-artifact row does not contain the selected artifact path.
+    Keep this as a Pumas fixture/index follow-up; Pantograph behavior remains
+    fail-closed with no synthesized target. Retained artifact output remains
+    the next open execution slice.
 
 ### Traceability Links
 

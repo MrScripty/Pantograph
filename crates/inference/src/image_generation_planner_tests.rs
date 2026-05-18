@@ -1,5 +1,6 @@
 use super::*;
 use crate::device_contracts::{InferenceDevicePolicy, RuntimeVariantId};
+use crate::model_contracts::ModelStorageKind;
 use crate::types::EncodedImage;
 
 fn package_fixture(name: &str) -> ResolvedModelPackageFacts {
@@ -31,6 +32,20 @@ fn image_request() -> ImageGenerationRequest {
         mask_image: None,
         strength: None,
         extra_options: serde_json::Value::Null,
+    }
+}
+
+fn artifact_load_target(facts: &ResolvedModelPackageFacts) -> PumasArtifactLoadTarget {
+    PumasArtifactLoadTarget {
+        model_ref: facts.model_ref.clone(),
+        artifact_kind: ModelArtifactKind::DiffusersBundle,
+        local_load_path: "/pumas/models/image/stable-diffusion/tiny-sd".to_string(),
+        load_path_kind: PumasArtifactLoadPathKind::Directory,
+        library_root_id: Some("test-root".to_string()),
+        storage_kind: ModelStorageKind::LibraryOwned,
+        validation_state: ModelValidationState::Valid,
+        content_fingerprint: None,
+        package_facts_contract_version: Some(facts.package_facts_contract_version),
     }
 }
 
@@ -106,6 +121,7 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -118,6 +134,10 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
     assert_eq!(
         plan.artifact_entry_path.as_str(),
         "image/stable-diffusion/tiny-sd"
+    );
+    assert_eq!(
+        plan.artifact_load_target.local_load_path,
+        "/pumas/models/image/stable-diffusion/tiny-sd"
     );
     assert_eq!(plan.runtime_variant_id.as_str(), "pytorch.diffusers");
     assert_eq!(plan.family, ImageGenerationFamilyLabel::StableDiffusion);
@@ -138,6 +158,14 @@ fn planner_accepts_pumas_diffusers_stable_diffusion_facts() {
         plan_json.get("artifact_entry_path"),
         Some(&serde_json::json!("image/stable-diffusion/tiny-sd"))
     );
+    assert_eq!(
+        plan_json
+            .get("artifact_load_target")
+            .and_then(|value| value.get("local_load_path")),
+        Some(&serde_json::json!(
+            "/pumas/models/image/stable-diffusion/tiny-sd"
+        ))
+    );
     assert!(plan_json.get("denoising_scheduler").is_none());
     assert!(plan_json.get("scheduler").is_none());
 }
@@ -152,6 +180,7 @@ fn planner_rejects_absolute_artifact_entry_path_before_worker_dispatch() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -172,6 +201,7 @@ fn planner_rejects_traversing_artifact_entry_path_before_worker_dispatch() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -189,6 +219,7 @@ fn planner_rejects_missing_dependency_readiness_proof() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -211,6 +242,7 @@ fn planner_rejects_unavailable_dependency_readiness_proof() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -226,6 +258,7 @@ fn planner_rejects_missing_diffusers_facts_without_backend_fallback() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -244,6 +277,7 @@ fn planner_rejects_missing_scheduler_selected_model_ref() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -270,6 +304,7 @@ fn planner_rejects_scheduler_package_model_ref_mismatch() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -301,6 +336,7 @@ fn planner_rejects_ambiguous_family_evidence() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -325,6 +361,7 @@ fn planner_rejects_unsupported_single_family_without_generic_diffusers_fallback(
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -347,6 +384,7 @@ fn planner_reports_exact_missing_component_role_path() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -376,6 +414,7 @@ fn planner_rejects_ambiguous_component_role_sources_without_heuristic_selection(
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -398,6 +437,7 @@ fn planner_rejects_invalid_denoising_scheduler_option_id() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -420,6 +460,7 @@ fn planner_rejects_explicit_denoising_scheduler_until_family_support_exists() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -453,6 +494,7 @@ fn planner_rejects_non_pytorch_backend_decision_without_diffusers_alias() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -470,6 +512,7 @@ fn planner_rejects_scheduler_decision_for_non_image_task() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -492,6 +535,7 @@ fn planner_rejects_invalid_dimensions_before_resource_estimate() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -511,6 +555,7 @@ fn planner_rejects_non_finite_guidance_scale() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -545,6 +590,7 @@ fn planner_rejects_unsupported_image_options_without_silent_ignore() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 
@@ -576,6 +622,7 @@ fn planner_rejects_resource_estimate_overflow_without_allocation() {
     let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
         request: &request,
         package_facts: &facts,
+        artifact_load_target: &artifact_load_target(&facts),
         backend_decision: &decision,
     });
 

@@ -211,23 +211,92 @@ impl TauriTaskExecutor {
     async fn resolve_puma_lib_full_package_facts(
         api: &Arc<pumas_library::PumasApi>,
         model_id: &str,
-    ) -> Option<serde_json::Value> {
+    ) -> Option<pumas_library::models::ResolvedModelPackageFacts> {
         match api.resolve_model_package_facts(model_id).await {
-            Ok(package_facts) => match serde_json::to_value(&package_facts) {
-                Ok(value) => Some(value),
-                Err(error) => {
-                    log::warn!(
-                        "Puma-Lib package-facts serialization failed for '{}': {}",
-                        model_id,
-                        error
-                    );
-                    None
-                }
-            },
+            Ok(package_facts) => Some(package_facts),
             Err(error) => {
                 log::warn!(
                     "Puma-Lib package-facts lookup failed for '{}': {}",
                     model_id,
+                    error
+                );
+                None
+            }
+        }
+    }
+
+    async fn resolve_puma_lib_artifact_load_target(
+        selector_access: &Arc<PumasSelectorAccess>,
+        package_facts: &pumas_library::models::ResolvedModelPackageFacts,
+        selected_model_ref: Option<&pumas_library::models::PumasModelRef>,
+        task_type_primary: Option<&str>,
+        recommended_backend: Option<&str>,
+    ) -> Option<serde_json::Value> {
+        let entry_path = package_facts.artifact.entry_path.trim();
+        let mut model_ref = selected_model_ref
+            .cloned()
+            .unwrap_or_else(|| package_facts.model_ref.clone());
+        if model_ref.selected_artifact_id.is_none()
+            && model_ref.selected_artifact_path.is_none()
+            && !entry_path.is_empty()
+        {
+            model_ref.selected_artifact_path = Some(entry_path.to_string());
+        }
+        let request = pumas_library::models::ResolveModelArtifactLoadTargetRequest {
+            model_ref,
+            expected_artifact_kind: Some(package_facts.artifact.artifact_kind),
+            caller_observed_entry_path: (!entry_path.is_empty()).then(|| entry_path.to_string()),
+            caller_observed_package_facts_contract_version: Some(
+                package_facts.package_facts_contract_version,
+            ),
+            resolution_mode: match selector_access.as_ref() {
+                PumasSelectorAccess::Owner(_) => {
+                    pumas_library::models::PumasArtifactLoadTargetResolutionMode::OwnerFresh
+                }
+                PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
+                    pumas_library::models::PumasArtifactLoadTargetResolutionMode::ReadOnlyIndexed
+                }
+            },
+            consumer: pumas_library::models::PumasArtifactConsumer {
+                consumer_name: "pantograph".to_string(),
+                task_kind: task_type_primary.map(ToOwned::to_owned),
+                runtime_family: recommended_backend.map(ToOwned::to_owned),
+            },
+        };
+
+        match selector_access
+            .resolve_model_artifact_load_target(request)
+            .await
+        {
+            Ok(response) if response.is_ready() => {
+                response
+                    .target
+                    .and_then(|target| match serde_json::to_value(target) {
+                        Ok(value) => Some(value),
+                        Err(error) => {
+                            log::warn!(
+                                "Puma-Lib artifact load-target serialization failed for '{}': {}",
+                                package_facts.model_ref.model_id,
+                                error
+                            );
+                            None
+                        }
+                    })
+            }
+            Ok(response) => {
+                log::warn!(
+                    "Puma-Lib artifact load target for '{}' was not ready: artifact_state={:?} entry_path_state={:?} diagnostics={:?}",
+                    package_facts.model_ref.model_id,
+                    response.artifact_state,
+                    response.entry_path_state,
+                    response.diagnostics
+                );
+                None
+            }
+            Err(error) => {
+                log::warn!(
+                    "Puma-Lib artifact load-target lookup failed for '{}': {}",
+                    package_facts.model_ref.model_id,
                     error
                 );
                 None
@@ -258,6 +327,8 @@ impl TauriTaskExecutor {
         let mut hydrated_inference_settings = None;
         let mut resolved_from_pumas = false;
         let mut resolved_model_package_facts = None;
+        let mut resolved_model_artifact_load_target = None;
+        let mut selected_package_model_ref = None;
         let mut owner_api_for_package_facts = extensions
             .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
             .cloned();
@@ -280,6 +351,11 @@ impl TauriTaskExecutor {
                 {
                     Ok(Some(detail)) => {
                         resolved_from_pumas = true;
+                        selected_package_model_ref = detail
+                            .package_summary_result
+                            .as_ref()
+                            .and_then(|result| result.summary.as_ref())
+                            .map(|summary| summary.model_ref.clone());
                         hydrated_inference_settings =
                             Self::selected_detail_inference_settings_value(
                                 &detail,
@@ -317,11 +393,25 @@ impl TauriTaskExecutor {
         }
 
         if resolved_from_pumas {
-            if let (Some(api), Some(model_id)) =
-                (owner_api_for_package_facts.as_ref(), model_id.as_deref())
-            {
-                resolved_model_package_facts =
-                    Self::resolve_puma_lib_full_package_facts(&api, model_id).await;
+            if let (Some(api), Some(model_id), Some(selector_access)) = (
+                owner_api_for_package_facts.as_ref(),
+                model_id.as_deref(),
+                extensions.get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS),
+            ) {
+                if let Some(package_facts) =
+                    Self::resolve_puma_lib_full_package_facts(&api, model_id).await
+                {
+                    resolved_model_artifact_load_target =
+                        Self::resolve_puma_lib_artifact_load_target(
+                            selector_access,
+                            &package_facts,
+                            selected_package_model_ref.as_ref(),
+                            task_type_primary.as_deref(),
+                            recommended_backend.as_deref(),
+                        )
+                        .await;
+                    resolved_model_package_facts = Some(package_facts);
+                }
             }
         }
 
@@ -377,9 +467,23 @@ impl TauriTaskExecutor {
             serde_json::Value::Object(pumas_model_ref),
         );
         if let Some(resolved_model_package_facts) = resolved_model_package_facts {
+            match serde_json::to_value(&resolved_model_package_facts) {
+                Ok(value) => {
+                    outputs.insert("resolved_model_package_facts".to_string(), value);
+                }
+                Err(error) => {
+                    log::warn!(
+                        "Puma-Lib package-facts serialization failed for '{}': {}",
+                        resolved_model_package_facts.model_ref.model_id,
+                        error
+                    );
+                }
+            }
+        }
+        if let Some(resolved_model_artifact_load_target) = resolved_model_artifact_load_target {
             outputs.insert(
-                "resolved_model_package_facts".to_string(),
-                resolved_model_package_facts,
+                "resolved_model_artifact_load_target".to_string(),
+                resolved_model_artifact_load_target,
             );
         }
         Self::insert_puma_lib_output_string(&mut outputs, "model_id", model_id);

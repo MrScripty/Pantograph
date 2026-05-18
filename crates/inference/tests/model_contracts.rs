@@ -16,10 +16,11 @@ use inference::{
     ModelPackageDiagnostic, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummarySnapshotItem,
     ModelPackageFactsSummaryStatus, ModelRemoteCodePolicy, ModelStorageKind, ModelValidationState,
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
-    PumasModelRef, ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind,
-    RuntimeLifecycleSnapshot, SupportTier, TaskEvidence, TaskExecutionBehavior, TaskFamily,
-    TaskRegistryEntry, TaskRegistryResolutionDiagnosticKind, TaskRequestContract,
-    TaskStreamingSupport, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
+    ResolvedModelSource, ResolvedModelSourceKind, RuntimeLifecycleSnapshot, SupportTier,
+    TaskEvidence, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry,
+    TaskRegistryResolutionDiagnosticKind, TaskRequestContract, TaskStreamingSupport,
+    MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
@@ -183,6 +184,35 @@ fn pumas_image_generation_fixture_decodes_with_structured_diffusers_facts() {
             );
         }
     }
+}
+
+#[test]
+fn pumas_artifact_load_target_decodes_existing_pumas_wire_shape() {
+    let target: PumasArtifactLoadTarget = serde_json::from_value(serde_json::json!({
+        "model_ref": {
+            "model_ref_contract_version": 1,
+            "model_id": "image/stable-diffusion/tiny-sd",
+            "selected_artifact_path": "image/stable-diffusion/tiny-sd"
+        },
+        "artifact_kind": "diffusers_bundle",
+        "local_load_path": "/pumas/models/image/stable-diffusion/tiny-sd",
+        "load_path_kind": "directory",
+        "library_root_id": "library-root",
+        "storage_kind": "library_owned",
+        "validation_state": "valid",
+        "package_facts_contract_version": 2
+    }))
+    .expect("Pumas load-target response target should decode");
+
+    assert_eq!(target.model_ref.model_id, "image/stable-diffusion/tiny-sd");
+    assert_eq!(target.artifact_kind, ModelArtifactKind::DiffusersBundle);
+    assert_eq!(target.load_path_kind, PumasArtifactLoadPathKind::Directory);
+    assert_eq!(target.storage_kind, ModelStorageKind::LibraryOwned);
+    assert_eq!(target.validation_state, ModelValidationState::Valid);
+    assert_eq!(
+        target.local_load_path,
+        "/pumas/models/image/stable-diffusion/tiny-sd"
+    );
 }
 
 #[test]

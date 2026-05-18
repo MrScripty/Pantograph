@@ -125,6 +125,8 @@ class _Pipeline:
         return types.SimpleNamespace(images=[_Image()])
 
 pipeline = _Pipeline()
+def load_diffusion_model(path, device=None, torch_dtype=None):
+    return None
 "#,
     )
     .expect("pipeline setup source should not contain nul bytes");
@@ -139,6 +141,15 @@ pipeline = _Pipeline()
                 .expect("pipeline should exist"),
         )
         .expect("pipeline should attach");
+    module
+        .setattr(
+            "load_diffusion_model",
+            locals
+                .get_item("load_diffusion_model")
+                .expect("load_diffusion_model lookup should succeed")
+                .expect("load_diffusion_model should exist"),
+        )
+        .expect("load_diffusion_model should attach");
 }
 
 #[test]
@@ -169,6 +180,10 @@ fn test_python_worker_generate_image_from_envelope_returns_worker_response() {
         assert_eq!(success.result.seed_used, Some(42));
         assert!(success.result.metadata["denoising_scheduler"].is_null());
         assert_eq!(success.result.metadata["device"], "cpu");
+        assert_eq!(
+            success.result.metadata["artifact_load_target"]["local_load_path"],
+            "/pumas/models/image/stable-diffusion/tiny-sd"
+        );
     });
 }
 

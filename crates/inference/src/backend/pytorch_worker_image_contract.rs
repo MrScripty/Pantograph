@@ -8,7 +8,8 @@ use crate::backend::BackendError;
 use crate::device_contracts::InferenceDeviceId;
 use crate::image_generation_planner::ImageGenerationExecutionPlan;
 use crate::model_contracts::{
-    DiffusersComponentRole, ImageGenerationFamilyLabel, PumasArtifactEntryPath, PumasModelRef,
+    DiffusersComponentRole, ImageGenerationFamilyLabel, PumasArtifactLoadPathKind,
+    PumasArtifactLoadTarget, PumasModelRef,
 };
 
 #[allow(dead_code)]
@@ -42,6 +43,25 @@ pub(super) fn validate_generate_image_envelope(
             "PyTorch worker generate_image envelope requires component roles".to_string(),
         ));
     }
+    if envelope.payload.artifact_load_target.load_path_kind != PumasArtifactLoadPathKind::Directory
+    {
+        return Err(BackendError::Config(
+            "PyTorch worker generate_image envelope requires a directory artifact_load_target"
+                .to_string(),
+        ));
+    }
+    if envelope
+        .payload
+        .artifact_load_target
+        .local_load_path
+        .trim()
+        .is_empty()
+    {
+        return Err(BackendError::Config(
+            "PyTorch worker generate_image envelope requires artifact_load_target.local_load_path"
+                .to_string(),
+        ));
+    }
     Ok(())
 }
 
@@ -49,7 +69,7 @@ pub(super) fn validate_generate_image_envelope(
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(super) struct PyTorchGenerateImageRequest {
     pub model_ref: PumasModelRef,
-    pub artifact_entry_path: PumasArtifactEntryPath,
+    pub artifact_load_target: PumasArtifactLoadTarget,
     pub family: ImageGenerationFamilyLabel,
     pub pipeline_class: String,
     pub required_components: Vec<DiffusersComponentRole>,
@@ -78,7 +98,7 @@ impl From<&ImageGenerationExecutionPlan> for PyTorchGenerateImageRequest {
     fn from(plan: &ImageGenerationExecutionPlan) -> Self {
         Self {
             model_ref: plan.model_ref.clone(),
-            artifact_entry_path: plan.artifact_entry_path.clone(),
+            artifact_load_target: plan.artifact_load_target.clone(),
             family: plan.family,
             pipeline_class: plan.pipeline_class.clone(),
             required_components: plan.required_components.clone(),

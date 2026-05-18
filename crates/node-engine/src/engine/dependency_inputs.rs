@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::types::{NodeId, WorkflowGraph};
 
-const MODEL_CONTEXT_KEYS: [&str; 10] = [
+const MODEL_CONTEXT_KEYS: [&str; 11] = [
     "model_path",
     "mmproj_path",
     "pumas_model_ref",
@@ -13,6 +13,7 @@ const MODEL_CONTEXT_KEYS: [&str; 10] = [
     "platform_context",
     "dependency_bindings",
     "dependency_requirements_id",
+    "resolved_model_artifact_load_target",
 ];
 
 pub(super) fn resolve_dependency_inputs(
@@ -228,6 +229,16 @@ mod tests {
                 "model_id": "family/model"
             }
         });
+        let load_target = serde_json::json!({
+            "model_ref": {
+                "model_id": "family/model"
+            },
+            "artifact_kind": "diffusers_bundle",
+            "local_load_path": "/pumas/models/family/model",
+            "load_path_kind": "directory",
+            "storage_kind": "library_owned",
+            "validation_state": "valid"
+        });
         let dependency_outputs = HashMap::from([(
             "puma-lib".to_string(),
             HashMap::from([
@@ -242,6 +253,10 @@ mod tests {
                     "resolved_model_package_facts".to_string(),
                     package_facts.clone(),
                 ),
+                (
+                    "resolved_model_artifact_load_target".to_string(),
+                    load_target.clone(),
+                ),
             ]),
         )]);
 
@@ -254,6 +269,10 @@ mod tests {
             }))
         );
         assert_eq!(inputs.get("resolved_model_package_facts"), None);
+        assert_eq!(
+            inputs.get("resolved_model_artifact_load_target"),
+            Some(&load_target)
+        );
         assert_eq!(
             inputs.get("model_id"),
             Some(&serde_json::json!("family/model"))

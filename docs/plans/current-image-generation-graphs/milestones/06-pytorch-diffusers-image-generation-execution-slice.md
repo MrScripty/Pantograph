@@ -377,13 +377,33 @@ PyTorch/diffusers and produce a retained image artifact.
     paths with planner diagnostics. Already root-validated resolved absolute
     paths remain a later Pumas root-inventory extension point, not an
     executable fallback.
+  - 2026-05-17: image-generation execution now also requires a
+    Pumas-resolved artifact load target for worker loading. The target carries
+    Pumas-approved `local_load_path`, storage kind, validation state, artifact
+    kind, and load-path kind. The planner rejects mismatched model refs,
+    non-Diffusers artifact kinds, non-directory load targets, invalid
+    validation states, and empty/control-character load paths before worker
+    dispatch. Pantograph still does not join Pumas paths or synthesize local
+    load targets.
 - [ ] Return a terminal planning/readiness diagnostic when validation fails.
   Do not try alternate backends, generic Diffusers loading, default schedulers,
   CPU fallback, or alternate dependency environments.
 - [x] Update PyTorch capability facts so image generation is advertised only
   when the PyTorch/diffusers execution path is actually available.
-- [ ] Ensure PyTorch worker loading uses Pumas-resolved diffusers-directory
+- [x] Ensure PyTorch worker loading uses Pumas-resolved diffusers-directory
   package facts.
+  - 2026-05-17: the PyTorch image worker envelope now carries
+    `artifact_load_target` instead of `artifact_entry_path`; the Python worker
+    validates the target and calls `load_diffusion_model` with
+    `artifact_load_target.local_load_path` before generation. Node-engine
+    planned image execution requires `resolved_model_artifact_load_target`
+    alongside package facts, and `puma-lib` asks Pumas selector access for
+    `resolve_model_artifact_load_target` when full package facts are available.
+    Existing Pumas imported-bundle test fixtures currently resolve package
+    facts but report `ArtifactMissing` for load targets because their indexed
+    selected-artifact rows do not contain the selected artifact path; this is
+    recorded as a Pumas fixture/index follow-up and Pantograph intentionally
+    does not synthesize a fallback target.
 - [ ] Ensure dependency/runtime readiness reports missing `diffusers`,
   `transformers`, `accelerate`, `torch`, or Pillow as explicit readiness
   diagnostics.

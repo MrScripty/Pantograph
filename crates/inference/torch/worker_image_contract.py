@@ -7,7 +7,7 @@ from worker_contract import WORKER_CONTRACT_VERSION, _worker_device_or_auto
 GENERATE_IMAGE_OPERATION = "generate_image"
 IMAGE_GENERATION_PAYLOAD_KEYS = {
     "model_ref",
-    "artifact_entry_path",
+    "artifact_load_target",
     "family",
     "pipeline_class",
     "required_components",
@@ -28,6 +28,17 @@ MODEL_REF_KEYS = {
     "selected_artifact_id",
     "selected_artifact_path",
     "migration_diagnostics",
+}
+ARTIFACT_LOAD_TARGET_KEYS = {
+    "model_ref",
+    "artifact_kind",
+    "local_load_path",
+    "load_path_kind",
+    "library_root_id",
+    "storage_kind",
+    "validation_state",
+    "content_fingerprint",
+    "package_facts_contract_version",
 }
 
 
@@ -80,9 +91,41 @@ def generate_image_kwargs_from_envelope(envelope):
     _reject_unknown_keys(model_ref, MODEL_REF_KEYS, "generate_image payload.model_ref")
     _require_non_empty_string(model_ref, "model_id", "generate_image payload.model_ref")
 
-    artifact_entry_path = _require_non_empty_string(
-        payload, "artifact_entry_path", "generate_image payload"
+    artifact_load_target = payload.get("artifact_load_target")
+    if not isinstance(artifact_load_target, dict):
+        raise ValueError(
+            "PyTorch worker generate_image payload.artifact_load_target must be an object"
+        )
+    _reject_unknown_keys(
+        artifact_load_target,
+        ARTIFACT_LOAD_TARGET_KEYS,
+        "generate_image payload.artifact_load_target",
     )
+    local_load_path = _require_non_empty_string(
+        artifact_load_target,
+        "local_load_path",
+        "generate_image payload.artifact_load_target",
+    )
+    load_path_kind = _require_non_empty_string(
+        artifact_load_target,
+        "load_path_kind",
+        "generate_image payload.artifact_load_target",
+    )
+    if load_path_kind != "directory":
+        raise ValueError(
+            "PyTorch worker generate_image payload.artifact_load_target.load_path_kind "
+            "must be directory"
+        )
+    artifact_kind = _require_non_empty_string(
+        artifact_load_target,
+        "artifact_kind",
+        "generate_image payload.artifact_load_target",
+    )
+    if artifact_kind != "diffusers_bundle":
+        raise ValueError(
+            "PyTorch worker generate_image payload.artifact_load_target.artifact_kind "
+            "must be diffusers_bundle"
+        )
     family = _require_non_empty_string(payload, "family", "generate_image payload")
     pipeline_class = _require_non_empty_string(
         payload, "pipeline_class", "generate_image payload"
@@ -144,7 +187,8 @@ def generate_image_kwargs_from_envelope(envelope):
     }
     return {
         "model_ref": model_ref,
-        "artifact_entry_path": artifact_entry_path,
+        "artifact_load_target": artifact_load_target,
+        "local_load_path": local_load_path,
         "family": family,
         "pipeline_class": pipeline_class,
         "required_components": [component.strip() for component in required_components],
