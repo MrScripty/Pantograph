@@ -370,6 +370,46 @@ fn planner_rejects_unsupported_single_family_without_generic_diffusers_fallback(
 }
 
 #[test]
+fn planner_rejects_unsupported_image_family_fact_shapes_without_generic_fallback() {
+    for family in [
+        ImageGenerationFamilyLabel::StableDiffusionXl,
+        ImageGenerationFamilyLabel::Flux2,
+        ImageGenerationFamilyLabel::QwenImage,
+        ImageGenerationFamilyLabel::LuminaImage,
+        ImageGenerationFamilyLabel::GlmImage,
+        ImageGenerationFamilyLabel::ZImage,
+    ] {
+        let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
+        let diffusers = facts.diffusers.as_mut().expect("diffusers facts");
+        diffusers.family_evidence = vec![crate::model_contracts::ImageGenerationFamilyEvidence {
+            family,
+            source: crate::model_contracts::ImageGenerationFamilyEvidenceSource::PipelineClass,
+            value_source: crate::model_contracts::PackageFactValueSource::Config,
+            source_path: Some("model_index.json".to_string()),
+            message: None,
+        }];
+        let request = image_request();
+        let decision = backend_decision("pytorch");
+
+        let outcome = plan_image_generation_execution(ImageGenerationPlanningInput {
+            request: &request,
+            package_facts: &facts,
+            artifact_load_target: &artifact_load_target(&facts),
+            backend_decision: &decision,
+        });
+
+        let diagnostics = rejected_diagnostics(&outcome);
+        assert!(
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == ImageGenerationPlannerDiagnosticCode::UnsupportedFamily
+                    && diagnostic.field_path == "package_facts.diffusers.family_evidence"
+            }),
+            "expected unsupported-family diagnostic for {family:?}, got {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
 fn planner_reports_exact_missing_component_role_path() {
     let mut facts = package_fixture("diffusers_sd_text_to_image_package_facts.json");
     facts

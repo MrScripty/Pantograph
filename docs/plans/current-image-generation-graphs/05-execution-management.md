@@ -3843,6 +3843,25 @@ Worker rules:
   --check`. Remaining Milestone 6 follow-ups stay open for memory-estimate
   checked arithmetic review, bounded model smoke fixture, and additional
   family-shaped Pumas fact fixtures.
+- 2026-05-17: Completed the unsupported image-family fact-shape coverage
+  slice. Added table-driven planner tests that mock Pumas Diffusers family
+  evidence for SDXL, FLUX.2, Qwen Image, Lumina Image, GLM Image, and Z-Image
+  without loading large models. Each unsupported family now proves the planner
+  returns typed `UnsupportedFamily` diagnostics at
+  `package_facts.diffusers.family_evidence` and does not fall back to generic
+  Diffusers loading, Stable Diffusion assumptions, alternate backends, worker
+  execution, model-id/display-name matching, or fixture-specific path logic.
+  Allowed write set was
+  `crates/inference/src/image_generation_planner_tests.rs` and plan docs.
+  Verification passed: `cargo test -p inference
+  planner_rejects_unsupported_image_family_fact_shapes_without_generic_fallback
+  --features backend-pytorch`, `cargo test -p inference
+  planner_rejects_unsupported_single_family_without_generic_diffusers_fallback
+  --features backend-pytorch`, `cargo check -p inference --features
+  backend-pytorch`, `cargo fmt --manifest-path crates/inference/Cargo.toml`,
+  and `git diff --check`. Remaining follow-up: executable support for those
+  families still requires explicit family rules, component requirements,
+  option-support tables, and runtime worker support in later slices.
 - 2026-05-15: Completed the planner checked-resource-estimate verification
   slice. Added focused inference planner coverage proving overflow-prone width,
   height, and image-count combinations return

@@ -441,10 +441,15 @@ PyTorch/diffusers and produce a retained image artifact.
   summaries once artifacts exist.
 - [ ] Add a small model smoke path using Tiny SD Turbo or another bounded
   fixture before attempting Juggernaut.
-- [ ] Add model-family fixtures or table-driven tests for Pumas facts shaped
+- [x] Add model-family fixtures or table-driven tests for Pumas facts shaped
   like z-image turbo, qwen-image, lumina-image, glm-image, and FLUX.2 where
   available. These tests should validate routing/request construction and may
   use mocked generation rather than loading large models.
+  - 2026-05-17: added table-driven planner coverage using mocked Pumas
+    Diffusers family evidence for SDXL, FLUX.2, Qwen Image, Lumina Image,
+    GLM Image, and Z-Image. The slice proves each currently unsupported family
+    fails with typed `UnsupportedFamily` diagnostics and does not fall back to
+    generic Diffusers or Stable Diffusion worker execution.
 
 **Verification:**
 
