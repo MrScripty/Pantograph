@@ -604,6 +604,11 @@ PyTorch/diffusers and produce a retained image artifact.
     bounds producer facts without wiring image-generation execution,
     lifecycle events, terminal payloads, scheduler ranking, or legacy OOM
     parsing.
+  - 2026-05-18 lifecycle builder slice: lifecycle event construction now goes
+    through `InferenceRequestLifecycleEvent::builder` or
+    `InferenceRequestLifecycleEventContext` in gateway, node-engine emitters,
+    and affected tests. This prepares the event contract for future resource
+    telemetry fields without adding another repeated field-list constructor.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

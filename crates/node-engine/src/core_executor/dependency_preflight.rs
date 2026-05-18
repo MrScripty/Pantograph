@@ -868,36 +868,30 @@ fn record_dependency_preflight_lifecycle(
         (InferenceRequestLifecycleEventKind::CleanupCompleted, None),
     ] {
         let emit_compatibility = kind == InferenceRequestLifecycleEventKind::Completed;
-        if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
-            request_id: request_id.clone(),
-            phase: InferenceLifecyclePhase::ModelPackageResolution,
+        let event = InferenceRequestLifecycleEvent::builder(
+            InferenceLifecyclePhase::ModelPackageResolution,
             kind,
-            occurred_at_ms: dependency_preflight_unix_timestamp_ms(),
-            task_id: Some(context.task_label.clone()),
-            backend_key: context.backend_key.clone(),
-            runtime_id: runtime_id.clone(),
-            selected_runtime_variant_id: None,
-            runtime_instance_id: None,
-            selected_device_class: None,
-            selected_device_id: None,
-            selected_network_node_id: None,
-            model_id: context.model_id.clone(),
-            resolved_artifact_kind: context.resolved_artifact_kind.clone(),
-            usage: None,
-            cache_handle_id: None,
-            artifact_refs: Vec::new(),
-            detail,
-            canonical_error_event_id: None,
-            compatibility_report: emit_compatibility
+            dependency_preflight_unix_timestamp_ms(),
+        )
+        .with_request_id(request_id.clone())
+        .with_task_id(Some(context.task_label.clone()))
+        .with_backend_key(context.backend_key.clone())
+        .with_runtime_id(runtime_id.clone())
+        .with_model_id(context.model_id.clone())
+        .with_resolved_artifact_kind(context.resolved_artifact_kind.clone())
+        .with_detail(detail)
+        .with_compatibility_report(
+            emit_compatibility
                 .then(|| compatibility_diagnostics.compatibility_report.clone())
                 .flatten(),
-            compatibility_issues: if emit_compatibility {
-                compatibility_diagnostics.compatibility_issues.clone()
-            } else {
-                Vec::new()
-            },
-            option_diagnostics: Vec::new(),
-        }) {
+        )
+        .with_compatibility_issues(if emit_compatibility {
+            compatibility_diagnostics.compatibility_issues.clone()
+        } else {
+            Vec::new()
+        })
+        .build();
+        if let Err(error) = sink.record(event) {
             log::warn!("failed to record inference dependency preflight lifecycle event: {error}");
         }
     }

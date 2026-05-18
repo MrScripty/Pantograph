@@ -1925,6 +1925,17 @@ mod tests {
                     queue_wait_sample_count: 5,
                     average_queue_wait_ms: Some(40),
                     median_queue_wait_ms: Some(35),
+                    peak_ram_sample_count: 0,
+                    average_peak_ram_bytes: None,
+                    median_peak_ram_bytes: None,
+                    typical_min_peak_ram_bytes: None,
+                    typical_max_peak_ram_bytes: None,
+                    peak_vram_sample_count: 0,
+                    average_peak_vram_bytes: None,
+                    median_peak_vram_bytes: None,
+                    typical_min_peak_vram_bytes: None,
+                    typical_max_peak_vram_bytes: None,
+                    out_of_memory_count: 0,
                 }))
             },
         )

@@ -467,34 +467,26 @@ fn public_inference_contract_json_keys_avoid_scheduler_policy_language() {
         active: true,
         ..RuntimeLifecycleSnapshot::default()
     };
-    let event = InferenceRequestLifecycleEvent {
-        request_id: Some("req-1".to_string()),
-        phase: InferenceLifecyclePhase::BackendExecution,
-        kind: InferenceRequestLifecycleEventKind::Completed,
-        occurred_at_ms: 42,
-        task_id: Some("text_generation".to_string()),
-        backend_key: Some("llama_cpp".to_string()),
-        runtime_id: Some("runtime.llama_cpp".to_string()),
-        selected_runtime_variant_id: None,
-        runtime_instance_id: Some("runtime.llama_cpp.1".to_string()),
-        selected_device_class: None,
-        selected_device_id: None,
-        selected_network_node_id: None,
-        model_id: Some("pumas://models/tiny".to_string()),
-        resolved_artifact_kind: Some("gguf".to_string()),
-        usage: Some(InferenceUsage {
-            prompt_tokens: Some(2),
-            completion_tokens: Some(3),
-            total_tokens: Some(5),
-        }),
-        cache_handle_id: Some("kv-1".to_string()),
-        artifact_refs: vec!["artifact://audio.wav".to_string()],
-        detail: None,
-        canonical_error_event_id: None,
-        compatibility_report: None,
-        compatibility_issues: Vec::new(),
-        option_diagnostics: Vec::new(),
-    };
+    let event = InferenceRequestLifecycleEvent::builder(
+        InferenceLifecyclePhase::BackendExecution,
+        InferenceRequestLifecycleEventKind::Completed,
+        42,
+    )
+    .with_request_id(Some("req-1".to_string()))
+    .with_task_id(Some("text_generation".to_string()))
+    .with_backend_key(Some("llama_cpp".to_string()))
+    .with_runtime_id(Some("runtime.llama_cpp".to_string()))
+    .with_runtime_instance_id(Some("runtime.llama_cpp.1".to_string()))
+    .with_model_id(Some("pumas://models/tiny".to_string()))
+    .with_resolved_artifact_kind(Some("gguf".to_string()))
+    .with_usage(Some(InferenceUsage {
+        prompt_tokens: Some(2),
+        completion_tokens: Some(3),
+        total_tokens: Some(5),
+    }))
+    .with_cache_handle_id(Some("kv-1".to_string()))
+    .with_artifact_refs(vec!["artifact://audio.wav".to_string()])
+    .build();
     let capability_facts = BackendCapabilityFacts::from_tasks(vec![BackendTaskCapability::stable(
         InferenceTaskId::TextGeneration,
         vec![InferenceModality::Text],

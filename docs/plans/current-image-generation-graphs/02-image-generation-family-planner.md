@@ -604,12 +604,37 @@ Staged implementation:
    - Verification: `cargo test -p inference resource_observation --lib`,
      `cargo check -p inference`, `cargo fmt --all -- --check`, and
      `git diff --check`.
-2. [ ] Extract a small inference lifecycle event builder/context and update
+2. [x] Extract a small inference lifecycle event builder/context and update
    lifecycle tests before adding telemetry fields. This prevents
    resource-observation wiring from expanding the existing `gateway.rs`
    repeated constructor and `too_many_arguments` pattern and migrates
    node-engine/embedded-runtime test constructors to the same event-building
    boundary.
+   - 2026-05-18: completed the lifecycle event builder/context migration.
+     `InferenceRequestLifecycleEvent::builder` and
+     `InferenceRequestLifecycleEventContext` now centralize event
+     construction. Direct lifecycle event struct literals were removed from
+     gateway, node-engine lifecycle emitters, inference contract tests, and
+     embedded-runtime lifecycle tests; only the builder's internal
+     initialization remains. The slice does not add resource telemetry fields
+     or alter lifecycle semantics.
+   - Discovered issue resolved: an embedded-runtime technical-fit unit-test
+     fixture still constructed `RuntimeSelectionHistorySummary` without the
+     newer memory/OOM fields, which blocked embedded-runtime lifecycle test
+     compilation. The fixture now provides explicit zero/none memory history
+     facts. The workflow lifecycle sink tests also queried node-status
+     projections without applying the projection refresh requested by
+     diagnostic append; the fixtures now refresh the node-status projection
+     explicitly before querying.
+   - Verification: `cargo test -p inference lifecycle --lib`, `cargo test -p
+     inference --test model_contracts
+     public_inference_contract_json_keys_avoid_scheduler_policy_language`,
+     `cargo test -p node-engine inference_lifecycle --lib`, `cargo test -p
+     pantograph-embedded-runtime inference_lifecycle --lib`, `cargo test -p
+     pantograph-embedded-runtime
+     runtime_selection_history_summaries_project_exact_candidate_keys --lib`,
+     `cargo check -p pantograph-embedded-runtime`, `cargo fmt --all --
+     --check`, and `git diff --check`.
 3. [ ] Extend `InferenceExecutionDiagnosticObservedPayload` and
    embedded-runtime diagnostic projection with bounded resource-observation
    fields and persistability-gate coverage. This slice proves lifecycle-event

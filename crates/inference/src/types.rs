@@ -917,6 +917,261 @@ pub struct InferenceRequestLifecycleEvent {
     pub option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
 }
 
+impl InferenceRequestLifecycleEvent {
+    #[must_use]
+    pub fn builder(
+        phase: InferenceLifecyclePhase,
+        kind: InferenceRequestLifecycleEventKind,
+        occurred_at_ms: u64,
+    ) -> InferenceRequestLifecycleEventBuilder {
+        InferenceRequestLifecycleEventBuilder::new(phase, kind, occurred_at_ms)
+    }
+}
+
+/// Common request attribution copied onto lifecycle events.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[must_use]
+pub struct InferenceRequestLifecycleEventContext {
+    pub request_id: Option<String>,
+    pub task_id: Option<String>,
+    pub backend_key: Option<String>,
+    pub runtime_id: Option<String>,
+    pub selected_runtime_variant_id: Option<String>,
+    pub runtime_instance_id: Option<String>,
+    pub selected_device_class: Option<InferenceDeviceClass>,
+    pub selected_device_id: Option<InferenceDeviceId>,
+    pub selected_network_node_id: Option<String>,
+    pub model_id: Option<String>,
+    pub resolved_artifact_kind: Option<String>,
+}
+
+impl InferenceRequestLifecycleEventContext {
+    #[must_use]
+    pub fn builder(
+        &self,
+        phase: InferenceLifecyclePhase,
+        kind: InferenceRequestLifecycleEventKind,
+        occurred_at_ms: u64,
+    ) -> InferenceRequestLifecycleEventBuilder {
+        InferenceRequestLifecycleEvent::builder(phase, kind, occurred_at_ms)
+            .with_request_id(self.request_id.clone())
+            .with_task_id(self.task_id.clone())
+            .with_backend_key(self.backend_key.clone())
+            .with_runtime_id(self.runtime_id.clone())
+            .with_selected_runtime_variant_id(self.selected_runtime_variant_id.clone())
+            .with_runtime_instance_id(self.runtime_instance_id.clone())
+            .with_selected_device_class(self.selected_device_class)
+            .with_selected_device_id(self.selected_device_id.clone())
+            .with_selected_network_node_id(self.selected_network_node_id.clone())
+            .with_model_id(self.model_id.clone())
+            .with_resolved_artifact_kind(self.resolved_artifact_kind.clone())
+    }
+}
+
+/// Builder for lifecycle events so future event fields are added in one place.
+#[derive(Debug, Clone)]
+#[must_use]
+pub struct InferenceRequestLifecycleEventBuilder {
+    event: InferenceRequestLifecycleEvent,
+}
+
+impl InferenceRequestLifecycleEventBuilder {
+    #[must_use]
+    pub fn new(
+        phase: InferenceLifecyclePhase,
+        kind: InferenceRequestLifecycleEventKind,
+        occurred_at_ms: u64,
+    ) -> Self {
+        Self {
+            event: InferenceRequestLifecycleEvent {
+                request_id: None,
+                phase,
+                kind,
+                occurred_at_ms,
+                task_id: None,
+                backend_key: None,
+                runtime_id: None,
+                selected_runtime_variant_id: None,
+                runtime_instance_id: None,
+                selected_device_class: None,
+                selected_device_id: None,
+                selected_network_node_id: None,
+                model_id: None,
+                resolved_artifact_kind: None,
+                usage: None,
+                cache_handle_id: None,
+                artifact_refs: Vec::new(),
+                detail: None,
+                canonical_error_event_id: None,
+                compatibility_report: None,
+                compatibility_issues: Vec::new(),
+                option_diagnostics: Vec::new(),
+            },
+        }
+    }
+
+    #[must_use]
+    pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
+        self.event.request_id = request_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_phase(mut self, phase: InferenceLifecyclePhase) -> Self {
+        self.event.phase = phase;
+        self
+    }
+
+    #[must_use]
+    pub fn with_kind(mut self, kind: InferenceRequestLifecycleEventKind) -> Self {
+        self.event.kind = kind;
+        self
+    }
+
+    #[must_use]
+    pub fn with_occurred_at_ms(mut self, occurred_at_ms: u64) -> Self {
+        self.event.occurred_at_ms = occurred_at_ms;
+        self
+    }
+
+    #[must_use]
+    pub fn with_task_id(mut self, task_id: Option<String>) -> Self {
+        self.event.task_id = task_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_backend_key(mut self, backend_key: Option<String>) -> Self {
+        self.event.backend_key = backend_key;
+        self
+    }
+
+    #[must_use]
+    pub fn with_runtime_id(mut self, runtime_id: Option<String>) -> Self {
+        self.event.runtime_id = runtime_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_selected_runtime_variant_id(
+        mut self,
+        selected_runtime_variant_id: Option<String>,
+    ) -> Self {
+        self.event.selected_runtime_variant_id = selected_runtime_variant_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_runtime_instance_id(mut self, runtime_instance_id: Option<String>) -> Self {
+        self.event.runtime_instance_id = runtime_instance_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_selected_device_class(
+        mut self,
+        selected_device_class: Option<InferenceDeviceClass>,
+    ) -> Self {
+        self.event.selected_device_class = selected_device_class;
+        self
+    }
+
+    #[must_use]
+    pub fn with_selected_device_id(
+        mut self,
+        selected_device_id: Option<InferenceDeviceId>,
+    ) -> Self {
+        self.event.selected_device_id = selected_device_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_selected_network_node_id(
+        mut self,
+        selected_network_node_id: Option<String>,
+    ) -> Self {
+        self.event.selected_network_node_id = selected_network_node_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_model_id(mut self, model_id: Option<String>) -> Self {
+        self.event.model_id = model_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_resolved_artifact_kind(mut self, resolved_artifact_kind: Option<String>) -> Self {
+        self.event.resolved_artifact_kind = resolved_artifact_kind;
+        self
+    }
+
+    #[must_use]
+    pub fn with_usage(mut self, usage: Option<InferenceUsage>) -> Self {
+        self.event.usage = usage;
+        self
+    }
+
+    #[must_use]
+    pub fn with_cache_handle_id(mut self, cache_handle_id: Option<String>) -> Self {
+        self.event.cache_handle_id = cache_handle_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_artifact_refs(mut self, artifact_refs: Vec<String>) -> Self {
+        self.event.artifact_refs = artifact_refs;
+        self
+    }
+
+    #[must_use]
+    pub fn with_detail(mut self, detail: Option<String>) -> Self {
+        self.event.detail = detail;
+        self
+    }
+
+    #[must_use]
+    pub fn with_canonical_error_event_id(
+        mut self,
+        canonical_error_event_id: Option<String>,
+    ) -> Self {
+        self.event.canonical_error_event_id = canonical_error_event_id;
+        self
+    }
+
+    #[must_use]
+    pub fn with_compatibility_report(
+        mut self,
+        compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    ) -> Self {
+        self.event.compatibility_report = compatibility_report;
+        self
+    }
+
+    #[must_use]
+    pub fn with_compatibility_issues(
+        mut self,
+        compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+    ) -> Self {
+        self.event.compatibility_issues = compatibility_issues;
+        self
+    }
+
+    #[must_use]
+    pub fn with_option_diagnostics(
+        mut self,
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    ) -> Self {
+        self.event.option_diagnostics = option_diagnostics;
+        self
+    }
+
+    #[must_use]
+    pub fn build(self) -> InferenceRequestLifecycleEvent {
+        self.event
+    }
+}
+
 /// Return a bounded artifact reference suitable for lifecycle diagnostics.
 ///
 /// Stable logical refs such as `artifact://...` are preserved. Local path-like
@@ -2570,47 +2825,47 @@ mod tests {
 
     #[test]
     fn inference_request_lifecycle_event_serde_uses_stable_contract() {
-        let event = InferenceRequestLifecycleEvent {
-            request_id: Some("req-1".to_string()),
-            phase: InferenceLifecyclePhase::BackendExecution,
-            kind: InferenceRequestLifecycleEventKind::CleanupCompleted,
-            occurred_at_ms: 42,
-            task_id: Some("text_generation".to_string()),
-            backend_key: Some("llama_cpp".to_string()),
-            runtime_id: Some("llama.cpp".to_string()),
-            selected_runtime_variant_id: Some("llama_cpp.cuda".to_string()),
-            runtime_instance_id: Some("llama-main-1".to_string()),
-            selected_device_class: Some(InferenceDeviceClass::Cuda),
-            selected_device_id: Some(InferenceDeviceId::parse("cuda:0").unwrap()),
-            selected_network_node_id: Some("local-node-alpha".to_string()),
+        let event = InferenceRequestLifecycleEvent::builder(
+            InferenceLifecyclePhase::BackendExecution,
+            InferenceRequestLifecycleEventKind::CleanupCompleted,
+            42,
+        )
+        .with_request_id(Some("req-1".to_string()))
+        .with_task_id(Some("text_generation".to_string()))
+        .with_backend_key(Some("llama_cpp".to_string()))
+        .with_runtime_id(Some("llama.cpp".to_string()))
+        .with_selected_runtime_variant_id(Some("llama_cpp.cuda".to_string()))
+        .with_runtime_instance_id(Some("llama-main-1".to_string()))
+        .with_selected_device_class(Some(InferenceDeviceClass::Cuda))
+        .with_selected_device_id(Some(InferenceDeviceId::parse("cuda:0").unwrap()))
+        .with_selected_network_node_id(Some("local-node-alpha".to_string()))
+        .with_model_id(Some("pumas://models/tiny-llama".to_string()))
+        .with_resolved_artifact_kind(Some("gguf".to_string()))
+        .with_usage(Some(InferenceUsage {
+            prompt_tokens: Some(8),
+            completion_tokens: Some(5),
+            total_tokens: Some(13),
+        }))
+        .with_cache_handle_id(Some("kv-checkpoint-1".to_string()))
+        .with_artifact_refs(vec!["artifact://audio.wav".to_string()])
+        .with_detail(Some("stream dropped by consumer".to_string()))
+        .with_canonical_error_event_id(Some("diagnostic-error-inference-1".to_string()))
+        .with_compatibility_report(Some(InferenceCompatibilityReportSummary {
+            status: "accepted".to_string(),
+            compatible: true,
+            task: "supported".to_string(),
+            model_source: "supported".to_string(),
+            preprocessing: "supported".to_string(),
+            postprocessing: "supported".to_string(),
+        }))
+        .with_compatibility_issues(vec![InferenceCompatibilityIssueSummary {
+            kind: "unsupported_option".to_string(),
+            phase: InferenceLifecyclePhase::TaskValidation,
+            message: "sampling option was ignored".to_string(),
             model_id: Some("pumas://models/tiny-llama".to_string()),
-            resolved_artifact_kind: Some("gguf".to_string()),
-            usage: Some(InferenceUsage {
-                prompt_tokens: Some(8),
-                completion_tokens: Some(5),
-                total_tokens: Some(13),
-            }),
-            cache_handle_id: Some("kv-checkpoint-1".to_string()),
-            artifact_refs: vec!["artifact://audio.wav".to_string()],
-            detail: Some("stream dropped by consumer".to_string()),
-            canonical_error_event_id: Some("diagnostic-error-inference-1".to_string()),
-            compatibility_report: Some(InferenceCompatibilityReportSummary {
-                status: "accepted".to_string(),
-                compatible: true,
-                task: "supported".to_string(),
-                model_source: "supported".to_string(),
-                preprocessing: "supported".to_string(),
-                postprocessing: "supported".to_string(),
-            }),
-            compatibility_issues: vec![InferenceCompatibilityIssueSummary {
-                kind: "unsupported_option".to_string(),
-                phase: InferenceLifecyclePhase::TaskValidation,
-                message: "sampling option was ignored".to_string(),
-                model_id: Some("pumas://models/tiny-llama".to_string()),
-                path: Some("sampling.temperature".to_string()),
-            }],
-            option_diagnostics: Vec::new(),
-        };
+            path: Some("sampling.temperature".to_string()),
+        }])
+        .build();
 
         let encoded = serde_json::to_value(&event).unwrap();
         let decoded: InferenceRequestLifecycleEvent =

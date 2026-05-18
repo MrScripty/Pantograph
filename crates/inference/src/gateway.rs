@@ -2973,30 +2973,21 @@ fn record_planned_image_generation_lifecycle_event(
     detail: Option<String>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
 ) {
-    if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
-        request_id: context.request_id.clone(),
-        phase,
-        kind,
-        occurred_at_ms: unix_timestamp_ms(),
-        task_id: context.task_id.clone(),
-        backend_key: context.backend_key.clone(),
-        runtime_id: context.runtime_id.clone(),
-        selected_runtime_variant_id: context.selected_runtime_variant_id.clone(),
-        runtime_instance_id: context.runtime_instance_id.clone(),
-        selected_device_class: context.selected_device_class,
-        selected_device_id: context.selected_device_id.clone(),
-        selected_network_node_id: None,
-        model_id: context.model_id.clone(),
-        resolved_artifact_kind: context.resolved_artifact_kind.clone(),
-        usage: None,
-        cache_handle_id: None,
-        artifact_refs: Vec::new(),
-        detail,
-        canonical_error_event_id: None,
-        compatibility_report: None,
-        compatibility_issues,
-        option_diagnostics: Vec::new(),
-    }) {
+    let event = InferenceRequestLifecycleEvent::builder(phase, kind, unix_timestamp_ms())
+        .with_request_id(context.request_id.clone())
+        .with_task_id(context.task_id.clone())
+        .with_backend_key(context.backend_key.clone())
+        .with_runtime_id(context.runtime_id.clone())
+        .with_selected_runtime_variant_id(context.selected_runtime_variant_id.clone())
+        .with_runtime_instance_id(context.runtime_instance_id.clone())
+        .with_selected_device_class(context.selected_device_class)
+        .with_selected_device_id(context.selected_device_id.clone())
+        .with_model_id(context.model_id.clone())
+        .with_resolved_artifact_kind(context.resolved_artifact_kind.clone())
+        .with_detail(detail)
+        .with_compatibility_issues(compatibility_issues)
+        .build();
+    if let Err(error) = sink.record(event) {
         log::warn!("failed to record planned image-generation lifecycle event: {error}");
     }
 }
@@ -3099,30 +3090,25 @@ fn record_inference_lifecycle_phase_event_with_references(
     artifact_refs: Vec<String>,
     resolved_artifact_kind: Option<String>,
 ) {
-    if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
-        request_id,
-        phase,
-        kind,
-        occurred_at_ms: unix_timestamp_ms(),
-        task_id,
-        backend_key,
-        runtime_id,
-        selected_runtime_variant_id: None,
-        runtime_instance_id,
-        selected_device_class,
-        selected_device_id,
-        selected_network_node_id: None,
-        model_id,
-        resolved_artifact_kind,
-        usage,
-        cache_handle_id,
-        artifact_refs,
-        detail,
-        canonical_error_event_id: None,
-        compatibility_report,
-        compatibility_issues,
-        option_diagnostics,
-    }) {
+    let event = InferenceRequestLifecycleEvent::builder(phase, kind, unix_timestamp_ms())
+        .with_request_id(request_id)
+        .with_task_id(task_id)
+        .with_backend_key(backend_key)
+        .with_runtime_id(runtime_id)
+        .with_runtime_instance_id(runtime_instance_id)
+        .with_selected_device_class(selected_device_class)
+        .with_selected_device_id(selected_device_id)
+        .with_model_id(model_id)
+        .with_resolved_artifact_kind(resolved_artifact_kind)
+        .with_usage(usage)
+        .with_cache_handle_id(cache_handle_id)
+        .with_artifact_refs(artifact_refs)
+        .with_detail(detail)
+        .with_compatibility_report(compatibility_report)
+        .with_compatibility_issues(compatibility_issues)
+        .with_option_diagnostics(option_diagnostics)
+        .build();
+    if let Err(error) = sink.record(event) {
         log::warn!("failed to record inference lifecycle event: {error}");
     }
 }

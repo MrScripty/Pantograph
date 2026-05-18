@@ -648,30 +648,21 @@ fn record_task_validation_failure_lifecycle(
         } else {
             Vec::new()
         };
-        if let Err(error) = sink.record(InferenceRequestLifecycleEvent {
-            request_id: request_id.clone(),
-            phase: InferenceLifecyclePhase::TaskValidation,
+        let event = InferenceRequestLifecycleEvent::builder(
+            InferenceLifecyclePhase::TaskValidation,
             kind,
-            occurred_at_ms: unix_timestamp_ms(),
-            task_id: Some(task_label.to_string()),
-            backend_key: backend_key.clone(),
-            runtime_id: runtime_id.clone(),
-            selected_runtime_variant_id: None,
-            runtime_instance_id: None,
-            selected_device_class: None,
-            selected_device_id: None,
-            selected_network_node_id: None,
-            model_id: model_id.clone(),
-            resolved_artifact_kind: None,
-            usage: None,
-            cache_handle_id: None,
-            artifact_refs: event_artifact_refs,
-            detail,
-            canonical_error_event_id: None,
-            compatibility_report: None,
-            compatibility_issues: Vec::new(),
-            option_diagnostics: event_option_diagnostics,
-        }) {
+            unix_timestamp_ms(),
+        )
+        .with_request_id(request_id.clone())
+        .with_task_id(Some(task_label.to_string()))
+        .with_backend_key(backend_key.clone())
+        .with_runtime_id(runtime_id.clone())
+        .with_model_id(model_id.clone())
+        .with_artifact_refs(event_artifact_refs)
+        .with_detail(detail)
+        .with_option_diagnostics(event_option_diagnostics)
+        .build();
+        if let Err(error) = sink.record(event) {
             log::warn!("failed to record inference task validation lifecycle event: {error}");
         }
     }

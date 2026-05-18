@@ -6600,6 +6600,53 @@ Worker rules:
     `git diff --check`.
   - Remaining follow-up: the next slice is the lifecycle event builder/context
     migration before telemetry fields are added to lifecycle events.
+- 2026-05-18 lifecycle event builder/context slice:
+  - Smallest useful vertical slice: add the shared lifecycle event
+    builder/context and migrate current direct lifecycle event constructors
+    before resource telemetry fields are added.
+  - Allowed write set: `crates/inference/src/types.rs`,
+    `crates/inference/src/lib.rs`, `crates/inference/src/gateway.rs`,
+    `crates/inference/tests/model_contracts.rs`, `crates/inference/README.md`,
+    `crates/node-engine/src/core_executor.rs`,
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: this replaces direct field-list
+    lifecycle event construction with a canonical builder/context. It does not
+    add resource telemetry fields, parse OOM strings, synthesize terminal
+    memory observations, or preserve a parallel legacy constructor.
+  - Implementation completed: added `InferenceRequestLifecycleEvent::builder`,
+    `InferenceRequestLifecycleEventBuilder`, and
+    `InferenceRequestLifecycleEventContext`; re-exported the new types from
+    `inference`; migrated gateway lifecycle emitters, node-engine lifecycle
+    emitters, inference public-contract tests, and embedded-runtime lifecycle
+    fixtures to the builder.
+  - Discovered issue resolved: embedded-runtime lifecycle verification was
+    blocked by a stale technical-fit test fixture that did not populate the
+    diagnostics-ledger memory/OOM history fields added by an earlier slice.
+    The fixture now uses explicit zero/none memory facts. The workflow
+    lifecycle sink tests also depended on querying node-status projections
+    without applying the diagnostic projection refresh that append requests;
+    they now refresh node-status projection explicitly before querying.
+  - Focused tests updated: lifecycle serde/contract tests, model-contract JSON
+    key test, embedded-runtime lifecycle adapter and workflow sink tests, and
+    runtime-selection history summary fixture coverage.
+  - Verification passed: `cargo test -p inference lifecycle --lib`, `cargo
+    test -p inference --test model_contracts
+    public_inference_contract_json_keys_avoid_scheduler_policy_language`,
+    `cargo test -p node-engine inference_lifecycle --lib`, `cargo test -p
+    pantograph-embedded-runtime inference_lifecycle --lib`, `cargo test -p
+    pantograph-embedded-runtime
+    runtime_selection_history_summaries_project_exact_candidate_keys --lib`,
+    `cargo check -p pantograph-embedded-runtime`, `cargo fmt --all --
+    --check`, and `git diff --check`.
+  - Remaining follow-up: the next resource-observation slice is extending
+    `InferenceExecutionDiagnosticObservedPayload` and embedded-runtime
+    diagnostic projection/persistability gates before terminal payload wiring.
 
 ### Traceability Links
 

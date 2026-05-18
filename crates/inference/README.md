@@ -169,7 +169,10 @@ selection must use supported runtimes through Pumas model references.
 - `InferenceRequestLifecycleEvent` carries bounded lifecycle facts, including
   direct `canonical_error_event_id` links when a caller already recorded the
   detailed canonical diagnostic error elsewhere and optional selected
-  network-node ids when execution observed a concrete Pantograph node.
+  network-node ids when execution observed a concrete Pantograph node. Use
+  `InferenceRequestLifecycleEvent::builder(...)` or
+  `InferenceRequestLifecycleEventContext` rather than direct struct literals
+  so new lifecycle fields are added through one construction path.
 - `InferenceExecutionResourceObservation` carries typed execution telemetry for
   peak RAM, peak VRAM, memory-failure kind, metric source attribution, and
   explicit metric unavailability. It is a producer contract only; schedulers

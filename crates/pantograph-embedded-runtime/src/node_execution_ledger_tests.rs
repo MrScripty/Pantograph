@@ -16,8 +16,9 @@ use pantograph_runtime_attribution::{
 };
 use pantograph_workflow_service::{
     ArtifactAttribution, ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest, ArtifactStore,
-    ArtifactWriteRequest, WorkflowIoArtifactQueryRequest, WorkflowNodeStatusQueryRequest,
-    WorkflowService,
+    ArtifactWriteRequest, WorkflowDiagnosticsProjectionKind,
+    WorkflowDiagnosticsProjectionRefreshReason, WorkflowDiagnosticsProjectionRefreshRequest,
+    WorkflowIoArtifactQueryRequest, WorkflowNodeStatusQueryRequest, WorkflowService,
 };
 
 use super::{
@@ -129,30 +130,24 @@ fn unavailable_model_capability_is_not_recorded_as_usage() {
 #[test]
 fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_context() {
     let context = context();
-    let event = inference::InferenceRequestLifecycleEvent {
-        request_id: Some("req-a".to_string()),
-        phase: inference::InferenceLifecyclePhase::BackendExecution,
-        kind: inference::InferenceRequestLifecycleEventKind::Failed,
-        occurred_at_ms: 123,
-        task_id: Some("text_generation".to_string()),
-        backend_key: Some("pytorch".to_string()),
-        runtime_id: Some("pytorch.transformers".to_string()),
-        selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
-        runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
-        selected_device_class: Some(inference::InferenceDeviceClass::Cuda),
-        selected_device_id: Some(inference::InferenceDeviceId::parse("cuda:0").unwrap()),
-        selected_network_node_id: Some("local-node-alpha".to_string()),
-        model_id: Some("pumas://models/tiny-transformers".to_string()),
-        resolved_artifact_kind: None,
-        usage: None,
-        cache_handle_id: None,
-        artifact_refs: Vec::new(),
-        detail: Some("backend failed".to_string()),
-        canonical_error_event_id: Some("diagnostic-error-inference-a".to_string()),
-        compatibility_report: None,
-        compatibility_issues: Vec::new(),
-        option_diagnostics: Vec::new(),
-    };
+    let event = inference::InferenceRequestLifecycleEvent::builder(
+        inference::InferenceLifecyclePhase::BackendExecution,
+        inference::InferenceRequestLifecycleEventKind::Failed,
+        123,
+    )
+    .with_request_id(Some("req-a".to_string()))
+    .with_task_id(Some("text_generation".to_string()))
+    .with_backend_key(Some("pytorch".to_string()))
+    .with_runtime_id(Some("pytorch.transformers".to_string()))
+    .with_selected_runtime_variant_id(Some("pytorch.cuda".to_string()))
+    .with_runtime_instance_id(Some("python-runtime:pytorch:1".to_string()))
+    .with_selected_device_class(Some(inference::InferenceDeviceClass::Cuda))
+    .with_selected_device_id(Some(inference::InferenceDeviceId::parse("cuda:0").unwrap()))
+    .with_selected_network_node_id(Some("local-node-alpha".to_string()))
+    .with_model_id(Some("pumas://models/tiny-transformers".to_string()))
+    .with_detail(Some("backend failed".to_string()))
+    .with_canonical_error_event_id(Some("diagnostic-error-inference-a".to_string()))
+    .build();
 
     let request = inference_lifecycle_event_ledger_append_request(&context, &event)
         .expect("failed lifecycle event should map to ledger request");
@@ -213,32 +208,23 @@ fn inference_lifecycle_event_adapter_drops_path_shaped_runtime_metadata() {
 #[test]
 fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure() {
     let context = context();
-    let event = inference::InferenceRequestLifecycleEvent {
-        request_id: Some("exec-a:llm-inference-1:video_understanding".to_string()),
-        phase: inference::InferenceLifecyclePhase::TaskValidation,
-        kind: inference::InferenceRequestLifecycleEventKind::Failed,
-        occurred_at_ms: 126,
-        task_id: Some("video_understanding".to_string()),
-        backend_key: Some("vllm".to_string()),
-        runtime_id: Some("vllm".to_string()),
-        selected_runtime_variant_id: None,
-        runtime_instance_id: None,
-        selected_device_class: None,
-        selected_device_id: None,
-        selected_network_node_id: None,
-        model_id: Some("pumas://models/video-understanding".to_string()),
-        resolved_artifact_kind: None,
-        usage: None,
-        cache_handle_id: None,
-        artifact_refs: Vec::new(),
-        detail: Some(
+    let event = inference::InferenceRequestLifecycleEvent::builder(
+        inference::InferenceLifecyclePhase::TaskValidation,
+        inference::InferenceRequestLifecycleEventKind::Failed,
+        126,
+    )
+    .with_request_id(Some(
+        "exec-a:llm-inference-1:video_understanding".to_string(),
+    ))
+    .with_task_id(Some("video_understanding".to_string()))
+    .with_backend_key(Some("vllm".to_string()))
+    .with_runtime_id(Some("vllm".to_string()))
+    .with_model_id(Some("pumas://models/video-understanding".to_string()))
+    .with_detail(Some(
             "Canonical inference task 'video_understanding' is contract-only at this execution boundary: task request contract has execution_supported=false for input kind 'video_understanding'."
                 .to_string(),
-        ),
-        canonical_error_event_id: None,
-        compatibility_report: None,
-        compatibility_issues: Vec::new(),
-        option_diagnostics: vec![inference::OptionCompatibilityDiagnostic {
+        ))
+    .with_option_diagnostics(vec![inference::OptionCompatibilityDiagnostic {
             option_path: "video_understanding.max_frames".to_string(),
             state: inference::OptionSupportState::BackendUnavailable,
             backend_key: Some("vllm".to_string()),
@@ -246,8 +232,8 @@ fn inference_lifecycle_event_adapter_maps_contract_only_task_validation_failure(
                 "video_understanding is contract-only at this execution boundary; option support is deferred to an executable video backend"
                     .to_string(),
             ),
-        }],
-    };
+        }])
+    .build();
 
     let request = inference_lifecycle_event_ledger_append_request(&context, &event)
         .expect("contract-only task validation failure should map to ledger request");
@@ -341,30 +327,18 @@ fn inference_lifecycle_failed_event_preserves_canonical_error_link() {
 #[test]
 fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
     let context = context();
-    let event = inference::InferenceRequestLifecycleEvent {
-        request_id: Some("req-a".to_string()),
-        phase: inference::InferenceLifecyclePhase::BackendExecution,
-        kind: inference::InferenceRequestLifecycleEventKind::CleanupCompleted,
-        occurred_at_ms: 124,
-        task_id: Some("text_generation".to_string()),
-        backend_key: Some("pytorch".to_string()),
-        runtime_id: Some("pytorch.transformers".to_string()),
-        selected_runtime_variant_id: None,
-        runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
-        selected_device_class: None,
-        selected_device_id: None,
-        selected_network_node_id: None,
-        model_id: Some("pumas://models/tiny-transformers".to_string()),
-        resolved_artifact_kind: None,
-        usage: None,
-        cache_handle_id: None,
-        artifact_refs: Vec::new(),
-        detail: None,
-        canonical_error_event_id: None,
-        compatibility_report: None,
-        compatibility_issues: Vec::new(),
-        option_diagnostics: Vec::new(),
-    };
+    let event = inference::InferenceRequestLifecycleEvent::builder(
+        inference::InferenceLifecyclePhase::BackendExecution,
+        inference::InferenceRequestLifecycleEventKind::CleanupCompleted,
+        124,
+    )
+    .with_request_id(Some("req-a".to_string()))
+    .with_task_id(Some("text_generation".to_string()))
+    .with_backend_key(Some("pytorch".to_string()))
+    .with_runtime_id(Some("pytorch.transformers".to_string()))
+    .with_runtime_instance_id(Some("python-runtime:pytorch:1".to_string()))
+    .with_model_id(Some("pumas://models/tiny-transformers".to_string()))
+    .build();
 
     assert!(inference_lifecycle_event_ledger_append_request(&context, &event).is_none());
 }
@@ -2273,6 +2247,7 @@ fn inference_lifecycle_workflow_sink_records_cancelled_node_status_to_workflow_l
     cancelled.request_id = Some("run-a:node-a:LLM".to_string());
     inference::InferenceRequestLifecycleEventSink::record(&sink, cancelled)
         .expect("cancelled lifecycle records");
+    refresh_node_status_projection(&service);
 
     let response = service
         .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
@@ -2338,6 +2313,7 @@ fn inference_lifecycle_workflow_sink_records_failed_node_status_to_workflow_ledg
     failed.canonical_error_event_id = Some("diagnostic-error-inference-workflow".to_string());
     inference::InferenceRequestLifecycleEventSink::record(&sink, failed)
         .expect("failed lifecycle records");
+    refresh_node_status_projection(&service);
 
     let response = service
         .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
@@ -2448,6 +2424,7 @@ fn inference_lifecycle_workflow_sink_records_node_status_to_workflow_ledger() {
     completed.request_id = Some("run-a:node-a:LLM".to_string());
     inference::InferenceRequestLifecycleEventSink::record(&sink, completed)
         .expect("completed lifecycle records");
+    refresh_node_status_projection(&service);
 
     let response = service
         .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
@@ -2485,30 +2462,33 @@ fn inference_lifecycle_event(
         None
     };
 
-    inference::InferenceRequestLifecycleEvent {
-        request_id: Some("req-a".to_string()),
-        phase: inference::InferenceLifecyclePhase::BackendExecution,
+    inference::InferenceRequestLifecycleEvent::builder(
+        inference::InferenceLifecyclePhase::BackendExecution,
         kind,
         occurred_at_ms,
-        task_id: Some("text_generation".to_string()),
-        backend_key: Some("pytorch".to_string()),
-        runtime_id: Some("pytorch.transformers".to_string()),
-        selected_runtime_variant_id: None,
-        runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
-        selected_device_class: None,
-        selected_device_id: None,
-        selected_network_node_id: None,
-        model_id: Some("pumas://models/tiny-transformers".to_string()),
-        resolved_artifact_kind: None,
-        usage: None,
-        cache_handle_id: None,
-        artifact_refs: Vec::new(),
-        detail,
-        canonical_error_event_id: None,
-        compatibility_report: None,
-        compatibility_issues: Vec::new(),
-        option_diagnostics: Vec::new(),
-    }
+    )
+    .with_request_id(Some("req-a".to_string()))
+    .with_task_id(Some("text_generation".to_string()))
+    .with_backend_key(Some("pytorch".to_string()))
+    .with_runtime_id(Some("pytorch.transformers".to_string()))
+    .with_runtime_instance_id(Some("python-runtime:pytorch:1".to_string()))
+    .with_model_id(Some("pumas://models/tiny-transformers".to_string()))
+    .with_detail(detail)
+    .build()
+}
+
+fn refresh_node_status_projection(service: &WorkflowService) {
+    let refresh = service
+        .workflow_diagnostics_projection_refresh(WorkflowDiagnosticsProjectionRefreshRequest {
+            projections: vec![WorkflowDiagnosticsProjectionKind::NodeStatus],
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            reason: WorkflowDiagnosticsProjectionRefreshReason::DiagnosticEventAppended,
+            batch_size: 10,
+        })
+        .expect("node status projection refresh");
+
+    assert!(refresh.failed.is_empty());
 }
 
 fn context() -> NodeExecutionContext {
