@@ -5,6 +5,11 @@ use pantograph_runtime_identity::canonical_runtime_backend_key;
 use serde::Deserialize;
 
 use crate::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
+use crate::technical_fit::{
+    WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitResourceEstimateDiagnostic,
+    WorkflowTechnicalFitResourceEstimateDiagnosticCode, WorkflowTechnicalFitResourceEstimateKind,
+    WorkflowTechnicalFitUnavailableResourceEstimateState,
+};
 use crate::workflow::{WorkflowIdentity, WorkflowServiceError};
 
 pub const DEFAULT_MAX_INPUT_BINDINGS: usize = 128;
@@ -308,19 +313,12 @@ pub(crate) fn extract_required_extensions(
 pub fn estimate_memory_requirements(
     required_models: &[String],
     model_metadata: &HashMap<String, serde_json::Value>,
-) -> Result<(Option<u64>, Option<u64>, Option<u64>, Option<u64>, String), WorkflowServiceError> {
+) -> Result<Vec<WorkflowTechnicalFitResourceEstimate>, WorkflowServiceError> {
     if required_models.is_empty() {
-        return Ok((
-            Some(0),
-            Some(0),
-            Some(0),
-            Some(0),
-            "exact_no_models".to_string(),
-        ));
+        return Ok(peak_memory_estimates(0));
     }
 
-    const MB: u64 = 1024 * 1024;
-    let mut sizes_mb = Vec::new();
+    let mut sizes_bytes = Vec::new();
     let mut found_count = 0_usize;
 
     for model_id in required_models {
@@ -333,41 +331,65 @@ pub fn estimate_memory_requirements(
                     "model '{model_id}' size_bytes must be greater than zero"
                 )));
             }
-            let size_mb = size_bytes.checked_add(MB - 1).ok_or_else(|| {
-                WorkflowServiceError::InvalidRequest(format!(
-                    "model '{model_id}' size_bytes overflows megabyte rounding"
-                ))
-            })? / MB;
-            sizes_mb.push(size_mb);
+            sizes_bytes.push(size_bytes);
             found_count += 1;
         }
     }
 
-    if sizes_mb.is_empty() {
-        return Ok((None, None, None, None, "unknown".to_string()));
+    if sizes_bytes.is_empty() || found_count != required_models.len() {
+        return Ok(unavailable_peak_memory_estimates(
+            WorkflowTechnicalFitUnavailableResourceEstimateState::InsufficientFacts,
+            "runtime_requirements.resource_estimates",
+            "complete model size facts are required before publishing peak memory estimates",
+        ));
     }
 
-    let peak = sizes_mb.iter().try_fold(0_u64, |total, size_mb| {
-        total.checked_add(*size_mb).ok_or_else(|| {
+    let peak_bytes = sizes_bytes.iter().try_fold(0_u64, |total, size_bytes| {
+        total.checked_add(*size_bytes).ok_or_else(|| {
             WorkflowServiceError::InvalidRequest(
-                "model memory estimate overflows megabyte total".to_string(),
+                "model memory estimate overflows byte total".to_string(),
             )
         })
     })?;
-    let min = sizes_mb.into_iter().max().unwrap_or(0);
-    let confidence = if found_count == required_models.len() {
-        "estimated_from_model_sizes"
-    } else {
-        "partial_model_sizes"
-    };
 
-    Ok((
-        Some(peak),
-        Some(peak),
-        Some(min),
-        Some(min),
-        confidence.to_string(),
-    ))
+    Ok(peak_memory_estimates(peak_bytes))
+}
+
+fn peak_memory_estimates(value_bytes: u64) -> Vec<WorkflowTechnicalFitResourceEstimate> {
+    vec![
+        WorkflowTechnicalFitResourceEstimate::available(
+            WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+            value_bytes,
+        ),
+        WorkflowTechnicalFitResourceEstimate::available(
+            WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes,
+            value_bytes,
+        ),
+    ]
+}
+
+fn unavailable_peak_memory_estimates(
+    state: WorkflowTechnicalFitUnavailableResourceEstimateState,
+    field_path: &'static str,
+    message: &'static str,
+) -> Vec<WorkflowTechnicalFitResourceEstimate> {
+    [
+        WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+        WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes,
+    ]
+    .into_iter()
+    .map(|kind| {
+        WorkflowTechnicalFitResourceEstimate::unavailable(
+            kind,
+            state,
+            vec![WorkflowTechnicalFitResourceEstimateDiagnostic::error(
+                WorkflowTechnicalFitResourceEstimateDiagnosticCode::InsufficientFacts,
+                field_path,
+                message,
+            )],
+        )
+    })
+    .collect()
 }
 
 fn compute_graph_fingerprint(nodes: &[StoredGraphNode], edges: &[StoredGraphEdge]) -> String {
@@ -597,14 +619,18 @@ fn value_contains_embedding_hint(value: &serde_json::Value) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::technical_fit::WorkflowTechnicalFitResourceEstimateState;
 
     #[test]
     fn memory_estimate_is_unknown_when_no_sizes_exist() {
         let required = vec!["a".to_string()];
         let metadata = HashMap::new();
-        let (_, _, _, _, confidence) =
+        let estimates =
             estimate_memory_requirements(&required, &metadata).expect("estimate memory");
-        assert_eq!(confidence, "unknown");
+        assert!(estimates.iter().all(|estimate| {
+            estimate.state() == WorkflowTechnicalFitResourceEstimateState::InsufficientFacts
+                && estimate.value_bytes().is_none()
+        }));
     }
 
     #[test]
@@ -620,31 +646,32 @@ mod tests {
             serde_json::json!({ "sizeBytes": 1024_u64 * 1024_u64 }),
         );
 
-        let (peak_vram, peak_ram, min_vram, min_ram, confidence) =
+        let estimates =
             estimate_memory_requirements(&required, &metadata).expect("estimate memory");
-        assert_eq!(peak_vram, Some(3));
-        assert_eq!(peak_ram, Some(3));
-        assert_eq!(min_vram, Some(2));
-        assert_eq!(min_ram, Some(2));
-        assert_eq!(confidence, "estimated_from_model_sizes");
+        assert_eq!(estimates.len(), 2);
+        assert!(estimates.iter().all(|estimate| {
+            estimate.state() == WorkflowTechnicalFitResourceEstimateState::Available
+                && estimate.value_bytes() == Some(1024_u64 * 1024_u64 * 3_u64)
+        }));
     }
 
     #[test]
-    fn memory_estimate_rejects_model_size_rounding_overflow() {
-        let required = vec!["a".to_string()];
+    fn memory_estimate_rejects_model_size_total_overflow() {
+        let required = vec!["a".to_string(), "b".to_string()];
         let mut metadata = HashMap::new();
         metadata.insert(
             "a".to_string(),
             serde_json::json!({ "size_bytes": u64::MAX }),
         );
+        metadata.insert("b".to_string(), serde_json::json!({ "size_bytes": 1_u64 }));
 
         let err = estimate_memory_requirements(&required, &metadata)
-            .expect_err("model size rounding overflow should fail");
+            .expect_err("model size total overflow should fail");
 
         assert!(matches!(
             err,
             WorkflowServiceError::InvalidRequest(message)
-                if message.contains("size_bytes overflows megabyte rounding")
+                if message.contains("model memory estimate overflows byte total")
         ));
     }
 

@@ -108,11 +108,7 @@ mod tests {
         pantograph_workflow_service::build_workflow_technical_fit_request(
             "workflow-a",
             &pantograph_workflow_service::WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["image/stable-diffusion/tiny-sd".to_string()],
                 required_backends: vec!["pytorch".to_string()],
                 required_extensions: Vec::new(),

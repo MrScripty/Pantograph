@@ -4,7 +4,8 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionRunRequest, WorkflowHost, WorkflowHostCapabilities,
     WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
-    WorkflowService, WorkflowServiceError,
+    WorkflowService, WorkflowServiceError, WorkflowTechnicalFitResourceEstimate,
+    WorkflowTechnicalFitResourceEstimateKind,
 };
 
 struct ExampleHost;
@@ -29,11 +30,16 @@ impl WorkflowHost for ExampleHost {
             max_output_targets: 16,
             max_value_bytes: 4096,
             runtime_requirements: WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: Some(512),
-                estimated_peak_ram_mb: Some(1024),
-                estimated_min_vram_mb: Some(256),
-                estimated_min_ram_mb: Some(512),
-                estimation_confidence: "estimated".to_string(),
+                resource_estimates: vec![
+                    WorkflowTechnicalFitResourceEstimate::available(
+                        WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+                        512_u64 * 1024 * 1024,
+                    ),
+                    WorkflowTechnicalFitResourceEstimate::available(
+                        WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes,
+                        1024_u64 * 1024 * 1024,
+                    ),
+                ],
                 required_models: vec!["example-embed-model".to_string()],
                 required_backends: vec!["example-backend".to_string()],
                 required_extensions: vec!["inference_gateway".to_string()],

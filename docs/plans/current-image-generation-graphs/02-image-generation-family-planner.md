@@ -297,6 +297,34 @@ Staged implementation plan:
           admission or translate estimates back to MB fields.
      5. Replace the upstream workflow runtime-requirement MB fields with the
         shared typed estimate contract in a later serial contract slice.
+        - 2026-05-18: completed the workflow-service/embedded-runtime contract
+          replacement. `WorkflowRuntimeRequirements` now carries
+          `resource_estimates` typed records and no longer exposes
+          `estimated_*_mb` fields or `estimation_confidence` string control
+          flow. Default capability memory estimates publish available
+          `peak_ram_bytes`/`peak_vram_bytes` only when complete model-size
+          facts exist; missing or partial facts publish typed
+          `insufficient_facts` estimates. Embedded-runtime now projects typed
+          workflow estimates into runtime-registry estimates and reservation
+          byte claims directly, with no MiB conversion shim.
+        - Verification: `cargo test -p pantograph-workflow-service
+          capabilities::tests::memory_estimate --lib`, `cargo test -p
+          pantograph-workflow-service
+          workflow_technical_fit_resource_estimates_use_typed_states_without_legacy_mb_fields
+          --lib`, `cargo test -p pantograph-workflow-service --test
+          contract`, `cargo test -p pantograph-embedded-runtime host_helper
+          --lib`, `cargo test -p pantograph-embedded-runtime
+          runtime_requirements_resource_estimates --lib`, `cargo check -p
+          pantograph-embedded-runtime`, `cargo fmt --all -- --check`, and
+          `git diff --check`.
+        - Discovered issue: `cargo test -p pantograph-workflow-service
+          workflow_capabilities --lib` still fails because
+          `default_capabilities_derive_runtime_requirements_from_workflow`
+          expects `required_backends == ["llama_cpp"]` for a `text-input`
+          workflow node whose backend extraction currently returns no required
+          backend. This is outside the typed resource-estimate contract slice
+          and should be handled with a focused backend-extraction fixture
+          review rather than folded into memory-policy work.
 6. [ ] Persist observed timing and memory/OOM facts. History-backed memory and
    timing ranking starts only after every valid runtime candidate for the same
    workflow/model/runtime key has at least five completed runs; before that,

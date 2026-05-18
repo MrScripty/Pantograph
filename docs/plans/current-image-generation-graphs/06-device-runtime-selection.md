@@ -196,11 +196,11 @@ Blast-radius limits:
   instead of silently falling through to another policy path.
 - Typed estimate records are the replacement contract for scheduler-facing
   resource estimates. Runtime-registry, workflow-service, and embedded-runtime
-  technical-fit DTOs must remove the legacy singular `resource_estimate`
-  object with optional MB fields and confidence strings rather than adapting
-  typed states into it. During staged replacement there must be one canonical
-  source of truth per boundary; do not keep legacy and typed estimates side by
-  side as selectable inputs.
+  technical-fit DTOs have removed the legacy singular `resource_estimate`
+  object, optional MB fields, and confidence strings rather than adapting typed
+  states into them. During future extension there must be one canonical source
+  of truth per boundary; do not keep legacy and typed estimates side by side as
+  selectable inputs.
 - Scheduler policy must never depend on raw backend strings or local runtime
   paths. Parse workflow/backend/device input once into validated contract
   types, then rank typed candidates.

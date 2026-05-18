@@ -16,11 +16,16 @@ fn reservation_requirements_returns_none_when_workflow_estimate_is_unknown() {
 fn reservation_requirements_maps_workflow_memory_estimates() {
     let requirements =
         EmbeddedWorkflowHost::reservation_requirements(&WorkflowRuntimeRequirements {
-            estimated_peak_vram_mb: Some(2048),
-            estimated_peak_ram_mb: Some(1024),
-            estimated_min_vram_mb: Some(1536),
-            estimated_min_ram_mb: Some(768),
-            estimation_confidence: "estimated_from_model_sizes".to_string(),
+            resource_estimates: vec![
+                WorkflowTechnicalFitResourceEstimate::available(
+                    WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+                    2048 * MIB,
+                ),
+                WorkflowTechnicalFitResourceEstimate::available(
+                    WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes,
+                    1024 * MIB,
+                ),
+            ],
             required_models: vec!["model-a".to_string()],
             required_backends: vec!["llama_cpp".to_string()],
             required_extensions: Vec::new(),

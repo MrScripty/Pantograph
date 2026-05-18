@@ -168,11 +168,7 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
                 max_output_targets: 2,
                 max_value_bytes: 1000,
                 runtime_requirements: pantograph_workflow_service::WorkflowRuntimeRequirements {
-                    estimated_peak_vram_mb: None,
-                    estimated_peak_ram_mb: None,
-                    estimated_min_vram_mb: None,
-                    estimated_min_ram_mb: None,
-                    estimation_confidence: "high".to_string(),
+                    resource_estimates: Vec::new(),
                     required_models: vec!["model-a".to_string()],
                     required_backends: vec!["pytorch".to_string()],
                     required_extensions: Vec::new(),

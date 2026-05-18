@@ -504,6 +504,27 @@ PyTorch/diffusers and produce a retained image artifact.
     memory-policy follow-up: replace embedded-runtime's temporary workflow MiB
     projection with typed workflow resource-requirement contracts and then wire
     scheduler history/diagnostics-ledger policy over the same reduced facts.
+  - 2026-05-18 workflow runtime-requirement contract replacement:
+    workflow-service `WorkflowRuntimeRequirements` now carries typed
+    `resource_estimates` records instead of legacy `estimated_*_mb` fields and
+    `estimation_confidence`. Embedded-runtime projects those typed workflow
+    estimates directly into runtime-registry technical-fit estimates and
+    reservation byte claims, so no boundary translates estimates through MiB
+    fields. Default capability estimation emits available peak RAM/VRAM byte
+    estimates only from complete model-size facts and otherwise emits typed
+    `insufficient_facts` estimates. Verification: `cargo test -p
+    pantograph-workflow-service capabilities::tests::memory_estimate --lib`,
+    `cargo test -p pantograph-workflow-service
+    workflow_technical_fit_resource_estimates_use_typed_states_without_legacy_mb_fields
+    --lib`, `cargo test -p pantograph-workflow-service --test contract`,
+    `cargo test -p pantograph-embedded-runtime host_helper --lib`, `cargo test
+    -p pantograph-embedded-runtime runtime_requirements_resource_estimates
+    --lib`, `cargo check -p pantograph-embedded-runtime`, `cargo fmt --all --
+    --check`, and `git diff --check`. Discovered issue:
+    `cargo test -p pantograph-workflow-service workflow_capabilities --lib`
+    still fails on a pre-existing backend-extraction expectation for a
+    `text-input` node and should be resolved in a separate backend
+    capability/extraction slice.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

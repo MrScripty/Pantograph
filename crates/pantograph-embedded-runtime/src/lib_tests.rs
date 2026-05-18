@@ -23,7 +23,8 @@ use pantograph_workflow_service::{
     WorkflowRunResponse, WorkflowRuntimeInstallState, WorkflowRuntimeRequirements,
     WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
     WorkflowSchedulerRuntimeWarmupReason, WorkflowService, WorkflowServiceError,
-    WorkflowTechnicalFitOverride,
+    WorkflowTechnicalFitOverride, WorkflowTechnicalFitResourceEstimate,
+    WorkflowTechnicalFitResourceEstimateKind,
 };
 use std::path::Path;
 use std::pin::Pin;

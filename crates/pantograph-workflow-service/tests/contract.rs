@@ -52,6 +52,7 @@ use pantograph_workflow_service::{
     WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
     WorkflowSupportTier, WorkflowTaskModalitySignature, WorkflowTaskRequestContract,
     WorkflowTaskStreamingSupport, WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest,
+    WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitResourceEstimateKind,
     WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
     WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
     WorkflowTraceStatus, WorkflowTraceSummary,
@@ -74,11 +75,16 @@ impl WorkflowHost for ContractHost {
             max_output_targets: 8,
             max_value_bytes: 4096,
             runtime_requirements: WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: Some(1536),
-                estimated_peak_ram_mb: Some(3072),
-                estimated_min_vram_mb: Some(1024),
-                estimated_min_ram_mb: Some(2048),
-                estimation_confidence: "estimated".to_string(),
+                resource_estimates: vec![
+                    WorkflowTechnicalFitResourceEstimate::available(
+                        WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+                        1536_u64 * 1024 * 1024,
+                    ),
+                    WorkflowTechnicalFitResourceEstimate::available(
+                        WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes,
+                        3072_u64 * 1024 * 1024,
+                    ),
+                ],
                 required_models: vec!["model-a".to_string()],
                 required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: vec!["inference_gateway".to_string()],
@@ -351,11 +357,18 @@ async fn workflow_capabilities_contract_snapshot() {
         "max_output_targets": 8,
         "max_value_bytes": 4096,
         "runtime_requirements": {
-            "estimated_peak_vram_mb": 1536,
-            "estimated_peak_ram_mb": 3072,
-            "estimated_min_vram_mb": 1024,
-            "estimated_min_ram_mb": 2048,
-            "estimation_confidence": "estimated",
+            "resource_estimates": [
+                {
+                    "kind": "peak_vram_bytes",
+                    "state": "available",
+                    "value_bytes": 1536_u64 * 1024 * 1024
+                },
+                {
+                    "kind": "peak_ram_bytes",
+                    "state": "available",
+                    "value_bytes": 3072_u64 * 1024 * 1024
+                }
+            ],
             "required_models": ["model-a"],
             "required_backends": ["llama_cpp"],
             "required_extensions": ["inference_gateway"]

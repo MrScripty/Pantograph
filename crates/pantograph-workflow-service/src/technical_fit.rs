@@ -1263,14 +1263,7 @@ fn normalize_runtime_requirements(
     required_extensions.dedup();
 
     WorkflowRuntimeRequirements {
-        estimated_peak_vram_mb: runtime_requirements.estimated_peak_vram_mb,
-        estimated_peak_ram_mb: runtime_requirements.estimated_peak_ram_mb,
-        estimated_min_vram_mb: runtime_requirements.estimated_min_vram_mb,
-        estimated_min_ram_mb: runtime_requirements.estimated_min_ram_mb,
-        estimation_confidence: normalize_trimmed_string(Some(
-            runtime_requirements.estimation_confidence.as_str(),
-        ))
-        .unwrap_or_else(|| "unknown".to_string()),
+        resource_estimates: runtime_requirements.resource_estimates.clone(),
         required_models,
         required_backends,
         required_extensions,
@@ -1323,11 +1316,16 @@ mod tests {
 
     fn runtime_requirements() -> WorkflowRuntimeRequirements {
         WorkflowRuntimeRequirements {
-            estimated_peak_vram_mb: Some(4096),
-            estimated_peak_ram_mb: Some(8192),
-            estimated_min_vram_mb: Some(2048),
-            estimated_min_ram_mb: Some(4096),
-            estimation_confidence: " medium ".to_string(),
+            resource_estimates: vec![
+                WorkflowTechnicalFitResourceEstimate::available(
+                    WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+                    4096_u64 * 1024 * 1024,
+                ),
+                WorkflowTechnicalFitResourceEstimate::available(
+                    WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes,
+                    8192_u64 * 1024 * 1024,
+                ),
+            ],
             required_models: vec!["model-a".to_string(), "model-a".to_string()],
             required_backends: vec!["llama.cpp".to_string(), "llama_cpp".to_string()],
             required_extensions: vec!["kv_cache".to_string(), " kv_cache ".to_string()],
@@ -1596,11 +1594,19 @@ mod tests {
         assert_eq!(estimates[0]["kind"], "peak_vram_bytes");
         assert_eq!(estimates[0]["state"], "available");
         assert_eq!(estimates[0]["value_bytes"], 4096_u64 * 1024 * 1024);
-        assert!(estimates[0].get("estimated_peak_vram_mb").is_none());
+        assert!(!estimates[0]
+            .as_object()
+            .expect("estimate is object")
+            .keys()
+            .any(|key| key.ends_with("_mb")));
         assert_eq!(estimates[1]["kind"], "model_residency_bytes");
         assert_eq!(estimates[1]["state"], "insufficient_facts");
         assert_eq!(estimates[1]["diagnostics"][0]["code"], "insufficient_facts");
-        assert!(estimates[1].get("estimated_peak_ram_mb").is_none());
+        assert!(!estimates[1]
+            .as_object()
+            .expect("estimate is object")
+            .keys()
+            .any(|key| key.ends_with("_mb")));
     }
 
     #[test]

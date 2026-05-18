@@ -5,7 +5,6 @@ use pantograph_runtime_registry::{
     RuntimeTechnicalFitDependencyReadinessState, RuntimeTechnicalFitDependencyReadinessSubjectKind,
     RuntimeTechnicalFitDeviceDiagnostic, RuntimeTechnicalFitDeviceDiagnosticCode,
     RuntimeTechnicalFitDeviceDiagnosticSeverity, RuntimeTechnicalFitResourceEstimate,
-    RuntimeTechnicalFitResourceEstimateKind,
 };
 use pantograph_workflow_service::WorkflowRuntimeCapability;
 
@@ -421,7 +420,7 @@ mod tests {
     use super::*;
     use pantograph_runtime_registry::{
         RuntimeTechnicalFitDeviceClass, RuntimeTechnicalFitResidencyState,
-        RuntimeTechnicalFitWarmupState,
+        RuntimeTechnicalFitResourceEstimateKind, RuntimeTechnicalFitWarmupState,
     };
     use pantograph_workflow_service::{
         WorkflowBackendCapabilityFacts, WorkflowInferenceDeviceClass, WorkflowRuntimeInstallState,

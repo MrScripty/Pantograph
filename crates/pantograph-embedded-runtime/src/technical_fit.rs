@@ -43,8 +43,9 @@ use pantograph_workflow_service::{
     WorkflowTechnicalFitResourceEstimateDiagnostic,
     WorkflowTechnicalFitResourceEstimateDiagnosticCode,
     WorkflowTechnicalFitResourceEstimateDiagnosticSeverity,
-    WorkflowTechnicalFitResourceEstimateKind, WorkflowTechnicalFitSelectionMode,
-    WorkflowTechnicalFitSelectionPolicyTrace, WorkflowTechnicalFitUnavailableResourceEstimateState,
+    WorkflowTechnicalFitResourceEstimateKind, WorkflowTechnicalFitResourceEstimateState,
+    WorkflowTechnicalFitSelectionMode, WorkflowTechnicalFitSelectionPolicyTrace,
+    WorkflowTechnicalFitUnavailableResourceEstimateState,
 };
 use workflow_nodes::setup::PumasSelectorAccess;
 
@@ -1461,41 +1462,146 @@ fn project_resource_pressure(
 fn runtime_requirements_resource_estimates(
     requirements: &pantograph_workflow_service::WorkflowRuntimeRequirements,
 ) -> Vec<RuntimeTechnicalFitResourceEstimate> {
-    let mut estimates = Vec::new();
-    if let Some(peak_vram_mb) = requirements.estimated_peak_vram_mb {
-        estimates.push(runtime_requirements_mb_estimate(
-            RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes,
-            peak_vram_mb,
-            "runtime_requirements.estimated_peak_vram_mb",
-        ));
-    }
-    if let Some(peak_ram_mb) = requirements.estimated_peak_ram_mb {
-        estimates.push(runtime_requirements_mb_estimate(
-            RuntimeTechnicalFitResourceEstimateKind::PeakRamBytes,
-            peak_ram_mb,
-            "runtime_requirements.estimated_peak_ram_mb",
-        ));
-    }
-    estimates
+    requirements
+        .resource_estimates
+        .iter()
+        .map(project_workflow_resource_estimate)
+        .collect()
 }
 
-fn runtime_requirements_mb_estimate(
-    kind: RuntimeTechnicalFitResourceEstimateKind,
-    value_mb: u64,
-    field_path: &'static str,
+fn project_workflow_resource_estimate(
+    estimate: &WorkflowTechnicalFitResourceEstimate,
 ) -> RuntimeTechnicalFitResourceEstimate {
-    const BYTES_PER_MIB: u64 = 1024 * 1024;
-    match value_mb.checked_mul(BYTES_PER_MIB) {
-        Some(value_bytes) => RuntimeTechnicalFitResourceEstimate::available(kind, value_bytes),
-        None => RuntimeTechnicalFitResourceEstimate::unavailable(
+    let kind = project_workflow_resource_estimate_kind(estimate.kind());
+    if estimate.state() == WorkflowTechnicalFitResourceEstimateState::Available {
+        if let Some(value_bytes) = estimate.value_bytes() {
+            return RuntimeTechnicalFitResourceEstimate::available(kind, value_bytes);
+        }
+        return RuntimeTechnicalFitResourceEstimate::unavailable(
             kind,
-            RuntimeTechnicalFitUnavailableResourceEstimateState::Overflow,
+            RuntimeTechnicalFitUnavailableResourceEstimateState::NotAvailable,
             vec![RuntimeTechnicalFitResourceEstimateDiagnostic::error(
-                RuntimeTechnicalFitResourceEstimateDiagnosticCode::ArithmeticOverflow,
-                field_path,
-                "runtime requirement memory estimate overflowed while converting MiB to bytes",
+                RuntimeTechnicalFitResourceEstimateDiagnosticCode::InvalidInput,
+                "runtime_requirements.resource_estimates.value_bytes",
+                "available workflow resource estimate did not include a byte value",
             )],
-        ),
+        );
+    }
+
+    RuntimeTechnicalFitResourceEstimate::unavailable(
+        kind,
+        project_workflow_unavailable_resource_estimate_state(estimate.state()),
+        estimate
+            .diagnostics()
+            .iter()
+            .map(project_workflow_resource_estimate_diagnostic)
+            .collect(),
+    )
+}
+
+fn project_workflow_resource_estimate_kind(
+    kind: WorkflowTechnicalFitResourceEstimateKind,
+) -> RuntimeTechnicalFitResourceEstimateKind {
+    match kind {
+        WorkflowTechnicalFitResourceEstimateKind::OutputRgbaBytes => {
+            RuntimeTechnicalFitResourceEstimateKind::OutputRgbaBytes
+        }
+        WorkflowTechnicalFitResourceEstimateKind::VaeWorkingMemoryBytes => {
+            RuntimeTechnicalFitResourceEstimateKind::VaeWorkingMemoryBytes
+        }
+        WorkflowTechnicalFitResourceEstimateKind::ModelResidencyBytes => {
+            RuntimeTechnicalFitResourceEstimateKind::ModelResidencyBytes
+        }
+        WorkflowTechnicalFitResourceEstimateKind::RuntimeOverheadBytes => {
+            RuntimeTechnicalFitResourceEstimateKind::RuntimeOverheadBytes
+        }
+        WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes => {
+            RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes
+        }
+        WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes => {
+            RuntimeTechnicalFitResourceEstimateKind::PeakRamBytes
+        }
+        _ => unreachable!("unsupported workflow resource estimate kind"),
+    }
+}
+
+fn project_workflow_unavailable_resource_estimate_state(
+    state: WorkflowTechnicalFitResourceEstimateState,
+) -> RuntimeTechnicalFitUnavailableResourceEstimateState {
+    match state {
+        WorkflowTechnicalFitResourceEstimateState::Available => {
+            RuntimeTechnicalFitUnavailableResourceEstimateState::NotAvailable
+        }
+        WorkflowTechnicalFitResourceEstimateState::NotAvailable => {
+            RuntimeTechnicalFitUnavailableResourceEstimateState::NotAvailable
+        }
+        WorkflowTechnicalFitResourceEstimateState::NotImplemented => {
+            RuntimeTechnicalFitUnavailableResourceEstimateState::NotImplemented
+        }
+        WorkflowTechnicalFitResourceEstimateState::InsufficientFacts => {
+            RuntimeTechnicalFitUnavailableResourceEstimateState::InsufficientFacts
+        }
+        WorkflowTechnicalFitResourceEstimateState::Overflow => {
+            RuntimeTechnicalFitUnavailableResourceEstimateState::Overflow
+        }
+        WorkflowTechnicalFitResourceEstimateState::UnsupportedFamily => {
+            RuntimeTechnicalFitUnavailableResourceEstimateState::UnsupportedFamily
+        }
+        WorkflowTechnicalFitResourceEstimateState::UnsupportedRuntime => {
+            RuntimeTechnicalFitUnavailableResourceEstimateState::UnsupportedRuntime
+        }
+        _ => unreachable!("unsupported workflow resource estimate state"),
+    }
+}
+
+fn project_workflow_resource_estimate_diagnostic(
+    diagnostic: &WorkflowTechnicalFitResourceEstimateDiagnostic,
+) -> RuntimeTechnicalFitResourceEstimateDiagnostic {
+    RuntimeTechnicalFitResourceEstimateDiagnostic {
+        code: project_workflow_resource_estimate_diagnostic_code(diagnostic.code),
+        severity: project_workflow_resource_estimate_diagnostic_severity(diagnostic.severity),
+        field_path: diagnostic.field_path.clone(),
+        message: diagnostic.message.clone(),
+    }
+}
+
+fn project_workflow_resource_estimate_diagnostic_code(
+    code: WorkflowTechnicalFitResourceEstimateDiagnosticCode,
+) -> RuntimeTechnicalFitResourceEstimateDiagnosticCode {
+    match code {
+        WorkflowTechnicalFitResourceEstimateDiagnosticCode::ArithmeticOverflow => {
+            RuntimeTechnicalFitResourceEstimateDiagnosticCode::ArithmeticOverflow
+        }
+        WorkflowTechnicalFitResourceEstimateDiagnosticCode::InvalidInput => {
+            RuntimeTechnicalFitResourceEstimateDiagnosticCode::InvalidInput
+        }
+        WorkflowTechnicalFitResourceEstimateDiagnosticCode::InsufficientFacts => {
+            RuntimeTechnicalFitResourceEstimateDiagnosticCode::InsufficientFacts
+        }
+        WorkflowTechnicalFitResourceEstimateDiagnosticCode::NotAvailable => {
+            RuntimeTechnicalFitResourceEstimateDiagnosticCode::NotAvailable
+        }
+        WorkflowTechnicalFitResourceEstimateDiagnosticCode::NotImplemented => {
+            RuntimeTechnicalFitResourceEstimateDiagnosticCode::NotImplemented
+        }
+        WorkflowTechnicalFitResourceEstimateDiagnosticCode::UnsupportedFamily => {
+            RuntimeTechnicalFitResourceEstimateDiagnosticCode::UnsupportedFamily
+        }
+        WorkflowTechnicalFitResourceEstimateDiagnosticCode::UnsupportedRuntime => {
+            RuntimeTechnicalFitResourceEstimateDiagnosticCode::UnsupportedRuntime
+        }
+        _ => unreachable!("unsupported workflow resource estimate diagnostic code"),
+    }
+}
+
+fn project_workflow_resource_estimate_diagnostic_severity(
+    severity: WorkflowTechnicalFitResourceEstimateDiagnosticSeverity,
+) -> RuntimeTechnicalFitResourceEstimateDiagnosticSeverity {
+    match severity {
+        WorkflowTechnicalFitResourceEstimateDiagnosticSeverity::Error => {
+            RuntimeTechnicalFitResourceEstimateDiagnosticSeverity::Error
+        }
+        _ => unreachable!("unsupported workflow resource estimate diagnostic severity"),
     }
 }
 
@@ -1845,11 +1951,10 @@ mod tests {
         let mut workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: Some(4096),
-                estimated_peak_ram_mb: Some(8192),
-                estimated_min_vram_mb: Some(2048),
-                estimated_min_ram_mb: Some(4096),
-                estimation_confidence: "high".to_string(),
+                resource_estimates: vec![
+                    workflow_peak_vram_estimate(4096_u64 * 1024 * 1024),
+                    workflow_peak_ram_estimate(8192_u64 * 1024 * 1024),
+                ],
                 required_models: vec!["model-a".to_string()],
                 required_backends: vec!["llama.cpp".to_string()],
                 required_extensions: vec!["kv_cache".to_string()],
@@ -1933,13 +2038,17 @@ mod tests {
     }
 
     #[test]
-    fn runtime_requirements_resource_estimates_emit_typed_overflow_diagnostic() {
+    fn runtime_requirements_resource_estimates_project_typed_unavailable_diagnostic() {
         let estimates = runtime_requirements_resource_estimates(&WorkflowRuntimeRequirements {
-            estimated_peak_vram_mb: Some(u64::MAX),
-            estimated_peak_ram_mb: None,
-            estimated_min_vram_mb: None,
-            estimated_min_ram_mb: None,
-            estimation_confidence: "fixture".to_string(),
+            resource_estimates: vec![WorkflowTechnicalFitResourceEstimate::unavailable(
+                WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+                WorkflowTechnicalFitUnavailableResourceEstimateState::Overflow,
+                vec![WorkflowTechnicalFitResourceEstimateDiagnostic::error(
+                    WorkflowTechnicalFitResourceEstimateDiagnosticCode::ArithmeticOverflow,
+                    "runtime_requirements.resource_estimates",
+                    "workflow estimate overflowed before runtime projection",
+                )],
+            )],
             required_models: Vec::new(),
             required_backends: Vec::new(),
             required_extensions: Vec::new(),
@@ -1993,11 +2102,10 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: Some(4096),
-                estimated_peak_ram_mb: Some(8192),
-                estimated_min_vram_mb: Some(2048),
-                estimated_min_ram_mb: Some(4096),
-                estimation_confidence: "high".to_string(),
+                resource_estimates: vec![
+                    workflow_peak_vram_estimate(4096_u64 * 1024 * 1024),
+                    workflow_peak_ram_estimate(8192_u64 * 1024 * 1024),
+                ],
                 required_models: Vec::new(),
                 required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: Vec::new(),
@@ -2067,11 +2175,10 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: Some(4096),
-                estimated_peak_ram_mb: Some(8192),
-                estimated_min_vram_mb: Some(2048),
-                estimated_min_ram_mb: Some(4096),
-                estimation_confidence: "high".to_string(),
+                resource_estimates: vec![
+                    workflow_peak_vram_estimate(4096_u64 * 1024 * 1024),
+                    workflow_peak_ram_estimate(8192_u64 * 1024 * 1024),
+                ],
                 required_models: Vec::new(),
                 required_backends: Vec::new(),
                 required_extensions: Vec::new(),
@@ -2326,11 +2433,10 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: Some(4096),
-                estimated_peak_ram_mb: Some(8192),
-                estimated_min_vram_mb: Some(2048),
-                estimated_min_ram_mb: Some(4096),
-                estimation_confidence: "high".to_string(),
+                resource_estimates: vec![
+                    workflow_peak_vram_estimate(4096_u64 * 1024 * 1024),
+                    workflow_peak_ram_estimate(8192_u64 * 1024 * 1024),
+                ],
                 required_models: Vec::new(),
                 required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: Vec::new(),
@@ -2479,11 +2585,7 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["llm/llama/tiny-gguf".to_string()],
                 required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: Vec::new(),
@@ -2547,11 +2649,7 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["llm/llama/tiny-gguf".to_string()],
                 required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: Vec::new(),
@@ -2631,11 +2729,7 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["llm/example/missing-tokenizer".to_string()],
                 required_backends: vec!["pytorch".to_string()],
                 required_extensions: Vec::new(),
@@ -2701,11 +2795,7 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["image/stable-diffusion/tiny-sd".to_string()],
                 required_backends: Vec::new(),
                 required_extensions: Vec::new(),
@@ -2866,11 +2956,7 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["llm/llama/tiny-gguf".to_string()],
                 required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: Vec::new(),
@@ -2911,11 +2997,10 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: Some(4096),
-                estimated_peak_ram_mb: Some(8192),
-                estimated_min_vram_mb: Some(2048),
-                estimated_min_ram_mb: Some(4096),
-                estimation_confidence: "high".to_string(),
+                resource_estimates: vec![
+                    workflow_peak_vram_estimate(4096_u64 * 1024 * 1024),
+                    workflow_peak_ram_estimate(8192_u64 * 1024 * 1024),
+                ],
                 required_models: vec!["llm/llama/missing-facts".to_string()],
                 required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: Vec::new(),
@@ -2970,11 +3055,7 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["llm/llama/tiny-gguf".to_string()],
                 required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: Vec::new(),
@@ -3066,11 +3147,7 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["image/stable-diffusion/tiny-sd".to_string()],
                 required_backends: vec!["pytorch".to_string()],
                 required_extensions: Vec::new(),
@@ -3133,11 +3210,7 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["image/stable-diffusion/tiny-sd".to_string()],
                 required_backends: vec!["candle".to_string()],
                 required_extensions: Vec::new(),
@@ -3205,11 +3278,7 @@ mod tests {
         let workflow_request = build_workflow_technical_fit_request(
             "workflow-a",
             &WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "fixture".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["image/stable-diffusion/tiny-sd".to_string()],
                 required_backends: vec!["vllm".to_string()],
                 required_extensions: Vec::new(),

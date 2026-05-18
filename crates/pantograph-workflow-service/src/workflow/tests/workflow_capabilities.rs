@@ -1,5 +1,19 @@
 use super::*;
 
+fn peak_estimate_bytes(
+    requirements: &WorkflowRuntimeRequirements,
+    kind: WorkflowTechnicalFitResourceEstimateKind,
+) -> Option<u64> {
+    requirements
+        .resource_estimates
+        .iter()
+        .find(|estimate| {
+            estimate.kind() == kind
+                && estimate.state() == WorkflowTechnicalFitResourceEstimateState::Available
+        })
+        .and_then(|estimate| estimate.value_bytes())
+}
+
 #[tokio::test]
 async fn capabilities_returns_host_capabilities() {
     let host = MockWorkflowHost::new(8, 4096);
@@ -18,8 +32,11 @@ async fn capabilities_returns_host_capabilities() {
     assert_eq!(response.max_output_targets, 16);
     assert_eq!(response.max_value_bytes, 4096);
     assert_eq!(
-        response.runtime_requirements.estimated_peak_ram_mb,
-        Some(2048)
+        peak_estimate_bytes(
+            &response.runtime_requirements,
+            WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes
+        ),
+        Some(2048_u64 * 1024 * 1024)
     );
     assert_eq!(response.runtime_requirements.required_models.len(), 1);
     assert_eq!(response.models.len(), 1);
@@ -104,11 +121,12 @@ async fn default_capabilities_derive_runtime_requirements_from_workflow() {
     );
     assert_eq!(response.models[0].node_ids, vec!["node-1".to_string()]);
     assert_eq!(response.models[0].roles, vec!["embedding".to_string()]);
-    assert_eq!(response.runtime_requirements.estimated_peak_ram_mb, Some(2));
-    assert_eq!(response.runtime_requirements.estimated_min_ram_mb, Some(2));
     assert_eq!(
-        response.runtime_requirements.estimation_confidence,
-        "estimated_from_model_sizes"
+        peak_estimate_bytes(
+            &response.runtime_requirements,
+            WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes
+        ),
+        Some(2_u64 * 1024 * 1024)
     );
 
     let _ = fs::remove_dir_all(temp_root);

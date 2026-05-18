@@ -10,7 +10,10 @@ use crate::graph::{
     WorkflowPresentationMetadata,
 };
 use crate::scheduler::WorkflowExecutionSessionAttributionContext;
-use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
+use crate::technical_fit::{
+    WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride,
+    WorkflowTechnicalFitResourceEstimate,
+};
 
 /// Node/port value binding used for workflow inputs and outputs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -90,15 +93,8 @@ pub struct WorkflowCapabilityModel {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowRuntimeRequirements {
-    #[serde(default)]
-    pub estimated_peak_vram_mb: Option<u64>,
-    #[serde(default)]
-    pub estimated_peak_ram_mb: Option<u64>,
-    #[serde(default)]
-    pub estimated_min_vram_mb: Option<u64>,
-    #[serde(default)]
-    pub estimated_min_ram_mb: Option<u64>,
-    pub estimation_confidence: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_estimates: Vec<WorkflowTechnicalFitResourceEstimate>,
     pub required_models: Vec<String>,
     pub required_backends: Vec<String>,
     pub required_extensions: Vec<String>,
@@ -107,11 +103,7 @@ pub struct WorkflowRuntimeRequirements {
 impl Default for WorkflowRuntimeRequirements {
     fn default() -> Self {
         Self {
-            estimated_peak_vram_mb: None,
-            estimated_peak_ram_mb: None,
-            estimated_min_vram_mb: None,
-            estimated_min_ram_mb: None,
-            estimation_confidence: "unknown".to_string(),
+            resource_estimates: Vec::new(),
             required_models: Vec::new(),
             required_backends: Vec::new(),
             required_extensions: Vec::new(),

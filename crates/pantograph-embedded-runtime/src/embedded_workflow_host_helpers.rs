@@ -14,6 +14,7 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionState, WorkflowHost,
     WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeDiagnosticPhaseHint,
     WorkflowRuntimeRequirements, WorkflowServiceError, WorkflowSessionRuntimeLoadProof,
+    WorkflowTechnicalFitResourceEstimateKind, WorkflowTechnicalFitResourceEstimateState,
 };
 use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
@@ -63,33 +64,26 @@ impl EmbeddedWorkflowHost {
             .map(ToOwned::to_owned)
     }
 
-    fn mib_to_bytes(mib: u64, field_path: &str) -> Result<u64, WorkflowServiceError> {
-        mib.checked_mul(1024 * 1024).ok_or_else(|| {
-            WorkflowServiceError::Internal(format!(
-                "{field_path} overflowed while converting MiB to bytes for runtime admission"
-            ))
-        })
-    }
-
     pub(crate) fn reservation_requirements(
         runtime_requirements: &WorkflowRuntimeRequirements,
     ) -> Result<Option<RuntimeReservationRequirements>, WorkflowServiceError> {
         let mut claims = Vec::new();
-        if let Some(vram_mib) = runtime_requirements
-            .estimated_peak_vram_mb
-            .or(runtime_requirements.estimated_min_vram_mb)
-        {
-            claims.push(RuntimeReservationResourceClaim::vram_bytes(
-                Self::mib_to_bytes(vram_mib, "runtime_requirements.estimated_peak_vram_mb")?,
-            ));
-        }
-        if let Some(ram_mib) = runtime_requirements
-            .estimated_peak_ram_mb
-            .or(runtime_requirements.estimated_min_ram_mb)
-        {
-            claims.push(RuntimeReservationResourceClaim::ram_bytes(
-                Self::mib_to_bytes(ram_mib, "runtime_requirements.estimated_peak_ram_mb")?,
-            ));
+        for estimate in &runtime_requirements.resource_estimates {
+            if estimate.state() != WorkflowTechnicalFitResourceEstimateState::Available {
+                continue;
+            }
+            let Some(value_bytes) = estimate.value_bytes() else {
+                continue;
+            };
+            match estimate.kind() {
+                WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes => {
+                    claims.push(RuntimeReservationResourceClaim::vram_bytes(value_bytes));
+                }
+                WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes => {
+                    claims.push(RuntimeReservationResourceClaim::ram_bytes(value_bytes));
+                }
+                _ => {}
+            }
         }
 
         if claims.is_empty() {

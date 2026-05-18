@@ -28,7 +28,8 @@ use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
 use crate::technical_fit::{
     WorkflowTechnicalFitDecision, WorkflowTechnicalFitDecisionCode,
     WorkflowTechnicalFitHistoryThresholdState, WorkflowTechnicalFitOverride,
-    WorkflowTechnicalFitPolicyPhase,
+    WorkflowTechnicalFitPolicyPhase, WorkflowTechnicalFitResourceEstimateKind,
+    WorkflowTechnicalFitResourceEstimateState,
 };
 
 use super::diagnostic_errors::{
@@ -2063,10 +2064,7 @@ fn scheduler_estimate_context_from_snapshot(
             ),
         );
     }
-    let confidence = match runtime_requirements.estimation_confidence.trim() {
-        "" | "unknown" => "low".to_string(),
-        value => value.to_string(),
-    };
+    let confidence = scheduler_estimate_confidence(&runtime_requirements);
     let model_cache_state = if runtime_requirements.required_models.is_empty() {
         SchedulerModelCacheState::NotRequired
     } else {
@@ -2264,17 +2262,40 @@ fn append_scheduler_estimate_runtime_reasons(
         );
     }
     let mut memory_estimates = Vec::new();
-    if let Some(peak_vram_mb) = runtime_requirements.estimated_peak_vram_mb {
-        memory_estimates.push(format!("{peak_vram_mb} MB VRAM"));
-    }
-    if let Some(peak_ram_mb) = runtime_requirements.estimated_peak_ram_mb {
-        memory_estimates.push(format!("{peak_ram_mb} MB RAM"));
+    for estimate in &runtime_requirements.resource_estimates {
+        if estimate.state() != WorkflowTechnicalFitResourceEstimateState::Available {
+            continue;
+        }
+        let Some(value_bytes) = estimate.value_bytes() else {
+            continue;
+        };
+        match estimate.kind() {
+            WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes => {
+                memory_estimates.push(format!("{value_bytes} bytes peak VRAM"));
+            }
+            WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes => {
+                memory_estimates.push(format!("{value_bytes} bytes peak RAM"));
+            }
+            _ => {}
+        }
     }
     if !memory_estimates.is_empty() {
         push_scheduler_estimate_reason(
             reasons,
             format!("estimated peak memory: {}", memory_estimates.join(", ")),
         );
+    }
+}
+
+fn scheduler_estimate_confidence(runtime_requirements: &WorkflowRuntimeRequirements) -> String {
+    if runtime_requirements
+        .resource_estimates
+        .iter()
+        .any(|estimate| estimate.state().is_available())
+    {
+        "estimated".to_string()
+    } else {
+        "low".to_string()
     }
 }
 
@@ -2364,11 +2385,7 @@ mod tests {
 
     fn empty_runtime_requirements() -> WorkflowRuntimeRequirements {
         WorkflowRuntimeRequirements {
-            estimated_peak_vram_mb: None,
-            estimated_peak_ram_mb: None,
-            estimated_min_vram_mb: None,
-            estimated_min_ram_mb: None,
-            estimation_confidence: "unknown".to_string(),
+            resource_estimates: Vec::new(),
             required_models: Vec::new(),
             required_backends: Vec::new(),
             required_extensions: Vec::new(),

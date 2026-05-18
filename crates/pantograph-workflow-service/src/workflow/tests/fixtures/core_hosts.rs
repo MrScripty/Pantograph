@@ -21,11 +21,16 @@ impl MockWorkflowHost {
                 max_output_targets: 16,
                 max_value_bytes,
                 runtime_requirements: WorkflowRuntimeRequirements {
-                    estimated_peak_vram_mb: Some(1024),
-                    estimated_peak_ram_mb: Some(2048),
-                    estimated_min_vram_mb: Some(512),
-                    estimated_min_ram_mb: Some(1024),
-                    estimation_confidence: "estimated".to_string(),
+                    resource_estimates: vec![
+                        WorkflowTechnicalFitResourceEstimate::available(
+                            WorkflowTechnicalFitResourceEstimateKind::PeakVramBytes,
+                            1024_u64 * 1024 * 1024,
+                        ),
+                        WorkflowTechnicalFitResourceEstimate::available(
+                            WorkflowTechnicalFitResourceEstimateKind::PeakRamBytes,
+                            2048_u64 * 1024 * 1024,
+                        ),
+                    ],
                     required_models: vec!["model-a".to_string()],
                     required_backends: vec!["llama_cpp".to_string()],
                     required_extensions: vec!["inference_gateway".to_string()],

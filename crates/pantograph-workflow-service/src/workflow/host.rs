@@ -119,13 +119,8 @@ pub trait WorkflowHost: Send + Sync {
             }
         }
 
-        let (
-            estimated_peak_vram_mb,
-            estimated_peak_ram_mb,
-            estimated_min_vram_mb,
-            estimated_min_ram_mb,
-            estimation_confidence,
-        ) = capabilities::estimate_memory_requirements(&required_models, &model_metadata)?;
+        let resource_estimates =
+            capabilities::estimate_memory_requirements(&required_models, &model_metadata)?;
         let model_usages = capabilities::extract_model_usages(stored.nodes());
         let mut models = Vec::with_capacity(model_usages.len());
         for usage in model_usages {
@@ -154,11 +149,7 @@ pub trait WorkflowHost: Send + Sync {
             max_output_targets: self.max_output_targets(),
             max_value_bytes: self.max_value_bytes(),
             runtime_requirements: WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb,
-                estimated_peak_ram_mb,
-                estimated_min_vram_mb,
-                estimated_min_ram_mb,
-                estimation_confidence,
+                resource_estimates,
                 required_models,
                 required_backends,
                 required_extensions,

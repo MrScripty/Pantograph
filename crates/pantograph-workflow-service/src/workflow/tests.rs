@@ -1,6 +1,8 @@
 use super::*;
 use crate::technical_fit::{
-    WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitSelectionMode,
+    WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
+    WorkflowTechnicalFitResourceEstimate, WorkflowTechnicalFitResourceEstimateKind,
+    WorkflowTechnicalFitResourceEstimateState, WorkflowTechnicalFitSelectionMode,
 };
 use crate::WorkflowSchedulerRuntimeCapacityPressure;
 use crate::{WorkflowGraph, WorkflowGraphEditSessionCreateRequest};
