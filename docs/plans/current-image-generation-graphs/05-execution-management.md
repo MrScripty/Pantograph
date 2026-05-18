@@ -266,6 +266,15 @@ Update during implementation:
   scheduler, workflow-service, and node-engine must not parse terminal error
   text, read artifact cache policy as measured memory, or import OS-specific
   monitor code.
+- 2026-05-18: Resource observation blast-radius review refined the plan.
+  Telemetry must flow first through `InferenceRequestLifecycleEvent`, with a
+  small inference lifecycle event builder/context added before resource fields
+  are wired into `gateway.rs`. PyTorch worker telemetry belongs on the generic
+  success/failure envelope, process RSS monitoring should use existing
+  `sysinfo` plus `ProcessHandle::pid()` before direct platform APIs, legacy
+  OOM string detection must be retired or confined to typed adapter-local
+  translation, and runtime-registry candidate history must expose observed
+  memory/OOM facts before scheduler history ranking consumes them.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed
@@ -6458,6 +6467,30 @@ Worker rules:
   - Stop condition: implementation should pause here until the typed producer
     contract is accepted; filling terminal memory/OOM history without that
     contract would violate the no-fallback/no-legacy rule.
+- 2026-05-18 resource-observation blast-radius plan refinement:
+  - Smallest useful vertical slice: update the existing producer-telemetry
+    re-plan with codebase review constraints before implementation starts.
+    This is documentation-only and does not change contracts or runtime
+    behavior.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log.
+  - No-fallback/no-legacy confirmation: the refined plan does not preserve
+    old terminal error parsing, artifact-cache memory reuse, image-only
+    telemetry, or scheduler-side OS probing. Legacy OOM string checks must be
+    removed or converted immediately to typed adapter-local memory-failure
+    facts.
+  - Implementation guidance added: extract an inference lifecycle event
+    builder/context before adding resource observation fields; use lifecycle
+    events as the first telemetry transport; put PyTorch resource facts on the
+    generic worker success/failure envelopes; use `sysinfo` process RSS first
+    and reserve OS-specific modules for proven gaps; keep detailed
+    source/availability facts in inference diagnostics unless scheduler later
+    needs them on terminal events; extend runtime-registry candidate history
+    with memory/OOM fields before ranking uses diagnostics-ledger memory
+    history.
+  - Verification for this documentation slice: `git diff --check`.
 
 ### Traceability Links
 

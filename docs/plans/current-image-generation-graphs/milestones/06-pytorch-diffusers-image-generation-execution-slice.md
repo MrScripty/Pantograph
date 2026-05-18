@@ -556,6 +556,19 @@ PyTorch/diffusers and produce a retained image artifact.
     events; scheduler consumes reduced history later. Do not add scheduler OS
     probes, workflow terminal string matching, artifact-cache memory reuse, or
     image-only PyTorch ownership of the shared telemetry contract.
+  - 2026-05-18 blast-radius review update: before wiring telemetry, extract a
+    small inference lifecycle event builder/context so resource fields are not
+    added through the existing repeated `gateway.rs` lifecycle constructor
+    pattern. Use lifecycle events as the first transport rather than adding
+    optional telemetry fields to every `InferenceExecutionResult` variant.
+    Add PyTorch telemetry on the generic worker success/failure envelope, not
+    image-only metadata. Prefer the existing `sysinfo` dependency for initial
+    process RSS monitoring before direct `/proc`, Windows API, or macOS native
+    wrappers. Confine or retire existing adapter-local OOM string detection by
+    converting it immediately to typed memory-failure facts; never expose it as
+    workflow terminal string matching. Extend runtime-registry candidate
+    history with observed memory/OOM fields before scheduler history ranking
+    consumes those persisted diagnostics-ledger facts.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

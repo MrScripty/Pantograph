@@ -416,6 +416,37 @@ producer explicitly does not claim that metric; unavailable states are required
 when a backend/runtime advertises the metric concept but cannot currently
 produce it.
 
+Codebase review refinement:
+
+- Use `InferenceRequestLifecycleEvent` as the first canonical transport for
+  execution resource observations. `InferenceExecutionResult` is task-output
+  shaped and would require repetitive optional telemetry fields on every result
+  variant. Lifecycle events already carry request, task, backend, runtime,
+  model, device, phase, and timing attribution, so they are the lower-blast
+  radius path for observed execution facts.
+- Add a small inference lifecycle event builder/context before threading
+  resource observations through `gateway.rs`. The current gateway lifecycle
+  helpers already have repeated field-by-field constructors and several
+  `too_many_arguments` allowances. Resource telemetry must be added once
+  through a builder/context, not by adding another parameter to every lifecycle
+  helper.
+- Treat the Python worker boundary as a generic runtime producer. Add optional
+  resource observation fields to the generic `PyTorchWorkerSuccess<T>` and
+  `PyTorchWorkerFailure` envelopes, not only to image-generation metadata, so
+  image generation, text generation, audio transcription, and later PyTorch
+  task families can report the same facts.
+- Keep `RunTerminalPayload.resource_observation` reduced to scheduler-history
+  facts: peak RAM, peak VRAM, and memory failure kind. Preserve detailed
+  source and availability facts in inference diagnostic events unless a later
+  scheduler use case requires them on run-terminal events. This avoids
+  widening the terminal ledger contract before the scheduler consumes those
+  fields.
+- Extend runtime-registry candidate history summaries with observed memory and
+  OOM fields before enabling history-backed ranking. Diagnostics-ledger already
+  computes memory/OOM history, but scheduler-facing candidate history currently
+  exposes timing/queue fields only; memory ranking must not silently ignore the
+  persisted memory facts.
+
 ### Resource Monitor Platform Design
 
 Resource monitoring should follow the repository's cross-platform pattern:
@@ -430,9 +461,10 @@ Planned module shape:
 | ------ | ---- | -------------- |
 | `inference::resource_observation` | none | Public typed DTOs, validation, source/availability enums, and merge rules for backend plus OS observations. |
 | `inference::resource_monitor` | none | Trait/factory for monitor lifecycle, no scheduler policy. |
-| `inference::resource_monitor::linux` | `#[cfg(target_os = "linux")]` | Process RSS high-water observation from `/proc` or another Linux-owned API when the process id is known. No GPU assumptions. |
-| `inference::resource_monitor::macos` | `#[cfg(target_os = "macos")]` | macOS process memory observation through an explicit platform API when accepted; MPS memory still comes from PyTorch/MPS telemetry when available. |
-| `inference::resource_monitor::windows` | `#[cfg(target_os = "windows")]` | Windows process memory observation through a narrow Windows API wrapper if the dependency/unsafe boundary is accepted; otherwise returns typed `not_implemented`. |
+| `inference::resource_monitor::process_rss` | none, implemented with existing dependency first | Shared process RSS high-water observation using the existing `sysinfo` dependency and `ProcessHandle::pid()` when sufficient. It reports host RAM only, never VRAM. |
+| `inference::resource_monitor::linux` | `#[cfg(target_os = "linux")]` | Linux-specific process memory implementation only if `sysinfo` is insufficient; prefer avoiding direct `/proc` parsing until a concrete gap is proven. No GPU assumptions. |
+| `inference::resource_monitor::macos` | `#[cfg(target_os = "macos")]` | macOS-specific process memory implementation only if the shared `sysinfo` path is insufficient; MPS memory still comes from PyTorch/MPS telemetry when available. |
+| `inference::resource_monitor::windows` | `#[cfg(target_os = "windows")]` | Windows-specific process memory implementation only if the shared `sysinfo` path is insufficient and the dependency/unsafe boundary is accepted; otherwise returns typed `not_implemented`. |
 | `inference::resource_monitor::unsupported` | fallback cfg for unsupported targets | Compiles the neutral contract and reports typed unsupported/not-implemented availability. |
 | PyTorch worker telemetry | runtime/backend capability, not OS cfg only | CUDA/MPS/CPU counters returned in the worker envelope when PyTorch exposes them. CUDA is runtime/device availability, not a Linux-only assumption. |
 | Managed runtime telemetry | runtime adapter owned | Structured binary/API telemetry when available. Free-form logs may be interpreted only inside the runtime adapter and must be emitted as typed facts or diagnostics before crossing crate boundaries. |
@@ -461,38 +493,58 @@ Collector lifecycle rules:
   detection inside backend support must either be replaced by structured
   backend errors or confined to the adapter that owns the external process
   contract; workflow terminal code must not string-match it.
+- Existing llama.cpp and embedding-runtime OOM string detection is a legacy
+  adapter-local translation point. The replacement slice must either retire it
+  in favor of structured runtime telemetry or explicitly confine it to the
+  external-process adapter and convert it immediately to typed
+  `InferenceMemoryFailureKind::OutOfMemory` facts. It must not leak as
+  workflow terminal string matching or scheduler policy.
 
 Staged implementation:
 
 1. [ ] Add the inference-owned execution-resource observation DTOs and
    validation tests. This slice is shared-contract only and should not wire
    scheduler ranking.
-2. [ ] Add `resource_monitor` factory/modules with Linux/macOS/Windows/
-   unsupported gates and tests proving the neutral API compiles without
+2. [ ] Extract a small inference lifecycle event builder/context and update
+   lifecycle tests before adding telemetry fields. This prevents
+   resource-observation wiring from expanding the existing `gateway.rs`
+   repeated constructor and `too_many_arguments` pattern.
+3. [ ] Add `resource_monitor` factory/modules with a `sysinfo` process-RSS
+   first implementation, Linux/macOS/Windows/unsupported gates for proven
+   platform gaps, and tests proving the neutral API compiles without
    scattering `cfg()` through business logic.
-3. [ ] Extend inference execution results or lifecycle events to carry
+4. [ ] Extend `InferenceRequestLifecycleEvent` to carry
    `InferenceExecutionResourceObservation` for all task families. Image
    generation is one consumer, not the contract owner.
-4. [ ] Extend node-engine inference task result/event plumbing to forward the
+5. [ ] Extend the generic PyTorch worker success/failure envelope with
+   optional resource observation and update Python worker shape checks before
+   adding task-specific producers.
+6. [ ] Extend node-engine inference task result/event plumbing to forward the
    observation without interpreting metric sources.
-5. [ ] Extend embedded-runtime projection into
+7. [ ] Extend embedded-runtime projection into inference diagnostics and
    `RunTerminalPayload.resource_observation`, including mapping tests for
-   peak RAM, peak VRAM, explicit OOM, and unavailable metrics that should not
-   be persisted as fake values.
-6. [ ] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
-   OS process RSS where supported, and managed runtime structured telemetry.
-   Each producer slice must include focused tests/fixtures for its source and
-   availability states.
-7. [ ] Activate scheduler history weighting only after observations are
-   available in runtime-selection history and the existing five-completed-run
-   threshold per valid runtime candidate is enforced.
+   peak RAM, peak VRAM, explicit OOM, source/availability diagnostics, and
+   unavailable metrics that should not be persisted as fake terminal values.
+8. [ ] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
+   shared process RSS where supported, and managed runtime structured
+   telemetry. Each producer slice must include focused tests/fixtures for its
+   source and availability states.
+9. [ ] Extend runtime-registry candidate history DTOs and embedded-runtime
+   history projection with observed memory and OOM fields already computed by
+   diagnostics-ledger.
+10. [ ] Activate scheduler history weighting only after observations are
+    available in runtime-selection history and the existing five-completed-run
+    threshold per valid runtime candidate is enforced.
 
 Verification for this staged design should include:
 
 - `cargo test -p inference resource_observation --lib`
 - `cargo test -p inference resource_monitor --lib`
+- `cargo test -p inference lifecycle --lib`
+- `cargo test -p inference pytorch_worker --lib`
 - `cargo test -p node-engine inference_resource_observation --lib`
 - `cargo test -p pantograph-embedded-runtime resource_observation --lib`
+- `cargo test -p pantograph-runtime-registry history --lib`
 - `cargo test -p pantograph-workflow-service diagnostics --lib`
 - `cargo fmt --all -- --check`
 - `git diff --check`
