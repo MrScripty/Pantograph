@@ -98,7 +98,7 @@ fn node_io_artifact_metadata(
         );
     }
 
-    let materialized = node_io_artifact_body(value);
+    let materialized = node_io_artifact_body(port_id, value);
     let artifact_id = payload_artifact_id.clone();
     if materialized.body.len() <= RETAINED_NODE_IO_VALUE_MAX_BYTES {
         let descriptor = service.write_artifact(ArtifactWriteRequest {
@@ -188,8 +188,17 @@ fn node_io_payload_family(role_label: &str) -> &'static str {
     }
 }
 
-fn node_io_artifact_body(value: &serde_json::Value) -> NodeIoArtifactBody {
+fn node_io_artifact_body(port_id: &str, value: &serde_json::Value) -> NodeIoArtifactBody {
     if let Some(text) = value.as_str() {
+        if port_id == "image" {
+            if let Ok(body) = crate::media_base64::decode_base64(text) {
+                return NodeIoArtifactBody {
+                    body,
+                    media_type: "image/png".to_string(),
+                    payload_kind: ArtifactPayloadKind::Image,
+                };
+            }
+        }
         return NodeIoArtifactBody {
             body: text.as_bytes().to_vec(),
             media_type: "text/plain".to_string(),
@@ -274,6 +283,7 @@ fn node_io_artifact_format_metadata(media_type: &str) -> ArtifactFormatMetadata 
         format_id: match media_type {
             "text/plain" => "plain_text",
             "application/json" => "json",
+            "image/png" => "png",
             _ => "generic",
         }
         .to_string(),
@@ -291,6 +301,97 @@ fn node_io_artifact_format_metadata(media_type: &str) -> ArtifactFormatMetadata 
         conversion_status: None,
         conversion_command_id: None,
         conversion_dependencies: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        node_io_artifact_body, node_io_artifact_format_metadata, node_output_artifact_metadata,
+    };
+    use pantograph_diagnostics_ledger::{IoArtifactPayloadKind, IoArtifactRetentionState};
+    use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
+    use pantograph_workflow_service::{
+        ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowService,
+    };
+
+    #[test]
+    fn node_io_artifact_body_retains_image_port_as_binary_image() {
+        let body = node_io_artifact_body("image", &serde_json::json!("aGVsbG8="));
+
+        assert_eq!(body.body, b"hello");
+        assert_eq!(body.media_type, "image/png");
+        assert_eq!(body.payload_kind, ArtifactPayloadKind::Image);
+    }
+
+    #[test]
+    fn node_io_artifact_body_keeps_non_image_strings_as_text() {
+        let body = node_io_artifact_body("text", &serde_json::json!("aGVsbG8="));
+
+        assert_eq!(body.body, b"aGVsbG8=");
+        assert_eq!(body.media_type, "text/plain");
+        assert_eq!(body.payload_kind, ArtifactPayloadKind::Text);
+    }
+
+    #[test]
+    fn image_format_metadata_uses_png_format_id() {
+        let format = node_io_artifact_format_metadata("image/png");
+
+        assert_eq!(format.format_id, "png");
+        assert_eq!(format.media_type, "image/png");
+    }
+
+    #[test]
+    fn node_output_artifact_metadata_retains_image_port_body() {
+        let temp = tempfile::TempDir::new().expect("temp artifact dir");
+        let store = ArtifactStore::open(
+            temp.path(),
+            ArtifactPolicy {
+                policy_id: "node-io-image-test".to_string(),
+                policy_version: 1,
+                ttl_seconds: None,
+                max_disk_bytes: None,
+                max_memory_bytes: None,
+                max_single_artifact_bytes: None,
+                spill_threshold_bytes: None,
+                delete_on_consume: false,
+            },
+        )
+        .expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+        let workflow_run_id = WorkflowRunId::try_from("run-image".to_string()).expect("run id");
+        let workflow_id = WorkflowId::try_from("workflow-image".to_string()).expect("workflow id");
+
+        let metadata = node_output_artifact_metadata(
+            &service,
+            &workflow_run_id,
+            &workflow_id,
+            "image-node-1",
+            "image",
+            &serde_json::json!("aGVsbG8="),
+        );
+
+        assert_eq!(metadata.retention_state, IoArtifactRetentionState::Retained);
+        assert_eq!(metadata.payload_kind, Some(IoArtifactPayloadKind::Image));
+        assert_eq!(metadata.media_type.as_deref(), Some("image/png"));
+        assert_eq!(
+            metadata
+                .format
+                .as_ref()
+                .map(|format| format.format_id.as_str()),
+            Some("png")
+        );
+        assert_eq!(
+            service
+                .read_artifact_body(ArtifactReadRequest {
+                    artifact_id: metadata.artifact_id,
+                    byte_range_start: None,
+                    byte_range_end_exclusive: None,
+                })
+                .expect("image artifact body")
+                .body,
+            b"hello"
+        );
     }
 }
 

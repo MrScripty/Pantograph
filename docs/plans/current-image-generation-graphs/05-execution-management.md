@@ -3774,6 +3774,29 @@ Worker rules:
   node-engine`, and `git diff --check`. Remaining follow-up: add an
   end-to-end retained image workflow-output test once the image-generation
   workflow fixture exists.
+- 2026-05-17: Completed the retained image output artifact slice. Smallest
+  useful vertical slice: embedded-runtime node I/O projection now treats a
+  valid base64 string on the canonical `image` port as the generated image
+  payload, decodes it into a retained `image/png` artifact body, and projects
+  diagnostics metadata as an image artifact with PNG format metadata. Non-image
+  string ports remain text artifacts, and stream artifactization reuses the
+  same base64 decoder. Allowed write set was
+  `crates/pantograph-embedded-runtime/src/media_base64.rs`,
+  `crates/pantograph-embedded-runtime/src/node_io_artifacts.rs`,
+  `crates/pantograph-embedded-runtime/src/task_executor/stream_artifacts.rs`,
+  `crates/pantograph-embedded-runtime/src/lib.rs`, focused tests, and plan
+  docs. This preserves the no-fallback/no-legacy rule because the slice is
+  limited to post-execution output retention and does not infer or synthesize
+  package facts, artifact load targets, runtime choices, worker inputs,
+  backend decisions, saved workflow compatibility, or alternate execution
+  behavior. Verification passed: `cargo test -p pantograph-embedded-runtime
+  media_base64`, `cargo test -p pantograph-embedded-runtime
+  node_io_artifacts`, `cargo test -p pantograph-embedded-runtime
+  recorder_stream`, `cargo check -p pantograph-embedded-runtime`, `cargo fmt
+  --manifest-path crates/pantograph-embedded-runtime/Cargo.toml`, and `git
+  diff --check`. Remaining follow-up: add the true image-generation workflow
+  fixture/smoke test once the Pumas selected-artifact fixture can resolve a
+  load target without Pantograph fallback synthesis.
 - 2026-05-15: Completed the planner checked-resource-estimate verification
   slice. Added focused inference planner coverage proving overflow-prone width,
   height, and image-count combinations return

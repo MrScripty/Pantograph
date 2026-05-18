@@ -407,8 +407,12 @@ PyTorch/diffusers and produce a retained image artifact.
 - [ ] Ensure dependency/runtime readiness reports missing `diffusers`,
   `transformers`, `accelerate`, `torch`, or Pillow as explicit readiness
   diagnostics.
-- [ ] Retain final generated image output through ArtifactStore and IO
-  projections.
+- [x] Retain final generated image output through ArtifactStore and IO
+  projections. Completed 2026-05-17: embedded runtime node I/O projection now
+  decodes valid base64 on the canonical `image` port into a retained
+  `image/png` image artifact body and keeps non-image strings as text. This is
+  output retention only; it does not synthesize worker inputs, package facts,
+  load targets, runtime choices, or backend fallbacks.
 - [x] Ensure `image` and `results` outputs do not persist duplicate full image
   base64 bodies after artifact conversion.
 - [x] Change node-engine image-generation output shaping so large generated

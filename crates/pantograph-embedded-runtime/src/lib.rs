@@ -20,6 +20,7 @@ mod embedded_workflow_service_api;
 pub mod embedding_workflow;
 pub mod host_runtime;
 pub mod managed_runtime_manager;
+mod media_base64;
 pub mod model_dependencies;
 mod node_execution;
 mod node_execution_diagnostics;
