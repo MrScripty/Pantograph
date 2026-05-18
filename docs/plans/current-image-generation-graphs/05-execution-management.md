@@ -6428,6 +6428,28 @@ Worker rules:
   - Remaining follow-up: producers still need to populate real terminal
     resource observations from runtime execution and memory/OOM telemetry
     before scheduler history ranking can consume them.
+- 2026-05-18 producer telemetry re-plan boundary:
+  - Investigation result: the current codebase can persist terminal
+    `resource_observation` facts, but it does not yet have a typed
+    inference/node-execution telemetry contract that carries observed peak
+    RAM, observed peak VRAM, or OOM state to workflow terminal recording.
+    Existing OOM detection in inference support is string-based, and
+    artifact-store `max_memory_bytes` is a cache/retention policy limit rather
+    than measured runtime memory.
+  - Rejected options: do not parse terminal error strings for OOM, and do not
+    map artifact policy limits into observed runtime memory facts.
+  - Preferred re-plan option: define a canonical typed
+    execution-resource-observation contract at the inference/node execution
+    boundary, wire runtime backends to populate it when available, forward it
+    through node-engine and embedded-runtime, and only then attach it to
+    `RunTerminalPayload`. This preserves one scheduler-history source of
+    truth and avoids incidental metadata.
+  - Alternative retained for discussion: carry memory facts only on inference
+    diagnostic events and make history queries join them. This is less clean
+    because it fragments attribution across event families.
+  - Stop condition: implementation should pause here until the typed producer
+    contract is accepted; filling terminal memory/OOM history without that
+    contract would violate the no-fallback/no-legacy rule.
 
 ### Traceability Links
 

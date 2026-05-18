@@ -541,6 +541,12 @@ PyTorch/diffusers and produce a retained image artifact.
     pantograph-diagnostics-ledger --lib`, `cargo test -p
     pantograph-workflow-service diagnostics --lib`, `cargo fmt --all --
     --check`, and `git diff --check`.
+  - 2026-05-18 re-plan boundary: actual producer wiring must not infer
+    terminal memory/OOM observations from error strings or artifact-store
+    memory policy. The codebase needs a canonical typed
+    execution-resource-observation contract at the inference/node execution
+    boundary before runtime backends can populate observed peak RAM, observed
+    peak VRAM, and explicit OOM facts for workflow terminal events.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

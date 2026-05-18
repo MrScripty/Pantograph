@@ -344,6 +344,33 @@ Staged implementation plan:
      pantograph-diagnostics-ledger --lib`, `cargo test -p
      pantograph-workflow-service diagnostics --lib`, `cargo fmt --all --
      --check`, and `git diff --check`.
+   - 2026-05-18 producer-wiring re-plan boundary: the next implementation
+     cannot populate real `resource_observation` facts by parsing terminal
+     error text or by repurposing artifact cache `max_memory_bytes` policy,
+     because neither is typed runtime execution telemetry. Current code has
+     duration facts and some OOM string detection in inference/runtime support,
+     but no canonical byte-valued execution-resource observation contract that
+     flows from inference runtime results through node-engine/embedded-runtime
+     into workflow terminal events.
+   - Re-plan options:
+     1. Reject: infer OOM from existing free-form error messages at the
+        workflow terminal boundary. This violates the no-incidental-metadata
+        rule and would create a legacy string parser.
+     2. Reject: treat artifact-store memory policy fields as observed runtime
+        memory. Those fields are retention/cache policy limits, not measured
+        inference execution facts.
+     3. Preferred: add a canonical typed execution-resource observation
+        contract at the inference/node execution boundary, then project it
+        upward. Runtime backends may report `peak_ram_bytes`,
+        `peak_vram_bytes`, and explicit `out_of_memory`; unavailable metrics
+        remain absent or explicitly not available at the producer contract,
+        not guessed later. Node-engine and embedded-runtime forward the typed
+        observation, and workflow-service records it on `RunTerminalPayload`.
+     4. Alternative: store memory facts only on inference diagnostic events
+        and teach runtime-selection history to join inference diagnostics.
+        This keeps terminal events smaller but fragments the scheduler-history
+        source of truth and complicates exact workflow/task/model/runtime
+        attribution.
 
 ## Standards Guardrails
 
