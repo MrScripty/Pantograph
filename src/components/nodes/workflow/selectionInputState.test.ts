@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildSelectionInputControlModel,
   buildSelectionInputState,
   resolveSelectionAutoUpdate,
   type SelectionInputOption,
@@ -104,4 +105,50 @@ test('buildSelectionInputState keeps disabled provider rows visible when selecte
       placeholderLabel: null,
     },
   );
+});
+
+test('buildSelectionInputControlModel exposes provider-backed accessible name', () => {
+  const providerPort = port({
+    label: 'Denoising Scheduler',
+    options_provider: {
+      node_type: 'llm-inference',
+      port_id: 'denoising_scheduler',
+    },
+  });
+
+  assert.deepEqual(buildSelectionInputControlModel(providerPort, options), {
+    accessibleName: 'Denoising Scheduler',
+    graphGestureClass: 'nodrag nopan nowheel',
+    usesNativeKeyboardSelection: true,
+    disabled: false,
+  });
+});
+
+test('buildSelectionInputControlModel falls back to stable name for blank labels', () => {
+  assert.equal(
+    buildSelectionInputControlModel(port({ label: '  ' }), options).accessibleName,
+    'Value',
+  );
+});
+
+test('buildSelectionInputControlModel disables empty provider-backed native select', () => {
+  const providerPort = port({
+    options_provider: {
+      node_type: 'llm-inference',
+      port_id: 'denoising_scheduler',
+    },
+  });
+
+  const model = buildSelectionInputControlModel(providerPort, []);
+
+  assert.equal(model.disabled, true);
+  assert.equal(model.usesNativeKeyboardSelection, true);
+});
+
+test('buildSelectionInputControlModel keeps graph gestures contained on select control', () => {
+  const classNames = buildSelectionInputControlModel(port(), options).graphGestureClass.split(/\s+/);
+
+  assert.ok(classNames.includes('nodrag'));
+  assert.ok(classNames.includes('nopan'));
+  assert.ok(classNames.includes('nowheel'));
 });

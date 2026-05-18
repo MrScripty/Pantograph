@@ -5808,6 +5808,41 @@ Worker rules:
     processor/Transformers facts when available, then wire PyTorch worker
     loading to the Pumas-resolved Diffusers directory and retained artifact
     output.
+- 2026-05-17 provider-backed selection control coverage slice:
+  - Smallest useful vertical slice: complete the approved Node-test coverage
+    for provider-backed `selection-input` control accessibility and graph
+    gesture containment without introducing a new browser-mounted component
+    test platform.
+  - Allowed write set:
+    `src/components/nodes/workflow/selectionInputState.ts`,
+    `src/components/nodes/workflow/selectionInputState.test.ts`,
+    `src/components/nodes/workflow/SelectionInputNode.svelte`, and this plan
+    directory. The modified and untracked root proposal markdown files were
+    ignored because they are unrelated to this slice.
+  - No-fallback/no-legacy confirmation: provider-backed selectable values
+    still come only from backend port-option results. The component does not
+    synthesize executable defaults, hardcode denoising scheduler options,
+    infer package facts in frontend state, or add compatibility behavior for
+    stale values.
+  - Implementation notes: extracted a tested selection-input control model
+    that owns the accessible name, graph-gesture containment class, native
+    select keyboard contract, and empty-provider disabled state. The Svelte
+    component now consumes that model for its label, `nodrag`/`nopan`/`nowheel`
+    class, and disabled state.
+  - Focused tests added/updated: `selectionInputState.test.ts` now covers
+    provider-backed accessible names, blank-label fallback, native select
+    keyboard behavior, empty provider disabled state, and graph gesture
+    containment classes.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/nodes/workflow/selectionInputState.test.ts`; `npm run
+    typecheck`.
+  - Verification deviation: none.
+  - Remaining follow-up: Pumas accepted artifact load-target resolver is
+    available locally at `8444b50d`, but the configured Git remote still
+    advertises `f63ef180` on `main`; do not pin or consume the new API until
+    the accepted Pumas commit is published or another standards-compliant pin
+    is available. Then wire PyTorch worker loading to the Pumas-resolved
+    Diffusers directory and continue retained artifact output.
 
 ### Traceability Links
 

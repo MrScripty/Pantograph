@@ -275,12 +275,17 @@ PyTorch/diffusers and produce a retained image artifact.
   state updates, manual DOM mutation, or graph-canvas gesture conflicts. Async
   option loads must discard stale responses when model/runtime context changes
   before the previous query returns.
-- [ ] Add node-test coverage or the existing project-approved equivalent for
+- [x] Add node-test coverage or the existing project-approved equivalent for
   provider-backed selection accessible-name, native keyboard selection, and
   graph gesture containment after real backend provider metadata is exposed
   through node definitions. The current slice keeps the control labelled,
   native-select based, and `nodrag`/`nopan`/`nowheel`, but does not add a
   browser-mounted component test platform.
+  - 2026-05-17: added Node-tested selection-input control presenter coverage
+    for provider-backed accessible names, native select keyboard behavior,
+    empty-provider disabled state, and graph gesture containment classes. The
+    Svelte component now consumes the tested control model without adding a
+    DOM/browser component test platform.
 - [x] Add context-keyed cache/invalidation for provider-backed option queries
   before reusing backend port options for model/runtime-dependent traits. The
   cache key must include node type, port id, provider context, and package-facts

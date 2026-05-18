@@ -3,6 +3,7 @@
   import type { NodeDefinition, PortDefinition } from '../../../services/workflow/types';
   import { updateNodeData, edges, nodes } from '../../../stores/workflowStore';
   import {
+    buildSelectionInputControlModel,
     buildSelectionInputState,
     resolveSelectionAutoUpdate,
     stringifySelectionValue,
@@ -96,6 +97,7 @@
   let isProviderBacked = $derived(Boolean(targetPort?.options_provider));
   let hasOptions = $derived(isProviderBacked || options.length > 0);
   let selectionState = $derived(buildSelectionInputState(targetPort, options, data.value));
+  let controlModel = $derived(buildSelectionInputControlModel(targetPort, options));
 
   $effect(() => {
     const query = providerQuery;
@@ -178,15 +180,15 @@
       {:else}
         <div class="flex flex-col gap-1">
           <label class="text-[10px] text-neutral-400" for={selectId}>
-            {targetPort?.label || 'Value'}
+            {controlModel.accessibleName}
           </label>
           <select
             id={selectId}
-            class="nodrag nopan nowheel w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-sm text-neutral-200 focus:outline-none"
+            class="{controlModel.graphGestureClass} w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-sm text-neutral-200 focus:outline-none"
             style="--focus-color: {nodeColor}"
             value={selectionState.displayValue}
             onchange={handleChange}
-            disabled={isProviderBacked && options.length === 0}
+            disabled={controlModel.disabled}
           >
             {#if selectionState.placeholderLabel}
               <option value="" disabled>{selectionState.placeholderLabel}</option>

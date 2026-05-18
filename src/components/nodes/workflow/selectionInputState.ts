@@ -17,10 +17,19 @@ export interface SelectionInputState {
   placeholderLabel: string | null;
 }
 
+export interface SelectionInputControlModel {
+  accessibleName: string;
+  graphGestureClass: string;
+  usesNativeKeyboardSelection: true;
+  disabled: boolean;
+}
+
 export interface SelectionAutoUpdate {
   shouldUpdate: boolean;
   value?: unknown;
 }
+
+const GRAPH_GESTURE_CONTAINMENT_CLASS = 'nodrag nopan nowheel';
 
 export function buildSelectionInputState(
   targetPort: PortDefinition | null,
@@ -42,6 +51,21 @@ export function buildSelectionInputState(
         ? 'Unset'
         : 'Stale selection'
       : null,
+  };
+}
+
+export function buildSelectionInputControlModel(
+  targetPort: PortDefinition | null,
+  options: SelectionInputOption[],
+): SelectionInputControlModel {
+  const accessibleName = normalizeAccessibleName(targetPort?.label) ?? 'Value';
+  const isProviderBacked = Boolean(targetPort?.options_provider);
+
+  return {
+    accessibleName,
+    graphGestureClass: GRAPH_GESTURE_CONTAINMENT_CLASS,
+    usesNativeKeyboardSelection: true,
+    disabled: isProviderBacked && options.length === 0,
   };
 }
 
@@ -80,4 +104,10 @@ export function stringifySelectionValue(value: unknown): string {
     return '';
   }
   return JSON.stringify(value);
+}
+
+function normalizeAccessibleName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
 }
