@@ -328,6 +328,22 @@ Staged implementation plan:
    timing ranking starts only after every valid runtime candidate for the same
    workflow/model/runtime key has at least five completed runs; before that,
    policy uses current facts and controlled exploration.
+   - 2026-05-18 diagnostics-ledger history persistence slice:
+     run-terminal events now accept typed `resource_observation` facts for
+     peak RAM bytes, peak VRAM bytes, and explicit `out_of_memory` failures.
+     Run-list/run-detail projections persist those fields as typed scheduler
+     history facts, and runtime-selection history summaries now expose memory
+     samples, typical ranges, and OOM counts beside duration/queue history.
+     This does not activate history-backed scheduler ranking yet and does not
+     infer OOM from free-form terminal error text.
+   - Verification: `cargo test -p pantograph-diagnostics-ledger
+     runtime_selection_history --lib`, `cargo test -p
+     pantograph-diagnostics-ledger
+     existing_v24_schema_adds_scheduler_learning_output_and_memory_projection_columns
+     --lib`, `cargo check -p pantograph-workflow-service`, and `cargo test -p
+     pantograph-diagnostics-ledger --lib`, `cargo test -p
+     pantograph-workflow-service diagnostics --lib`, `cargo fmt --all --
+     --check`, and `git diff --check`.
 
 ## Standards Guardrails
 

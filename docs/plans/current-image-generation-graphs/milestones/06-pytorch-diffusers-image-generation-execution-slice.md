@@ -525,6 +525,22 @@ PyTorch/diffusers and produce a retained image artifact.
     `backend_key` metadata, and `cargo test -p pantograph-workflow-service
     workflow_capabilities --lib` now verifies that no hard backend requirement
     is inferred without the canonical typed runtime input path.
+  - 2026-05-18 diagnostics-ledger runtime-history slice:
+    run-terminal payloads now carry optional typed `resource_observation`
+    facts for observed peak RAM, observed peak VRAM, and explicit
+    out-of-memory failure kind. Run-list/run-detail projections and
+    runtime-selection history summaries persist those facts for later
+    scheduler memory ranking without parsing terminal error strings. This
+    slice does not turn on history-backed ranking or infer missing resource
+    observations.
+    Verification: `cargo test -p pantograph-diagnostics-ledger
+    runtime_selection_history --lib`, `cargo test -p
+    pantograph-diagnostics-ledger
+    existing_v24_schema_adds_scheduler_learning_output_and_memory_projection_columns
+    --lib`, `cargo check -p pantograph-workflow-service`, and `cargo test -p
+    pantograph-diagnostics-ledger --lib`, `cargo test -p
+    pantograph-workflow-service diagnostics --lib`, `cargo fmt --all --
+    --check`, and `git diff --check`.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

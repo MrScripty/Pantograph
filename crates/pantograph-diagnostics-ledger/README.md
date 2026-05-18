@@ -38,6 +38,9 @@ estimate confidence, estimated wait/duration, and scheduler reason as typed
 columns. The original scheduler payload JSON remains audit detail and rebuild
 input, but GUI/API consumers should read the typed projection fields for normal
 list and detail views.
+They also persist typed terminal resource observations for peak RAM, peak
+VRAM, and out-of-memory failures so scheduler history can compare memory facts
+without parsing terminal error strings.
 The node-status projection stores the latest typed execution status per
 `workflow_run_id` and `node_id` so graph overlays can render node state without
 replaying scheduler timelines or parsing raw diagnostic event payloads.

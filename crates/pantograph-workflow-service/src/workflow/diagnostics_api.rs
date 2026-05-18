@@ -650,6 +650,7 @@ impl WorkflowService {
                             duration_ms,
                             error: Some(reason.to_string()),
                             canonical_error_event_id: None,
+                            resource_observation: None,
                         }),
                     },
                 )

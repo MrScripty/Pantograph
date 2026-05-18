@@ -5,7 +5,7 @@ use crate::runtime_selection_history::{
     RuntimeSelectionHistoryQuery, RuntimeSelectionHistoryRunStatus, RuntimeSelectionHistorySample,
     RuntimeSelectionHistorySummary,
 };
-use crate::DiagnosticsLedgerError;
+use crate::{DiagnosticsLedgerError, RunMemoryFailureKind};
 
 pub(super) fn runtime_selection_history_summary(
     ledger: &SqliteDiagnosticsLedger,
@@ -13,7 +13,8 @@ pub(super) fn runtime_selection_history_summary(
 ) -> Result<RuntimeSelectionHistorySummary, DiagnosticsLedgerError> {
     query.validate()?;
     let mut stmt = ledger.conn.prepare(
-        "SELECT status, duration_ms, accepted_at_ms, started_at_ms
+        "SELECT status, duration_ms, accepted_at_ms, started_at_ms,
+                observed_peak_ram_bytes, observed_peak_vram_bytes, memory_failure_kind
          FROM run_list_projection
          WHERE workflow_id = ?1
            AND selected_task_id = ?2
@@ -51,6 +52,19 @@ fn runtime_selection_history_sample_from_row(
         duration_ms: optional_i64_to_u64("duration_ms", row.get(1)?)?,
         accepted_at_ms: row.get(2)?,
         started_at_ms: row.get(3)?,
+        observed_peak_ram_bytes: optional_i64_to_u64("observed_peak_ram_bytes", row.get(4)?)?,
+        observed_peak_vram_bytes: optional_i64_to_u64("observed_peak_vram_bytes", row.get(5)?)?,
+        memory_failure_kind: row
+            .get::<_, Option<String>>(6)?
+            .map(|value| RunMemoryFailureKind::from_db(&value))
+            .transpose()
+            .map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    6,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })?,
     })
 }
 

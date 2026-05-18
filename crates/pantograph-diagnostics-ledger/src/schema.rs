@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 25;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v25";
+pub(crate) const SCHEMA_VERSION: i64 = 26;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v26";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -561,6 +561,9 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             estimate_confidence TEXT,
             estimated_queue_wait_ms INTEGER,
             estimated_duration_ms INTEGER,
+            observed_peak_ram_bytes INTEGER,
+            observed_peak_vram_bytes INTEGER,
+            memory_failure_kind TEXT,
             output_artifact_count INTEGER NOT NULL DEFAULT 0,
             output_artifact_total_size_bytes INTEGER NOT NULL DEFAULT 0,
             model_cache_state TEXT,
@@ -664,6 +667,9 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             estimate_confidence TEXT,
             estimated_queue_wait_ms INTEGER,
             estimated_duration_ms INTEGER,
+            observed_peak_ram_bytes INTEGER,
+            observed_peak_vram_bytes INTEGER,
+            memory_failure_kind TEXT,
             output_artifact_count INTEGER NOT NULL DEFAULT 0,
             output_artifact_total_size_bytes INTEGER NOT NULL DEFAULT 0,
             model_cache_state TEXT,
@@ -729,6 +735,9 @@ fn ensure_run_list_projection_columns(tx: &Transaction<'_>) -> Result<(), Diagno
             ("estimate_confidence", "TEXT"),
             ("estimated_queue_wait_ms", "INTEGER"),
             ("estimated_duration_ms", "INTEGER"),
+            ("observed_peak_ram_bytes", "INTEGER"),
+            ("observed_peak_vram_bytes", "INTEGER"),
+            ("memory_failure_kind", "TEXT"),
             ("output_artifact_count", "INTEGER NOT NULL DEFAULT 0"),
             (
                 "output_artifact_total_size_bytes",
@@ -781,6 +790,9 @@ fn ensure_run_detail_projection_columns(
             ("estimate_confidence", "TEXT"),
             ("estimated_queue_wait_ms", "INTEGER"),
             ("estimated_duration_ms", "INTEGER"),
+            ("observed_peak_ram_bytes", "INTEGER"),
+            ("observed_peak_vram_bytes", "INTEGER"),
+            ("memory_failure_kind", "TEXT"),
             ("output_artifact_count", "INTEGER NOT NULL DEFAULT 0"),
             (
                 "output_artifact_total_size_bytes",

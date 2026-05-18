@@ -6389,6 +6389,45 @@ Worker rules:
   - Remaining follow-up: make technical-fit candidate eligibility consume the
     typed snapshot budget/claim facts and emit typed diagnostics for
     over-budget candidates before selection.
+- 2026-05-18 diagnostics-ledger runtime-history resource observation slice:
+  - Smallest useful vertical slice: add typed terminal resource observations
+    to the diagnostics ledger and include those facts in runtime-selection
+    history summaries, without changing scheduler ranking behavior.
+  - Allowed write set:
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/lib.rs`,
+    `crates/pantograph-diagnostics-ledger/src/runtime_selection_history.rs`,
+    `crates/pantograph-diagnostics-ledger/src/schema.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/runtime_selection_history_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-diagnostics-ledger/README.md`,
+    `crates/pantograph-diagnostics-ledger/src/README.md`,
+    terminal-event construction call sites in workflow-service,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: OOM history is explicit typed
+    `RunMemoryFailureKind::OutOfMemory`; it is not inferred from terminal
+    error strings or incidental metadata. Memory observations are byte-valued
+    fields in the terminal payload and projections, not MB compatibility
+    fields.
+  - Focused tests added/updated: runtime-selection history now proves peak
+    RAM/VRAM typical ranges and OOM counts are summarized for the exact
+    workflow/task/model/runtime/device key; schema migration coverage proves
+    the projection columns are added for existing v24 ledgers.
+  - Verification passed: `cargo test -p pantograph-diagnostics-ledger
+    runtime_selection_history --lib`; `cargo test -p
+    pantograph-diagnostics-ledger
+    existing_v24_schema_adds_scheduler_learning_output_and_memory_projection_columns
+    --lib`; `cargo check -p pantograph-workflow-service`; `cargo test -p
+    pantograph-diagnostics-ledger --lib`; `cargo test -p
+    pantograph-workflow-service diagnostics --lib`; `cargo fmt --all --
+    --check`; `git diff --check`.
+  - Remaining follow-up: producers still need to populate real terminal
+    resource observations from runtime execution and memory/OOM telemetry
+    before scheduler history ranking can consume them.
 
 ### Traceability Links
 

@@ -2605,6 +2605,7 @@ fn sample_run_terminal_event() -> DiagnosticEventAppendRequest {
             duration_ms: Some(15),
             error: None,
             canonical_error_event_id: None,
+            resource_observation: None,
         }),
     }
 }

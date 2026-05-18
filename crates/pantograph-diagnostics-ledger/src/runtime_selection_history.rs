@@ -2,7 +2,7 @@ use pantograph_runtime_attribution::WorkflowId;
 use serde::{Deserialize, Serialize};
 
 use crate::util::{validate_optional_text, validate_required_text, MAX_ID_LEN};
-use crate::DiagnosticsLedgerError;
+use crate::{DiagnosticsLedgerError, RunMemoryFailureKind};
 
 pub const RUNTIME_SELECTION_HISTORY_MIN_SAMPLE_COUNT: u32 = 5;
 pub const RUNTIME_SELECTION_HISTORY_MAX_SAMPLE_LIMIT: u32 = 500;
@@ -111,6 +111,17 @@ pub struct RuntimeSelectionHistorySummary {
     pub queue_wait_sample_count: u32,
     pub average_queue_wait_ms: Option<u64>,
     pub median_queue_wait_ms: Option<u64>,
+    pub peak_ram_sample_count: u32,
+    pub average_peak_ram_bytes: Option<u64>,
+    pub median_peak_ram_bytes: Option<u64>,
+    pub typical_min_peak_ram_bytes: Option<u64>,
+    pub typical_max_peak_ram_bytes: Option<u64>,
+    pub peak_vram_sample_count: u32,
+    pub average_peak_vram_bytes: Option<u64>,
+    pub median_peak_vram_bytes: Option<u64>,
+    pub typical_min_peak_vram_bytes: Option<u64>,
+    pub typical_max_peak_vram_bytes: Option<u64>,
+    pub out_of_memory_count: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -127,6 +138,9 @@ pub struct RuntimeSelectionHistorySample {
     pub duration_ms: Option<u64>,
     pub accepted_at_ms: Option<i64>,
     pub started_at_ms: Option<i64>,
+    pub observed_peak_ram_bytes: Option<u64>,
+    pub observed_peak_vram_bytes: Option<u64>,
+    pub memory_failure_kind: Option<RunMemoryFailureKind>,
 }
 
 impl RuntimeSelectionHistorySummary {
@@ -139,6 +153,9 @@ impl RuntimeSelectionHistorySummary {
         let mut cancelled_count = 0_u32;
         let mut durations_ms = Vec::new();
         let mut queue_wait_ms = Vec::new();
+        let mut peak_ram_bytes = Vec::new();
+        let mut peak_vram_bytes = Vec::new();
+        let mut out_of_memory_count = 0_u32;
 
         for sample in &samples {
             match sample.status {
@@ -163,10 +180,21 @@ impl RuntimeSelectionHistorySummary {
                 }
                 queue_wait_ms.push((started_at_ms - accepted_at_ms) as u64);
             }
+            if let Some(value) = sample.observed_peak_ram_bytes {
+                peak_ram_bytes.push(value);
+            }
+            if let Some(value) = sample.observed_peak_vram_bytes {
+                peak_vram_bytes.push(value);
+            }
+            if sample.memory_failure_kind == Some(RunMemoryFailureKind::OutOfMemory) {
+                out_of_memory_count = increment_count(out_of_memory_count, "out_of_memory_count")?;
+            }
         }
 
         durations_ms.sort_unstable();
         queue_wait_ms.sort_unstable();
+        peak_ram_bytes.sort_unstable();
+        peak_vram_bytes.sort_unstable();
         let sample_count =
             u32::try_from(samples.len()).map_err(|_| DiagnosticsLedgerError::InvalidField {
                 field: "sample_count",
@@ -195,6 +223,25 @@ impl RuntimeSelectionHistorySummary {
             })?,
             average_queue_wait_ms: average_u64(&queue_wait_ms),
             median_queue_wait_ms: percentile_nearest_rank(&queue_wait_ms, 50),
+            peak_ram_sample_count: u32::try_from(peak_ram_bytes.len()).map_err(|_| {
+                DiagnosticsLedgerError::InvalidField {
+                    field: "peak_ram_sample_count",
+                }
+            })?,
+            average_peak_ram_bytes: average_u64(&peak_ram_bytes),
+            median_peak_ram_bytes: percentile_nearest_rank(&peak_ram_bytes, 50),
+            typical_min_peak_ram_bytes: percentile_nearest_rank(&peak_ram_bytes, 25),
+            typical_max_peak_ram_bytes: percentile_nearest_rank(&peak_ram_bytes, 75),
+            peak_vram_sample_count: u32::try_from(peak_vram_bytes.len()).map_err(|_| {
+                DiagnosticsLedgerError::InvalidField {
+                    field: "peak_vram_sample_count",
+                }
+            })?,
+            average_peak_vram_bytes: average_u64(&peak_vram_bytes),
+            median_peak_vram_bytes: percentile_nearest_rank(&peak_vram_bytes, 50),
+            typical_min_peak_vram_bytes: percentile_nearest_rank(&peak_vram_bytes, 25),
+            typical_max_peak_vram_bytes: percentile_nearest_rank(&peak_vram_bytes, 75),
+            out_of_memory_count,
         })
     }
 }

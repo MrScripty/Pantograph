@@ -15,7 +15,7 @@ use crate::event::{
     NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
     ProjectionStateUpdate, ProjectionStatus, RetentionArtifactStateChangedPayload,
     RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord,
-    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
+    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus, RunMemoryFailureKind,
     SchedulerModelCacheState, SchedulerQueueControlAction, SchedulerQueueControlActorScope,
     SchedulerQueueControlOutcome, SchedulerQueueControlPayload, SchedulerTimelineProjectionQuery,
     SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
@@ -524,7 +524,8 @@ pub(super) fn query_run_list_projection(
                 latest_error_severity, latest_error_phase, latest_error_code,
                 latest_error_message, fatal_error_event_id, error_count, warning_count,
                 last_event_seq, last_updated_at_ms, selected_runtime_variant_id,
-                output_artifact_count, output_artifact_total_size_bytes
+                output_artifact_count, output_artifact_total_size_bytes,
+                observed_peak_ram_bytes, observed_peak_vram_bytes, memory_failure_kind
          FROM run_list_projection
          WHERE (?1 IS NULL OR workflow_id = ?1)
            AND (?2 IS NULL OR workflow_version_id = ?2)
@@ -797,7 +798,8 @@ pub(super) fn query_run_detail_projection(
                 latest_error_message, fatal_error_event_id, error_count, warning_count,
                 timeline_event_count, last_event_seq, last_updated_at_ms,
                 selected_runtime_variant_id, output_artifact_count,
-                output_artifact_total_size_bytes
+                output_artifact_total_size_bytes, observed_peak_ram_bytes,
+                observed_peak_vram_bytes, memory_failure_kind
          FROM run_detail_projection
          WHERE workflow_run_id = ?1",
     )?;
@@ -2421,6 +2423,7 @@ fn apply_run_list_projection_event(
         _ => (None, None),
     };
     let scheduler_facts = scheduler_projection_facts(&payload);
+    let resource_facts = run_resource_projection_facts(&payload)?;
     let error_facts = error_projection_facts(event, &payload);
     let workflow_execution_session_id = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(payload) => {
@@ -2443,10 +2446,12 @@ fn apply_run_list_projection_event(
              scheduler_reason, latest_error_event_id, latest_error_severity,
              latest_error_phase, latest_error_code, latest_error_message,
              fatal_error_event_id, error_count, warning_count,
+             observed_peak_ram_bytes, observed_peak_vram_bytes, memory_failure_kind,
              last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
              ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27,
-             ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40)
+             ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40,
+             ?41, ?42, ?43)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -2485,6 +2490,9 @@ fn apply_run_list_projection_event(
             fatal_error_event_id = COALESCE(excluded.fatal_error_event_id, fatal_error_event_id),
             error_count = error_count + excluded.error_count,
             warning_count = warning_count + excluded.warning_count,
+            observed_peak_ram_bytes = COALESCE(excluded.observed_peak_ram_bytes, observed_peak_ram_bytes),
+            observed_peak_vram_bytes = COALESCE(excluded.observed_peak_vram_bytes, observed_peak_vram_bytes),
+            memory_failure_kind = COALESCE(excluded.memory_failure_kind, memory_failure_kind),
             last_event_seq = excluded.last_event_seq,
             last_updated_at_ms = excluded.last_updated_at_ms",
         params![
@@ -2531,6 +2539,9 @@ fn apply_run_list_projection_event(
             error_facts.fatal_error_event_id.as_deref(),
             error_facts.error_increment,
             error_facts.warning_increment,
+            resource_facts.observed_peak_ram_bytes,
+            resource_facts.observed_peak_vram_bytes,
+            resource_facts.memory_failure_kind,
             event.event_seq,
             event.occurred_at_ms,
         ],
@@ -2701,6 +2712,12 @@ struct SchedulerProjectionFacts {
     selected_network_node_id: Option<String>,
 }
 
+struct RunResourceProjectionFacts {
+    observed_peak_ram_bytes: Option<i64>,
+    observed_peak_vram_bytes: Option<i64>,
+    memory_failure_kind: Option<&'static str>,
+}
+
 struct ErrorProjectionFacts {
     latest_error_event_id: Option<String>,
     latest_error_severity: Option<DiagnosticErrorSeverity>,
@@ -2710,6 +2727,49 @@ struct ErrorProjectionFacts {
     fatal_error_event_id: Option<String>,
     error_increment: i64,
     warning_increment: i64,
+}
+
+fn run_resource_projection_facts(
+    payload: &DiagnosticEventPayload,
+) -> Result<RunResourceProjectionFacts, DiagnosticsLedgerError> {
+    let DiagnosticEventPayload::RunTerminal(payload) = payload else {
+        return Ok(RunResourceProjectionFacts {
+            observed_peak_ram_bytes: None,
+            observed_peak_vram_bytes: None,
+            memory_failure_kind: None,
+        });
+    };
+    let Some(observation) = payload.resource_observation.as_ref() else {
+        return Ok(RunResourceProjectionFacts {
+            observed_peak_ram_bytes: None,
+            observed_peak_vram_bytes: None,
+            memory_failure_kind: None,
+        });
+    };
+    Ok(RunResourceProjectionFacts {
+        observed_peak_ram_bytes: optional_u64_to_i64(
+            "observed_peak_ram_bytes",
+            observation.peak_ram_bytes,
+        )?,
+        observed_peak_vram_bytes: optional_u64_to_i64(
+            "observed_peak_vram_bytes",
+            observation.peak_vram_bytes,
+        )?,
+        memory_failure_kind: observation
+            .memory_failure_kind
+            .map(RunMemoryFailureKind::as_db),
+    })
+}
+
+fn optional_u64_to_i64(
+    field: &'static str,
+    value: Option<u64>,
+) -> Result<Option<i64>, DiagnosticsLedgerError> {
+    value
+        .map(|value| {
+            i64::try_from(value).map_err(|_| DiagnosticsLedgerError::InvalidField { field })
+        })
+        .transpose()
 }
 
 fn error_projection_facts(
@@ -2974,6 +3034,7 @@ fn apply_run_detail_projection_event(
     let terminal_payload_json = matches!(&payload, DiagnosticEventPayload::RunTerminal(_))
         .then_some(event.payload_json.as_str());
     let scheduler_facts = scheduler_projection_facts(&payload);
+    let resource_facts = run_resource_projection_facts(&payload)?;
     let error_facts = error_projection_facts(event, &payload);
 
     tx.execute(
@@ -2991,12 +3052,13 @@ fn apply_run_detail_projection_event(
              selected_network_node_id,
              latest_error_event_id, latest_error_severity, latest_error_phase,
              latest_error_code, latest_error_message, fatal_error_event_id, error_count,
-             warning_count, timeline_event_count, last_event_seq, last_updated_at_ms)
+             warning_count, observed_peak_ram_bytes, observed_peak_vram_bytes,
+             memory_failure_kind, timeline_event_count, last_event_seq, last_updated_at_ms)
          VALUES
             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
              ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28,
              ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41,
-             ?42, ?43, ?44, ?45, ?46, ?47, ?48)
+             ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -3042,6 +3104,9 @@ fn apply_run_detail_projection_event(
             fatal_error_event_id = COALESCE(excluded.fatal_error_event_id, fatal_error_event_id),
             error_count = error_count + excluded.error_count,
             warning_count = warning_count + excluded.warning_count,
+            observed_peak_ram_bytes = COALESCE(excluded.observed_peak_ram_bytes, observed_peak_ram_bytes),
+            observed_peak_vram_bytes = COALESCE(excluded.observed_peak_vram_bytes, observed_peak_vram_bytes),
+            memory_failure_kind = COALESCE(excluded.memory_failure_kind, memory_failure_kind),
             timeline_event_count = timeline_event_count + 1,
             last_event_seq = excluded.last_event_seq,
             last_updated_at_ms = excluded.last_updated_at_ms",
@@ -3099,6 +3164,9 @@ fn apply_run_detail_projection_event(
             error_facts.fatal_error_event_id.as_deref(),
             error_facts.error_increment,
             error_facts.warning_increment,
+            resource_facts.observed_peak_ram_bytes,
+            resource_facts.observed_peak_vram_bytes,
+            resource_facts.memory_failure_kind,
             1_i64,
             event.event_seq,
             event.occurred_at_ms,
@@ -3666,6 +3734,13 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
         estimate_confidence: row.get(25)?,
         estimated_queue_wait_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64_saturating),
         estimated_duration_ms: row.get::<_, Option<i64>>(27)?.map(i64_to_u64_saturating),
+        observed_peak_ram_bytes: row.get::<_, Option<i64>>(43)?.map(i64_to_u64_saturating),
+        observed_peak_vram_bytes: row.get::<_, Option<i64>>(44)?.map(i64_to_u64_saturating),
+        memory_failure_kind: row
+            .get::<_, Option<String>>(45)?
+            .map(|value| RunMemoryFailureKind::from_db(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
         output_artifact_count: row.get::<_, i64>(41).map(i64_to_u64_saturating)?,
         output_artifact_total_size_bytes: row.get::<_, i64>(42).map(i64_to_u64_saturating)?,
         model_cache_state: row
@@ -3755,6 +3830,13 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
         estimate_confidence: row.get(32)?,
         estimated_queue_wait_ms: row.get::<_, Option<i64>>(33)?.map(i64_to_u64_saturating),
         estimated_duration_ms: row.get::<_, Option<i64>>(34)?.map(i64_to_u64_saturating),
+        observed_peak_ram_bytes: row.get::<_, Option<i64>>(51)?.map(i64_to_u64_saturating),
+        observed_peak_vram_bytes: row.get::<_, Option<i64>>(52)?.map(i64_to_u64_saturating),
+        memory_failure_kind: row
+            .get::<_, Option<String>>(53)?
+            .map(|value| RunMemoryFailureKind::from_db(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
         output_artifact_count: row.get::<_, i64>(49).map(i64_to_u64_saturating)?,
         output_artifact_total_size_bytes: row.get::<_, i64>(50).map(i64_to_u64_saturating)?,
         model_cache_state: row

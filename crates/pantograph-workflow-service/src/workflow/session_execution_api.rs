@@ -1734,6 +1734,7 @@ impl WorkflowService {
                     duration_ms,
                     error,
                     canonical_error_event_id,
+                    resource_observation: None,
                 }),
             },
         )

@@ -30,22 +30,22 @@ use crate::{
     OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
     PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
-    RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
-    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    RuntimeSelectionHistoryKey, RuntimeSelectionHistoryQuery, SchedulerCandidateSetSummary,
-    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload,
-    SchedulerExecutionPlanSummary, SchedulerModelCacheState, SchedulerModelLifecycleChangedPayload,
-    SchedulerModelLifecycleTransition, SchedulerQueueControlAction,
-    SchedulerQueueControlActorScope, SchedulerQueueControlOutcome, SchedulerQueueControlPayload,
-    SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
-    SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
-    SchedulerRunDelayedPayload, SchedulerSelectionDecisionCode,
-    SchedulerSelectionHistoryThresholdState, SchedulerSelectionPolicyPhase,
-    SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
-    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
-    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
-    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
-    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunMemoryFailureKind,
+    RunResourceObservation, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
+    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, RuntimeSelectionHistoryKey,
+    RuntimeSelectionHistoryQuery, SchedulerCandidateSetSummary, SchedulerEstimateBlockingCondition,
+    SchedulerEstimateProducedPayload, SchedulerExecutionPlanSummary, SchedulerModelCacheState,
+    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
+    SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
+    SchedulerQueueControlPayload, SchedulerQueuePlacementPayload,
+    SchedulerReservationChangedPayload, SchedulerReservationResourceKind,
+    SchedulerReservationTransition, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
+    SchedulerSelectionDecisionCode, SchedulerSelectionHistoryThresholdState,
+    SchedulerSelectionPolicyPhase, SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery,
+    SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage,
+    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
+    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
     DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MAX_INFERENCE_COMPATIBILITY_ISSUES,
@@ -958,6 +958,7 @@ fn run_terminal_projects_canonical_error_link_without_counting_new_error() {
         duration_ms: Some(80),
         error: Some("runtime failed after diagnostic error".to_string()),
         canonical_error_event_id: Some("diagnostic-error-runtime-alpha".to_string()),
+        resource_observation: None,
     });
     ledger
         .append_diagnostic_event(terminal)
@@ -2376,6 +2377,7 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         duration_ms: Some(90),
         error: Some("runtime failed".to_string()),
         canonical_error_event_id: None,
+        resource_observation: None,
     });
     ledger
         .append_diagnostic_event(second_terminal)
@@ -4623,7 +4625,7 @@ fn existing_v20_schema_adds_scheduler_model_cache_projection_columns() {
 }
 
 #[test]
-fn existing_v24_schema_adds_scheduler_learning_output_projection_columns() {
+fn existing_v24_schema_adds_scheduler_learning_output_and_memory_projection_columns() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();
     {
@@ -4665,6 +4667,17 @@ fn existing_v24_schema_adds_scheduler_learning_output_projection_columns() {
             table,
             "output_artifact_total_size_bytes"
         ));
+        assert!(sqlite_column_exists(
+            &conn,
+            table,
+            "observed_peak_ram_bytes"
+        ));
+        assert!(sqlite_column_exists(
+            &conn,
+            table,
+            "observed_peak_vram_bytes"
+        ));
+        assert!(sqlite_column_exists(&conn, table, "memory_failure_kind"));
     }
 }
 
@@ -4987,6 +5000,60 @@ fn runtime_selection_history_summarizes_exact_terminal_run_key() {
 }
 
 #[test]
+fn runtime_selection_history_summarizes_memory_and_oom_observations() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    for (index, (peak_ram_bytes, peak_vram_bytes, memory_failure_kind)) in [
+        (1_000_u64, 2_000_u64, None),
+        (1_100, 2_100, None),
+        (1_200, 2_200, None),
+        (1_300, 2_300, None),
+        (1_400, 2_400, Some(RunMemoryFailureKind::OutOfMemory)),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        append_runtime_selection_history_run_with_observation(
+            &mut ledger,
+            index,
+            "pytorch.cuda",
+            Some("cuda:0"),
+            if memory_failure_kind.is_some() {
+                RunTerminalStatus::Failed
+            } else {
+                RunTerminalStatus::Completed
+            },
+            Some(100 + index as u64),
+            Some(RunResourceObservation {
+                peak_ram_bytes: Some(peak_ram_bytes),
+                peak_vram_bytes: Some(peak_vram_bytes),
+                memory_failure_kind,
+            }),
+        );
+    }
+    ledger
+        .drain_run_list_projection(500)
+        .expect("run list projection drains");
+
+    let summary = ledger
+        .runtime_selection_history_summary(sample_runtime_selection_history_query(Some("cuda:0")))
+        .expect("runtime selection history summary loads");
+
+    assert_eq!(summary.sample_count, 5);
+    assert!(summary.threshold_met);
+    assert_eq!(summary.peak_ram_sample_count, 5);
+    assert_eq!(summary.average_peak_ram_bytes, Some(1_200));
+    assert_eq!(summary.median_peak_ram_bytes, Some(1_200));
+    assert_eq!(summary.typical_min_peak_ram_bytes, Some(1_100));
+    assert_eq!(summary.typical_max_peak_ram_bytes, Some(1_300));
+    assert_eq!(summary.peak_vram_sample_count, 5);
+    assert_eq!(summary.average_peak_vram_bytes, Some(2_200));
+    assert_eq!(summary.median_peak_vram_bytes, Some(2_200));
+    assert_eq!(summary.typical_min_peak_vram_bytes, Some(2_100));
+    assert_eq!(summary.typical_max_peak_vram_bytes, Some(2_300));
+    assert_eq!(summary.out_of_memory_count, 1);
+}
+
+#[test]
 fn runtime_selection_history_does_not_broaden_when_threshold_is_unmet() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     for index in 0..4 {
@@ -5134,6 +5201,26 @@ fn append_runtime_selection_history_run(
     terminal_status: RunTerminalStatus,
     duration_ms: Option<u64>,
 ) {
+    append_runtime_selection_history_run_with_observation(
+        ledger,
+        index,
+        selected_runtime_variant_id,
+        selected_device_id,
+        terminal_status,
+        duration_ms,
+        None,
+    );
+}
+
+fn append_runtime_selection_history_run_with_observation(
+    ledger: &mut SqliteDiagnosticsLedger,
+    index: usize,
+    selected_runtime_variant_id: &str,
+    selected_device_id: Option<&str>,
+    terminal_status: RunTerminalStatus,
+    duration_ms: Option<u64>,
+    resource_observation: Option<RunResourceObservation>,
+) {
     let workflow_run_id = format!("runtime_selection_run_{index}");
     let occurred_at_base_ms = 10_000 + index as i64 * 1_000;
 
@@ -5192,6 +5279,7 @@ fn append_runtime_selection_history_run(
         error: (terminal_status == RunTerminalStatus::Failed)
             .then(|| "runtime selection sample failed".to_string()),
         canonical_error_event_id: None,
+        resource_observation,
     });
     ledger
         .append_diagnostic_event(terminal)
@@ -5611,6 +5699,7 @@ fn sample_run_terminal_event(workflow_run_id: &str) -> DiagnosticEventAppendRequ
             duration_ms: Some(80),
             error: None,
             canonical_error_event_id: None,
+            resource_observation: None,
         }),
     }
 }

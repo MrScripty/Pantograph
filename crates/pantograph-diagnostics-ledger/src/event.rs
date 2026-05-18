@@ -913,6 +913,54 @@ pub enum RunTerminalStatus {
     Cancelled,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunMemoryFailureKind {
+    OutOfMemory,
+}
+
+impl RunMemoryFailureKind {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::OutOfMemory => "out_of_memory",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "out_of_memory" => Ok(Self::OutOfMemory),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "memory_failure_kind",
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RunResourceObservation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peak_ram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peak_vram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_failure_kind: Option<RunMemoryFailureKind>,
+}
+
+impl RunResourceObservation {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        if self.peak_ram_bytes.is_none()
+            && self.peak_vram_bytes.is_none()
+            && self.memory_failure_kind.is_none()
+        {
+            return Err(DiagnosticsLedgerError::MissingField {
+                field: "resource_observation",
+            });
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RunTerminalPayload {
@@ -921,6 +969,8 @@ pub struct RunTerminalPayload {
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical_error_event_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_observation: Option<RunResourceObservation>,
 }
 
 impl RunTerminalPayload {
@@ -930,7 +980,11 @@ impl RunTerminalPayload {
             "canonical_error_event_id",
             self.canonical_error_event_id.as_deref(),
             MAX_ID_LEN,
-        )
+        )?;
+        if let Some(observation) = self.resource_observation.as_ref() {
+            observation.validate()?;
+        }
+        Ok(())
     }
 }
 
@@ -2545,6 +2599,9 @@ pub struct RunListProjectionRecord {
     pub estimate_confidence: Option<String>,
     pub estimated_queue_wait_ms: Option<u64>,
     pub estimated_duration_ms: Option<u64>,
+    pub observed_peak_ram_bytes: Option<u64>,
+    pub observed_peak_vram_bytes: Option<u64>,
+    pub memory_failure_kind: Option<RunMemoryFailureKind>,
     pub output_artifact_count: u64,
     pub output_artifact_total_size_bytes: u64,
     pub model_cache_state: Option<SchedulerModelCacheState>,
@@ -2626,6 +2683,9 @@ pub struct RunDetailProjectionRecord {
     pub estimate_confidence: Option<String>,
     pub estimated_queue_wait_ms: Option<u64>,
     pub estimated_duration_ms: Option<u64>,
+    pub observed_peak_ram_bytes: Option<u64>,
+    pub observed_peak_vram_bytes: Option<u64>,
+    pub memory_failure_kind: Option<RunMemoryFailureKind>,
     pub output_artifact_count: u64,
     pub output_artifact_total_size_bytes: u64,
     pub model_cache_state: Option<SchedulerModelCacheState>,
