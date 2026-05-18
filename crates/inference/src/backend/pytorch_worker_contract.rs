@@ -10,6 +10,7 @@ use crate::model_contracts::{
     ModelLoadNetworkPolicy, ModelLoadSecurityPolicy, ModelRemoteCodePolicy,
     OptionCompatibilityDiagnostic, ProcessorComponentKind, PumasModelRef, ResolvedModelSource,
 };
+use crate::resource_observation::InferenceExecutionResourceObservation;
 
 pub(super) const PYTORCH_WORKER_CONTRACT_VERSION: u32 = 1;
 
@@ -290,6 +291,8 @@ pub(super) struct PyTorchWorkerSuccess<T> {
     pub result: T,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_observation: Option<InferenceExecutionResourceObservation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -297,6 +300,8 @@ pub(super) struct PyTorchWorkerSuccess<T> {
 pub(super) struct PyTorchWorkerFailure {
     pub request_id: String,
     pub error: PyTorchWorkerError,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_observation: Option<InferenceExecutionResourceObservation>,
 }
 
 #[allow(dead_code)]

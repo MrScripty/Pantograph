@@ -699,7 +699,7 @@ Staged implementation:
    - 2026-05-18: completed as part of the diagnostic projection slice. The
      field is optional on the shared lifecycle event and available to every
      task family; producer wiring remains staged separately.
-6. [ ] Extract Python worker response helpers, then extend the generic
+6. [x] Extract Python worker response helpers, then extend the generic
    PyTorch worker success/failure envelope with optional resource observation
    and update Python worker shape checks before adding task-specific
    producers.
@@ -729,6 +729,25 @@ Staged implementation:
      test_python_worker_generate_image_from_envelope_returns_worker_response
      --lib`, `cargo test -p inference --features backend-pytorch
      pytorch_worker_generate_text_success_response_returns_text --lib`, and
+     `cargo test -p inference --features backend-pytorch pytorch_worker
+     --lib`, `cargo check -p inference --features backend-pytorch`, `cargo
+     fmt --all -- --check`, and `git diff --check` for the allowed write set.
+   - 2026-05-18: completed the generic Rust envelope sub-slice.
+     `PyTorchWorkerSuccess<T>` and `PyTorchWorkerFailure` now carry optional
+     `InferenceExecutionResourceObservation` fields with serde defaults, so
+     existing worker responses remain valid while future PyTorch producers can
+     attach typed peak-memory, unavailable-metric, or OOM facts without adding
+     task-specific telemetry dictionaries.
+   - No-fallback/no-legacy confirmation: the Rust envelope accepts only the
+     inference-owned typed resource observation contract. Invalid observation
+     payloads fail serde construction through the existing validated DTO
+     instead of being accepted as incidental metadata or raw Python dicts.
+     Backend failure constructors use `None` until a real producer reports
+     observations; they do not synthesize memory facts from error strings.
+   - Verification: `cargo test -p inference --features backend-pytorch
+     test_pytorch_worker_success_response_decodes_resource_observation --lib`,
+     `cargo test -p inference --features backend-pytorch
+     test_pytorch_worker_error_response_decodes_resource_observation --lib`,
      `cargo test -p inference --features backend-pytorch pytorch_worker
      --lib`, `cargo check -p inference --features backend-pytorch`, `cargo
      fmt --all -- --check`, and `git diff --check` for the allowed write set.

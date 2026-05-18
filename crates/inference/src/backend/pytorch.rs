@@ -179,6 +179,7 @@ fn kv_worker_failure_from_message(
             message: normalize_worker_error_message(&message, "Python worker transport failed"),
             canonical_code: Some(canonical_code.to_string()),
         },
+        resource_observation: None,
     }
     .into_backend_error()
 }
@@ -1505,6 +1506,7 @@ impl PyTorchBackend {
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_model_load_failed".to_string()),
             },
+            resource_observation: None,
         }
         .into_backend_error()
     }
@@ -1517,6 +1519,7 @@ impl PyTorchBackend {
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_generate_text_stream_failed".to_string()),
             },
+            resource_observation: None,
         }
         .into_backend_error()
     }
@@ -1647,6 +1650,7 @@ impl PyTorchBackend {
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_generate_text_failed".to_string()),
             },
+            resource_observation: None,
         }
         .into_backend_error()
     }
@@ -1662,6 +1666,7 @@ impl PyTorchBackend {
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_audio_transcription_failed".to_string()),
             },
+            resource_observation: None,
         }
         .into_backend_error()
     }
@@ -1721,6 +1726,7 @@ impl PyTorchBackend {
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_unload_failed".to_string()),
             },
+            resource_observation: None,
         }
         .into_backend_error()
     }
@@ -1733,6 +1739,7 @@ impl PyTorchBackend {
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_init_failed".to_string()),
             },
+            resource_observation: None,
         }
         .into_backend_error()
     }
@@ -1745,6 +1752,7 @@ impl PyTorchBackend {
                 message: normalize_worker_error_message(&message, "Python worker transport failed"),
                 canonical_code: Some("pytorch_worker_shutdown_failed".to_string()),
             },
+            resource_observation: None,
         }
         .into_backend_error()
     }

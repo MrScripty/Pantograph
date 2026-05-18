@@ -3050,7 +3050,9 @@ fn test_pytorch_worker_error_response_preserves_request_correlation() {
         serde_json::from_str(fixture).expect("decode worker error fixture");
 
     match response {
-        PyTorchWorkerResponse::Error(PyTorchWorkerFailure { request_id, error }) => {
+        PyTorchWorkerResponse::Error(PyTorchWorkerFailure {
+            request_id, error, ..
+        }) => {
             assert_eq!(request_id, "req-load-001");
             assert_eq!(error.kind, PyTorchWorkerErrorKind::TrustPolicyRejected);
             assert_eq!(
@@ -3117,6 +3119,71 @@ fn test_pytorch_worker_success_response_tolerates_additive_fields() {
 
     assert_eq!(success.request_id, "req-generate-additive");
     assert_eq!(success.result.text, "done");
+    assert_eq!(success.resource_observation, None);
+}
+
+#[test]
+fn test_pytorch_worker_success_response_decodes_resource_observation() {
+    let response = serde_json::json!({
+        "status": "ok",
+        "request_id": "req-generate-resource",
+        "result": {
+            "text": "done"
+        },
+        "resource_observation": {
+            "peak_ram_bytes": 4096,
+            "sources": [{
+                "metric_kind": "peak_ram_bytes",
+                "source_kind": "os_process_rss"
+            }]
+        }
+    });
+
+    let decoded: PyTorchWorkerResponse<PyTorchGenerateTextResult> =
+        serde_json::from_value(response).expect("resource observation should decode");
+    let PyTorchWorkerResponse::Ok(success) = decoded else {
+        panic!("expected worker success response");
+    };
+
+    let observation = success
+        .resource_observation
+        .expect("resource observation should be present");
+    assert_eq!(observation.peak_ram_bytes(), Some(4096));
+    assert_eq!(observation.sources().len(), 1);
+    assert_eq!(
+        observation.sources()[0].source_kind(),
+        crate::InferenceResourceObservationSourceKind::OsProcessRss
+    );
+}
+
+#[test]
+fn test_pytorch_worker_error_response_decodes_resource_observation() {
+    let response = serde_json::json!({
+        "status": "error",
+        "request_id": "req-error-resource",
+        "error": {
+            "kind": "generation_failed",
+            "message": "out of memory",
+            "canonical_code": "pytorch_worker_generation_failed"
+        },
+        "resource_observation": {
+            "memory_failure_kind": "out_of_memory"
+        }
+    });
+
+    let decoded: PyTorchWorkerResponse<serde_json::Value> =
+        serde_json::from_value(response).expect("resource observation should decode");
+    let PyTorchWorkerResponse::Error(failure) = decoded else {
+        panic!("expected worker error response");
+    };
+
+    let observation = failure
+        .resource_observation
+        .expect("resource observation should be present");
+    assert_eq!(
+        observation.memory_failure_kind(),
+        Some(crate::InferenceMemoryFailureKind::OutOfMemory)
+    );
 }
 
 #[test]
@@ -3154,6 +3221,7 @@ RuntimeError: failed while reading /home/jeremy/private/model/config.json
 "#
             .to_string(),
         },
+        resource_observation: None,
     };
 
     match failure.into_backend_error() {
@@ -3750,6 +3818,7 @@ fn test_pytorch_audio_transcription_worker_response_decodes() {
                 duration_seconds: Some(1.25_f32),
             },
             option_diagnostics: Vec::new(),
+            resource_observation: None,
         });
     let response_json = serde_json::to_string(&response).expect("encode audio response");
 
