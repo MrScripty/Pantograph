@@ -170,6 +170,10 @@ selection must use supported runtimes through Pumas model references.
   direct `canonical_error_event_id` links when a caller already recorded the
   detailed canonical diagnostic error elsewhere and optional selected
   network-node ids when execution observed a concrete Pantograph node.
+- `InferenceExecutionResourceObservation` carries typed execution telemetry for
+  peak RAM, peak VRAM, memory-failure kind, metric source attribution, and
+  explicit metric unavailability. It is a producer contract only; schedulers
+  and workflow ledgers consume projected facts in their own owning crates.
 - Stable generation behavior belongs in typed `GenerationOptions` groups.
   Backend-local generation escape hatches are limited to
   `backend_extensions` keys scoped as `<backend-or-adapter>:<option>`, and

@@ -6567,6 +6567,39 @@ Worker rules:
     adapter-local external-runtime translation that immediately emits typed
     memory-failure facts and bounded diagnostics.
   - Verification for this documentation slice: `git diff --check`.
+- 2026-05-18 inference resource-observation DTO slice:
+  - Smallest useful vertical slice: add the shared inference-owned execution
+    resource observation contract and focused validation/serde tests without
+    wiring producers, lifecycle events, terminal payloads, or scheduler
+    ranking.
+  - Allowed write set: `crates/inference/src/resource_observation.rs`,
+    `crates/inference/src/lib.rs`, `crates/inference/README.md`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: the new contract is typed producer
+    telemetry only. It does not parse terminal error strings, reuse artifact
+    cache memory policy, infer missing metrics as zero, add image-only
+    telemetry, or activate scheduler ranking. Unavailable runtime metrics are
+    explicit typed availability facts.
+  - Implementation completed: added `InferenceExecutionResourceObservation`
+    plus typed metric, source, availability, and memory-failure enums. The
+    constructor and serde decode path validate non-empty observations, reject
+    zero-valued peak metrics, enforce bounded source/availability collections
+    before de-duplication, order facts deterministically, and reject source
+    attribution when there is no matching metric value or availability fact.
+    The contract is re-exported from `inference` and documented in the module
+    README as a producer contract rather than scheduler policy.
+  - Focused tests added: resource-observation round-trip tests, decode
+    validation, zero-value rejection, bounded collection rejection,
+    deterministic de-duplication/ordering, source-attribution validation,
+    unavailable metric encoding, and merge max-peak behavior.
+  - Verification passed: `cargo test -p inference resource_observation
+    --lib`, `cargo check -p inference`, `cargo fmt --all -- --check`, and
+    `git diff --check`.
+  - Remaining follow-up: the next slice is the lifecycle event builder/context
+    migration before telemetry fields are added to lifecycle events.
 
 ### Traceability Links
 

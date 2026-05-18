@@ -588,9 +588,22 @@ Collector lifecycle rules:
 
 Staged implementation:
 
-1. [ ] Add the inference-owned execution-resource observation DTOs and
+1. [x] Add the inference-owned execution-resource observation DTOs and
    validation tests. This slice is shared-contract only and should not wire
    scheduler ranking.
+   - 2026-05-18: completed the shared inference contract slice.
+     `inference::resource_observation` now owns typed execution resource
+     telemetry DTOs for peak RAM bytes, peak VRAM bytes, memory failure kind,
+     metric source attribution, and explicit metric unavailability. The
+     constructor and serde decode path validate non-empty observations, reject
+     zero-valued peak metrics, bound source/availability collections before
+     de-duplication, deterministically order facts, and reject source
+     attribution without a matching metric or availability fact. This slice
+     does not wire lifecycle events, terminal payloads, scheduler ranking,
+     worker telemetry, process sampling, or legacy OOM string translation.
+   - Verification: `cargo test -p inference resource_observation --lib`,
+     `cargo check -p inference`, `cargo fmt --all -- --check`, and
+     `git diff --check`.
 2. [ ] Extract a small inference lifecycle event builder/context and update
    lifecycle tests before adding telemetry fields. This prevents
    resource-observation wiring from expanding the existing `gateway.rs`

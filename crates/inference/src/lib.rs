@@ -45,6 +45,7 @@ pub mod managed_runtime;
 pub mod model_contracts;
 pub mod process;
 pub mod resource_estimates;
+pub mod resource_observation;
 pub mod runtime_load;
 pub mod server;
 pub mod types;
@@ -187,6 +188,13 @@ pub use resource_estimates::{
     InferenceResourceEstimateDiagnosticCode, InferenceResourceEstimateDiagnosticSeverity,
     InferenceResourceEstimateError, InferenceResourceEstimateKind, InferenceResourceEstimateState,
     InferenceUnavailableResourceEstimateState,
+};
+pub use resource_observation::{
+    InferenceExecutionResourceObservation, InferenceExecutionResourceObservationError,
+    InferenceMemoryFailureKind, InferenceResourceObservationAvailability,
+    InferenceResourceObservationMetricKind, InferenceResourceObservationSource,
+    InferenceResourceObservationSourceKind, InferenceResourceObservationUnavailableState,
+    INFERENCE_RESOURCE_OBSERVATION_AVAILABILITY_LIMIT, INFERENCE_RESOURCE_OBSERVATION_SOURCE_LIMIT,
 };
 pub use runtime_load::{
     managed_runtime_load_facts_from_snapshot, LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode,

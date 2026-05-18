@@ -598,6 +598,12 @@ PyTorch/diffusers and produce a retained image artifact.
     Python worker response helper before adding telemetry to operation
     envelopes, and keep runtime-registry memory/OOM history projection ahead
     of scheduler ranking activation.
+  - 2026-05-18 resource-observation DTO slice: `inference` now owns the shared
+    `InferenceExecutionResourceObservation` contract and related typed metric,
+    source, availability, and memory-failure enums. The contract validates and
+    bounds producer facts without wiring image-generation execution,
+    lifecycle events, terminal payloads, scheduler ranking, or legacy OOM
+    parsing.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
