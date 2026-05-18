@@ -119,6 +119,89 @@ Reference repo findings used by this design:
   be bounded, own overflow behavior, and emit diagnostics when rejecting or
   dropping work.
 
+## Memory Estimate Policy
+
+Memory-fit planning is a scheduler concern that applies to all inference
+families and runtimes, not only PyTorch image generation. The image-generation
+planner may validate request-local numeric bounds, but it must not become the
+owner of queue admission, runtime ranking, model residency, retries, or learned
+placement.
+
+The planned ownership boundary is:
+
+- Pumas owns model-library facts such as artifact kind, selected artifact,
+  component roles, package readiness, dtype/config evidence, storage kind, and
+  validation state. Pumas may expose component sizes or model-residency facts
+  when they are available, including `not_available` or `not_implemented`
+  states. Pantograph must not synthesize missing Pumas facts from paths,
+  display names, or Python worker discovery.
+- The inference crate owns task/family request validation. It performs checked
+  arithmetic for dimensions, image count, output byte estimates, and
+  family-specific option constraints, then emits typed planner diagnostics for
+  overflow, impossible values, unsupported families, or unavailable estimate
+  inputs.
+- Backend adapters and runtime-registry providers expose typed candidate facts:
+  runtime readiness, device inventory, package/dependency readiness,
+  backend/runtime capability, resource estimates when known, and bounded
+  diagnostics. They do not rank candidates or decide whether a workflow should
+  wait, retry, or terminate.
+- The scheduler owns memory admission, candidate ranking, reservation policy,
+  retry/reschedule/termination policy, and history weighting. It is the only
+  component that may decide a candidate is runnable now based on current memory
+  pressure, model residency, queue state, timing history, and OOM/failure
+  history.
+- Workers report observed load duration, warmup duration, execution duration,
+  terminal status, output size, and observed memory/OOM facts back to lifecycle
+  and diagnostics projections. Workers must not choose alternate runtimes or
+  continue after scheduler-required memory proofs are missing.
+
+Memory estimates should use typed states instead of sentinel values:
+
+| State | Meaning |
+| ----- | ------- |
+| `available` | The estimate was computed from trusted facts with checked arithmetic. |
+| `not_available` | The runtime or host cannot currently provide the fact, such as a missing managed binary or unprobed device. |
+| `not_implemented` | The inference crate knows the family/runtime concept but does not yet implement that estimate. |
+| `insufficient_facts` | Required Pumas, runtime, or request facts are missing or ambiguous. |
+| `overflow` | Checked arithmetic failed while computing the estimate. |
+| `unsupported_family` / `unsupported_runtime` | The family or runtime is intentionally non-executable for this estimate. |
+
+Initial estimate kinds should be explicit and additive:
+
+- `output_rgba_bytes` for conservative generated-image output sizing.
+- `vae_working_memory_bytes` for image-family encode/decode pressure.
+- `model_residency_bytes` for model/component residency when facts are known.
+- `runtime_overhead_bytes` for runtime-specific fixed overhead when known.
+- `peak_vram_bytes` and `peak_ram_bytes` for scheduler admission inputs.
+
+Reference boundary: InvokeAI's VAE working-memory utility estimates
+family-specific VAE pressure from dimensions, operation, element size, tile
+size, latent scale factor, and family constants. Pantograph may use that as a
+reference for the type of facts needed, but the implementation must remain a
+Pantograph-owned typed estimator fed by Pumas/runtime facts rather than copying
+InvokeAI invocation or model-manager architecture.
+
+Staged implementation plan:
+
+1. Add inference/runtime resource-estimate DTOs and diagnostics with the states
+   above. This is a contract slice only; it must not change scheduler ranking.
+2. Move existing output-size checked arithmetic into the shared estimate shape
+   and add tests proving overflow is diagnostic-backed.
+3. Add side-effect-free family/runtime calculators for estimates that can be
+   computed from already-available facts. Unknown or unimplemented estimates
+   must be explicit states, not `0`, silent omission, or saturated values.
+4. Project reduced estimate facts into scheduler-facing
+   `BackendExecutionCandidate` data. Do not pass full Pumas package facts or
+   worker envelopes through the scheduler.
+5. Make scheduler admission consume memory estimates and current resource
+   pressure before selection. Explicit runtime/device requirements must fail
+   with diagnostics when they cannot fit; omitted requirements let the
+   scheduler choose among valid candidates.
+6. Persist observed timing and memory/OOM facts. History-backed memory and
+   timing ranking starts only after every valid runtime candidate for the same
+   workflow/model/runtime key has at least five completed runs; before that,
+   policy uses current facts and controlled exploration.
+
 ## Standards Guardrails
 
 - No production `unwrap()` or `expect()` in new request, lifecycle, worker,

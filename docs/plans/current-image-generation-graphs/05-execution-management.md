@@ -6044,6 +6044,43 @@ Worker rules:
     Keep this as a Pumas fixture/index follow-up; Pantograph behavior remains
     fail-closed with no synthesized target. Retained artifact output remains
     the next open execution slice.
+- 2026-05-17 memory policy planning slice:
+  - Smallest useful vertical slice: plan the remaining checked-memory and
+    artifact-size work as a cross-runtime scheduler/inference contract before
+    implementing more image-generation memory behavior.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/06-device-runtime-selection.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. The modified and untracked root proposal markdown
+    files were ignored because they are unrelated to this slice.
+  - No-fallback/no-legacy confirmation: the plan keeps memory-fit decisions in
+    scheduler policy and rejects overflow, missing required facts, unsupported
+    runtime/family cases, and unavailable estimates through typed diagnostics
+    or explicit estimate states. It does not add PyTorch-only fallback math,
+    worker-side runtime choice, sentinel `0` estimates, or silent saturation.
+  - Planning notes: Pumas owns package/component/storage/validation facts;
+    inference owns request-local checked arithmetic and typed estimate
+    diagnostics; backend/runtime providers expose reduced readiness and
+    resource-estimate facts; scheduler owns admission, reservations, retry,
+    rescheduling, termination after retry exhaustion, and history-backed
+    ranking. Estimate states must distinguish `available`, `not_available`,
+    `not_implemented`, `insufficient_facts`, `overflow`,
+    `unsupported_family`, and `unsupported_runtime`. Timing and memory history
+    may influence ranking only after every valid runtime candidate for the same
+    workflow/model/runtime key has at least five completed runs.
+  - Reference note: InvokeAI's VAE working-memory estimator is useful evidence
+    for the kinds of image-family facts Pantograph will need, but Pantograph
+    must keep the estimator and scheduler policy in its own typed contracts
+    rather than copying InvokeAI invocation or model-manager architecture.
+  - Focused tests added/updated: none; this is a documentation/planning slice.
+  - Verification passed: `git diff --check`.
+  - Verification deviation: no runtime tests were run because no source,
+    fixture, config, lockfile, or generated file changed.
+  - Remaining follow-up: implement the staged resource-estimate DTO,
+    calculator, candidate-projection, scheduler-admission, and observed
+    memory/timing ledger slices before marking the Milestone 6 checked-memory
+    checklist item complete.
 
 ### Traceability Links
 

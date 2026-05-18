@@ -397,6 +397,19 @@ PyTorch/diffusers and produce a retained image artifact.
     artifact range metadata. Remaining scope for this checklist item:
     scheduler/runtime memory estimates and any other planner-side artifact
     size limits must be verified before marking complete.
+  - 2026-05-17 memory policy planning: remaining memory work must be
+    implemented as a cross-runtime scheduler/inference contract, not a
+    PyTorch-image-only calculation. Inference owns request-local checked
+    arithmetic and typed estimate diagnostics; Pumas owns package/component
+    facts; backend/runtime providers expose readiness and estimate facts; the
+    scheduler owns memory admission, reservations, retries, rescheduling,
+    termination policy, and history-backed ranking. Estimate DTOs must
+    distinguish `available`, `not_available`, `not_implemented`,
+    `insufficient_facts`, `overflow`, `unsupported_family`, and
+    `unsupported_runtime` instead of using sentinel values. History-backed
+    timing and memory ranking remains gated until every valid runtime
+    candidate for the same workflow/model/runtime key has at least five
+    completed runs.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

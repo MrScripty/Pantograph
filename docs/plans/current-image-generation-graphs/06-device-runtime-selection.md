@@ -184,6 +184,10 @@ Blast-radius limits:
 - Backend adapters expose feasibility, estimates, diagnostics, and execution
   translation only. They must not implement cross-backend ranking, random or
   exploration policy, queue fairness, or learned model/runtime preference.
+- Memory estimate production is split from memory admission. Inference and
+  backend adapters may publish typed estimates and explicit unavailable states,
+  but the scheduler owns fit decisions, reservations, retries, rescheduling,
+  termination after retry exhaustion, and learned memory/timing policy.
 - Scheduler policy must never depend on raw backend strings or local runtime
   paths. Parse workflow/backend/device input once into validated contract
   types, then rank typed candidates.
@@ -195,6 +199,9 @@ Blast-radius limits:
   saturating-at-boundary math with typed diagnostics for impossible state. Do
   not silently cap a rank or counter in a way that changes the selected
   candidate without an emitted diagnostic.
+- Estimate states must not use sentinel numeric values. Missing, unavailable,
+  unimplemented, overflowed, unsupported, or insufficient-facts estimates are
+  separate typed states that scheduler policy can record and reason about.
 - Async code may fetch candidates, ledger summaries, and resource snapshots,
   but ranking itself must be synchronous and lock-free. Never hold scheduler or
   backend state locks while querying SQLite, probing devices, loading models,
