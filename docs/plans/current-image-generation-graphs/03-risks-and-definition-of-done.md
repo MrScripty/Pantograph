@@ -85,6 +85,9 @@
 - Runtime registry/admission can present typed backend execution candidates
   with backend id, task/model compatibility, runtime variant, device facts,
   resource estimates where known, and bounded rejection diagnostics.
+- Runtime registry technical-fit selection rejects candidates that exceed
+  typed snapshot RAM/VRAM budgets or impossible active-claim arithmetic before
+  selection, and reports typed diagnostics for the rejected runtime/candidate.
 - Backend adapter and device/runtime implementation slices have a recorded
   standards gate covering crate role, public facade impact, lifecycle owner,
   persisted artifacts, feature/dependency impact, path/resource validation,

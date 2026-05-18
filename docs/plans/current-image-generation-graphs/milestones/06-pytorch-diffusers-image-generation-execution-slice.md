@@ -489,6 +489,21 @@ PyTorch/diffusers and produce a retained image artifact.
     workflow metadata, Pumas facts, or worker envelopes. Remaining
     memory-policy work: make technical-fit selection consume these facts and
     reject over-budget candidates before runtime selection.
+  - 2026-05-18 technical-fit memory admission slice: runtime-registry's pure
+    selector now consumes snapshot admission budgets, active reservation byte
+    claims, and candidate `peak_ram_bytes`/`peak_vram_bytes` estimates before
+    selection. Automatic selection rejects over-budget candidates instead of
+    ranking them, explicit overrides surface typed `ResourceBudgetExceeded`,
+    `ResourceAccountingOverflow`, or `ResourceBudgetUnderflow` diagnostics,
+    and the selector does not call mutable admission/reservation APIs or
+    translate typed estimates back into legacy MB fields. Verification:
+    `cargo test -p pantograph-runtime-registry resource_ --lib`,
+    `cargo test -p pantograph-runtime-registry --lib`,
+    `cargo test -p pantograph-runtime-registry --test technical_fit_contract`,
+    `cargo fmt --all -- --check`, and `git diff --check`. Remaining
+    memory-policy follow-up: replace embedded-runtime's temporary workflow MiB
+    projection with typed workflow resource-requirement contracts and then wire
+    scheduler history/diagnostics-ledger policy over the same reduced facts.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

@@ -5,7 +5,7 @@ use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runti
 use serde::{Deserialize, Serialize};
 
 use crate::runtime_selection_policy::{
-    candidate_is_eligible, candidate_matches_device_policy,
+    candidate_is_eligible, candidate_matches_device_policy, candidate_resource_budget_diagnostics,
     select_runtime_technical_fit_automatically, RuntimeSelectionDecisionInput,
 };
 use crate::snapshot::RuntimeRegistrySnapshot;
@@ -344,6 +344,9 @@ pub enum RuntimeTechnicalFitDeviceDiagnosticCode {
     MissingModelPackageFacts,
     CandidateSetOverflow,
     LegacyDeviceRejected,
+    ResourceAccountingOverflow,
+    ResourceBudgetExceeded,
+    ResourceBudgetUnderflow,
     EvidenceUnsupportedTask,
     EvidenceBackendUnavailable,
     EvidenceMissingRuntimeCapability,
@@ -1261,13 +1264,14 @@ fn explicit_override_rejection_diagnostics(
         .iter()
         .filter(|candidate| candidate_matches_override(candidate, override_selection))
         .min_by(|left, right| compare_candidate_ids(left, right))
-        .map(candidate_rejection_diagnostics)
+        .map(|candidate| candidate_rejection_diagnostics(candidate, request))
         .filter(|diagnostics| !diagnostics.is_empty())
         .unwrap_or_else(|| synthetic_explicit_override_diagnostic(override_selection))
 }
 
 fn candidate_rejection_diagnostics(
     candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
 ) -> Vec<RuntimeTechnicalFitDeviceDiagnostic> {
     if !candidate.device_diagnostics.is_empty() {
         return candidate.device_diagnostics.clone();
@@ -1275,6 +1279,10 @@ fn candidate_rejection_diagnostics(
     let dependency_diagnostics = candidate_dependency_readiness_diagnostics(candidate);
     if !dependency_diagnostics.is_empty() {
         return dependency_diagnostics;
+    }
+    let budget_diagnostics = candidate_resource_budget_diagnostics(candidate, request);
+    if !budget_diagnostics.is_empty() {
+        return budget_diagnostics;
     }
 
     let compatibility_rejected = candidate

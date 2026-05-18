@@ -4,6 +4,10 @@ use crate::runtime_selection_policy::{
 };
 use crate::snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
 use crate::state::RuntimeRegistryStatus;
+use crate::{
+    RuntimeActiveReservationClaim, RuntimeAdmissionBudget, RuntimeAdmissionResourceBudget,
+    RuntimeReservationResourceClaim,
+};
 use serde::Deserialize;
 
 fn deserialize_source_kind(
@@ -107,6 +111,13 @@ fn runtime_capability_candidate(candidate_id: &str) -> RuntimeTechnicalFitCandid
 fn peak_vram_estimate(value_bytes: u64) -> RuntimeTechnicalFitResourceEstimate {
     RuntimeTechnicalFitResourceEstimate::available(
         RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes,
+        value_bytes,
+    )
+}
+
+fn peak_ram_estimate(value_bytes: u64) -> RuntimeTechnicalFitResourceEstimate {
+    RuntimeTechnicalFitResourceEstimate::available(
+        RuntimeTechnicalFitResourceEstimateKind::PeakRamBytes,
         value_bytes,
     )
 }
@@ -2212,4 +2223,225 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
         reason.code == RuntimeTechnicalFitReasonCode::BudgetPressure
             && reason.candidate_id.as_deref() == Some("runtime-roomy")
     }));
+}
+
+#[test]
+fn selector_rejects_over_budget_candidate_before_selection() {
+    let gib = 1024_u64 * 1024 * 1024;
+    let mut tight_runtime = runtime_snapshot(
+        "runtime-tight",
+        vec!["pytorch"],
+        RuntimeRegistryStatus::Ready,
+        0,
+    );
+    tight_runtime.admission_budget = Some(RuntimeAdmissionBudget::from_resources(vec![
+        RuntimeAdmissionResourceBudget::vram_bytes(Some(4 * gib)),
+    ]));
+    let mut fitting_runtime = runtime_snapshot(
+        "runtime-fitting",
+        vec!["pytorch"],
+        RuntimeRegistryStatus::Ready,
+        0,
+    );
+    fitting_runtime.admission_budget = Some(RuntimeAdmissionBudget::from_resources(vec![
+        RuntimeAdmissionResourceBudget::vram_bytes(Some(8 * gib)),
+    ]));
+
+    let mut over_budget = runtime_capability_candidate("runtime-tight");
+    over_budget.backend_key = Some("pytorch".to_string());
+    over_budget.resource_estimates = vec![peak_vram_estimate(6 * gib)];
+    let mut fitting = runtime_capability_candidate("runtime-fitting");
+    fitting.backend_key = Some("pytorch".to_string());
+    fitting.resource_estimates = vec![peak_vram_estimate(6 * gib)];
+
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: RuntimeRegistrySnapshot {
+            generated_at_ms: 123,
+            runtimes: vec![tight_runtime, fitting_runtime],
+            reservations: Vec::new(),
+        },
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["pytorch".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![over_budget, fitting],
+        candidate_history_summaries: Vec::new(),
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selected_candidate_id.as_deref(),
+        Some("runtime-fitting")
+    );
+    assert_eq!(
+        decision
+            .selection_policy_trace
+            .as_ref()
+            .and_then(|trace| trace.candidate_set_summary.as_ref())
+            .map(|summary| summary.rejected_candidate_count),
+        Some(1)
+    );
+}
+
+#[test]
+fn selector_reports_resource_budget_exceeded_for_explicit_candidate() {
+    let gib = 1024_u64 * 1024 * 1024;
+    let mut runtime = runtime_snapshot(
+        "runtime-tight",
+        vec!["pytorch"],
+        RuntimeRegistryStatus::Ready,
+        0,
+    );
+    runtime.admission_budget = Some(RuntimeAdmissionBudget::from_resources(vec![
+        RuntimeAdmissionResourceBudget::vram_bytes(Some(4 * gib)),
+    ]));
+    let mut candidate = runtime_capability_candidate("runtime-tight");
+    candidate.backend_key = Some("pytorch".to_string());
+    candidate.resource_estimates = vec![peak_vram_estimate(6 * gib)];
+
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: RuntimeRegistrySnapshot {
+            generated_at_ms: 123,
+            runtimes: vec![runtime],
+            reservations: Vec::new(),
+        },
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: Vec::new(),
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: Some(RuntimeTechnicalFitOverride {
+            runtime_id: Some("runtime-tight".to_string()),
+            runtime_variant_id: None,
+            model_id: None,
+            backend_key: Some("pytorch".to_string()),
+        }),
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![candidate],
+        candidate_history_summaries: Vec::new(),
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selection_mode,
+        RuntimeTechnicalFitSelectionMode::ExplicitOverride
+    );
+    assert_eq!(decision.selected_candidate_id, None);
+    assert_eq!(decision.device_diagnostics.len(), 1);
+    assert_eq!(
+        decision.device_diagnostics[0].code,
+        RuntimeTechnicalFitDeviceDiagnosticCode::ResourceBudgetExceeded
+    );
+    assert_eq!(
+        decision.device_diagnostics[0].evidence_key.as_deref(),
+        Some("vram_bytes")
+    );
+}
+
+#[test]
+fn selector_reports_resource_accounting_overflow_before_selection() {
+    let mut runtime = runtime_snapshot(
+        "runtime-overflow",
+        vec!["pytorch"],
+        RuntimeRegistryStatus::Ready,
+        2,
+    );
+    runtime.admission_budget = Some(RuntimeAdmissionBudget::from_resources(vec![
+        RuntimeAdmissionResourceBudget::ram_bytes(Some(u64::MAX)),
+    ]));
+    runtime.active_reservation_claims = vec![
+        RuntimeActiveReservationClaim {
+            reservation_id: 1,
+            claims: vec![RuntimeReservationResourceClaim::ram_bytes(u64::MAX)],
+        },
+        RuntimeActiveReservationClaim {
+            reservation_id: 2,
+            claims: vec![RuntimeReservationResourceClaim::ram_bytes(1)],
+        },
+    ];
+    let mut candidate = runtime_capability_candidate("runtime-overflow");
+    candidate.backend_key = Some("pytorch".to_string());
+    candidate.resource_estimates = vec![peak_ram_estimate(1)];
+
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: RuntimeRegistrySnapshot {
+            generated_at_ms: 123,
+            runtimes: vec![runtime],
+            reservations: Vec::new(),
+        },
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["pytorch".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![candidate],
+        candidate_history_summaries: Vec::new(),
+        resource_pressure: None,
+    });
+
+    assert_eq!(decision.selected_candidate_id, None);
+    assert_eq!(decision.device_diagnostics.len(), 1);
+    assert_eq!(
+        decision.device_diagnostics[0].code,
+        RuntimeTechnicalFitDeviceDiagnosticCode::ResourceAccountingOverflow
+    );
+    assert_eq!(
+        decision.device_diagnostics[0].evidence_key.as_deref(),
+        Some("ram_bytes")
+    );
+}
+
+#[test]
+fn selector_reports_resource_budget_underflow_before_selection() {
+    let gib = 1024_u64 * 1024 * 1024;
+    let mut runtime = runtime_snapshot(
+        "runtime-underflow",
+        vec!["pytorch"],
+        RuntimeRegistryStatus::Ready,
+        0,
+    );
+    runtime.admission_budget = Some(RuntimeAdmissionBudget::from_resources(vec![
+        RuntimeAdmissionResourceBudget::vram_bytes(Some(4 * gib)).with_safety_margin_bytes(5 * gib),
+    ]));
+    let mut candidate = runtime_capability_candidate("runtime-underflow");
+    candidate.backend_key = Some("pytorch".to_string());
+    candidate.resource_estimates = vec![peak_vram_estimate(1)];
+
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: RuntimeRegistrySnapshot {
+            generated_at_ms: 123,
+            runtimes: vec![runtime],
+            reservations: Vec::new(),
+        },
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["pytorch".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![candidate],
+        candidate_history_summaries: Vec::new(),
+        resource_pressure: None,
+    });
+
+    assert_eq!(decision.selected_candidate_id, None);
+    assert_eq!(decision.device_diagnostics.len(), 1);
+    assert_eq!(
+        decision.device_diagnostics[0].code,
+        RuntimeTechnicalFitDeviceDiagnosticCode::ResourceBudgetUnderflow
+    );
+    assert_eq!(
+        decision.device_diagnostics[0].evidence_key.as_deref(),
+        Some("vram_bytes")
+    );
 }

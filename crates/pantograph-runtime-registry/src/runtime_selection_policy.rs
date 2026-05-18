@@ -1,5 +1,8 @@
 use std::cmp::Ordering;
 
+use crate::admission::{
+    RuntimeAdmissionResourceBudget, RuntimeAdmissionResourceKind, RuntimeReservationResourceClaim,
+};
 use crate::snapshot::RuntimeRegistryRuntimeSnapshot;
 use crate::state::RuntimeRegistryStatus;
 use crate::technical_fit::{
@@ -434,6 +437,10 @@ fn automatic_no_valid_candidate_diagnostics(
         if !dependency_diagnostics.is_empty() {
             return dependency_diagnostics;
         }
+        let budget_diagnostics = candidate_resource_budget_diagnostics(candidate, request);
+        if !budget_diagnostics.is_empty() {
+            return budget_diagnostics;
+        }
     }
 
     vec![RuntimeTechnicalFitDeviceDiagnostic {
@@ -613,6 +620,7 @@ pub(crate) fn candidate_is_eligible(
         && candidate_matches_device_policy(candidate, request)
         && candidate_meets_context_length(candidate, request)
         && candidate_dependency_readiness_is_ready(candidate)
+        && candidate_resource_budget_diagnostics(candidate, request).is_empty()
 }
 
 pub(crate) fn candidate_matches_device_policy(
@@ -720,6 +728,214 @@ fn candidate_has_missing_state(
     candidate_runtime_snapshot(candidate, request).is_none()
         && candidate.runtime_id.is_some()
         && (candidate.residency_state.is_none() || candidate.warmup_state.is_none())
+}
+
+pub(crate) fn candidate_resource_budget_diagnostics(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> Vec<RuntimeTechnicalFitDeviceDiagnostic> {
+    let Some(runtime_snapshot) = candidate_runtime_snapshot(candidate, request) else {
+        return Vec::new();
+    };
+    let Some(admission_budget) = runtime_snapshot.admission_budget.as_ref() else {
+        return Vec::new();
+    };
+
+    [
+        (
+            RuntimeTechnicalFitResourceEstimateKind::PeakRamBytes,
+            RuntimeAdmissionResourceKind::RamBytes,
+        ),
+        (
+            RuntimeTechnicalFitResourceEstimateKind::PeakVramBytes,
+            RuntimeAdmissionResourceKind::VramBytes,
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(estimate_kind, resource_kind)| {
+        let requested_bytes = candidate_peak_estimate_bytes(candidate, estimate_kind)?;
+        let resource_budget = admission_budget.resource_budget(resource_kind)?;
+        resource_budget_diagnostic(
+            candidate,
+            runtime_snapshot,
+            resource_kind,
+            resource_budget,
+            requested_bytes,
+        )
+    })
+    .collect()
+}
+
+fn candidate_peak_estimate_bytes(
+    candidate: &RuntimeTechnicalFitCandidate,
+    kind: RuntimeTechnicalFitResourceEstimateKind,
+) -> Option<u64> {
+    candidate
+        .resource_estimates
+        .iter()
+        .find(|estimate| estimate.kind() == kind && estimate.state().is_available())
+        .and_then(|estimate| estimate.value_bytes())
+}
+
+fn resource_budget_diagnostic(
+    candidate: &RuntimeTechnicalFitCandidate,
+    runtime_snapshot: &RuntimeRegistryRuntimeSnapshot,
+    resource_kind: RuntimeAdmissionResourceKind,
+    resource_budget: &RuntimeAdmissionResourceBudget,
+    requested_bytes: u64,
+) -> Option<RuntimeTechnicalFitDeviceDiagnostic> {
+    let total_bytes = resource_budget.total_bytes?;
+    let Some(after_safety_margin_bytes) =
+        total_bytes.checked_sub(resource_budget.safety_margin_bytes)
+    else {
+        return Some(resource_budget_underflow_diagnostic(
+            candidate,
+            runtime_snapshot,
+            resource_kind,
+            total_bytes,
+            resource_budget.safety_margin_bytes,
+            0,
+        ));
+    };
+    let reserved_bytes = match active_reserved_bytes(runtime_snapshot, resource_kind) {
+        Ok(reserved_bytes) => reserved_bytes,
+        Err(diagnostic) => return Some(diagnostic_context_from_candidate(diagnostic, candidate)),
+    };
+    let Some(available_bytes) = after_safety_margin_bytes.checked_sub(reserved_bytes) else {
+        return Some(resource_budget_underflow_diagnostic(
+            candidate,
+            runtime_snapshot,
+            resource_kind,
+            total_bytes,
+            resource_budget.safety_margin_bytes,
+            reserved_bytes,
+        ));
+    };
+
+    if requested_bytes <= available_bytes {
+        return None;
+    }
+
+    Some(RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::ResourceBudgetExceeded,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: format!(
+            "technical-fit candidate '{}' requires {} {} but runtime '{}' has {} available (total={} safety_margin={} reserved={})",
+            candidate.candidate_id,
+            requested_bytes,
+            resource_kind.resource_label(),
+            runtime_snapshot.runtime_id,
+            available_bytes,
+            total_bytes,
+            resource_budget.safety_margin_bytes,
+            reserved_bytes
+        ),
+        task_id: None,
+        runtime_id: candidate
+            .runtime_id
+            .clone()
+            .or_else(|| Some(runtime_snapshot.runtime_id.clone())),
+        device_class: candidate.device_class,
+        device_id: candidate.selected_device_id.clone(),
+        runtime_variant_id: candidate.runtime_variant_id.clone(),
+        backend_key: candidate.backend_key.clone(),
+        model_id: candidate.model_id.clone(),
+        evidence_key: Some(resource_kind.resource_label().to_string()),
+        requested_runtime_key: candidate.backend_key.clone(),
+    })
+}
+
+fn active_reserved_bytes(
+    runtime_snapshot: &RuntimeRegistryRuntimeSnapshot,
+    resource_kind: RuntimeAdmissionResourceKind,
+) -> Result<u64, RuntimeTechnicalFitDeviceDiagnostic> {
+    let mut reserved_bytes = 0_u64;
+    for active_claim in &runtime_snapshot.active_reservation_claims {
+        for claim in active_claim
+            .claims
+            .iter()
+            .filter(|claim| claim.kind == resource_kind)
+        {
+            reserved_bytes =
+                checked_add_claim_bytes(runtime_snapshot, resource_kind, reserved_bytes, claim)?;
+        }
+    }
+    Ok(reserved_bytes)
+}
+
+fn checked_add_claim_bytes(
+    runtime_snapshot: &RuntimeRegistryRuntimeSnapshot,
+    resource_kind: RuntimeAdmissionResourceKind,
+    reserved_bytes: u64,
+    claim: &RuntimeReservationResourceClaim,
+) -> Result<u64, RuntimeTechnicalFitDeviceDiagnostic> {
+    reserved_bytes
+        .checked_add(claim.bytes)
+        .ok_or_else(|| RuntimeTechnicalFitDeviceDiagnostic {
+            code: RuntimeTechnicalFitDeviceDiagnosticCode::ResourceAccountingOverflow,
+            severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+            message: format!(
+                "technical-fit resource accounting overflowed while summing active {} claims for runtime '{}'",
+                resource_kind.resource_label(),
+                runtime_snapshot.runtime_id
+            ),
+            task_id: None,
+            runtime_id: Some(runtime_snapshot.runtime_id.clone()),
+            device_class: None,
+            device_id: None,
+            runtime_variant_id: None,
+            backend_key: None,
+            model_id: None,
+            evidence_key: Some(resource_kind.resource_label().to_string()),
+            requested_runtime_key: None,
+        })
+}
+
+fn resource_budget_underflow_diagnostic(
+    candidate: &RuntimeTechnicalFitCandidate,
+    runtime_snapshot: &RuntimeRegistryRuntimeSnapshot,
+    resource_kind: RuntimeAdmissionResourceKind,
+    total_bytes: u64,
+    safety_margin_bytes: u64,
+    reserved_bytes: u64,
+) -> RuntimeTechnicalFitDeviceDiagnostic {
+    RuntimeTechnicalFitDeviceDiagnostic {
+        code: RuntimeTechnicalFitDeviceDiagnosticCode::ResourceBudgetUnderflow,
+        severity: RuntimeTechnicalFitDeviceDiagnosticSeverity::Error,
+        message: format!(
+            "technical-fit resource budget underflowed for runtime '{}' {}: total={} safety_margin={} reserved={}",
+            runtime_snapshot.runtime_id,
+            resource_kind.resource_label(),
+            total_bytes,
+            safety_margin_bytes,
+            reserved_bytes
+        ),
+        task_id: None,
+        runtime_id: candidate
+            .runtime_id
+            .clone()
+            .or_else(|| Some(runtime_snapshot.runtime_id.clone())),
+        device_class: candidate.device_class,
+        device_id: candidate.selected_device_id.clone(),
+        runtime_variant_id: candidate.runtime_variant_id.clone(),
+        backend_key: candidate.backend_key.clone(),
+        model_id: candidate.model_id.clone(),
+        evidence_key: Some(resource_kind.resource_label().to_string()),
+        requested_runtime_key: candidate.backend_key.clone(),
+    }
+}
+
+fn diagnostic_context_from_candidate(
+    mut diagnostic: RuntimeTechnicalFitDeviceDiagnostic,
+    candidate: &RuntimeTechnicalFitCandidate,
+) -> RuntimeTechnicalFitDeviceDiagnostic {
+    diagnostic.device_class = candidate.device_class;
+    diagnostic.device_id = candidate.selected_device_id.clone();
+    diagnostic.runtime_variant_id = candidate.runtime_variant_id.clone();
+    diagnostic.backend_key = candidate.backend_key.clone();
+    diagnostic.model_id = candidate.model_id.clone();
+    diagnostic.requested_runtime_key = candidate.backend_key.clone();
+    diagnostic
 }
 
 fn candidate_residency_rank(

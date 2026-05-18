@@ -240,6 +240,11 @@ Staged implementation plan:
      `peak_vram_bytes`/`peak_ram_bytes` estimate presence for ranking
      activation. Full admission/reservation diagnostics remain in the next
      memory-policy slice.
+   - 2026-05-18: runtime-registry technical-fit candidates now project typed
+     `peak_ram_bytes`/`peak_vram_bytes` estimates into pure selector admission
+     checks. The projection stays reduced to estimate records and runtime
+     snapshot facts; it does not pass Pumas package facts or worker envelopes
+     through scheduler-facing data.
 5. [ ] Make scheduler admission consume memory estimates and current resource
    pressure before selection. Explicit runtime/device requirements must fail
    with diagnostics when they cannot fit; omitted requirements let the
@@ -282,6 +287,14 @@ Staged implementation plan:
      4. Filter/diagnose technical-fit candidates against typed peak memory
         estimates, current reservations, safety margins, and explicit
         runtime/device requirements.
+        - 2026-05-18: completed in runtime-registry. The pure
+          technical-fit selector rejects over-budget candidates before
+          selection using snapshot admission budgets, active reservation byte
+          claims, safety margins, and candidate peak RAM/VRAM estimates.
+          Explicit overrides surface typed resource budget/accounting
+          diagnostics instead of falling through to synthetic fallback
+          diagnostics, and selector code does not call mutable registry
+          admission or translate estimates back to MB fields.
      5. Replace the upstream workflow runtime-requirement MB fields with the
         shared typed estimate contract in a later serial contract slice.
 6. [ ] Persist observed timing and memory/OOM facts. History-backed memory and

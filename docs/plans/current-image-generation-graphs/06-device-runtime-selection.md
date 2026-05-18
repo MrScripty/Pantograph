@@ -188,6 +188,12 @@ Blast-radius limits:
   backend adapters may publish typed estimates and explicit unavailable states,
   but the scheduler owns fit decisions, reservations, retries, rescheduling,
   termination after retry exhaustion, and learned memory/timing policy.
+- Runtime-registry technical-fit selection consumes immutable typed admission
+  facts, not mutable reservation APIs. Candidate `peak_ram_bytes` and
+  `peak_vram_bytes` estimates are checked against snapshot budget rows and
+  active reservation claims before runtime selection; budget overflow,
+  accounting overflow, and impossible budget arithmetic emit typed diagnostics
+  instead of silently falling through to another policy path.
 - Typed estimate records are the replacement contract for scheduler-facing
   resource estimates. Runtime-registry, workflow-service, and embedded-runtime
   technical-fit DTOs must remove the legacy singular `resource_estimate`
