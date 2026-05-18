@@ -609,6 +609,13 @@ PyTorch/diffusers and produce a retained image artifact.
     `InferenceRequestLifecycleEventContext` in gateway, node-engine emitters,
     and affected tests. This prepares the event contract for future resource
     telemetry fields without adding another repeated field-list constructor.
+  - 2026-05-18 diagnostic resource-observation projection slice:
+    `InferenceRequestLifecycleEvent` now carries optional typed resource
+    observations, and `InferenceExecutionDiagnosticObservedPayload` persists a
+    bounded diagnostic summary with peak RAM, peak VRAM, memory failure,
+    source, and availability facts. This is diagnostic projection only; run
+    terminal payload wiring, producer telemetry, resource monitoring, and
+    scheduler ranking remain separate slices.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

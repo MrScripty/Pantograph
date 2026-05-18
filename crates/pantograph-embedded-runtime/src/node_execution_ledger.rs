@@ -9,12 +9,16 @@ use pantograph_diagnostics_ledger::{
     InferenceCompatibilityIssueDiagnosticSummary, InferenceCompatibilityReportDiagnosticSummary,
     InferenceExecutionDiagnosticObservedPayload, InferenceKvCacheDiagnosticSummary,
     InferenceOptionDiagnosticSummary, InferenceOptionSupportCounts,
-    InferenceRuntimeSettingDiagnosticSummary, InferenceRuntimeSettingsDiagnosticSummary,
-    InferenceUsageDiagnosticSummary, IoArtifactObservedPayload, IoArtifactRole, LicenseSnapshot,
-    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionCacheStatus,
-    NodeExecutionProjectionStatus, NodeExecutionStatusPayload, RetentionClass, UsageEventStatus,
-    UsageLineage, MAX_DIAGNOSTIC_ERROR_TEXT_LEN, MAX_INFERENCE_COMPATIBILITY_ISSUES,
-    MAX_INFERENCE_OPTION_DIAGNOSTICS, MAX_INFERENCE_RUNTIME_SETTINGS,
+    InferenceResourceObservationAvailabilityDiagnosticSummary,
+    InferenceResourceObservationDiagnosticSummary,
+    InferenceResourceObservationSourceDiagnosticSummary, InferenceRuntimeSettingDiagnosticSummary,
+    InferenceRuntimeSettingsDiagnosticSummary, InferenceUsageDiagnosticSummary,
+    IoArtifactObservedPayload, IoArtifactRole, LicenseSnapshot, ModelIdentity,
+    ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionCacheStatus,
+    NodeExecutionProjectionStatus, NodeExecutionStatusPayload, RetentionClass,
+    RunMemoryFailureKind, UsageEventStatus, UsageLineage, MAX_DIAGNOSTIC_ERROR_TEXT_LEN,
+    MAX_INFERENCE_COMPATIBILITY_ISSUES, MAX_INFERENCE_OPTION_DIAGNOSTICS,
+    MAX_INFERENCE_RUNTIME_SETTINGS,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
@@ -964,6 +968,7 @@ fn build_kv_cache_diagnostic_event_ledger_append_request(
                 usage: None,
                 cache_handle_id: None,
                 artifact_refs: Vec::new(),
+                resource_observation: None,
                 kv_cache: Some(kv_cache_diagnostic_summary(detail)),
                 runtime_settings: None,
                 compatibility_report: None,
@@ -1059,6 +1064,7 @@ fn build_runtime_settings_diagnostic_event_ledger_append_request(
                 usage: None,
                 cache_handle_id: None,
                 artifact_refs: Vec::new(),
+                resource_observation: None,
                 kv_cache: None,
                 runtime_settings: Some(InferenceRuntimeSettingsDiagnosticSummary {
                     backend_key: backend_key?,
@@ -1090,6 +1096,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
         || event.compatibility_report.is_some()
         || !event.compatibility_issues.is_empty()
         || event.usage.is_some()
+        || event.resource_observation.is_some()
         || cache_handle_id.is_some()
         || resolved_artifact_kind.is_some()
         || !artifact_refs.is_empty()
@@ -1164,6 +1171,10 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 usage: event.usage.as_ref().map(inference_usage_summary),
                 cache_handle_id,
                 artifact_refs,
+                resource_observation: event
+                    .resource_observation
+                    .as_ref()
+                    .map(inference_resource_observation_summary),
                 kv_cache: None,
                 runtime_settings: None,
                 compatibility_report: event
@@ -1268,6 +1279,7 @@ fn inference_diagnostic_phase_is_persistable(
                 || !event.compatibility_issues.is_empty()
                 || !event.option_diagnostics.is_empty()
                 || !event.artifact_refs.is_empty()
+                || event.resource_observation.is_some()
         }
         inference::InferenceLifecyclePhase::BackendExecution => true,
     }
@@ -1289,6 +1301,103 @@ fn inference_usage_summary(usage: &inference::InferenceUsage) -> InferenceUsageD
         prompt_tokens: usage.prompt_tokens,
         completion_tokens: usage.completion_tokens,
         total_tokens: usage.total_tokens,
+    }
+}
+
+fn inference_resource_observation_summary(
+    observation: &inference::InferenceExecutionResourceObservation,
+) -> InferenceResourceObservationDiagnosticSummary {
+    InferenceResourceObservationDiagnosticSummary {
+        peak_ram_bytes: observation.peak_ram_bytes(),
+        peak_vram_bytes: observation.peak_vram_bytes(),
+        memory_failure_kind: observation.memory_failure_kind().map(memory_failure_kind),
+        sources: observation
+            .sources()
+            .iter()
+            .map(inference_resource_observation_source_summary)
+            .collect(),
+        availability: observation
+            .availability()
+            .iter()
+            .map(inference_resource_observation_availability_summary)
+            .collect(),
+    }
+}
+
+fn inference_resource_observation_source_summary(
+    source: &inference::InferenceResourceObservationSource,
+) -> InferenceResourceObservationSourceDiagnosticSummary {
+    InferenceResourceObservationSourceDiagnosticSummary {
+        metric_kind: resource_observation_metric_kind(source.metric_kind()).to_string(),
+        source_kind: resource_observation_source_kind(source.source_kind()).to_string(),
+    }
+}
+
+fn inference_resource_observation_availability_summary(
+    availability: &inference::InferenceResourceObservationAvailability,
+) -> InferenceResourceObservationAvailabilityDiagnosticSummary {
+    InferenceResourceObservationAvailabilityDiagnosticSummary {
+        metric_kind: resource_observation_metric_kind(availability.metric_kind()).to_string(),
+        state: resource_observation_unavailable_state(availability.state()).to_string(),
+        source_kind: availability
+            .source_kind()
+            .map(resource_observation_source_kind)
+            .map(ToOwned::to_owned),
+    }
+}
+
+fn memory_failure_kind(kind: inference::InferenceMemoryFailureKind) -> RunMemoryFailureKind {
+    match kind {
+        inference::InferenceMemoryFailureKind::OutOfMemory => RunMemoryFailureKind::OutOfMemory,
+    }
+}
+
+fn resource_observation_metric_kind(
+    kind: inference::InferenceResourceObservationMetricKind,
+) -> &'static str {
+    match kind {
+        inference::InferenceResourceObservationMetricKind::PeakRamBytes => "peak_ram_bytes",
+        inference::InferenceResourceObservationMetricKind::PeakVramBytes => "peak_vram_bytes",
+    }
+}
+
+fn resource_observation_source_kind(
+    kind: inference::InferenceResourceObservationSourceKind,
+) -> &'static str {
+    match kind {
+        inference::InferenceResourceObservationSourceKind::PytorchCuda => "pytorch_cuda",
+        inference::InferenceResourceObservationSourceKind::PytorchMps => "pytorch_mps",
+        inference::InferenceResourceObservationSourceKind::PytorchCpu => "pytorch_cpu",
+        inference::InferenceResourceObservationSourceKind::OsProcessRss => "os_process_rss",
+        inference::InferenceResourceObservationSourceKind::ManagedRuntimeTelemetry => {
+            "managed_runtime_telemetry"
+        }
+        inference::InferenceResourceObservationSourceKind::ExternalRuntimeAdapter => {
+            "external_runtime_adapter"
+        }
+    }
+}
+
+fn resource_observation_unavailable_state(
+    state: inference::InferenceResourceObservationUnavailableState,
+) -> &'static str {
+    match state {
+        inference::InferenceResourceObservationUnavailableState::NotAvailable => "not_available",
+        inference::InferenceResourceObservationUnavailableState::NotImplemented => {
+            "not_implemented"
+        }
+        inference::InferenceResourceObservationUnavailableState::RuntimeNotInstalled => {
+            "runtime_not_installed"
+        }
+        inference::InferenceResourceObservationUnavailableState::UnsupportedDevice => {
+            "unsupported_device"
+        }
+        inference::InferenceResourceObservationUnavailableState::UnsupportedPlatform => {
+            "unsupported_platform"
+        }
+        inference::InferenceResourceObservationUnavailableState::MissingRuntimeCapability => {
+            "missing_runtime_capability"
+        }
     }
 }
 

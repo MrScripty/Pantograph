@@ -6647,6 +6647,53 @@ Worker rules:
   - Remaining follow-up: the next resource-observation slice is extending
     `InferenceExecutionDiagnosticObservedPayload` and embedded-runtime
     diagnostic projection/persistability gates before terminal payload wiring.
+- 2026-05-18 diagnostic resource-observation projection slice:
+  - Smallest useful vertical slice: add resource observation to the shared
+    lifecycle event and diagnostic payload, then prove embedded-runtime
+    persists resource observations as inference diagnostics before terminal
+    payload wiring.
+  - Allowed write set: `crates/inference/src/types.rs`,
+    `crates/inference/src/resource_observation.rs`, `crates/inference/README.md`,
+    `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/lib.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger.rs`,
+    `crates/pantograph-embedded-runtime/src/node_execution_ledger_tests.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    `docs/plans/current-image-generation-graphs/milestones/06-pytorch-diffusers-image-generation-execution-slice.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - Sequencing note: the lifecycle event needed an optional
+    `resource_observation` field in this slice to prove the diagnostic
+    persistability gate. This completes the shared event-contract portion of
+    staged item 5 before the resource-monitor slice, without adding producers
+    or terminal payload projection.
+  - No-fallback/no-legacy confirmation: resource observations are not inferred
+    from terminal error strings, cache policy, or scheduler metadata. The
+    projection maps explicit typed enum cases and keeps the inference resource
+    observation enums exhaustive so future metric/source/state additions force
+    deliberate projection updates instead of falling through to generic
+    strings.
+  - Implementation completed: added optional resource observation to
+    `InferenceRequestLifecycleEvent` and its builder; added bounded
+    diagnostics-ledger resource-observation summaries to
+    `InferenceExecutionDiagnosticObservedPayload`; mapped inference resource
+    observations through embedded-runtime diagnostic projection; and updated
+    diagnostics validation for source bounds.
+  - Focused tests added/updated: lifecycle serde coverage for resource
+    observation, diagnostics-ledger payload-bound validation, and
+    embedded-runtime projection coverage proving resource observations alone
+    keep lifecycle diagnostics persistable.
+  - Verification passed: `cargo test -p inference lifecycle --lib`, `cargo
+    test -p pantograph-diagnostics-ledger
+    diagnostic_event_ledger_validates_inference_execution_diagnostic_scope_and_bounds
+    --lib`, `cargo test -p pantograph-embedded-runtime
+    inference_diagnostic_event_adapter_persists_resource_observation_without_other_diagnostics
+    --lib`, `cargo test -p pantograph-embedded-runtime inference_diagnostic
+    --lib`, `cargo check -p pantograph-embedded-runtime`, `cargo fmt --all
+    -- --check`, and `git diff --check`.
+  - Remaining follow-up: the next slice is the resource-monitor
+    factory/modules with the `sysinfo` process-RSS first implementation.
 
 ### Traceability Links
 

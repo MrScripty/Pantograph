@@ -635,18 +635,46 @@ Staged implementation:
      runtime_selection_history_summaries_project_exact_candidate_keys --lib`,
      `cargo check -p pantograph-embedded-runtime`, `cargo fmt --all --
      --check`, and `git diff --check`.
-3. [ ] Extend `InferenceExecutionDiagnosticObservedPayload` and
+3. [x] Extend `InferenceExecutionDiagnosticObservedPayload` and
    embedded-runtime diagnostic projection with bounded resource-observation
    fields and persistability-gate coverage. This slice proves lifecycle-event
    resource observations cannot be silently dropped before terminal payload
    projection is implemented.
+   - 2026-05-18: completed diagnostic resource-observation projection. The
+     diagnostics-ledger inference diagnostic payload now carries a bounded
+     `resource_observation` summary with peak RAM bytes, peak VRAM bytes,
+     typed memory failure kind, source summaries, and availability summaries.
+     Embedded-runtime maps the inference-owned typed observation into this
+     diagnostic payload and treats resource observation as a persistability
+     condition, including task-validation events. This slice intentionally
+     does not project resource observations into run-terminal payloads or
+     scheduler history.
+   - Sequencing deviation: the lifecycle event needed the optional
+     `resource_observation` field in this slice to prove diagnostic
+     persistability. This also completes staged item 5's shared event-contract
+     part before the resource monitor slice, without wiring any producers.
+   - No-fallback/no-legacy confirmation: resource-observation mapping uses
+     explicit enum cases and exhaustive compiler checks. New metric/source or
+     unavailable-state variants must update the projection intentionally; they
+     are not silently mapped to generic fallback strings.
+   - Verification: `cargo test -p inference lifecycle --lib`, `cargo test -p
+     pantograph-diagnostics-ledger
+     diagnostic_event_ledger_validates_inference_execution_diagnostic_scope_and_bounds
+     --lib`, `cargo test -p pantograph-embedded-runtime
+     inference_diagnostic_event_adapter_persists_resource_observation_without_other_diagnostics
+     --lib`, `cargo test -p pantograph-embedded-runtime inference_diagnostic
+     --lib`, `cargo check -p pantograph-embedded-runtime`, `cargo fmt --all
+     -- --check`, and `git diff --check`.
 4. [ ] Add `resource_monitor` factory/modules with a `sysinfo` process-RSS
    first implementation, Linux/macOS/Windows/unsupported gates for proven
    platform gaps, and tests proving the neutral API compiles without
    scattering `cfg()` through business logic.
-5. [ ] Extend `InferenceRequestLifecycleEvent` to carry
+5. [x] Extend `InferenceRequestLifecycleEvent` to carry
    `InferenceExecutionResourceObservation` for all task families. Image
    generation is one consumer, not the contract owner.
+   - 2026-05-18: completed as part of the diagnostic projection slice. The
+     field is optional on the shared lifecycle event and available to every
+     task family; producer wiring remains staged separately.
 6. [ ] Extract Python worker response helpers, then extend the generic
    PyTorch worker success/failure envelope with optional resource observation
    and update Python worker shape checks before adding task-specific

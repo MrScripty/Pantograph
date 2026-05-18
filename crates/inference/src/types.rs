@@ -7,6 +7,8 @@ use pantograph_timing_contracts::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::resource_observation::InferenceExecutionResourceObservation;
+
 use crate::device_contracts::{InferenceDeviceClass, InferenceDeviceId};
 use crate::model_contracts::{
     resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, GenerationOptions,
@@ -906,6 +908,8 @@ pub struct InferenceRequestLifecycleEvent {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifact_refs: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_observation: Option<InferenceExecutionResourceObservation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical_error_event_id: Option<String>,
@@ -1001,6 +1005,7 @@ impl InferenceRequestLifecycleEventBuilder {
                 usage: None,
                 cache_handle_id: None,
                 artifact_refs: Vec::new(),
+                resource_observation: None,
                 detail: None,
                 canonical_error_event_id: None,
                 compatibility_report: None,
@@ -1121,6 +1126,15 @@ impl InferenceRequestLifecycleEventBuilder {
     #[must_use]
     pub fn with_artifact_refs(mut self, artifact_refs: Vec<String>) -> Self {
         self.event.artifact_refs = artifact_refs;
+        self
+    }
+
+    #[must_use]
+    pub fn with_resource_observation(
+        mut self,
+        resource_observation: Option<InferenceExecutionResourceObservation>,
+    ) -> Self {
+        self.event.resource_observation = resource_observation;
         self
     }
 
@@ -2848,6 +2862,13 @@ mod tests {
         }))
         .with_cache_handle_id(Some("kv-checkpoint-1".to_string()))
         .with_artifact_refs(vec!["artifact://audio.wav".to_string()])
+        .with_resource_observation(Some(
+            InferenceExecutionResourceObservation::peak_ram(
+                4096,
+                crate::resource_observation::InferenceResourceObservationSourceKind::OsProcessRss,
+            )
+            .expect("valid resource observation"),
+        ))
         .with_detail(Some("stream dropped by consumer".to_string()))
         .with_canonical_error_event_id(Some("diagnostic-error-inference-1".to_string()))
         .with_compatibility_report(Some(InferenceCompatibilityReportSummary {
@@ -2898,6 +2919,10 @@ mod tests {
         assert_eq!(
             encoded["artifact_refs"],
             serde_json::json!(["artifact://audio.wav"])
+        );
+        assert_eq!(
+            encoded["resource_observation"]["peak_ram_bytes"],
+            serde_json::json!(4096)
         );
         assert_eq!(
             encoded["canonical_error_event_id"],
@@ -2988,6 +3013,7 @@ mod tests {
         assert_eq!(decoded.resolved_artifact_kind, None);
         assert_eq!(decoded.usage, None);
         assert_eq!(decoded.cache_handle_id, None);
+        assert_eq!(decoded.resource_observation, None);
         assert_eq!(decoded.detail, None);
         assert_eq!(decoded.canonical_error_event_id, None);
         assert_eq!(decoded.compatibility_report, None);

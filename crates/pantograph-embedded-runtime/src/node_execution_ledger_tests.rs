@@ -4,7 +4,8 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventPayload, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
     IoArtifactLifecycleState, IoArtifactPayloadKind, IoArtifactRetentionState, LicenseSnapshot,
     ModelIdentity, ModelOutputMeasurement, NodeExecutionCacheStatus, NodeExecutionProjectionStatus,
-    OutputMeasurementUnavailableReason, OutputModality, SqliteDiagnosticsLedger,
+    OutputMeasurementUnavailableReason, OutputModality, RunMemoryFailureKind,
+    SqliteDiagnosticsLedger,
 };
 use pantograph_node_contracts::{
     EffectiveNodeContract, NodeAuthoringMetadata, NodeCapabilityRequirement, NodeCategory,
@@ -954,6 +955,70 @@ fn inference_diagnostic_event_adapter_persists_bounded_resolved_artifact_kind() 
             assert!(payload.compatibility_report.is_none());
             assert!(payload.compatibility_issues.is_empty());
             assert!(payload.option_diagnostics.is_empty());
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_diagnostic_event_adapter_persists_resource_observation_without_other_diagnostics() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    event.usage = None;
+    event.cache_handle_id = None;
+    event.compatibility_report = None;
+    event.compatibility_issues.clear();
+    event.option_diagnostics.clear();
+    event.artifact_refs.clear();
+    event.resolved_artifact_kind = None;
+    event.resource_observation = Some(
+        inference::InferenceExecutionResourceObservation::new(
+            Some(4096),
+            Some(2048),
+            Some(inference::InferenceMemoryFailureKind::OutOfMemory),
+            vec![
+                inference::InferenceResourceObservationSource::new(
+                    inference::InferenceResourceObservationMetricKind::PeakRamBytes,
+                    inference::InferenceResourceObservationSourceKind::OsProcessRss,
+                ),
+                inference::InferenceResourceObservationSource::new(
+                    inference::InferenceResourceObservationMetricKind::PeakVramBytes,
+                    inference::InferenceResourceObservationSourceKind::PytorchCuda,
+                ),
+            ],
+            vec![inference::InferenceResourceObservationAvailability::new(
+                inference::InferenceResourceObservationMetricKind::PeakVramBytes,
+                inference::InferenceResourceObservationUnavailableState::UnsupportedDevice,
+                Some(inference::InferenceResourceObservationSourceKind::PytorchMps),
+            )],
+        )
+        .expect("resource observation"),
+    );
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("resource observation should keep lifecycle diagnostic persistable");
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            let observation = payload
+                .resource_observation
+                .expect("resource observation projects");
+            assert_eq!(observation.peak_ram_bytes, Some(4096));
+            assert_eq!(observation.peak_vram_bytes, Some(2048));
+            assert_eq!(
+                observation.memory_failure_kind,
+                Some(RunMemoryFailureKind::OutOfMemory)
+            );
+            assert_eq!(observation.sources.len(), 2);
+            assert_eq!(observation.sources[0].metric_kind, "peak_ram_bytes");
+            assert_eq!(observation.sources[0].source_kind, "os_process_rss");
+            assert_eq!(observation.sources[1].metric_kind, "peak_vram_bytes");
+            assert_eq!(observation.sources[1].source_kind, "pytorch_cuda");
+            assert_eq!(observation.availability.len(), 1);
+            assert_eq!(observation.availability[0].state, "unsupported_device");
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }

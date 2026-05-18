@@ -18,7 +18,8 @@ use crate::{
     DiagnosticsQuery, ExecutionGuaranteeLevel, InferenceCompatibilityIssueDiagnosticSummary,
     InferenceCompatibilityReportDiagnosticSummary, InferenceExecutionDiagnosticObservedPayload,
     InferenceKvCacheDiagnosticSummary, InferenceOptionDiagnosticSummary,
-    InferenceOptionSupportCounts, InferenceRuntimeSettingDiagnosticSummary,
+    InferenceOptionSupportCounts, InferenceResourceObservationDiagnosticSummary,
+    InferenceResourceObservationSourceDiagnosticSummary, InferenceRuntimeSettingDiagnosticSummary,
     InferenceRuntimeSettingsDiagnosticSummary, InferenceUsageDiagnosticSummary,
     IoArtifactAccessMode, IoArtifactFormatMetadata, IoArtifactLifecycleState,
     IoArtifactObservedPayload, IoArtifactPayloadKind, IoArtifactProjectionQuery,
@@ -49,10 +50,10 @@ use crate::{
     DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MAX_INFERENCE_COMPATIBILITY_ISSUES,
-    MAX_INFERENCE_OPTION_DIAGNOSTICS, MILLIS_PER_DAY, NODE_STATUS_PROJECTION_NAME,
-    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
-    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
-    SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    MAX_INFERENCE_OPTION_DIAGNOSTICS, MAX_INFERENCE_RESOURCE_OBSERVATION_SOURCES, MILLIS_PER_DAY,
+    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
+    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
+    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -1648,6 +1649,34 @@ fn diagnostic_event_ledger_validates_inference_execution_diagnostic_scope_and_bo
         result,
         Err(DiagnosticsLedgerError::FieldTooLong {
             field: "compatibility_issues",
+            ..
+        })
+    ));
+
+    let mut too_many_resource_sources = sample_inference_execution_diagnostic_event();
+    if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) =
+        &mut too_many_resource_sources.payload
+    {
+        payload.resource_observation = Some(InferenceResourceObservationDiagnosticSummary {
+            peak_ram_bytes: Some(4096),
+            peak_vram_bytes: None,
+            memory_failure_kind: None,
+            sources: (0..=MAX_INFERENCE_RESOURCE_OBSERVATION_SOURCES)
+                .map(
+                    |index| InferenceResourceObservationSourceDiagnosticSummary {
+                        metric_kind: "peak_ram_bytes".to_string(),
+                        source_kind: format!("os_process_rss_{index}"),
+                    },
+                )
+                .collect(),
+            availability: Vec::new(),
+        });
+    }
+    let result = ledger.append_diagnostic_event(too_many_resource_sources);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::FieldTooLong {
+            field: "resource_observation.sources",
             ..
         })
     ));
@@ -5975,6 +6004,7 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                 }),
                 cache_handle_id: Some("kv-checkpoint-1".to_string()),
                 artifact_refs: vec!["artifact://audio.wav".to_string()],
+                resource_observation: None,
                 kv_cache: Some(InferenceKvCacheDiagnosticSummary {
                     action: "restore_input".to_string(),
                     outcome: "hit".to_string(),

@@ -172,7 +172,9 @@ selection must use supported runtimes through Pumas model references.
   network-node ids when execution observed a concrete Pantograph node. Use
   `InferenceRequestLifecycleEvent::builder(...)` or
   `InferenceRequestLifecycleEventContext` rather than direct struct literals
-  so new lifecycle fields are added through one construction path.
+  so new lifecycle fields are added through one construction path. Resource
+  observations may be attached here for diagnostics; producers still own when
+  and how those observations are measured.
 - `InferenceExecutionResourceObservation` carries typed execution telemetry for
   peak RAM, peak VRAM, memory-failure kind, metric source attribution, and
   explicit metric unavailability. It is a producer contract only; schedulers

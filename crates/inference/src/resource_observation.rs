@@ -14,7 +14,6 @@ pub const INFERENCE_RESOURCE_OBSERVATION_AVAILABILITY_LIMIT: usize = 16;
 /// Resource metric represented by one observation fact.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
-#[non_exhaustive]
 pub enum InferenceResourceObservationMetricKind {
     PeakRamBytes,
     PeakVramBytes,
@@ -23,7 +22,6 @@ pub enum InferenceResourceObservationMetricKind {
 /// Backend/runtime source that produced or attempted to produce one metric.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
-#[non_exhaustive]
 pub enum InferenceResourceObservationSourceKind {
     PytorchCuda,
     PytorchMps,
@@ -36,7 +34,6 @@ pub enum InferenceResourceObservationSourceKind {
 /// Explicit state for a metric a producer knows about but cannot report.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
-#[non_exhaustive]
 pub enum InferenceResourceObservationUnavailableState {
     NotAvailable,
     NotImplemented,
@@ -49,7 +46,6 @@ pub enum InferenceResourceObservationUnavailableState {
 /// Typed memory-failure facts observed by a runtime/backend adapter.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
-#[non_exhaustive]
 pub enum InferenceMemoryFailureKind {
     OutOfMemory,
 }

@@ -28,6 +28,8 @@ pub const MAX_INFERENCE_RUNTIME_SETTINGS: usize = 32;
 pub const MAX_INFERENCE_COMPATIBILITY_ISSUES: usize = 32;
 pub const MAX_INFERENCE_KV_CACHE_REASON_LEN: usize = 1_024;
 pub const MAX_INFERENCE_ARTIFACT_REFS: usize = 16;
+pub const MAX_INFERENCE_RESOURCE_OBSERVATION_SOURCES: usize = 8;
+pub const MAX_INFERENCE_RESOURCE_OBSERVATION_AVAILABILITY: usize = 16;
 pub const MAX_SCHEDULER_EXECUTION_PLAN_POLICY_TRACE_IDS: usize = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1632,6 +1634,8 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifact_refs: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_observation: Option<InferenceResourceObservationDiagnosticSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kv_cache: Option<InferenceKvCacheDiagnosticSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_settings: Option<InferenceRuntimeSettingsDiagnosticSummary>,
@@ -1645,6 +1649,115 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     pub option_support_counts: InferenceOptionSupportCounts,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub option_diagnostics: Vec<InferenceOptionDiagnosticSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceResourceObservationDiagnosticSummary {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peak_ram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peak_vram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_failure_kind: Option<RunMemoryFailureKind>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<InferenceResourceObservationSourceDiagnosticSummary>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub availability: Vec<InferenceResourceObservationAvailabilityDiagnosticSummary>,
+}
+
+impl InferenceResourceObservationDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        if self.peak_ram_bytes.is_none()
+            && self.peak_vram_bytes.is_none()
+            && self.memory_failure_kind.is_none()
+            && self.availability.is_empty()
+        {
+            return Err(DiagnosticsLedgerError::MissingField {
+                field: "resource_observation",
+            });
+        }
+        if self.peak_ram_bytes == Some(0) {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "resource_observation.peak_ram_bytes",
+            });
+        }
+        if self.peak_vram_bytes == Some(0) {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "resource_observation.peak_vram_bytes",
+            });
+        }
+        if self.sources.len() > MAX_INFERENCE_RESOURCE_OBSERVATION_SOURCES {
+            return Err(DiagnosticsLedgerError::FieldTooLong {
+                field: "resource_observation.sources",
+                max_len: MAX_INFERENCE_RESOURCE_OBSERVATION_SOURCES,
+            });
+        }
+        if self.availability.len() > MAX_INFERENCE_RESOURCE_OBSERVATION_AVAILABILITY {
+            return Err(DiagnosticsLedgerError::FieldTooLong {
+                field: "resource_observation.availability",
+                max_len: MAX_INFERENCE_RESOURCE_OBSERVATION_AVAILABILITY,
+            });
+        }
+        for source in &self.sources {
+            source.validate()?;
+        }
+        for availability in &self.availability {
+            availability.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceResourceObservationSourceDiagnosticSummary {
+    pub metric_kind: String,
+    pub source_kind: String,
+}
+
+impl InferenceResourceObservationSourceDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text(
+            "resource_observation.sources.metric_kind",
+            &self.metric_kind,
+            MAX_ID_LEN,
+        )?;
+        validate_required_text(
+            "resource_observation.sources.source_kind",
+            &self.source_kind,
+            MAX_ID_LEN,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceResourceObservationAvailabilityDiagnosticSummary {
+    pub metric_kind: String,
+    pub state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_kind: Option<String>,
+}
+
+impl InferenceResourceObservationAvailabilityDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text(
+            "resource_observation.availability.metric_kind",
+            &self.metric_kind,
+            MAX_ID_LEN,
+        )?;
+        validate_required_text(
+            "resource_observation.availability.state",
+            &self.state,
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "resource_observation.availability.source_kind",
+            self.source_kind.as_deref(),
+            MAX_ID_LEN,
+        )
+    }
 }
 
 impl InferenceExecutionDiagnosticObservedPayload {
@@ -1734,6 +1847,9 @@ impl InferenceExecutionDiagnosticObservedPayload {
         }
         if let Some(kv_cache) = self.kv_cache.as_ref() {
             kv_cache.validate()?;
+        }
+        if let Some(resource_observation) = self.resource_observation.as_ref() {
+            resource_observation.validate()?;
         }
         if let Some(runtime_settings) = self.runtime_settings.as_ref() {
             runtime_settings.validate()?;
