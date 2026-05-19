@@ -23,11 +23,12 @@ use inference::{
     GenerationOptions, ImageGenerationExecutionPlan, ImageGenerationRequest, ImageGenerationResult,
     InferenceBackend, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
     InferenceExecutionInput, InferenceLifecyclePhase, InferenceRequestLifecycleEvent,
-    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink, InferenceTaskId,
-    InferenceUsage, LengthGenerationOptions, ModelArtifactKind, ModelStorageKind,
-    ModelValidationState, ProcessSpawner, PumasArtifactLoadPathKind, PumasArtifactLoadTarget,
-    PumasModelRef, RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts,
-    RuntimeVariantId, SamplingGenerationOptions,
+    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink,
+    InferenceResourceObservationSourceKind, InferenceTaskId, InferenceUsage,
+    LengthGenerationOptions, ModelArtifactKind, ModelStorageKind, ModelValidationState,
+    ProcessSpawner, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
+    RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts, RuntimeVariantId,
+    SamplingGenerationOptions,
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
@@ -675,6 +676,79 @@ async fn test_canonical_llm_text_uses_typed_lifecycle_sink_extension() {
         event.request_id.as_deref() == Some("exec-a:llm-inference-1:text_generation")
             && event.backend_key.as_deref() == Some("mock")
             && event.model_id.as_deref() == Some("typed-model")
+    }));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_text_keeps_resource_observation_on_lifecycle_events() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedTextBackend {
+            requests: requests.clone(),
+            cache_handle_on_terminal: Some("kv-typed-text".to_string()),
+        }),
+        "mock",
+    ));
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(ResourceInjectingInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("model_name".to_string(), serde_json::json!("typed-model"));
+
+    let executor = CoreTaskExecutor::new()
+        .with_gateway(gateway)
+        .with_execution_id("exec-a".to_string());
+    let outputs = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect("typed non-streaming inference should execute with lifecycle sink");
+
+    assert_eq!(
+        outputs.get("response").and_then(|value| value.as_str()),
+        Some("typed response")
+    );
+    assert!(!outputs.contains_key("resource_observation"));
+    assert!(!outputs.contains_key("resourceObservation"));
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    let backend_completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion lifecycle event");
+    let observation = backend_completed
+        .resource_observation
+        .as_ref()
+        .expect("resource observation should remain on lifecycle event");
+    assert_eq!(observation.peak_ram_bytes(), Some(4096));
+    assert_eq!(observation.sources().len(), 1);
+    assert_eq!(
+        observation.sources()[0].source_kind(),
+        InferenceResourceObservationSourceKind::OsProcessRss
+    );
+    assert!(events.iter().all(|event| {
+        event.resource_observation.is_none()
+            || (event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed)
     }));
 }
 
@@ -4596,6 +4670,36 @@ impl InferenceRequestLifecycleEventSink for MockInferenceLifecycleSink {
         &self,
         event: InferenceRequestLifecycleEvent,
     ) -> std::result::Result<(), inference::InferenceRequestLifecycleEventSinkError> {
+        self.events
+            .lock()
+            .expect("lifecycle events lock")
+            .push(event);
+        Ok(())
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+struct ResourceInjectingInferenceLifecycleSink {
+    events: Arc<Mutex<Vec<InferenceRequestLifecycleEvent>>>,
+}
+
+#[cfg(feature = "inference-nodes")]
+impl InferenceRequestLifecycleEventSink for ResourceInjectingInferenceLifecycleSink {
+    fn record(
+        &self,
+        mut event: InferenceRequestLifecycleEvent,
+    ) -> std::result::Result<(), inference::InferenceRequestLifecycleEventSinkError> {
+        if event.phase == InferenceLifecyclePhase::BackendExecution
+            && event.kind == InferenceRequestLifecycleEventKind::Completed
+        {
+            event.resource_observation = Some(
+                inference::InferenceExecutionResourceObservation::peak_ram(
+                    4096,
+                    InferenceResourceObservationSourceKind::OsProcessRss,
+                )
+                .expect("test resource observation should be valid"),
+            );
+        }
         self.events
             .lock()
             .expect("lifecycle events lock")

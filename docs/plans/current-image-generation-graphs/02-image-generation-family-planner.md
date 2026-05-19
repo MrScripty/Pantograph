@@ -751,7 +751,7 @@ Staged implementation:
      `cargo test -p inference --features backend-pytorch pytorch_worker
      --lib`, `cargo check -p inference --features backend-pytorch`, `cargo
      fmt --all -- --check`, and `git diff --check` for the allowed write set.
-7. [ ] Extend node-engine inference task result/event plumbing to forward the
+7. [x] Extend node-engine inference task result/event plumbing to forward the
    observation without interpreting metric sources.
    - 2026-05-18 re-plan boundary: this item is ambiguous after the lifecycle
      event contract decision. The implemented canonical transport for resource
@@ -775,6 +775,21 @@ Staged implementation:
         every result variant and duplicates lifecycle telemetry ownership.
    - Recommended resolution: option 1 or option 2. Do not implement option 3
      unless the lifecycle-event transport decision is explicitly reversed.
+   - 2026-05-18: completed option 2 as a verification-only slice.
+     `test_canonical_llm_text_keeps_resource_observation_on_lifecycle_events`
+     now runs canonical node-engine text inference with a test-only lifecycle
+     sink that attaches a typed `InferenceExecutionResourceObservation` to the
+     backend-execution completion event. The assertions prove node-engine
+     forwards lifecycle events with typed resource observations intact while
+     keeping task output JSON free of `resource_observation` fields.
+   - No-fallback/no-legacy confirmation: this slice added no production
+     fallback path, no result DTO telemetry field, no node-output telemetry
+     field, and no metric-source interpretation in node-engine. The canonical
+     transport remains `InferenceRequestLifecycleEvent`.
+   - Verification: `cargo test -p node-engine --features inference-nodes
+     test_canonical_llm_text_keeps_resource_observation_on_lifecycle_events
+     --lib`, `cargo check -p node-engine --features inference-nodes`, and
+     `cargo fmt --all -- --check`.
 8. [ ] Extend embedded-runtime projection into inference diagnostics and
    `RunTerminalPayload.resource_observation`, including mapping tests for
    peak RAM, peak VRAM, explicit OOM, source/availability diagnostics, and
