@@ -887,6 +887,24 @@ Staged implementation:
    shared process RSS where supported, and managed runtime structured
    telemetry. Each producer slice must include focused tests/fixtures for its
    source and availability states.
+   - 2026-05-18: completed the first PyTorch image-generation producer
+     sub-slice. The Python image worker now resets CUDA peak memory stats
+     before the planned load/generate operation and attaches typed
+     `peak_vram_bytes` with `pytorch_cuda` source facts to successful worker
+     responses when CUDA reports a positive peak allocation.
+   - No-fallback/no-legacy confirmation: the producer reads PyTorch CUDA's
+     typed memory API only. It does not parse error strings, infer memory from
+     scheduler/device names, or synthesize zero-byte terminal facts. CPU remains
+     unreported here because process RSS is owned by the separate shared
+     monitor producer.
+   - Verification: `cargo test -p inference --features backend-pytorch
+     test_python_worker_generate_image_from_envelope_reports_cuda_peak_vram
+     --lib`, `cargo test -p inference --features backend-pytorch
+     pytorch_worker_image_python --lib`, `cargo check -p inference --features
+     backend-pytorch`, and `cargo fmt --all -- --check`.
+   - Remaining producer follow-ups: add MPS availability/metric behavior,
+     shared process RSS producer wiring, managed runtime structured telemetry,
+     and failure-path OOM typing without broad legacy string parsing.
 10. [ ] Remove or explicitly confine legacy OOM string parsing in
     `inference::server`, `inference::embedding_runtime`, and
     `backend::llamacpp_support` behind typed adapter-local memory failure

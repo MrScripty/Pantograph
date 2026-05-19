@@ -6747,6 +6747,31 @@ Worker rules:
     --check`.
   - Remaining follow-up: item 8 is complete; the next plan item is backend
     producer telemetry.
+- 2026-05-18 PyTorch image CUDA resource producer slice:
+  - Smallest useful vertical slice: add a PyTorch worker producer for planned
+    image-generation CUDA peak VRAM telemetry and verify it through the
+    existing Python worker image harness.
+  - Allowed write set: `crates/inference/torch/worker.py`,
+    `crates/inference/src/backend/pytorch_worker_image_python_tests.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: the worker uses PyTorch CUDA memory
+    APIs only and does not infer memory from error strings, scheduler metadata,
+    or runtime names. CPU/process RSS remains owned by the shared monitor path,
+    not this PyTorch CUDA producer.
+  - Implementation completed: image generation resets CUDA peak memory stats
+    before the planned load/generate operation and attaches a typed
+    `peak_vram_bytes` observation with `pytorch_cuda` source facts to the
+    worker response when CUDA reports a positive peak allocation.
+  - Verification passed: `cargo test -p inference --features backend-pytorch
+    test_python_worker_generate_image_from_envelope_reports_cuda_peak_vram
+    --lib`, `cargo test -p inference --features backend-pytorch
+    pytorch_worker_image_python --lib`, `cargo check -p inference --features
+    backend-pytorch`, and `cargo fmt --all -- --check`.
+  - Remaining follow-up: item 9 still needs MPS availability/metric behavior,
+    shared process RSS producer wiring, managed runtime structured telemetry,
+    and failure-path OOM typing.
 
 ### Traceability Links
 

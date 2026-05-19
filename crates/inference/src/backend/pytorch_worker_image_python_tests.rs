@@ -3,6 +3,8 @@ use std::ffi::CString;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
 
+use crate::resource_observation::InferenceResourceObservationSourceKind;
+
 use super::pytorch_worker_contract::{PyTorchWorkerFailure, PyTorchWorkerResponse};
 use super::pytorch_worker_image_contract::PyTorchGenerateImageResult;
 
@@ -183,6 +185,65 @@ fn test_python_worker_generate_image_from_envelope_returns_worker_response() {
         assert_eq!(
             success.result.metadata["artifact_load_target"]["local_load_path"],
             "/pumas/models/image/stable-diffusion/tiny-sd"
+        );
+    });
+}
+
+#[test]
+fn test_python_worker_generate_image_from_envelope_reports_cuda_peak_vram() {
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_image_stubs(py);
+        attach_stub_diffusion_pipeline(&module);
+        let locals = PyDict::new(py);
+        locals.set_item("worker", &module).expect("worker binds");
+        let cuda_setup = CString::new(
+            r#"
+class _Cuda:
+    def __init__(self):
+        self.reset_device = None
+        self.max_device = None
+
+    def is_available(self):
+        return True
+
+    def reset_peak_memory_stats(self, device=None):
+        self.reset_device = device
+
+    def max_memory_allocated(self, device=None):
+        self.max_device = device
+        return 8192
+
+worker.torch.cuda = _Cuda()
+"#,
+        )
+        .expect("cuda setup source should not contain nul bytes");
+        py.run(&cuda_setup, Some(&locals), Some(&locals))
+            .expect("cuda telemetry stub should attach");
+        let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
+        ))
+        .expect("decode image request fixture");
+        envelope["payload"]["device"] = serde_json::json!("cuda:0");
+
+        let response_json: String = module
+            .call_method1("generate_image_from_envelope", (envelope.to_string(),))
+            .expect("generate_image_from_envelope should return JSON")
+            .extract()
+            .expect("response should be a string");
+        let response: PyTorchWorkerResponse<PyTorchGenerateImageResult> =
+            serde_json::from_str(&response_json).expect("worker response should decode");
+
+        let PyTorchWorkerResponse::Ok(success) = response else {
+            panic!("expected generate_image worker success, got {response_json}");
+        };
+        let observation = success
+            .resource_observation
+            .expect("CUDA peak VRAM observation should be present");
+        assert_eq!(observation.peak_vram_bytes(), Some(8192));
+        assert_eq!(observation.sources().len(), 1);
+        assert_eq!(
+            observation.sources()[0].source_kind(),
+            InferenceResourceObservationSourceKind::PytorchCuda
         );
     });
 }

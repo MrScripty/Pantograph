@@ -367,6 +367,108 @@ def _load_transformers_model_from_kwargs(loader, kwargs):
     _validate_transformers_loader(loader)
 
 
+def _torch_device_type(device):
+    if device is None:
+        return None
+    return str(device).split(":", 1)[0]
+
+
+def _reset_resource_peak_stats_for_device(device):
+    device_type = _torch_device_type(device)
+    if device_type != "cuda":
+        return
+    if not getattr(torch, "cuda", None) or not torch.cuda.is_available():
+        return
+    reset_peak_memory_stats = getattr(torch.cuda, "reset_peak_memory_stats", None)
+    if reset_peak_memory_stats is None:
+        return
+    try:
+        reset_peak_memory_stats(device)
+    except TypeError:
+        reset_peak_memory_stats()
+
+
+def _resource_observation_for_device(device):
+    device_type = _torch_device_type(device)
+    if device_type == "cuda":
+        return _cuda_resource_observation(device)
+    if device_type == "mps":
+        return _mps_resource_observation()
+    return None
+
+
+def _cuda_resource_observation(device):
+    metric_kind = "peak_vram_bytes"
+    source_kind = "pytorch_cuda"
+    if not getattr(torch, "cuda", None) or not torch.cuda.is_available():
+        return {
+            "availability": [
+                {
+                    "metric_kind": metric_kind,
+                    "state": "unsupported_device",
+                    "source_kind": source_kind,
+                }
+            ]
+        }
+
+    max_memory_allocated = getattr(torch.cuda, "max_memory_allocated", None)
+    if max_memory_allocated is None:
+        return {
+            "availability": [
+                {
+                    "metric_kind": metric_kind,
+                    "state": "not_implemented",
+                    "source_kind": source_kind,
+                }
+            ]
+        }
+
+    try:
+        peak_vram_bytes = int(max_memory_allocated(device))
+    except TypeError:
+        peak_vram_bytes = int(max_memory_allocated())
+    if peak_vram_bytes <= 0:
+        return {
+            "availability": [
+                {
+                    "metric_kind": metric_kind,
+                    "state": "not_available",
+                    "source_kind": source_kind,
+                }
+            ]
+        }
+
+    return {
+        "peak_vram_bytes": peak_vram_bytes,
+        "sources": [{"metric_kind": metric_kind, "source_kind": source_kind}],
+    }
+
+
+def _mps_resource_observation():
+    metric_kind = "peak_vram_bytes"
+    source_kind = "pytorch_mps"
+    mps = getattr(getattr(torch, "backends", None), "mps", None)
+    if mps is None or not mps.is_available():
+        return {
+            "availability": [
+                {
+                    "metric_kind": metric_kind,
+                    "state": "unsupported_device",
+                    "source_kind": source_kind,
+                }
+            ]
+        }
+    return {
+        "availability": [
+            {
+                "metric_kind": metric_kind,
+                "state": "not_implemented",
+                "source_kind": source_kind,
+            }
+        ]
+    }
+
+
 def generate_text_from_envelope(envelope):
     """Generate text from the Rust worker envelope contract."""
     request_id = "unknown"
@@ -1377,11 +1479,16 @@ def generate_image(
 def generate_image_from_envelope(envelope):
     """Generate an image from the Rust-planned worker envelope contract."""
     request_id = "unknown"
+    planned_device = None
+    resource_observation = None
     try:
         decoded, request_id = decode_worker_envelope(envelope)
         planned = generate_image_kwargs_from_envelope(decoded)
-        load_diffusion_model(planned["local_load_path"], device=planned["device"])
+        planned_device = planned["device"]
+        _reset_resource_peak_stats_for_device(planned_device)
+        load_diffusion_model(planned["local_load_path"], device=planned_device)
         result = generate_image(**planned["generation_kwargs"])
+        resource_observation = _resource_observation_for_device(planned_device)
         return worker_success_response_json(
             request_id,
             {
@@ -1397,6 +1504,7 @@ def generate_image_from_envelope(envelope):
                     "device": planned["device"],
                 },
             },
+            resource_observation=resource_observation,
         )
     except ValueError as exc:
         return worker_error_response_json(
@@ -1412,18 +1520,24 @@ def generate_image_from_envelope(envelope):
             if "No diffusion pipeline loaded" in message
             else "generation_failed"
         )
+        if resource_observation is None:
+            resource_observation = _resource_observation_for_device(planned_device)
         return worker_error_response_json(
             request_id,
             kind,
             message,
             "pytorch_worker_generate_image_failed",
+            resource_observation=resource_observation,
         )
     except Exception as exc:
+        if resource_observation is None:
+            resource_observation = _resource_observation_for_device(planned_device)
         return worker_error_response_json(
             request_id,
             "internal",
             exc,
             "pytorch_worker_generate_image_internal",
+            resource_observation=resource_observation,
         )
 
 
