@@ -794,6 +794,48 @@ Staged implementation:
    `RunTerminalPayload.resource_observation`, including mapping tests for
    peak RAM, peak VRAM, explicit OOM, source/availability diagnostics, and
    unavailable metrics that should not be persisted as fake terminal values.
+   - 2026-05-18 re-plan boundary: the inference-diagnostic half of this item
+     is already implemented in `pantograph-embedded-runtime`.
+     `node_execution_ledger.rs` maps lifecycle
+     `InferenceExecutionResourceObservation` values into
+     `InferenceExecutionDiagnosticObservedPayload.resource_observation`, and
+     `node_execution_ledger_tests.rs` covers peak RAM, peak VRAM, OOM,
+     source summaries, and availability summaries.
+   - The remaining requirement is `RunTerminalPayload.resource_observation`.
+     That terminal event is emitted by
+     `pantograph-workflow-service::record_run_terminal_event_if_configured`,
+     while `pantograph-diagnostics-ledger` runtime-selection history currently
+     reads observed memory/OOM fields from `RunTerminal` payloads only. An
+     embedded-runtime-only implementation would either miss terminal/history
+     projection or duplicate terminal ownership.
+   - Clean options:
+     1. Keep resource observations only on inference diagnostic events and
+        leave `RunTerminalPayload.resource_observation` empty. This is rejected
+        because scheduler history and run-list projection would not receive
+        terminal memory/OOM facts.
+     2. Preferred: add a diagnostics-ledger run resource rollup query over
+        persisted `InferenceExecutionDiagnosticObserved` events, returning a
+        compact `RunResourceObservation` with max peak RAM, max peak VRAM, and
+        OOM when any inference event reports it. Workflow-service should call
+        that query while appending the single owned `RunTerminal` event.
+        Availability-only observations remain inference diagnostics and must
+        not be converted into fake terminal byte values.
+     3. Have embedded-runtime emit or mutate `RunTerminal` directly. This is
+        rejected because it creates a second terminal-event owner and risks
+        duplicate terminal facts.
+     4. Teach run-list/history projection to read inference diagnostic events
+        directly instead of terminal payloads. This is a later projection
+        redesign candidate, but it does not satisfy the explicit terminal DTO
+        contract in this milestone and spreads resource-summary policy across
+        projection code.
+   - Recommended staged replacement:
+     1. Add diagnostics-ledger rollup API and tests for max RAM/max VRAM/OOM,
+        no observations, and availability-only observations.
+     2. Update workflow-service terminal event recording to include the rollup
+        result and add focused tests proving a single `RunTerminal` owns the
+        run-level observation.
+     3. Mark the embedded-runtime diagnostic projection sub-slice complete in
+        this item without adding duplicate terminal behavior there.
 9. [ ] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
    shared process RSS where supported, and managed runtime structured
    telemetry. Each producer slice must include focused tests/fixtures for its
