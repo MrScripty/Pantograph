@@ -926,12 +926,23 @@ Staged implementation:
    - Verification: `cargo test -p inference
      test_generate_image_from_planning_input_with_lifecycle_records_planned_decision
      --lib` and `cargo test -p inference image_generation --lib`.
-   - Remaining producer follow-ups: extend shared process-RSS lifecycle
-     wiring to the other runtime execution families, surface backend-native
-     worker observations through lifecycle without task-output coupling,
-     managed runtime structured telemetry, real MPS metric support if PyTorch
-     exposes a canonical counter, and failure-path OOM typing without broad
-     legacy string parsing.
+   - 2026-05-18: completed the generic typed non-streaming process-RSS
+     lifecycle producer sub-slice. `execute_typed_with_lifecycle` now starts
+     the same neutral monitor around backend execution for text, embedding,
+     rerank, image, and audio typed requests, then attaches the observation to
+     the backend execution terminal event.
+   - No-fallback/no-legacy confirmation: typed task outputs still do not carry
+     process RSS telemetry, and stream lifecycle behavior remains unchanged
+     until it gets a dedicated bounded monitor lifecycle slice.
+   - Verification: `cargo test -p inference
+     test_execute_typed_text_reports_generation_option_diagnostics --lib` and
+     `cargo test -p inference lifecycle --lib`.
+   - Remaining producer follow-ups: surface backend-native worker observations
+     through lifecycle without task-output coupling, add process-RSS lifecycle
+     coverage to streaming/runtime paths in a dedicated slice, managed runtime
+     structured telemetry, real MPS metric support if PyTorch exposes a
+     canonical counter, and failure-path OOM typing without broad legacy string
+     parsing.
 10. [ ] Remove or explicitly confine legacy OOM string parsing in
     `inference::server`, `inference::embedding_runtime`, and
     `backend::llamacpp_support` behind typed adapter-local memory failure

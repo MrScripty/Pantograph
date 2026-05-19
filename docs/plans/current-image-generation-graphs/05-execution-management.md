@@ -6818,6 +6818,32 @@ Worker rules:
     backend-native worker observations, managed runtime structured telemetry,
     real MPS metrics if a canonical PyTorch counter becomes available, and
     failure-path OOM typing.
+- 2026-05-18 generic typed process-RSS lifecycle producer slice:
+  - Smallest useful vertical slice: extend the process-RSS producer from the
+    planned image lifecycle path to the generic typed non-streaming backend
+    execution lifecycle path without changing task outputs.
+  - Allowed write set: `crates/inference/src/gateway.rs`,
+    `crates/inference/src/gateway_tests.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: the slice reuses the canonical
+    `RuntimeResourceMonitor` API, records only typed `os_process_rss` host RAM
+    observations on backend execution terminal lifecycle events, and does not
+    add scheduler policy, task-output metadata, or string-derived memory facts.
+  - Implementation completed: `execute_typed_with_lifecycle` starts the
+    monitor immediately before `execute_typed_validated`, finishes it
+    immediately afterward, and records the observation through the typed
+    backend execution result event. Validation, preprocessing, postprocessing,
+    result projection, cleanup, and streaming paths remain unchanged.
+  - Verification passed: `cargo test -p inference
+    test_execute_typed_text_reports_generation_option_diagnostics --lib` and
+    `cargo test -p inference lifecycle --lib`.
+  - Remaining follow-up: item 9 still needs a lifecycle path for
+    backend-native worker observations, streaming/runtime process-RSS
+    monitoring in a dedicated slice, managed runtime structured telemetry,
+    real MPS metrics if a canonical PyTorch counter becomes available, and
+    failure-path OOM typing.
 
 ### Traceability Links
 

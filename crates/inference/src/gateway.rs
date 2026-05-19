@@ -1643,7 +1643,10 @@ impl InferenceGateway {
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
+        let resource_monitor = start_runtime_resource_monitor_for_current_process();
         let result = self.execute_typed_validated(request).await;
+        let resource_observation =
+            finish_runtime_resource_monitor_for_current_process(resource_monitor);
         let mut option_diagnostics = option_diagnostics_from_execution_result(&result);
         option_diagnostics.extend(request_option_diagnostics);
         dedupe_option_diagnostics(&mut option_diagnostics);
@@ -1662,6 +1665,7 @@ impl InferenceGateway {
             compatibility_diagnostics.compatibility_report,
             compatibility_diagnostics.compatibility_issues,
             artifact_refs,
+            resource_observation,
         );
         if emit_typed_boundary_lifecycle && result.is_ok() {
             record_successful_non_streaming_lifecycle_phase(
@@ -3199,8 +3203,43 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
     compatibility_report: Option<InferenceCompatibilityReportSummary>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     artifact_refs: Vec<String>,
+    resource_observation: Option<InferenceExecutionResourceObservation>,
 ) {
-    record_non_streaming_lifecycle_phase_result_with_references(
+    let (kind, detail) = match result {
+        Ok(_) => (InferenceRequestLifecycleEventKind::Completed, None),
+        Err(error) => (
+            InferenceRequestLifecycleEventKind::Failed,
+            Some(error.to_string()),
+        ),
+    };
+
+    let event = InferenceRequestLifecycleEvent::builder(
+        InferenceLifecyclePhase::BackendExecution,
+        kind,
+        unix_timestamp_ms(),
+    )
+    .with_request_id(request_id.clone())
+    .with_task_id(task_id.clone())
+    .with_backend_key(backend_key.clone())
+    .with_runtime_id(runtime_id.clone())
+    .with_runtime_instance_id(runtime_instance_id.clone())
+    .with_selected_device_class(selected_device_class)
+    .with_selected_device_id(selected_device_id.clone())
+    .with_model_id(model_id.clone())
+    .with_usage(usage_from_execution_result(result))
+    .with_cache_handle_id(cache_handle_from_execution_result(result))
+    .with_artifact_refs(artifact_refs)
+    .with_detail(detail)
+    .with_compatibility_report(compatibility_report)
+    .with_compatibility_issues(compatibility_issues)
+    .with_option_diagnostics(option_diagnostics)
+    .with_resource_observation(resource_observation)
+    .build();
+    if let Err(error) = sink.record(event) {
+        log::warn!("failed to record inference lifecycle event: {error}");
+    }
+
+    record_inference_lifecycle_phase_event(
         sink,
         InferenceLifecyclePhase::BackendExecution,
         request_id,
@@ -3211,13 +3250,7 @@ fn record_typed_lifecycle_result_with_option_diagnostics(
         selected_device_class,
         selected_device_id,
         model_id,
-        result,
-        option_diagnostics,
-        compatibility_report,
-        compatibility_issues,
-        usage_from_execution_result(result),
-        cache_handle_from_execution_result(result),
-        artifact_refs,
+        InferenceRequestLifecycleEventKind::CleanupCompleted,
         None,
     );
 }

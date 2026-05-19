@@ -27,7 +27,8 @@ use crate::model_contracts::{
 };
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 use crate::resource_observation::{
-    InferenceResourceObservationMetricKind, InferenceResourceObservationSourceKind,
+    InferenceExecutionResourceObservation, InferenceResourceObservationMetricKind,
+    InferenceResourceObservationSourceKind,
 };
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
@@ -80,6 +81,18 @@ impl InferenceRequestLifecycleEventSink for RecordingLifecycleSink {
         self.events.lock().expect("events lock").push(event);
         Ok(())
     }
+}
+
+fn assert_process_rss_observation(observation: &InferenceExecutionResourceObservation) {
+    assert!(
+        observation.peak_ram_bytes().is_some()
+            || observation.availability().iter().any(|availability| {
+                availability.metric_kind() == InferenceResourceObservationMetricKind::PeakRamBytes
+                    && availability.source_kind()
+                        == Some(InferenceResourceObservationSourceKind::OsProcessRss)
+            }),
+        "backend execution should report process RSS bytes or typed RSS availability"
+    );
 }
 
 struct MockProcessHandle;
@@ -1246,19 +1259,7 @@ async fn test_generate_image_from_planning_input_with_lifecycle_records_planned_
         .resource_observation
         .as_ref()
         .expect("backend execution completion should include process RSS observation");
-    assert!(
-        resource_observation.peak_ram_bytes().is_some()
-            || resource_observation
-                .availability()
-                .iter()
-                .any(|availability| {
-                    availability.metric_kind()
-                        == InferenceResourceObservationMetricKind::PeakRamBytes
-                        && availability.source_kind()
-                            == Some(InferenceResourceObservationSourceKind::OsProcessRss)
-                }),
-        "backend execution should report process RSS bytes or typed RSS availability"
-    );
+    assert_process_rss_observation(resource_observation);
     assert!(events
         .iter()
         .enumerate()
@@ -1931,6 +1932,11 @@ async fn test_execute_typed_text_reports_generation_option_diagnostics() {
         completed_backend_event.task_id.as_deref(),
         Some("text_generation")
     );
+    let resource_observation = completed_backend_event
+        .resource_observation
+        .as_ref()
+        .expect("typed backend completion should include process RSS observation");
+    assert_process_rss_observation(resource_observation);
     assert!(completed_backend_event
         .option_diagnostics
         .iter()
