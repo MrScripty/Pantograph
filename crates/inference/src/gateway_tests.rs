@@ -3174,6 +3174,11 @@ async fn test_chat_completion_stream_with_lifecycle_records_completion() {
         events[1].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
+    let resource_observation = events[1]
+        .resource_observation
+        .as_ref()
+        .expect("stream completion should include process RSS observation");
+    assert_process_rss_observation(resource_observation);
     assert_eq!(
         events[2].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
@@ -3404,6 +3409,11 @@ async fn test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage() {
         backend_completed.cache_handle_id.as_deref(),
         Some("kv-stream-checkpoint")
     );
+    let resource_observation = backend_completed
+        .resource_observation
+        .as_ref()
+        .expect("typed stream completion should include process RSS observation");
+    assert_process_rss_observation(resource_observation);
     let event_json = serde_json::to_string(backend_completed).expect("event serializes");
     assert!(!event_json.contains("SECRET_STREAM_PROMPT"));
     assert!(!event_json.contains("hello"));

@@ -1939,6 +1939,7 @@ struct LifecycleStream {
     usage: Option<InferenceUsage>,
     cache_handle_id: Option<String>,
     emit_typed_boundary_lifecycle: bool,
+    resource_monitor: Option<RuntimeResourceMonitorGuard>,
     finished: bool,
 }
 
@@ -1975,6 +1976,7 @@ impl LifecycleStream {
             usage: None,
             cache_handle_id: None,
             emit_typed_boundary_lifecycle,
+            resource_monitor: start_runtime_resource_monitor_for_current_process(),
             finished: false,
         }
     }
@@ -1995,7 +1997,12 @@ impl LifecycleStream {
         );
     }
 
-    fn record_terminal(&self, kind: InferenceRequestLifecycleEventKind, detail: Option<String>) {
+    fn record_terminal(
+        &self,
+        kind: InferenceRequestLifecycleEventKind,
+        detail: Option<String>,
+        resource_observation: Option<InferenceExecutionResourceObservation>,
+    ) {
         record_inference_lifecycle_phase_event_with_references(
             self.lifecycle_sink.as_ref(),
             InferenceLifecyclePhase::BackendExecution,
@@ -2016,6 +2023,7 @@ impl LifecycleStream {
             self.cache_handle_id.clone(),
             Vec::new(),
             None,
+            resource_observation,
         );
     }
 
@@ -2025,7 +2033,9 @@ impl LifecycleStream {
         }
 
         let completed = kind == InferenceRequestLifecycleEventKind::Completed;
-        self.record_terminal(kind, detail);
+        let resource_observation =
+            finish_runtime_resource_monitor_for_current_process(self.resource_monitor.take());
+        self.record_terminal(kind, detail, resource_observation);
         self.record(InferenceRequestLifecycleEventKind::CleanupCompleted, None);
         if self.emit_typed_boundary_lifecycle && completed {
             self.record_successful_boundary_phase(InferenceLifecyclePhase::Postprocessing);
@@ -2839,6 +2849,7 @@ fn record_model_package_resolution_lifecycle_if_present(
         None,
         Vec::new(),
         resolved_artifact_kind.clone(),
+        None,
     );
     record_non_streaming_lifecycle_phase_result_with_references(
         sink,
@@ -3111,6 +3122,7 @@ fn record_inference_lifecycle_phase_event_with_diagnostics(
         None,
         Vec::new(),
         None,
+        None,
     );
 }
 
@@ -3135,6 +3147,7 @@ fn record_inference_lifecycle_phase_event_with_references(
     cache_handle_id: Option<String>,
     artifact_refs: Vec<String>,
     resolved_artifact_kind: Option<String>,
+    resource_observation: Option<InferenceExecutionResourceObservation>,
 ) {
     let event = InferenceRequestLifecycleEvent::builder(phase, kind, unix_timestamp_ms())
         .with_request_id(request_id)
@@ -3153,6 +3166,7 @@ fn record_inference_lifecycle_phase_event_with_references(
         .with_compatibility_report(compatibility_report)
         .with_compatibility_issues(compatibility_issues)
         .with_option_diagnostics(option_diagnostics)
+        .with_resource_observation(resource_observation)
         .build();
     if let Err(error) = sink.record(event) {
         log::warn!("failed to record inference lifecycle event: {error}");
@@ -3472,6 +3486,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
             cache_handle_id,
             artifact_refs,
             resolved_artifact_kind.clone(),
+            None,
         ),
         Err(error) => record_inference_lifecycle_phase_event_with_references(
             sink,
@@ -3493,6 +3508,7 @@ fn record_non_streaming_lifecycle_phase_result_with_references<T>(
             cache_handle_id,
             artifact_refs,
             resolved_artifact_kind.clone(),
+            None,
         ),
     }
 

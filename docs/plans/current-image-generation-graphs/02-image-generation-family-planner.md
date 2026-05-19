@@ -937,12 +937,25 @@ Staged implementation:
    - Verification: `cargo test -p inference
      test_execute_typed_text_reports_generation_option_diagnostics --lib` and
      `cargo test -p inference lifecycle --lib`.
+   - 2026-05-18: completed the streaming process-RSS lifecycle producer
+     sub-slice. `LifecycleStream` now owns the monitor guard for stream
+     completion, stream failure, and dropped-stream cancellation, and records
+     the finished observation on the backend execution terminal event.
+   - No-fallback/no-legacy confirmation: streaming process RSS uses the same
+     typed lifecycle-only producer as non-streaming execution. Stream chunks,
+     prompts, generated text, and task result payloads remain free of resource
+     telemetry.
+   - Verification: `cargo test -p inference
+     test_chat_completion_stream_with_lifecycle_records_completion --lib`,
+     `cargo test -p inference
+     test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage --lib`,
+     and `cargo test -p inference lifecycle --lib`.
    - Remaining producer follow-ups: surface backend-native worker observations
      through lifecycle without task-output coupling, add process-RSS lifecycle
-     coverage to streaming/runtime paths in a dedicated slice, managed runtime
-     structured telemetry, real MPS metric support if PyTorch exposes a
-     canonical counter, and failure-path OOM typing without broad legacy string
-     parsing.
+     coverage to managed runtime process boundaries where they differ from the
+     current process, managed runtime structured telemetry, real MPS metric
+     support if PyTorch exposes a canonical counter, and failure-path OOM
+     typing without broad legacy string parsing.
 10. [ ] Remove or explicitly confine legacy OOM string parsing in
     `inference::server`, `inference::embedding_runtime`, and
     `backend::llamacpp_support` behind typed adapter-local memory failure
