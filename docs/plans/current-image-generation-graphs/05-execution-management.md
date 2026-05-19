@@ -6792,6 +6792,32 @@ Worker rules:
   - Remaining follow-up: item 9 still needs shared process RSS producer
     wiring, managed runtime structured telemetry, real MPS metric support if a
     canonical PyTorch counter becomes available, and failure-path OOM typing.
+- 2026-05-18 planned image process-RSS lifecycle producer slice:
+  - Smallest useful vertical slice: wire the existing neutral
+    `resource_monitor` process-RSS producer into planned image-generation
+    backend execution lifecycle events without changing task result payloads.
+  - Allowed write set: `crates/inference/src/gateway.rs`,
+    `crates/inference/src/gateway_tests.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: the producer uses the canonical
+    `RuntimeResourceMonitor` API and records only typed host RAM observations
+    sourced as `os_process_rss`. It does not infer VRAM, write telemetry into
+    image outputs, or add platform-specific probes outside the monitor module.
+  - Implementation completed: planned image-generation lifecycle execution
+    now starts the default runtime resource monitor immediately before the
+    backend execution call, finishes it immediately after the call, and
+    attaches the observation to the backend execution completed/failed event.
+    Task-validation and cleanup events remain free of resource observations.
+  - Verification passed: `cargo test -p inference
+    test_generate_image_from_planning_input_with_lifecycle_records_planned_decision
+    --lib` and `cargo test -p inference image_generation --lib`.
+  - Remaining follow-up: item 9 still needs shared process-RSS lifecycle
+    wiring for the other runtime execution families, a lifecycle path for
+    backend-native worker observations, managed runtime structured telemetry,
+    real MPS metrics if a canonical PyTorch counter becomes available, and
+    failure-path OOM typing.
 
 ### Traceability Links
 

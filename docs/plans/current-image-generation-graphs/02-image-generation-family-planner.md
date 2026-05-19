@@ -913,7 +913,22 @@ Staged implementation:
    - Verification: `cargo test -p inference --features backend-pytorch
      test_python_worker_generate_image_from_envelope_reports_mps_metric_unimplemented
      --lib`.
-   - Remaining producer follow-ups: shared process RSS producer wiring,
+   - 2026-05-18: completed the planned image-generation process-RSS producer
+     sub-slice. The gateway now starts the neutral runtime resource monitor
+     for the current process at the planned image backend execution boundary
+     and attaches the finished observation only to the backend execution
+     terminal lifecycle event.
+   - No-fallback/no-legacy confirmation: process RSS remains host RAM only,
+     sourced as `os_process_rss`, and is not written into task output metadata
+     or relabeled as VRAM. Monitor startup/finish errors are logged as
+     telemetry producer failures rather than replaced with synthetic byte
+     values.
+   - Verification: `cargo test -p inference
+     test_generate_image_from_planning_input_with_lifecycle_records_planned_decision
+     --lib` and `cargo test -p inference image_generation --lib`.
+   - Remaining producer follow-ups: extend shared process-RSS lifecycle
+     wiring to the other runtime execution families, surface backend-native
+     worker observations through lifecycle without task-output coupling,
      managed runtime structured telemetry, real MPS metric support if PyTorch
      exposes a canonical counter, and failure-path OOM typing without broad
      legacy string parsing.

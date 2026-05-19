@@ -26,6 +26,9 @@ use crate::model_contracts::{
     SamplingGenerationOptions, StoppingGenerationOptions,
 };
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
+use crate::resource_observation::{
+    InferenceResourceObservationMetricKind, InferenceResourceObservationSourceKind,
+};
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
     AudioTranscriptionRequest, AudioTranscriptionResult, DepthEstimationRequest, EncodedAudio,
@@ -1239,6 +1242,27 @@ async fn test_generate_image_from_planning_input_with_lifecycle_records_planned_
         events[4].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
+    let resource_observation = events[4]
+        .resource_observation
+        .as_ref()
+        .expect("backend execution completion should include process RSS observation");
+    assert!(
+        resource_observation.peak_ram_bytes().is_some()
+            || resource_observation
+                .availability()
+                .iter()
+                .any(|availability| {
+                    availability.metric_kind()
+                        == InferenceResourceObservationMetricKind::PeakRamBytes
+                        && availability.source_kind()
+                            == Some(InferenceResourceObservationSourceKind::OsProcessRss)
+                }),
+        "backend execution should report process RSS bytes or typed RSS availability"
+    );
+    assert!(events
+        .iter()
+        .enumerate()
+        .all(|(index, event)| { index == 4 || event.resource_observation.is_none() }));
     assert!(events.iter().all(|event| {
         event.request_id.as_deref() == Some("run-a:image-node-1:image_generation")
             && event.task_id.as_deref() == Some("image_generation")

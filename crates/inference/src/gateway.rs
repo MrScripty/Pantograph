@@ -43,6 +43,9 @@ use crate::types::{
     InferenceRequestLifecycleEventSink, InferenceUsage, RerankRequest, RerankResponse,
     RuntimeLifecycleSnapshot, ServerModeInfo,
 };
+use crate::{
+    InferenceExecutionResourceObservation, RuntimeResourceMonitor, RuntimeResourceMonitorGuard,
+};
 
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
 const MAX_LIFECYCLE_COMPATIBILITY_ISSUES: usize = 32;
@@ -1373,6 +1376,7 @@ impl InferenceGateway {
             &lifecycle_context,
             None,
             Vec::new(),
+            None,
         );
 
         match plan_image_generation_execution(input) {
@@ -1383,6 +1387,7 @@ impl InferenceGateway {
                     &lifecycle_context,
                     &Ok::<(), GatewayError>(()),
                     Vec::new(),
+                    None,
                 );
                 record_planned_image_generation_lifecycle_event(
                     lifecycle_sink.as_ref(),
@@ -1391,14 +1396,19 @@ impl InferenceGateway {
                     &lifecycle_context,
                     None,
                     Vec::new(),
+                    None,
                 );
+                let resource_monitor = start_runtime_resource_monitor_for_current_process();
                 let result = self.generate_image_from_plan(plan).await;
+                let resource_observation =
+                    finish_runtime_resource_monitor_for_current_process(resource_monitor);
                 record_planned_image_generation_lifecycle_result(
                     lifecycle_sink.as_ref(),
                     InferenceLifecyclePhase::BackendExecution,
                     &lifecycle_context,
                     &result,
                     Vec::new(),
+                    resource_observation,
                 );
                 result
             }
@@ -1416,6 +1426,7 @@ impl InferenceGateway {
                     &lifecycle_context,
                     &result,
                     compatibility_issues,
+                    None,
                 );
                 result
             }
@@ -2933,12 +2944,39 @@ fn image_generation_planner_diagnostic_code_label(
         .unwrap_or_else(|| format!("{code:?}"))
 }
 
+fn start_runtime_resource_monitor_for_current_process() -> Option<RuntimeResourceMonitorGuard> {
+    let monitor = crate::default_runtime_resource_monitor();
+    match monitor.start_process_monitor(std::process::id()) {
+        Ok(guard) => Some(guard),
+        Err(error) => {
+            log::warn!("failed to start runtime resource monitor: {error}");
+            None
+        }
+    }
+}
+
+fn finish_runtime_resource_monitor_for_current_process(
+    guard: Option<RuntimeResourceMonitorGuard>,
+) -> Option<InferenceExecutionResourceObservation> {
+    let Some(guard) = guard else {
+        return None;
+    };
+    match guard.finish() {
+        Ok(observation) => Some(observation),
+        Err(error) => {
+            log::warn!("failed to finish runtime resource monitor: {error}");
+            None
+        }
+    }
+}
+
 fn record_planned_image_generation_lifecycle_result<T>(
     sink: &dyn InferenceRequestLifecycleEventSink,
     phase: InferenceLifecyclePhase,
     context: &PlannedImageGenerationLifecycleContext,
     result: &Result<T, GatewayError>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+    resource_observation: Option<InferenceExecutionResourceObservation>,
 ) {
     let (kind, detail) = match result {
         Ok(_) => (InferenceRequestLifecycleEventKind::Completed, None),
@@ -2954,6 +2992,7 @@ fn record_planned_image_generation_lifecycle_result<T>(
         context,
         detail,
         compatibility_issues,
+        resource_observation,
     );
     record_planned_image_generation_lifecycle_event(
         sink,
@@ -2962,6 +3001,7 @@ fn record_planned_image_generation_lifecycle_result<T>(
         context,
         None,
         Vec::new(),
+        None,
     );
 }
 
@@ -2972,6 +3012,7 @@ fn record_planned_image_generation_lifecycle_event(
     context: &PlannedImageGenerationLifecycleContext,
     detail: Option<String>,
     compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
+    resource_observation: Option<InferenceExecutionResourceObservation>,
 ) {
     let event = InferenceRequestLifecycleEvent::builder(phase, kind, unix_timestamp_ms())
         .with_request_id(context.request_id.clone())
@@ -2986,6 +3027,7 @@ fn record_planned_image_generation_lifecycle_event(
         .with_resolved_artifact_kind(context.resolved_artifact_kind.clone())
         .with_detail(detail)
         .with_compatibility_issues(compatibility_issues)
+        .with_resource_observation(resource_observation)
         .build();
     if let Err(error) = sink.record(event) {
         log::warn!("failed to record planned image-generation lifecycle event: {error}");
