@@ -18,7 +18,8 @@ use crate::{
     DiagnosticsQuery, ExecutionGuaranteeLevel, InferenceCompatibilityIssueDiagnosticSummary,
     InferenceCompatibilityReportDiagnosticSummary, InferenceExecutionDiagnosticObservedPayload,
     InferenceKvCacheDiagnosticSummary, InferenceOptionDiagnosticSummary,
-    InferenceOptionSupportCounts, InferenceResourceObservationDiagnosticSummary,
+    InferenceOptionSupportCounts, InferenceResourceObservationAvailabilityDiagnosticSummary,
+    InferenceResourceObservationDiagnosticSummary,
     InferenceResourceObservationSourceDiagnosticSummary, InferenceRuntimeSettingDiagnosticSummary,
     InferenceRuntimeSettingsDiagnosticSummary, InferenceUsageDiagnosticSummary,
     IoArtifactAccessMode, IoArtifactFormatMetadata, IoArtifactLifecycleState,
@@ -32,21 +33,22 @@ use crate::{
     PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
     RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunMemoryFailureKind,
-    RunResourceObservation, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
-    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, RuntimeSelectionHistoryKey,
-    RuntimeSelectionHistoryQuery, SchedulerCandidateSetSummary, SchedulerEstimateBlockingCondition,
-    SchedulerEstimateProducedPayload, SchedulerExecutionPlanSummary, SchedulerModelCacheState,
-    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
-    SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
-    SchedulerQueueControlPayload, SchedulerQueuePlacementPayload,
-    SchedulerReservationChangedPayload, SchedulerReservationResourceKind,
-    SchedulerReservationTransition, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
-    SchedulerSelectionDecisionCode, SchedulerSelectionHistoryThresholdState,
-    SchedulerSelectionPolicyPhase, SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery,
-    SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage,
-    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
-    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    RunResourceObservation, RunResourceObservationRollupQuery, RunSnapshotAcceptedPayload,
+    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    RuntimeSelectionHistoryKey, RuntimeSelectionHistoryQuery, SchedulerCandidateSetSummary,
+    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload,
+    SchedulerExecutionPlanSummary, SchedulerModelCacheState, SchedulerModelLifecycleChangedPayload,
+    SchedulerModelLifecycleTransition, SchedulerQueueControlAction,
+    SchedulerQueueControlActorScope, SchedulerQueueControlOutcome, SchedulerQueueControlPayload,
+    SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
+    SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
+    SchedulerRunDelayedPayload, SchedulerSelectionDecisionCode,
+    SchedulerSelectionHistoryThresholdState, SchedulerSelectionPolicyPhase,
+    SchedulerSelectionPolicyTrace, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
+    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
+    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
     DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MAX_INFERENCE_COMPATIBILITY_ISSUES,
@@ -5083,6 +5085,122 @@ fn runtime_selection_history_summarizes_memory_and_oom_observations() {
 }
 
 #[test]
+fn run_resource_observation_rollup_summarizes_inference_observation_maxima() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    let mut first = sample_inference_execution_diagnostic_event();
+    set_inference_resource_observation(
+        &mut first,
+        InferenceResourceObservationDiagnosticSummary {
+            peak_ram_bytes: Some(4_096),
+            peak_vram_bytes: Some(2_048),
+            memory_failure_kind: None,
+            sources: Vec::new(),
+            availability: Vec::new(),
+        },
+    );
+    ledger
+        .append_diagnostic_event(first)
+        .expect("first inference diagnostic appends");
+
+    let mut second = sample_inference_execution_diagnostic_event();
+    second.occurred_at_ms = 1_260;
+    set_inference_resource_observation(
+        &mut second,
+        InferenceResourceObservationDiagnosticSummary {
+            peak_ram_bytes: Some(3_072),
+            peak_vram_bytes: Some(3_584),
+            memory_failure_kind: Some(RunMemoryFailureKind::OutOfMemory),
+            sources: Vec::new(),
+            availability: Vec::new(),
+        },
+    );
+    ledger
+        .append_diagnostic_event(second)
+        .expect("second inference diagnostic appends");
+
+    let mut other_run = sample_inference_execution_diagnostic_event();
+    other_run.workflow_run_id =
+        Some(WorkflowRunId::try_from("workflow_run_beta".to_string()).unwrap());
+    set_inference_resource_observation(
+        &mut other_run,
+        InferenceResourceObservationDiagnosticSummary {
+            peak_ram_bytes: Some(99_999),
+            peak_vram_bytes: Some(88_888),
+            memory_failure_kind: None,
+            sources: Vec::new(),
+            availability: Vec::new(),
+        },
+    );
+    ledger
+        .append_diagnostic_event(other_run)
+        .expect("other run inference diagnostic appends");
+
+    let rollup = ledger
+        .run_resource_observation_rollup(RunResourceObservationRollupQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+        })
+        .expect("run resource rollup query succeeds")
+        .expect("resource rollup should exist");
+
+    assert_eq!(rollup.peak_ram_bytes, Some(4_096));
+    assert_eq!(rollup.peak_vram_bytes, Some(3_584));
+    assert_eq!(
+        rollup.memory_failure_kind,
+        Some(RunMemoryFailureKind::OutOfMemory)
+    );
+}
+
+#[test]
+fn run_resource_observation_rollup_returns_none_for_missing_or_unavailable_only_metrics() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    let no_events = ledger
+        .run_resource_observation_rollup(RunResourceObservationRollupQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_missing".to_string()).unwrap(),
+        })
+        .expect("missing run rollup query succeeds");
+    assert_eq!(no_events, None);
+
+    ledger
+        .append_diagnostic_event(sample_inference_execution_diagnostic_event())
+        .expect("inference diagnostic without resource observation appends");
+    let no_observations = ledger
+        .run_resource_observation_rollup(RunResourceObservationRollupQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+        })
+        .expect("no-observation rollup query succeeds");
+    assert_eq!(no_observations, None);
+
+    let mut unavailable_only = sample_inference_execution_diagnostic_event();
+    unavailable_only.workflow_run_id =
+        Some(WorkflowRunId::try_from("workflow_run_beta".to_string()).unwrap());
+    set_inference_resource_observation(
+        &mut unavailable_only,
+        InferenceResourceObservationDiagnosticSummary {
+            peak_ram_bytes: None,
+            peak_vram_bytes: None,
+            memory_failure_kind: None,
+            sources: Vec::new(),
+            availability: vec![InferenceResourceObservationAvailabilityDiagnosticSummary {
+                metric_kind: "peak_vram_bytes".to_string(),
+                state: "unsupported_device".to_string(),
+                source_kind: Some("pytorch_mps".to_string()),
+            }],
+        },
+    );
+    ledger
+        .append_diagnostic_event(unavailable_only)
+        .expect("availability-only inference diagnostic appends");
+    let unavailable_rollup = ledger
+        .run_resource_observation_rollup(RunResourceObservationRollupQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_beta".to_string()).unwrap(),
+        })
+        .expect("availability-only rollup query succeeds");
+    assert_eq!(unavailable_rollup, None);
+}
+
+#[test]
 fn runtime_selection_history_does_not_broaden_when_threshold_is_unmet() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     for index in 0..4 {
@@ -6053,6 +6171,18 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
             },
         ),
     }
+}
+
+fn set_inference_resource_observation(
+    request: &mut DiagnosticEventAppendRequest,
+    observation: InferenceResourceObservationDiagnosticSummary,
+) {
+    let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) =
+        &mut request.payload
+    else {
+        panic!("expected inference execution diagnostic payload");
+    };
+    payload.resource_observation = Some(observation);
 }
 
 fn sample_library_asset_access_event(

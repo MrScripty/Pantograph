@@ -6694,6 +6694,36 @@ Worker rules:
     -- --check`, and `git diff --check`.
   - Remaining follow-up: the next slice is the resource-monitor
     factory/modules with the `sysinfo` process-RSS first implementation.
+- 2026-05-18 diagnostics-ledger run resource rollup slice:
+  - Smallest useful vertical slice: add a diagnostics-ledger query that rolls
+    persisted typed inference resource observations for one workflow run into
+    the existing compact `RunResourceObservation` DTO, without changing
+    workflow-service terminal emission yet.
+  - Allowed write set: `crates/pantograph-diagnostics-ledger/src/event.rs`,
+    `crates/pantograph-diagnostics-ledger/src/lib.rs`,
+    `crates/pantograph-diagnostics-ledger/src/repository.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/sqlite/run_resource_observation_sqlite.rs`,
+    `crates/pantograph-diagnostics-ledger/src/tests.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: the rollup reads only typed
+    `InferenceExecutionDiagnosticObservedPayload.resource_observation` values.
+    It does not derive memory from error text, scheduler state, runtime names,
+    or unavailable metric diagnostics. Availability-only observations remain
+    detailed inference diagnostics and are not converted into fake terminal
+    bytes.
+  - Implementation completed: added `RunResourceObservationRollupQuery`,
+    exposed `DiagnosticsLedgerRepository::run_resource_observation_rollup`,
+    implemented the SQLite query over persisted inference diagnostic events,
+    and added tests for max RAM/max VRAM/OOM rollup, missing observations, and
+    availability-only observations.
+  - Verification passed: `cargo test -p pantograph-diagnostics-ledger
+    run_resource_observation_rollup --lib`, `cargo check -p
+    pantograph-diagnostics-ledger`, and `cargo fmt --all -- --check`.
+  - Remaining follow-up: workflow-service still needs to call the rollup while
+    appending its single owned `RunTerminal` event.
 
 ### Traceability Links
 

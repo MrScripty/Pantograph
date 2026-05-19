@@ -847,13 +847,28 @@ Staged implementation:
         contract in this milestone and spreads resource-summary policy across
         projection code.
    - Recommended staged replacement:
-     1. Add diagnostics-ledger rollup API and tests for max RAM/max VRAM/OOM,
+     1. [x] Add diagnostics-ledger rollup API and tests for max RAM/max VRAM/OOM,
         no observations, and availability-only observations.
-     2. Update workflow-service terminal event recording to include the rollup
+     2. [ ] Update workflow-service terminal event recording to include the rollup
         result and add focused tests proving a single `RunTerminal` owns the
         run-level observation.
-     3. Mark the embedded-runtime diagnostic projection sub-slice complete in
+     3. [ ] Mark the embedded-runtime diagnostic projection sub-slice complete in
         this item without adding duplicate terminal behavior there.
+   - 2026-05-18: completed the diagnostics-ledger rollup sub-slice.
+     `RunResourceObservationRollupQuery` and
+     `DiagnosticsLedgerRepository::run_resource_observation_rollup` summarize
+     persisted `InferenceExecutionDiagnosticObserved` events for one workflow
+     run into the existing compact `RunResourceObservation` terminal DTO. The
+     rollup uses max peak RAM, max peak VRAM, and OOM if any inference
+     diagnostic reports it.
+   - No-fallback/no-legacy confirmation: the rollup reads only typed
+     inference diagnostic resource observations. It does not parse terminal
+     error strings, scheduler metadata, runtime names, or unavailable metric
+     diagnostics as memory usage. Availability-only observations remain
+     detailed inference diagnostics and produce no fake terminal byte values.
+   - Verification: `cargo test -p pantograph-diagnostics-ledger
+     run_resource_observation_rollup --lib`, `cargo check -p
+     pantograph-diagnostics-ledger`, and `cargo fmt --all -- --check`.
 9. [ ] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
    shared process RSS where supported, and managed runtime structured
    telemetry. Each producer slice must include focused tests/fixtures for its

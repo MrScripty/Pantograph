@@ -964,6 +964,11 @@ impl RunResourceObservation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunResourceObservationRollupQuery {
+    pub workflow_run_id: WorkflowRunId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RunTerminalPayload {
     pub status: RunTerminalStatus,

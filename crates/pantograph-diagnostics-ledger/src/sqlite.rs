@@ -6,6 +6,7 @@ use pantograph_runtime_attribution::{
 use rusqlite::{params, Connection, Row};
 
 mod event_sqlite;
+mod run_resource_observation_sqlite;
 mod run_summary_sqlite;
 mod runtime_selection_history_sqlite;
 mod timing_sqlite;
@@ -38,7 +39,10 @@ use crate::timing::{
     WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
 use crate::util::now_ms;
-use crate::{DiagnosticsLedgerError, DiagnosticsLedgerRepository};
+use crate::{
+    DiagnosticsLedgerError, DiagnosticsLedgerRepository, RunResourceObservation,
+    RunResourceObservationRollupQuery,
+};
 
 pub struct SqliteDiagnosticsLedger {
     conn: Connection,
@@ -521,6 +525,13 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         query: RuntimeSelectionHistoryQuery,
     ) -> Result<RuntimeSelectionHistorySummary, DiagnosticsLedgerError> {
         runtime_selection_history_sqlite::runtime_selection_history_summary(self, query)
+    }
+
+    fn run_resource_observation_rollup(
+        &self,
+        query: RunResourceObservationRollupQuery,
+    ) -> Result<Option<RunResourceObservation>, DiagnosticsLedgerError> {
+        run_resource_observation_sqlite::run_resource_observation_rollup(self, query)
     }
 
     fn drain_run_detail_projection(
