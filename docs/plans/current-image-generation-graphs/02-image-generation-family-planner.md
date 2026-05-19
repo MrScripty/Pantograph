@@ -794,6 +794,24 @@ Staged implementation:
    `RunTerminalPayload.resource_observation`, including mapping tests for
    peak RAM, peak VRAM, explicit OOM, source/availability diagnostics, and
    unavailable metrics that should not be persisted as fake terminal values.
+   - Definition: this item is about completed-run resource history, not live
+     scheduler capacity sampling. Live capacity monitoring answers "how much
+     memory is available now"; `RunTerminalPayload.resource_observation`
+     answers "what did this completed workflow run actually use, and did it
+     hit OOM?" Scheduler policy needs both, but this milestone supplies the
+     historical memory/OOM facts used to learn model/runtime behavior over
+     repeated runs.
+   - `RunTerminal` is the single final diagnostics-ledger event for a workflow
+     run. It records completed/failed/cancelled status, duration, terminal
+     error identity when present, and the compact run-level resource summary
+     used by run-list and runtime-selection history projection.
+   - Ownership rule: detailed per-inference observations originate on
+     inference lifecycle events, embedded-runtime persists those details as
+     inference diagnostics, diagnostics-ledger summarizes persisted inference
+     observations into one run-level terminal resource observation, and
+     workflow-service writes that summary when it emits the single owned
+     `RunTerminal` event. No crate other than workflow-service should emit or
+     mutate terminal run completion events.
    - 2026-05-18 re-plan boundary: the inference-diagnostic half of this item
      is already implemented in `pantograph-embedded-runtime`.
      `node_execution_ledger.rs` maps lifecycle
