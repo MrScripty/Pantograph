@@ -902,9 +902,21 @@ Staged implementation:
      --lib`, `cargo test -p inference --features backend-pytorch
      pytorch_worker_image_python --lib`, `cargo check -p inference --features
      backend-pytorch`, and `cargo fmt --all -- --check`.
-   - Remaining producer follow-ups: add MPS availability/metric behavior,
-     shared process RSS producer wiring, managed runtime structured telemetry,
-     and failure-path OOM typing without broad legacy string parsing.
+   - 2026-05-18: completed the PyTorch image-generation MPS availability
+     sub-slice. The worker emits a typed `peak_vram_bytes` availability fact
+     with `not_implemented` state and `pytorch_mps` source when MPS is
+     available but PyTorch exposes no canonical peak VRAM counter.
+   - No-fallback/no-legacy confirmation: MPS telemetry does not synthesize
+     zero-byte observations or infer VRAM from scheduler/device metadata. It
+     reports a typed unavailable metric until a canonical runtime counter is
+     available.
+   - Verification: `cargo test -p inference --features backend-pytorch
+     test_python_worker_generate_image_from_envelope_reports_mps_metric_unimplemented
+     --lib`.
+   - Remaining producer follow-ups: shared process RSS producer wiring,
+     managed runtime structured telemetry, real MPS metric support if PyTorch
+     exposes a canonical counter, and failure-path OOM typing without broad
+     legacy string parsing.
 10. [ ] Remove or explicitly confine legacy OOM string parsing in
     `inference::server`, `inference::embedding_runtime`, and
     `backend::llamacpp_support` behind typed adapter-local memory failure

@@ -6772,6 +6772,26 @@ Worker rules:
   - Remaining follow-up: item 9 still needs MPS availability/metric behavior,
     shared process RSS producer wiring, managed runtime structured telemetry,
     and failure-path OOM typing.
+- 2026-05-18 PyTorch image MPS resource availability slice:
+  - Smallest useful vertical slice: verify the existing PyTorch image worker
+    MPS producer emits typed metric availability when MPS is available but no
+    canonical peak VRAM counter exists.
+  - Allowed write set: `crates/inference/src/backend/pytorch_worker_image_python_tests.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: MPS does not report fake
+    `peak_vram_bytes`, zero-byte values, or scheduler-derived estimates. The
+    producer emits typed `not_implemented` availability for the MPS source.
+  - Implementation completed: added Python worker image harness coverage for
+    an MPS-planned image request and asserted a `pytorch_mps` availability
+    fact with `not_implemented` state and no peak VRAM value.
+  - Verification passed: `cargo test -p inference --features backend-pytorch
+    test_python_worker_generate_image_from_envelope_reports_mps_metric_unimplemented
+    --lib`.
+  - Remaining follow-up: item 9 still needs shared process RSS producer
+    wiring, managed runtime structured telemetry, real MPS metric support if a
+    canonical PyTorch counter becomes available, and failure-path OOM typing.
 
 ### Traceability Links
 
