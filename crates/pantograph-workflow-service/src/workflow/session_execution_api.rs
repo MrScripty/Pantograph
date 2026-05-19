@@ -2,17 +2,17 @@ use std::{collections::HashMap, time::Duration};
 
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
-    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, IoArtifactObservedPayload,
-    IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetOperation, RunSnapshotAcceptedPayload,
-    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerCandidateSetSummary, SchedulerEstimateBlockingCondition,
-    SchedulerEstimateProducedPayload, SchedulerExecutionPlanSummary, SchedulerModelCacheState,
-    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
-    SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
-    SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
-    SchedulerRunDelayedPayload, SchedulerSelectionDecisionCode,
-    SchedulerSelectionHistoryThresholdState, SchedulerSelectionPolicyPhase,
-    SchedulerSelectionPolicyTrace,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
+    IoArtifactObservedPayload, IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetOperation,
+    RunResourceObservationRollupQuery, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
+    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerCandidateSetSummary,
+    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload,
+    SchedulerExecutionPlanSummary, SchedulerModelCacheState, SchedulerModelLifecycleChangedPayload,
+    SchedulerModelLifecycleTransition, SchedulerQueuePlacementPayload,
+    SchedulerReservationChangedPayload, SchedulerReservationResourceKind,
+    SchedulerReservationTransition, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
+    SchedulerSelectionDecisionCode, SchedulerSelectionHistoryThresholdState,
+    SchedulerSelectionPolicyPhase, SchedulerSelectionPolicyTrace,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
@@ -1702,6 +1702,13 @@ impl WorkflowService {
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
+        let resource_observation = DiagnosticsLedgerRepository::run_resource_observation_rollup(
+            &*ledger,
+            RunResourceObservationRollupQuery {
+                workflow_run_id: workflow_run_id.clone(),
+            },
+        )
+        .map_err(WorkflowServiceError::from)?;
         self.append_diagnostic_event_and_request_projection_refresh(
             &mut *ledger,
             DiagnosticEventAppendRequest {
@@ -1734,7 +1741,7 @@ impl WorkflowService {
                     duration_ms,
                     error,
                     canonical_error_event_id,
-                    resource_observation: None,
+                    resource_observation,
                 }),
             },
         )
@@ -2429,5 +2436,149 @@ mod tests {
             WorkflowServiceError::Internal(message)
                 if message.contains("scheduler admission retry timestamp overflowed")
         ));
+    }
+
+    #[test]
+    fn run_terminal_event_includes_diagnostics_ledger_resource_rollup() {
+        let service = WorkflowService::new().with_diagnostics_ledger(
+            pantograph_diagnostics_ledger::SqliteDiagnosticsLedger::open_in_memory()
+                .expect("diagnostics ledger opens"),
+        );
+        {
+            let mut ledger = service
+                .diagnostics_ledger_guard()
+                .expect("diagnostics ledger guard");
+            DiagnosticsLedgerRepository::append_diagnostic_event(
+                &mut *ledger,
+                sample_inference_resource_observation_event(),
+            )
+            .expect("inference resource diagnostic appends");
+        }
+
+        let session = WorkflowExecutionSessionSummary {
+            session_id: "session-a".to_string(),
+            workflow_id: "workflow-a".to_string(),
+            session_kind: WorkflowExecutionSessionKind::Workflow,
+            usage_profile: None,
+            attribution: None,
+            keep_alive: false,
+            state: crate::scheduler::WorkflowExecutionSessionState::Running,
+            queued_runs: 0,
+            run_count: 1,
+        };
+        let response = Ok(WorkflowRunResponse {
+            workflow_run_id: "run-a".to_string(),
+            outputs: Vec::new(),
+            timing_ms: 42,
+        });
+
+        service
+            .record_run_terminal_event_if_configured(
+                &session,
+                None,
+                "run-a",
+                Some("1.0.0"),
+                &response,
+            )
+            .expect("terminal event records");
+
+        let terminal_payload = {
+            let ledger = service
+                .diagnostics_ledger_guard()
+                .expect("diagnostics ledger guard");
+            let events = DiagnosticsLedgerRepository::diagnostic_events_after(&*ledger, 0, 10)
+                .expect("diagnostic events query succeeds");
+            let terminal_event = events
+                .iter()
+                .find(|event| {
+                    event.event_kind
+                        == pantograph_diagnostics_ledger::DiagnosticEventKind::RunTerminal
+                })
+                .expect("terminal event exists");
+            let payload: DiagnosticEventPayload =
+                serde_json::from_str(&terminal_event.payload_json).expect("terminal payload json");
+            let DiagnosticEventPayload::RunTerminal(payload) = payload else {
+                panic!("expected run terminal payload");
+            };
+            payload
+        };
+
+        assert_eq!(terminal_payload.status, RunTerminalStatus::Completed);
+        assert_eq!(terminal_payload.duration_ms, Some(42));
+        assert_eq!(
+            terminal_payload.resource_observation,
+            Some(pantograph_diagnostics_ledger::RunResourceObservation {
+                peak_ram_bytes: Some(4_096),
+                peak_vram_bytes: Some(8_192),
+                memory_failure_kind: Some(
+                    pantograph_diagnostics_ledger::RunMemoryFailureKind::OutOfMemory,
+                ),
+            })
+        );
+    }
+
+    fn sample_inference_resource_observation_event() -> DiagnosticEventAppendRequest {
+        DiagnosticEventAppendRequest {
+            source_component: DiagnosticEventSourceComponent::NodeExecution,
+            source_instance_id: Some("python-runtime:pytorch:1".to_string()),
+            occurred_at_ms: 20,
+            workflow_run_id: Some(WorkflowRunId::try_from("run-a".to_string()).unwrap()),
+            workflow_id: Some(WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+            workflow_version_id: None,
+            workflow_semantic_version: Some("1.0.0".to_string()),
+            node_id: Some("llm-node".to_string()),
+            node_type: Some("llm-inference".to_string()),
+            node_version: None,
+            runtime_id: Some("pytorch.transformers".to_string()),
+            runtime_version: None,
+            model_id: Some("pumas://models/tiny-transformers".to_string()),
+            model_version: None,
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
+            scheduler_policy_id: None,
+            retention_policy_id: None,
+            privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+            retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+            payload_ref: None,
+            payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
+                pantograph_diagnostics_ledger::InferenceExecutionDiagnosticObservedPayload {
+                    request_id: "req-a".to_string(),
+                    task_id: "image_generation".to_string(),
+                    lifecycle_phase: Some("backend_execution".to_string()),
+                    lifecycle_event_kind: Some("completed".to_string()),
+                    duration_ms: Some(75),
+                    selected_backend_key: Some("pytorch".to_string()),
+                    selected_backend_family: Some("pytorch".to_string()),
+                    selected_runtime_variant_id: Some("pytorch.cuda".to_string()),
+                    selected_device_class: Some("cuda".to_string()),
+                    selected_device_id: Some("cuda:0".to_string()),
+                    selected_network_node_id: None,
+                    resolved_artifact_kind: Some("diffusers_bundle".to_string()),
+                    usage: None,
+                    cache_handle_id: None,
+                    artifact_refs: Vec::new(),
+                    resource_observation: Some(
+                        pantograph_diagnostics_ledger::InferenceResourceObservationDiagnosticSummary {
+                            peak_ram_bytes: Some(4_096),
+                            peak_vram_bytes: Some(8_192),
+                            memory_failure_kind: Some(
+                                pantograph_diagnostics_ledger::RunMemoryFailureKind::OutOfMemory,
+                            ),
+                            sources: Vec::new(),
+                            availability: Vec::new(),
+                        },
+                    ),
+                    kv_cache: None,
+                    runtime_settings: None,
+                    compatibility_report: None,
+                    compatibility_issue_count: 0,
+                    compatibility_issues: Vec::new(),
+                    option_support_counts:
+                        pantograph_diagnostics_ledger::InferenceOptionSupportCounts::default(),
+                    option_diagnostics: Vec::new(),
+                },
+            ),
+        }
     }
 }

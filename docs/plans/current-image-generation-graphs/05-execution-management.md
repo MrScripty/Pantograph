@@ -6724,6 +6724,29 @@ Worker rules:
     pantograph-diagnostics-ledger`, and `cargo fmt --all -- --check`.
   - Remaining follow-up: workflow-service still needs to call the rollup while
     appending its single owned `RunTerminal` event.
+- 2026-05-18 workflow-service terminal resource observation slice:
+  - Smallest useful vertical slice: wire workflow-service terminal event
+    emission to read the diagnostics-ledger run resource rollup and store it in
+    `RunTerminalPayload.resource_observation`.
+  - Allowed write set: `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    and this execution log. Unrelated root proposal markdown files remain
+    ignored.
+  - No-fallback/no-legacy confirmation: workflow-service remains the only
+    producer of terminal run-completion events. It does not inspect inference
+    diagnostics or compute resource facts itself; diagnostics-ledger owns the
+    rollup, and embedded-runtime remains limited to detailed inference
+    diagnostic persistence.
+  - Implementation completed: `record_run_terminal_event_if_configured` now
+    calls `run_resource_observation_rollup` before appending `RunTerminal`.
+    The focused test proves the terminal payload includes peak RAM, peak VRAM,
+    and OOM from the typed rollup.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    run_terminal_event_includes_diagnostics_ledger_resource_rollup --lib`,
+    `cargo check -p pantograph-workflow-service`, and `cargo fmt --all --
+    --check`.
+  - Remaining follow-up: item 8 is complete; the next plan item is backend
+    producer telemetry.
 
 ### Traceability Links
 

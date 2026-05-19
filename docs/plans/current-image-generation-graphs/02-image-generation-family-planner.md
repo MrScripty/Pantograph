@@ -790,7 +790,7 @@ Staged implementation:
      test_canonical_llm_text_keeps_resource_observation_on_lifecycle_events
      --lib`, `cargo check -p node-engine --features inference-nodes`, and
      `cargo fmt --all -- --check`.
-8. [ ] Extend embedded-runtime projection into inference diagnostics and
+8. [x] Extend embedded-runtime projection into inference diagnostics and
    `RunTerminalPayload.resource_observation`, including mapping tests for
    peak RAM, peak VRAM, explicit OOM, source/availability diagnostics, and
    unavailable metrics that should not be persisted as fake terminal values.
@@ -849,10 +849,10 @@ Staged implementation:
    - Recommended staged replacement:
      1. [x] Add diagnostics-ledger rollup API and tests for max RAM/max VRAM/OOM,
         no observations, and availability-only observations.
-     2. [ ] Update workflow-service terminal event recording to include the rollup
+     2. [x] Update workflow-service terminal event recording to include the rollup
         result and add focused tests proving a single `RunTerminal` owns the
         run-level observation.
-     3. [ ] Mark the embedded-runtime diagnostic projection sub-slice complete in
+     3. [x] Mark the embedded-runtime diagnostic projection sub-slice complete in
         this item without adding duplicate terminal behavior there.
    - 2026-05-18: completed the diagnostics-ledger rollup sub-slice.
      `RunResourceObservationRollupQuery` and
@@ -869,6 +869,20 @@ Staged implementation:
    - Verification: `cargo test -p pantograph-diagnostics-ledger
      run_resource_observation_rollup --lib`, `cargo check -p
      pantograph-diagnostics-ledger`, and `cargo fmt --all -- --check`.
+   - 2026-05-18: completed the workflow-service terminal wiring sub-slice.
+     `record_run_terminal_event_if_configured` now reads the diagnostics-ledger
+     rollup immediately before appending the workflow-service-owned
+     `RunTerminal` event and stores that compact run-level observation in
+     `RunTerminalPayload.resource_observation`.
+   - No-fallback/no-legacy confirmation: workflow-service does not compute
+     resource facts itself and does not inspect inference diagnostics directly.
+     It delegates rollup policy to diagnostics-ledger, preserves single
+     terminal-event ownership, and does not introduce a second terminal
+     producer in embedded-runtime.
+   - Verification: `cargo test -p pantograph-workflow-service
+     run_terminal_event_includes_diagnostics_ledger_resource_rollup --lib`,
+     `cargo check -p pantograph-workflow-service`, and `cargo fmt --all --
+     --check`.
 9. [ ] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
    shared process RSS where supported, and managed runtime structured
    telemetry. Each producer slice must include focused tests/fixtures for its
