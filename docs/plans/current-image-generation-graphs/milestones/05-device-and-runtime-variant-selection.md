@@ -759,6 +759,56 @@ meet them, stop and re-plan instead of adding compatibility or local bypasses.
   README coverage under the documentation standards; placeholder prose is not
   acceptable.
 
+### Per-Slice Standards Evidence
+
+Before any remaining closeout item is marked complete, the implementation note
+for that slice must record the standards evidence below. This is not a
+compatibility step and must not preserve retired behavior; it is the audit
+trail that proves the replacement path stayed inside the agreed blast radius.
+
+- **Write set and ownership:** exact files or directories touched, forbidden
+  shared artifacts left untouched, and whether the slice was serial-only
+  because it changed contracts, generated DTOs, persisted state, lockfiles,
+  workflow fixtures, or plan files.
+- **Layer and crate-role check:** why the changed code belongs in its crate or
+  frontend module, and confirmation that dependency direction still follows the
+  established architecture. In particular, `inference` must remain free of
+  workflow-service, diagnostics-ledger, frontend, Tauri, graph-internal, and
+  scheduler-policy dependencies.
+- **Contract and fixture impact:** every Rust, TypeScript, Tauri, Python
+  worker, diagnostics-ledger, persisted-state, and saved-workflow boundary
+  affected by the slice, plus the fixture or contract test that proves serde
+  casing, tags, validated ids, and diagnostic variants.
+- **Lifecycle and concurrency owner:** for every task, subprocess, stream,
+  probe, watcher, install job, local service, or refresh loop touched, record
+  the owner, tracked handle shape, cancellation path, shutdown timeout, overlap
+  policy, bounded queue/request policy, and panic/error reporting path.
+- **Path, process, and resource security:** the allowed-root validation point,
+  loopback/request-limit policy for local services, and checked arithmetic for
+  dimensions, byte ranges, cache counters, timings, resource observations,
+  memory estimates, and scheduler/admission budgets.
+- **Cross-platform and feature matrix:** when a slice touches platform-specific
+  runtime, monitor, subprocess, filesystem, dynamic-library, or feature-flag
+  behavior, record the platform abstraction used, any `cfg()` containment, and
+  the default/no-default/all-features or target checks that apply. Unsupported
+  or unavailable platform/runtime features must surface typed unavailable
+  diagnostics, not implicit fallback behavior.
+- **Frontend accessibility and state ownership:** when UI is touched, record
+  the accessible selectors/names, focus and keyboard behavior, cleanup of
+  subscriptions or scoped polls, and confirmation that backend-owned
+  runtime/device readiness is rendered from backend facts only.
+- **Decomposition review:** if a changed file crosses the standards thresholds
+  for size or responsibility, either decompose it in the slice or record the
+  concrete follow-up owner before closing the related checklist row.
+- **Verification:** exact commands run, including focused tests, formatting,
+  diff checks, fixture checks, and any skipped verification with the reason and
+  owner.
+
+Acceptance: broad Milestone 5 checklist rows cannot close from prose-only
+confidence. The matching implementation note must include the evidence above
+and must point to the tests or diagnostics that prove the canonical path
+replaced the retired behavior.
+
 ### Codebase Investigation Findings
 
 The closeout plan was rechecked against the current codebase on 2026-05-20.
