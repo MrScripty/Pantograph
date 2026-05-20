@@ -610,7 +610,36 @@ fn rewrite_test_workflow_required_backend(root: &Path, workflow_id: &str, backen
     let mut workflow_json: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&workflow_path).expect("read workflow"))
             .expect("parse workflow");
-    workflow_json["graph"]["nodes"][0]["data"]["backend_key"] = serde_json::json!(backend_key);
+    workflow_json["graph"]["nodes"] = serde_json::json!([
+        workflow_json["graph"]["nodes"][0].clone(),
+        {
+            "id": "llm-1",
+            "node_type": "llm-inference",
+            "data": {
+                "task_kind": "text_generation",
+                "runtime": backend_key
+            },
+            "position": { "x": 200.0, "y": 0.0 }
+        },
+        workflow_json["graph"]["nodes"][1].clone()
+    ]);
+    workflow_json["graph"]["nodes"][2]["position"] = serde_json::json!({ "x": 400.0, "y": 0.0 });
+    workflow_json["graph"]["edges"] = serde_json::json!([
+        {
+            "id": "e-prompt",
+            "source": "text-input-1",
+            "source_handle": "text",
+            "target": "llm-1",
+            "target_handle": "prompt"
+        },
+        {
+            "id": "e-text",
+            "source": "llm-1",
+            "source_handle": "text",
+            "target": "text-output-1",
+            "target_handle": "text"
+        }
+    ]);
     std::fs::write(
         workflow_path,
         serde_json::to_vec(&workflow_json).expect("serialize workflow"),

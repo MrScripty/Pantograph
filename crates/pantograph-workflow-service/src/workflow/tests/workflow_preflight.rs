@@ -1,5 +1,8 @@
 use super::*;
-use crate::WorkflowTechnicalFitCompatibilityReport;
+use crate::{
+    WorkflowTechnicalFitCompatibilityReport, WorkflowTechnicalFitDeviceDiagnostic,
+    WorkflowTechnicalFitDeviceDiagnosticCode, WorkflowTechnicalFitDeviceDiagnosticSeverity,
+};
 
 #[tokio::test]
 async fn workflow_preflight_reports_missing_required_inputs_and_invalid_targets() {
@@ -176,6 +179,81 @@ async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
     assert!(response.blocking_runtime_issues[0]
         .message
         .contains("candidate state is incomplete"));
+}
+
+#[tokio::test]
+async fn workflow_preflight_ignores_irrelevant_technical_fit_blocker_without_runtime_need() {
+    let host = PreflightHost::with_technical_fit_decision(
+        WorkflowHostCapabilities {
+            max_input_bindings: 16,
+            max_output_targets: 16,
+            max_value_bytes: 4096,
+            runtime_requirements: WorkflowRuntimeRequirements::default(),
+            models: Vec::new(),
+            runtime_capabilities: Vec::new(),
+        },
+        WorkflowTechnicalFitDecision {
+            selection_mode: WorkflowTechnicalFitSelectionMode::Automatic,
+            selected_candidate_id: Some("candle.cpu".to_string()),
+            selected_runtime_id: None,
+            selected_runtime_variant_id: Some("candle.cpu".to_string()),
+            selected_backend_key: Some("candle".to_string()),
+            selected_model_id: None,
+            selected_device_class: None,
+            selected_device_id: None,
+            resource_estimates: Vec::new(),
+            observed_throughput_hint: None,
+            device_diagnostics: vec![WorkflowTechnicalFitDeviceDiagnostic {
+                code: WorkflowTechnicalFitDeviceDiagnosticCode::NoValidCandidate,
+                severity: WorkflowTechnicalFitDeviceDiagnosticSeverity::Error,
+                message: "Candle executable model loading is not implemented".to_string(),
+                task_id: None,
+                runtime_id: None,
+                device_class: None,
+                device_id: None,
+                runtime_variant_id: Some("candle.cpu".to_string()),
+                backend_key: Some("candle".to_string()),
+                model_id: None,
+                evidence_key: None,
+                requested_runtime_key: None,
+            }],
+            dependency_readiness: Vec::new(),
+            reasons: vec![WorkflowTechnicalFitReason::new(
+                WorkflowTechnicalFitReasonCode::AutomaticRanking,
+                Some("candle.cpu"),
+            )],
+            selection_policy_trace: None,
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
+        },
+    );
+    let service = WorkflowService::new();
+
+    let response = service
+        .workflow_preflight(
+            &host,
+            WorkflowPreflightRequest {
+                workflow_id: "wf-1".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+            },
+        )
+        .await
+        .expect("preflight response");
+
+    assert!(response.can_run);
+    assert!(response.blocking_runtime_issues.is_empty());
+    assert!(response.runtime_warnings.is_empty());
+    assert!(response.technical_fit_decision.is_some());
 }
 
 #[tokio::test]

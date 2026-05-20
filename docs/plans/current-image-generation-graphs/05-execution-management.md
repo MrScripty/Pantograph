@@ -7088,6 +7088,8 @@ Worker rules:
     required-backend assertion, but the tests still need a dedicated slice to
     update their expected readiness/preflight path without reintroducing legacy
     metadata behavior.
+    Resolved by the 2026-05-20 canonical runtime-preflight ordering slice
+    below.
   - Standards and boundary notes: no dependencies, lockfiles, workflow
     fixtures, generated files, sqlite WAL/SHM files, or production runtime
     paths changed. The new smoke script is an internal developer validation
@@ -7127,6 +7129,46 @@ Worker rules:
     weighting and richer multi-device/multi-runtime observations, but the
     current no-fallback history gate is now active for the typed timing,
     memory, and OOM facts available today.
+- 2026-05-20 canonical runtime-preflight ordering slice:
+  - Smallest useful vertical slice: replace the stale embedded-runtime
+    required-backend test helper with canonical `llm-inference.data.runtime`
+    input and make workflow preflight ignore irrelevant technical-fit blockers
+    unless a workflow/model/explicit selection actually requires runtime
+    readiness.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/lib_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/lib_tests/runtime_preflight_tests.rs`,
+    `crates/pantograph-workflow-service/src/technical_fit.rs`,
+    `crates/pantograph-workflow-service/src/workflow/tests/workflow_preflight.rs`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the test helper no longer writes
+    incidental `backend_key` metadata onto `text-input` nodes. Runtime
+    requirements are derived from the typed inference `runtime` input, and
+    unavailable explicit/required runtimes still fail with typed
+    `WorkflowRuntimeIssue` diagnostics instead of selecting another runtime or
+    coercing the request.
+  - Implementation completed: `rewrite_test_workflow_required_backend` now
+    builds `text-input -> llm-inference -> text-output` with `runtime` on the
+    inference node. Workflow-service runtime preflight now first checks whether
+    runtime readiness should be enforced, then prefers concrete runtime
+    capability readiness diagnostics before falling back to technical-fit
+    blocking diagnostics. Non-inference workflows with no runtime requirement
+    keep their technical-fit decision for visibility but do not block on an
+    irrelevant candidate diagnostic.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    workflow_preflight --lib`, `cargo test -p pantograph-embedded-runtime
+    runtime_preflight --lib`, `cargo check -p pantograph-workflow-service`,
+    `cargo check -p pantograph-embedded-runtime`, `cargo fmt --package
+    pantograph-workflow-service --package pantograph-embedded-runtime --
+    --check`, and `git diff --check`.
+  - Discovered issue fixed in-slice: the preflight service previously
+    evaluated technical-fit blocking diagnostics before checking whether
+    runtime readiness was required. That made a text-only workflow fail because
+    an unrelated Candle candidate reported unavailable executable loading, and
+    it obscured concrete managed-runtime readiness reasons such as validation
+    failure or interrupted-job reconciliation.
+  - Remaining follow-up: none for this slice. Broader technical-fit and device
+    milestone items remain tracked in their milestone sections.
 
 ### Traceability Links
 

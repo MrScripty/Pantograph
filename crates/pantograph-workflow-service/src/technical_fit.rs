@@ -978,24 +978,6 @@ fn workflow_runtime_preflight_from_decision(
     let mut runtime_warnings = Vec::new();
     let mut blocking_runtime_issues = Vec::new();
 
-    if decision_has_blocking_device_diagnostic(&decision)
-        || decision_has_incomplete_runtime_state(&decision)
-    {
-        let issue = WorkflowRuntimeIssue {
-            runtime_id,
-            display_name,
-            required_backend_key,
-            message: describe_technical_fit_blocking_issue(&decision),
-        };
-        runtime_warnings.push(issue.clone());
-        blocking_runtime_issues.push(issue);
-        return WorkflowRuntimePreflightAssessment {
-            technical_fit_decision: Some(decision),
-            runtime_warnings,
-            blocking_runtime_issues,
-        };
-    }
-
     if !enforce_runtime_readiness {
         return WorkflowRuntimePreflightAssessment {
             technical_fit_decision: Some(decision),
@@ -1015,6 +997,24 @@ fn workflow_runtime_preflight_from_decision(
                 blocking_runtime_issues,
             };
         }
+    }
+
+    if decision_has_blocking_device_diagnostic(&decision)
+        || decision_has_incomplete_runtime_state(&decision)
+    {
+        let issue = WorkflowRuntimeIssue {
+            runtime_id,
+            display_name,
+            required_backend_key,
+            message: describe_technical_fit_blocking_issue(&decision),
+        };
+        runtime_warnings.push(issue.clone());
+        blocking_runtime_issues.push(issue);
+        return WorkflowRuntimePreflightAssessment {
+            technical_fit_decision: Some(decision),
+            runtime_warnings,
+            blocking_runtime_issues,
+        };
     }
 
     if decision.selected_runtime_id.is_none() {
