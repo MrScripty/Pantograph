@@ -783,6 +783,25 @@ PyTorch/diffusers and produce a retained image artifact.
       leakage, and whether the dedicated embedding sidecar shares the same
       contract. No compatibility shim or scheduler-side log parsing should be
       introduced.
+  - 2026-05-20 legacy OOM handling planning decision:
+    - Use the shared llama.cpp sidecar event classifier as the next
+      implementation slice. This is option 2: enough to remove scattered
+      legacy string handling now, while preserving option 3, the full sidecar
+      startup state machine, as the later objective.
+    - The classifier should be owned by the llama.cpp adapter boundary and
+      shared by `inference::server` and `inference::embedding_runtime`.
+      Gateway, scheduler, diagnostics-ledger, generic process code, and
+      runtime selection code must not inspect runtime logs.
+    - No-fallback/no-legacy rule: existing OOM string checks must be removed
+      from readiness loops or replaced by calls into the classifier. Detected
+      OOM must become typed startup/runtime failure facts that can map to
+      `InferenceMemoryFailureKind::OutOfMemory`; non-OOM startup failures must
+      remain explicit typed failures and must not be mislabeled as memory
+      failures.
+    - Staged path to option 3: after the classifier is in place, a later slice
+      may introduce a full sidecar startup state machine that owns process
+      events, HTTP readiness, timeout, termination, cleanup, and telemetry
+      emission.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

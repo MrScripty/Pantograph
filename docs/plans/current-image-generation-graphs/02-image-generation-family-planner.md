@@ -1038,6 +1038,20 @@ Staged implementation:
       contract or a narrower llama.cpp startup error type. No compatibility
       shim or fallback string parser should be preserved outside that typed
       adapter-local boundary.
+    - 2026-05-20 planning decision: implement the shared llama.cpp sidecar
+      event classifier now, with the full typed sidecar startup state machine
+      retained as the later target. The immediate slice should introduce one
+      shared adapter-local classifier for `ProcessEvent` stdout/stderr/error/
+      termination facts, used by both `LlamaServer` and
+      `LlamaCppEmbeddingRuntime`. The classifier may inspect bounded
+      llama.cpp output only inside the adapter boundary and must immediately
+      translate detected OOM into typed startup/runtime failure facts that can
+      map to `InferenceMemoryFailureKind::OutOfMemory`; it must not preserve
+      scattered fallback string parsing or move log parsing into scheduler,
+      gateway, diagnostics-ledger, or generic process code. The later option-3
+      state machine should own process events, HTTP readiness, timeout,
+      termination, cleanup, and telemetry emission once this classifier is in
+      place.
 11. [ ] Extend runtime-registry candidate history DTOs and embedded-runtime
    history projection with observed memory and OOM fields already computed by
    diagnostics-ledger.

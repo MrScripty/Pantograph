@@ -347,6 +347,14 @@ Update during implementation:
   editing `inference::server`, `inference::embedding_runtime`, or
   `backend::llamacpp_support`; do not preserve fallback string parsing outside
   that boundary.
+- 2026-05-20: Legacy OOM handling planning decision recorded. Use a shared
+  llama.cpp sidecar event classifier now and keep the full sidecar startup
+  state machine as the later endpoint. The classifier is the only allowed
+  boundary for bounded llama.cpp output inspection and must immediately
+  translate OOM into typed startup/runtime failure facts that can map to
+  `InferenceMemoryFailureKind::OutOfMemory`; scheduler, gateway, diagnostics
+  ledger, and generic process code must not parse logs or keep string fallback
+  paths.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed
