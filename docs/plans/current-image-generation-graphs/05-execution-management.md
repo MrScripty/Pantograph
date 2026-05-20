@@ -296,6 +296,12 @@ Update during implementation:
   typed non-streaming execution, and streaming lifecycle wrappers now use the
   same collector path for process-RSS observations; backend-native worker
   telemetry remains the next boundary slice.
+- 2026-05-20: Continued telemetry-scope implementation by replacing the
+  planned image backend trait boundary with a minimal
+  `BackendExecutionContext` that carries the telemetry recorder. The
+  PyTorch/Diffusers bridge now records worker success/failure resource
+  observations into the gateway-owned scope, so backend-native CUDA/MPS facts
+  and process-RSS facts merge through one terminal lifecycle path.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

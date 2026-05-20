@@ -44,8 +44,8 @@ use crate::types::{
     RuntimeLifecycleSnapshot, ServerModeInfo,
 };
 use crate::{
-    InferenceExecutionResourceObservation, InferenceExecutionTelemetryScope,
-    RuntimeResourceMonitor, RuntimeResourceMonitorGuard,
+    BackendExecutionContext, InferenceExecutionResourceObservation,
+    InferenceExecutionTelemetryScope, RuntimeResourceMonitor, RuntimeResourceMonitorGuard,
 };
 
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
@@ -1328,12 +1328,26 @@ impl InferenceGateway {
         &self,
         plan: ImageGenerationExecutionPlan,
     ) -> Result<ImageGenerationResult, GatewayError> {
+        let telemetry_scope = InferenceExecutionTelemetryScope::new();
+        let context = BackendExecutionContext::new(telemetry_scope.recorder());
+        let result = self
+            .generate_image_from_plan_with_context(plan, context)
+            .await;
+        let _ = telemetry_scope.drain_resource_observation();
+        result
+    }
+
+    async fn generate_image_from_plan_with_context(
+        &self,
+        plan: ImageGenerationExecutionPlan,
+        context: BackendExecutionContext,
+    ) -> Result<ImageGenerationResult, GatewayError> {
         let guard = self.backend.read().await;
         if !guard.is_ready() {
             return Err(GatewayError::Backend(BackendError::NotReady));
         }
         guard
-            .generate_image_from_plan(plan)
+            .generate_image_from_plan(plan, context)
             .await
             .map_err(GatewayError::Backend)
     }
@@ -1400,7 +1414,10 @@ impl InferenceGateway {
                     None,
                 );
                 let execution_telemetry = start_execution_telemetry_for_current_process();
-                let result = self.generate_image_from_plan(plan).await;
+                let context = execution_telemetry.backend_execution_context();
+                let result = self
+                    .generate_image_from_plan_with_context(plan, context)
+                    .await;
                 let resource_observation =
                     finish_execution_telemetry_for_current_process(execution_telemetry);
                 record_planned_image_generation_lifecycle_result(
@@ -2965,6 +2982,12 @@ fn image_generation_planner_diagnostic_code_label(
 struct GatewayExecutionTelemetry {
     scope: InferenceExecutionTelemetryScope,
     resource_monitor: Option<RuntimeResourceMonitorGuard>,
+}
+
+impl GatewayExecutionTelemetry {
+    fn backend_execution_context(&self) -> BackendExecutionContext {
+        BackendExecutionContext::new(self.scope.recorder())
+    }
 }
 
 fn start_execution_telemetry_for_current_process() -> GatewayExecutionTelemetry {

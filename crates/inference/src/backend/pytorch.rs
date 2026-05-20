@@ -2956,8 +2956,9 @@ impl InferenceBackend for PyTorchBackend {
     async fn generate_image_from_plan(
         &self,
         plan: crate::image_generation_planner::ImageGenerationExecutionPlan,
+        context: crate::BackendExecutionContext,
     ) -> Result<ImageGenerationResult, BackendError> {
-        PyTorchBackend::generate_image_from_plan(self, plan).await
+        PyTorchBackend::generate_image_from_plan(self, plan, context).await
     }
 
     async fn kv_cache_runtime_fingerprint(

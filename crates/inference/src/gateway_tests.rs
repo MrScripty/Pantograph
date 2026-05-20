@@ -39,7 +39,7 @@ use crate::types::{
     InferenceRequestLifecycleEventSinkError, InferenceUsage, MultimodalGenerationRequest,
     MultimodalInputPart, RuntimeFactReadiness, VideoUnderstandingRequest,
 };
-use crate::{InferenceDeviceClass, InferenceDeviceId};
+use crate::{BackendExecutionContext, InferenceDeviceClass, InferenceDeviceId};
 
 #[path = "gateway_tests/start_config.rs"]
 mod start_config;
@@ -406,7 +406,18 @@ impl InferenceBackend for MockImageBackend {
     async fn generate_image_from_plan(
         &self,
         plan: ImageGenerationExecutionPlan,
+        context: BackendExecutionContext,
     ) -> Result<ImageGenerationResult, BackendError> {
+        context
+            .telemetry_recorder()
+            .record_resource_observation(
+                InferenceExecutionResourceObservation::peak_vram(
+                    4096,
+                    InferenceResourceObservationSourceKind::PytorchCuda,
+                )
+                .expect("mock backend resource observation is valid"),
+            )
+            .expect("mock backend records resource observation");
         Ok(ImageGenerationResult {
             images: vec![crate::types::EncodedImage {
                 data_base64: plan.prompt,
@@ -1258,8 +1269,13 @@ async fn test_generate_image_from_planning_input_with_lifecycle_records_planned_
     let resource_observation = events[4]
         .resource_observation
         .as_ref()
-        .expect("backend execution completion should include process RSS observation");
+        .expect("backend execution completion should include merged resource observations");
     assert_process_rss_observation(resource_observation);
+    assert_eq!(resource_observation.peak_vram_bytes(), Some(4096));
+    assert!(resource_observation.sources().iter().any(|source| {
+        source.metric_kind() == InferenceResourceObservationMetricKind::PeakVramBytes
+            && source.source_kind() == InferenceResourceObservationSourceKind::PytorchCuda
+    }));
     assert!(events
         .iter()
         .enumerate()

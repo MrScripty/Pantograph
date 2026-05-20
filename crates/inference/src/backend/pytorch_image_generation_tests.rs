@@ -10,6 +10,7 @@ use crate::model_contracts::{
     PumasArtifactLoadTarget, PumasModelRef,
 };
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
+use crate::InferenceExecutionTelemetryScope;
 
 #[test]
 fn test_generate_image_envelope_from_plan_validates_worker_request() {
@@ -41,8 +42,13 @@ fn test_image_generation_result_from_worker_response_maps_images() {
     let response =
         include_str!("../../tests/fixtures/pytorch_worker_contract/generate_image_response.json");
 
-    let result = image_generation_result_from_worker_response("req-image-001", response)
-        .expect("response should map");
+    let telemetry_scope = InferenceExecutionTelemetryScope::new();
+    let result = image_generation_result_from_worker_response(
+        "req-image-001",
+        response,
+        &telemetry_scope.recorder(),
+    )
+    .expect("response should map");
 
     assert_eq!(result.images.len(), 1);
     assert_eq!(result.images[0].mime_type, "image/png");
@@ -56,8 +62,13 @@ fn test_image_generation_result_rejects_request_id_mismatch() {
     let response =
         include_str!("../../tests/fixtures/pytorch_worker_contract/generate_image_response.json");
 
-    let error = image_generation_result_from_worker_response("req-other", response)
-        .expect_err("mismatched response ids should fail");
+    let telemetry_scope = InferenceExecutionTelemetryScope::new();
+    let error = image_generation_result_from_worker_response(
+        "req-other",
+        response,
+        &telemetry_scope.recorder(),
+    )
+    .expect_err("mismatched response ids should fail");
 
     assert!(error
         .to_string()

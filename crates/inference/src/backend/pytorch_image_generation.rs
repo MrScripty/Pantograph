@@ -12,11 +12,13 @@ use super::{task_join_error_message, PyTorchBackend};
 use crate::backend::BackendError;
 use crate::image_generation_planner::ImageGenerationExecutionPlan;
 use crate::types::{EncodedImage, ImageGenerationResult};
+use crate::{BackendExecutionContext, InferenceExecutionTelemetryRecorder};
 
 impl PyTorchBackend {
     pub async fn generate_image_from_plan(
         &self,
         plan: ImageGenerationExecutionPlan,
+        context: BackendExecutionContext,
     ) -> Result<ImageGenerationResult, BackendError> {
         if !self.ready {
             return Err(BackendError::NotReady);
@@ -56,7 +58,11 @@ impl PyTorchBackend {
                             ),
                         )
                     })?;
-                image_generation_result_from_worker_response(&request_id, &response_json)
+                image_generation_result_from_worker_response(
+                    &request_id,
+                    &response_json,
+                    context.telemetry_recorder(),
+                )
             })
         })
         .await
@@ -80,6 +86,7 @@ pub(super) fn generate_image_envelope_from_plan(
 pub(super) fn image_generation_result_from_worker_response(
     request_id: &str,
     response_json: &str,
+    telemetry_recorder: &InferenceExecutionTelemetryRecorder,
 ) -> Result<ImageGenerationResult, BackendError> {
     let response: PyTorchWorkerResponse<PyTorchGenerateImageResult> =
         serde_json::from_str(response_json).map_err(|error| {
@@ -105,6 +112,11 @@ pub(super) fn image_generation_result_from_worker_response(
                     "PyTorch worker generate_image response returned no images".to_string(),
                 ));
             }
+            record_worker_resource_observation(
+                request_id,
+                telemetry_recorder,
+                success.resource_observation,
+            );
             Ok(ImageGenerationResult {
                 images: success
                     .result
@@ -121,12 +133,15 @@ pub(super) fn image_generation_result_from_worker_response(
                 metadata: success.result.metadata,
             })
         }
-        PyTorchWorkerResponse::Error(failure) => image_worker_failure(request_id, failure),
+        PyTorchWorkerResponse::Error(failure) => {
+            image_worker_failure(request_id, telemetry_recorder, failure)
+        }
     }
 }
 
 fn image_worker_failure(
     request_id: &str,
+    telemetry_recorder: &InferenceExecutionTelemetryRecorder,
     failure: PyTorchWorkerFailure,
 ) -> Result<ImageGenerationResult, BackendError> {
     if failure.request_id != request_id {
@@ -138,7 +153,27 @@ fn image_worker_failure(
             ),
         ));
     }
+    record_worker_resource_observation(
+        request_id,
+        telemetry_recorder,
+        failure.resource_observation.clone(),
+    );
     Err(failure.into_backend_error())
+}
+
+fn record_worker_resource_observation(
+    request_id: &str,
+    telemetry_recorder: &InferenceExecutionTelemetryRecorder,
+    resource_observation: Option<crate::InferenceExecutionResourceObservation>,
+) {
+    let Some(resource_observation) = resource_observation else {
+        return;
+    };
+    if let Err(error) = telemetry_recorder.record_resource_observation(resource_observation) {
+        log::warn!(
+            "failed to record PyTorch worker image resource observation for {request_id}: {error}"
+        );
+    }
 }
 
 fn image_worker_failure_from_message(request_id: &str, message: String) -> BackendError {

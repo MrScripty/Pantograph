@@ -51,6 +51,24 @@ impl InferenceExecutionTelemetryScope {
     }
 }
 
+/// Minimal backend execution context for one backend call.
+#[derive(Debug, Clone)]
+pub struct BackendExecutionContext {
+    telemetry_recorder: InferenceExecutionTelemetryRecorder,
+}
+
+impl BackendExecutionContext {
+    #[must_use]
+    pub fn new(telemetry_recorder: InferenceExecutionTelemetryRecorder) -> Self {
+        Self { telemetry_recorder }
+    }
+
+    #[must_use]
+    pub fn telemetry_recorder(&self) -> &InferenceExecutionTelemetryRecorder {
+        &self.telemetry_recorder
+    }
+}
+
 /// Cloneable backend-facing telemetry recorder.
 #[derive(Debug, Clone)]
 pub struct InferenceExecutionTelemetryRecorder {

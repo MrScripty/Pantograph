@@ -104,7 +104,7 @@ pub use execution_evidence::{
     ExecutionEvidenceSource, GraphRuntimeRequirement, GraphRuntimeRequirementParseError,
 };
 pub use execution_telemetry::{
-    InferenceExecutionTelemetryError, InferenceExecutionTelemetryRecorder,
+    BackendExecutionContext, InferenceExecutionTelemetryError, InferenceExecutionTelemetryRecorder,
     InferenceExecutionTelemetryScope,
 };
 pub use gateway::{

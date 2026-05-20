@@ -51,6 +51,9 @@ capability declarations. Backend-specific translation lives in per-engine files,
 while `registry.rs` handles discovery and instantiation. Reranking is exposed as
 its own typed method and capability bit so callers can request it directly and
 the llama.cpp adapter can switch into a dedicated reranking mode when needed.
+Backend execution methods that can produce runtime telemetry receive a minimal
+`BackendExecutionContext`; that context carries diagnostic recorders only and
+does not move lifecycle ownership out of the gateway.
 
 ## Alternatives Rejected
 
@@ -129,6 +132,10 @@ fn create_backend() {
   by the active backend before command or worker-load translation.
 - `InferenceBackend` method additions must preserve compatibility expectations
   for existing callers or be versioned through coordinated contract changes.
+- Planned image-generation backends may record typed resource observations
+  through `BackendExecutionContext`, but they must not emit lifecycle events,
+  write telemetry into task outputs, or read scheduler/workflow/Pumas facts
+  from the context.
 - `reranking_mode` is backend-consumed lifecycle metadata, not a UI hint; host
   layers should treat it as part of sidecar startup configuration.
 - Backend `start()` results own lifecycle reuse facts when a backend can attach

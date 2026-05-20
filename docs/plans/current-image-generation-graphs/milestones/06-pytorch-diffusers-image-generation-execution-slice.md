@@ -667,6 +667,27 @@ PyTorch/diffusers and produce a retained image artifact.
     Remaining follow-up: pass the telemetry recorder through the backend
     execution boundary so PyTorch worker success/failure resource observations
     reach the same lifecycle terminal summary.
+  - 2026-05-20 planned image backend-native telemetry slice: replaced the
+    planned image backend trait boundary with a minimal
+    `BackendExecutionContext` containing only the telemetry recorder. Gateway
+    creates the context from its execution telemetry scope for planned image
+    lifecycle calls, and the PyTorch/Diffusers bridge records worker
+    success/failure `resource_observation` facts into that recorder before
+    returning task output or backend errors. The worker observations remain
+    diagnostics only: they are not written into image metadata, emitted as
+    backend-owned lifecycle events, passed through Pumas/workflow facts, or
+    routed through a compatibility result wrapper. Focused coverage proves a
+    backend-native CUDA VRAM observation merges with process-RSS lifecycle
+    telemetry on the planned image backend execution terminal event. The
+    backend README now documents that `BackendExecutionContext` is diagnostic
+    recorder context only, not lifecycle or scheduler ownership transfer.
+    Verification passed: `cargo test -p inference
+    test_generate_image_from_planning_input_with_lifecycle_records_planned_decision
+    --lib`, `cargo test -p inference --features backend-pytorch
+    pytorch_image_generation --lib`, `cargo check -p inference`, and
+    `cargo check -p inference --features backend-pytorch`. Remaining
+    follow-up: failure-path OOM typing and managed-runtime structured
+    telemetry still need separate producer slices.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
