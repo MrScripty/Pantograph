@@ -38,6 +38,7 @@ mod image_generation_family_adapters;
 mod image_generation_family_rules;
 pub mod image_generation_planner;
 pub mod kv_cache;
+pub(crate) mod llamacpp_sidecar_events;
 pub mod managed_binaries;
 pub mod managed_dependencies;
 pub mod managed_media_dependencies;

@@ -14,6 +14,10 @@ use tokio::sync::RwLock;
 
 use crate::config::DeviceConfig;
 use crate::constants::{hosts, ports, timeouts};
+use crate::llamacpp_sidecar_events::{
+    LlamaCppSidecarEventClassification, LlamaCppSidecarEventClassifier,
+    LlamaCppSidecarOutputStream, LlamaCppSidecarStartupError,
+};
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::ServerModeInfo;
@@ -29,37 +33,6 @@ struct SidecarPidRecord {
 
 fn normalize_server_url(url: &str) -> String {
     url.trim_end_matches('/').to_string()
-}
-
-fn is_oom_line(line: &str) -> bool {
-    let lower = line.to_ascii_lowercase();
-    if lower.contains("out of memory") {
-        return true;
-    }
-    if lower.contains("outofdevicememory") || lower.contains("erroroutofdevicememory") {
-        return true;
-    }
-    if lower.contains("device memory allocation") {
-        return true;
-    }
-    if lower.contains("failed to allocate") && (lower.contains("vulkan") || lower.contains("cuda"))
-    {
-        return true;
-    }
-    if lower.contains("ggml_gallocr") && lower.contains("failed to allocate") {
-        return true;
-    }
-    if lower.contains("graph_reserve: failed to allocate") {
-        return true;
-    }
-    false
-}
-
-fn oom_error_message(hint: Option<&str>) -> String {
-    match hint {
-        Some(line) if !line.is_empty() => format!("Out of GPU memory (OOM): {}", line),
-        _ => "Out of GPU memory (OOM).".to_string(),
-    }
 }
 
 fn kv_slot_save_dir(app_data_dir: &std::path::Path) -> PathBuf {
@@ -283,7 +256,7 @@ impl LlamaServer {
         batch_size: Option<u32>,
         ubatch_size: Option<u32>,
         port_override: Option<u16>,
-    ) -> Result<(), String> {
+    ) -> Result<(), LlamaCppSidecarStartupError> {
         // Stop any existing connection
         self.stop();
 
@@ -294,12 +267,14 @@ impl LlamaServer {
         let port_str = port.to_string();
         let context_size_str = context_size.to_string();
 
-        let app_data_dir = spawner.app_data_dir()?;
+        let app_data_dir = spawner
+            .app_data_dir()
+            .map_err(LlamaCppSidecarEventClassifier::classify_process_error)?;
         let pid_file = app_data_dir.join(SIDECAR_PID_FILE);
         let pid_file_str = pid_file.to_string_lossy().to_string();
         let slot_save_dir = kv_slot_save_dir(&app_data_dir);
         fs::create_dir_all(&slot_save_dir)
-            .map_err(|e| format!("Failed to create llama.cpp KV slot directory: {}", e))?;
+            .map_err(|_| LlamaCppSidecarStartupError::ProcessError)?;
         let slot_save_dir_str = slot_save_dir.to_string_lossy().to_string();
 
         // Build base args
@@ -362,7 +337,8 @@ impl LlamaServer {
 
         let (rx, child) = spawner
             .spawn_sidecar("llama-server-wrapper", &args_refs)
-            .await?;
+            .await
+            .map_err(LlamaCppSidecarEventClassifier::classify_process_error)?;
 
         self.child = Some(child);
         self.pid_file = Some(pid_file);
@@ -387,7 +363,7 @@ impl LlamaServer {
         model_path: &str,
         device: &DeviceConfig,
         port_override: Option<u16>,
-    ) -> Result<(), String> {
+    ) -> Result<(), LlamaCppSidecarStartupError> {
         // Stop any existing connection
         self.stop();
 
@@ -397,7 +373,9 @@ impl LlamaServer {
         let gpu_layers_str = device.gpu_layers.to_string();
         let port_str = port.to_string();
 
-        let app_data_dir = spawner.app_data_dir()?;
+        let app_data_dir = spawner
+            .app_data_dir()
+            .map_err(LlamaCppSidecarEventClassifier::classify_process_error)?;
         let pid_file = app_data_dir.join(SIDECAR_PID_FILE);
         let pid_file_str = pid_file.to_string_lossy().to_string();
 
@@ -433,7 +411,8 @@ impl LlamaServer {
 
         let (rx, child) = spawner
             .spawn_sidecar("llama-server-wrapper", &args_refs)
-            .await?;
+            .await
+            .map_err(LlamaCppSidecarEventClassifier::classify_process_error)?;
 
         self.child = Some(child);
         self.pid_file = Some(pid_file);
@@ -453,14 +432,16 @@ impl LlamaServer {
         model_path: &str,
         device: &DeviceConfig,
         port_override: Option<u16>,
-    ) -> Result<(), String> {
+    ) -> Result<(), LlamaCppSidecarStartupError> {
         self.stop();
 
         let port = port_override.unwrap_or(ports::SERVER);
         let gpu_layers_str = device.gpu_layers.to_string();
         let port_str = port.to_string();
 
-        let app_data_dir = spawner.app_data_dir()?;
+        let app_data_dir = spawner
+            .app_data_dir()
+            .map_err(LlamaCppSidecarEventClassifier::classify_process_error)?;
         let pid_file = app_data_dir.join(SIDECAR_PID_FILE);
         let pid_file_str = pid_file.to_string_lossy().to_string();
 
@@ -492,7 +473,8 @@ impl LlamaServer {
         let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
         let (rx, child) = spawner
             .spawn_sidecar("llama-server-wrapper", &args_refs)
-            .await?;
+            .await
+            .map_err(LlamaCppSidecarEventClassifier::classify_process_error)?;
 
         self.child = Some(child);
         self.pid_file = Some(pid_file);
@@ -545,99 +527,62 @@ impl LlamaServer {
     async fn wait_for_ready(
         &mut self,
         mut rx: tokio::sync::mpsc::Receiver<ProcessEvent>,
-    ) -> Result<(), String> {
+    ) -> Result<(), LlamaCppSidecarStartupError> {
         let timeout = tokio::time::Duration::from_secs(timeouts::SERVER_STARTUP_SECS);
         let start = std::time::Instant::now();
-        let mut oom_hint: Option<String> = None;
 
         while let Some(event) = rx.recv().await {
             if start.elapsed() > timeout {
                 self.stop();
-                return Err("Timeout waiting for llama-server to start".to_string());
+                return Err(LlamaCppSidecarStartupError::ReadinessTimeout);
             }
 
-            match event {
-                ProcessEvent::Stdout(line) => {
-                    let line_str = String::from_utf8_lossy(&line);
-                    let line_trimmed = line_str.trim();
-                    // Only log important messages, skip verbose metadata
-                    if !line_str.contains("llama_model_loader: - kv")
-                        && !line_str.contains("llama_model_loader: - type")
-                    {
-                        log::info!("[llama-server] {}", line_str);
+            match LlamaCppSidecarEventClassifier::classify_event(event) {
+                LlamaCppSidecarEventClassification::Output {
+                    line,
+                    stream,
+                    loggable,
+                    listening,
+                    failure,
+                } => {
+                    if loggable {
+                        match stream {
+                            LlamaCppSidecarOutputStream::Stdout => {
+                                log::info!("[llama-server] {}", line);
+                            }
+                            LlamaCppSidecarOutputStream::Stderr => {
+                                log::warn!("[llama-server stderr] {}", line);
+                            }
+                        }
                     }
-                    if is_oom_line(line_trimmed) {
-                        oom_hint = Some(line_trimmed.to_string());
+                    if let Some(failure) = failure {
+                        self.stop();
+                        return Err(failure);
                     }
-                    if (line_str.contains("server") && line_str.contains("listening"))
-                        || line_str.contains("HTTP server listening")
-                    {
-                        log::debug!("Stdout reports server listening, verifying HTTP...");
-                        // Verify HTTP is actually responding
+                    if listening {
+                        log::debug!("Sidecar reports server listening, verifying HTTP...");
                         match self.verify_http_ready(5000).await {
                             Ok(_) => {
                                 self.ready = true;
                                 break;
                             }
-                            Err(e) => {
+                            Err(_) => {
                                 self.stop();
-                                return Err(e);
+                                return Err(LlamaCppSidecarStartupError::HttpReadinessFailed);
                             }
                         }
                     }
                 }
-                ProcessEvent::Stderr(line) => {
-                    let line_str = String::from_utf8_lossy(&line);
-                    let line_trimmed = line_str.trim();
-                    // Only log important messages, skip verbose metadata
-                    if !line_str.contains("llama_model_loader: - kv")
-                        && !line_str.contains("llama_model_loader: - type")
-                    {
-                        log::warn!("[llama-server stderr] {}", line_str);
-                    }
-                    if is_oom_line(line_trimmed) {
-                        oom_hint = Some(line_trimmed.to_string());
-                    }
-                    if (line_str.contains("server") && line_str.contains("listening"))
-                        || line_str.contains("HTTP server listening")
-                    {
-                        log::debug!("Stderr reports server listening, verifying HTTP...");
-                        // Verify HTTP is actually responding
-                        match self.verify_http_ready(5000).await {
-                            Ok(_) => {
-                                self.ready = true;
-                                break;
-                            }
-                            Err(e) => {
-                                self.stop();
-                                return Err(e);
-                            }
-                        }
-                    }
-                }
-                ProcessEvent::Error(err) => {
+                LlamaCppSidecarEventClassification::Failure(error) => {
                     self.stop();
-                    if oom_hint.is_some() {
-                        return Err(oom_error_message(oom_hint.as_deref()));
-                    }
-                    return Err(format!("llama-server error: {}", err));
-                }
-                ProcessEvent::Terminated(status) => {
-                    self.stop();
-                    if oom_hint.is_some() {
-                        return Err(oom_error_message(oom_hint.as_deref()));
-                    }
-                    return Err(format!(
-                        "llama-server terminated unexpectedly: {:?}",
-                        status
-                    ));
+                    return Err(error);
                 }
             }
         }
 
         if !self.ready {
             self.stop();
-            return Err("llama-server failed to become ready".to_string());
+            return Err(LlamaCppSidecarStartupError::EndedBeforeReady);
         }
 
         Ok(())

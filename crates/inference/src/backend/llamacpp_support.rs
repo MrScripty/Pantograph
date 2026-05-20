@@ -505,14 +505,25 @@ pub fn kv_cache_model_fingerprint_for_mode(
     })
 }
 
-pub fn map_sidecar_start_error(error: String) -> BackendError {
-    if let Some(message) = crate::process::strip_managed_binary_spawn_error(&error) {
-        BackendError::ManagedBinary(message)
-    } else if error.to_lowercase().contains("out of memory") || error.to_lowercase().contains("oom")
-    {
-        BackendError::OutOfMemory(error)
-    } else {
-        BackendError::StartupFailed(error)
+pub fn map_sidecar_start_error(
+    error: crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError,
+) -> BackendError {
+    match error {
+        crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError::ManagedBinary { message } => {
+            BackendError::ManagedBinary(message)
+        }
+        crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError::OutOfMemory => {
+            BackendError::OutOfMemory(error.to_string())
+        }
+        crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError::ProcessError
+        | crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError::ProcessTerminated {
+            ..
+        }
+        | crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError::ReadinessTimeout
+        | crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError::HttpReadinessFailed
+        | crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError::EndedBeforeReady => {
+            BackendError::StartupFailed(error.to_string())
+        }
     }
 }
 
@@ -529,12 +540,25 @@ mod tests {
 
     #[test]
     fn map_sidecar_start_error_preserves_managed_binary_failures() {
-        let error = crate::process::managed_binary_spawn_error("llama.cpp is not ready for launch");
+        let error = crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError::ManagedBinary {
+            message: "llama.cpp is not ready for launch".to_string(),
+        };
 
         assert!(matches!(
             map_sidecar_start_error(error),
             BackendError::ManagedBinary(message)
                 if message == "llama.cpp is not ready for launch"
+        ));
+    }
+
+    #[test]
+    fn map_sidecar_start_error_uses_typed_oom_failure() {
+        assert!(matches!(
+            map_sidecar_start_error(
+                crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError::OutOfMemory
+            ),
+            BackendError::OutOfMemory(message)
+                if message == "llama.cpp sidecar startup failed: out of memory"
         ));
     }
 

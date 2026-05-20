@@ -355,6 +355,18 @@ Update during implementation:
   `InferenceMemoryFailureKind::OutOfMemory`; scheduler, gateway, diagnostics
   ledger, and generic process code must not parse logs or keep string fallback
   paths.
+- 2026-05-20: Shared llama.cpp sidecar event classifier implementation
+  completed. `llamacpp_sidecar_events` is now the only sidecar output
+  classifier for main llama.cpp and dedicated embedding readiness loops.
+  `backend::llamacpp_support` maps typed startup failures to `BackendError`
+  without scanning strings, and OOM maps through
+  `LlamaCppSidecarStartupError::OutOfMemory` /
+  `InferenceMemoryFailureKind::OutOfMemory`. Verification passed:
+  `cargo test -p inference llamacpp_sidecar_events --lib`,
+  `cargo test -p inference start_sidecar_inference_cleans_process_and_pid_file_on_start_error --lib`,
+  `cargo test -p inference embedding_runtime_wait_for_ready_uses_shared_oom_classifier --lib`,
+  `cargo test -p inference map_sidecar_start_error --lib`, and
+  `cargo check -p inference`.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

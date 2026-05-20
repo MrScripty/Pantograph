@@ -1,6 +1,7 @@
 use super::{parse_sidecar_pid, LlamaServer, ServerMode};
 use crate::config::DeviceConfig;
 use crate::device::DeviceBackend;
+use crate::llamacpp_sidecar_events::LlamaCppSidecarStartupError;
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::runtime_load::LlamaCppRuntimeMode;
 use crate::InferenceDeviceClass;
@@ -367,10 +368,7 @@ async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
         )
         .await;
 
-    assert_eq!(
-        result,
-        Err("llama-server error: mock startup error".to_string())
-    );
+    assert_eq!(result, Err(LlamaCppSidecarStartupError::ProcessError));
     assert!(killed.load(Ordering::SeqCst));
     assert!(!pid_file.exists());
     assert!(!server.is_ready());

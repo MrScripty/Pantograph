@@ -1052,6 +1052,18 @@ Staged implementation:
       state machine should own process events, HTTP readiness, timeout,
       termination, cleanup, and telemetry emission once this classifier is in
       place.
+    - 2026-05-20 implementation update: added
+      `llamacpp_sidecar_events` as the shared adapter-local classifier and
+      moved main llama.cpp and dedicated embedding sidecar readiness loops onto
+      it. OOM detection now maps to typed
+      `LlamaCppSidecarStartupError::OutOfMemory`, which exposes
+      `InferenceMemoryFailureKind::OutOfMemory`; managed binary, process,
+      termination, timeout, HTTP readiness, and ended-before-ready failures are
+      explicit typed startup failures. The old scattered OOM string checks in
+      `inference::server`, `inference::embedding_runtime`, and
+      `backend::llamacpp_support` were removed rather than preserved as
+      fallbacks. Remaining follow-up: the full sidecar startup state machine
+      can replace the current readiness-loop orchestration later.
 11. [ ] Extend runtime-registry candidate history DTOs and embedded-runtime
    history projection with observed memory and OOM fields already computed by
    diagnostics-ledger.

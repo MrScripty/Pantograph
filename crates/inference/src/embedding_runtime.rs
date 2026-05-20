@@ -12,6 +12,10 @@ use pantograph_timing_contracts::WorkflowTimingContractError;
 use crate::config::{DeviceConfig, DeviceInfo, EmbeddingMemoryMode};
 use crate::constants::hosts;
 use crate::device::DeviceBackend;
+use crate::llamacpp_sidecar_events::{
+    LlamaCppSidecarEventClassification, LlamaCppSidecarEventClassifier,
+    LlamaCppSidecarOutputStream, LlamaCppSidecarStartupError,
+};
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::RuntimeLifecycleSnapshot;
 
@@ -173,14 +177,11 @@ impl LlamaCppEmbeddingRuntime {
         self.pid_file = Some(pid_file);
         self.model_path = Some(model_path.to_string());
 
-        self.wait_for_ready(&mut rx).await?;
+        self.wait_for_ready(&mut rx)
+            .await
+            .map_err(|error| error.to_string())?;
         self.ready = true;
         Ok(())
-    }
-
-    fn is_server_listening(line: &str) -> bool {
-        (line.contains("server") && line.contains("listening"))
-            || line.contains("HTTP server listening")
     }
 
     async fn verify_http_ready(&self, timeout_ms: u64) -> Result<(), String> {
@@ -208,68 +209,53 @@ impl LlamaCppEmbeddingRuntime {
     async fn wait_for_ready(
         &self,
         rx: &mut tokio::sync::mpsc::Receiver<ProcessEvent>,
-    ) -> Result<(), String> {
+    ) -> Result<(), LlamaCppSidecarStartupError> {
         let start = std::time::Instant::now();
         let timeout_ms = 60000;
 
         while start.elapsed().as_millis() < timeout_ms {
             match tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv()).await {
-                Ok(Some(event)) => match event {
-                    ProcessEvent::Stdout(line) => {
-                        let line_str = String::from_utf8_lossy(&line);
-                        if !line_str.contains("llama_model_loader: - kv")
-                            && !line_str.contains("llama_model_loader: - type")
-                        {
-                            log::debug!("[embedding-runtime] {}", line_str);
+                Ok(Some(event)) => match LlamaCppSidecarEventClassifier::classify_event(event) {
+                    LlamaCppSidecarEventClassification::Output {
+                        line,
+                        stream,
+                        loggable,
+                        listening,
+                        failure,
+                    } => {
+                        if loggable {
+                            match stream {
+                                LlamaCppSidecarOutputStream::Stdout => {
+                                    log::debug!("[embedding-runtime] {}", line);
+                                }
+                                LlamaCppSidecarOutputStream::Stderr => {
+                                    log::debug!("[embedding-runtime stderr] {}", line);
+                                }
+                            }
                         }
-
-                        if Self::is_server_listening(&line_str) {
-                            log::debug!(
-                                "Stdout reports embedding runtime listening, verifying HTTP..."
-                            );
-                            return self.verify_http_ready(5000).await;
+                        if let Some(failure) = failure {
+                            return Err(failure);
                         }
-                    }
-                    ProcessEvent::Stderr(line) => {
-                        let line_str = String::from_utf8_lossy(&line);
-                        if !line_str.contains("llama_model_loader: - kv")
-                            && !line_str.contains("llama_model_loader: - type")
-                        {
-                            log::debug!("[embedding-runtime stderr] {}", line_str);
-                        }
-
-                        if line_str.to_lowercase().contains("out of memory") {
-                            return Err("Embedding runtime: Out of memory".to_string());
-                        }
-
-                        if Self::is_server_listening(&line_str) {
-                            log::debug!(
-                                "Stderr reports embedding runtime listening, verifying HTTP..."
-                            );
-                            return self.verify_http_ready(5000).await;
+                        if listening {
+                            log::debug!("Embedding runtime reports listening, verifying HTTP...");
+                            return self
+                                .verify_http_ready(5000)
+                                .await
+                                .map_err(|_| LlamaCppSidecarStartupError::HttpReadinessFailed);
                         }
                     }
-                    ProcessEvent::Terminated(code) => {
-                        return Err(format!(
-                            "Embedding runtime terminated unexpectedly with code: {:?}",
-                            code
-                        ));
-                    }
-                    ProcessEvent::Error(err) => {
-                        return Err(format!("Embedding runtime error: {}", err));
+                    LlamaCppSidecarEventClassification::Failure(error) => {
+                        return Err(error);
                     }
                 },
                 Ok(None) => {
-                    return Err("Embedding runtime process ended without ready signal".to_string());
+                    return Err(LlamaCppSidecarStartupError::EndedBeforeReady);
                 }
                 Err(_) => continue,
             }
         }
 
-        Err(format!(
-            "Embedding runtime failed to start within {} seconds",
-            timeout_ms / 1000
-        ))
+        Err(LlamaCppSidecarStartupError::ReadinessTimeout)
     }
 
     /// Get the base URL of the embedding runtime.
@@ -559,6 +545,24 @@ mod tests {
     fn test_base_url() {
         let runtime = LlamaCppEmbeddingRuntime::new(EmbeddingMemoryMode::CpuParallel);
         assert_eq!(runtime.base_url(), "http://127.0.0.1:8081");
+    }
+
+    #[tokio::test]
+    async fn embedding_runtime_wait_for_ready_uses_shared_oom_classifier() {
+        let runtime = LlamaCppEmbeddingRuntime::new(EmbeddingMemoryMode::CpuParallel);
+        let (tx, mut rx) = mpsc::channel(1);
+        tx.send(ProcessEvent::Stderr(
+            b"CUDA errorOutOfDeviceMemory while allocating".to_vec(),
+        ))
+        .await
+        .expect("send stderr event");
+
+        let error = runtime
+            .wait_for_ready(&mut rx)
+            .await
+            .expect_err("OOM should fail readiness");
+
+        assert_eq!(error, LlamaCppSidecarStartupError::OutOfMemory);
     }
 
     #[test]

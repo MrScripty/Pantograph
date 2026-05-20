@@ -802,6 +802,33 @@ PyTorch/diffusers and produce a retained image artifact.
       may introduce a full sidecar startup state machine that owns process
       events, HTTP readiness, timeout, termination, cleanup, and telemetry
       emission.
+  - 2026-05-20 shared llama.cpp sidecar event classifier slice:
+    - Smallest useful vertical slice: introduce the shared adapter-local
+      classifier and route both main llama.cpp and dedicated embedding sidecar
+      readiness loops through it.
+    - Allowed files touched: `crates/inference/src/llamacpp_sidecar_events.rs`,
+      `crates/inference/src/lib.rs`, `crates/inference/src/server.rs`,
+      `crates/inference/src/embedding_runtime.rs`,
+      `crates/inference/src/backend/llamacpp_support.rs`,
+      `crates/inference/src/server_tests.rs`, and this plan.
+    - No-fallback/no-legacy confirmation: scattered OOM string checks were
+      removed from `inference::server`, `inference::embedding_runtime`, and
+      `backend::llamacpp_support`. Bounded llama.cpp output inspection now
+      exists only in `llamacpp_sidecar_events`; scheduler, gateway,
+      diagnostics-ledger, generic process code, and runtime selection code do
+      not parse logs. Detected OOM maps to
+      `LlamaCppSidecarStartupError::OutOfMemory` and
+      `InferenceMemoryFailureKind::OutOfMemory`; non-OOM startup states remain
+      explicit typed startup failures.
+    - Verification passed:
+      `cargo test -p inference llamacpp_sidecar_events --lib`,
+      `cargo test -p inference start_sidecar_inference_cleans_process_and_pid_file_on_start_error --lib`,
+      `cargo test -p inference embedding_runtime_wait_for_ready_uses_shared_oom_classifier --lib`,
+      `cargo test -p inference map_sidecar_start_error --lib`,
+      `cargo check -p inference`, and `cargo fmt --all -- --check`.
+    - Remaining follow-up: option 3, the full sidecar startup state machine, can
+      now be planned as a later orchestration replacement without needing
+      scattered log parsing.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
