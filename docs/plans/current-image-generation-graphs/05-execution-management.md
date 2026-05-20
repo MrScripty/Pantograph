@@ -290,6 +290,12 @@ Update during implementation:
   drain only. This slice intentionally does not wire gateway/backends yet, add
   live observation events, pass Pumas/workflow facts through telemetry, or
   preserve a parallel result-wrapper compatibility path.
+- 2026-05-20: Continued telemetry-scope implementation by migrating gateway
+  process-RSS lifecycle producers to record through the gateway-owned telemetry
+  scope before terminal lifecycle emission. Planned image execution, generic
+  typed non-streaming execution, and streaming lifecycle wrappers now use the
+  same collector path for process-RSS observations; backend-native worker
+  telemetry remains the next boundary slice.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

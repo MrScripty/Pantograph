@@ -44,7 +44,8 @@ use crate::types::{
     RuntimeLifecycleSnapshot, ServerModeInfo,
 };
 use crate::{
-    InferenceExecutionResourceObservation, RuntimeResourceMonitor, RuntimeResourceMonitorGuard,
+    InferenceExecutionResourceObservation, InferenceExecutionTelemetryScope,
+    RuntimeResourceMonitor, RuntimeResourceMonitorGuard,
 };
 
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
@@ -1398,10 +1399,10 @@ impl InferenceGateway {
                     Vec::new(),
                     None,
                 );
-                let resource_monitor = start_runtime_resource_monitor_for_current_process();
+                let execution_telemetry = start_execution_telemetry_for_current_process();
                 let result = self.generate_image_from_plan(plan).await;
                 let resource_observation =
-                    finish_runtime_resource_monitor_for_current_process(resource_monitor);
+                    finish_execution_telemetry_for_current_process(execution_telemetry);
                 record_planned_image_generation_lifecycle_result(
                     lifecycle_sink.as_ref(),
                     InferenceLifecyclePhase::BackendExecution,
@@ -1643,10 +1644,10 @@ impl InferenceGateway {
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
-        let resource_monitor = start_runtime_resource_monitor_for_current_process();
+        let execution_telemetry = start_execution_telemetry_for_current_process();
         let result = self.execute_typed_validated(request).await;
         let resource_observation =
-            finish_runtime_resource_monitor_for_current_process(resource_monitor);
+            finish_execution_telemetry_for_current_process(execution_telemetry);
         let mut option_diagnostics = option_diagnostics_from_execution_result(&result);
         option_diagnostics.extend(request_option_diagnostics);
         dedupe_option_diagnostics(&mut option_diagnostics);
@@ -1939,7 +1940,7 @@ struct LifecycleStream {
     usage: Option<InferenceUsage>,
     cache_handle_id: Option<String>,
     emit_typed_boundary_lifecycle: bool,
-    resource_monitor: Option<RuntimeResourceMonitorGuard>,
+    execution_telemetry: Option<GatewayExecutionTelemetry>,
     finished: bool,
 }
 
@@ -1976,7 +1977,7 @@ impl LifecycleStream {
             usage: None,
             cache_handle_id: None,
             emit_typed_boundary_lifecycle,
-            resource_monitor: start_runtime_resource_monitor_for_current_process(),
+            execution_telemetry: Some(start_execution_telemetry_for_current_process()),
             finished: false,
         }
     }
@@ -2033,8 +2034,9 @@ impl LifecycleStream {
         }
 
         let completed = kind == InferenceRequestLifecycleEventKind::Completed;
-        let resource_observation =
-            finish_runtime_resource_monitor_for_current_process(self.resource_monitor.take());
+        let resource_observation = finish_optional_execution_telemetry_for_current_process(
+            self.execution_telemetry.take(),
+        );
         self.record_terminal(kind, detail, resource_observation);
         self.record(InferenceRequestLifecycleEventKind::CleanupCompleted, None);
         if self.emit_typed_boundary_lifecycle && completed {
@@ -2957,6 +2959,49 @@ fn image_generation_planner_diagnostic_code_label(
         .ok()
         .and_then(|value| value.as_str().map(str::to_string))
         .unwrap_or_else(|| format!("{code:?}"))
+}
+
+#[derive(Debug)]
+struct GatewayExecutionTelemetry {
+    scope: InferenceExecutionTelemetryScope,
+    resource_monitor: Option<RuntimeResourceMonitorGuard>,
+}
+
+fn start_execution_telemetry_for_current_process() -> GatewayExecutionTelemetry {
+    GatewayExecutionTelemetry {
+        scope: InferenceExecutionTelemetryScope::new(),
+        resource_monitor: start_runtime_resource_monitor_for_current_process(),
+    }
+}
+
+fn finish_execution_telemetry_for_current_process(
+    telemetry: GatewayExecutionTelemetry,
+) -> Option<InferenceExecutionResourceObservation> {
+    finish_optional_execution_telemetry_for_current_process(Some(telemetry))
+}
+
+fn finish_optional_execution_telemetry_for_current_process(
+    telemetry: Option<GatewayExecutionTelemetry>,
+) -> Option<InferenceExecutionResourceObservation> {
+    let telemetry = telemetry?;
+    if let Some(observation) =
+        finish_runtime_resource_monitor_for_current_process(telemetry.resource_monitor)
+    {
+        if let Err(error) = telemetry
+            .scope
+            .recorder()
+            .record_resource_observation(observation)
+        {
+            log::warn!("failed to record runtime resource observation: {error}");
+        }
+    }
+    match telemetry.scope.drain_resource_observation() {
+        Ok(observation) => observation,
+        Err(error) => {
+            log::warn!("failed to drain runtime resource observations: {error}");
+            None
+        }
+    }
 }
 
 fn start_runtime_resource_monitor_for_current_process() -> Option<RuntimeResourceMonitorGuard> {

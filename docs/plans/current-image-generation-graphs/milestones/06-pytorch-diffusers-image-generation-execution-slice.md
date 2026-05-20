@@ -648,6 +648,25 @@ PyTorch/diffusers and produce a retained image artifact.
     inference telemetry --lib`. Remaining follow-up: wire gateway process-RSS
     monitoring and PyTorch worker success/failure resource observations
     through this scope instead of direct per-path lifecycle attachment.
+  - 2026-05-20 gateway process-RSS telemetry-scope slice: migrated the
+    gateway's planned image, generic typed non-streaming, and streaming
+    process-RSS lifecycle producers to start a gateway-owned telemetry scope,
+    record the existing process-RSS observation into the scope, and drain the
+    merged terminal observation into the existing lifecycle event. This keeps
+    lifecycle ownership in `gateway.rs` while removing direct per-path monitor
+    attachment as the canonical producer path. No backend trait, task output,
+    scheduler policy, live observation stream, or worker envelope behavior
+    changed. Verification passed: `cargo test -p inference
+    test_generate_image_from_planning_input_with_lifecycle_records_planned_decision
+    --lib`, `cargo test -p inference
+    test_execute_typed_text_reports_generation_option_diagnostics --lib`,
+    `cargo test -p inference
+    test_chat_completion_stream_with_lifecycle_records_completion --lib`, and
+    `cargo test -p inference
+    test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage --lib`.
+    Remaining follow-up: pass the telemetry recorder through the backend
+    execution boundary so PyTorch worker success/failure resource observations
+    reach the same lifecycle terminal summary.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
