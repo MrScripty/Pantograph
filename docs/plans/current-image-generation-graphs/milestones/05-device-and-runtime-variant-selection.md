@@ -1004,6 +1004,40 @@ before the matching checklist row is closed.
   current internal handoff. It should not parse retired graph fields, scan model
   directories, or use Pumas artifact paths as display model identity after the
   image planner has a Pumas artifact load target.
+  - 2026-05-20 update: node-engine typed inference request builders now promote
+    only explicit `pumas_model_ref`/`model_ref` graph inputs into request model
+    identity. `resolved_model_source` no longer supplies model identity for
+    text requests, and resolved package facts remain forwarded only as
+    host/planning compatibility facts instead of being promoted into request
+    `model_ref`. Image, audio, and rerank request builders no longer derive
+    model names from `model_path`, `selected_artifact_path`, or `entry_path`;
+    canonical tests now wire `pumas_model_ref` when model identity is required.
+  - No-fallback/no-legacy confirmation: this slice did not add compatibility
+    aliases for retired Pumas source fields, did not synthesize graph model
+    identity from package facts, and did not keep artifact paths as successful
+    image/rerank/audio model names. Pumas artifact load targets still enter the
+    image planner through the existing internal planned-execution handoff; that
+    path remains separate from graph model selection.
+  - Standards/blast-radius evidence: write set was limited to
+    `crates/node-engine/src/core_executor/inference_nodes.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/core_executor/README.md`,
+    `crates/node-engine/src/README.md`, and this plan. Crate roles remain
+    unchanged: node-engine builds typed runtime requests and forwards
+    host/planning facts but does not own Pumas path resolution, scheduler
+    runtime/device decisions, frontend state, persisted schema, generated DTOs,
+    lockfiles, or worker process ownership. No background task, local service,
+    filesystem path access, feature flag, or frontend behavior changed.
+  - Verification: `cargo fmt --all -- --check`, focused node-engine builder
+    tests for text, embedding, rerank, image, and audio transcription,
+    `cargo test -p node-engine --features inference-nodes
+    core_executor::tests::inference_tests -- --nocapture`, `cargo check -p
+    node-engine --features inference-nodes`, and `git diff --check`.
+  - Remaining follow-up: `dependency_preflight.rs` still has legacy
+    `resolved_model_source`/`model_path` repair and model-dependency identity
+    helpers. That is a separate dependency-preflight slice because it affects
+    resolver requests, Python-worker preflight, and lifecycle diagnostics rather
+    than the typed gateway request builders changed here.
 - **Tracked saved workflow closure is broader than image examples:** bundled
   templates and tracked image examples are already canonical, but tracked
   non-image workflow files such as Whisper STT and KittenTTS still use retired

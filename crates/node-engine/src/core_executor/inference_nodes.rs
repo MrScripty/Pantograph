@@ -289,8 +289,7 @@ pub(crate) fn build_text_generation_execution_request(
     apply_graph_cache_generation_options(inputs, &mut generation_options);
 
     let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
-    let model_ref = parse_pumas_model_ref(inputs)
-        .or_else(|| model_ref_from_package_facts(&resolved_model_package_facts));
+    let model_ref = parse_pumas_model_ref(inputs);
 
     Ok(inference::InferenceExecutionRequest {
         request_id: None,
@@ -444,23 +443,6 @@ fn parse_pumas_model_ref(
         .get("pumas_model_ref")
         .or_else(|| inputs.get("model_ref"))
         .and_then(|value| serde_json::from_value(value.clone()).ok())
-        .or_else(|| parse_resolved_model_source_ref(inputs))
-}
-
-#[cfg(feature = "inference-nodes")]
-fn model_ref_from_package_facts(
-    facts: &Option<inference::ResolvedModelPackageFacts>,
-) -> Option<inference::PumasModelRef> {
-    facts.as_ref().map(|facts| facts.model_ref.clone())
-}
-
-#[cfg(feature = "inference-nodes")]
-fn parse_resolved_model_source_ref(
-    inputs: &HashMap<String, serde_json::Value>,
-) -> Option<inference::PumasModelRef> {
-    read_optional_input_value(inputs, "resolved_model_source")
-        .and_then(|value| serde_json::from_value::<inference::ResolvedModelSource>(value).ok())
-        .and_then(|source| source.model_ref)
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -594,8 +576,7 @@ pub(crate) fn build_embedding_execution_request(
     }
 
     let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
-    let model_ref = parse_pumas_model_ref(inputs)
-        .or_else(|| model_ref_from_package_facts(&resolved_model_package_facts));
+    let model_ref = parse_pumas_model_ref(inputs);
 
     Ok(inference::InferenceExecutionRequest {
         request_id: None,
@@ -733,8 +714,7 @@ pub(crate) fn build_rerank_execution_request(
     extra_settings.remove("context_length");
 
     let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
-    let model_ref = parse_pumas_model_ref(inputs)
-        .or_else(|| model_ref_from_package_facts(&resolved_model_package_facts));
+    let model_ref = parse_pumas_model_ref(inputs);
     let model_name = read_rerank_model_name(inputs, model_ref.as_ref())?;
 
     Ok(inference::InferenceExecutionRequest {
@@ -946,11 +926,7 @@ pub(crate) fn build_image_generation_execution_request(
     }
 
     let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
-    let model_ref = parse_pumas_model_ref(inputs).or_else(|| {
-        resolved_model_package_facts
-            .as_ref()
-            .map(|facts| facts.model_ref.clone())
-    });
+    let model_ref = parse_pumas_model_ref(inputs);
     let model = read_image_generation_model_name(inputs, model_ref.as_ref())?
         .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing image model input".to_string()))?;
     let mut extra_options = build_extra_settings(inputs);
@@ -1023,11 +999,7 @@ pub(crate) fn build_audio_transcription_execution_request(
         .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing audio input".to_string()))?;
     let (audio, audio_ref) = parse_audio_transcription_input(audio_value)?;
     let resolved_model_package_facts = parse_resolved_model_package_facts(inputs)?;
-    let model_ref = parse_pumas_model_ref(inputs).or_else(|| {
-        resolved_model_package_facts
-            .as_ref()
-            .map(|facts| facts.model_ref.clone())
-    });
+    let model_ref = parse_pumas_model_ref(inputs);
     let model_name = read_audio_model_name(inputs, model_ref.as_ref())?;
     let mut extra_settings = build_extra_settings(inputs);
     extra_settings.remove("audio");
@@ -1139,13 +1111,6 @@ fn read_audio_model_name(
         return Ok(Some(model));
     }
 
-    if let Some(model_path) =
-        read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
-            .filter(|model_path| !model_path.trim().is_empty())
-    {
-        return Ok(Some(model_path));
-    }
-
     Ok(model_ref.map(|model_ref| model_ref.model_id.clone()))
 }
 
@@ -1161,34 +1126,6 @@ fn read_image_generation_model_name(
     .filter(|model| !model.trim().is_empty())
     {
         return Ok(Some(model));
-    }
-
-    if let Some(model_path) =
-        read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
-            .filter(|model_path| !model_path.trim().is_empty())
-    {
-        return Ok(Some(model_path));
-    }
-
-    if let Some(model_ref_value) = inputs
-        .get("pumas_model_ref")
-        .or_else(|| inputs.get("model_ref"))
-    {
-        if let Some(path) = read_string_aliases_from_value(
-            model_ref_value,
-            &[
-                "selected_artifact_path",
-                "selectedArtifactPath",
-                "model_path",
-                "modelPath",
-                "entry_path",
-                "entryPath",
-            ],
-        )
-        .filter(|path| !path.trim().is_empty())
-        {
-            return Ok(Some(path));
-        }
     }
 
     Ok(model_ref.map(|model_ref| model_ref.model_id.clone()))
@@ -1488,43 +1425,7 @@ fn read_rerank_model_name(
         return Ok(Some(model));
     }
 
-    if let Some(model_path) =
-        read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
-            .filter(|model_path| !model_path.trim().is_empty())
-    {
-        return resolve_gguf_path(&model_path).map(Some);
-    }
-
-    if let Some(model_ref_value) = inputs
-        .get("pumas_model_ref")
-        .or_else(|| inputs.get("model_ref"))
-    {
-        if let Some(path) = read_string_aliases_from_value(
-            model_ref_value,
-            &[
-                "selected_artifact_path",
-                "selectedArtifactPath",
-                "model_path",
-                "modelPath",
-                "entry_path",
-                "entryPath",
-            ],
-        )
-        .filter(|path| !path.trim().is_empty())
-        {
-            return resolve_gguf_path(&path).map(Some);
-        }
-    }
-
     Ok(model_ref.map(|model_ref| model_ref.model_id.clone()))
-}
-
-#[cfg(feature = "inference-nodes")]
-fn read_string_aliases_from_value(value: &serde_json::Value, aliases: &[&str]) -> Option<String> {
-    aliases
-        .iter()
-        .find_map(|alias| value.get(*alias).and_then(|value| value.as_str()))
-        .map(str::to_string)
 }
 
 #[cfg(feature = "inference-nodes")]

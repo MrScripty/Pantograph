@@ -95,9 +95,10 @@ are resolved through `pantograph-node-contracts` projections.
 - Core executor dependency preflight stays in
   `core_executor/dependency_preflight.rs` so model-reference construction,
   backend-key normalization, and resolver readiness checks remain separate from
-  dispatch and runtime request execution. Explicit workflow/backend hints win,
-  then resolved Pumas package facts may supply factual backend/task/model
-  inputs before sparse legacy graph heuristics are considered.
+  dispatch and runtime request execution. Explicit workflow/backend inputs are
+  the only graph-owned backend signal; resolved Pumas package facts may supply
+  factual compatibility context, but node-engine must not treat retired package
+  facts or path fields as an alternate graph model-selection contract.
 - Retired backend-specific inference node types in `core_executor.rs` must
   remain outside the live executor path. Saved graph upgrades are owned by
   workflow-service canonicalization; new runtime-backed behavior must enter via

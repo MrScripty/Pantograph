@@ -99,10 +99,11 @@ stable public facade and dispatch owner.
   audio Python-worker handlers remain separate feature families. The retired
   direct `vision-analysis` HTTP path must not bypass canonical
   `llm-inference` image-understanding task contracts.
-- Canonical `llm-inference` request builders in `inference_nodes.rs` should
-  promote resolved Pumas package facts into typed request `model_ref` when an
-  explicit graph `pumas_model_ref` or `model_ref` is not wired, so stable model
-  identity still reaches backend lifecycle and transport contracts.
+- Canonical `llm-inference` request builders in `inference_nodes.rs` accept
+  `pumas_model_ref` or `model_ref` as the graph-authored model identity.
+  Resolved Pumas package facts may be forwarded as host/planning facts for
+  compatibility reporting, but they must not be promoted into graph model
+  identity when a model reference was not explicitly wired.
 - Canonical image-generation execution exposes the first generated image body on
   the graph-visible `image` output and compact per-image summaries in
   `results`. `results` must not duplicate generated image base64 bodies; the

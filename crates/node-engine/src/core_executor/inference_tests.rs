@@ -18,17 +18,17 @@ use inference::backend::BackendStartOutcome;
 #[cfg(feature = "inference-nodes")]
 use inference::{
     AudioTranscriptionRequest, AudioTranscriptionResult, AudioTranscriptionSegment,
-    BackendCapabilities, BackendConfig, BackendError, BackendExecutionDecision, BackendId,
-    CacheGenerationOptions, ChatChunk, DeviceResolutionDecision, EmbeddingResult, EncodedImage,
-    GenerationOptions, ImageGenerationExecutionPlan, ImageGenerationRequest, ImageGenerationResult,
-    InferenceBackend, InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy,
-    InferenceExecutionInput, InferenceLifecyclePhase, InferenceRequestLifecycleEvent,
-    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink,
-    InferenceResourceObservationSourceKind, InferenceTaskId, InferenceUsage,
-    LengthGenerationOptions, ModelArtifactKind, ModelStorageKind, ModelValidationState,
-    ProcessSpawner, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
-    RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts, RuntimeVariantId,
-    SamplingGenerationOptions,
+    BackendCapabilities, BackendConfig, BackendError, BackendExecutionContext,
+    BackendExecutionDecision, BackendId, CacheGenerationOptions, ChatChunk,
+    DeviceResolutionDecision, EmbeddingResult, EncodedImage, GenerationOptions,
+    ImageGenerationExecutionPlan, ImageGenerationRequest, ImageGenerationResult, InferenceBackend,
+    InferenceDeviceClass, InferenceDeviceId, InferenceDevicePolicy, InferenceExecutionInput,
+    InferenceLifecyclePhase, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink, InferenceResourceObservationSourceKind, InferenceTaskId,
+    InferenceUsage, LengthGenerationOptions, ModelArtifactKind, ModelStorageKind,
+    ModelValidationState, ProcessSpawner, PumasArtifactLoadPathKind, PumasArtifactLoadTarget,
+    PumasModelRef, RerankRequest, RerankResponse, RerankResult, ResolvedModelPackageFacts,
+    RuntimeVariantId, SamplingGenerationOptions,
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
@@ -174,7 +174,7 @@ fn test_build_text_generation_execution_request_accepts_legacy_flat_generation_o
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_build_text_generation_execution_request_uses_resolved_model_source_ref() {
+fn test_build_text_generation_execution_request_ignores_resolved_model_source_ref() {
     let mut inputs = HashMap::new();
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
     inputs.insert(
@@ -183,18 +183,9 @@ fn test_build_text_generation_execution_request_uses_resolved_model_source_ref()
     );
 
     let request = build_text_generation_execution_request(&inputs)
-        .expect("resolved model source should provide model identity");
+        .expect("retired resolved model source should not block text request construction");
 
-    assert_eq!(
-        request.model_ref,
-        Some(PumasModelRef {
-            model_id: "pumas://models/tiny-gguf".to_string(),
-            revision: None,
-            selected_artifact_id: None,
-            selected_artifact_path: None,
-            migration_diagnostics: Vec::new(),
-        })
-    );
+    assert_eq!(request.model_ref, None);
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -222,7 +213,7 @@ fn test_build_text_generation_execution_request_forwards_package_facts() {
             .map(|facts| facts.model_ref.model_id.as_str()),
         Some("llm/llama/tiny-gguf")
     );
-    assert_eq!(request.model_ref, Some(package_facts.model_ref));
+    assert_eq!(request.model_ref, None);
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -789,6 +780,10 @@ async fn test_canonical_llm_text_with_package_facts_emits_compatibility_lifecycl
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
     );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
+    );
 
     let executor = CoreTaskExecutor::new()
         .with_gateway(gateway)
@@ -898,6 +893,10 @@ async fn test_canonical_llm_streaming_with_package_facts_emits_compatibility_lif
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
     );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
+    );
 
     let outputs = execute_llm_inference(
         Some(&gateway),
@@ -1003,6 +1002,10 @@ async fn test_canonical_llm_text_rejects_package_task_mismatch_before_backend() 
     inputs.insert(
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
     );
 
     let executor = CoreTaskExecutor::new()
@@ -1111,7 +1114,7 @@ fn test_build_embedding_execution_request_forwards_package_facts() {
             .map(|facts| facts.model_ref.model_id.as_str()),
         Some("embedding/qwen3/tiny-embedding-gguf")
     );
-    assert_eq!(request.model_ref, Some(package_facts.model_ref));
+    assert_eq!(request.model_ref, None);
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -1196,7 +1199,10 @@ fn test_build_rerank_execution_request_preserves_canonical_inputs() {
         build_rerank_execution_request(&inputs).expect("canonical rerank request should build");
 
     assert_eq!(request.task_id, InferenceTaskId::Rerank);
-    assert_eq!(request.model_name.as_deref(), Some("/tmp/reranker.gguf"));
+    assert_eq!(
+        request.model_name.as_deref(),
+        Some("pumas://models/reranker")
+    );
     assert_eq!(
         request.model_ref,
         Some(PumasModelRef {
@@ -1262,7 +1268,7 @@ fn test_build_rerank_execution_request_forwards_package_facts() {
             .map(|facts| facts.model_ref.model_id.as_str()),
         Some("rerank/bge/tiny-reranker-gguf")
     );
-    assert_eq!(request.model_ref, Some(package_facts.model_ref));
+    assert_eq!(request.model_ref, None);
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -1415,7 +1421,7 @@ fn test_build_image_generation_execution_request_preserves_canonical_inputs() {
     assert_eq!(request.task_id, InferenceTaskId::ImageGeneration);
     assert_eq!(
         request.model_name.as_deref(),
-        Some("/models/tiny-diffusion")
+        Some("pumas://models/tiny-diffusion")
     );
     assert_eq!(
         request.model_ref,
@@ -1429,7 +1435,7 @@ fn test_build_image_generation_execution_request_preserves_canonical_inputs() {
     );
     match request.input {
         InferenceExecutionInput::ImageGeneration { request } => {
-            assert_eq!(request.model, "/models/tiny-diffusion");
+            assert_eq!(request.model, "pumas://models/tiny-diffusion");
             assert_eq!(request.prompt, "paint a quiet lake");
             assert_eq!(request.negative_prompt.as_deref(), Some("blur"));
             assert_eq!(request.width, Some(512));
@@ -1488,16 +1494,15 @@ fn test_build_image_generation_execution_request_forwards_package_facts() {
         serde_json::to_value(&package_facts).expect("package facts json"),
     );
 
-    let request = build_image_generation_execution_request(&inputs)
-        .expect("image package facts should be forwarded to typed request");
+    let err = build_image_generation_execution_request(&inputs)
+        .expect_err("package facts alone must not provide graph model identity");
 
-    assert_eq!(
-        request
-            .resolved_model_package_facts
-            .as_ref()
-            .map(|facts| facts.model_ref.model_id.as_str()),
-        Some("image/example/tiny-diffusers")
-    );
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Missing image model input"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -1627,6 +1632,10 @@ async fn test_canonical_llm_image_generation_requires_planned_context() {
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
     );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
+    );
 
     let executor = CoreTaskExecutor::new()
         .with_gateway(gateway)
@@ -1737,6 +1746,10 @@ async fn test_canonical_llm_image_generation_requires_artifact_load_target_for_p
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
     );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
+    );
 
     let executor = CoreTaskExecutor::new()
         .with_gateway(gateway)
@@ -1803,6 +1816,10 @@ async fn test_canonical_llm_image_generation_uses_planned_gateway_boundary() {
     inputs.insert(
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
     );
     inputs.insert(
         "resolved_model_artifact_load_target".to_string(),
@@ -1932,6 +1949,10 @@ async fn test_canonical_llm_image_generation_rejects_stale_planned_context() {
     inputs.insert(
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
+    );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::to_value(package_facts.model_ref.clone()).expect("model ref json"),
     );
 
     let executor = CoreTaskExecutor::new()
@@ -2207,17 +2228,8 @@ fn test_build_audio_transcription_execution_request_forwards_package_facts() {
     let request = build_audio_transcription_execution_request(&inputs)
         .expect("audio package facts should be forwarded to typed request");
 
-    assert_eq!(
-        request.model_name.as_deref(),
-        Some("audio/whisper/tiny-asr")
-    );
-    assert_eq!(
-        request
-            .model_ref
-            .as_ref()
-            .map(|model_ref| model_ref.model_id.as_str()),
-        Some("audio/whisper/tiny-asr")
-    );
+    assert_eq!(request.model_name, None);
+    assert_eq!(request.model_ref, None);
     assert_eq!(
         request
             .resolved_model_package_facts
@@ -2227,7 +2239,7 @@ fn test_build_audio_transcription_execution_request_forwards_package_facts() {
     );
     match request.input {
         InferenceExecutionInput::AudioTranscription { request } => {
-            assert_eq!(request.model, "audio/whisper/tiny-asr");
+            assert_eq!(request.model, "default");
         }
         other => panic!("unexpected input variant: {other:?}"),
     }
@@ -2465,8 +2477,8 @@ async fn test_canonical_llm_rerank_uses_typed_gateway_boundary() {
     inputs.insert(
         "pumas_model_ref".to_string(),
         serde_json::json!({
-            "model_path": "/tmp/reranker.gguf",
-            "recommended_backend": "llamacpp"
+            "model_id": "pumas://models/reranker",
+            "selected_artifact_path": "/tmp/reranker.gguf"
         }),
     );
 
@@ -2501,7 +2513,7 @@ async fn test_canonical_llm_rerank_uses_typed_gateway_boundary() {
     assert!(!diagnostics_json.contains("\"b\""));
     let captured = rerank_requests.lock().expect("rerank requests lock");
     assert_eq!(captured.len(), 1);
-    assert_eq!(captured[0].model, "/tmp/reranker.gguf");
+    assert_eq!(captured[0].model, "pumas://models/reranker");
     assert_eq!(captured[0].query, "search");
     assert_eq!(
         captured[0].documents,
@@ -4520,6 +4532,7 @@ impl InferenceBackend for MockTypedImageGenerationBackend {
     async fn generate_image_from_plan(
         &self,
         plan: ImageGenerationExecutionPlan,
+        _context: BackendExecutionContext,
     ) -> std::result::Result<ImageGenerationResult, BackendError> {
         let request = ImageGenerationRequest {
             model: plan.artifact_load_target.local_load_path,
