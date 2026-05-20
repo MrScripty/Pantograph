@@ -28,7 +28,7 @@ use crate::model_contracts::{
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 use crate::resource_observation::{
     InferenceExecutionResourceObservation, InferenceResourceObservationMetricKind,
-    InferenceResourceObservationSourceKind,
+    InferenceResourceObservationSourceKind, InferenceResourceObservationUnavailableState,
 };
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
@@ -59,6 +59,7 @@ struct MockLifecycleStreamBackend {
     fail_on_stream: bool,
     usage_on_terminal: Option<InferenceUsage>,
     cache_handle_on_terminal: Option<String>,
+    active_runtime_process_id: Option<u32>,
 }
 struct MockKvBackend;
 
@@ -92,6 +93,22 @@ fn assert_process_rss_observation(observation: &InferenceExecutionResourceObserv
                         == Some(InferenceResourceObservationSourceKind::OsProcessRss)
             }),
         "backend execution should report process RSS bytes or typed RSS availability"
+    );
+}
+
+fn assert_unavailable_process_rss_observation(
+    observation: &InferenceExecutionResourceObservation,
+    state: InferenceResourceObservationUnavailableState,
+) {
+    assert_eq!(observation.peak_ram_bytes(), None);
+    assert!(
+        observation.availability().iter().any(|availability| {
+            availability.metric_kind() == InferenceResourceObservationMetricKind::PeakRamBytes
+                && availability.source_kind()
+                    == Some(InferenceResourceObservationSourceKind::OsProcessRss)
+                && availability.state() == state
+        }),
+        "backend execution should report the requested process RSS availability state"
     );
 }
 
@@ -928,6 +945,10 @@ impl InferenceBackend for MockLifecycleStreamBackend {
 
     fn base_url(&self) -> Option<String> {
         None
+    }
+
+    fn active_runtime_process_id(&self) -> Option<u32> {
+        self.active_runtime_process_id
     }
 
     async fn chat_completion_stream(
@@ -2060,6 +2081,7 @@ async fn test_execute_typed_text_filters_path_shaped_cache_handle() {
             fail_on_stream: false,
             usage_on_terminal: None,
             cache_handle_on_terminal: Some("/tmp/private/kv-cache.bin".to_string()),
+            active_runtime_process_id: None,
         }),
         "mock",
     );
@@ -3207,6 +3229,48 @@ async fn test_chat_completion_stream_with_lifecycle_records_completion() {
 }
 
 #[tokio::test]
+async fn test_chat_completion_stream_with_lifecycle_monitors_active_runtime_process() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: false,
+            active_runtime_process_id: Some(u32::MAX),
+            ..Default::default()
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    let mut stream = gateway
+        .chat_completion_stream_with_lifecycle(
+            r#"{"model":"mock-chat"}"#.to_string(),
+            Some("req-managed-process".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("stream should start");
+
+    while stream.next().await.is_some() {}
+
+    let events = sink.events();
+    let completed = events
+        .iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion event");
+    let resource_observation = completed
+        .resource_observation
+        .as_ref()
+        .expect("stream completion should include process RSS observation");
+
+    assert_unavailable_process_rss_observation(
+        resource_observation,
+        InferenceResourceObservationUnavailableState::NotAvailable,
+    );
+}
+
+#[tokio::test]
 async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_phases() {
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
@@ -3367,6 +3431,7 @@ async fn test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage() {
                 total_tokens: Some(13),
             }),
             cache_handle_on_terminal: Some("kv-stream-checkpoint".to_string()),
+            active_runtime_process_id: None,
         }),
         "mock",
     );
@@ -3442,6 +3507,7 @@ async fn test_stream_typed_text_with_lifecycle_filters_path_shaped_cache_handle(
             fail_on_stream: false,
             usage_on_terminal: None,
             cache_handle_on_terminal: Some("/tmp/private/kv-stream.bin".to_string()),
+            active_runtime_process_id: None,
         }),
         "mock",
     );

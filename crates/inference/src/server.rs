@@ -819,6 +819,14 @@ impl LlamaServer {
         }
     }
 
+    pub fn active_process_id(&self) -> Option<u32> {
+        if !self.ready || !self.is_sidecar() {
+            return None;
+        }
+
+        self.child.as_ref().map(|child| child.pid())
+    }
+
     async fn execute_slot_action(
         &self,
         slot_id: u32,
@@ -881,6 +889,11 @@ impl LlamaServer {
     pub(crate) fn set_test_runtime_state(&mut self, mode: ServerMode, ready: bool) {
         self.mode = mode;
         self.ready = ready;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_test_process_handle(&mut self, child: Box<dyn ProcessHandle>) {
+        self.child = Some(child);
     }
 
     /// Get detailed server mode info for frontend

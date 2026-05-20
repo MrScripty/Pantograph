@@ -785,6 +785,19 @@ impl InferenceGateway {
         guard.active_llamacpp_runtime_descriptor()
     }
 
+    async fn active_runtime_process_id(&self) -> Option<u32> {
+        let guard = self.backend.read().await;
+        guard.active_runtime_process_id()
+    }
+
+    async fn start_execution_telemetry(&self) -> GatewayExecutionTelemetry {
+        let process_id = self
+            .active_runtime_process_id()
+            .await
+            .unwrap_or_else(std::process::id);
+        start_execution_telemetry_for_process(process_id)
+    }
+
     /// Restore the last non-embedding inference runtime when available.
     pub async fn restore_inference_runtime(
         &self,
@@ -961,6 +974,7 @@ impl InferenceGateway {
             None,
         );
 
+        let execution_telemetry = self.start_execution_telemetry().await;
         match self.chat_completion_stream(request_json).await {
             Ok(stream) => Ok(Box::pin(LifecycleStream::new(
                 stream,
@@ -976,8 +990,10 @@ impl InferenceGateway {
                 compatibility_report,
                 compatibility_issues,
                 emit_typed_boundary_lifecycle,
+                execution_telemetry,
             ))),
             Err(error) => {
+                let _ = finish_execution_telemetry(execution_telemetry);
                 record_inference_lifecycle_phase_event_with_diagnostics(
                     lifecycle_sink.as_ref(),
                     InferenceLifecyclePhase::BackendExecution,
@@ -1413,13 +1429,12 @@ impl InferenceGateway {
                     Vec::new(),
                     None,
                 );
-                let execution_telemetry = start_execution_telemetry_for_current_process();
+                let execution_telemetry = self.start_execution_telemetry().await;
                 let context = execution_telemetry.backend_execution_context();
                 let result = self
                     .generate_image_from_plan_with_context(plan, context)
                     .await;
-                let resource_observation =
-                    finish_execution_telemetry_for_current_process(execution_telemetry);
+                let resource_observation = finish_execution_telemetry(execution_telemetry);
                 record_planned_image_generation_lifecycle_result(
                     lifecycle_sink.as_ref(),
                     InferenceLifecyclePhase::BackendExecution,
@@ -1661,10 +1676,9 @@ impl InferenceGateway {
             InferenceRequestLifecycleEventKind::Started,
             None,
         );
-        let execution_telemetry = start_execution_telemetry_for_current_process();
+        let execution_telemetry = self.start_execution_telemetry().await;
         let result = self.execute_typed_validated(request).await;
-        let resource_observation =
-            finish_execution_telemetry_for_current_process(execution_telemetry);
+        let resource_observation = finish_execution_telemetry(execution_telemetry);
         let mut option_diagnostics = option_diagnostics_from_execution_result(&result);
         option_diagnostics.extend(request_option_diagnostics);
         dedupe_option_diagnostics(&mut option_diagnostics);
@@ -1977,6 +1991,7 @@ impl LifecycleStream {
         compatibility_report: Option<InferenceCompatibilityReportSummary>,
         compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
         emit_typed_boundary_lifecycle: bool,
+        execution_telemetry: GatewayExecutionTelemetry,
     ) -> Self {
         Self {
             inner,
@@ -1994,7 +2009,7 @@ impl LifecycleStream {
             usage: None,
             cache_handle_id: None,
             emit_typed_boundary_lifecycle,
-            execution_telemetry: Some(start_execution_telemetry_for_current_process()),
+            execution_telemetry: Some(execution_telemetry),
             finished: false,
         }
     }
@@ -2051,9 +2066,8 @@ impl LifecycleStream {
         }
 
         let completed = kind == InferenceRequestLifecycleEventKind::Completed;
-        let resource_observation = finish_optional_execution_telemetry_for_current_process(
-            self.execution_telemetry.take(),
-        );
+        let resource_observation =
+            finish_optional_execution_telemetry(self.execution_telemetry.take());
         self.record_terminal(kind, detail, resource_observation);
         self.record(InferenceRequestLifecycleEventKind::CleanupCompleted, None);
         if self.emit_typed_boundary_lifecycle && completed {
@@ -2990,26 +3004,24 @@ impl GatewayExecutionTelemetry {
     }
 }
 
-fn start_execution_telemetry_for_current_process() -> GatewayExecutionTelemetry {
+fn start_execution_telemetry_for_process(process_id: u32) -> GatewayExecutionTelemetry {
     GatewayExecutionTelemetry {
         scope: InferenceExecutionTelemetryScope::new(),
-        resource_monitor: start_runtime_resource_monitor_for_current_process(),
+        resource_monitor: start_runtime_resource_monitor_for_process(process_id),
     }
 }
 
-fn finish_execution_telemetry_for_current_process(
+fn finish_execution_telemetry(
     telemetry: GatewayExecutionTelemetry,
 ) -> Option<InferenceExecutionResourceObservation> {
-    finish_optional_execution_telemetry_for_current_process(Some(telemetry))
+    finish_optional_execution_telemetry(Some(telemetry))
 }
 
-fn finish_optional_execution_telemetry_for_current_process(
+fn finish_optional_execution_telemetry(
     telemetry: Option<GatewayExecutionTelemetry>,
 ) -> Option<InferenceExecutionResourceObservation> {
     let telemetry = telemetry?;
-    if let Some(observation) =
-        finish_runtime_resource_monitor_for_current_process(telemetry.resource_monitor)
-    {
+    if let Some(observation) = finish_runtime_resource_monitor(telemetry.resource_monitor) {
         if let Err(error) = telemetry
             .scope
             .recorder()
@@ -3027,18 +3039,22 @@ fn finish_optional_execution_telemetry_for_current_process(
     }
 }
 
-fn start_runtime_resource_monitor_for_current_process() -> Option<RuntimeResourceMonitorGuard> {
+fn start_runtime_resource_monitor_for_process(
+    process_id: u32,
+) -> Option<RuntimeResourceMonitorGuard> {
     let monitor = crate::default_runtime_resource_monitor();
-    match monitor.start_process_monitor(std::process::id()) {
+    match monitor.start_process_monitor(process_id) {
         Ok(guard) => Some(guard),
         Err(error) => {
-            log::warn!("failed to start runtime resource monitor: {error}");
+            log::warn!(
+                "failed to start runtime resource monitor for process {process_id}: {error}"
+            );
             None
         }
     }
 }
 
-fn finish_runtime_resource_monitor_for_current_process(
+fn finish_runtime_resource_monitor(
     guard: Option<RuntimeResourceMonitorGuard>,
 ) -> Option<InferenceExecutionResourceObservation> {
     let Some(guard) = guard else {

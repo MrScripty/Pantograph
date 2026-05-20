@@ -1094,6 +1094,15 @@ pub trait InferenceBackend: Send + Sync {
         None
     }
 
+    /// Process identifier for a ready backend-owned runtime process.
+    ///
+    /// In-process backends return `None`; the gateway then monitors the
+    /// Pantograph process. Managed sidecar backends return the concrete child
+    /// process id they own for execution resource observations.
+    fn active_runtime_process_id(&self) -> Option<u32> {
+        None
+    }
+
     // ─── INFERENCE ──────────────────────────────────────────────────
 
     /// Stream chat completion responses

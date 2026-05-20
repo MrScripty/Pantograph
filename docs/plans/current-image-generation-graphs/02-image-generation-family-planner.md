@@ -996,6 +996,14 @@ Staged implementation:
         `RuntimeResourceMonitor`, report only host RAM `os_process_rss`, and
         merge through the execution telemetry scope. It must not add
         runtime-native source labels or parse runtime logs.
+        - 2026-05-20 implementation update: completed for llama.cpp managed
+          sidecars. `InferenceBackend` now exposes an optional ready runtime
+          process id, `LlamaServer` returns the child `ProcessHandle::pid()`
+          only for ready sidecars, and gateway lifecycle telemetry samples that
+          process before using the Pantograph process for in-process backends.
+          The observation source remains `os_process_rss`; no runtime-native
+          telemetry labels, scheduler probes, or managed-runtime log parsing
+          were added.
      2. Add a small runtime-native telemetry provider contract that can return
         a typed observation or typed unavailable state such as
         `not_implemented`, `missing_runtime_capability`,

@@ -317,6 +317,10 @@ impl InferenceBackend for LlamaCppBackend {
         self.server.active_runtime_descriptor()
     }
 
+    fn active_runtime_process_id(&self) -> Option<u32> {
+        self.server.active_process_id()
+    }
+
     async fn chat_completion_stream(
         &self,
         request_json: String,

@@ -252,6 +252,43 @@ impl ProcessHandle for ErroringProcessHandle {
     }
 }
 
+#[test]
+fn active_process_id_reports_ready_sidecar_child_pid_only() {
+    let mut server = LlamaServer::new();
+    server.set_test_runtime_state(
+        ServerMode::SidecarInference {
+            port: 18080,
+            model_path: "/models/main.gguf".to_string(),
+            mmproj_path: None,
+            device: DeviceConfig {
+                device: DeviceBackend::Auto,
+                gpu_layers: -1,
+            },
+            context_size: crate::constants::defaults::CONTEXT_SIZE,
+            cpu_threads: None,
+            batch_size: None,
+            ubatch_size: None,
+        },
+        true,
+    );
+    server.set_test_process_handle(Box::new(ErroringProcessHandle {
+        killed: Arc::new(AtomicBool::new(false)),
+    }));
+
+    assert_eq!(server.active_process_id(), Some(1234));
+
+    server.set_test_runtime_state(
+        ServerMode::External {
+            url: "http://127.0.0.1:11434".to_string(),
+        },
+        true,
+    );
+    assert_eq!(server.active_process_id(), None);
+
+    server.set_test_runtime_state(ServerMode::None, false);
+    assert_eq!(server.active_process_id(), None);
+}
+
 struct ErroringProcessSpawner {
     app_data_dir: PathBuf,
     killed: Arc<AtomicBool>,

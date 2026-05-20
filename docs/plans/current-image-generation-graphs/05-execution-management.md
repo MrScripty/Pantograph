@@ -320,6 +320,16 @@ Update during implementation:
   later provider contract and remain `managed_runtime_telemetry`. Both merge
   through `InferenceExecutionTelemetryScope`, while scheduler and
   diagnostics-ledger consume only projected typed observations.
+- 2026-05-20: Managed child-process RSS implementation slice completed for
+  llama.cpp sidecars. Gateway execution telemetry now asks the active backend
+  for a ready runtime process id, monitors that child with the existing
+  `RuntimeResourceMonitor` when present, and otherwise monitors the Pantograph
+  process for in-process backends. The slice intentionally did not add
+  runtime-native telemetry, scheduler-side probing, log parsing, or simulated
+  managed-runtime metrics. Focused verification passed:
+  `cargo test -p inference active_process_id_reports_ready_sidecar_child_pid_only --lib`
+  and
+  `cargo test -p inference test_chat_completion_stream_with_lifecycle_monitors_active_runtime_process --lib`.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

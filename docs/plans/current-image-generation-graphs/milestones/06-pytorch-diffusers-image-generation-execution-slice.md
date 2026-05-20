@@ -722,6 +722,31 @@ PyTorch/diffusers and produce a retained image artifact.
     RSS, and child-process RSS must not be mislabeled as runtime-native
     telemetry. Scheduler and diagnostics-ledger consume the projected typed
     observations only; they do not run probes or parse runtime logs.
+  - 2026-05-20 managed child-process RSS implementation slice:
+    - Smallest useful vertical slice: route gateway execution telemetry to a
+      backend-owned ready runtime process id when one exists, with llama.cpp
+      sidecars as the first producer.
+    - Allowed files touched:
+      `crates/inference/src/backend/mod.rs`,
+      `crates/inference/src/backend/llamacpp.rs`,
+      `crates/inference/src/server.rs`,
+      `crates/inference/src/gateway.rs`,
+      `crates/inference/src/gateway_tests.rs`,
+      `crates/inference/src/server_tests.rs`, and this plan.
+    - No-fallback/no-legacy confirmation: the slice keeps process RSS typed as
+      `InferenceResourceObservationSourceKind::OsProcessRss`, reuses
+      `RuntimeResourceMonitor`, and does not add runtime-native telemetry
+      labels, scheduler probes, managed-runtime log parsing, or compatibility
+      shims. In-process backends still use the Pantograph process as their
+      canonical process owner; ready managed sidecars use their concrete child
+      pid.
+    - Verification passed:
+      `cargo test -p inference active_process_id_reports_ready_sidecar_child_pid_only --lib`
+      and
+      `cargo test -p inference test_chat_completion_stream_with_lifecycle_monitors_active_runtime_process --lib`.
+    - Remaining follow-up: add the separate runtime-native telemetry provider
+      contract with typed unavailable states before any runtime/API metrics are
+      labeled as `managed_runtime_telemetry`.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
