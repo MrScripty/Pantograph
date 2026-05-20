@@ -7548,6 +7548,43 @@ Worker rules:
     dependency-preflight construction, dependency cache/activity correlation,
     and any direct explicit `model_path` graph edges with typed Pumas
     model-reference request/result contracts.
+- 2026-05-20 Milestone 5 embedded-runtime dependency-preflight Pumas identity
+  gate slice:
+  - Smallest useful vertical slice: align embedded-runtime Python dependency
+    preflight and explicit `dependency-environment` execution with the
+    node-engine gate by building resolver requests from explicit
+    `pumas_model_ref` or `model_id`, leaving `model_path` empty, and failing
+    closed when Pumas identity is missing.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_preflight.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_fail_closed.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/input_helpers.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this slice removes successful
+    embedded-runtime path-only preflight identity and package-fact or
+    dependency-requirement model-id fallback. It does not add a compatibility
+    builder, path alias, package-fact identity fallback, directory scan, or
+    scheduler bypass.
+  - Implementation completed: `build_model_dependency_request` now reads
+    explicit Pumas identity, leaves `model_path` empty, and both
+    `dependency-environment` and Python-node dependency preflight block with a
+    typed execution error when Pumas identity is absent. Failure payloads report
+    `model_id` instead of stale local paths. Focused tests and README
+    traceability were updated.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`, `cargo
+    fmt -p pantograph-embedded-runtime -- --check`, `cargo test -p
+    pantograph-embedded-runtime dependency_preflight --lib`, `cargo test -p
+    pantograph-embedded-runtime dependency_fail_closed --lib`, `cargo test -p
+    pantograph-embedded-runtime build_model_dependency_request --lib`, and
+    `cargo check -p pantograph-embedded-runtime`.
+  - Remaining follow-up: replace the exported path-shaped
+    `ModelDependencyRequest`/`ModelRefV2` contracts, lower-level
+    descriptor/cache/activity correlation, and any direct explicit
+    `model_path` graph edges with typed Pumas model-reference request/result
+    contracts.
 
 ### Traceability Links
 

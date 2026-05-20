@@ -16,8 +16,8 @@ async fn onnx_nodes_block_when_dependency_preflight_is_not_ready() {
 
     let mut inputs = HashMap::new();
     inputs.insert(
-        "model_path".to_string(),
-        serde_json::json!("/tmp/model-not-ready"),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/model-not-ready"}),
     );
     inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
@@ -79,8 +79,8 @@ async fn onnx_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
 
     let mut inputs = HashMap::new();
     inputs.insert(
-        "model_path".to_string(),
-        serde_json::json!("/tmp/model-ready"),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/model-ready"}),
     );
     inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
@@ -144,8 +144,8 @@ async fn onnx_nodes_route_through_python_adapter_with_preflight() {
 
     let mut inputs = HashMap::new();
     inputs.insert(
-        "model_path".to_string(),
-        serde_json::json!("/tmp/model.onnx"),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/model-onnx"}),
     );
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 

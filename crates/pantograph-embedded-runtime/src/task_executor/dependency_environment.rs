@@ -115,7 +115,6 @@ impl TauriTaskExecutor {
 
     pub(super) fn build_model_dependency_request(
         node_type: &str,
-        model_path: &str,
         inputs: &HashMap<String, serde_json::Value>,
     ) -> ModelDependencyRequest {
         let requirements = Self::parse_dependency_requirements_input(inputs);
@@ -134,8 +133,7 @@ impl TauriTaskExecutor {
         .or_else(|| Self::task_type_primary_from_package_facts(package_facts.as_ref()))
         .unwrap_or_else(|| Self::infer_task_type_primary(node_type, inputs));
         let model_id = Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
-            .or_else(|| Self::model_id_from_package_facts(package_facts.as_ref()))
-            .or_else(|| requirements.as_ref().map(|r| r.model_id.clone()));
+            .or_else(|| Self::model_id_from_pumas_model_ref_input(inputs));
         let platform_context = Self::read_optional_input_value_aliases(
             inputs,
             &["platform_context", "platformContext"],
@@ -155,7 +153,7 @@ impl TauriTaskExecutor {
 
         ModelDependencyRequest {
             node_type: node_type.to_string(),
-            model_path: model_path.to_string(),
+            model_path: String::new(),
             model_id,
             model_type: Self::read_optional_input_string_aliases(
                 inputs,
@@ -167,6 +165,22 @@ impl TauriTaskExecutor {
             selected_binding_ids,
             dependency_override_patches: Self::read_input_dependency_override_patches(inputs),
         }
+    }
+
+    fn model_id_from_pumas_model_ref_input(
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Option<String> {
+        Self::read_optional_input_value_aliases(inputs, &["pumas_model_ref", "pumasModelRef"])
+            .and_then(|model_ref| {
+                ["model_id", "modelId"].iter().find_map(|key| {
+                    model_ref
+                        .get(*key)
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned)
+                })
+            })
     }
 
     fn read_resolved_model_package_facts_for_preflight(
@@ -191,14 +205,6 @@ impl TauriTaskExecutor {
         facts
             .and_then(|facts| facts.task.task_type_primary.clone())
             .filter(|task| !task.trim().is_empty())
-    }
-
-    fn model_id_from_package_facts(
-        facts: Option<&inference::ResolvedModelPackageFacts>,
-    ) -> Option<String> {
-        facts
-            .map(|facts| facts.model_ref.model_id.clone())
-            .filter(|model_id| !model_id.trim().is_empty())
     }
 
     pub(super) fn python_runtime_handles_node(node_type: &str) -> bool {
@@ -418,16 +424,18 @@ impl TauriTaskExecutor {
             ));
         };
 
-        let model_path =
-            Self::read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
-                .ok_or_else(|| {
-                    NodeEngineError::ExecutionFailed(
-                        "Missing model_path input. Connect Puma-Lib model_path output.".to_string(),
-                    )
-                })?;
         let mode = Self::dependency_mode(inputs);
-        let request =
-            Self::build_model_dependency_request("dependency-environment", &model_path, inputs);
+        let request = Self::build_model_dependency_request("dependency-environment", inputs);
+        if request
+            .model_id
+            .as_deref()
+            .is_none_or(|model_id| model_id.trim().is_empty())
+        {
+            return Err(NodeEngineError::ExecutionFailed(
+                "Missing pumas_model_ref/model_id input. Connect Puma-Lib pumas_model_ref output."
+                    .to_string(),
+            ));
+        }
         let requirements = resolver
             .resolve_model_dependency_requirements(request.clone())
             .await
@@ -557,16 +565,16 @@ impl TauriTaskExecutor {
             ));
         };
 
-        let model_path = inputs
-            .get("model_path")
-            .and_then(|m| m.as_str())
-            .ok_or_else(|| {
-                NodeEngineError::ExecutionFailed(
-                    "Missing model_path input. Connect a Puma-Lib node.".to_string(),
-                )
-            })?;
-
-        let request = Self::build_model_dependency_request(node_type, model_path, inputs);
+        let request = Self::build_model_dependency_request(node_type, inputs);
+        let request_model_id = match request.model_id.as_deref() {
+            Some(model_id) if !model_id.trim().is_empty() => model_id.to_string(),
+            _ => {
+                return Err(NodeEngineError::ExecutionFailed(
+                    "Missing pumas_model_ref/model_id input. Connect Puma-Lib pumas_model_ref output."
+                        .to_string(),
+                ));
+            }
+        };
         if environment_gate_enabled {
             let resolved = resolver
                 .resolve_model_ref(request, None)
@@ -609,7 +617,7 @@ impl TauriTaskExecutor {
             let payload = serde_json::json!({
                 "kind": "dependency_preflight",
                 "node_type": node_type,
-                "model_path": model_path,
+                "model_id": request_model_id,
                 "validation_state": requirements.validation_state,
                 "validation_errors": requirements.validation_errors,
                 "selected_binding_ids": requirements.selected_binding_ids,

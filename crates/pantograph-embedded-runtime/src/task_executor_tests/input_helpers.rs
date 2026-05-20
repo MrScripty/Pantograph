@@ -121,13 +121,19 @@ fn stable_hash_hex_is_deterministic() {
 fn build_model_dependency_request_normalizes_backend_aliases() {
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("onnx-runtime"));
-
-    let request = TauriTaskExecutor::build_model_dependency_request(
-        "dependency-environment",
-        "/tmp/model",
-        &inputs,
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/tiny-onnx"}),
     );
+
+    let request =
+        TauriTaskExecutor::build_model_dependency_request("dependency-environment", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("onnx-runtime"));
+    assert_eq!(request.model_path, "");
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("pumas://models/tiny-onnx")
+    );
 }
 
 #[test]
@@ -135,9 +141,9 @@ fn build_model_dependency_request_ignores_backend_key_for_canonical_preflight() 
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("onnx-runtime"));
 
-    let request =
-        TauriTaskExecutor::build_model_dependency_request("onnx-inference", "/tmp/model", &inputs);
+    let request = TauriTaskExecutor::build_model_dependency_request("onnx-inference", &inputs);
     assert_eq!(request.backend_key.as_deref(), None);
+    assert_eq!(request.model_path, "");
 }
 
 #[test]
@@ -162,9 +168,12 @@ fn build_model_dependency_request_uses_package_facts_without_selecting_backend()
     );
     inputs.insert("model_type".to_string(), serde_json::json!("embedding"));
     inputs.insert("resolved_model_package_facts".to_string(), package_facts);
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "llm/example/tiny-transformers"}),
+    );
 
-    let request =
-        TauriTaskExecutor::build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
+    let request = TauriTaskExecutor::build_model_dependency_request("llm-inference", &inputs);
 
     assert_eq!(request.backend_key.as_deref(), None);
     assert_eq!(
@@ -192,11 +201,8 @@ fn build_model_dependency_request_keeps_explicit_inputs_before_package_facts() {
     );
     inputs.insert("model_package_facts".to_string(), package_facts);
 
-    let request = TauriTaskExecutor::build_model_dependency_request(
-        "dependency-environment",
-        "/tmp/model",
-        &inputs,
-    );
+    let request =
+        TauriTaskExecutor::build_model_dependency_request("dependency-environment", &inputs);
 
     assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
     assert_eq!(request.model_id.as_deref(), Some("explicit-model"));
@@ -223,7 +229,7 @@ fn build_model_dependency_request_ignores_requirements_backend_when_input_missin
         }),
     );
 
-    let request =
-        TauriTaskExecutor::build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
+    let request = TauriTaskExecutor::build_model_dependency_request("llm-inference", &inputs);
     assert_eq!(request.backend_key.as_deref(), None);
+    assert_eq!(request.model_id, None);
 }

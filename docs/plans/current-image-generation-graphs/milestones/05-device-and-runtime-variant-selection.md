@@ -5832,6 +5832,46 @@ Stop and re-plan before implementation when any remaining slice would require:
     dependency-descriptor cache/activity correlation still keys by local path.
     Those are the next typed contract replacement slices, not compatibility
     behavior to preserve.
+- 2026-05-20 slice: embedded-runtime dependency-preflight Pumas identity gate.
+  - Smallest useful vertical slice: align embedded-runtime Python dependency
+    preflight and explicit `dependency-environment` execution with the
+    node-engine gate by building `ModelDependencyRequest` values from explicit
+    `pumas_model_ref` or `model_id`, leaving `model_path` empty, and failing
+    closed when Pumas identity is missing.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_preflight.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/dependency_fail_closed.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/input_helpers.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, this milestone file,
+    and `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+    Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: embedded-runtime preflight no longer
+    reads `model_path` as request identity, no longer derives model id from
+    resolved package facts or dependency requirements, and emits a typed
+    execution error when explicit Pumas identity is absent. The slice did not
+    add path aliases, package-fact identity fallback, or a compatibility
+    environment-node path.
+  - Per-slice standards evidence: embedded-runtime remains the host integration
+    owner for Python dependency preflight; no node-engine public DTO, scheduler
+    policy, generated bindings, worker code, frontend controls, saved workflow
+    fixtures, lockfiles, or platform code changed. README traceability records
+    the remaining lower-level path-shaped DTO fields as follow-up.
+  - Tests/fixtures: embedded-runtime input-helper tests prove request identity
+    comes from explicit Pumas refs/ids and path stays empty; dependency
+    preflight/fail-closed tests now wire Pumas identity while still proving
+    missing/invalid dependency states block before Python worker execution.
+  - Verification passed:
+    `cargo fmt -p pantograph-embedded-runtime`,
+    `cargo fmt -p pantograph-embedded-runtime -- --check`,
+    `cargo test -p pantograph-embedded-runtime dependency_preflight --lib`,
+    `cargo test -p pantograph-embedded-runtime dependency_fail_closed --lib`,
+    `cargo test -p pantograph-embedded-runtime build_model_dependency_request --lib`,
+    `cargo check -p pantograph-embedded-runtime`.
+  - Remaining follow-up: the exported `ModelDependencyRequest` and
+    `ModelRefV2` contracts still contain `model_path`, and the lower-level
+    descriptor/cache/activity resolver still keys/correlates by local path.
+    Replace those contracts next rather than preserving them as compatibility.
 
 **Verification:**
 

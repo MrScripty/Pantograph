@@ -141,14 +141,14 @@ Pantograph-owned runtime behavior. `model_dependencies.rs` is responsible for
 mapping workflow dependency requests onto Pumas contracts, and it should prefer
 `ModelExecutionDescriptor` when a request can resolve a model id. The crate
 preserves the existing workflow-facing `model_path`, `model_type`, and
-`task_type_primary` facades while the remaining dependency-preflight contract is
-being replaced by Pumas model references. `puma-lib` task execution is no
-longer a model-path producer: it emits `pumas_model_ref` plus bounded selection
-facts and leaves executable path/load-target resolution to the scheduler-owned
-dependency planning path.
-Path-only dependency requests use Pumas' canonical model-ref resolver as a
-bounded migration aid; if Pumas cannot map the path to a model id, Pantograph
-preserves the requested path instead of doing a descriptor scan.
+`task_type_primary` facades while the exported dependency DTOs are being
+replaced by Pumas model references. `puma-lib` task execution is no longer a
+model-path producer, and embedded-runtime dependency preflight no longer uses
+`model_path` as successful request identity: both emit or consume
+`pumas_model_ref` plus bounded planning facts and leave executable
+path/load-target resolution to the scheduler-owned dependency planning path.
+Lower-level descriptor helpers still contain the remaining path-shaped DTO
+fields until the typed request/result contract replacement removes them.
 Python package checks, binding installation, install stream
 capture, and per-environment install locks stay in `model_dependency_python.rs`
 so the resolver facade remains focused on API orchestration, cache lookup, and
@@ -699,10 +699,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   phase, binding, requirement, stream, and model-path fields.
 - `model_dependency_descriptors.rs` preserves stable cache keys,
   requirements-id shape, Pumas descriptor fallback semantics, backend-key
-  canonicalization, and the remaining dependency-preflight
-  `model_path`/`task_type_primary` boundary before the resolver runs dependency
-  checks or installation. That boundary is not used by `puma-lib` task
-  execution, which produces `pumas_model_ref` rather than executable paths.
+  canonicalization, and the remaining exported `ModelDependencyRequest` local
+  path fields before the typed request/result replacement lands. Task
+  execution and dependency preflight should provide Pumas identity, not
+  graph-authored executable paths, to this lower-level resolver boundary.
 - `model_dependency_requirements.rs` preserves stable dependency error codes,
   binding ids, validation scopes, selected binding order, install targets, and
   user override validation before those facts are cached or returned by the

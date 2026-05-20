@@ -16,8 +16,8 @@ async fn onnx_nodes_fail_fast_when_environment_ref_is_not_ready() {
 
     let mut inputs = HashMap::new();
     inputs.insert(
-        "model_path".to_string(),
-        serde_json::json!("/tmp/model-ready"),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/model-ready"}),
     );
     inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
@@ -61,8 +61,8 @@ async fn python_nodes_block_when_no_dependency_bindings_are_available() {
 
     let mut inputs = HashMap::new();
     inputs.insert(
-        "model_path".to_string(),
-        serde_json::json!("/tmp/external/tiny-tts.onnx"),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/tiny-tts"}),
     );
     inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert(
@@ -102,8 +102,8 @@ async fn python_nodes_block_when_bindings_are_missing_runtime_packages() {
 
     let mut inputs = HashMap::new();
     inputs.insert(
-        "model_path".to_string(),
-        serde_json::json!("/tmp/external/tiny-tts.onnx"),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/tiny-tts"}),
     );
     inputs.insert("model_type".to_string(), serde_json::json!("audio"));
     inputs.insert(
