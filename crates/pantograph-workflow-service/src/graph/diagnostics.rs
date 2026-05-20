@@ -36,6 +36,7 @@ pub enum WorkflowGraphDiagnosticCode {
     InvalidNodeId,
     InvalidNodeType,
     InvalidDynamicDefinition,
+    InvalidPumasModelReference,
     MissingEdgeSourceNode,
     MissingEdgeTargetNode,
     SelfConnection,
@@ -59,6 +60,9 @@ impl WorkflowGraphDiagnosticCode {
             WorkflowGraphDiagnosticCode::InvalidNodeId => "invalid_node_id",
             WorkflowGraphDiagnosticCode::InvalidNodeType => "invalid_node_type",
             WorkflowGraphDiagnosticCode::InvalidDynamicDefinition => "invalid_dynamic_definition",
+            WorkflowGraphDiagnosticCode::InvalidPumasModelReference => {
+                "invalid_pumas_model_reference"
+            }
             WorkflowGraphDiagnosticCode::MissingEdgeSourceNode => "missing_edge_source_node",
             WorkflowGraphDiagnosticCode::MissingEdgeTargetNode => "missing_edge_target_node",
             WorkflowGraphDiagnosticCode::SelfConnection => "self_connection",

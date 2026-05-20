@@ -7194,6 +7194,32 @@ Worker rules:
   - Verification deviation: the two Cargo commands briefly waited on package
     and build locks, then completed successfully.
   - Remaining follow-up: none for P6.
+- 2026-05-20 stale graph Pumas model-ref diagnostic slice:
+  - Smallest useful vertical slice: close the remaining Milestone 3 backend
+    stale-graph diagnostic gap for graph-authored Pumas model references by
+    validating only structural model-ref shape during graph contract
+    inspection.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/graph/diagnostics.rs`,
+    `crates/pantograph-workflow-service/src/graph/contract_validation.rs`,
+    `crates/pantograph-workflow-service/src/graph/contract_validation_tests.rs`,
+    `docs/plans/current-image-generation-graphs/milestones/03-backend-stale-graph-diagnostics.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: graph validation does not call Pumas,
+    infer model availability, repair local paths, or translate invalid model
+    refs into fallback model ids. It emits a typed
+    `InvalidPumasModelReference` stale graph diagnostic when graph data already
+    contains malformed/local/unsupported Pumas model-ref payloads.
+  - Implementation completed: added the diagnostic code, top-level
+    `pumas_model_ref`/`model_ref` payload validation for known graph nodes,
+    and focused tests for a local-path Pumas ref, invalid object shape, and a
+    valid Pumas ref that stays non-stale.
+  - Verification passed: `cargo test -p pantograph-workflow-service
+    graph::contract_validation --lib`, `cargo check -p
+    pantograph-workflow-service`, `cargo fmt --package
+    pantograph-workflow-service -- --check`, and `git diff --check`.
+  - Remaining follow-up: none for Milestone 3. Live Pumas model availability
+    remains owned by Pumas resolution and execution planning diagnostics.
 
 ### Traceability Links
 

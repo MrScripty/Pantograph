@@ -14,16 +14,16 @@ inspectable and explain why they cannot be submitted.
   boundaries.
 - [x] Use the retired-node classification path created by the canonicalization
   split to emit stale diagnostics for retired node types.
-- [ ] Cover unknown node types, retired node types, missing definitions,
+- [x] Cover unknown node types, retired node types, missing definitions,
   missing nodes, missing edge endpoints, missing edge handles, unresolved Puma
   model references, and incompatible or stale port contracts.
-- [ ] Return stale graph diagnostics from graph load/read-model paths used by
+- [x] Return stale graph diagnostics from graph load/read-model paths used by
   graph editor, the shared graph inspection projection, IO inspector
   saved-graph mode, and run inspection.
 - [x] Include bounded submit/admission reasons when stale executable graphs are
   blocked.
-- [ ] Ensure diagnostics are factual and presentation-neutral.
-- [ ] Ensure stale graph diagnostics can represent node-level, edge-level, and
+- [x] Ensure diagnostics are factual and presentation-neutral.
+- [x] Ensure stale graph diagnostics can represent node-level, edge-level, and
   graph-level facts without requiring frontend inference.
 - [x] Keep stale graph validation as a replayable projection over saved graph
   data. Loading the same saved graph should produce the same stale facts without
@@ -78,12 +78,18 @@ inspectable and explain why they cannot be submitted.
   and `cargo test -p pantograph-workflow-service graph::diagnostics` passed
   after adding structured graph error details and blocking stale graphs before
   queue admission.
+- `cargo test -p pantograph-workflow-service graph::contract_validation --lib`,
+  `cargo check -p pantograph-workflow-service`, `cargo fmt --package
+  pantograph-workflow-service -- --check`, and `git diff --check` passed after
+  adding `InvalidPumasModelReference` stale graph diagnostics. The diagnostic
+  validates only graph-authored Pumas model-reference shape, rejects local
+  paths, unsupported URI schemes, invalid segments, and invalid JSON shapes,
+  and does not perform live Pumas library lookup or availability inference.
 
 **Remaining Follow-Up:**
 
-- Extend coverage to unresolved Puma model references and stale dynamic port
-  contracts once the graph inspection projection exists.
-- Add cross-layer saved-graph inspection tests in a separate slice to avoid
-  mixing editor stale facts with execution admission behavior.
+- None for Milestone 3. Live Pumas model availability remains owned by Pumas
+  resolution and execution planning diagnostics, not graph-structure
+  inspection.
 
-**Status:** Partially completed on 2026-05-10
+**Status:** Complete

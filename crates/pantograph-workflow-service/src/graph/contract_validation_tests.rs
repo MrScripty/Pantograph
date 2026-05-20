@@ -88,6 +88,86 @@ fn contract_diagnostics_classify_unknown_and_retired_node_types() {
 }
 
 #[test]
+fn contract_diagnostics_classify_invalid_pumas_model_refs_without_live_lookup() {
+    let registry = NodeRegistry::new();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "puma-local-path".to_string(),
+                node_type: "puma-lib".to_string(),
+                position: Position::default(),
+                data: serde_json::json!({
+                    "pumas_model_ref": {
+                        "model_ref_contract_version": 1,
+                        "model_id": "/models/tiny-sd"
+                    }
+                }),
+            },
+            GraphNode {
+                id: "llm-invalid-shape".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position::default(),
+                data: serde_json::json!({
+                    "model_ref": {
+                        "model_ref_contract_version": 1
+                    }
+                }),
+            },
+            GraphNode {
+                id: "puma-valid".to_string(),
+                node_type: "puma-lib".to_string(),
+                position: Position::default(),
+                data: serde_json::json!({
+                    "pumas_model_ref": {
+                        "model_ref_contract_version": 1,
+                        "model_id": "pumas://models/image/stable-diffusion/tiny-sd"
+                    }
+                }),
+            },
+        ],
+        edges: Vec::new(),
+        derived_graph: None,
+    };
+
+    let diagnostics = validate_workflow_graph_contract_diagnostics(&graph, &registry);
+
+    let local_path = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.node_id.as_deref() == Some("puma-local-path"))
+        .expect("local path diagnostic");
+    assert_eq!(
+        local_path.code,
+        WorkflowGraphDiagnosticCode::InvalidPumasModelReference
+    );
+    assert_eq!(local_path.scope, WorkflowGraphDiagnosticScope::Node);
+    assert!(local_path.blocking_submission);
+    assert_eq!(
+        local_path.details.get("field_path").map(String::as_str),
+        Some("data.pumas_model_ref")
+    );
+
+    let invalid_shape = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.node_id.as_deref() == Some("llm-invalid-shape"))
+        .expect("invalid shape diagnostic");
+    assert_eq!(
+        invalid_shape.code,
+        WorkflowGraphDiagnosticCode::InvalidPumasModelReference
+    );
+    assert_eq!(
+        invalid_shape.details.get("field_path").map(String::as_str),
+        Some("data.model_ref")
+    );
+
+    assert!(
+        diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.node_id.as_deref() != Some("puma-valid")),
+        "valid Pumas model refs should not become stale graph diagnostics"
+    );
+}
+
+#[test]
 fn contract_diagnostics_classify_missing_edge_endpoints_and_handles() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {

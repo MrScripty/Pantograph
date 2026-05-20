@@ -8,6 +8,7 @@ use super::effective_definition::EffectiveDefinitionError;
 use super::registry::NodeRegistry;
 use super::types::{GraphEdge, GraphNode, WorkflowGraph};
 use super::validation::check_connection_ports;
+use crate::workflow::WorkflowExecutionPlanModelRef;
 
 const RETIRED_NODE_TYPES: &[&str] = &[
     "diffusion-inference",
@@ -48,6 +49,8 @@ pub fn validate_workflow_graph_contract_diagnostics(
     for node in &graph.nodes {
         if let Err(error) = effective_node_definition(node, registry) {
             diagnostics.push(diagnostic_from_effective_definition_error(node, error));
+        } else {
+            validate_node_payload_contract(node, &mut diagnostics);
         }
     }
 
@@ -94,6 +97,72 @@ fn validate_unique_ids(graph: &WorkflowGraph, diagnostics: &mut Vec<WorkflowGrap
             );
         }
     }
+}
+
+fn validate_node_payload_contract(
+    node: &GraphNode,
+    diagnostics: &mut Vec<WorkflowGraphDiagnostic>,
+) {
+    validate_pumas_model_ref_field(node, "pumas_model_ref", diagnostics);
+    validate_pumas_model_ref_field(node, "model_ref", diagnostics);
+}
+
+fn validate_pumas_model_ref_field(
+    node: &GraphNode,
+    field_name: &str,
+    diagnostics: &mut Vec<WorkflowGraphDiagnostic>,
+) {
+    let Some(value) = node.data.get(field_name) else {
+        return;
+    };
+    if value.is_null() {
+        return;
+    }
+
+    let model_ref = match value {
+        serde_json::Value::String(value) => Some(value.as_str()),
+        serde_json::Value::Object(object) => {
+            object.get("model_id").and_then(serde_json::Value::as_str)
+        }
+        _ => None,
+    };
+
+    match model_ref {
+        Some(model_ref) => {
+            if let Err(error) = WorkflowExecutionPlanModelRef::parse(model_ref) {
+                diagnostics.push(invalid_pumas_model_ref_diagnostic(
+                    node,
+                    field_name,
+                    error.to_string(),
+                ));
+            }
+        }
+        None => diagnostics.push(invalid_pumas_model_ref_diagnostic(
+            node,
+            field_name,
+            "Pumas model reference must be a string or object with a model_id string".to_string(),
+        )),
+    }
+}
+
+fn invalid_pumas_model_ref_diagnostic(
+    node: &GraphNode,
+    field_name: &str,
+    reason: String,
+) -> WorkflowGraphDiagnostic {
+    WorkflowGraphDiagnostic::node(
+        WorkflowGraphDiagnosticCode::InvalidPumasModelReference,
+        WorkflowGraphDiagnosticSeverity::Error,
+        &node.id,
+        &node.node_type,
+        format!(
+            "node '{}' has invalid Pumas model reference in data.{}: {}",
+            node.id, field_name, reason
+        ),
+        true,
+    )
+    .with_detail("field_path", format!("data.{field_name}"))
+    .with_detail("model_ref_error", reason)
 }
 
 fn validate_edge_contract(
