@@ -5688,6 +5688,39 @@ Stop and re-plan before implementation when any remaining slice would require:
     model-change detection. Removing or scoping that field requires a separate
     workflow schema/legacy saved graph ownership decision because existing
     graph persistence tests still preserve legacy model-path data.
+- 2026-05-20 slice: node-engine dependency-input retired context cleanup.
+  - Smallest useful vertical slice: remove implicit node-engine dependency
+    input propagation of executable model paths, Pumas load targets, and
+    resolved dependency facts from canonical model-reference context while
+    rejecting path-shaped values targeting `pumas_model_ref`.
+  - Allowed write set:
+    `crates/node-engine/src/engine/dependency_inputs.rs`,
+    `crates/node-engine/src/engine/README.md`, this milestone file, and
+    `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the slice removes implicit path and
+    load-target repair from dependency-input assembly and adds no alias,
+    fallback resolver, Pumas path join, package-fact revival, or scheduler
+    bypass. A `pumas_model_ref` input now accepts only object-shaped explicit
+    model-reference intent.
+  - Per-slice standards evidence: node-engine remains the backend-owned graph
+    dependency-input assembly owner; no public DTO, generated binding,
+    lockfile, saved workflow fixture, frontend UI, runtime lifecycle,
+    subprocess, path access, worker code, or platform-specific code changed.
+    The slice is synchronous map shaping with focused unit coverage and README
+    traceability.
+  - Tests/fixtures: dependency-input unit tests now prove `pumas_model_ref`
+    edges keep only explicit object model refs plus bounded planning context,
+    Pumas load targets are not implicitly propagated, path-shaped model-ref
+    target values are dropped, and direct explicit `model_path` edges are not
+    repaired through model-context merging.
+  - Verification passed:
+    `cargo fmt -p node-engine`,
+    `cargo test -p node-engine dependency_inputs --lib`,
+    `cargo check -p node-engine`.
+  - Remaining follow-up: direct explicit `model_path` graph edges still exist
+    for non-canonical/legacy consumers and must be removed, rejected, or scoped
+    in the later `ModelDependencyRequest`/`ModelRefV2` contract replacement
+    slice rather than treated as accepted compatibility.
 
 **Verification:**
 

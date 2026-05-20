@@ -7451,6 +7451,32 @@ Worker rules:
     authoritative.
   - Remaining follow-up: remove node-engine retired model/fact intake and
     reconcile non-image tracked workflow examples in their own slices.
+- 2026-05-20 Milestone 5 node-engine dependency-input retired context cleanup
+  slice:
+  - Smallest useful vertical slice: stop node-engine dependency-input assembly
+    from implicitly propagating executable model paths, Pumas load targets, and
+    resolved dependency facts as canonical model-reference context, and reject
+    path-shaped values targeting `pumas_model_ref`.
+  - Allowed write set:
+    `crates/node-engine/src/engine/dependency_inputs.rs`,
+    `crates/node-engine/src/engine/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this removes a legacy dependency-input
+    repair path and adds no compatibility alias, fallback resolver, Pumas path
+    join, package-fact revival, or scheduler bypass. `pumas_model_ref` now
+    requires explicit object-shaped model-reference intent in this assembly
+    path.
+  - Implementation completed: reduced implicit model context to
+    `pumas_model_ref`, model/task facts, selected binding ids, and bounded
+    platform context; blocked non-object direct values for `pumas_model_ref`;
+    updated focused unit tests and the node-engine engine README.
+  - Verification passed: `cargo fmt -p node-engine`, `cargo test -p
+    node-engine dependency_inputs --lib`, and `cargo check -p node-engine`.
+  - Remaining follow-up: direct explicit `model_path` graph edges still exist
+    for non-canonical/legacy consumers and must be removed, rejected, or scoped
+    in the later `ModelDependencyRequest`/`ModelRefV2` contract replacement
+    slice rather than treated as accepted compatibility.
 
 ### Traceability Links
 
