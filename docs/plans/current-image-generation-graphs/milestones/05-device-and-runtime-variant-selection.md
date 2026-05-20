@@ -680,7 +680,12 @@ fixture contract must not remain reachable as an alternate execution path.
      receives typed dependency/preflight results and diagnostics, not Pumas
      paths. Replace `ModelRefV2` or split it so graph/node-engine model
      identity no longer requires `model_path`; executable paths may exist only
-     in selected backend/worker handoff contracts after planning.
+     in selected backend/worker handoff contracts after planning. Before
+     implementation, pick the contract owner deliberately: keep the contract in
+     `node-engine` only if it remains the curated public facade for both
+     producer and consumer, or move it to a narrower shared contract module if
+     the same DTO is trusted across multiple crates/processes. Do not hide a
+     cross-boundary schema inside an adapter implementation module.
    - Required ownership split: Pumas owns model-library lookup, artifact
      selection, storage kind, validation state, and local load targets.
      Scheduler/planner owns runtime/device candidate selection. Node-engine owns
@@ -699,14 +704,22 @@ fixture contract must not remain reachable as an alternate execution path.
      as graph-level dependency identity. Replace dependency cache keys and
      activity correlation fields with stable Pumas identity plus selected
      artifact/runtime/task facts; activity may include redacted runtime paths
-     only as backend/worker diagnostics after handoff.
+     only as backend/worker diagnostics after handoff. Replace public
+     `Result<_, String>` resolver errors with typed error/diagnostic enums and
+     preserve lower-level causes when adapting Pumas, dependency, or worker
+     failures.
    - Staging:
      1. Introduce the typed dependency-planning request/diagnostic/result
         contract around `PumasModelRef`, task facts, optional expected artifact
         kind, optional scheduler/runtime/device intent, selected binding ids,
         and bounded caller context. Keep node-engine request construction
         synchronous; the resolver trait may remain async because host/planner
-        implementations perform real Pumas/dependency I/O.
+        implementations perform real Pumas/dependency I/O. Decode and validate
+        raw JSON graph/input payloads once at the node-engine or host boundary,
+        then pass validated domain types inward; do not pass unvalidated
+        `serde_json::Value`, raw `String` mode/kind values, or filesystem
+        paths through internal planning APIs when a domain type can encode the
+        invariant.
      2. Replace `ModelRefV2` or introduce a successor graph model-reference
         contract that does not contain `model_path`. Update validation and
         output tests so graph identity is explicit Pumas identity, not a
@@ -744,7 +757,15 @@ fixture contract must not remain reachable as an alternate execution path.
      Embedded-runtime tests prove dependency cache/activity/environment identity
      remains stable across path changes for the same Pumas-selected artifact and
      changes when model ref, selected artifact, backend/runtime intent, platform,
-     task kind, or selected bindings change.
+     task kind, or selected bindings change. At least one cross-layer acceptance
+     test must exercise the real producer-to-consumer path from graph
+     `pumas_model_ref` input through node-engine dependency planning,
+     host/planner Pumas load-target resolution, and selected runtime/worker
+     handoff, asserting the worker receives a Pumas-approved local load path
+     while node-engine graph identity never contains or derives from that path.
+     Negative acceptance must prove missing/stale/invalid/unavailable Pumas
+     state returns the typed dependency-planning diagnostic through the existing
+     owned diagnostic channel without adding a parallel diagnostics system.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
