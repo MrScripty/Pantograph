@@ -538,6 +538,33 @@ removes a retired path, replaces it with the canonical scheduler-owned
 contract, or records a typed diagnostic when the canonical contract cannot make
 a valid decision.
 
+### Legacy Removal Contract
+
+Milestone 5 closeout treats legacy behavior as removal work, not compatibility
+work. A replaced graph, backend, runtime, device, technical-fit, worker, or
+fixture contract must not remain reachable as an alternate execution path.
+
+- Old graph shapes are not migrated into executable requests during runtime
+  planning. Tracked examples must be rewritten to canonical fields. User-local
+  or persisted stale shapes may be inspected only to produce stale/invalid graph
+  diagnostics; they must not be silently accepted, repaired, or routed.
+- Raw local model paths are not model identity for canonical inference. Pumas
+  owns model identity, artifact selection, artifact load targets, storage kind,
+  and validation state. Pantograph may carry `pumas_model_ref` and
+  scheduler-facing intent, then consume Pumas-approved load targets at the
+  host/planning boundary.
+- Runtime and device values from workflow graphs are scheduler requirements or
+  preferences only when expressed through typed canonical inputs. The inference
+  crate receives the runtime/device decision exclusively from the scheduler
+  path; it must not separately resolve graph hints, fallback runtime strings, or
+  backend-local defaults.
+- Remaining tests that mention retired fields must be negative coverage proving
+  ignore/reject/stale-diagnostic behavior, or must be removed when the canonical
+  replacement lands. Tests must not preserve old behavior by expecting successful
+  execution through legacy fields.
+- If a slice discovers that removing a retired path requires a broader schema or
+  ownership decision, stop at a re-plan boundary. Do not add a transitional shim.
+
 ### Closeout Order
 
 1. **Checklist Reconciliation And Contract Inventory**
@@ -554,9 +581,18 @@ a valid decision.
      diagnostics-ledger scheduler/run payloads, TypeScript mirrors, Python
      worker load envelopes, managed-runtime persisted state, Tauri command
      DTOs, and saved workflow/template JSON.
+   - Required legacy-removal inventory: every remaining use of raw
+     `model_path`, `backend_key`, `runtime_hint`, raw device strings,
+     backend-local device ids, resolved Pumas package facts, capability-only
+     technical-fit selection, and sidecar `DeviceConfig` execution must be
+     classified as `removed`, `backend-adapter-local`, `negative diagnostic
+     coverage`, or `re-plan required`. No item may be classified as
+     `compatibility`.
    - Acceptance: every boundary is listed as `covered`, `missing fixture`,
      `not a boundary`, or `deferred with owner`. Missing fixtures become the
      next smallest slice; broad rows are not marked complete from prose alone.
+     Retired fields have an explicit removal or rejection owner before any
+     execution-admission slice begins.
 
 2. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
@@ -682,9 +718,22 @@ a valid decision.
      optional canonical runtime/device intent only. They must not carry
      `backend_key`, `runtime_hint`, resolved Pumas package facts, raw local
      model paths, generated output bodies, or scheduler decisions.
+   - Required `model_path` resolution: remove `model_path` from canonical
+     inference identity and memory-impact calculations once replacement
+     `pumas_model_ref` coverage exists for the affected workflow/test shape. If
+     old saved graphs still contain `model_path`, classify that data as stale
+     graph input for diagnostics only; do not use it for execution, memory
+     identity, package-fact lookup, or scheduler candidate synthesis.
+   - Required non-image fixture decision: non-image tracked examples must either
+     be updated to the same canonical scheduler-owned runtime/device/model
+     contract or explicitly scoped out of Milestone 5 with an owner and a later
+     removal/replacement milestone. They must not keep raw runtime/device/model
+     fields as working examples of current behavior.
    - Acceptance: tests distinguish intentionally tracked examples from ignored
      user-local files and assert that examples either use canonical inference
-     contracts or are explicitly out of scope for Milestone 5.
+     contracts or are explicitly out of scope for Milestone 5. Any retained
+     stale-shape fixture is named as stale diagnostic coverage and cannot be
+     used by successful execution tests.
 
 ### Standards Compliance Gates
 

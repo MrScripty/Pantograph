@@ -7350,6 +7350,28 @@ Worker rules:
   - Remaining follow-up: `model_path` still participates in memory-impact
     model-change detection and needs a separate schema/legacy saved graph
     ownership decision before removal or scoping.
+- 2026-05-20 Milestone 5 legacy-removal closeout planning slice:
+  - Smallest useful vertical slice: update the remaining Milestone 5 closeout
+    plan so legacy graph/device/runtime/model-path behavior is planned as
+    removal or typed stale diagnostics, not compatibility.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the plan now forbids runtime planning
+    migrations for old graph shapes, classifies raw local model paths as
+    non-canonical model identity, requires runtime/device graph values to flow
+    only as typed scheduler intent, and requires tests mentioning retired
+    fields to be negative coverage or removed.
+  - Implementation completed: added the Milestone 5 legacy removal contract,
+    expanded the contract inventory with explicit retired-field classifications,
+    and tightened workflow/fixture closure around `model_path`, non-image
+    examples, and stale-shape fixtures.
+  - Verification passed: documentation-only review with `git diff --check --
+    docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md
+    docs/plans/current-image-generation-graphs/05-execution-management.md`.
+  - Remaining follow-up: implement the next code slice from the updated
+    closeout order, starting with contract inventory or the narrowest remaining
+    `model_path` removal/rejection boundary.
 
 ### Traceability Links
 
