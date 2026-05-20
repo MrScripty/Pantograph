@@ -816,6 +816,28 @@ pub struct RuntimeTechnicalFitCandidateHistorySummary {
     pub average_queue_wait_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub median_queue_wait_ms: Option<u64>,
+    #[serde(default)]
+    pub peak_ram_sample_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub average_peak_ram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub median_peak_ram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typical_min_peak_ram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typical_max_peak_ram_bytes: Option<u64>,
+    #[serde(default)]
+    pub peak_vram_sample_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub average_peak_vram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub median_peak_vram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typical_min_peak_vram_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typical_max_peak_vram_bytes: Option<u64>,
+    #[serde(default)]
+    pub out_of_memory_count: u32,
 }
 
 impl RuntimeTechnicalFitCandidateHistorySummary {
@@ -837,6 +859,17 @@ impl RuntimeTechnicalFitCandidateHistorySummary {
             queue_wait_sample_count: self.queue_wait_sample_count,
             average_queue_wait_ms: self.average_queue_wait_ms,
             median_queue_wait_ms: self.median_queue_wait_ms,
+            peak_ram_sample_count: self.peak_ram_sample_count,
+            average_peak_ram_bytes: self.average_peak_ram_bytes,
+            median_peak_ram_bytes: self.median_peak_ram_bytes,
+            typical_min_peak_ram_bytes: self.typical_min_peak_ram_bytes,
+            typical_max_peak_ram_bytes: self.typical_max_peak_ram_bytes,
+            peak_vram_sample_count: self.peak_vram_sample_count,
+            average_peak_vram_bytes: self.average_peak_vram_bytes,
+            median_peak_vram_bytes: self.median_peak_vram_bytes,
+            typical_min_peak_vram_bytes: self.typical_min_peak_vram_bytes,
+            typical_max_peak_vram_bytes: self.typical_max_peak_vram_bytes,
+            out_of_memory_count: self.out_of_memory_count,
         }
     }
 }

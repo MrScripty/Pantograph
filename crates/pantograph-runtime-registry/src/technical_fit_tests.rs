@@ -173,7 +173,84 @@ fn candidate_history_summary(
         queue_wait_sample_count: sample_count,
         average_queue_wait_ms: Some(10),
         median_queue_wait_ms: Some(10),
+        peak_ram_sample_count: 0,
+        average_peak_ram_bytes: None,
+        median_peak_ram_bytes: None,
+        typical_min_peak_ram_bytes: None,
+        typical_max_peak_ram_bytes: None,
+        peak_vram_sample_count: 0,
+        average_peak_vram_bytes: None,
+        median_peak_vram_bytes: None,
+        typical_min_peak_vram_bytes: None,
+        typical_max_peak_vram_bytes: None,
+        out_of_memory_count: 0,
     }
+}
+
+#[test]
+fn candidate_history_summary_preserves_memory_and_oom_evidence() {
+    let summary = RuntimeTechnicalFitCandidateHistorySummary {
+        candidate_id: " candidate-a ".to_string(),
+        sample_count: 7,
+        min_sample_count: 5,
+        threshold_met: true,
+        completed_count: 6,
+        failed_count: 1,
+        cancelled_count: 0,
+        duration_sample_count: 6,
+        average_duration_ms: Some(100),
+        median_duration_ms: Some(95),
+        typical_min_duration_ms: Some(90),
+        typical_max_duration_ms: Some(120),
+        queue_wait_sample_count: 6,
+        average_queue_wait_ms: Some(10),
+        median_queue_wait_ms: Some(8),
+        peak_ram_sample_count: 5,
+        average_peak_ram_bytes: Some(10_000),
+        median_peak_ram_bytes: Some(9_000),
+        typical_min_peak_ram_bytes: Some(8_000),
+        typical_max_peak_ram_bytes: Some(12_000),
+        peak_vram_sample_count: 4,
+        average_peak_vram_bytes: Some(20_000),
+        median_peak_vram_bytes: Some(19_000),
+        typical_min_peak_vram_bytes: Some(18_000),
+        typical_max_peak_vram_bytes: Some(22_000),
+        out_of_memory_count: 2,
+    }
+    .normalized();
+
+    assert_eq!(summary.candidate_id, "candidate-a");
+    assert_eq!(summary.peak_ram_sample_count, 5);
+    assert_eq!(summary.average_peak_ram_bytes, Some(10_000));
+    assert_eq!(summary.median_peak_ram_bytes, Some(9_000));
+    assert_eq!(summary.typical_min_peak_ram_bytes, Some(8_000));
+    assert_eq!(summary.typical_max_peak_ram_bytes, Some(12_000));
+    assert_eq!(summary.peak_vram_sample_count, 4);
+    assert_eq!(summary.average_peak_vram_bytes, Some(20_000));
+    assert_eq!(summary.median_peak_vram_bytes, Some(19_000));
+    assert_eq!(summary.typical_min_peak_vram_bytes, Some(18_000));
+    assert_eq!(summary.typical_max_peak_vram_bytes, Some(22_000));
+    assert_eq!(summary.out_of_memory_count, 2);
+
+    let encoded = serde_json::to_value(&summary).expect("summary serializes");
+    assert_eq!(encoded["peak_ram_sample_count"], 5);
+    assert_eq!(encoded["average_peak_ram_bytes"], 10_000);
+    assert_eq!(encoded["peak_vram_sample_count"], 4);
+    assert_eq!(encoded["out_of_memory_count"], 2);
+
+    let decoded_without_memory: RuntimeTechnicalFitCandidateHistorySummary =
+        serde_json::from_value(serde_json::json!({
+            "candidate_id": "candidate-a",
+            "sample_count": 5,
+            "min_sample_count": 5,
+            "threshold_met": true
+        }))
+        .expect("append-only history summary fields default when omitted");
+    assert_eq!(decoded_without_memory.peak_ram_sample_count, 0);
+    assert_eq!(decoded_without_memory.average_peak_ram_bytes, None);
+    assert_eq!(decoded_without_memory.peak_vram_sample_count, 0);
+    assert_eq!(decoded_without_memory.average_peak_vram_bytes, None);
+    assert_eq!(decoded_without_memory.out_of_memory_count, 0);
 }
 
 #[test]

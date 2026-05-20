@@ -267,6 +267,17 @@ fn candidate_history_summary_from_ledger_summary(
         queue_wait_sample_count: summary.queue_wait_sample_count,
         average_queue_wait_ms: summary.average_queue_wait_ms,
         median_queue_wait_ms: summary.median_queue_wait_ms,
+        peak_ram_sample_count: summary.peak_ram_sample_count,
+        average_peak_ram_bytes: summary.average_peak_ram_bytes,
+        median_peak_ram_bytes: summary.median_peak_ram_bytes,
+        typical_min_peak_ram_bytes: summary.typical_min_peak_ram_bytes,
+        typical_max_peak_ram_bytes: summary.typical_max_peak_ram_bytes,
+        peak_vram_sample_count: summary.peak_vram_sample_count,
+        average_peak_vram_bytes: summary.average_peak_vram_bytes,
+        median_peak_vram_bytes: summary.median_peak_vram_bytes,
+        typical_min_peak_vram_bytes: summary.typical_min_peak_vram_bytes,
+        typical_max_peak_vram_bytes: summary.typical_max_peak_vram_bytes,
+        out_of_memory_count: summary.out_of_memory_count,
     }
     .normalized()
 }
@@ -1925,17 +1936,17 @@ mod tests {
                     queue_wait_sample_count: 5,
                     average_queue_wait_ms: Some(40),
                     median_queue_wait_ms: Some(35),
-                    peak_ram_sample_count: 0,
-                    average_peak_ram_bytes: None,
-                    median_peak_ram_bytes: None,
-                    typical_min_peak_ram_bytes: None,
-                    typical_max_peak_ram_bytes: None,
-                    peak_vram_sample_count: 0,
-                    average_peak_vram_bytes: None,
-                    median_peak_vram_bytes: None,
-                    typical_min_peak_vram_bytes: None,
-                    typical_max_peak_vram_bytes: None,
-                    out_of_memory_count: 0,
+                    peak_ram_sample_count: 5,
+                    average_peak_ram_bytes: Some(10_000),
+                    median_peak_ram_bytes: Some(9_000),
+                    typical_min_peak_ram_bytes: Some(8_000),
+                    typical_max_peak_ram_bytes: Some(12_000),
+                    peak_vram_sample_count: 4,
+                    average_peak_vram_bytes: Some(20_000),
+                    median_peak_vram_bytes: Some(19_000),
+                    typical_min_peak_vram_bytes: Some(18_000),
+                    typical_max_peak_vram_bytes: Some(22_000),
+                    out_of_memory_count: 1,
                 }))
             },
         )
@@ -1955,6 +1966,17 @@ mod tests {
         assert!(summaries[0].threshold_met);
         assert_eq!(summaries[0].average_duration_ms, Some(1200));
         assert_eq!(summaries[0].average_queue_wait_ms, Some(40));
+        assert_eq!(summaries[0].peak_ram_sample_count, 5);
+        assert_eq!(summaries[0].average_peak_ram_bytes, Some(10_000));
+        assert_eq!(summaries[0].median_peak_ram_bytes, Some(9_000));
+        assert_eq!(summaries[0].typical_min_peak_ram_bytes, Some(8_000));
+        assert_eq!(summaries[0].typical_max_peak_ram_bytes, Some(12_000));
+        assert_eq!(summaries[0].peak_vram_sample_count, 4);
+        assert_eq!(summaries[0].average_peak_vram_bytes, Some(20_000));
+        assert_eq!(summaries[0].median_peak_vram_bytes, Some(19_000));
+        assert_eq!(summaries[0].typical_min_peak_vram_bytes, Some(18_000));
+        assert_eq!(summaries[0].typical_max_peak_vram_bytes, Some(22_000));
+        assert_eq!(summaries[0].out_of_memory_count, 1);
     }
 
     #[test]

@@ -829,6 +829,32 @@ PyTorch/diffusers and produce a retained image artifact.
     - Remaining follow-up: option 3, the full sidecar startup state machine, can
       now be planned as a later orchestration replacement without needing
       scattered log parsing.
+  - 2026-05-20 runtime-selection memory/OOM history contract slice:
+    - Smallest useful vertical slice: expose diagnostics-ledger
+      peak-RAM/peak-VRAM and out-of-memory history facts on
+      `RuntimeTechnicalFitCandidateHistorySummary` and project them from
+      embedded-runtime exact-key ledger summaries.
+    - Allowed files touched:
+      `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+      `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+      `crates/pantograph-embedded-runtime/src/technical_fit.rs`, and this
+      plan.
+    - No-fallback/no-legacy confirmation: this is an append-only typed
+      history-evidence slice. It does not activate memory/OOM ranking, query
+      the ledger from pure scheduler policy, broaden missing history keys,
+      infer missing metrics as zero evidence, parse terminal/log strings, or
+      translate observations through legacy MB reservation fields.
+    - Verification passed:
+      `cargo test -p pantograph-runtime-registry candidate_history_summary_preserves_memory_and_oom_evidence --lib`,
+      `cargo test -p pantograph-runtime-registry technical_fit --lib`,
+      `cargo test -p pantograph-embedded-runtime runtime_selection_history_summaries_project_exact_candidate_keys --lib`,
+      `cargo test -p pantograph-embedded-runtime technical_fit --lib`,
+      `cargo check -p pantograph-embedded-runtime`, and
+      `cargo fmt --package pantograph-runtime-registry --package pantograph-embedded-runtime -- --check`.
+    - Remaining follow-up: scheduler policy still ranks history by failure,
+      execution duration, and queue wait only. Memory/OOM weighting remains a
+      later explicit policy slice after the typed evidence is available to
+      every candidate through the same exact-key path.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

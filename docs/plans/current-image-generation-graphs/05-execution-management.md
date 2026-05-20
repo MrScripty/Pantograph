@@ -367,6 +367,19 @@ Update during implementation:
   `cargo test -p inference embedding_runtime_wait_for_ready_uses_shared_oom_classifier --lib`,
   `cargo test -p inference map_sidecar_start_error --lib`, and
   `cargo check -p inference`.
+- 2026-05-20: Continued memory-policy history work by projecting the already
+  persisted diagnostics-ledger peak RAM, peak VRAM, and out-of-memory counts
+  into runtime-registry candidate history summaries. This is a typed
+  evidence-contract slice only: pure scheduler policy still does not query the
+  ledger directly, memory/OOM weighting remains inactive, missing history is
+  not broadened or fabricated, and no terminal/log text parsing is introduced.
+  Verification passed:
+  `cargo test -p pantograph-runtime-registry candidate_history_summary_preserves_memory_and_oom_evidence --lib`,
+  `cargo test -p pantograph-runtime-registry technical_fit --lib`,
+  `cargo test -p pantograph-embedded-runtime runtime_selection_history_summaries_project_exact_candidate_keys --lib`,
+  `cargo test -p pantograph-embedded-runtime technical_fit --lib`,
+  `cargo check -p pantograph-embedded-runtime`, and
+  `cargo fmt --package pantograph-runtime-registry --package pantograph-embedded-runtime -- --check`.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed
