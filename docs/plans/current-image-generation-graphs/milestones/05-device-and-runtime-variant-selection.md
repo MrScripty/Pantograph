@@ -659,12 +659,18 @@ fixture contract must not remain reachable as an alternate execution path.
    - Allowed primary write areas by slice:
      `crates/node-engine/src/core_executor/dependency_preflight.rs`,
      `crates/node-engine/src/core_executor.rs`,
+     `crates/node-engine/src/engine/dependency_inputs.rs`,
      `crates/node-engine/src/model_dependencies.rs` or equivalent dependency
      contract owner, host/planner adapter code that currently implements
-     `ModelDependencyResolver`, and focused tests/READMEs. Do not touch
-     scheduler ranking policy, generated DTOs, lockfiles, saved workflows,
-     frontend controls, or Pumas proposal files in the same slice unless the
-     compiler proves a contract boundary must move together.
+     `ModelDependencyResolver`,
+     `crates/pantograph-embedded-runtime/src/model_dependency_descriptors.rs`,
+     `crates/pantograph-embedded-runtime/src/model_dependency_activity.rs`,
+     `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
+     `crates/pantograph-embedded-runtime/src/task_executor/puma_lib.rs`, and
+     focused tests/READMEs. Do not touch scheduler ranking policy, generated
+     DTOs, lockfiles, saved workflows, frontend controls, or Pumas proposal
+     files in the same slice unless the compiler proves a contract boundary
+     must move together.
    - Required direction: replace `ModelDependencyRequest.model_path` as the
      dependency-preflight source of truth with a typed request keyed by
      `PumasModelRef`, canonical task id/task type, expected artifact kind when
@@ -672,7 +678,9 @@ fixture contract must not remain reachable as an alternate execution path.
      The host/planner-side resolver asks Pumas for the approved artifact load
      target and derives runtime-specific dependency facts there. Node-engine
      receives typed dependency/preflight results and diagnostics, not Pumas
-     paths.
+     paths. Replace `ModelRefV2` or split it so graph/node-engine model
+     identity no longer requires `model_path`; executable paths may exist only
+     in selected backend/worker handoff contracts after planning.
    - Required ownership split: Pumas owns model-library lookup, artifact
      selection, storage kind, validation state, and local load targets.
      Scheduler/planner owns runtime/device candidate selection. Node-engine owns
@@ -684,18 +692,44 @@ fixture contract must not remain reachable as an alternate execution path.
      no directory scanning, no Pumas path joining, no model id derivation from
      paths, and no fallback to raw path preflight when Pumas cannot resolve a
      valid target. Missing/stale/invalid/unavailable Pumas state returns typed
-     dependency planning diagnostics.
+     dependency planning diagnostics. Remove Puma-Lib execution-time stale-path
+     rebinding and path-shaped outputs (`model_path`, `selected_artifact_path`,
+     `entry_path`) from canonical inference identity. Remove dependency-input
+     context propagation that can reintroduce executable paths or load targets
+     as graph-level dependency identity. Replace dependency cache keys and
+     activity correlation fields with stable Pumas identity plus selected
+     artifact/runtime/task facts; activity may include redacted runtime paths
+     only as backend/worker diagnostics after handoff.
    - Staging:
      1. Introduce the typed dependency-planning request/diagnostic/result
-        contract around `PumasModelRef` and task facts, keeping it synchronous
-        unless the resolver performs real I/O.
-     2. Move Pumas artifact-load-target resolution into the host/planner
+        contract around `PumasModelRef`, task facts, optional expected artifact
+        kind, optional scheduler/runtime/device intent, selected binding ids,
+        and bounded caller context. Keep node-engine request construction
+        synchronous; the resolver trait may remain async because host/planner
+        implementations perform real Pumas/dependency I/O.
+     2. Replace `ModelRefV2` or introduce a successor graph model-reference
+        contract that does not contain `model_path`. Update validation and
+        output tests so graph identity is explicit Pumas identity, not a
+        filesystem path.
+     3. Move Pumas artifact-load-target resolution into the host/planner
         resolver implementation and return typed unavailable diagnostics for
-        missing, stale, invalid, not-installed, or unsupported artifacts.
-     3. Update node-engine preflight callers/tests to use the typed
+        missing, stale, invalid, not-installed, or unsupported artifacts. Reuse
+        the existing `PumasSelectorAccess::resolve_model_artifact_load_target`
+        boundary rather than adding another Pumas lookup path.
+     4. Replace dependency descriptor cache keys, install locks, environment
+        manifest identity, and dependency activity events so they key/correlate
+        by Pumas model ref, selected artifact identity/kind, backend/runtime
+        intent, platform context, task kind, and selected dependency bindings,
+        never by local load path.
+     5. Update Puma-Lib execution and dependency-input assembly so canonical
+        inference graphs propagate `pumas_model_ref`, task facts, selected
+        binding ids, and scheduler intent only. Remove stale path rebinding and
+        path-shaped `pumas_model_ref` aliases instead of keeping compatibility
+        shims.
+     6. Update node-engine preflight callers/tests to use the typed
         model-reference request and remove all successful `model_path` preflight
         cases from canonical `llm-inference`.
-     4. Remove the old path-shaped `ModelDependencyRequest` fields or confine
+     7. Remove the old path-shaped `ModelDependencyRequest` fields or confine
         any remaining executable paths to backend/worker-local plan handoff
         types that are not graph/node-engine dependency identity.
    - Acceptance: node-engine dependency-preflight tests prove a graph with only
@@ -703,9 +737,14 @@ fixture contract must not remain reachable as an alternate execution path.
      local path knowledge; stale or unresolved Pumas state fails with typed
      diagnostics; legacy `model_path`, `resolved_model_source`,
      `selected_artifact_path`, and `entry_path` cannot produce successful
-     dependency-preflight execution. Host/planner tests prove Pumas-approved
-     load targets are resolved outside node-engine and are passed to runtime or
-     worker code only after scheduler/planner selection.
+     dependency-preflight execution; `ModelRefV2` or its successor does not
+     require or emit `model_path` as graph identity. Host/planner tests prove
+     Pumas-approved load targets are resolved outside node-engine and are passed
+     to runtime or worker code only after scheduler/planner selection.
+     Embedded-runtime tests prove dependency cache/activity/environment identity
+     remains stable across path changes for the same Pumas-selected artifact and
+     changes when model ref, selected artifact, backend/runtime intent, platform,
+     task kind, or selected bindings change.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
