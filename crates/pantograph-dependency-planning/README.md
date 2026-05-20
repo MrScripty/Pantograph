@@ -53,6 +53,10 @@ instead of parallel artifact DTO families.
   by local filesystem path.
 - Manual dependency override patches are part of the shared request contract,
   not an adapter-local extension field.
+- Platform context is a typed platform key, not arbitrary JSON forwarded
+  through node-engine.
+- Source node type is bounded caller context for diagnostics, not a runtime
+  routing selector.
 - Pumas load targets are result/handoff facts, not graph identity.
 - Raw graph JSON and frontend payloads must parse once into validated domain
   types before internal use.
@@ -82,8 +86,8 @@ instead of parallel artifact DTO families.
 ## Usage Examples
 ```rust
 use pantograph_dependency_planning::{
-    DependencyPlanningRequest, DependencyTaskId, PumasModelRef,
-    ValidatedDependencyPlanningRequest,
+    DependencyNodeTypeId, DependencyPlanningCallerContext, DependencyPlanningPlatformContext,
+    DependencyPlanningRequest, DependencyTaskId, PumasModelRef, ValidatedDependencyPlanningRequest,
 };
 
 let request = DependencyPlanningRequest {
@@ -98,8 +102,16 @@ let request = DependencyPlanningRequest {
     task_type: None,
     expected_artifact_kind: None,
     scheduler_intent: Default::default(),
+    platform_context: Some(DependencyPlanningPlatformContext::from_os_arch(
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+    )?),
     selected_binding_ids: Vec::new(),
-    caller_context: Default::default(),
+    dependency_override_patches: Vec::new(),
+    caller_context: DependencyPlanningCallerContext {
+        source_node_type: Some(DependencyNodeTypeId::parse("llm-inference")?),
+        ..Default::default()
+    },
 };
 
 let _validated = ValidatedDependencyPlanningRequest::try_from(request)?;

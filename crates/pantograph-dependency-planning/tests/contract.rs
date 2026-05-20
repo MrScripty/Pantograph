@@ -1,6 +1,7 @@
 use pantograph_dependency_planning::{
-    DependencyPlanningContractError, DependencyPlanningDiagnosticCode, DependencyPlanningRequest,
-    DependencyPlanningResult, DependencyPlanningState, ModelArtifactKind, PumasArtifactEntryPath,
+    DependencyPlanningContractError, DependencyPlanningDiagnosticCode,
+    DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyPlanningResult,
+    DependencyPlanningState, ModelArtifactKind, PumasArtifactEntryPath,
     PumasArtifactEntryPathError, PumasArtifactLoadPathKind, ValidatedDependencyPlanningRequest,
 };
 
@@ -25,7 +26,51 @@ fn dependency_planning_request_fixture_decodes_and_validates() {
         validated.as_request().expected_artifact_kind,
         Some(ModelArtifactKind::DiffusersBundle)
     );
+    assert_eq!(
+        validated
+            .as_request()
+            .platform_context
+            .as_ref()
+            .map(|context| context.platform_key.as_str()),
+        Some("linux-x86_64")
+    );
+    assert_eq!(
+        validated
+            .as_request()
+            .caller_context
+            .source_node_type
+            .as_ref()
+            .map(|node_type| node_type.as_str()),
+        Some("llm-inference")
+    );
     assert_eq!(validated.as_request().dependency_override_patches.len(), 1);
+}
+
+#[test]
+fn dependency_planning_platform_context_derives_stable_os_arch_key() {
+    let context = DependencyPlanningPlatformContext::from_os_arch("Linux", "X86_64")
+        .expect("os/arch should form a platform key");
+
+    assert_eq!(context.platform_key.as_str(), "linux-x86_64");
+}
+
+#[test]
+fn dependency_planning_request_rejects_raw_platform_context_json() {
+    let value = serde_json::json!({
+        "model_ref": {
+            "model_id": "image/stable-diffusion/tiny-sd"
+        },
+        "task_id": "image_generation",
+        "platform_context": {
+            "os": "linux",
+            "arch": "x86_64"
+        }
+    });
+
+    let error = serde_json::from_value::<DependencyPlanningRequest>(value)
+        .expect_err("platform context must use the typed platform_key field");
+
+    assert!(error.to_string().contains("platform_key"));
 }
 
 #[test]

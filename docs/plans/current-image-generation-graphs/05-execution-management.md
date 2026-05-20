@@ -7746,6 +7746,33 @@ Worker rules:
   - Remaining follow-up: migrate node-engine and embedded-runtime from
     `ModelDependencyRequest` to the shared request/result contracts, then remove
     path-shaped dependency identity fields.
+- 2026-05-20 Milestone 5 dependency-planning platform/source context contract:
+  - Smallest useful vertical slice: close the shared-contract gap found before
+    node-engine request migration by adding typed platform context and
+    diagnostic-only source node type to `pantograph-dependency-planning`.
+  - Allowed write set: `crates/pantograph-dependency-planning/`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - Implementation completed: `DependencyPlanningPlatformContext` now carries a
+    validated `DependencyPlatformKey`, can derive the stable key from OS/arch
+    facts, and `DependencyPlanningCallerContext` can carry
+    `source_node_type` as a validated diagnostic field. The request fixture now
+    exercises both fields.
+  - No-fallback/no-legacy confirmation: this does not preserve the old
+    `platform_context: serde_json::Value` or executable `node_type` routing.
+    Platform data is a typed planning/correlation fact, and source node type is
+    caller context only.
+  - Verification passed:
+    `cargo fmt -p pantograph-dependency-planning`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo check -p pantograph-dependency-planning --all-features`,
+    `cargo check -p pantograph-dependency-planning --no-default-features`,
+    `cargo fmt -p pantograph-dependency-planning -- --check`,
+    `cargo check -p node-engine --features inference-nodes,pytorch-nodes`,
+    and `git diff --check`.
+  - Remaining follow-up: migrate node-engine request construction to decode
+    graph input into the shared request, then remove the old path-shaped
+    request fields and raw platform JSON from internal dependency APIs.
 
 ### Traceability Links
 

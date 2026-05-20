@@ -84,6 +84,8 @@ validated_id!(DependencyTaskId, "task_id");
 validated_id!(RuntimeIntentId, "runtime_id");
 validated_id!(DeviceIntentId, "device_id");
 validated_id!(DependencyBindingId, "dependency_binding_id");
+validated_id!(DependencyNodeTypeId, "node_type");
+validated_id!(DependencyPlatformKey, "platform_key");
 
 /// Scheduler-facing intent supplied by a graph or caller.
 ///
@@ -104,6 +106,8 @@ pub struct SchedulerIntent {
 #[serde(rename_all = "snake_case")]
 pub struct DependencyPlanningCallerContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_node_type: Option<DependencyNodeTypeId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_id: Option<String>,
@@ -120,6 +124,40 @@ impl DependencyPlanningCallerContext {
         validate_optional_context("caller_context.port_id", self.port_id.as_deref())?;
         validate_optional_context("caller_context.run_id", self.run_id.as_deref())?;
         Ok(())
+    }
+}
+
+/// Canonical platform identity for dependency planning.
+///
+/// The planner and host resolver may derive this from graph input, a dependency
+/// requirement result, or host facts. The shared contract carries the stable key
+/// only, not arbitrary platform JSON.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct DependencyPlanningPlatformContext {
+    pub platform_key: DependencyPlatformKey,
+}
+
+impl DependencyPlanningPlatformContext {
+    pub fn parse_platform_key(
+        value: impl AsRef<str>,
+    ) -> Result<Self, DependencyPlanningContractError> {
+        Ok(Self {
+            platform_key: DependencyPlatformKey::parse(value)?,
+        })
+    }
+
+    pub fn from_os_arch(
+        os: impl AsRef<str>,
+        arch: impl AsRef<str>,
+    ) -> Result<Self, DependencyPlanningContractError> {
+        let os = validate_identifier("platform_context.os", os.as_ref())?;
+        let arch = validate_identifier("platform_context.arch", arch.as_ref())?;
+        Self::parse_platform_key(format!(
+            "{}-{}",
+            os.to_ascii_lowercase(),
+            arch.to_ascii_lowercase()
+        ))
     }
 }
 
@@ -230,6 +268,8 @@ pub struct DependencyPlanningRequest {
     pub expected_artifact_kind: Option<ModelArtifactKind>,
     #[serde(default, skip_serializing_if = "SchedulerIntent::is_empty")]
     pub scheduler_intent: SchedulerIntent,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_context: Option<DependencyPlanningPlatformContext>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub selected_binding_ids: Vec<DependencyBindingId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -260,7 +300,8 @@ impl SchedulerIntent {
 
 impl DependencyPlanningCallerContext {
     fn is_empty(&self) -> bool {
-        self.workflow_id.is_none()
+        self.source_node_type.is_none()
+            && self.workflow_id.is_none()
             && self.node_id.is_none()
             && self.port_id.is_none()
             && self.run_id.is_none()

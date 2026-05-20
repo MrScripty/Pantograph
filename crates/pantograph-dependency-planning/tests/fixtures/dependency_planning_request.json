@@ -12,6 +12,9 @@
     "requested_runtime_id": "pytorch",
     "requested_device_id": "cuda:0"
   },
+  "platform_context": {
+    "platform_key": "linux-x86_64"
+  },
   "selected_binding_ids": [
     "diffusers.scheduler"
   ],
@@ -32,6 +35,7 @@
     }
   ],
   "caller_context": {
+    "source_node_type": "llm-inference",
     "workflow_id": "workflow-image",
     "node_id": "node-inference",
     "port_id": "pumas_model_ref",

@@ -46,6 +46,9 @@ target contracts, requests, and results. `lib.rs` is the only public facade.
 - Serde fixture tests cover public wire shapes.
 - Dependency override patches stay in the shared request contract so manual
   dependency-environment behavior can migrate without adapter-local fields.
+- Platform context uses a validated platform key instead of raw JSON.
+- Source node type stays in caller context for traceability and must not become
+  runtime selection policy.
 
 ## Revisit Triggers
 - The crate exceeds the decomposition thresholds.

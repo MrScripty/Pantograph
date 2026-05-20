@@ -768,6 +768,11 @@ fixture contract must not remain reachable as an alternate execution path.
         parsing. This gate must explicitly choose one canonical Pantograph
         location for Pumas-facing model-ref/load-target mirrors or re-exports;
         adding another parallel artifact DTO family is rejected.
+        The contract must also carry platform context as a typed platform key,
+        not arbitrary JSON, and may carry source node type only as bounded
+        caller context for diagnostics. Source node type must not become a
+        runtime-selection input; scheduler/runtime intent remains the only
+        graph-originating runtime influence.
      2. Node-engine adapter gate: migrate node-engine request construction to
         build the shared typed request synchronously from graph inputs. Decode
         and validate raw JSON graph/input payloads once at the boundary, then
