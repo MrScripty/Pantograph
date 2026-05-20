@@ -397,6 +397,26 @@ def _resource_observation_for_device(device):
     return None
 
 
+def _is_out_of_memory_error(exc):
+    cuda = getattr(torch, "cuda", None)
+    cuda_oom_error = getattr(cuda, "OutOfMemoryError", None)
+    if cuda_oom_error is not None and isinstance(exc, cuda_oom_error):
+        return True
+    message = str(exc).lower()
+    return "out of memory" in message or "outofmemory" in message
+
+
+def _resource_observation_with_memory_failure(resource_observation, exc):
+    if not _is_out_of_memory_error(exc):
+        return resource_observation
+    if resource_observation is None:
+        resource_observation = {}
+    else:
+        resource_observation = dict(resource_observation)
+    resource_observation["memory_failure_kind"] = "out_of_memory"
+    return resource_observation
+
+
 def _cuda_resource_observation(device):
     metric_kind = "peak_vram_bytes"
     source_kind = "pytorch_cuda"
@@ -1522,6 +1542,9 @@ def generate_image_from_envelope(envelope):
         )
         if resource_observation is None:
             resource_observation = _resource_observation_for_device(planned_device)
+        resource_observation = _resource_observation_with_memory_failure(
+            resource_observation, exc
+        )
         return worker_error_response_json(
             request_id,
             kind,
@@ -1532,6 +1555,9 @@ def generate_image_from_envelope(envelope):
     except Exception as exc:
         if resource_observation is None:
             resource_observation = _resource_observation_for_device(planned_device)
+        resource_observation = _resource_observation_with_memory_failure(
+            resource_observation, exc
+        )
         return worker_error_response_json(
             request_id,
             "internal",

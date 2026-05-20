@@ -302,6 +302,11 @@ Update during implementation:
   PyTorch/Diffusers bridge now records worker success/failure resource
   observations into the gateway-owned scope, so backend-native CUDA/MPS facts
   and process-RSS facts merge through one terminal lifecycle path.
+- 2026-05-20: Continued producer telemetry with PyTorch image OOM typing. The
+  Python worker now converts adapter-local PyTorch/CUDA out-of-memory signals
+  into typed `memory_failure_kind = out_of_memory` resource observations on
+  worker error envelopes; terminal workflow code still consumes only typed
+  observations and does not parse error text.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

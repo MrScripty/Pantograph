@@ -4,7 +4,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
 
 use crate::resource_observation::{
-    InferenceResourceObservationSourceKind, InferenceResourceObservationUnavailableState,
+    InferenceMemoryFailureKind, InferenceResourceObservationSourceKind,
+    InferenceResourceObservationUnavailableState,
 };
 
 use super::pytorch_worker_contract::{PyTorchWorkerFailure, PyTorchWorkerResponse};
@@ -298,6 +299,52 @@ worker.torch.backends = types.SimpleNamespace(
         assert_eq!(
             observation.availability()[0].source_kind(),
             Some(InferenceResourceObservationSourceKind::PytorchMps)
+        );
+    });
+}
+
+#[test]
+fn test_python_worker_generate_image_from_envelope_reports_oom_failure() {
+    Python::with_gil(|py| {
+        let module = load_worker_module_with_image_stubs(py);
+        attach_stub_diffusion_pipeline(&module);
+        let locals = PyDict::new(py);
+        locals.set_item("worker", &module).expect("worker binds");
+        let oom_setup = CString::new(
+            r#"
+class _FailingPipeline:
+    def __call__(self, **kwargs):
+        raise RuntimeError("CUDA out of memory while allocating tensor")
+
+worker._diffusion_pipeline = _FailingPipeline()
+"#,
+        )
+        .expect("OOM setup source should not contain nul bytes");
+        py.run(&oom_setup, Some(&locals), Some(&locals))
+            .expect("OOM pipeline stub should attach");
+        let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
+        ))
+        .expect("decode image request fixture");
+        envelope["payload"]["device"] = serde_json::json!("cuda:0");
+
+        let response_json: String = module
+            .call_method1("generate_image_from_envelope", (envelope.to_string(),))
+            .expect("generate_image_from_envelope should return JSON")
+            .extract()
+            .expect("response should be a string");
+        let response: PyTorchWorkerResponse<PyTorchGenerateImageResult> =
+            serde_json::from_str(&response_json).expect("worker response should decode");
+
+        let PyTorchWorkerResponse::Error(failure) = response else {
+            panic!("expected generate_image worker OOM failure");
+        };
+        let observation = failure
+            .resource_observation
+            .expect("OOM resource observation should be present");
+        assert_eq!(
+            observation.memory_failure_kind(),
+            Some(InferenceMemoryFailureKind::OutOfMemory)
         );
     });
 }

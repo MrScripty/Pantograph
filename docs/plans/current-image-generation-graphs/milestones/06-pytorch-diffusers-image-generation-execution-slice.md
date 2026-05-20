@@ -688,6 +688,18 @@ PyTorch/diffusers and produce a retained image artifact.
     `cargo check -p inference --features backend-pytorch`. Remaining
     follow-up: failure-path OOM typing and managed-runtime structured
     telemetry still need separate producer slices.
+  - 2026-05-20 PyTorch image OOM resource producer slice: the Python
+    PyTorch/Diffusers worker now converts adapter-local PyTorch/CUDA
+    out-of-memory signals into typed
+    `resource_observation.memory_failure_kind = out_of_memory` facts on
+    worker error envelopes. This confines string/classification handling to
+    the PyTorch worker adapter and immediately emits typed diagnostics; gateway
+    and workflow terminal paths still consume only typed resource observations
+    and do not parse terminal error text. Verification passed: `cargo test -p
+    inference --features backend-pytorch
+    test_python_worker_generate_image_from_envelope_reports_oom_failure --lib`.
+    Remaining follow-up: managed-runtime structured telemetry remains a
+    separate producer slice.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
