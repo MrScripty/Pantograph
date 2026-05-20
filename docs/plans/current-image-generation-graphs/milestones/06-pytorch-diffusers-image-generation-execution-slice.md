@@ -711,6 +711,17 @@ PyTorch/diffusers and produce a retained image artifact.
     `os_process_rss` and `managed_runtime_telemetry` sources. Do not implement
     this by parsing managed-runtime logs outside the runtime adapter or by
     adding scheduler-owned probes.
+  - 2026-05-20 managed-runtime telemetry planning decision: use the two-source
+    model. Managed child-process RSS is the first implementation slice and
+    must be owned by the runtime lifecycle boundary that has the concrete
+    `ProcessHandle::pid()`; it reports only host RAM as `os_process_rss` and
+    merges through `InferenceExecutionTelemetryScope`. Runtime-native
+    telemetry is a second provider contract that reports structured
+    runtime/API metrics as `managed_runtime_telemetry` or typed unavailable
+    states. Runtime-native telemetry must not be simulated from child-process
+    RSS, and child-process RSS must not be mislabeled as runtime-native
+    telemetry. Scheduler and diagnostics-ledger consume the projected typed
+    observations only; they do not run probes or parse runtime logs.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

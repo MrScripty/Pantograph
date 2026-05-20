@@ -314,6 +314,12 @@ Update during implementation:
   a precise boundary before implementation: lifecycle owner, target PID/API
   source, typed unavailable states, and separation between `os_process_rss`
   and `managed_runtime_telemetry`.
+- 2026-05-20: Managed-runtime telemetry planning decision recorded. Use the
+  two-source model: managed child-process RSS is the first implementation
+  slice and remains `os_process_rss`; runtime-native structured metrics are a
+  later provider contract and remain `managed_runtime_telemetry`. Both merge
+  through `InferenceExecutionTelemetryScope`, while scheduler and
+  diagnostics-ledger consume only projected typed observations.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

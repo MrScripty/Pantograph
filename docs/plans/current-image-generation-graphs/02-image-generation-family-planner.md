@@ -553,7 +553,8 @@ Planned module shape:
 | `inference::resource_monitor::windows` | `#[cfg(target_os = "windows")]` | Windows-specific process memory implementation only if the shared `sysinfo` path is insufficient and the dependency/unsafe boundary is accepted; otherwise returns typed `not_implemented`. |
 | `inference::resource_monitor::unsupported` | fallback cfg for unsupported targets | Compiles the neutral contract and reports typed unsupported/not-implemented availability. |
 | PyTorch worker telemetry | runtime/backend capability, not OS cfg only | CUDA/MPS/CPU counters returned in the worker envelope when PyTorch exposes them. CUDA is runtime/device availability, not a Linux-only assumption. |
-| Managed runtime telemetry | runtime adapter owned | Structured binary/API telemetry when available. Free-form logs may be interpreted only inside the runtime adapter and must be emitted as typed facts or diagnostics before crossing crate boundaries. |
+| Managed runtime child-process RSS | runtime lifecycle owner, no scheduler OS probes | OS RSS observation for managed sidecar/runtime processes using the owned `ProcessHandle::pid()` when the request/lifecycle owner has a concrete child process. It reports host RAM as `os_process_rss` only, never VRAM or runtime-native allocator state. |
+| Managed runtime native telemetry | runtime adapter owned | Structured binary/API telemetry when available. It reports runtime-provided RAM/VRAM/cache/allocator facts as `managed_runtime_telemetry`; free-form logs may be interpreted only inside the runtime adapter and must be emitted as typed facts or diagnostics before crossing crate boundaries. |
 
 CUDA, MPS, Metal, ROCm, MLX, vLLM, llama.cpp, and future runtimes must be
 modeled as runtime/backend capabilities layered over platform collectors. For
@@ -977,6 +978,36 @@ Staged implementation:
      ad hoc managed-runtime log parsing, scheduler-owned probes, or generic
      source labels that hide whether the observation came from OS RSS or a
      runtime-native metric.
+   - 2026-05-20 managed-runtime telemetry option decision: use the two-source
+     model. Managed child-process RSS and runtime-native structured telemetry
+     are separate producers that both merge through
+     `InferenceExecutionTelemetryScope`. Child-process RSS uses
+     `InferenceResourceObservationSourceKind::OsProcessRss` and starts/stops
+     at the runtime lifecycle owner that owns the `ProcessHandle`. Native
+     telemetry uses `InferenceResourceObservationSourceKind::ManagedRuntimeTelemetry`
+     and is supplied by the runtime adapter only when the runtime exposes a
+     structured API or bounded adapter-local translation. The scheduler and
+     diagnostics-ledger do not run OS probes, parse logs, or decide which
+     producer is authoritative; they consume reduced typed observations after
+     projection.
+   - Staged implementation for this decision:
+     1. Add managed child-process RSS for lifecycle owners that already hold a
+        concrete `ProcessHandle::pid()`. The slice must reuse
+        `RuntimeResourceMonitor`, report only host RAM `os_process_rss`, and
+        merge through the execution telemetry scope. It must not add
+        runtime-native source labels or parse runtime logs.
+     2. Add a small runtime-native telemetry provider contract that can return
+        a typed observation or typed unavailable state such as
+        `not_implemented`, `missing_runtime_capability`,
+        `runtime_not_installed`, or `not_available`. Initial runtimes may
+        return unavailable facts; do not fake zero-byte metrics.
+     3. Wire individual runtime adapters to the native telemetry provider only
+        when they expose structured metrics. Adapter-local parsing of
+        free-form output is allowed only if it is immediately converted into
+        typed facts and covered by runtime-specific tests.
+     4. Add participant/runtime identity only when a consumer needs to
+        distinguish simultaneous managed runtimes beyond existing lifecycle
+        request/runtime/device attribution.
 10. [ ] Remove or explicitly confine legacy OOM string parsing in
     `inference::server`, `inference::embedding_runtime`, and
     `backend::llamacpp_support` behind typed adapter-local memory failure
