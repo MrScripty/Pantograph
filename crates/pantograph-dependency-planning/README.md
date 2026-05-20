@@ -2,16 +2,17 @@
 
 ## Purpose
 This crate owns Pantograph's shared dependency-planning contracts: typed model
-identity, scheduler intent, planning request/result DTOs, Pumas-facing load
-target mirrors, and diagnostics used across graph execution, host planning,
-frontend actions, persisted fixtures, and backend handoff boundaries.
+identity, scheduler intent, dependency override patches, planning request/result
+DTOs, Pumas-facing load target mirrors, and diagnostics used across graph
+execution, host planning, frontend actions, persisted fixtures, and backend
+handoff boundaries.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
 | `src/lib.rs` | Curated public re-exports for dependency-planning consumers. |
 | `src/model_ref.rs` | Pumas-compatible model reference and artifact load-target contract mirrors. |
-| `src/request.rs` | Typed dependency-planning request, caller context, scheduler intent, and validated ids. |
+| `src/request.rs` | Typed dependency-planning request, caller context, scheduler intent, dependency overrides, and validated ids. |
 | `src/result.rs` | Typed dependency-planning result states and diagnostics. |
 | `tests/` | Public serde and validation contract tests with JSON fixtures. |
 
@@ -50,6 +51,8 @@ instead of parallel artifact DTO families.
 ## Invariants
 - Requests are keyed by `PumasModelRef` and typed task/scheduler intent, never
   by local filesystem path.
+- Manual dependency override patches are part of the shared request contract,
+  not an adapter-local extension field.
 - Pumas load targets are result/handoff facts, not graph identity.
 - Raw graph JSON and frontend payloads must parse once into validated domain
   types before internal use.

@@ -7714,6 +7714,38 @@ Worker rules:
     resolver traits, embedded-runtime cache/activity identity, and frontend
     dependency-environment actions to the shared contract; then remove the old
     path-shaped DTO fields instead of adapting them.
+- 2026-05-20 Milestone 5 dependency override patch shared-contract ownership:
+  - Smallest useful vertical slice: move dependency override patch DTOs from
+    node-engine-local ownership into `pantograph-dependency-planning`.
+  - Allowed write set: `Cargo.lock`, `crates/node-engine/Cargo.toml`,
+    `crates/node-engine/src/model_dependencies.rs`,
+    `crates/pantograph-dependency-planning/`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - Implementation completed: `DependencyOverrideScope`,
+    `DependencyOverrideFieldsV1`, and `DependencyOverridePatchV1` now live in
+    the shared contract crate and are re-exported from node-engine for current
+    callers. `DependencyPlanningRequest` now carries
+    `dependency_override_patches` directly.
+  - No-fallback/no-legacy confirmation: node-engine's duplicate override DTOs
+    were removed rather than adapted. No runtime behavior, path resolver,
+    frontend compatibility payload, worker fallback, scheduler bypass, or second
+    override schema was added.
+  - Standards evidence: override patches remain typed contract data with
+    validation and executable fixture coverage. The slice did not touch
+    scheduler policy, Pumas lookup, worker execution, frontend controls,
+    generated files, saved workflows, or platform-specific code.
+  - Verification passed:
+    `cargo fmt -p pantograph-dependency-planning -p node-engine`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo test -p node-engine model_dependencies --lib`,
+    `cargo check -p node-engine --features inference-nodes,pytorch-nodes`,
+    `cargo fmt -p pantograph-dependency-planning -p node-engine -- --check`,
+    `cargo check -p pantograph-dependency-planning --all-features`,
+    and `cargo check -p pantograph-dependency-planning --no-default-features`.
+  - Remaining follow-up: migrate node-engine and embedded-runtime from
+    `ModelDependencyRequest` to the shared request/result contracts, then remove
+    path-shaped dependency identity fields.
 
 ### Traceability Links
 

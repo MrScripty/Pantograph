@@ -15,6 +15,22 @@
   "selected_binding_ids": [
     "diffusers.scheduler"
   ],
+  "dependency_override_patches": [
+    {
+      "contract_version": 1,
+      "binding_id": "diffusers.scheduler",
+      "scope": "requirement",
+      "requirement_name": "diffusers",
+      "fields": {
+        "index_url": "https://download.pytorch.org/whl/cu124",
+        "extra_index_urls": [
+          "https://pypi.org/simple"
+        ]
+      },
+      "source": "node:dependency-environment",
+      "updated_at": "2026-05-20T00:00:00Z"
+    }
+  ],
   "caller_context": {
     "workflow_id": "workflow-image",
     "node_id": "node-inference",

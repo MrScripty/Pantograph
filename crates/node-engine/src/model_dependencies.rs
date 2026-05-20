@@ -6,6 +6,9 @@
 //! - The `model_ref` v2 runtime contract used by inference/unload nodes
 
 use async_trait::async_trait;
+pub use pantograph_dependency_planning::{
+    DependencyOverrideFieldsV1, DependencyOverridePatchV1, DependencyOverrideScope,
+};
 use serde::{Deserialize, Serialize};
 
 /// Pantograph-owned runtime lifecycle state for dependency handling.
@@ -38,52 +41,6 @@ pub enum DependencyValidationState {
 pub enum DependencyValidationErrorScope {
     TopLevel,
     Binding,
-}
-
-/// Override scope for Pantograph-managed dependency patches.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum DependencyOverrideScope {
-    Binding,
-    Requirement,
-}
-
-/// Supported override fields for dependency patch contract v1.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub struct DependencyOverrideFieldsV1 {
-    #[serde(default)]
-    pub python_executable: Option<String>,
-    #[serde(default)]
-    pub index_url: Option<String>,
-    #[serde(default)]
-    pub extra_index_urls: Option<Vec<String>>,
-    #[serde(default)]
-    pub wheel_source_path: Option<String>,
-    #[serde(default)]
-    pub package_source_override: Option<String>,
-}
-
-/// Manual override patch contract v1.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub struct DependencyOverridePatchV1 {
-    #[serde(default = "default_dependency_override_contract_version")]
-    pub contract_version: u32,
-    pub binding_id: String,
-    pub scope: DependencyOverrideScope,
-    #[serde(default)]
-    pub requirement_name: Option<String>,
-    #[serde(default)]
-    pub fields: DependencyOverrideFieldsV1,
-    #[serde(default)]
-    pub source: Option<String>,
-    #[serde(default)]
-    pub updated_at: Option<String>,
-}
-
-fn default_dependency_override_contract_version() -> u32 {
-    1
 }
 
 /// Structured resolver validation error entry.

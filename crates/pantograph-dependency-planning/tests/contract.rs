@@ -25,6 +25,7 @@ fn dependency_planning_request_fixture_decodes_and_validates() {
         validated.as_request().expected_artifact_kind,
         Some(ModelArtifactKind::DiffusersBundle)
     );
+    assert_eq!(validated.as_request().dependency_override_patches.len(), 1);
 }
 
 #[test]

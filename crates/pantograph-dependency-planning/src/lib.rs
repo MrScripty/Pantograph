@@ -16,7 +16,8 @@ pub use model_ref::{
     PumasArtifactEntryPath, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
 };
 pub use request::{
-    DependencyBindingId, DependencyPlanningCallerContext, DependencyPlanningRequest,
+    DependencyBindingId, DependencyOverrideFieldsV1, DependencyOverridePatchV1,
+    DependencyOverrideScope, DependencyPlanningCallerContext, DependencyPlanningRequest,
     DependencyTaskId, DeviceIntentId, RuntimeIntentId, SchedulerIntent,
     ValidatedDependencyPlanningRequest,
 };

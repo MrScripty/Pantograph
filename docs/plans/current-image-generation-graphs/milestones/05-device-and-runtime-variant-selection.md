@@ -6060,6 +6060,42 @@ Stop and re-plan before implementation when any remaining slice would require:
     dependency-environment actions still submit path-shaped payloads. The next
     implementation slices must migrate those consumers to the shared contract
     and remove the old path-shaped DTO fields rather than adapting them.
+- 2026-05-20 slice: dependency override patch shared-contract ownership.
+  - Smallest useful vertical slice: move the manual dependency override patch
+    DTOs behind the shared `pantograph-dependency-planning` contract owner and
+    re-export them from node-engine so the later request replacement can carry
+    dependency-environment overrides without adapter-local legacy fields.
+  - Allowed write set: `Cargo.lock`, `crates/node-engine/Cargo.toml`,
+    `crates/node-engine/src/model_dependencies.rs`,
+    `crates/pantograph-dependency-planning/`, this milestone file, and
+    `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+    Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this slice does not add a compatibility
+    adapter or second override schema. The old node-engine DTO definitions were
+    removed and replaced by re-exports from the shared contract. The shared
+    dependency-planning request now carries typed override patches directly.
+  - Per-slice standards evidence: dependency override patches remain
+    contract/domain data with typed validation and fixture coverage. Node-engine
+    keeps its public import surface for current consumers while the concrete
+    type owner moves to the shared contract crate. No resolver behavior,
+    scheduler policy, frontend payload, worker code, saved workflow fixture,
+    subprocess, path access, or platform code changed.
+  - Tests/fixtures: the dependency-planning request fixture now includes a
+    manual requirement override patch; contract tests assert it decodes and
+    validates through the shared request. Existing node-engine model dependency
+    tests still pass through the re-exported override types.
+  - Verification passed:
+    `cargo fmt -p pantograph-dependency-planning -p node-engine`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo test -p node-engine model_dependencies --lib`,
+    `cargo check -p node-engine --features inference-nodes,pytorch-nodes`,
+    `cargo fmt -p pantograph-dependency-planning -p node-engine -- --check`,
+    `cargo check -p pantograph-dependency-planning --all-features`,
+    `cargo check -p pantograph-dependency-planning --no-default-features`.
+  - Remaining follow-up: node-engine request construction still needs to emit
+    the shared `DependencyPlanningRequest`, host resolver traits still need to
+    consume typed planning results/diagnostics, and the old path-shaped
+    `ModelDependencyRequest`/`ModelRefV2` fields still need replacement/removal.
 
 **Verification:**
 

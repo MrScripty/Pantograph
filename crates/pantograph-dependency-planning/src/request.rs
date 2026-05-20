@@ -123,6 +123,101 @@ impl DependencyPlanningCallerContext {
     }
 }
 
+/// Override scope for Pantograph-managed dependency patches.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DependencyOverrideScope {
+    Binding,
+    Requirement,
+}
+
+/// Supported override fields for dependency patch contract v1.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct DependencyOverrideFieldsV1 {
+    #[serde(default)]
+    pub python_executable: Option<String>,
+    #[serde(default)]
+    pub index_url: Option<String>,
+    #[serde(default)]
+    pub extra_index_urls: Option<Vec<String>>,
+    #[serde(default)]
+    pub wheel_source_path: Option<String>,
+    #[serde(default)]
+    pub package_source_override: Option<String>,
+}
+
+impl DependencyOverrideFieldsV1 {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        validate_optional_context(
+            "dependency_override.fields.python_executable",
+            self.python_executable.as_deref(),
+        )?;
+        validate_optional_context(
+            "dependency_override.fields.index_url",
+            self.index_url.as_deref(),
+        )?;
+        validate_optional_context(
+            "dependency_override.fields.wheel_source_path",
+            self.wheel_source_path.as_deref(),
+        )?;
+        validate_optional_context(
+            "dependency_override.fields.package_source_override",
+            self.package_source_override.as_deref(),
+        )?;
+        if let Some(extra_index_urls) = &self.extra_index_urls {
+            for extra_index_url in extra_index_urls {
+                validate_optional_context(
+                    "dependency_override.fields.extra_index_urls",
+                    Some(extra_index_url),
+                )?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Manual override patch contract v1.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct DependencyOverridePatchV1 {
+    #[serde(default = "default_dependency_override_contract_version")]
+    pub contract_version: u32,
+    pub binding_id: String,
+    pub scope: DependencyOverrideScope,
+    #[serde(default)]
+    pub requirement_name: Option<String>,
+    #[serde(default)]
+    pub fields: DependencyOverrideFieldsV1,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+impl DependencyOverridePatchV1 {
+    pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
+        if self.contract_version != 1 {
+            return Err(DependencyPlanningContractError::InvalidField {
+                field: "dependency_override.contract_version",
+                reason: "only dependency override contract version 1 is supported",
+            });
+        }
+        validate_identifier("dependency_override.binding_id", &self.binding_id)?;
+        validate_optional_context(
+            "dependency_override.requirement_name",
+            self.requirement_name.as_deref(),
+        )?;
+        validate_optional_context("dependency_override.source", self.source.as_deref())?;
+        validate_optional_context("dependency_override.updated_at", self.updated_at.as_deref())?;
+        self.fields.validate()
+    }
+}
+
+fn default_dependency_override_contract_version() -> u32 {
+    1
+}
+
 /// Typed dependency planning request crossing graph, host, and scheduler seams.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -137,6 +232,8 @@ pub struct DependencyPlanningRequest {
     pub scheduler_intent: SchedulerIntent,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub selected_binding_ids: Vec<DependencyBindingId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependency_override_patches: Vec<DependencyOverridePatchV1>,
     #[serde(
         default,
         skip_serializing_if = "DependencyPlanningCallerContext::is_empty"
@@ -148,6 +245,9 @@ impl DependencyPlanningRequest {
     pub fn validate(&self) -> Result<(), DependencyPlanningContractError> {
         self.model_ref.validate()?;
         self.caller_context.validate()?;
+        for patch in &self.dependency_override_patches {
+            patch.validate()?;
+        }
         Ok(())
     }
 }

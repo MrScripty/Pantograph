@@ -8,7 +8,7 @@ frontend, persisted, and worker-adjacent consumers must preserve.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `dependency_planning_request.json` | Valid graph/host dependency-planning request keyed by `pumas_model_ref`. |
+| `dependency_planning_request.json` | Valid graph/host dependency-planning request keyed by `pumas_model_ref`, including selected binding ids and manual dependency override patches. |
 | `dependency_planning_ready_result.json` | Ready result carrying a Pumas-approved load target for backend handoff. |
 | `dependency_planning_unavailable_result.json` | Unavailable result with a typed Pumas diagnostic and no load target. |
 
@@ -35,6 +35,8 @@ cross-layer tests without importing unrelated runtime behavior.
 
 ## Invariants
 - `dependency_planning_request.json` uses `pumas_model_ref`.
+- Request fixtures keep manual dependency override patches in the shared
+  contract shape.
 - Ready results include exactly one host/planner load target.
 - Unavailable results include diagnostics and no load target.
 

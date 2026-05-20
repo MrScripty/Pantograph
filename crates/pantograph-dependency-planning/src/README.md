@@ -12,7 +12,7 @@ frontend state, and scheduler policy.
 | `lib.rs` | Public re-export surface for contract consumers. |
 | `error.rs` | Typed validation errors for request parsing and load-target result invariants. |
 | `model_ref.rs` | Pumas-compatible model reference, artifact entry path, artifact kind, storage, validation, and load-target mirrors. |
-| `request.rs` | Dependency-planning request DTOs, caller context, scheduler intent, and validated ids. |
+| `request.rs` | Dependency-planning request DTOs, caller context, scheduler intent, dependency overrides, and validated ids. |
 | `result.rs` | Dependency-planning state, diagnostic, and result DTOs. |
 
 ## Problem
@@ -44,6 +44,8 @@ target contracts, requests, and results. `lib.rs` is the only public facade.
 - Load targets are result/handoff facts only.
 - Public fallible validation returns typed errors.
 - Serde fixture tests cover public wire shapes.
+- Dependency override patches stay in the shared request contract so manual
+  dependency-environment behavior can migrate without adapter-local fields.
 
 ## Revisit Triggers
 - The crate exceeds the decomposition thresholds.

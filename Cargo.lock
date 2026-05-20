@@ -6553,6 +6553,7 @@ dependencies = [
  "inference",
  "inventory",
  "log",
+ "pantograph-dependency-planning",
  "pantograph-path-security",
  "pantograph-runtime-identity",
  "pyo3",
