@@ -650,7 +650,64 @@ fixture contract must not remain reachable as an alternate execution path.
      those remain separate closeout slices and were intentionally not touched
      by this workflow-node contract slice.
 
-3. **Raw Device Boundary Removal**
+3. **Node-Engine Dependency Planning Contract Replacement**
+   - Purpose: remove path-shaped dependency resolution from node-engine. The
+     graph and node-engine boundary carries `pumas_model_ref`, task kind, task
+     options, and optional typed scheduler intent only. Node-engine must not
+     know, infer, repair, or forward the exact Pumas artifact filesystem path
+     as model identity or dependency identity.
+   - Allowed primary write areas by slice:
+     `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+     `crates/node-engine/src/core_executor.rs`,
+     `crates/node-engine/src/model_dependencies.rs` or equivalent dependency
+     contract owner, host/planner adapter code that currently implements
+     `ModelDependencyResolver`, and focused tests/READMEs. Do not touch
+     scheduler ranking policy, generated DTOs, lockfiles, saved workflows,
+     frontend controls, or Pumas proposal files in the same slice unless the
+     compiler proves a contract boundary must move together.
+   - Required direction: replace `ModelDependencyRequest.model_path` as the
+     dependency-preflight source of truth with a typed request keyed by
+     `PumasModelRef`, canonical task id/task type, expected artifact kind when
+     known, optional backend/runtime/device intent, and bounded caller context.
+     The host/planner-side resolver asks Pumas for the approved artifact load
+     target and derives runtime-specific dependency facts there. Node-engine
+     receives typed dependency/preflight results and diagnostics, not Pumas
+     paths.
+   - Required ownership split: Pumas owns model-library lookup, artifact
+     selection, storage kind, validation state, and local load targets.
+     Scheduler/planner owns runtime/device candidate selection. Node-engine owns
+     graph task execution orchestration and typed intent forwarding only.
+     Backend adapters/workers may receive a local load path only through an
+     already-selected execution/preflight plan at the runtime handoff.
+   - Required removal/replacement: no `model_path` repair in node-engine, no
+     `resolved_model_source` revival, no path-shaped `pumas_model_ref` aliases,
+     no directory scanning, no Pumas path joining, no model id derivation from
+     paths, and no fallback to raw path preflight when Pumas cannot resolve a
+     valid target. Missing/stale/invalid/unavailable Pumas state returns typed
+     dependency planning diagnostics.
+   - Staging:
+     1. Introduce the typed dependency-planning request/diagnostic/result
+        contract around `PumasModelRef` and task facts, keeping it synchronous
+        unless the resolver performs real I/O.
+     2. Move Pumas artifact-load-target resolution into the host/planner
+        resolver implementation and return typed unavailable diagnostics for
+        missing, stale, invalid, not-installed, or unsupported artifacts.
+     3. Update node-engine preflight callers/tests to use the typed
+        model-reference request and remove all successful `model_path` preflight
+        cases from canonical `llm-inference`.
+     4. Remove the old path-shaped `ModelDependencyRequest` fields or confine
+        any remaining executable paths to backend/worker-local plan handoff
+        types that are not graph/node-engine dependency identity.
+   - Acceptance: node-engine dependency-preflight tests prove a graph with only
+     `pumas_model_ref` and task intent can request dependency planning without
+     local path knowledge; stale or unresolved Pumas state fails with typed
+     diagnostics; legacy `model_path`, `resolved_model_source`,
+     `selected_artifact_path`, and `entry_path` cannot produce successful
+     dependency-preflight execution. Host/planner tests prove Pumas-approved
+     load targets are resolved outside node-engine and are passed to runtime or
+     worker code only after scheduler/planner selection.
+
+4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
      strings as trusted scheduler/runtime state.
    - Allowed primary write areas by slice:
@@ -673,7 +730,7 @@ fixture contract must not remain reachable as an alternate execution path.
      selected runtime variant/device facts or rejected with a typed diagnostic;
      `auto` is policy intent only and never a concrete selected device id.
 
-4. **Candidate Synthesis And Ledger Projection Closure**
+5. **Candidate Synthesis And Ledger Projection Closure**
    - Purpose: finish the policy input path so automatic selection sees complete
      candidate facts and diagnostics-ledger history can explain the decision.
    - Allowed primary write areas:
@@ -695,7 +752,7 @@ fixture contract must not remain reachable as an alternate execution path.
      candidate was selected or rejected without inspecting graph internals,
      frontend state, Pumas filesystem paths, or display strings.
 
-5. **Lifecycle Ownership Hardening**
+6. **Lifecycle Ownership Hardening**
    - Purpose: make every touched long-running operation explicitly owned,
      cancellable, bounded, and observable.
    - Allowed primary write areas:
@@ -713,7 +770,7 @@ fixture contract must not remain reachable as an alternate execution path.
      task, and no adapter creates global Tokio runtimes, untracked tasks,
      unbounded queues, or self-owned long-lived subprocesses.
 
-6. **Allowed-Root And Worker-Visible Path Closure**
+7. **Allowed-Root And Worker-Visible Path Closure**
    - Purpose: ensure every executable, dynamic library, Pumas artifact, and
      worker-visible path is approved by the owning boundary before filesystem
      or subprocess use.
@@ -731,7 +788,7 @@ fixture contract must not remain reachable as an alternate execution path.
      pid files, Pumas artifact paths, artifact-store paths, and worker-visible
      paths cannot escape their approved roots and fail with typed diagnostics.
 
-7. **Checked Numeric Boundary Closure**
+8. **Checked Numeric Boundary Closure**
    - Purpose: remove remaining saturation, clamping, defaulting, or raw
      arithmetic from public/runtime/worker boundaries where invalid values
      should fail.
@@ -746,7 +803,7 @@ fixture contract must not remain reachable as an alternate execution path.
      demonstrate no impossible value reaches a backend, worker, persisted
      ledger row, or frontend contract.
 
-8. **Frontend Runtime/Device Contract Closure**
+9. **Frontend Runtime/Device Contract Closure**
    - Purpose: make the UI a renderer of backend-owned capability facts and a
      submitter of typed intent only.
    - Allowed primary write areas: `src/components/DeviceConfig.svelte`,
@@ -763,7 +820,7 @@ fixture contract must not remain reachable as an alternate execution path.
      and labels explain scheduler/backend ownership without implying frontend
      execution authority.
 
-9. **Workflow And Fixture Shape Closure**
+10. **Workflow And Fixture Shape Closure**
    - Purpose: remove retired graph-visible execution hints from tracked
      workflows/templates and freeze the canonical examples used by tests.
    - Allowed primary write areas: tracked `.pantograph/workflows/` examples,
@@ -1064,10 +1121,11 @@ before the matching checklist row is closed.
     test_dependency_preflight_maps_explicit_hf_transformers_request --
     --nocapture`, and `git diff --check`.
   - Remaining follow-up: replace the explicit `model_path` dependency resolver
-    contract with Pumas-owned artifact load targets across the resolver API and
-    worker/preflight callers. That is a re-plan-sized contract slice because
-    Pantograph must not infer Pumas paths and the resolver currently accepts
-    path-shaped model identity.
+    contract with the Node-Engine Dependency Planning Contract Replacement
+    above. Node-engine should request dependency planning with `pumas_model_ref`
+    and task facts only; Pumas artifact load-target resolution belongs in the
+    host/planner resolver implementation, and executable paths should appear
+    only at the selected runtime/worker handoff.
 - **Tracked saved workflow closure is broader than image examples:** bundled
   templates and tracked image examples are already canonical, but tracked
   non-image workflow files such as Whisper STT and KittenTTS still use retired
