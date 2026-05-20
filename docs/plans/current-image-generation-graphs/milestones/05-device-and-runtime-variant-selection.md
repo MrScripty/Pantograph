@@ -4852,7 +4852,7 @@ typed diagnostic and the canonical design is fixed.
   - Verification passed:
     `node --experimental-strip-types --test src/services/workflow/templateService.test.ts`,
     `npm run typecheck`,
-    `rg -n "backend_key|runtime_hint|resolved_model_source|resolved_model_package_facts" src/templates/workflows .pantograph/workflows/tiny-sd-turbo-diffusion.json .pantograph/workflows/juggernaut-x-v10-sdxl.json -g '*.json' -g '*.md'`,
+    `rg -n "backend_key|runtime_hint|resolved_model_source|resolved_model_package_facts" src/templates/workflows .pantograph/workflows/tiny-sd-turbo-diffusion.json .pantograph/workflows/juggernaut-x-v10-sdxl.json -g '*.json'`,
     and `git diff --check`.
   - Remaining follow-up: the broader canonical workflow/fixture checklist item
     remains open until non-image tracked examples and any formal workflow
