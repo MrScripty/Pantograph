@@ -2,7 +2,7 @@ use super::*;
 use workflow_nodes::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
 
 #[tokio::test]
-async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
+async fn puma_lib_execution_hydrates_model_ref_from_model_id_without_path_outputs() {
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
@@ -52,11 +52,11 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
     let outputs = executor
         .execute_task("puma-lib-1", inputs, &Context::new(), &extensions)
         .await
-        .expect("puma-lib should resolve runtime path");
+        .expect("puma-lib should resolve selector metadata");
 
-    assert_eq!(
-        outputs.get("model_path"),
-        Some(&serde_json::json!(bundle_root.display().to_string()))
+    assert!(
+        outputs.get("model_path").is_none(),
+        "puma-lib must not emit executable path outputs"
     );
     assert_eq!(
         outputs.get("model_id"),
@@ -72,65 +72,29 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
             .and_then(|value| value.get("model_id")),
         Some(&serde_json::json!("diffusion/imported/test-bundle"))
     );
-    assert_eq!(
+    assert!(
         outputs
             .get("pumas_model_ref")
-            .and_then(|value| value.get("model_path")),
-        Some(&serde_json::json!(bundle_root.display().to_string()))
+            .and_then(|value| value.get("model_path"))
+            .is_none(),
+        "puma-lib must not hide executable paths inside pumas_model_ref"
     );
-    assert_eq!(
-        outputs
-            .get("pumas_model_ref")
-            .and_then(|value| value.get("recommended_backend")),
-        Some(&serde_json::json!("diffusers"))
+    assert!(
+        outputs.get("backend_key").is_none(),
+        "puma-lib must not emit graph-visible backend-key aliases"
     );
-    assert_eq!(
-        outputs
-            .get("resolved_model_package_facts")
-            .and_then(|value| value.get("model_ref"))
-            .and_then(|value| value.get("model_id")),
-        Some(&serde_json::json!("diffusion/imported/test-bundle"))
+    assert!(
+        outputs.get("resolved_model_package_facts").is_none(),
+        "puma-lib must not emit hidden package facts"
     );
-    assert_eq!(
-        outputs
-            .get("resolved_model_package_facts")
-            .and_then(|value| value.get("artifact"))
-            .and_then(|value| value.get("entry_path")),
-        Some(&serde_json::json!(bundle_root.display().to_string()))
-    );
-    let load_target = outputs
-        .get("resolved_model_artifact_load_target")
-        .expect("Puma-Lib should provide a selected-artifact load target");
-    assert_eq!(
-        load_target.get("artifact_kind"),
-        Some(&serde_json::json!("diffusers_bundle"))
-    );
-    assert_eq!(
-        load_target.get("local_load_path"),
-        Some(&serde_json::json!(bundle_root.display().to_string()))
-    );
-    assert_eq!(
-        load_target.get("load_path_kind"),
-        Some(&serde_json::json!("directory"))
-    );
-    assert_eq!(
-        load_target.get("storage_kind"),
-        Some(&serde_json::json!("external_reference"))
-    );
-    assert_eq!(
-        load_target.get("validation_state"),
-        Some(&serde_json::json!("valid"))
-    );
-    assert_eq!(
-        load_target
-            .get("model_ref")
-            .and_then(|value| value.get("selected_artifact_id")),
-        Some(&serde_json::json!("diffusers"))
+    assert!(
+        outputs.get("resolved_model_artifact_load_target").is_none(),
+        "puma-lib must not emit hidden artifact load targets"
     );
 }
 
 #[tokio::test]
-async fn puma_lib_execution_uses_nested_selected_artifact_path_when_saved_path_is_absent() {
+async fn puma_lib_execution_preserves_explicit_model_ref_without_model_path_output() {
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
@@ -162,11 +126,11 @@ async fn puma_lib_execution_uses_nested_selected_artifact_path_when_saved_path_i
     let outputs = executor
         .execute_task("puma-lib-1", inputs, &Context::new(), &extensions)
         .await
-        .expect("puma-lib should preserve nested selected artifact path");
+        .expect("puma-lib should preserve explicit model ref");
 
-    assert_eq!(
-        outputs.get("model_path"),
-        Some(&serde_json::json!(artifact_path))
+    assert!(
+        outputs.get("model_path").is_none(),
+        "puma-lib must not promote selected artifact paths to executable outputs"
     );
     assert_eq!(
         outputs
@@ -179,6 +143,10 @@ async fn puma_lib_execution_uses_nested_selected_artifact_path_when_saved_path_i
         Some(&serde_json::json!(
             "vlm/qwen35/qwen3_6-27b-heretic-ara-gguf"
         ))
+    );
+    assert!(
+        outputs.get("backend_key").is_none(),
+        "puma-lib must not emit graph-visible backend-key aliases"
     );
 }
 
@@ -231,9 +199,9 @@ async fn puma_lib_execution_does_not_rebind_model_id_from_raw_pumas_api() {
         .await
         .expect("puma-lib should preserve saved data without selector access");
 
-    assert_eq!(
-        outputs.get("model_path"),
-        Some(&serde_json::json!("/stale/location/tiny-sd-turbo"))
+    assert!(
+        outputs.get("model_path").is_none(),
+        "raw saved paths must not be emitted as executable outputs"
     );
     assert_eq!(
         outputs.get("recommended_backend"),
@@ -242,17 +210,25 @@ async fn puma_lib_execution_does_not_rebind_model_id_from_raw_pumas_api() {
     assert_eq!(
         outputs
             .get("pumas_model_ref")
-            .and_then(|value| value.get("status")),
-        Some(&serde_json::json!("identity_unverified"))
+            .and_then(|value| value.get("model_id")),
+        Some(&serde_json::json!(model_id))
+    );
+    assert!(
+        outputs.get("backend_key").is_none(),
+        "puma-lib must not emit graph-visible backend-key aliases"
     );
     assert!(
         outputs.get("resolved_model_package_facts").is_none(),
         "raw PUMAS_API alone must not rehydrate selected model facts"
     );
+    assert!(
+        outputs.get("resolved_model_artifact_load_target").is_none(),
+        "raw PUMAS_API alone must not rehydrate selected artifact load targets"
+    );
 }
 
 #[tokio::test]
-async fn puma_lib_execution_rebinds_stale_model_path_from_selector_access_without_pumas_api() {
+async fn puma_lib_execution_hydrates_model_ref_from_selector_access_without_pumas_api() {
     let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
         requests: Arc::new(Mutex::new(Vec::new())),
         response: HashMap::new(),
@@ -305,11 +281,11 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_selector_access_withou
     let outputs = executor
         .execute_task("puma-lib-1", inputs, &Context::new(), &extensions)
         .await
-        .expect("puma-lib should resolve runtime path from selector access");
+        .expect("puma-lib should resolve selector metadata from selector access");
 
-    assert_eq!(
-        outputs.get("model_path"),
-        Some(&serde_json::json!(bundle_root.display().to_string()))
+    assert!(
+        outputs.get("model_path").is_none(),
+        "puma-lib must not emit executable path outputs"
     );
     assert_eq!(outputs.get("model_id"), Some(&serde_json::json!(model_id)));
     assert_eq!(
@@ -319,18 +295,23 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_selector_access_withou
     assert_eq!(
         outputs
             .get("pumas_model_ref")
-            .and_then(|value| value.get("status")),
-        Some(&serde_json::json!("resolved"))
+            .and_then(|value| value.get("model_id")),
+        Some(&serde_json::json!(model_id))
     );
-    assert_eq!(
+    assert!(
         outputs
             .get("pumas_model_ref")
-            .and_then(|value| value.get("model_path")),
-        Some(&serde_json::json!(bundle_root.display().to_string()))
+            .and_then(|value| value.get("model_path"))
+            .is_none(),
+        "puma-lib must not hide executable paths inside pumas_model_ref"
     );
     assert!(
         outputs.get("resolved_model_package_facts").is_none(),
         "read-only selector rows must not be promoted to full package facts"
+    );
+    assert!(
+        outputs.get("resolved_model_artifact_load_target").is_none(),
+        "read-only selector rows must not be promoted to artifact load targets"
     );
 }
 
@@ -462,15 +443,14 @@ async fn puma_lib_execution_does_not_resolve_saved_model_name_without_model_id()
         .await
         .expect("puma-lib should execute with saved data only");
 
-    assert_eq!(outputs.get("model_path"), Some(&serde_json::json!("")));
+    assert!(
+        outputs.get("model_path").is_none(),
+        "puma-lib must not emit empty path outputs"
+    );
     assert!(outputs.get("model_id").is_none());
     assert!(outputs.get("model_type").is_none());
     assert!(outputs.get("task_type_primary").is_none());
     assert!(outputs.get("resolved_model_package_facts").is_none());
-    assert_eq!(
-        outputs
-            .get("pumas_model_ref")
-            .and_then(|value| value.get("status")),
-        Some(&serde_json::json!("path_only"))
-    );
+    assert!(outputs.get("resolved_model_artifact_load_target").is_none());
+    assert!(outputs.get("pumas_model_ref").is_none());
 }

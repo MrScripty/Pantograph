@@ -7477,6 +7477,44 @@ Worker rules:
     for non-canonical/legacy consumers and must be removed, rejected, or scoped
     in the later `ModelDependencyRequest`/`ModelRefV2` contract replacement
     slice rather than treated as accepted compatibility.
+- 2026-05-20 Milestone 5 embedded-runtime `puma-lib` execution path-output
+  removal slice:
+  - Smallest useful vertical slice: align embedded-runtime `puma-lib` host
+    execution with the new graph-facing `pumas_model_ref` contract by removing
+    stale path rebinding, path-derived model-id inference, top-level
+    `model_path`, graph-visible `backend_key`, hidden package facts, and hidden
+    artifact load-target outputs from the task executor.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/task_executor/puma_lib.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/puma_lib.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the executor now emits official
+    Pumas model references and bounded selector facts only. The slice removed
+    path repair, path-shaped model-ref alias creation, embedded package-fact
+    revival, and artifact-load-target shortcuts instead of preserving them as
+    compatibility behavior.
+  - Implementation completed: `execute_puma_lib` now reads
+    `pumas_model_ref`/`model_id`, hydrates selector detail without producing
+    executable paths, leaves selected-artifact path authority inside official
+    Pumas model refs, and forwards only existing bounded planning metadata.
+    Focused execution tests and the model-library options/resolver test now
+    assert the retired outputs stay absent.
+  - Verification passed: `cargo fmt -p pantograph-embedded-runtime`, `cargo
+    fmt -p pantograph-embedded-runtime -- --check`, `cargo test -p
+    pantograph-embedded-runtime puma_lib`, and `cargo check -p
+    pantograph-embedded-runtime`.
+  - Verification deviation: the initial command `cargo test -p
+    pantograph-embedded-runtime puma_lib --features model-library` failed
+    because `model-library` is a `workflow-nodes` feature. The corrected
+    command passed.
+  - Remaining follow-up: replace the explicit
+    `ModelDependencyRequest.model_path` dependency-preflight contract,
+    dependency cache/correlation fields, and remaining direct explicit
+    `model_path` graph edges with the planned typed Pumas model-reference
+    request/result contract.
 
 ### Traceability Links
 

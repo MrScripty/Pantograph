@@ -649,6 +649,29 @@ fixture contract must not remain reachable as an alternate execution path.
      non-image workflow examples still carry retired direct inference shapes;
      those remain separate closeout slices and were intentionally not touched
      by this workflow-node contract slice.
+   - 2026-05-20 embedded-runtime follow-up: completed the `puma-lib` execution
+     contract slice. Host execution now reads and emits `pumas_model_ref`
+     values plus bounded selector facts, preserves official Pumas model refs
+     when they are supplied, and hydrates selector metadata without emitting
+     top-level `model_path`, graph-visible `backend_key`, hidden package facts,
+     or artifact load-target payloads.
+   - No-fallback/no-legacy confirmation: this follow-up removed stale
+     execution-time path rebinding, removed Pumas-path-to-model-id inference,
+     removed embedded-runtime package-fact/load-target revival from `puma-lib`,
+     and did not add a compatibility provider or alias for the retired
+     `model_path` option contract.
+   - Verification: `cargo fmt -p pantograph-embedded-runtime`,
+     `cargo fmt -p pantograph-embedded-runtime -- --check`,
+     `cargo test -p pantograph-embedded-runtime puma_lib`, and
+     `cargo check -p pantograph-embedded-runtime`.
+   - Verification deviation: an initial focused test command used
+     `--features model-library` on `pantograph-embedded-runtime`; Cargo
+     correctly rejected it because the feature belongs to `workflow-nodes`.
+     The corrected crate-local command passed.
+   - Remaining follow-up: the explicit `ModelDependencyRequest.model_path`
+     dependency-preflight contract still exists and must be replaced by the
+     planned typed Pumas model-reference request/result contract before the
+     dependency resolver can stop resolving executable paths internally.
 
 3. **Node-Engine Dependency Planning Contract Replacement**
    - Purpose: remove path-shaped dependency resolution from node-engine. The
@@ -5721,6 +5744,52 @@ Stop and re-plan before implementation when any remaining slice would require:
     for non-canonical/legacy consumers and must be removed, rejected, or scoped
     in the later `ModelDependencyRequest`/`ModelRefV2` contract replacement
     slice rather than treated as accepted compatibility.
+- 2026-05-20 slice: embedded-runtime `puma-lib` execution path-output removal.
+  - Smallest useful vertical slice: align embedded-runtime `puma-lib`
+    execution with the graph-facing `pumas_model_ref` selector contract by
+    removing stale path rebinding, path-derived model-id inference, top-level
+    executable path output, graph-visible backend-key aliasing, and hidden
+    package/load-target payloads from the host task executor.
+  - Allowed write set:
+    `crates/pantograph-embedded-runtime/src/task_executor/puma_lib.rs`,
+    `crates/pantograph-embedded-runtime/src/task_executor_tests/puma_lib.rs`,
+    `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
+    `crates/pantograph-embedded-runtime/src/README.md`, this milestone file,
+    and `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+    Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the slice removed the old `model_path`
+    execution output and did not replace it with a compatibility shim, path
+    alias, package-fact revival, artifact-load-target shortcut, directory
+    scan, Pumas path join, or scheduler bypass. Pumas model references remain
+    the only graph-facing selection value from `puma-lib`.
+  - Per-slice standards evidence: the change stays inside the embedded-runtime
+    host task executor and focused tests; no generated DTOs, lockfiles, saved
+    workflow fixtures, frontend UI, scheduler policy, worker code, or
+    platform-specific resource code changed. The module README now records the
+    producer contract boundary, and the focused tests assert both positive
+    model-ref propagation and negative retired-output behavior.
+  - Tests/fixtures: `puma-lib` execution tests now prove selector hydration
+    emits model refs without top-level executable paths, explicit Pumas refs
+    stay intact without becoming `model_path`, raw `PUMAS_API` alone does not
+    rehydrate package/load-target facts, read-only selector access does not
+    promote rows into package/load-target payloads, and saved model names
+    without model id do not synthesize path-only model refs. The stale
+    model-library options/resolver test now queries `pumas_model_ref` rather
+    than `puma-lib:model_path`.
+  - Verification passed:
+    `cargo fmt -p pantograph-embedded-runtime`,
+    `cargo fmt -p pantograph-embedded-runtime -- --check`,
+    `cargo test -p pantograph-embedded-runtime puma_lib`,
+    `cargo check -p pantograph-embedded-runtime`.
+  - Verification deviation: `cargo test -p pantograph-embedded-runtime
+    puma_lib --features model-library` failed before implementation
+    verification because `model-library` is a `workflow-nodes` feature, not a
+    `pantograph-embedded-runtime` feature; the corrected command passed.
+  - Remaining follow-up: `ModelDependencyRequest.model_path`,
+    dependency-descriptor cache/correlation fields, and direct explicit
+    `model_path` graph edges remain for later typed model-reference contract
+    replacement; they must be removed, rejected, or scoped rather than carried
+    as compatibility behavior.
 
 **Verification:**
 

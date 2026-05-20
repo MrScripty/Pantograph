@@ -433,7 +433,7 @@ async fn resolve_descriptor_uses_pumas_model_ref_for_path_only_library_model() {
 }
 
 #[tokio::test]
-async fn puma_lib_option_and_dependency_resolver_agree_on_primary_file_path() {
+async fn puma_lib_option_and_dependency_resolver_agree_on_model_ref_identity() {
     let temp_dir = create_test_env();
     let model_dir = temp_dir
         .path()
@@ -456,7 +456,7 @@ async fn puma_lib_option_and_dependency_resolver_agree_on_primary_file_path() {
     };
 
     let options = registry
-        .query_port_options("puma-lib", "model_path", &query, &extensions)
+        .query_port_options("puma-lib", "pumas_model_ref", &query, &extensions)
         .await
         .expect("puma-lib options should resolve");
     let option = options
@@ -471,23 +471,23 @@ async fn puma_lib_option_and_dependency_resolver_agree_on_primary_file_path() {
                 == Some("llm/imported/test-gguf")
         })
         .expect("test option should be present");
-    let option_model_path = option
+    let option_model_id = option
         .value
-        .as_str()
-        .expect("option value should be a string path")
+        .get("model_id")
+        .and_then(|value| value.as_str())
+        .expect("option value should be a Pumas model reference")
         .to_string();
 
-    assert_eq!(option_model_path, model_file.display().to_string());
+    assert_eq!(option_model_id, "llm/imported/test-gguf");
+    assert!(
+        option.value.get("model_path").is_none(),
+        "puma-lib options must not expose executable model_path values"
+    );
 
     let request = ModelDependencyRequest {
         node_type: "llm-inference".to_string(),
-        model_path: option_model_path.clone(),
-        model_id: option
-            .metadata
-            .as_ref()
-            .and_then(|metadata| metadata.get("id"))
-            .and_then(|value| value.as_str())
-            .map(|value| value.to_string()),
+        model_path: String::new(),
+        model_id: Some(option_model_id),
         model_type: option
             .metadata
             .as_ref()
@@ -515,7 +515,6 @@ async fn puma_lib_option_and_dependency_resolver_agree_on_primary_file_path() {
         .expect("descriptor should resolve");
 
     assert_eq!(descriptor.model_id, "llm/imported/test-gguf");
-    assert_eq!(descriptor.model_path, option_model_path);
     assert_eq!(descriptor.model_path, model_file.display().to_string());
 }
 

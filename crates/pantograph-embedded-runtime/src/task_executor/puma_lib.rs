@@ -12,40 +12,21 @@ impl TauriTaskExecutor {
         }
     }
 
-    fn read_puma_lib_model_path(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
-        Self::read_optional_input_string_aliases(
-            inputs,
-            &[
-                "model_path",
-                "modelPath",
-                "selected_artifact_path",
-                "selectedArtifactPath",
-                "entry_path",
-                "entryPath",
-            ],
-        )
-        .or_else(|| {
-            Self::read_optional_input_value_aliases(inputs, &["pumas_model_ref", "pumasModelRef"])
-                .and_then(|model_ref| {
-                    [
-                        "model_path",
-                        "modelPath",
-                        "selected_artifact_path",
-                        "selectedArtifactPath",
-                        "entry_path",
-                        "entryPath",
-                    ]
-                    .iter()
-                    .find_map(|key| {
-                        model_ref
-                            .get(key)
-                            .and_then(serde_json::Value::as_str)
-                            .map(str::trim)
-                            .filter(|value| !value.is_empty())
-                            .map(ToOwned::to_owned)
-                    })
-                })
-        })
+    fn read_puma_lib_model_ref(
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Option<serde_json::Value> {
+        Self::read_optional_input_value_aliases(inputs, &["pumas_model_ref", "pumasModelRef"])
+            .filter(|value| value.is_object())
+    }
+
+    fn model_id_from_pumas_model_ref(value: &serde_json::Value) -> Option<String> {
+        value
+            .get("model_id")
+            .or_else(|| value.get("modelId"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
     }
 
     async fn resolve_puma_lib_selected_detail(
@@ -66,9 +47,8 @@ impl TauriTaskExecutor {
     }
 
     fn apply_puma_lib_selected_detail(
-        detail: PumasSelectedModelDetail,
+        detail: &PumasSelectedModelDetail,
         requested_model_id: &str,
-        model_path: &mut String,
         model_id: &mut Option<String>,
         model_type: &mut Option<String>,
         task_type_primary: &mut Option<String>,
@@ -83,17 +63,6 @@ impl TauriTaskExecutor {
                 .or_else(|| row.map(|row| row.model_ref.model_id.clone()))
                 .unwrap_or_else(|| requested_model_id.to_string()),
         );
-        if let Some(entry_path) = descriptor
-            .map(|descriptor| descriptor.entry_path.trim())
-            .filter(|path| !path.is_empty())
-            .map(ToOwned::to_owned)
-            .or_else(|| {
-                row.and_then(|row| row.executable_entry_path())
-                    .map(ToOwned::to_owned)
-            })
-        {
-            *model_path = entry_path;
-        }
         if let Some(value) = descriptor
             .map(|descriptor| descriptor.model_type.trim())
             .filter(|value| !value.is_empty())
@@ -136,6 +105,22 @@ impl TauriTaskExecutor {
         }
     }
 
+    fn selected_detail_model_ref_value(
+        detail: &PumasSelectedModelDetail,
+    ) -> Option<serde_json::Value> {
+        detail
+            .package_summary_result
+            .as_ref()
+            .and_then(|result| result.summary.as_ref())
+            .and_then(|summary| serde_json::to_value(&summary.model_ref).ok())
+            .or_else(|| {
+                detail
+                    .selector_row
+                    .as_ref()
+                    .and_then(|row| serde_json::to_value(&row.model_ref).ok())
+            })
+    }
+
     fn selected_detail_inference_settings_value(
         detail: &PumasSelectedModelDetail,
         requested_model_id: &str,
@@ -164,207 +149,50 @@ impl TauriTaskExecutor {
         }
     }
 
-    fn owner_api_from_selector_access(
-        selector_access: &Arc<PumasSelectorAccess>,
-    ) -> Option<Arc<pumas_library::PumasApi>> {
-        match selector_access.as_ref() {
-            PumasSelectorAccess::Owner(api) => Some(api.clone()),
-            PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => None,
-        }
-    }
-
-    fn infer_model_id_from_pumas_model_path(model_path: &str) -> Option<String> {
-        let marker = "shared-resources/models/";
-        let normalized = model_path.replace('\\', "/");
-        let (_, model_id) = normalized.rsplit_once(marker)?;
-        let model_id = Self::model_id_from_pumas_model_suffix(model_id)?;
-        Some(model_id.to_string())
-    }
-
-    fn model_id_from_pumas_model_suffix(suffix: &str) -> Option<&str> {
-        let model_id = suffix
-            .trim_matches('/')
-            .trim_end_matches("/metadata.json")
-            .trim();
-        if model_id.is_empty() {
-            return None;
-        }
-
-        if std::path::Path::new(model_id)
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"))
-        {
-            model_id.rsplit_once('/').and_then(|(parent, _)| {
-                let parent = parent.trim_matches('/');
-                if parent.is_empty() {
-                    None
-                } else {
-                    Some(parent)
-                }
-            })
-        } else {
-            Some(model_id)
-        }
-    }
-
-    async fn resolve_puma_lib_full_package_facts(
-        api: &Arc<pumas_library::PumasApi>,
-        model_id: &str,
-    ) -> Option<pumas_library::models::ResolvedModelPackageFacts> {
-        match api.resolve_model_package_facts(model_id).await {
-            Ok(package_facts) => Some(package_facts),
-            Err(error) => {
-                log::warn!(
-                    "Puma-Lib package-facts lookup failed for '{}': {}",
-                    model_id,
-                    error
-                );
-                None
-            }
-        }
-    }
-
-    async fn resolve_puma_lib_artifact_load_target(
-        selector_access: &Arc<PumasSelectorAccess>,
-        package_facts: &pumas_library::models::ResolvedModelPackageFacts,
-        selected_model_ref: Option<&pumas_library::models::PumasModelRef>,
-        task_type_primary: Option<&str>,
-        recommended_backend: Option<&str>,
-    ) -> Option<serde_json::Value> {
-        let entry_path = package_facts.artifact.entry_path.trim();
-        let mut model_ref = selected_model_ref
-            .cloned()
-            .unwrap_or_else(|| package_facts.model_ref.clone());
-        if model_ref.selected_artifact_id.is_none()
-            && model_ref.selected_artifact_path.is_none()
-            && !entry_path.is_empty()
-        {
-            model_ref.selected_artifact_path = Some(entry_path.to_string());
-        }
-        let request = pumas_library::models::ResolveModelArtifactLoadTargetRequest {
-            model_ref,
-            expected_artifact_kind: Some(package_facts.artifact.artifact_kind),
-            caller_observed_entry_path: (!entry_path.is_empty()).then(|| entry_path.to_string()),
-            caller_observed_package_facts_contract_version: Some(
-                package_facts.package_facts_contract_version,
-            ),
-            resolution_mode: match selector_access.as_ref() {
-                PumasSelectorAccess::Owner(_) => {
-                    pumas_library::models::PumasArtifactLoadTargetResolutionMode::OwnerFresh
-                }
-                PumasSelectorAccess::LocalClient(_) | PumasSelectorAccess::ReadOnly(_) => {
-                    pumas_library::models::PumasArtifactLoadTargetResolutionMode::ReadOnlyIndexed
-                }
-            },
-            consumer: pumas_library::models::PumasArtifactConsumer {
-                consumer_name: "pantograph".to_string(),
-                task_kind: task_type_primary.map(ToOwned::to_owned),
-                runtime_family: recommended_backend.map(ToOwned::to_owned),
-            },
-        };
-
-        match selector_access
-            .resolve_model_artifact_load_target(request)
-            .await
-        {
-            Ok(response) if response.is_ready() => {
-                response
-                    .target
-                    .and_then(|target| match serde_json::to_value(target) {
-                        Ok(value) => Some(value),
-                        Err(error) => {
-                            log::warn!(
-                                "Puma-Lib artifact load-target serialization failed for '{}': {}",
-                                package_facts.model_ref.model_id,
-                                error
-                            );
-                            None
-                        }
-                    })
-            }
-            Ok(response) => {
-                log::warn!(
-                    "Puma-Lib artifact load target for '{}' was not ready: artifact_state={:?} entry_path_state={:?} diagnostics={:?}",
-                    package_facts.model_ref.model_id,
-                    response.artifact_state,
-                    response.entry_path_state,
-                    response.diagnostics
-                );
-                None
-            }
-            Err(error) => {
-                log::warn!(
-                    "Puma-Lib artifact load-target lookup failed for '{}': {}",
-                    package_facts.model_ref.model_id,
-                    error
-                );
-                None
-            }
-        }
-    }
-
     pub(super) async fn execute_puma_lib(
         &self,
         inputs: &HashMap<String, serde_json::Value>,
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
-        let mut model_path = Self::read_puma_lib_model_path(inputs).unwrap_or_default();
+        let mut pumas_model_ref = Self::read_puma_lib_model_ref(inputs);
         let mut model_id =
-            Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"]);
+            Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"]).or_else(
+                || {
+                    pumas_model_ref
+                        .as_ref()
+                        .and_then(Self::model_id_from_pumas_model_ref)
+                },
+            );
         let mut model_type =
             Self::read_optional_input_string_aliases(inputs, &["model_type", "modelType"]);
         let mut task_type_primary = Self::read_optional_input_string_aliases(
             inputs,
             &["task_type_primary", "taskTypePrimary"],
         );
-        let backend_key =
-            Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"]);
         let mut recommended_backend = Self::read_optional_input_string_aliases(
             inputs,
             &["recommended_backend", "recommendedBackend"],
         );
         let mut hydrated_inference_settings = None;
-        let mut resolved_from_pumas = false;
-        let mut resolved_model_package_facts = None;
-        let mut resolved_model_artifact_load_target = None;
-        let mut selected_package_model_ref = None;
-        let mut owner_api_for_package_facts = extensions
-            .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
-            .cloned();
-
-        if model_id.is_none() {
-            model_id = Self::infer_model_id_from_pumas_model_path(&model_path);
-        }
 
         let requested_model_id = model_id.clone();
         if let Some(requested_model_id) = requested_model_id.as_deref() {
             if let Some(selector_access) =
                 extensions.get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
             {
-                if owner_api_for_package_facts.is_none() {
-                    owner_api_for_package_facts =
-                        Self::owner_api_from_selector_access(&selector_access);
-                }
                 match Self::resolve_puma_lib_selected_detail(&selector_access, requested_model_id)
                     .await
                 {
                     Ok(Some(detail)) => {
-                        resolved_from_pumas = true;
-                        selected_package_model_ref = detail
-                            .package_summary_result
-                            .as_ref()
-                            .and_then(|result| result.summary.as_ref())
-                            .map(|summary| summary.model_ref.clone());
+                        pumas_model_ref = Self::selected_detail_model_ref_value(&detail);
                         hydrated_inference_settings =
                             Self::selected_detail_inference_settings_value(
                                 &detail,
                                 requested_model_id,
                             );
                         Self::apply_puma_lib_selected_detail(
-                            detail,
+                            &detail,
                             requested_model_id,
-                            &mut model_path,
                             &mut model_id,
                             &mut model_type,
                             &mut task_type_primary,
@@ -392,29 +220,6 @@ impl TauriTaskExecutor {
             }
         }
 
-        if resolved_from_pumas {
-            if let (Some(api), Some(model_id), Some(selector_access)) = (
-                owner_api_for_package_facts.as_ref(),
-                model_id.as_deref(),
-                extensions.get::<Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS),
-            ) {
-                if let Some(package_facts) =
-                    Self::resolve_puma_lib_full_package_facts(&api, model_id).await
-                {
-                    resolved_model_artifact_load_target =
-                        Self::resolve_puma_lib_artifact_load_target(
-                            selector_access,
-                            &package_facts,
-                            selected_package_model_ref.as_ref(),
-                            task_type_primary.as_deref(),
-                            recommended_backend.as_deref(),
-                        )
-                        .await;
-                    resolved_model_package_facts = Some(package_facts);
-                }
-            }
-        }
-
         let inference_settings = hydrated_inference_settings
             .or_else(|| {
                 Self::read_optional_input_value_aliases(
@@ -426,70 +231,18 @@ impl TauriTaskExecutor {
             .unwrap_or_else(|| serde_json::json!([]));
 
         let mut outputs = HashMap::new();
-        outputs.insert(
-            "model_path".to_string(),
-            serde_json::json!(model_path.clone()),
-        );
         outputs.insert("inference_settings".to_string(), inference_settings);
-        let mut pumas_model_ref = serde_json::Map::new();
-        pumas_model_ref.insert("source".to_string(), serde_json::json!("puma-lib"));
-        pumas_model_ref.insert(
-            "status".to_string(),
-            serde_json::json!(if resolved_from_pumas {
-                "resolved"
-            } else if model_id.is_some() {
-                "identity_unverified"
-            } else {
-                "path_only"
-            }),
-        );
-        pumas_model_ref.insert(
-            "model_path".to_string(),
-            serde_json::json!(model_path.clone()),
-        );
-        pumas_model_ref.insert(
-            "selected_artifact_path".to_string(),
-            serde_json::json!(model_path.clone()),
-        );
-        for (key, value) in [
-            ("model_id", model_id.as_deref()),
-            ("model_type", model_type.as_deref()),
-            ("task_type_primary", task_type_primary.as_deref()),
-            ("backend_key", backend_key.as_deref()),
-            ("recommended_backend", recommended_backend.as_deref()),
-        ] {
-            if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
-                pumas_model_ref.insert(key.to_string(), serde_json::json!(value));
+        if pumas_model_ref.is_none() {
+            if let Some(model_id) = model_id.as_deref().filter(|value| !value.trim().is_empty()) {
+                pumas_model_ref = Some(serde_json::json!({ "model_id": model_id }));
             }
         }
-        outputs.insert(
-            "pumas_model_ref".to_string(),
-            serde_json::Value::Object(pumas_model_ref),
-        );
-        if let Some(resolved_model_package_facts) = resolved_model_package_facts {
-            match serde_json::to_value(&resolved_model_package_facts) {
-                Ok(value) => {
-                    outputs.insert("resolved_model_package_facts".to_string(), value);
-                }
-                Err(error) => {
-                    log::warn!(
-                        "Puma-Lib package-facts serialization failed for '{}': {}",
-                        resolved_model_package_facts.model_ref.model_id,
-                        error
-                    );
-                }
-            }
-        }
-        if let Some(resolved_model_artifact_load_target) = resolved_model_artifact_load_target {
-            outputs.insert(
-                "resolved_model_artifact_load_target".to_string(),
-                resolved_model_artifact_load_target,
-            );
+        if let Some(pumas_model_ref) = pumas_model_ref {
+            outputs.insert("pumas_model_ref".to_string(), pumas_model_ref);
         }
         Self::insert_puma_lib_output_string(&mut outputs, "model_id", model_id);
         Self::insert_puma_lib_output_string(&mut outputs, "model_type", model_type);
         Self::insert_puma_lib_output_string(&mut outputs, "task_type_primary", task_type_primary);
-        Self::insert_puma_lib_output_string(&mut outputs, "backend_key", backend_key);
         Self::insert_puma_lib_output_string(
             &mut outputs,
             "recommended_backend",
@@ -540,42 +293,13 @@ impl TauriTaskExecutor {
             ),
         );
 
-        log::debug!("PumaLib: providing model path '{}'", model_path);
+        log::debug!(
+            "PumaLib: providing Pumas model reference for '{}'",
+            outputs
+                .get("model_id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown")
+        );
         Ok(outputs)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::TauriTaskExecutor;
-
-    #[test]
-    fn infer_model_id_from_pumas_model_path_uses_shared_resources_suffix() {
-        assert_eq!(
-            TauriTaskExecutor::infer_model_id_from_pumas_model_path(
-                "/opt/Pumas-Library/shared-resources/models/llm/gen-verse/trado-8b-instruct"
-            )
-            .as_deref(),
-            Some("llm/gen-verse/trado-8b-instruct")
-        );
-    }
-
-    #[test]
-    fn infer_model_id_from_pumas_model_path_drops_gguf_artifact_filename() {
-        assert_eq!(
-            TauriTaskExecutor::infer_model_id_from_pumas_model_path(
-                "/opt/Pumas-Library/shared-resources/models/vlm/qwen35/qwen3_6-27b-heretic-ara-gguf/Qwen3.6-27B-heretic-ara-Q4_K_M.gguf"
-            )
-            .as_deref(),
-            Some("vlm/qwen35/qwen3_6-27b-heretic-ara-gguf")
-        );
-    }
-
-    #[test]
-    fn infer_model_id_from_pumas_model_path_ignores_non_pumas_paths() {
-        assert_eq!(
-            TauriTaskExecutor::infer_model_id_from_pumas_model_path("/models/model.gguf"),
-            None
-        );
     }
 }
