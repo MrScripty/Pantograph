@@ -11,7 +11,7 @@ use node_engine::{
     ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor, TaskMetadata,
 };
 
-const PORT_MODEL_PATH: &str = "model_path";
+const PORT_PUMAS_MODEL_REF: &str = "pumas_model_ref";
 const PORT_DEPENDENCY_REQUIREMENTS: &str = "dependency_requirements";
 const PORT_MODEL_ID: &str = "model_id";
 const PORT_MODEL_TYPE: &str = "model_type";
@@ -48,7 +48,7 @@ impl TaskDescriptor for DependencyEnvironmentTask {
                 "Resolve/check/install model dependencies and output an environment reference"
                     .to_string(),
             inputs: vec![
-                PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
+                PortMetadata::required(PORT_PUMAS_MODEL_REF, "Pumas Model Ref", PortDataType::Json),
                 PortMetadata::optional(
                     PORT_DEPENDENCY_REQUIREMENTS,
                     "Dependency Requirements",
@@ -119,7 +119,8 @@ mod tests {
     #[test]
     fn test_descriptor_has_required_ports() {
         let meta = DependencyEnvironmentTask::descriptor();
-        assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
+        assert!(meta.inputs.iter().any(|p| p.id == "pumas_model_ref"));
+        assert!(!meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta
             .inputs
             .iter()

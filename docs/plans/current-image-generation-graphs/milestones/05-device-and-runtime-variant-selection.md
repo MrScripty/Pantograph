@@ -5872,6 +5872,41 @@ Stop and re-plan before implementation when any remaining slice would require:
     `ModelRefV2` contracts still contain `model_path`, and the lower-level
     descriptor/cache/activity resolver still keys/correlates by local path.
     Replace those contracts next rather than preserving them as compatibility.
+- 2026-05-20 slice: dependency-environment descriptor Pumas identity contract.
+  - Smallest useful vertical slice: align the graph-visible
+    `dependency-environment` descriptor with canonical preflight by replacing
+    the required `model_path` input with required object-shaped
+    `pumas_model_ref`.
+  - Allowed write set:
+    `crates/workflow-nodes/src/processing/dependency_environment.rs`,
+    `crates/workflow-nodes/src/processing/README.md`, this milestone file, and
+    `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+    Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the descriptor no longer exposes
+    `model_path` as graph-facing dependency identity and does not add a path
+    alias, migration shim, Pumas path join, package-fact identity fallback, or
+    scheduler bypass. Pumas model refs remain the graph identity; Pumas owns
+    artifact load-target resolution.
+  - Per-slice standards evidence: workflow-nodes remains the descriptor
+    contract owner; the slice updates one host-routed descriptor and local
+    README traceability only. No node-engine resolver, embedded-runtime
+    resolver, scheduler policy, worker code, generated bindings, lockfiles,
+    saved workflow fixtures, frontend controls, persisted schema, subprocess,
+    path access, or platform code changed.
+  - Tests/fixtures: focused descriptor tests prove `pumas_model_ref` is
+    required and `model_path` is absent from the current dependency-environment
+    graph contract.
+  - Verification passed:
+    `cargo fmt -p workflow-nodes`,
+    `cargo fmt -p workflow-nodes -- --check`,
+    `cargo test -p workflow-nodes dependency_environment --lib`,
+    `cargo check -p workflow-nodes`.
+  - Remaining follow-up: the exported `ModelDependencyRequest` and
+    `ModelRefV2` contracts still contain `model_path`, other non-canonical
+    processing descriptors still expose model-path inputs, and lower-level
+    descriptor/cache/activity correlation still keys by local path. Replace or
+    retire those in scoped typed-contract slices rather than preserving them as
+    compatibility behavior.
 
 **Verification:**
 

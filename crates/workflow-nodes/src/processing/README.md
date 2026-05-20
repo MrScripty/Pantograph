@@ -27,7 +27,8 @@ hidden behavior that the graph cannot express safely.
 ## Constraints
 - Processing descriptors must stay host-agnostic even when execution is
   delegated to Tauri task executors or Python sidecars.
-- Contract changes must remain additive so saved workflows continue to load.
+- Current canonical contract changes must preserve declared port meanings.
+  Retired legacy ports are removed instead of kept as compatibility aliases.
 - Dependency/runtime metadata used by Python-backed nodes must be graph-visible
   when workflows need to stage environment readiness explicitly.
 - Canonical inference runtime selection is graph-visible only as optional
@@ -47,6 +48,10 @@ standalone graph execution cannot bypass the host typed inference gateway.
 The optional `runtime` input is not projected into node-engine execution,
 worker envelopes, or inference requests directly; scheduler-produced execution
 decisions are the only source of selected runtime facts.
+The dependency-environment descriptor consumes explicit `pumas_model_ref` or
+`model_id` identity and must not expose `model_path` as graph-facing dependency
+identity. Pumas remains responsible for mapping model references to approved
+artifact load targets.
 The old descriptor-local `base_url`/model generation config has been removed;
 generation and task options must flow through canonical graph ports and typed
 inference requests.
@@ -70,7 +75,9 @@ instead of hiding behind generic JSON ports.
 
 ## Invariants
 - Descriptor metadata remains the source of truth for graph-visible ports.
-- Python-backed node contracts must stay additive across releases.
+- Python-backed node contracts must preserve canonical port meanings across
+  releases. Retired path-shaped inputs are removed rather than maintained as
+  compatibility shims.
 - Dependency environment handoff, when used, is represented as structured JSON
   rather than opaque string flags.
 - KV-cache reuse, when exposed by processing nodes, uses explicit `kv_cache`

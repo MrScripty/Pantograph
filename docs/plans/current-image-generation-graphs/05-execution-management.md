@@ -7585,6 +7585,32 @@ Worker rules:
     descriptor/cache/activity correlation, and any direct explicit
     `model_path` graph edges with typed Pumas model-reference request/result
     contracts.
+- 2026-05-20 Milestone 5 dependency-environment descriptor Pumas identity
+  contract slice:
+  - Smallest useful vertical slice: align the graph-visible
+    `dependency-environment` descriptor with canonical preflight by replacing
+    the required `model_path` input with required object-shaped
+    `pumas_model_ref`.
+  - Allowed write set:
+    `crates/workflow-nodes/src/processing/dependency_environment.rs`,
+    `crates/workflow-nodes/src/processing/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this slice removes graph-facing
+    dependency-environment `model_path` identity and does not add a path alias,
+    compatibility shim, Pumas path join, package-fact identity fallback, or
+    scheduler bypass.
+  - Implementation completed: the descriptor now requires `pumas_model_ref`,
+    omits `model_path`, and the processing-node README records that Pumas
+    owns model-reference to artifact load-target resolution.
+  - Verification passed: `cargo fmt -p workflow-nodes`, `cargo fmt -p
+    workflow-nodes -- --check`, `cargo test -p workflow-nodes
+    dependency_environment --lib`, and `cargo check -p workflow-nodes`.
+  - Remaining follow-up: replace the exported path-shaped
+    `ModelDependencyRequest`/`ModelRefV2` contracts, non-canonical processing
+    descriptor model-path inputs, lower-level descriptor/cache/activity
+    correlation, and any direct explicit `model_path` graph edges with typed
+    Pumas model-reference request/result contracts.
 
 ### Traceability Links
 
