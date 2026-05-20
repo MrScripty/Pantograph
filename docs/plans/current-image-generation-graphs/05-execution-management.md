@@ -6995,6 +6995,61 @@ Worker rules:
     resource monitoring where the target process is not the Pantograph
     process, managed runtime structured telemetry, real MPS metrics if a
     canonical PyTorch counter becomes available, and failure-path OOM typing.
+- 2026-05-20 release validation and Tauri startup contract slice:
+  - Smallest useful vertical slice: complete Milestone 8 automated release
+    validation and fix only the stale Tauri release/test contract sites that
+    blocked the release gate.
+  - Allowed write set: `src-tauri/src/llm/startup.rs`,
+    `src-tauri/src/llm/commands/server.rs`,
+    `src-tauri/src/llm/commands/rag.rs`,
+    `src-tauri/src/workflow/workflow_execution_runtime.rs`,
+    stale Tauri test fixtures using `RuntimeLifecycleSnapshot`,
+    `WorkflowRuntimeRequirements`, or managed-runtime job/selection DTOs,
+    `docs/plans/current-image-generation-graphs/milestones/08-release-build-and-user-validation.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the startup path now translates
+    app-configured llama.cpp selectors through
+    `BackendStartupDeviceIntent::llama_cpp_selector` and returns an error for
+    invalid selectors such as canonical scheduler ids instead of coercing or
+    guessing. The scheduler-selected canonical-device path remains separate
+    from backend-local llama.cpp startup selectors.
+  - Implementation completed: Tauri startup request builders now return
+    `Result`, command call sites propagate invalid startup device diagnostics,
+    edit-session embedding runtime startup propagates the same typed error,
+    and diagnostics lifecycle snapshot projection initializes newly added
+    timing fields through the canonical `RuntimeLifecycleSnapshot::default`.
+    Tauri unit fixtures were updated to the current runtime lifecycle,
+    workflow requirement, and managed-runtime variant DTO shapes.
+  - Discovered issue fixed in-slice: the first release build failed because
+    `src-tauri/src/llm/startup.rs` still passed raw device strings into the
+    typed backend startup contract, and
+    `src-tauri/src/workflow/diagnostics/types.rs` still constructed
+    `RuntimeLifecycleSnapshot` without the warmup timing fields. A focused
+    Tauri test compile then exposed stale test-only DTO fixtures, which were
+    updated rather than preserving legacy fields.
+  - Verification passed: `cargo test -p pantograph startup`,
+    `cargo check -p pantograph`, `cargo fmt --package pantograph -- --check`,
+    `bash launcher.sh --build-release`, and
+    `bash launcher.sh --release-smoke`.
+  - Earlier Milestone 8 verification already passed before this slice:
+    `cargo test -p pantograph-diagnostics-ledger
+    runtime_selection_history --lib`, `npm run typecheck`,
+    `npm run test:frontend`, `npm run build`,
+    `cargo check -p inference --no-default-features`, and
+    `cargo check -p inference --all-features`.
+  - Standards and boundary notes: no new dependencies or lockfile changes were
+    introduced; no frontend code changed in this slice; no new production
+    `unwrap()`/`expect()` paths were added; no platform-specific `cfg` or path
+    handling was added; no generated, build-output, sqlite WAL/SHM, or workflow
+    fixture files were dirtied. Release validation still reports pre-existing
+    Tauri dead-code warnings and a Tauri identifier warning because
+    `com.pantograph.app` ends with `.app`.
+  - Remaining follow-up: `bash launcher.sh --release-smoke` verifies the
+    release artifact and managed-runtime contracts, but it explicitly reports
+    that Pantograph does not yet expose a headless desktop release-smoke
+    entrypoint. Manual desktop validation still needs to confirm Juggernaut
+    graph visibility, Pumas model resolution, stale diagnostic behavior, and
+    image output artifact retention.
 
 ### Traceability Links
 

@@ -30,6 +30,7 @@ mod tests {
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
                 active: false,
                 last_error: None,
+                ..inference::RuntimeLifecycleSnapshot::default()
             },
             embedding_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama_cpp_embedding".to_string()),
@@ -41,6 +42,7 @@ mod tests {
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
                 active: true,
                 last_error: None,
+                ..inference::RuntimeLifecycleSnapshot::default()
             }),
             trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("pytorch".to_string()),

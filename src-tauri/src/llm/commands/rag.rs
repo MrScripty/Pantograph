@@ -219,7 +219,7 @@ pub async fn index_docs_with_switch(
             Some(resolved_embedding_model_path.clone()),
             candle_model_path,
             &device,
-        ))
+        )?)
         .await
         .map_err(|e| format!("Failed to start embedding server: {}", e))?;
     sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;

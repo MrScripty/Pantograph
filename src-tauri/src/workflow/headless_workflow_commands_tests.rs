@@ -89,11 +89,7 @@ fn capability_response() -> WorkflowCapabilitiesResponse {
         max_output_targets: 2,
         max_value_bytes: 2_048,
         runtime_requirements: WorkflowRuntimeRequirements {
-            estimated_peak_vram_mb: None,
-            estimated_peak_ram_mb: None,
-            estimated_min_vram_mb: None,
-            estimated_min_ram_mb: None,
-            estimation_confidence: "high".to_string(),
+            resource_estimates: Vec::new(),
             required_models: vec!["model-a".to_string()],
             required_backends: vec!["llama_cpp".to_string()],
             required_extensions: vec!["kv_cache".to_string()],

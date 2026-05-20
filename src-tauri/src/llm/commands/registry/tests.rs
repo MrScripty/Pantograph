@@ -75,6 +75,7 @@ async fn runtime_registry_snapshot_syncs_embedding_runtime_observation() {
         lifecycle_decision_reason: Some("runtime_ready".to_string()),
         active: true,
         last_error: None,
+        ..inference::RuntimeLifecycleSnapshot::default()
     });
     gateway.set_test_embedding_server(server).await;
 
@@ -113,6 +114,7 @@ async fn reclaim_runtime_returns_updated_registry_snapshot() {
         lifecycle_decision_reason: Some("runtime_ready".to_string()),
         active: true,
         last_error: None,
+        ..inference::RuntimeLifecycleSnapshot::default()
     });
     gateway.set_test_embedding_server(server).await;
 
@@ -158,6 +160,7 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
         lifecycle_decision_reason: Some("runtime_ready".to_string()),
         active: true,
         last_error: None,
+        ..inference::RuntimeLifecycleSnapshot::default()
     });
     gateway.set_test_embedding_server(server).await;
 
@@ -211,6 +214,7 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         }),
         embedding_runtime_snapshot: None,
         managed_runtimes: Vec::new(),
@@ -368,6 +372,7 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         }),
         embedding_runtime_snapshot: None,
         managed_runtimes: Vec::new(),

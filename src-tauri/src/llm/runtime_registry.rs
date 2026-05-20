@@ -287,6 +287,7 @@ mod tests {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
         gateway.set_test_embedding_server(server).await;
 
@@ -317,6 +318,7 @@ mod tests {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
         gateway.set_test_embedding_server(server).await;
 
@@ -357,6 +359,7 @@ mod tests {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
         gateway.set_test_embedding_server(server).await;
 
@@ -410,6 +413,7 @@ mod tests {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
         gateway.set_test_embedding_server(server).await;
         gateway
@@ -470,6 +474,7 @@ mod tests {
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
                 active: true,
                 last_error: None,
+                ..inference::RuntimeLifecycleSnapshot::default()
             }),
             embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama_cpp_embedding".to_string()),
@@ -481,6 +486,7 @@ mod tests {
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
                 active: true,
                 last_error: None,
+                ..inference::RuntimeLifecycleSnapshot::default()
             }),
         };
 
@@ -559,6 +565,7 @@ mod tests {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
         gateway.set_test_embedding_server(server).await;
 
@@ -731,6 +738,7 @@ mod tests {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
         gateway.set_test_embedding_server(server).await;
 

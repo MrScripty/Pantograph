@@ -203,6 +203,7 @@ impl From<&DiagnosticsRuntimeLifecycleSnapshot> for inference::RuntimeLifecycleS
             lifecycle_decision_reason: snapshot.lifecycle_decision_reason.clone(),
             active: snapshot.active,
             last_error: snapshot.last_error.clone(),
+            ..inference::RuntimeLifecycleSnapshot::default()
         };
         normalized_runtime_lifecycle_snapshot(&lifecycle_snapshot)
     }

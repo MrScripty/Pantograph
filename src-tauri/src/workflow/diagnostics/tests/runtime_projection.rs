@@ -10,11 +10,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             max_output_targets: 2,
             max_value_bytes: 1000,
             runtime_requirements: pantograph_workflow_service::WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "high".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["model-a".to_string()],
                 required_backends: vec!["llama-cpp".to_string()],
                 required_extensions: vec!["kv_cache".to_string()],
@@ -41,6 +37,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         }),
         embedding_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp.embedding".to_string()),
@@ -52,6 +49,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             lifecycle_decision_reason: Some("runtime_reused".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         }),
         managed_runtimes: Vec::new(),
         captured_at_ms: 5_000,
@@ -193,10 +191,15 @@ fn runtime_snapshot_preserves_managed_runtime_views() {
         versions: Vec::new(),
         selection: inference::ManagedRuntimeSelectionState {
             selected_version: Some("b8248".to_string()),
+            selected_runtime_variant_id: None,
             active_version: None,
+            active_runtime_variant_id: None,
             default_version: Some("b8248".to_string()),
+            default_runtime_variant_id: None,
         },
         active_job: Some(inference::ManagedRuntimeJobStatus {
+            runtime_variant_id: inference::RuntimeVariantId::parse("llama_cpp.cpu")
+                .expect("runtime variant id should parse"),
             state: inference::ManagedRuntimeJobState::Downloading,
             status: "downloading".to_string(),
             current: 128,
@@ -248,11 +251,7 @@ fn runtime_snapshot_falls_back_to_selected_capability_when_lifecycle_is_absent()
             max_output_targets: 2,
             max_value_bytes: 1000,
             runtime_requirements: pantograph_workflow_service::WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "high".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["model-a".to_string()],
                 required_backends: vec!["pytorch".to_string()],
                 required_extensions: Vec::new(),
@@ -326,11 +325,7 @@ fn runtime_snapshot_matches_required_backend_alias_when_selected_runtime_is_abse
             max_output_targets: 2,
             max_value_bytes: 1000,
             runtime_requirements: pantograph_workflow_service::WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "high".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["model-a".to_string()],
                 required_backends: vec!["onnxruntime".to_string()],
                 required_extensions: Vec::new(),
@@ -395,11 +390,7 @@ fn runtime_snapshot_normalizes_selected_capability_runtime_id_when_lifecycle_is_
             max_output_targets: 2,
             max_value_bytes: 1000,
             runtime_requirements: pantograph_workflow_service::WorkflowRuntimeRequirements {
-                estimated_peak_vram_mb: None,
-                estimated_peak_ram_mb: None,
-                estimated_min_vram_mb: None,
-                estimated_min_ram_mb: None,
-                estimation_confidence: "high".to_string(),
+                resource_estimates: Vec::new(),
                 required_models: vec!["model-a".to_string()],
                 required_backends: vec!["pytorch".to_string()],
                 required_extensions: Vec::new(),
@@ -477,6 +468,7 @@ fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         }),
         embedding_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp.embedding".to_string()),
@@ -488,6 +480,7 @@ fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
             lifecycle_decision_reason: Some("runtime_reused".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         }),
         managed_runtimes: Vec::new(),
         error: None,
@@ -574,6 +567,7 @@ fn diagnostics_runtime_lifecycle_snapshot_normalizes_known_runtime_aliases() {
             lifecycle_decision_reason: Some("runtime_reused".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
 
     assert_eq!(snapshot.runtime_id.as_deref(), Some("pytorch"));
@@ -592,6 +586,7 @@ fn diagnostics_runtime_lifecycle_snapshot_infers_default_lifecycle_reason() {
             lifecycle_decision_reason: None,
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
 
     assert_eq!(
@@ -613,6 +608,7 @@ fn diagnostics_runtime_lifecycle_snapshot_infers_start_failure_reason() {
             lifecycle_decision_reason: None,
             active: false,
             last_error: Some("failed".to_string()),
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
 
     assert_eq!(

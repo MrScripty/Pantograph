@@ -66,7 +66,7 @@ pub async fn start_sidecar_llm(
 
     let config_guard = config.read().await;
     let inference_request =
-        build_explicit_llamacpp_inference_request(&model_path, &mmproj_path, &config_guard.device);
+        build_explicit_llamacpp_inference_request(&model_path, &mmproj_path, &config_guard.device)?;
     drop(config_guard);
 
     let backend_config = gateway
@@ -117,7 +117,7 @@ pub async fn start_sidecar_inference(
     // Extract config values we'll need after dropping the guard
     let embedding_model_path = config_guard.models.embedding_model_path.clone();
     let embedding_memory_mode = config_guard.embedding_memory_mode.clone();
-    let inference_request = build_configured_inference_request(&config_guard);
+    let inference_request = build_configured_inference_request(&config_guard)?;
     drop(config_guard);
 
     let backend_config = gateway

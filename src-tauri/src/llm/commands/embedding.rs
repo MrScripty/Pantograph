@@ -144,6 +144,7 @@ mod tests {
             lifecycle_decision_reason: Some("runtime_reused".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         });
         gateway.set_test_embedding_server(server).await;
 

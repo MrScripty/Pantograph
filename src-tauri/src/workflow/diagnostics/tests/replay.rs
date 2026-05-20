@@ -78,6 +78,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         }),
         captured_at_ms: 2_010,
         ..Default::default()
@@ -365,6 +366,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         }),
         embedding_runtime_snapshot: None,
         managed_runtimes: Vec::new(),
@@ -435,6 +437,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             lifecycle_decision_reason: Some("runtime_reused".to_string()),
             active: true,
             last_error: None,
+            ..inference::RuntimeLifecycleSnapshot::default()
         }),
         embedding_runtime_snapshot: None,
         managed_runtimes: Vec::new(),

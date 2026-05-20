@@ -395,7 +395,7 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
             &session_id,
             &workflow_run_id,
             &session_graph,
-            build_resolved_embedding_request(None, None, &device),
+            build_resolved_embedding_request(None, None, &device)?,
             event_adapter.clone() as Arc<dyn EventSink>,
         )
         .await

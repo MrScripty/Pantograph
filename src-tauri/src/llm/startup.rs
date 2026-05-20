@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use inference::BackendStartupDeviceIntent;
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use reqwest::Url;
 
@@ -34,43 +35,45 @@ pub(crate) fn build_explicit_llamacpp_inference_request(
     model_path: &str,
     mmproj_path: &str,
     device: &DeviceConfig,
-) -> InferenceStartRequest {
-    InferenceStartRequest {
+) -> Result<InferenceStartRequest, String> {
+    Ok(InferenceStartRequest {
         external_url: None,
         file_model_path: Some(PathBuf::from(model_path)),
         mmproj_path: Some(PathBuf::from(mmproj_path)),
-        device: Some(device.device.clone()),
+        device: Some(llama_cpp_startup_device_intent(device)?),
         gpu_layers: Some(device.gpu_layers),
-    }
+    })
 }
 
-pub(crate) fn build_configured_inference_request(config: &AppConfig) -> InferenceStartRequest {
-    InferenceStartRequest {
+pub(crate) fn build_configured_inference_request(
+    config: &AppConfig,
+) -> Result<InferenceStartRequest, String> {
+    Ok(InferenceStartRequest {
         external_url: None,
         file_model_path: config.models.vlm_model_path.as_ref().map(PathBuf::from),
         mmproj_path: config.models.vlm_mmproj_path.as_ref().map(PathBuf::from),
-        device: Some(config.device.device.clone()),
+        device: Some(llama_cpp_startup_device_intent(&config.device)?),
         gpu_layers: Some(config.device.gpu_layers),
-    }
+    })
 }
 
 pub(crate) fn build_resolved_embedding_request(
     gguf_model_path: Option<PathBuf>,
     candle_model_path: Option<PathBuf>,
     device: &DeviceConfig,
-) -> EmbeddingStartRequest {
-    EmbeddingStartRequest {
+) -> Result<EmbeddingStartRequest, String> {
+    Ok(EmbeddingStartRequest {
         gguf_model_path,
         candle_model_path,
-        device: Some(device.device.clone()),
+        device: Some(llama_cpp_startup_device_intent(device)?),
         gpu_layers: Some(device.gpu_layers),
-    }
+    })
 }
 
 pub(crate) fn build_configured_embedding_request(
     config: &AppConfig,
 ) -> Result<EmbeddingStartRequest, String> {
-    Ok(build_resolved_embedding_request(
+    build_resolved_embedding_request(
         config
             .models
             .embedding_model_path
@@ -83,7 +86,18 @@ pub(crate) fn build_configured_embedding_request(
             .as_ref()
             .map(PathBuf::from),
         &config.device,
-    ))
+    )
+}
+
+fn llama_cpp_startup_device_intent(
+    device: &DeviceConfig,
+) -> Result<BackendStartupDeviceIntent, String> {
+    BackendStartupDeviceIntent::llama_cpp_selector(&device.device).map_err(|error| {
+        format!(
+            "Invalid configured llama.cpp startup device '{}': {}",
+            device.device, error
+        )
+    })
 }
 
 #[cfg(test)]
@@ -137,7 +151,8 @@ mod tests {
             ..AppConfig::default()
         };
 
-        let request = build_configured_inference_request(&config);
+        let request =
+            build_configured_inference_request(&config).expect("inference request should build");
         assert_eq!(
             request.file_model_path.as_deref(),
             Some(Path::new("/models/qwen.gguf"))
@@ -146,7 +161,15 @@ mod tests {
             request.mmproj_path.as_deref(),
             Some(Path::new("/models/qwen.mmproj"))
         );
-        assert_eq!(request.device.as_deref(), Some("Vulkan0"));
+        assert_eq!(
+            request
+                .device
+                .as_ref()
+                .and_then(|device| device.as_llama_cpp_selector())
+                .map(|device| device.to_id())
+                .as_deref(),
+            Some("Vulkan0")
+        );
         assert_eq!(request.gpu_layers, Some(99));
     }
 
@@ -156,10 +179,11 @@ mod tests {
             "/models/main.gguf",
             "/models/main.mmproj",
             &DeviceConfig {
-                device: "cuda".to_string(),
+                device: "none".to_string(),
                 gpu_layers: -1,
             },
-        );
+        )
+        .expect("explicit llama.cpp inference request should build");
 
         assert_eq!(
             request.file_model_path.as_deref(),
@@ -169,7 +193,15 @@ mod tests {
             request.mmproj_path.as_deref(),
             Some(Path::new("/models/main.mmproj"))
         );
-        assert_eq!(request.device.as_deref(), Some("cuda"));
+        assert_eq!(
+            request
+                .device
+                .as_ref()
+                .and_then(|device| device.as_llama_cpp_selector())
+                .map(|device| device.to_id())
+                .as_deref(),
+            Some("none")
+        );
         assert_eq!(request.gpu_layers, Some(-1));
     }
 
@@ -182,7 +214,8 @@ mod tests {
                 device: "Vulkan0".to_string(),
                 gpu_layers: 24,
             },
-        );
+        )
+        .expect("resolved embedding request should build");
 
         assert_eq!(
             request.gguf_model_path.as_deref(),
@@ -192,8 +225,32 @@ mod tests {
             request.candle_model_path.as_deref(),
             Some(Path::new("/models/candle"))
         );
-        assert_eq!(request.device.as_deref(), Some("Vulkan0"));
+        assert_eq!(
+            request
+                .device
+                .as_ref()
+                .and_then(|device| device.as_llama_cpp_selector())
+                .map(|device| device.to_id())
+                .as_deref(),
+            Some("Vulkan0")
+        );
         assert_eq!(request.gpu_layers, Some(24));
+    }
+
+    #[test]
+    fn rejects_unknown_llamacpp_startup_device_without_fallback() {
+        let config = AppConfig {
+            device: DeviceConfig {
+                device: "cuda:0".to_string(),
+                gpu_layers: 99,
+            },
+            ..AppConfig::default()
+        };
+
+        let error = build_configured_inference_request(&config)
+            .expect_err("canonical scheduler ids are not llama.cpp selectors");
+
+        assert!(error.contains("Invalid configured llama.cpp startup device 'cuda:0'"));
     }
 
     #[test]
@@ -240,7 +297,15 @@ mod tests {
             request.candle_model_path.as_deref(),
             Some(Path::new("/models/candle"))
         );
-        assert_eq!(request.device.as_deref(), Some("auto"));
+        assert_eq!(
+            request
+                .device
+                .as_ref()
+                .and_then(|device| device.as_llama_cpp_selector())
+                .map(|device| device.to_id())
+                .as_deref(),
+            Some("auto")
+        );
         assert_eq!(request.gpu_layers, Some(12));
 
         fs::remove_file(&model_path).expect("temporary embedding model file should be removed");
