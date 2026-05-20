@@ -1,0 +1,24 @@
+{
+  "model_ref": {
+    "model_id": "image/stable-diffusion/tiny-sd",
+    "revision": "main",
+    "selected_artifact_id": "artifact-diffusers",
+    "selected_artifact_path": "image/stable-diffusion/tiny-sd"
+  },
+  "task_id": "image_generation",
+  "task_type": "text_to_image",
+  "expected_artifact_kind": "diffusers_bundle",
+  "scheduler_intent": {
+    "requested_runtime_id": "pytorch",
+    "requested_device_id": "cuda:0"
+  },
+  "selected_binding_ids": [
+    "diffusers.scheduler"
+  ],
+  "caller_context": {
+    "workflow_id": "workflow-image",
+    "node_id": "node-inference",
+    "port_id": "pumas_model_ref",
+    "run_id": "run-1"
+  }
+}

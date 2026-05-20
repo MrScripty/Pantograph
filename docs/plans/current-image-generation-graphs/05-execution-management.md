@@ -7675,6 +7675,45 @@ Worker rules:
     parse-once typed boundaries, executable contract fixtures, typed diagnostics,
     backend-owned frontend state, and no path-shaped UI/action/activity aliases.
   - Verification passed: docs-only update; `git diff --check`.
+- 2026-05-20 Milestone 5 dependency-planning contract-owner gate:
+  - Smallest useful vertical slice: add a neutral shared
+    `pantograph-dependency-planning` contract crate before migrating
+    node-engine, embedded-runtime, or frontend consumers.
+  - Allowed write set:
+    root `Cargo.toml`, `Cargo.lock`, `crates/pantograph-dependency-planning/`,
+    `crates/inference/Cargo.toml`, `crates/inference/src/model_contracts.rs`,
+    `crates/inference/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - Implementation completed: the new crate owns typed dependency-planning
+    requests, scheduler intent, caller context, selected binding ids, result
+    states, typed diagnostics, and Pumas-facing model/load-target mirror types.
+    Inference now re-exports those Pumas mirror types from the shared contract
+    owner instead of defining a parallel local copy.
+  - No-fallback/no-legacy confirmation: no runtime behavior, resolver path,
+    graph alias, frontend compatibility payload, worker fallback, or scheduler
+    bypass was added. Local load paths appear only in ready load-target result
+    handoff DTOs.
+  - Standards evidence: the crate is contract/domain-only, uses workspace
+    lints, has crate-level docs and README coverage for the crate, source,
+    tests, and fixtures, and adds executable serde fixtures. The crate has no
+    Pumas client, filesystem, subprocess, frontend, Tauri, Python, worker, or
+    scheduler policy dependencies.
+  - Verification passed:
+    `cargo fmt -p pantograph-dependency-planning -p inference`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo check -p inference`,
+    `cargo test -p inference --test model_contracts pumas_artifact_load_target_decodes_existing_pumas_wire_shape`,
+    `cargo fmt -p pantograph-dependency-planning -p inference -- --check`,
+    `cargo check -p pantograph-dependency-planning --all-features`,
+    `cargo check -p pantograph-dependency-planning --no-default-features`,
+    `cargo check -p node-engine --features inference-nodes,pytorch-nodes`,
+    `cargo check -p inference --no-default-features`,
+    and `cargo check -p inference --all-features`.
+  - Remaining follow-up: migrate node-engine request construction, host
+    resolver traits, embedded-runtime cache/activity identity, and frontend
+    dependency-environment actions to the shared contract; then remove the old
+    path-shaped DTO fields instead of adapting them.
 
 ### Traceability Links
 

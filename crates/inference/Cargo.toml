@@ -33,6 +33,7 @@ std-process = []
 
 [dependencies]
 pantograph-managed-dependencies = { path = "../pantograph-managed-dependencies" }
+pantograph-dependency-planning = { path = "../pantograph-dependency-planning" }
 pantograph-media-conversion = { path = "../pantograph-media-conversion" }
 pantograph-path-security = { path = "../pantograph-path-security" }
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }

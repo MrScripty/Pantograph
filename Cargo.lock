@@ -4992,6 +4992,7 @@ dependencies = [
  "futures-util",
  "log",
  "once_cell",
+ "pantograph-dependency-planning",
  "pantograph-managed-dependencies",
  "pantograph-media-conversion",
  "pantograph-path-security",
@@ -7340,6 +7341,15 @@ dependencies = [
  "workflow-nodes",
  "zip 2.4.2",
  "zstd",
+]
+
+[[package]]
+name = "pantograph-dependency-planning"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

@@ -1,0 +1,17 @@
+{
+  "state": "unavailable",
+  "model_ref": {
+    "model_id": "image/stable-diffusion/tiny-sd",
+    "selected_artifact_id": "artifact-diffusers"
+  },
+  "diagnostics": [
+    {
+      "code": "pumas_unavailable",
+      "severity": "error",
+      "message": "Pumas model library is not available to resolve the selected artifact.",
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "runtime_id": "pytorch",
+      "field_path": "model_ref"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "state": "ready",
+  "model_ref": {
+    "model_id": "image/stable-diffusion/tiny-sd",
+    "revision": "main",
+    "selected_artifact_id": "artifact-diffusers",
+    "selected_artifact_path": "image/stable-diffusion/tiny-sd"
+  },
+  "load_target": {
+    "model_ref": {
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "revision": "main",
+      "selected_artifact_id": "artifact-diffusers",
+      "selected_artifact_path": "image/stable-diffusion/tiny-sd"
+    },
+    "artifact_kind": "diffusers_bundle",
+    "local_load_path": "/pumas/library/image/stable-diffusion/tiny-sd",
+    "load_path_kind": "directory",
+    "library_root_id": "default",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "package_facts_contract_version": 2
+  }
+}

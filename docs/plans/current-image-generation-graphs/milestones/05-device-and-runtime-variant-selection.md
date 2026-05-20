@@ -6012,6 +6012,54 @@ Stop and re-plan before implementation when any remaining slice would require:
     descriptor/cache/activity correlation still keys by local path. Replace or
     retire those in scoped typed-contract slices rather than preserving them as
     compatibility behavior.
+- 2026-05-20 slice: dependency-planning contract-owner gate.
+  - Smallest useful vertical slice: add the neutral
+    `pantograph-dependency-planning` contract crate with typed request/result/
+    diagnostic DTOs, Pumas-facing model/load-target mirrors, public serde
+    fixtures, README traceability, and no runtime behavior changes.
+  - Allowed write set: root `Cargo.toml`, `Cargo.lock`,
+    `crates/pantograph-dependency-planning/`, `crates/inference/Cargo.toml`,
+    `crates/inference/src/model_contracts.rs`, `crates/inference/README.md`,
+    this milestone file, and
+    `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+    Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this slice adds no path resolver,
+    scheduler bypass, graph migration shim, frontend alias, worker fallback, or
+    compatibility path. Dependency-planning requests are keyed by typed
+    `PumasModelRef`, task id, optional artifact kind, scheduler intent, selected
+    binding ids, and caller context. Pumas-approved local load paths appear only
+    in ready result/load-target handoff shapes.
+  - Per-slice standards evidence: the new crate is a contract/domain-only
+    workspace member with workspace lints, crate docs, curated `lib.rs`
+    re-exports, source/test/fixture READMEs, typed validation errors, and serde
+    fixtures. It has no Pumas client, filesystem, subprocess, scheduler policy,
+    frontend, Tauri, Python, or worker execution dependencies. Existing
+    inference-local Pumas model/load-target mirror types moved behind the new
+    contract owner and are re-exported from inference, avoiding a third DTO
+    family.
+  - Tests/fixtures: `pantograph-dependency-planning` fixtures cover a valid
+    request, ready result with Pumas-approved load target, unavailable result
+    with typed diagnostic, empty Pumas model id rejection, local artifact entry
+    path rejection, and ready-result-without-target rejection. Existing
+    inference load-target wire-shape coverage still passes through the
+    re-exported types.
+  - Verification passed:
+    `cargo fmt -p pantograph-dependency-planning -p inference`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo check -p inference`,
+    `cargo test -p inference --test model_contracts pumas_artifact_load_target_decodes_existing_pumas_wire_shape`,
+    `cargo fmt -p pantograph-dependency-planning -p inference -- --check`,
+    `cargo check -p pantograph-dependency-planning --all-features`,
+    `cargo check -p pantograph-dependency-planning --no-default-features`,
+    `cargo check -p node-engine --features inference-nodes,pytorch-nodes`,
+    `cargo check -p inference --no-default-features`,
+    `cargo check -p inference --all-features`.
+  - Remaining follow-up: node-engine still constructs the old
+    `ModelDependencyRequest`/`ModelRefV2` contracts, embedded-runtime
+    descriptor/cache/activity code still keys by local path, and frontend
+    dependency-environment actions still submit path-shaped payloads. The next
+    implementation slices must migrate those consumers to the shared contract
+    and remove the old path-shaped DTO fields rather than adapting them.
 
 **Verification:**
 

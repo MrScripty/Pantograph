@@ -158,6 +158,10 @@ selection must use supported runtimes through Pumas model references.
   option compatibility diagnostics, lifecycle phases, Pumas package-facts
   summary snapshots, and model-library update feeds are structured
   producer/consumer contracts for later inference slices.
+- Pumas-facing model reference and artifact load-target mirror types are
+  re-exported from `pantograph-dependency-planning`. Inference consumes those
+  shared contracts but does not own dependency-planning request/result semantics,
+  Pumas library lookup, or scheduler policy.
 - Backend-local load envelopes, including PyTorch worker envelopes and Candle
   staged resource probes, are adapter contracts. They may contain direct-source
   import/debug paths or loaded tensor resources, but they do not choose
