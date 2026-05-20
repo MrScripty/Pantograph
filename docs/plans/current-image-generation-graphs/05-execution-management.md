@@ -7631,8 +7631,25 @@ Worker rules:
     path-shaped compatibility. It makes the remaining `model_path` fields
     explicit removal targets and keeps executable local paths scoped to
     selected backend/worker handoff after Pumas-approved planning.
-  - Verification: docs-only update; `git diff --check` to be run before the
-    planning commit.
+  - Verification passed: docs-only update; `git diff --check`.
+- 2026-05-20 Milestone 5 dependency-planning blast-radius review:
+  - Finding: the plan needed tighter implementation boundaries after inspecting
+    the affected code. `ModelDependencyRequest`/`ModelRefV2`,
+    embedded-runtime descriptor/cache/activity code, frontend
+    dependency-environment action/source/activity matching, and existing
+    inference-local Pumas DTO mirrors are all touched by the replacement.
+  - Plan update completed: Milestone 5 now rejects a third independent Pumas
+    model-ref/artifact DTO family, requires one canonical Pantograph location
+    for Pumas-facing mirrors or re-exports, adds frontend
+    dependency-environment contract alignment as its own staged slice, and
+    requires removal of embedded-runtime path-to-Pumas fallback resolution.
+  - No-fallback/no-legacy confirmation: path-shaped UI action payloads,
+    dependency activity correlation, descriptor cache keys, and path-to-Pumas
+    resolver behavior are explicit replacement/removal targets. Remaining
+    `model_path` uses must be classified before deletion as either
+    graph/dependency identity, which is removed, or selected backend/worker load
+    target handoff, which may exist only after scheduler/Pumas planning.
+  - Verification passed: docs-only update; `git diff --check`.
 
 ### Traceability Links
 

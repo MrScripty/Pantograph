@@ -690,10 +690,13 @@ fixture contract must not remain reachable as an alternate execution path.
      `crates/pantograph-embedded-runtime/src/model_dependency_activity.rs`,
      `crates/pantograph-embedded-runtime/src/task_executor/dependency_environment.rs`,
      `crates/pantograph-embedded-runtime/src/task_executor/puma_lib.rs`, and
-     focused tests/READMEs. Do not touch scheduler ranking policy, generated
-     DTOs, lockfiles, saved workflows, frontend controls, or Pumas proposal
-     files in the same slice unless the compiler proves a contract boundary
-     must move together.
+     focused tests/READMEs. Frontend dependency-environment source discovery,
+     action payloads, status/activity matching, and typed display state become
+     in-scope only for the dedicated frontend contract-alignment slice after
+     the shared dependency-planning contract exists. Do not touch scheduler
+     ranking policy, generated DTOs, lockfiles, saved workflows, unrelated
+     frontend controls, or Pumas proposal files in the same slice unless the
+     compiler proves a contract boundary must move together.
    - Ownership decision: use option 3. Introduce or promote a neutral shared
      dependency-planning contract owner before replacing the path-shaped
      resolver DTOs. The preferred first choice is a small shared contract crate
@@ -704,7 +707,12 @@ fixture contract must not remain reachable as an alternate execution path.
      Reusing `inference` as the owner is rejected because dependency planning
      spans graph, host, scheduler, and worker boundaries and must not become
      image/PyTorch/inference-feature-specific. The shared contract may re-export
-     or mirror Pumas-compatible model-ref fields, but it must not create a
+     or wrap the existing Pantograph/Pumas-compatible model-ref and
+     artifact-load-target DTOs, but it must not create a third independent
+     `PumasModelRef`, artifact-kind, or artifact-load-target copy. If existing
+     inference-local Pumas-facing DTOs remain useful, move them behind the
+     shared contract owner or re-export them from one canonical Pantograph
+     location before broad adoption. The shared contract must not become a
      parallel artifact authority or require node-engine to know executable
      paths.
    - Required direction: replace `ModelDependencyRequest.model_path` as the
@@ -739,7 +747,13 @@ fixture contract must not remain reachable as an alternate execution path.
      only as backend/worker diagnostics after handoff. Replace public
      `Result<_, String>` resolver errors with typed error/diagnostic enums and
      preserve lower-level causes when adapting Pumas, dependency, or worker
-     failures.
+     failures. Remove embedded-runtime path-to-Pumas fallback resolution such as
+     resolving `request.model_path` through Pumas when explicit Pumas identity
+     is absent; an absent/invalid Pumas model ref is a typed dependency
+     planning failure, not a path lookup opportunity. Update embedded-runtime
+     README compatibility language in the same gate that removes the exported
+     path-shaped dependency contract so documentation describes the retired
+     path facade as removed rather than preserved.
    - Staging:
      1. Contract-owner gate: add the neutral dependency-planning contract owner
         with README traceability, public serde fixture tests, typed error/
@@ -751,7 +765,9 @@ fixture contract must not remain reachable as an alternate execution path.
         diagnostics, selected artifact/load-target status, and a result shape
         that can distinguish ready, unavailable, invalid, stale, ambiguous,
         needs-detail, missing, and not-implemented states without string
-        parsing.
+        parsing. This gate must explicitly choose one canonical Pantograph
+        location for Pumas-facing model-ref/load-target mirrors or re-exports;
+        adding another parallel artifact DTO family is rejected.
      2. Node-engine adapter gate: migrate node-engine request construction to
         build the shared typed request synchronously from graph inputs. Decode
         and validate raw JSON graph/input payloads once at the boundary, then
@@ -778,18 +794,30 @@ fixture contract must not remain reachable as an alternate execution path.
         manifest identity, and dependency activity events so they key/correlate
         by Pumas model ref, selected artifact identity/kind, backend/runtime
         intent, platform context, task kind, and selected dependency bindings,
-        never by local load path.
-     7. Update Puma-Lib execution and dependency-input assembly so canonical
+        never by local load path. Include the frontend dependency-environment
+        activity event type and matcher in this gate so backend events and UI
+        correlation use the same typed identity key.
+     7. Update frontend dependency-environment source discovery, action DTOs,
+        auto-run gating, display/status copy, and node tests so the UI discovers
+        and submits `pumas_model_ref` plus task/scheduler intent instead of
+        `modelPath`/`model_path`. This is a replacement of the path-shaped UI
+        contract, not an alias or compatibility layer.
+     8. Update Puma-Lib execution and dependency-input assembly so canonical
         inference graphs propagate `pumas_model_ref`, task facts, selected
         binding ids, and scheduler intent only. Remove stale path rebinding and
         path-shaped `pumas_model_ref` aliases instead of keeping compatibility
         shims.
-     8. Update node-engine preflight callers/tests to use the typed
+     9. Update node-engine preflight callers/tests to use the typed
         model-reference request and remove all successful `model_path` preflight
         cases from canonical `llm-inference`.
-     9. Remove the old path-shaped `ModelDependencyRequest` fields or confine
+     10. Remove the old path-shaped `ModelDependencyRequest` fields or confine
         any remaining executable paths to backend/worker-local plan handoff
         types that are not graph/node-engine dependency identity.
+     11. Classify every remaining `model_path` use before removal as either
+         graph/dependency identity, which must be replaced, or selected
+         backend/worker executable load-target handoff, which may remain only
+         after scheduler/Pumas planning and must not flow back into graph,
+         cache, activity, or dependency identity.
    - Acceptance: node-engine dependency-preflight tests prove a graph with only
      `pumas_model_ref` and task intent can request dependency planning without
      local path knowledge; stale or unresolved Pumas state fails with typed
@@ -802,7 +830,9 @@ fixture contract must not remain reachable as an alternate execution path.
      Embedded-runtime tests prove dependency cache/activity/environment identity
      remains stable across path changes for the same Pumas-selected artifact and
      changes when model ref, selected artifact, backend/runtime intent, platform,
-     task kind, or selected bindings change. At least one cross-layer acceptance
+     task kind, or selected bindings change. Frontend node tests prove
+     dependency-environment actions are keyed by Pumas model ref and no longer
+     require or submit `modelPath`. At least one cross-layer acceptance
      test must exercise the real producer-to-consumer path from graph
      `pumas_model_ref` input through node-engine dependency planning,
      host/planner Pumas load-target resolution, and selected runtime/worker
