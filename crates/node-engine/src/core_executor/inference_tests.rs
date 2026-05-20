@@ -3248,21 +3248,13 @@ fn test_pytorch_typed_generation_settings_rejects_custom_kwargs() {
 
 #[cfg(feature = "pytorch-nodes")]
 #[test]
-fn test_resolved_artifact_kind_prefers_package_facts_before_model_source() {
+fn test_resolved_artifact_kind_uses_package_facts() {
     let fixture = include_str!(
         "../../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
     );
     let package_facts: inference::ResolvedModelPackageFacts =
         serde_json::from_str(fixture).expect("text package facts fixture");
     let mut inputs = HashMap::new();
-    inputs.insert(
-        "resolved_model_source".to_string(),
-        resolved_model_source_with_artifact_kind(
-            "pumas://models/tiny-hf",
-            "/models/tiny-hf",
-            "hf_compatible_directory",
-        ),
-    );
     inputs.insert(
         "resolved_model_package_facts".to_string(),
         serde_json::to_value(&package_facts).expect("package facts json"),
@@ -3512,7 +3504,7 @@ fn model_dependency_requirements_for_request(
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
-async fn test_dependency_preflight_maps_hf_transformers_source_to_pytorch_request() {
+async fn test_dependency_preflight_maps_explicit_hf_transformers_request() {
     let captured_requests = Arc::new(Mutex::new(Vec::new()));
     let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(CapturingDependencyResolver {
         captured_requests: captured_requests.clone(),
@@ -3527,12 +3519,12 @@ async fn test_dependency_preflight_maps_hf_transformers_source_to_pytorch_reques
         serde_json::json!("text-generation"),
     );
     inputs.insert(
-        "resolved_model_source".to_string(),
-        resolved_model_source_with_artifact_kind(
-            "pumas://models/tiny-hf",
-            "/models/tiny-hf",
-            "hf_compatible_directory",
-        ),
+        "model_id".to_string(),
+        serde_json::json!("pumas://models/tiny-hf"),
+    );
+    inputs.insert(
+        "model_path".to_string(),
+        serde_json::json!("/models/tiny-hf"),
     );
 
     let resolved = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
@@ -3631,40 +3623,39 @@ fn test_build_model_dependency_request_does_not_infer_retired_backend_node() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_inputs_with_model_path_uses_resolved_model_source_entry_path() {
+fn test_inputs_with_model_path_rejects_resolved_model_source_entry_path() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "resolved_model_source".to_string(),
         resolved_model_source_value("pumas://models/tiny-gguf", "/models/tiny/model.gguf"),
     );
 
-    let canonical =
-        inputs_with_model_path_from_ref(&inputs).expect("resolved model source should parse");
+    let err = inputs_with_model_path_from_ref(&inputs)
+        .expect_err("retired resolved model source should fail explicitly");
 
-    assert_eq!(
-        canonical.get("model_path").and_then(|value| value.as_str()),
-        Some("/models/tiny/model.gguf")
-    );
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Retired resolved_model_source input"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
 }
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_inputs_with_model_path_preserves_resolved_mmproj_companion() {
+fn test_inputs_with_model_path_preserves_explicit_mmproj_companion() {
     let mut inputs = HashMap::new();
     inputs.insert(
-        "resolved_model_source".to_string(),
-        resolved_model_source_with_companion_artifacts(
-            "pumas://models/tiny-vlm-gguf",
-            "/models/tiny-vlm/model.gguf",
-            vec![
-                "/models/tiny-vlm/readme.txt",
-                "/models/tiny-vlm/mmproj-model-f16.mmproj",
-            ],
-        ),
+        "model_path".to_string(),
+        serde_json::json!("/models/tiny-vlm/model.gguf"),
+    );
+    inputs.insert(
+        "mmproj_path".to_string(),
+        serde_json::json!("/models/tiny-vlm/mmproj-model-f16.mmproj"),
     );
 
-    let canonical =
-        inputs_with_model_path_from_ref(&inputs).expect("resolved model source should parse");
+    let canonical = inputs_with_model_path_from_ref(&inputs)
+        .expect("explicit model and companion paths should pass through");
 
     assert_eq!(
         canonical.get("model_path").and_then(|value| value.as_str()),
@@ -3680,7 +3671,7 @@ fn test_inputs_with_model_path_preserves_resolved_mmproj_companion() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_inputs_with_model_path_rejects_malformed_resolved_model_source() {
+fn test_inputs_with_model_path_rejects_malformed_retired_resolved_model_source() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "resolved_model_source".to_string(),
@@ -3688,11 +3679,11 @@ fn test_inputs_with_model_path_rejects_malformed_resolved_model_source() {
     );
 
     let err = inputs_with_model_path_from_ref(&inputs)
-        .expect_err("malformed resolved model source should fail explicitly");
+        .expect_err("retired resolved model source should fail explicitly");
 
     match err {
         NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("Invalid resolved_model_source input"));
+            assert!(message.contains("Retired resolved_model_source input"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -3742,13 +3733,11 @@ fn test_inputs_with_model_path_rejects_unresolved_model_source() {
     );
 
     let err = inputs_with_model_path_from_ref(&inputs)
-        .expect_err("unresolved model source should fail explicitly before serde parsing");
+        .expect_err("retired model source should fail explicitly before serde parsing");
 
     match err {
         NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("resolved_model_source"));
-            assert!(message.contains("legacy_pytorch"));
-            assert!(message.contains("Resolve this model through Pumas"));
+            assert!(message.contains("Retired resolved_model_source input"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -3756,7 +3745,7 @@ fn test_inputs_with_model_path_rejects_unresolved_model_source() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_build_model_ref_v2_prefers_resolved_model_source_identity() {
+fn test_build_model_ref_v2_ignores_resolved_model_source_identity() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "resolved_model_source".to_string(),
@@ -3772,13 +3761,13 @@ fn test_build_model_ref_v2_prefers_resolved_model_source_identity() {
         &inputs,
     );
 
-    assert_eq!(model_ref.model_id, "pumas://models/tiny-gguf");
+    assert_eq!(model_ref.model_id, "/models/tiny/model.gguf");
     assert_eq!(model_ref.model_path, "/models/tiny/model.gguf");
 }
 
 #[cfg(feature = "inference-nodes")]
 #[test]
-fn test_build_model_dependency_request_uses_resolved_model_source_identity() {
+fn test_build_model_dependency_request_ignores_resolved_model_source_identity() {
     let mut inputs = HashMap::new();
     inputs.insert(
         "resolved_model_source".to_string(),
@@ -3788,10 +3777,7 @@ fn test_build_model_dependency_request_uses_resolved_model_source_identity() {
     let request =
         build_model_dependency_request("llm-inference", "/models/tiny/model.gguf", &inputs);
 
-    assert_eq!(
-        request.model_id.as_deref(),
-        Some("pumas://models/tiny-gguf")
-    );
+    assert_eq!(request.model_id, None);
     assert_eq!(request.model_path, "/models/tiny/model.gguf");
 }
 
@@ -4140,17 +4126,6 @@ fn resolved_model_source_with_artifact_kind(
             "model_id": model_id
         }
     })
-}
-
-#[cfg(feature = "inference-nodes")]
-fn resolved_model_source_with_companion_artifacts(
-    model_id: &str,
-    entry_path: &str,
-    companion_artifacts: Vec<&str>,
-) -> serde_json::Value {
-    let mut value = resolved_model_source_value(model_id, entry_path);
-    value["companion_artifacts"] = serde_json::json!(companion_artifacts);
-    value
 }
 
 #[cfg(feature = "inference-nodes")]

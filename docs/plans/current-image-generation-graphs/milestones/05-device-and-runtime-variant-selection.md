@@ -1033,11 +1033,41 @@ before the matching checklist row is closed.
     `cargo test -p node-engine --features inference-nodes
     core_executor::tests::inference_tests -- --nocapture`, `cargo check -p
     node-engine --features inference-nodes`, and `git diff --check`.
-  - Remaining follow-up: `dependency_preflight.rs` still has legacy
-    `resolved_model_source`/`model_path` repair and model-dependency identity
-    helpers. That is a separate dependency-preflight slice because it affects
-    resolver requests, Python-worker preflight, and lifecycle diagnostics rather
-    than the typed gateway request builders changed here.
+  - 2026-05-20 update: dependency preflight no longer accepts
+    `resolved_model_source` as a model-path, companion-artifact, artifact-kind,
+    `ModelRefV2`, or model-dependency identity source. Dependency input repair
+    now rejects `resolved_model_source` with an explicit retired-input
+    diagnostic, and it no longer reads `model_path`, `selected_artifact_path`,
+    `entry_path`, `mmproj_path`, or legacy companion paths from
+    `pumas_model_ref`.
+  - No-fallback/no-legacy confirmation: this follow-up did not translate old
+    Pumas source DTOs into dependency requests and did not preserve path-shaped
+    `pumas_model_ref` fields as hidden executable path aliases. Existing
+    explicit `model_path` dependency-preflight input remains only because the
+    current `ModelDependencyRequest`/resolver contract still requires an
+    executable path; replacing that with Pumas artifact load targets is a
+    broader resolver API slice, not a compatibility shim added here.
+  - Standards/blast-radius evidence: write set for the dependency-preflight
+    cleanup was limited to
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`, and this plan.
+    Node-engine remains the dependency preflight caller; Pumas path ownership,
+    scheduler runtime/device decisions, resolver API shape, Python-worker
+    process execution, generated DTOs, lockfiles, saved workflows, frontend
+    state, background tasks, and persisted schemas were not changed.
+  - Verification: `cargo fmt --all -- --check`, `cargo test -p node-engine
+    --features inference-nodes core_executor::tests::inference_tests --
+    --nocapture`, `cargo check -p node-engine --features inference-nodes`,
+    `cargo test -p node-engine --features pytorch-nodes
+    test_resolved_artifact_kind_uses_package_facts -- --nocapture`, `cargo
+    test -p node-engine --features pytorch-nodes
+    test_dependency_preflight_maps_explicit_hf_transformers_request --
+    --nocapture`, and `git diff --check`.
+  - Remaining follow-up: replace the explicit `model_path` dependency resolver
+    contract with Pumas-owned artifact load targets across the resolver API and
+    worker/preflight callers. That is a re-plan-sized contract slice because
+    Pantograph must not infer Pumas paths and the resolver currently accepts
+    path-shaped model identity.
 - **Tracked saved workflow closure is broader than image examples:** bundled
   templates and tracked image examples are already canonical, but tracked
   non-image workflow files such as Whisper STT and KittenTTS still use retired
