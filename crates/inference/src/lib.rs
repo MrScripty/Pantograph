@@ -32,6 +32,7 @@ pub mod device;
 pub mod device_contracts;
 pub mod embedding_runtime;
 pub mod execution_evidence;
+pub mod execution_telemetry;
 pub mod gateway;
 mod image_generation_family_adapters;
 mod image_generation_family_rules;
@@ -101,6 +102,10 @@ pub use execution_evidence::{
     ExecutionEvidenceDiagnosticCode, ExecutionEvidenceDiagnosticSeverity, ExecutionEvidenceRecord,
     ExecutionEvidenceReport, ExecutionEvidenceRequest, ExecutionEvidenceRole,
     ExecutionEvidenceSource, GraphRuntimeRequirement, GraphRuntimeRequirementParseError,
+};
+pub use execution_telemetry::{
+    InferenceExecutionTelemetryError, InferenceExecutionTelemetryRecorder,
+    InferenceExecutionTelemetryScope,
 };
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,

@@ -284,6 +284,12 @@ Update during implementation:
   existing terminal lifecycle event. Live observation streaming, participant
   identity for parallel runtimes/devices, and scheduler real-time feedback
   remain later explicit contract slices.
+- 2026-05-20: Started the telemetry-scope implementation with a foundation
+  slice in `inference`. The new `InferenceExecutionTelemetryScope` and
+  cloneable recorder collect typed resource observations for terminal summary
+  drain only. This slice intentionally does not wire gateway/backends yet, add
+  live observation events, pass Pumas/workflow facts through telemetry, or
+  preserve a parallel result-wrapper compatibility path.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

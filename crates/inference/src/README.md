@@ -18,6 +18,7 @@ details.
 | `device_contracts/` | Canonical device policy, runtime variant, backend candidate, and selected execution decision DTOs with strict parser/serde validation, including selected dependency-readiness proof carried from scheduler/admission. |
 | `dependency_requirements.rs` | Inference-owned runtime/package dependency requirement declarations that can project resolved states into dependency-readiness proof without probing environments or selecting runtimes. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
+| `execution_telemetry.rs` | Gateway-owned execution telemetry scope and backend-facing recorder for typed resource observations before lifecycle projection. |
 | `execution_evidence.rs` | Side-effect-free normalization of model package facts, backend capability facts, runtime capability evidence, and graph runtime requirements into typed executable-candidate evidence without scheduler ranking. |
 | `execution_evidence_tests.rs` | Focused tests for execution evidence candidate and diagnostic normalization. |
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
@@ -114,6 +115,11 @@ Runtime/package dependency requirement declarations live in
 PyTorch/Diffusers image generation requires `diffusers`, `transformers`,
 `accelerate`, `torch`, and `pillow`; embedded-runtime or managed-runtime owns
 resolving those declarations into readiness facts.
+Execution telemetry collection lives in `execution_telemetry.rs`. The gateway
+creates one telemetry scope for an execution boundary and may pass a cloneable
+recorder to backend code. Backends can record typed resource observations into
+that recorder, but lifecycle event emission remains gateway-owned and task
+outputs must not carry diagnostic telemetry.
 Execution evidence normalization lives in `execution_evidence.rs` so package
 labels, backend hints, runtime capability facts, graph runtime requirements,
 and executable backend candidates stay separate before the scheduler ranks
@@ -162,6 +168,10 @@ backend is registered.
   decide candidate eligibility.
 - Shared request/response types are append-only unless a coordinated breaking
   change is approved.
+- Execution telemetry scopes are terminal-summary collectors until a separate
+  live observation contract is designed. Backends must not emit lifecycle
+  events directly, use global/thread-local telemetry state, or place resource
+  observations in task-output metadata.
 - Image-generation execution plans carry explicit denoising scheduler intent as
   `DenoisingSchedulerOptionId`, a bounded lowercase primitive id. Display names
   and Diffusers/Pumas component class names must not be treated as executable

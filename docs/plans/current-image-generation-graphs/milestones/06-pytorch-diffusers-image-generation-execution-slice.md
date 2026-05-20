@@ -636,6 +636,18 @@ PyTorch/diffusers and produce a retained image artifact.
     `ResourceObserved`/observation event kind remain later explicit contract
     slices; do not add them until the ledger/UI/scheduler consumption contract
     is designed.
+  - 2026-05-20 telemetry scope foundation slice: added the inference-owned
+    `InferenceExecutionTelemetryScope` and cloneable
+    `InferenceExecutionTelemetryRecorder` as the canonical in-memory
+    backend-to-gateway observation collector. The scope drains one terminal
+    merged resource observation and does not emit lifecycle events, stream live
+    observations, carry Pumas/workflow facts, use global/thread-local state, or
+    place telemetry in task outputs. Focused tests cover empty drains,
+    terminal one-shot drain behavior, and merge semantics for RAM, VRAM, and
+    memory-failure observations. Verification passed: `cargo test -p
+    inference telemetry --lib`. Remaining follow-up: wire gateway process-RSS
+    monitoring and PyTorch worker success/failure resource observations
+    through this scope instead of direct per-path lifecycle attachment.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
