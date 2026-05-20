@@ -7169,6 +7169,31 @@ Worker rules:
     failure or interrupted-job reconciliation.
   - Remaining follow-up: none for this slice. Broader technical-fit and device
     milestone items remain tracked in their milestone sections.
+- 2026-05-20 Pumas P6 fixture-alignment closeout slice:
+  - Smallest useful vertical slice: close the remaining cross-repo
+    fixture-alignment checklist rows by verifying Pantograph's planner and
+    public model-contract tests consume the checked-in Pumas Diffusers fixture
+    without local patching, name guessing, or Pantograph-specific producer
+    fields.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/07-pumas-library-image-generation-facts.md`
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this slice added no compatibility
+    shim, source-derived family guess, or backend fallback. The existing
+    planner test proves missing/ambiguous Pumas facts reject with typed
+    diagnostics, and the existing public contract test proves the fixture
+    remains factual rather than consumer-policy-shaped.
+  - Implementation completed: marked the remaining P6 checklist rows complete
+    and recorded the current `pumas-library` pin
+    `8444b50df28c3e2bd8db58fb3645fa4dd8664b27` as the verified fixture
+    alignment boundary.
+  - Verification passed: `cargo test -p inference image_generation_planner
+    --lib`, `cargo test -p inference --test model_contracts
+    pumas_image_generation_fixture_decodes_with_structured_diffusers_facts`,
+    and `git diff --check`.
+  - Verification deviation: the two Cargo commands briefly waited on package
+    and build locks, then completed successfully.
+  - Remaining follow-up: none for P6.
 
 ### Traceability Links
 

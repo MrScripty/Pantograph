@@ -1195,10 +1195,10 @@ guesswork.
 - [x] Export or document canonical package-facts fixtures.
 - [x] Add Pantograph fixture copies or contract tests that consume Pumas fixture
       JSON.
-- [ ] Verify Pantograph image-family planner can reject missing/ambiguous facts
+- [x] Verify Pantograph image-family planner can reject missing/ambiguous facts
       and accept supported fixtures.
 - [x] Record deviations in this plan and the Pumas implementation plan.
-- [ ] Verify Pumas remains useful to non-Pantograph consumers by keeping fixture
+- [x] Verify Pumas remains useful to non-Pantograph consumers by keeping fixture
       field names factual and standards-oriented rather than Pantograph-specific.
 - [x] Record the Pumas release/version boundary that Pantograph should pin after
       the contract is implemented.
@@ -1210,6 +1210,19 @@ guesswork.
 - At least one cross-layer acceptance path proves a Pumas-produced fixture is
   consumed by Pantograph's planner without local patching or bridge conversion
   guesses.
+
+**Status:** Complete. Pantograph verification on 2026-05-20 used the current
+`pumas-library` pin `8444b50df28c3e2bd8db58fb3645fa4dd8664b27` plus the
+checked-in Pumas Diffusers fixture. `cargo test -p inference
+image_generation_planner --lib` proves the image planner accepts the supported
+Pumas Stable Diffusion fixture and rejects missing/ambiguous Diffusers facts
+with typed diagnostics instead of name guessing or backend fallback. `cargo
+test -p inference --test model_contracts
+pumas_image_generation_fixture_decodes_with_structured_diffusers_facts` proves
+the fixture decodes through public contracts, resolves image-generation task
+evidence, preserves factual Diffusers/package evidence, and rejects
+Pantograph-specific consumer fields such as workflow, runtime-registry,
+scheduler-policy, and diagnostics-ledger data.
 
 ## Risks
 
