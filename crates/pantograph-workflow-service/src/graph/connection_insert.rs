@@ -87,14 +87,7 @@ fn edge_anchors(edge: &GraphEdge) -> (ConnectionAnchor, ConnectionAnchor) {
 fn edge_insert_input_priority(port: &PortDefinition) -> u8 {
     match port.id.as_str() {
         "prompt" => 0,
-        "task_kind"
-        | "model"
-        | "model_name"
-        | "model_id"
-        | "model_ref"
-        | "pumas_model_ref"
-        | "resolved_model_source"
-        | "resolved_model_package_facts" => 4,
+        "task_kind" | "model" | "model_name" | "model_id" | "model_ref" | "pumas_model_ref" => 4,
         "context" | "system_prompt" => 3,
         _ if port.required => 1,
         _ => 2,
@@ -367,6 +360,43 @@ pub fn rejected_insert_response(
         workflow_event: None,
         workflow_execution_session_state: None,
         rejection: Some(rejection),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn optional_json_port(id: &str) -> PortDefinition {
+        PortDefinition {
+            id: id.to_string(),
+            label: id.to_string(),
+            data_type: PortDataType::Json,
+            required: false,
+            multiple: false,
+            options_provider: None,
+            inference_payloads: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn edge_insert_priority_does_not_prefer_retired_model_fact_ports() {
+        assert_eq!(
+            edge_insert_input_priority(&optional_json_port("model_ref")),
+            4
+        );
+        assert_eq!(
+            edge_insert_input_priority(&optional_json_port("pumas_model_ref")),
+            4
+        );
+        assert_eq!(
+            edge_insert_input_priority(&optional_json_port("resolved_model_source")),
+            2
+        );
+        assert_eq!(
+            edge_insert_input_priority(&optional_json_port("resolved_model_package_facts")),
+            2
+        );
     }
 }
 

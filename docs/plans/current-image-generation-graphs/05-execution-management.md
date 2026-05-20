@@ -7300,6 +7300,32 @@ Worker rules:
     filters at once and failed before tests ran. The valid broader
     `workflow_run_` filter was rerun successfully.
   - Remaining follow-up: none for this compile blocker.
+- 2026-05-20 Milestone 5 graph edge-insert retired model fact priority removal
+  slice:
+  - Smallest useful vertical slice: stop edge-insert helper priority from
+    preferring retired `resolved_model_source` and
+    `resolved_model_package_facts` ports as model-reference targets.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/graph/connection_insert.rs`,
+    `crates/pantograph-workflow-service/src/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this removes retired handle names from
+    graph helper ordering and adds no alias, migration, package-fact port
+    recreation, scheduler bypass, or compatibility route. Canonical priority
+    remains limited to explicit model identity ports.
+  - Implementation completed: removed the retired ports from
+    `edge_insert_input_priority`, added a private unit test for canonical and
+    retired port ordering, and documented that graph helpers must not treat
+    retired package/source fields as current model signals.
+  - Verification passed: `cargo fmt --all -- --check`, `cargo test -p
+    pantograph-workflow-service graph::connection_intent`, `cargo check -p
+    pantograph-workflow-service`, and `git diff --check`.
+  - Verification deviation: the first format check failed and `cargo fmt
+    --all` was run; verification was rerun successfully.
+  - Remaining follow-up: KV-cache memory-impact still tracks
+    `resolved_model_source` as a graph change signal and needs a separate
+    focused semantic slice.
 
 ### Traceability Links
 

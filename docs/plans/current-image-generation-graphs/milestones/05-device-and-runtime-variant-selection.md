@@ -865,6 +865,9 @@ before the matching checklist row is closed.
     path-shaped model fields and uses only explicit model identity fields such
     as `model_id` and `pumas_model_ref.model_id`. Pumas path-to-model
     interpretation remains outside Pantograph capability extraction.
+  - 2026-05-20 update: graph edge-insert input priority now treats
+    `resolved_model_source` and `resolved_model_package_facts` as ordinary
+    optional JSON ports instead of preferred model-reference ports.
 - **Preserve the clean image planner boundary:** the current image-generation
   planner shape is the model to preserve: side-effect-free input, Pumas package
   facts, Pumas artifact load target, and a scheduler-owned
@@ -5294,6 +5297,34 @@ Stop and re-plan before implementation when any remaining slice would require:
     with the valid single broader `workflow_run_` filter.
   - Remaining follow-up: none for the compile blocker. Broader memory policy
     work remains under the scheduler/resource-observation closeout items.
+- 2026-05-20 slice: graph edge-insert retired model fact priority removal.
+  - Smallest useful vertical slice: stop workflow-service graph edge-insert
+    helper priority from preferring retired `resolved_model_source` and
+    `resolved_model_package_facts` ports as model-reference targets.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/graph/connection_insert.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, this milestone file,
+    and `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the slice removes retired handle names
+    from graph-edit helper behavior and adds no alias, migration, package-fact
+    port recreation, scheduler bypass, or compatibility route. Canonical
+    model-reference priority remains limited to explicit model identity ports
+    such as `model_ref` and `pumas_model_ref`.
+  - Per-slice standards evidence: workflow-service remains the graph helper
+    owner; no public DTO, generated binding, persisted schema, lockfile,
+    frontend UI, runtime lifecycle, subprocess, path access, feature flag,
+    worker, or platform-specific code changed. A private unit test pins the
+    helper ordering behavior.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service graph::connection_intent`,
+    `cargo check -p pantograph-workflow-service`, and `git diff --check`.
+  - Verification deviation: the first format check failed and `cargo fmt
+    --all` was run; the format check and focused graph tests passed afterward.
+  - Remaining follow-up: KV-cache memory-impact still tracks
+    `resolved_model_source` as a graph change signal and needs its own focused
+    slice because it affects memory-impact semantics rather than edge-insert
+    helper ordering.
 
 **Verification:**
 
