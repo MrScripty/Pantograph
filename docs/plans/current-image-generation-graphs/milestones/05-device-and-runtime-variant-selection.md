@@ -594,7 +594,41 @@ fixture contract must not remain reachable as an alternate execution path.
      Retired fields have an explicit removal or rejection owner before any
      execution-admission slice begins.
 
-2. **Raw Device Boundary Removal**
+2. **Graph Model Selection Contract Replacement**
+   - Purpose: replace the remaining `puma-lib` model-file-path producer
+     contract with a graph-facing Pumas model-reference selector before
+     node-engine, workflow fixture, or scheduler-admission slices consume more
+     graph model data.
+   - Allowed primary write areas by slice:
+     `crates/workflow-nodes/src/input/puma_lib.rs`,
+     `crates/workflow-nodes/src/input/README.md`,
+     `crates/workflow-nodes/src/contracts.rs` only if the descriptor contract
+     must change, frontend selection-input/provider option helpers and Node
+     tests only if the option value shape changes, and focused workflow-node
+     tests. Do not touch node-engine execution, scheduler policy, saved
+     workflows, generated DTOs, lockfiles, or Pumas proposal files in this
+     slice.
+   - Required direction: `pumas_model_ref` is the executable graph-facing
+     model selection value. Pumas selector metadata may include display labels,
+     readiness, package summary, storage kind, validation state, and stale
+     diagnostics, but raw executable paths and `backend_key` must not be
+     emitted as current execution outputs or option values. Any path-shaped
+     data that remains must be explicitly named display/debug/stale diagnostic
+     evidence and must not feed execution, memory identity, package-fact
+     lookup, or scheduler candidate synthesis.
+   - Required option-provider behavior: `PortOptionsProvider` results for
+     `puma-lib` must advertise typed Pumas reference values and typed
+     availability/readiness facts. They must not use executable entry paths as
+     option values, infer runtime/backend choices, or hide missing/stale Pumas
+     state behind an empty successful option list.
+   - Acceptance: workflow-node tests prove `puma-lib` descriptors/options no
+     longer expose `model_path` or `backend_key` as executable outputs, prove
+     ready selector rows produce `pumas_model_ref` values, and prove missing,
+     stale, invalid, unavailable, or not-implemented Pumas states become typed
+     unavailable options or diagnostics. Documentation must describe the
+     replacement contract and remove the old `model_path` facade language.
+
+3. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
      strings as trusted scheduler/runtime state.
    - Allowed primary write areas by slice:
@@ -617,7 +651,7 @@ fixture contract must not remain reachable as an alternate execution path.
      selected runtime variant/device facts or rejected with a typed diagnostic;
      `auto` is policy intent only and never a concrete selected device id.
 
-3. **Candidate Synthesis And Ledger Projection Closure**
+4. **Candidate Synthesis And Ledger Projection Closure**
    - Purpose: finish the policy input path so automatic selection sees complete
      candidate facts and diagnostics-ledger history can explain the decision.
    - Allowed primary write areas:
@@ -639,7 +673,7 @@ fixture contract must not remain reachable as an alternate execution path.
      candidate was selected or rejected without inspecting graph internals,
      frontend state, Pumas filesystem paths, or display strings.
 
-4. **Lifecycle Ownership Hardening**
+5. **Lifecycle Ownership Hardening**
    - Purpose: make every touched long-running operation explicitly owned,
      cancellable, bounded, and observable.
    - Allowed primary write areas:
@@ -657,7 +691,7 @@ fixture contract must not remain reachable as an alternate execution path.
      task, and no adapter creates global Tokio runtimes, untracked tasks,
      unbounded queues, or self-owned long-lived subprocesses.
 
-5. **Allowed-Root And Worker-Visible Path Closure**
+6. **Allowed-Root And Worker-Visible Path Closure**
    - Purpose: ensure every executable, dynamic library, Pumas artifact, and
      worker-visible path is approved by the owning boundary before filesystem
      or subprocess use.
@@ -675,7 +709,7 @@ fixture contract must not remain reachable as an alternate execution path.
      pid files, Pumas artifact paths, artifact-store paths, and worker-visible
      paths cannot escape their approved roots and fail with typed diagnostics.
 
-6. **Checked Numeric Boundary Closure**
+7. **Checked Numeric Boundary Closure**
    - Purpose: remove remaining saturation, clamping, defaulting, or raw
      arithmetic from public/runtime/worker boundaries where invalid values
      should fail.
@@ -690,7 +724,7 @@ fixture contract must not remain reachable as an alternate execution path.
      demonstrate no impossible value reaches a backend, worker, persisted
      ledger row, or frontend contract.
 
-7. **Frontend Runtime/Device Contract Closure**
+8. **Frontend Runtime/Device Contract Closure**
    - Purpose: make the UI a renderer of backend-owned capability facts and a
      submitter of typed intent only.
    - Allowed primary write areas: `src/components/DeviceConfig.svelte`,
@@ -707,7 +741,7 @@ fixture contract must not remain reachable as an alternate execution path.
      and labels explain scheduler/backend ownership without implying frontend
      execution authority.
 
-8. **Workflow And Fixture Shape Closure**
+9. **Workflow And Fixture Shape Closure**
    - Purpose: remove retired graph-visible execution hints from tracked
      workflows/templates and freeze the canonical examples used by tests.
    - Allowed primary write areas: tracked `.pantograph/workflows/` examples,

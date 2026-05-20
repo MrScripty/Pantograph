@@ -7399,6 +7399,29 @@ Worker rules:
   - Remaining follow-up: implement the `puma-lib` contract replacement first,
     then remove node-engine retired fact intake and reconcile non-image tracked
     workflows as canonical examples or stale diagnostic fixtures.
+- 2026-05-20 Milestone 5 standards-iteration update:
+  - Smallest useful vertical slice: re-iterate the Milestone 5 closeout plan
+    against the repository standards for planning, architecture, testing,
+    concurrency, frontend ownership, interop, security, Rust API/async/path
+    safety, and cross-platform behavior.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`
+    and this execution log. Root proposal markdown files remained ignored.
+  - Standards result: the existing gates already covered typed boundaries,
+    sync-core/async-shell design, lifecycle ownership, allowed-root validation,
+    checked arithmetic, frontend backend-owned state, Node frontend tests,
+    interop fixtures, README traceability, and platform-module isolation.
+    The missing sequencing detail was that `puma-lib` path-producer replacement
+    was recorded as a finding but not promoted into the closeout order.
+  - Plan update completed: added a dedicated Graph Model Selection Contract
+    Replacement closeout step before raw device removal, with allowed write
+    areas, no-legacy constraints, typed Pumas selector option requirements, and
+    acceptance tests proving `model_path`/`backend_key` are not executable
+    graph outputs.
+  - No-fallback/no-legacy confirmation: the update does not preserve old graph
+    behavior. It makes the path-producing `puma-lib` contract the next serial
+    replacement boundary and prevents later scheduler/node-engine slices from
+    treating raw paths or backend keys as accepted compatibility aliases.
 
 ### Traceability Links
 
