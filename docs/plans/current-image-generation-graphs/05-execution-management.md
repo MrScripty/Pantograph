@@ -7515,6 +7515,39 @@ Worker rules:
     dependency cache/correlation fields, and remaining direct explicit
     `model_path` graph edges with the planned typed Pumas model-reference
     request/result contract.
+- 2026-05-20 Milestone 5 node-engine canonical preflight Pumas identity gate
+  slice:
+  - Smallest useful vertical slice: make canonical node-engine dependency
+    preflight build host resolver requests from explicit `pumas_model_ref` or
+    `model_id` instead of graph-facing `model_path`, and fail closed when
+    neither Pumas identity is present.
+  - Allowed write set:
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/README.md`,
+    `crates/node-engine/src/core_executor/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this slice removes successful
+    path-only canonical preflight identity and package-fact model-id fallback.
+    It does not add a compatibility builder, path alias, package-fact identity
+    fallback, directory scan, or scheduler bypass.
+  - Implementation completed: `build_model_dependency_request` now reads
+    explicit Pumas identity, leaves `model_path` empty, and canonical preflight
+    blocks with a typed execution error when Pumas identity is absent. Failure
+    payloads report `model_id` instead of stale local paths. Focused tests and
+    README traceability were updated.
+  - Verification passed: `cargo fmt -p node-engine`, `cargo fmt -p
+    node-engine -- --check`, `cargo test -p node-engine dependency_preflight
+    --features inference-nodes,pytorch-nodes --lib`, `cargo test -p
+    node-engine build_model_dependency_request --features
+    inference-nodes,pytorch-nodes --lib`, and `cargo check -p node-engine
+    --features inference-nodes,pytorch-nodes`.
+  - Remaining follow-up: replace the exported path-shaped
+    `ModelDependencyRequest`/`ModelRefV2` contracts, embedded-runtime
+    dependency-preflight construction, dependency cache/activity correlation,
+    and any direct explicit `model_path` graph edges with typed Pumas
+    model-reference request/result contracts.
 
 ### Traceability Links
 

@@ -5790,6 +5790,48 @@ Stop and re-plan before implementation when any remaining slice would require:
     `model_path` graph edges remain for later typed model-reference contract
     replacement; they must be removed, rejected, or scoped rather than carried
     as compatibility behavior.
+- 2026-05-20 slice: node-engine canonical preflight Pumas identity gate.
+  - Smallest useful vertical slice: stop canonical node-engine dependency
+    preflight from accepting successful path-only identity by building
+    `ModelDependencyRequest` values from explicit `pumas_model_ref` or
+    `model_id` and leaving `model_path` empty for the host resolver to replace
+    with a Pumas-approved load target.
+  - Allowed write set:
+    `crates/node-engine/src/core_executor/dependency_preflight.rs`,
+    `crates/node-engine/src/core_executor/inference_tests.rs`,
+    `crates/node-engine/src/README.md`,
+    `crates/node-engine/src/core_executor/README.md`, this milestone file,
+    and `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+    Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: canonical preflight no longer reads
+    `model_path` as the request identity, no longer derives model id from
+    resolved package facts, and emits a typed execution error when no explicit
+    Pumas identity exists. The slice did not add path aliases, package-fact
+    identity fallback, directory scans, or a compatibility request builder.
+  - Per-slice standards evidence: node-engine remains the curated dependency
+    preflight facade owner for this stage; the change is synchronous request
+    shaping plus focused tests and README traceability. No scheduler policy,
+    embedded-runtime resolver implementation, worker code, generated DTOs,
+    saved workflow fixtures, frontend controls, lockfiles, or platform code
+    changed.
+  - Tests/fixtures: request-builder tests prove backend/task shaping survives
+    while `model_path` stays empty and package facts no longer provide model
+    identity. Dependency-preflight tests prove resolver-backed canonical
+    preflight requires explicit Pumas identity, failure diagnostics omit stale
+    local paths, and lifecycle context reads model identity from
+    `pumas_model_ref`.
+  - Verification passed:
+    `cargo fmt -p node-engine`,
+    `cargo fmt -p node-engine -- --check`,
+    `cargo test -p node-engine dependency_preflight --features inference-nodes,pytorch-nodes --lib`,
+    `cargo test -p node-engine build_model_dependency_request --features inference-nodes,pytorch-nodes --lib`,
+    `cargo check -p node-engine --features inference-nodes,pytorch-nodes`.
+  - Remaining follow-up: the exported `ModelDependencyRequest` and
+    `ModelRefV2` contracts still contain `model_path`; embedded-runtime
+    dependency preflight still has its own path-shaped request construction;
+    dependency-descriptor cache/activity correlation still keys by local path.
+    Those are the next typed contract replacement slices, not compatibility
+    behavior to preserve.
 
 **Verification:**
 

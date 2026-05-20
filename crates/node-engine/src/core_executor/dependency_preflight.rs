@@ -308,7 +308,6 @@ pub(crate) fn preferred_backend_key(
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 pub(crate) fn build_model_dependency_request(
     node_type: &str,
-    model_path: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelDependencyRequest {
     let package_facts = read_resolved_model_package_facts_for_preflight(inputs);
@@ -323,9 +322,9 @@ pub(crate) fn build_model_dependency_request(
 
     ModelDependencyRequest {
         node_type: node_type.to_string(),
-        model_path: model_path.to_string(),
+        model_path: String::new(),
         model_id: read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
-            .or_else(|| model_id_from_package_facts(package_facts.as_ref())),
+            .or_else(|| model_id_from_pumas_model_ref_input(inputs)),
         model_type: read_optional_input_string_aliases(inputs, &["model_type", "modelType"]),
         task_type_primary: Some(task_type_primary),
         backend_key,
@@ -336,6 +335,15 @@ pub(crate) fn build_model_dependency_request(
         selected_binding_ids: read_input_selected_binding_ids(inputs),
         dependency_override_patches: Vec::new(),
     }
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+fn model_id_from_pumas_model_ref_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    read_optional_input_value_aliases(inputs, &["pumas_model_ref", "pumasModelRef"]).and_then(
+        |model_ref| read_optional_string_aliases_from_value(&model_ref, &["model_id", "modelId"]),
+    )
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -395,18 +403,6 @@ fn task_type_primary_from_package_facts(
 
 #[cfg(not(feature = "inference-nodes"))]
 fn task_type_primary_from_package_facts(_facts: Option<&()>) -> Option<String> {
-    None
-}
-
-#[cfg(feature = "inference-nodes")]
-fn model_id_from_package_facts(facts: Option<&ResolvedModelPackageFacts>) -> Option<String> {
-    facts
-        .map(|facts| facts.model_ref.model_id.clone())
-        .filter(|model_id| !model_id.trim().is_empty())
-}
-
-#[cfg(not(feature = "inference-nodes"))]
-fn model_id_from_package_facts(_facts: Option<&()>) -> Option<String> {
     None
 }
 
@@ -563,16 +559,17 @@ async fn enforce_dependency_preflight_inner(
         return Err(NodeEngineError::ExecutionFailed(message));
     };
 
-    let model_path = match read_model_path_from_inputs(inputs) {
-        Some(model_path) => model_path,
-        None => {
-            let message = "Missing model_path input. Connect a Puma-Lib node.".to_string();
+    let request = build_model_dependency_request(node_type, inputs);
+    let request_model_id = match request.model_id.as_deref() {
+        Some(model_id) if !model_id.trim().is_empty() => model_id.to_string(),
+        _ => {
+            let message =
+                "Missing pumas_model_ref/model_id input. Connect Puma-Lib pumas_model_ref output."
+                    .to_string();
             record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
             return Err(NodeEngineError::ExecutionFailed(message));
         }
     };
-
-    let request = build_model_dependency_request(node_type, &model_path, inputs);
     let requirements = match resolver
         .resolve_model_dependency_requirements(request.clone())
         .await
@@ -604,7 +601,7 @@ async fn enforce_dependency_preflight_inner(
         let payload = serde_json::json!({
             "kind": "dependency_preflight",
             "node_type": node_type,
-            "model_path": model_path,
+            "model_id": request_model_id,
             "validation_state": requirements.validation_state,
             "validation_errors": requirements.validation_errors,
             "selected_binding_ids": requirements.selected_binding_ids,

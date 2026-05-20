@@ -104,6 +104,10 @@ stable public facade and dispatch owner.
   Resolved Pumas package facts may be forwarded as host/planning facts for
   compatibility reporting, but they must not be promoted into graph model
   identity when a model reference was not explicitly wired.
+- Canonical dependency preflight in `dependency_preflight.rs` builds host
+  resolver requests from explicit `pumas_model_ref`/`model_id` identity and
+  leaves executable path resolution to the host resolver. Path-only graph data
+  is not a successful preflight identity.
 - Canonical image-generation execution exposes the first generated image body on
   the graph-visible `image` output and compact per-image summaries in
   `results`. `results` must not duplicate generated image base64 bodies; the

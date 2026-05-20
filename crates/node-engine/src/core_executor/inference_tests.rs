@@ -2793,6 +2793,10 @@ async fn test_canonical_llm_pytorch_backend_key_dispatches_to_dependency_preflig
     );
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/tiny-hf"}),
+    );
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
     let executor = CoreTaskExecutor::new();
@@ -2874,8 +2878,8 @@ async fn test_dependency_preflight_skips_retired_direct_diffusion_node() {
 async fn test_dependency_preflight_blocks_canonical_pytorch_without_resolver() {
     let mut inputs = HashMap::new();
     inputs.insert(
-        "model_path".to_string(),
-        serde_json::json!("/tmp/model.gguf"),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/tiny-hf"}),
     );
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     let extensions = ExecutorExtensions::new();
@@ -2904,12 +2908,10 @@ async fn test_dependency_preflight_records_lifecycle_failure_without_resolver() 
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert(
-        "resolved_model_source".to_string(),
-        resolved_model_source_with_artifact_kind(
-            "pumas://models/tiny-hf",
-            "/models/tiny-hf",
-            "hf_compatible_directory",
-        ),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "llm/example/tiny-transformers"
+        }),
     );
 
     let context = DependencyPreflightLifecycleContext {
@@ -2985,12 +2987,10 @@ async fn test_dependency_preflight_records_lifecycle_success_with_resolver() {
         serde_json::json!("text-generation"),
     );
     inputs.insert(
-        "resolved_model_source".to_string(),
-        resolved_model_source_with_artifact_kind(
-            "pumas://models/tiny-hf",
-            "/models/tiny-hf",
-            "hf_compatible_directory",
-        ),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "llm/example/tiny-transformers"
+        }),
     );
     inputs.insert(
         "resolved_model_package_facts".to_string(),
@@ -3078,6 +3078,12 @@ async fn test_dependency_preflight_lifecycle_failure_redacts_model_path() {
         "model_path".to_string(),
         serde_json::json!("/tmp/private/tiny-hf"),
     );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/tiny-hf"
+        }),
+    );
 
     let context = DependencyPreflightLifecycleContext {
         task_id: "llm-inference-1".to_string(),
@@ -3098,7 +3104,8 @@ async fn test_dependency_preflight_lifecycle_failure_redacts_model_path() {
     .expect_err("not-ready dependencies should block execution");
     match err {
         NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("/tmp/private/tiny-hf"));
+            assert!(message.contains("pumas://models/tiny-hf"));
+            assert!(!message.contains("/tmp/private/tiny-hf"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
@@ -3109,7 +3116,7 @@ async fn test_dependency_preflight_lifecycle_failure_redacts_model_path() {
         .find(|event| event.kind == InferenceRequestLifecycleEventKind::Failed)
         .expect("failed lifecycle event");
     let detail = failed.detail.as_deref().expect("failure detail");
-    assert!(detail.contains("[local-path]"));
+    assert!(detail.contains("dependency_preflight"));
     assert!(!detail.contains("/tmp/private/tiny-hf"));
     let event_json = serde_json::to_string(&*events).expect("events serialize");
     assert!(!event_json.contains("/tmp/private/tiny-hf"));
@@ -3118,15 +3125,22 @@ async fn test_dependency_preflight_lifecycle_failure_redacts_model_path() {
 #[cfg(feature = "pytorch-nodes")]
 #[test]
 fn test_dependency_preflight_lifecycle_context_reads_resolved_artifact_kind() {
+    let fixture = include_str!(
+        "../../../inference/tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let package_facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("text package facts fixture");
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert(
-        "resolved_model_source".to_string(),
-        resolved_model_source_with_artifact_kind(
-            "pumas://models/tiny-hf",
-            "/models/tiny-hf",
-            "hf_compatible_directory",
-        ),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/tiny-hf"
+        }),
+    );
+    inputs.insert(
+        "resolved_model_package_facts".to_string(),
+        serde_json::to_value(&package_facts).expect("package facts json"),
     );
 
     let context = dependency_preflight_lifecycle_context(
@@ -3419,13 +3433,20 @@ impl ModelDependencyResolver for CapturingDependencyResolver {
         request: ModelDependencyRequest,
         _requirements: Option<ModelDependencyRequirements>,
     ) -> std::result::Result<Option<ModelRefV2>, String> {
+        let model_id = request
+            .model_id
+            .clone()
+            .unwrap_or_else(|| request.model_path.clone());
+        let model_path = if request.model_path.trim().is_empty() {
+            format!("pumas-resolved://{model_id}")
+        } else {
+            request.model_path.clone()
+        };
         Ok(Some(ModelRefV2 {
             contract_version: 2,
             engine: request.backend_key.unwrap_or_else(|| "pytorch".to_string()),
-            model_id: request
-                .model_id
-                .unwrap_or_else(|| request.model_path.clone()),
-            model_path: request.model_path,
+            model_id,
+            model_path,
             task_type_primary: request
                 .task_type_primary
                 .unwrap_or_else(|| "text-generation".to_string()),
@@ -3523,8 +3544,8 @@ async fn test_dependency_preflight_maps_explicit_hf_transformers_request() {
         serde_json::json!("pumas://models/tiny-hf"),
     );
     inputs.insert(
-        "model_path".to_string(),
-        serde_json::json!("/models/tiny-hf"),
+        "pumas_model_ref".to_string(),
+        serde_json::json!({"model_id": "pumas://models/tiny-hf"}),
     );
 
     let resolved = enforce_dependency_preflight("llm-inference", &inputs, &extensions)
@@ -3534,7 +3555,10 @@ async fn test_dependency_preflight_maps_explicit_hf_transformers_request() {
 
     assert_eq!(resolved.engine, "pytorch");
     assert_eq!(resolved.model_id, "pumas://models/tiny-hf");
-    assert_eq!(resolved.model_path, "/models/tiny-hf");
+    assert_eq!(
+        resolved.model_path,
+        "pumas-resolved://pumas://models/tiny-hf"
+    );
     assert_eq!(resolved.task_type_primary, "text-generation");
 
     let requests = captured_requests
@@ -3545,7 +3569,7 @@ async fn test_dependency_preflight_maps_explicit_hf_transformers_request() {
     assert_eq!(request.node_type, "llm-inference");
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     assert_eq!(request.model_id.as_deref(), Some("pumas://models/tiny-hf"));
-    assert_eq!(request.model_path, "/models/tiny-hf");
+    assert_eq!(request.model_path, "");
     assert_eq!(
         request.task_type_primary.as_deref(),
         Some("text-generation")
@@ -3583,8 +3607,9 @@ fn test_build_model_dependency_request_uses_canonical_backend_key() {
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("onnx-runtime"));
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("onnx-runtime"));
+    assert_eq!(request.model_path, "");
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -3593,7 +3618,7 @@ fn test_build_model_dependency_request_uses_canonical_llamacpp_hint() {
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("llama.cpp"));
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
     assert_eq!(
         request.task_type_primary.as_deref(),
@@ -3608,7 +3633,7 @@ fn test_build_model_dependency_request_ignores_legacy_runtime_hint() {
     inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
     inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
 }
 
@@ -3617,7 +3642,7 @@ fn test_build_model_dependency_request_ignores_legacy_runtime_hint() {
 fn test_build_model_dependency_request_does_not_infer_retired_backend_node() {
     let inputs = HashMap::new();
 
-    let request = build_model_dependency_request("llamacpp-inference", "/tmp/model.gguf", &inputs);
+    let request = build_model_dependency_request("llamacpp-inference", &inputs);
     assert_eq!(request.backend_key, None);
 }
 
@@ -3774,11 +3799,10 @@ fn test_build_model_dependency_request_ignores_resolved_model_source_identity() 
         resolved_model_source_value("pumas://models/tiny-gguf", "/models/tiny/model.gguf"),
     );
 
-    let request =
-        build_model_dependency_request("llm-inference", "/models/tiny/model.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
 
     assert_eq!(request.model_id, None);
-    assert_eq!(request.model_path, "/models/tiny/model.gguf");
+    assert_eq!(request.model_path, "");
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -3795,14 +3819,14 @@ fn test_build_model_dependency_request_uses_package_facts_for_model_and_task_onl
         serde_json::to_value(&package_facts).expect("package facts json"),
     );
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
 
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     assert_eq!(
         request.task_type_primary.as_deref(),
         Some("text_generation")
     );
-    assert_eq!(request.model_id.as_deref(), Some("llm/llama/tiny-gguf"));
+    assert_eq!(request.model_id, None);
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -3814,7 +3838,7 @@ fn test_build_model_dependency_request_ignores_recommended_backend() {
         serde_json::json!("llamacpp"),
     );
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
 
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
 }
@@ -3834,7 +3858,7 @@ fn test_build_model_dependency_request_keeps_explicit_backend_before_package_fac
         serde_json::to_value(&package_facts).expect("package facts json"),
     );
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
 
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     assert_eq!(
@@ -3857,14 +3881,11 @@ fn test_build_model_dependency_request_uses_embedding_package_facts() {
         serde_json::to_value(&package_facts).expect("package facts json"),
     );
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/embed.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
 
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     assert_eq!(request.task_type_primary.as_deref(), Some("embedding"));
-    assert_eq!(
-        request.model_id.as_deref(),
-        Some("embedding/qwen3/tiny-embedding-gguf")
-    );
+    assert_eq!(request.model_id, None);
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -3881,14 +3902,11 @@ fn test_build_model_dependency_request_uses_rerank_package_facts() {
         serde_json::to_value(&package_facts).expect("package facts json"),
     );
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/rerank.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
 
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     assert_eq!(request.task_type_primary.as_deref(), Some("reranking"));
-    assert_eq!(
-        request.model_id.as_deref(),
-        Some("rerank/bge/tiny-reranker-gguf")
-    );
+    assert_eq!(request.model_id, None);
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -3897,7 +3915,7 @@ fn test_build_model_dependency_request_maps_canonical_embedding_task() {
     let mut inputs = HashMap::new();
     inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
     assert_eq!(
         request.task_type_primary.as_deref(),
@@ -3914,7 +3932,7 @@ fn test_build_model_dependency_request_maps_embedding_alias_task() {
         serde_json::json!("sentence-similarity"),
     );
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
     assert_eq!(
         request.task_type_primary.as_deref(),
@@ -4037,7 +4055,7 @@ fn test_build_model_dependency_request_maps_canonical_rerank_task() {
     let mut inputs = HashMap::new();
     inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
     assert_eq!(request.task_type_primary.as_deref(), Some("reranking"));
 }
@@ -4049,13 +4067,18 @@ fn test_build_model_dependency_request_maps_pumas_rerank_alias_task() {
     inputs.insert(
         "pumas_model_ref".to_string(),
         serde_json::json!({
+            "model_id": "pumas://models/tiny-reranker",
             "pipeline_tag": "text-ranking"
         }),
     );
 
-    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    let request = build_model_dependency_request("llm-inference", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
     assert_eq!(request.task_type_primary.as_deref(), Some("reranking"));
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("pumas://models/tiny-reranker")
+    );
 }
 
 #[cfg(feature = "inference-nodes")]

@@ -196,6 +196,10 @@ use node_engine::core_executor::CoreNodeExecutor;
   or `recommended_backend` metadata as executable backend selection. Legacy
   `runtime_hint` fields are not backend preference inputs. Runtime scheduling
   and admission policy remain outside node-engine and inference.
+- Canonical dependency preflight requires explicit Pumas identity from
+  `pumas_model_ref` or `model_id`; `model_path` is not a successful
+  graph-facing dependency-preflight identity. The host resolver owns executable
+  load-target resolution from that identity.
 - Workflow dependency input resolution carries package-facts context from
   `puma-lib` model-reference edges into canonical inference inputs, so existing
   Pumas model-ref connections can benefit from package-facts diagnostics without
