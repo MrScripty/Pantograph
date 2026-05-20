@@ -7773,6 +7773,21 @@ Worker rules:
   - Remaining follow-up: migrate node-engine request construction to decode
     graph input into the shared request, then remove the old path-shaped
     request fields and raw platform JSON from internal dependency APIs.
+- 2026-05-20 Milestone 5 node-engine request migration re-plan boundary:
+  - Investigation result: production node-engine preflight cannot be migrated
+    directly to `DependencyPlanningRequest` while the resolver still returns
+    `ModelRefV2`, because `ModelRefV2` requires `model_path`.
+  - Rejected implementation paths: converting the shared request back into
+    `ModelDependencyRequest`, returning `ModelRefV2` with a Pumas-approved
+    local load path, or keeping `model_path` blank and repairing it in
+    `build_model_ref_v2`. Each option preserves or reintroduces the legacy
+    path-shaped node-engine contract.
+  - Required plan adjustment: introduce the path-free preflight/model-reference
+    successor before changing production preflight callers, then switch the
+    resolver trait to consume `DependencyPlanningRequest` and return the
+    path-free output. Pumas-approved local load targets must remain host/planner
+    handoff facts for backend/worker execution, not node-engine graph identity.
+  - Verification passed: docs-only boundary update; `git diff --check`.
 
 ### Traceability Links
 

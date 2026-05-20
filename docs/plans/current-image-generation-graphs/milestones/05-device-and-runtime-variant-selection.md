@@ -780,6 +780,16 @@ fixture contract must not remain reachable as an alternate execution path.
         unvalidated `serde_json::Value`, raw `String` mode/kind values, or
         filesystem paths through internal dependency-planning APIs when a domain
         type can encode the invariant.
+        Re-plan boundary found 2026-05-20: this gate cannot cleanly migrate
+        production preflight calls while the resolver still returns
+        `ModelRefV2`, because `ModelRefV2` requires `model_path`. Converting a
+        validated shared request back into `ModelDependencyRequest` or returning
+        `ModelRefV2` with a Pumas-approved load path would preserve the legacy
+        path-shaped node-engine contract. Before this gate changes production
+        preflight, introduce the path-free preflight/model-reference successor
+        from gate 4 and switch the resolver trait to the shared request plus
+        path-free preflight output. Backend/worker local load targets remain a
+        later host/planner handoff concern.
      3. Host resolver gate: migrate the resolver trait/adapter boundary to
         consume the shared typed request and return typed planning results/
         diagnostics. The trait may remain async because host/planner
