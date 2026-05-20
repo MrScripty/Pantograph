@@ -555,6 +555,7 @@ fn compare_candidate_history_priority(
     };
 
     compare_failure_rate(left_history, right_history)
+        .then_with(|| compare_out_of_memory_rate(left_history, right_history))
         .then_with(|| {
             compare_lower_optional_u64(
                 left_history.average_duration_ms,
@@ -571,6 +572,18 @@ fn compare_candidate_history_priority(
             compare_lower_optional_u64(
                 left_history.average_queue_wait_ms,
                 right_history.average_queue_wait_ms,
+            )
+        })
+        .then_with(|| {
+            compare_lower_optional_u64(
+                left_history.average_peak_vram_bytes,
+                right_history.average_peak_vram_bytes,
+            )
+        })
+        .then_with(|| {
+            compare_lower_optional_u64(
+                left_history.average_peak_ram_bytes,
+                right_history.average_peak_ram_bytes,
             )
         })
 }
@@ -596,6 +609,16 @@ fn compare_failure_rate(
     let right_sample_count = u128::from(right.sample_count.max(1));
     (left_terminal_failures * right_sample_count)
         .cmp(&(right_terminal_failures * left_sample_count))
+}
+
+fn compare_out_of_memory_rate(
+    left: &RuntimeTechnicalFitCandidateHistorySummary,
+    right: &RuntimeTechnicalFitCandidateHistorySummary,
+) -> Ordering {
+    let left_sample_count = u128::from(left.sample_count.max(1));
+    let right_sample_count = u128::from(right.sample_count.max(1));
+    (u128::from(left.out_of_memory_count) * right_sample_count)
+        .cmp(&(u128::from(right.out_of_memory_count) * left_sample_count))
 }
 
 fn compare_lower_optional_u64(left: Option<u64>, right: Option<u64>) -> Ordering {

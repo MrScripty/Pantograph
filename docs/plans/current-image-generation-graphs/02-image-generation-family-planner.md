@@ -884,7 +884,7 @@ Staged implementation:
      run_terminal_event_includes_diagnostics_ledger_resource_rollup --lib`,
      `cargo check -p pantograph-workflow-service`, and `cargo fmt --all --
      --check`.
-9. [ ] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
+9. [x] Add backend producers incrementally: PyTorch CUDA/MPS worker telemetry,
    shared process RSS where supported, and managed runtime structured
    telemetry. Each producer slice must include focused tests/fixtures for its
    source and availability states.
@@ -1023,7 +1023,7 @@ Staged implementation:
      4. Add participant/runtime identity only when a consumer needs to
         distinguish simultaneous managed runtimes beyond existing lifecycle
         request/runtime/device attribution.
-10. [ ] Remove or explicitly confine legacy OOM string parsing in
+10. [x] Remove or explicitly confine legacy OOM string parsing in
     `inference::server`, `inference::embedding_runtime`, and
     `backend::llamacpp_support` behind typed adapter-local memory failure
     translation.
@@ -1064,12 +1064,19 @@ Staged implementation:
       `backend::llamacpp_support` were removed rather than preserved as
       fallbacks. Remaining follow-up: the full sidecar startup state machine
       can replace the current readiness-loop orchestration later.
-11. [ ] Extend runtime-registry candidate history DTOs and embedded-runtime
+11. [x] Extend runtime-registry candidate history DTOs and embedded-runtime
    history projection with observed memory and OOM fields already computed by
    diagnostics-ledger.
-12. [ ] Activate scheduler history weighting only after observations are
+12. [x] Activate scheduler history weighting only after observations are
     available in runtime-selection history and the existing five-completed-run
     threshold per valid runtime candidate is enforced.
+    - 2026-05-20 implementation update: runtime-selection history ranking now
+      consumes typed OOM and memory evidence after the existing threshold is
+      met. The policy ranks lower terminal failure rate first, then lower OOM
+      rate, then timing/queue history, then observed peak VRAM/RAM as bounded
+      tie-breakers. Before every eligible candidate meets the configured
+      history threshold, selection remains on factual candidate priority and
+      controlled exploration rather than partially weighted history.
 
 Verification for this staged design should include:
 

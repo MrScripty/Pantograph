@@ -187,6 +187,31 @@ fn candidate_history_summary(
     }
 }
 
+fn candidate_history_summary_with_memory(
+    candidate_id: &str,
+    average_duration_ms: u64,
+    out_of_memory_count: u32,
+    average_peak_ram_bytes: u64,
+    average_peak_vram_bytes: u64,
+) -> RuntimeTechnicalFitCandidateHistorySummary {
+    let mut summary = candidate_history_summary(candidate_id, true, Some(average_duration_ms));
+    assert!(out_of_memory_count <= summary.sample_count);
+    summary.failed_count = out_of_memory_count;
+    summary.completed_count = summary.sample_count - out_of_memory_count;
+    summary.peak_ram_sample_count = summary.sample_count;
+    summary.average_peak_ram_bytes = Some(average_peak_ram_bytes);
+    summary.median_peak_ram_bytes = Some(average_peak_ram_bytes);
+    summary.typical_min_peak_ram_bytes = Some(average_peak_ram_bytes);
+    summary.typical_max_peak_ram_bytes = Some(average_peak_ram_bytes);
+    summary.peak_vram_sample_count = summary.sample_count;
+    summary.average_peak_vram_bytes = Some(average_peak_vram_bytes);
+    summary.median_peak_vram_bytes = Some(average_peak_vram_bytes);
+    summary.typical_min_peak_vram_bytes = Some(average_peak_vram_bytes);
+    summary.typical_max_peak_vram_bytes = Some(average_peak_vram_bytes);
+    summary.out_of_memory_count = out_of_memory_count;
+    summary
+}
+
 #[test]
 fn candidate_history_summary_preserves_memory_and_oom_evidence() {
     let summary = RuntimeTechnicalFitCandidateHistorySummary {
@@ -1722,6 +1747,76 @@ fn selector_uses_history_when_all_eligible_candidates_meet_threshold() {
         Some("history_backed_candidate_priority")
     );
     assert_eq!(selection_policy_trace.exploration_reason, None);
+}
+
+#[test]
+fn selector_history_prefers_lower_oom_rate_before_duration() {
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: RuntimeRegistrySnapshot {
+            generated_at_ms: 123,
+            runtimes: Vec::new(),
+            reservations: Vec::new(),
+        },
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["llama_cpp".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![
+            runtime_capability_candidate("a-fast-oom"),
+            runtime_capability_candidate("z-slower-stable"),
+        ],
+        candidate_history_summaries: vec![
+            candidate_history_summary_with_memory("a-fast-oom", 50, 1, 10_000, 20_000),
+            candidate_history_summary_with_memory("z-slower-stable", 100, 0, 10_000, 20_000),
+        ],
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selected_candidate_id.as_deref(),
+        Some("z-slower-stable")
+    );
+    assert!(decision.reasons.iter().any(|reason| {
+        reason.code == RuntimeTechnicalFitReasonCode::HistoricalPerformance
+            && reason.candidate_id.as_deref() == Some("z-slower-stable")
+    }));
+}
+
+#[test]
+fn selector_history_uses_peak_memory_as_tie_breaker() {
+    let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+        runtime_snapshot: RuntimeRegistrySnapshot {
+            generated_at_ms: 123,
+            runtimes: Vec::new(),
+            reservations: Vec::new(),
+        },
+        workflow_id: Some("workflow-a".to_string()),
+        required_model_ids: Vec::new(),
+        required_backend_keys: vec!["llama_cpp".to_string()],
+        required_extensions: Vec::new(),
+        required_context_window_tokens: None,
+        override_selection: None,
+        device_policy: None,
+        legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+        candidates: vec![
+            runtime_capability_candidate("a-higher-vram"),
+            runtime_capability_candidate("z-lower-vram"),
+        ],
+        candidate_history_summaries: vec![
+            candidate_history_summary_with_memory("a-higher-vram", 100, 0, 8_000, 20_000),
+            candidate_history_summary_with_memory("z-lower-vram", 100, 0, 8_000, 10_000),
+        ],
+        resource_pressure: None,
+    });
+
+    assert_eq!(
+        decision.selected_candidate_id.as_deref(),
+        Some("z-lower-vram")
+    );
 }
 
 #[test]

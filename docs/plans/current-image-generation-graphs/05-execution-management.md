@@ -7097,6 +7097,36 @@ Worker rules:
     manual/user-environment activity. The automated plan gate now has
     deterministic release-smoke coverage for the graph and contract boundaries
     named in Milestone 8.
+- 2026-05-20 runtime-selection memory/OOM history ranking slice:
+  - Smallest useful vertical slice: make the existing history-backed
+    runtime-selection policy consume the typed memory/OOM fields already
+    projected through diagnostics-ledger and embedded-runtime candidate history
+    summaries.
+  - Allowed write set: `crates/pantograph-runtime-registry/src/runtime_selection_policy.rs`,
+    `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`,
+    `docs/plans/current-image-generation-graphs/02-image-generation-family-planner.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the policy uses only typed
+    `RuntimeTechnicalFitCandidateHistorySummary` fields after the existing
+    all-eligible-candidates threshold is met. It does not parse diagnostics
+    strings, inspect task outputs, infer OOM from errors, or activate partial
+    history when any eligible candidate lacks the required sample count.
+  - Implementation completed: history-backed candidate ordering now compares
+    terminal failure rate, OOM rate, average/median duration, queue wait, peak
+    VRAM, and peak RAM in that order. Tests cover preferring a slower runtime
+    with lower OOM rate and using peak VRAM as a deterministic tie-breaker.
+  - Verification passed: `cargo test -p pantograph-runtime-registry history
+    --lib`, `cargo check -p pantograph-runtime-registry`, and `cargo fmt
+    --package pantograph-runtime-registry -- --check`.
+  - Standards and boundary notes: no public DTO shape, dependency, lockfile,
+    persisted artifact, generated file, sqlite WAL/SHM, frontend, or runtime
+    process lifecycle changed. The scheduler policy remains isolated in
+    `pantograph-runtime-registry`, so later algorithm changes stay local to
+    the policy module and its tests.
+  - Remaining follow-up: the policy can later evolve to resource-pressure-aware
+    weighting and richer multi-device/multi-runtime observations, but the
+    current no-fallback history gate is now active for the typed timing,
+    memory, and OOM facts available today.
 
 ### Traceability Links
 
