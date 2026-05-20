@@ -700,6 +700,17 @@ PyTorch/diffusers and produce a retained image artifact.
     test_python_worker_generate_image_from_envelope_reports_oom_failure --lib`.
     Remaining follow-up: managed-runtime structured telemetry remains a
     separate producer slice.
+  - 2026-05-20 managed-runtime telemetry re-plan boundary: stop before
+    implementing the remaining managed-runtime producer work. The existing
+    plan does not yet define whether the next slice should observe managed
+    child-process RSS, runtime-native structured telemetry, or both; it also
+    does not name the lifecycle owner for each managed runtime request/sidecar
+    boundary. The next plan update must define the target process/API source,
+    the handoff into `InferenceExecutionTelemetryScope`, typed unavailable
+    states for runtimes without telemetry APIs, and the distinction between
+    `os_process_rss` and `managed_runtime_telemetry` sources. Do not implement
+    this by parsing managed-runtime logs outside the runtime adapter or by
+    adding scheduler-owned probes.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

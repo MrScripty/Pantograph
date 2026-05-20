@@ -956,6 +956,27 @@ Staged implementation:
      current process, managed runtime structured telemetry, real MPS metric
      support if PyTorch exposes a canonical counter, and failure-path OOM
      typing without broad legacy string parsing.
+   - 2026-05-20 telemetry-scope implementation update:
+     `InferenceExecutionTelemetryScope` and `BackendExecutionContext` now own
+     the backend-to-gateway observation path for planned image execution.
+     Gateway process-RSS observations and PyTorch image worker success/failure
+     observations merge into the terminal lifecycle event through the same
+     scope. The PyTorch image worker now emits typed OOM memory-failure facts
+     on error envelopes. Remaining producer follow-ups are managed-runtime
+     process-boundary monitoring where the target process is not Pantograph,
+     managed-runtime structured telemetry, and real MPS metric support if a
+     canonical counter becomes available.
+   - 2026-05-20 managed-runtime telemetry re-plan boundary: implementation
+     must not infer this producer from the existing current-process gateway
+     monitor. The plan needs a precise managed-runtime telemetry contract that
+     separates child-process RSS observation from runtime-native structured
+     telemetry, names the lifecycle owner for each managed runtime request or
+     sidecar boundary, defines how `ProcessHandle::pid()` or runtime API facts
+     enter the telemetry scope, and specifies typed unavailable states when a
+     runtime has no telemetry API. Until that boundary is designed, do not add
+     ad hoc managed-runtime log parsing, scheduler-owned probes, or generic
+     source labels that hide whether the observation came from OS RSS or a
+     runtime-native metric.
 10. [ ] Remove or explicitly confine legacy OOM string parsing in
     `inference::server`, `inference::embedding_runtime`, and
     `backend::llamacpp_support` behind typed adapter-local memory failure

@@ -307,6 +307,13 @@ Update during implementation:
   into typed `memory_failure_kind = out_of_memory` resource observations on
   worker error envelopes; terminal workflow code still consumes only typed
   observations and does not parse error text.
+- 2026-05-20: Re-plan boundary reached for managed-runtime structured
+  telemetry. The current plan names the producer source but does not yet
+  define whether the next implementation should monitor managed child-process
+  RSS, consume runtime-native telemetry APIs, or do both. The plan now requires
+  a precise boundary before implementation: lifecycle owner, target PID/API
+  source, typed unavailable states, and separation between `os_process_rss`
+  and `managed_runtime_telemetry`.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed
