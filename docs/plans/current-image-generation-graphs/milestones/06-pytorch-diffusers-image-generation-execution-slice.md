@@ -397,7 +397,7 @@ PyTorch/diffusers and produce a retained image artifact.
 - [x] Validate component source ambiguity per family. Families such as Z-Image
   and FLUX.2 must reject ambiguous VAE/text-encoder sources instead of trying
   to assemble components heuristically.
-- [ ] Use checked arithmetic for dimensions, image counts, estimated memory,
+- [x] Use checked arithmetic for dimensions, image counts, estimated memory,
   and artifact size calculations. Reject overflow or unacceptable estimates
   through typed planner diagnostics.
   - 2026-05-17: stream artifact byte-range and implicit sequence progression
@@ -851,10 +851,16 @@ PyTorch/diffusers and produce a retained image artifact.
       `cargo test -p pantograph-embedded-runtime technical_fit --lib`,
       `cargo check -p pantograph-embedded-runtime`, and
       `cargo fmt --package pantograph-runtime-registry --package pantograph-embedded-runtime -- --check`.
-    - Remaining follow-up: scheduler policy still ranks history by failure,
-      execution duration, and queue wait only. Memory/OOM weighting remains a
-      later explicit policy slice after the typed evidence is available to
-      every candidate through the same exact-key path.
+    - Blocking scope closed: checked arithmetic, typed resource estimates,
+      typed admission budgets/claims, runtime snapshot budget facts,
+      technical-fit budget rejection, workflow requirement projection, ledger
+      memory/OOM persistence, inference telemetry producers, and exact-key
+      candidate-history projection are now implemented without legacy MB-field
+      fallbacks.
+    - Later policy objective: scheduler policy still ranks history by
+      failure, execution duration, and queue wait only. Memory/OOM weighting
+      remains a future explicit policy slice after the typed evidence is
+      available to every candidate through the same exact-key path.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
@@ -1032,9 +1038,11 @@ PyTorch/diffusers and produce a retained image artifact.
 - Artifact test verifies generated image retention stores one media body and
   projects only descriptors/metadata instead of duplicate base64 payloads.
 
-**Status:** In progress. Planner contract, Rust worker envelope,
-planner-to-worker translation, Python image-envelope shape validation, planned
-PyTorch image helper, and the planned gateway/backend boundary are implemented.
+**Status:** Complete for the current PyTorch/Diffusers image-generation
+execution slice. Later policy objectives such as memory/OOM history weighting,
+live resource observation, and the full llama.cpp sidecar startup state
+machine are tracked as explicit future work and are not required to execute the
+current planned image path.
 
 2026-05-12 boundary check:
 

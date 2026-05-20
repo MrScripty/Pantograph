@@ -380,6 +380,13 @@ Update during implementation:
   `cargo test -p pantograph-embedded-runtime technical_fit --lib`,
   `cargo check -p pantograph-embedded-runtime`, and
   `cargo fmt --package pantograph-runtime-registry --package pantograph-embedded-runtime -- --check`.
+- 2026-05-20: Closed Milestone 6's checked-arithmetic/resource-estimate
+  blocker as complete. The current execution path now has typed checked
+  resource estimates, typed admission/budget rejection, ledger memory/OOM
+  persistence, producer telemetry, and exact-key candidate-history projection.
+  Memory/OOM history weighting remains a later scheduler-policy objective,
+  not a compatibility fallback and not a current image-generation execution
+  blocker.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed
