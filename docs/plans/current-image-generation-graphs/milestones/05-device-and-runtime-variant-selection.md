@@ -506,7 +506,7 @@ typed diagnostic and the canonical design is fixed.
 - [x] Remove frontend fallback device options such as synthetic CPU-only lists
   after backend device discovery failure. Discovery failures render backend
   diagnostics/unavailable state and cannot create executable choices.
-- [ ] Replace or scope polling-heavy frontend refresh paths. Any remaining poll
+- [x] Replace or scope polling-heavy frontend refresh paths. Any remaining poll
   must have deterministic teardown and tests.
 - [ ] Update canonical workflows and fixtures to the new device policy/runtime
   variant shape. Do not add legacy compatibility shims for old raw-device
@@ -4799,6 +4799,30 @@ typed diagnostic and the canonical design is fixed.
   - Remaining follow-up: future img2img/inpaint and family-specific opaque
     option support needs explicit family option tables plus worker contract
     fields before these request fields can become executable.
+- 2026-05-20 slice: scoped device refresh lifecycle.
+  - Smallest useful vertical slice: move the `DeviceConfig.svelte` backend
+    device refresh interval behind a tiny scoped lifecycle helper with
+    deterministic start, duplicate-start prevention, stop, and restart
+    semantics.
+  - Allowed write set: `src/components/DeviceConfig.svelte`,
+    `src/components/deviceConfigRefreshScope.ts`,
+    `src/components/deviceConfigRefreshScope.test.ts`, and this plan file.
+  - No-fallback/no-legacy confirmation: the slice only scopes an existing
+    frontend refresh loop. It does not synthesize device options, infer runtime
+    readiness, preserve frontend-owned fallback devices, or add a secondary
+    scheduler/device-selection path.
+  - Standards/blast-radius gate: frontend polling remains scoped to the device
+    section owner, clears on collapse and unmount, prevents duplicate timers,
+    and has deterministic Node tests using injected timer APIs. No generated
+    files, lockfiles, workflow fixtures, backend contracts, persisted schemas,
+    runtime startup paths, or accessibility surface changed.
+  - Verification passed:
+    `node --experimental-strip-types --test src/components/deviceConfigRefreshScope.test.ts`,
+    `npm run typecheck`, and `git diff --check`.
+  - Remaining follow-up: broader frontend runtime/device selector
+    accessibility and backend-owned capability-fact presentation rows still
+    need explicit reconciliation or focused UI coverage before their checklist
+    items can close.
 
 **Verification:**
 

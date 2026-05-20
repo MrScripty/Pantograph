@@ -4,6 +4,7 @@
   import { LLMService } from '../services/LLMService';
   import { RagService } from '../services/RagService';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
+  import { createScopedDeviceRefresh, type DeviceRefreshScope } from './deviceConfigRefreshScope';
   import {
     buildBackendConfirmedDeviceOptions,
     formatDeviceDisplayName,
@@ -22,7 +23,7 @@
   let oomFlash = $state(false);
   let oomFlashTimer: ReturnType<typeof setTimeout> | null = null;
   let lastOomAt = 0;
-  let refreshTimer: ReturnType<typeof setInterval> | null = null;
+  let deviceRefreshScope: DeviceRefreshScope | null = null;
 
   // Available devices confirmed by the backend.
   let availableDevices: DeviceInfo[] = $state([]);
@@ -52,6 +53,13 @@
 
     // Load available devices
     await loadDevices();
+    deviceRefreshScope = createScopedDeviceRefresh(
+      () => {
+        void loadDevices({ silent: true });
+      },
+      window,
+    );
+    deviceRefreshScope.update($expandedSection === 'device');
 
     // Load embedding memory mode
     const mode = await ConfigService.getEmbeddingMemoryMode();
@@ -63,10 +71,8 @@
     unsubscribe?.();
     unsubscribeLLM?.();
     unsubscribeRag?.();
-    if (refreshTimer) {
-      clearInterval(refreshTimer);
-      refreshTimer = null;
-    }
+    deviceRefreshScope?.stop();
+    deviceRefreshScope = null;
     if (oomFlashTimer) {
       clearTimeout(oomFlashTimer);
       oomFlashTimer = null;
@@ -228,15 +234,7 @@
   };
 
   $effect(() => {
-    if ($expandedSection === 'device' && !refreshTimer) {
-      void loadDevices({ silent: true });
-      refreshTimer = setInterval(() => {
-        void loadDevices({ silent: true });
-      }, 3000);
-    } else if ($expandedSection !== 'device' && refreshTimer) {
-      clearInterval(refreshTimer);
-      refreshTimer = null;
-    }
+    deviceRefreshScope?.update($expandedSection === 'device');
   });
 </script>
 
