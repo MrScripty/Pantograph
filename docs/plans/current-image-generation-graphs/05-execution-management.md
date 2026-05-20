@@ -7650,6 +7650,31 @@ Worker rules:
     graph/dependency identity, which is removed, or selected backend/worker load
     target handoff, which may exist only after scheduler/Pumas planning.
   - Verification passed: docs-only update; `git diff --check`.
+- 2026-05-20 Milestone 5 dependency-planning standards iteration:
+  - Standards reviewed:
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/PLAN-STANDARDS.md`,
+    `ARCHITECTURE-PATTERNS.md`, `CODING-STANDARDS.md`,
+    `DOCUMENTATION-STANDARDS.md`, `TESTING-STANDARDS.md`,
+    `FRONTEND-STANDARDS.md`, `INTEROP-STANDARDS.md`,
+    `languages/rust/RUST-API-STANDARDS.md`, and
+    `languages/rust/RUST-TOOLING-STANDARDS.md`.
+  - Finding: the broad standards gates were directionally correct, but the new
+    dependency-planning replacement needed explicit crate/module shape,
+    feature-check, executable-fixture, frontend replacement, and decomposition
+    constraints before implementation.
+  - Plan update completed: Milestone 5 now requires the neutral contract owner
+    to be a contract/domain-only crate or module with workspace lints,
+    crate-level docs, README traceability, curated re-exports, typed error
+    modules, and serde fixtures. It also records that
+    `DependencyEnvironmentNode.svelte` is already over the UI decomposition
+    threshold and `model_dependencies.rs` is close to the general file
+    threshold, so implementation must extract or reuse focused helpers instead
+    of adding responsibilities there.
+  - No-fallback/no-legacy confirmation: these standards constraints do not add
+    compatibility behavior. They make the replacement stricter by requiring
+    parse-once typed boundaries, executable contract fixtures, typed diagnostics,
+    backend-owned frontend state, and no path-shaped UI/action/activity aliases.
+  - Verification passed: docs-only update; `git diff --check`.
 
 ### Traceability Links
 

@@ -1056,6 +1056,59 @@ meet them, stop and re-plan instead of adding compatibility or local bypasses.
   README coverage under the documentation standards; placeholder prose is not
   acceptable.
 
+#### Dependency-Planning Contract Standards Addendum
+
+The Milestone 5 dependency-planning replacement was rechecked against
+`PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`, `CODING-STANDARDS.md`,
+`DOCUMENTATION-STANDARDS.md`, `TESTING-STANDARDS.md`, `FRONTEND-STANDARDS.md`,
+`INTEROP-STANDARDS.md`, `RUST-API-STANDARDS.md`, and
+`RUST-TOOLING-STANDARDS.md` on 2026-05-20. The following constraints apply to
+the staged dependency-planning contract work above:
+
+- **Contract crate/module shape:** if the neutral contract owner is a new crate,
+  add it as an explicit workspace member with `[lints] workspace = true`,
+  crate-level `//!` docs, a root README using the documentation-standard
+  sections, curated `lib.rs` re-exports, and focused modules such as
+  `error.rs`, `model_ref.rs`, `request.rs`, `result.rs`, and `fixtures.rs` as
+  needed. The crate must be a contracts/domain crate only: no Pumas client,
+  filesystem, subprocess, scheduler policy, frontend, Tauri, Python, or worker
+  execution dependencies.
+- **Feature and dependency policy:** the contract owner should have no feature
+  flags unless an implementation slice proves they are necessary. If any
+  feature flag or optional dependency is added, document the feature contract
+  and run the default, no-default-features, and all-features checks required by
+  the Rust standards for the touched public crate.
+- **Executable contract fixtures:** every public request/result/event shape in
+  the dependency-planning contract must have serde fixture coverage for field
+  casing, enum spelling, missing required fields, unknown/unsupported states,
+  and typed diagnostics. Rust-only compile checks are not enough because the
+  DTOs cross Rust, frontend, persisted, and worker-adjacent boundaries.
+- **Boundary parsing:** raw graph JSON, frontend action payloads, activity
+  events, and Pumas adapter responses must parse once at the boundary into
+  validated domain types. Internal APIs may not continue to accept
+  `serde_json::Value`, raw mode strings, local paths, or unvalidated booleans
+  where typed ids/enums can encode the invariant.
+- **Frontend replacement discipline:** the frontend dependency-environment
+  slice must replace `modelPath`/`model_path` actions and matchers with typed
+  Pumas identity. It must keep backend-owned dependency/readiness state as
+  displayed facts, avoid polling when activity/subscription updates are
+  available, clean up any listener/subscription ownership deterministically, and
+  verify with the repository's Node test harness plus typecheck when TypeScript
+  contracts change.
+- **Decomposition triggers already hit or near-hit:** do not add new
+  responsibilities to `DependencyEnvironmentNode.svelte`, which is already over
+  the UI component threshold, or to `crates/node-engine/src/model_dependencies.rs`,
+  which is close to the general file threshold. The frontend slice should keep
+  new logic in existing pure helper modules or extract new focused helpers. The
+  Rust contract slice should move public dependency DTO ownership out of
+  `model_dependencies.rs` rather than growing it.
+- **Cross-layer acceptance:** after the host resolver and frontend action/event
+  replacements land, add one acceptance path that exercises graph
+  `pumas_model_ref` input, node-engine dependency planning, host-side Pumas
+  artifact load-target resolution, activity/status propagation, and selected
+  worker/backend handoff. The assertion should cover externally meaningful
+  inputs and outputs rather than every internal hop.
+
 ### Per-Slice Standards Evidence
 
 Before any remaining closeout item is marked complete, the implementation note
