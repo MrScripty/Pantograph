@@ -27,9 +27,11 @@ text-to-image generation or local GGUF reranking to be wired.
 ## Decision
 Store built-in workflow templates here as JSON and import them statically into
 the frontend template service. Text-to-image starters use the same canonical
-`puma-lib -> llm-inference` model identity, package facts, and inference
-settings handoff as other inference tasks, with `task_kind = image_generation`
-and a graph-visible `image` output connected to `image-output`.
+`puma-lib -> llm-inference` model-reference and inference-settings handoff as
+other inference tasks, with `task_kind = image_generation` and a graph-visible
+`image` output connected to `image-output`. Runtime selection remains
+scheduler-owned unless a template explicitly demonstrates a hard runtime
+requirement.
 
 ## Alternatives Rejected
 - Generate workflow templates dynamically in code.
@@ -45,9 +47,13 @@ and a graph-visible `image` output connected to `image-output`.
   `diffusion-inference`, `llamacpp-inference`, `pytorch-inference`,
   `ollama-inference`, dedicated `embedding`, or dedicated `reranker`.
 - Built-in text-to-image templates must use canonical `llm-inference` with
-  `task_kind = image_generation`, carry `pumas_model_ref`,
-  `resolved_model_package_facts`, and `inference_settings` from `puma-lib`, and
-  connect the canonical `image` output into `image-output`.
+  `task_kind = image_generation`, carry `pumas_model_ref` and
+  `inference_settings` from `puma-lib`, and connect the canonical `image`
+  output into `image-output`.
+- Built-in templates must not use retired graph-visible backend/runtime
+  selection fields such as `backend_key`, `runtime_hint`, resolved Pumas
+  package facts, or raw model-source ports. The scheduler is the only runtime
+  selection authority.
 - Example workflows should remain small enough to serve as operator references.
 - Reranker starter workflows may use additive compatibility inputs such as
   `documents_json` only when the canonical structured port is still awkward to

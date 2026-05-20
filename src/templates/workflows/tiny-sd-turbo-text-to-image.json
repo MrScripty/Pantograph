@@ -132,8 +132,7 @@
           "position": { "x": 700, "y": 220 },
           "data": {
             "label": "Tiny SD Turbo Image Generation",
-            "task_kind": "image_generation",
-            "backend_key": "pytorch"
+            "task_kind": "image_generation"
           }
         },
         {

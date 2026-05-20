@@ -515,6 +515,15 @@ typed diagnostic and the canonical design is fixed.
     fixtures and presenter tests from slash-shaped runtime variant ids to the
     canonical dot-shaped `RuntimeVariantId` examples such as
     `llama_cpp.cuda` and `pytorch.cuda`. Saved workflow files remain pending.
+  - 2026-05-20 partial: bundled image-generation/reranker workflow templates
+    and tracked image-generation saved workflow examples no longer persist
+    graph-visible `backend_key` runtime-selection fields on canonical
+    `llm-inference` nodes. Template and saved-workflow tests now require
+    scheduler-owned runtime selection for these examples while preserving
+    `pumas_model_ref`, `task_kind`, and image output wiring. Remaining
+    follow-up: non-image tracked workflow examples and any future canonical
+    workflow schema migration still need an explicit ownership decision before
+    this broad checklist item can close.
 - [ ] If runtime feature flags or optional dependencies change, document the
   feature contract and run affected public crates through default,
   no-default-features, and all-features checks.
@@ -4823,6 +4832,31 @@ typed diagnostic and the canonical design is fixed.
     accessibility and backend-owned capability-fact presentation rows still
     need explicit reconciliation or focused UI coverage before their checklist
     items can close.
+- 2026-05-20 slice: scheduler-owned workflow template runtime selection.
+  - Smallest useful vertical slice: remove retired graph-visible `backend_key`
+    fields from bundled image-generation/reranker templates and tracked
+    image-generation saved workflow examples, then tighten the template tests
+    and READMEs around scheduler-owned runtime selection.
+  - Allowed write set: `src/templates/workflows/gguf-reranker-workflow.json`,
+    `src/templates/workflows/tiny-sd-turbo-text-to-image.json`,
+    `src/templates/workflows/README.md`,
+    `.pantograph/workflows/tiny-sd-turbo-diffusion.json`,
+    `.pantograph/workflows/juggernaut-x-v10-sdxl.json`,
+    `.pantograph/workflows/README.md`,
+    `src/services/workflow/templateService.test.ts`, and this plan file.
+  - No-fallback/no-legacy confirmation: no compatibility alias, migration
+    shim, executor fallback, or frontend runtime inference was added. The graph
+    examples now carry model reference and task intent only, so scheduler
+    policy remains the single runtime-selection authority unless a canonical
+    runtime input is explicitly authored in a future workflow.
+  - Verification passed:
+    `node --experimental-strip-types --test src/services/workflow/templateService.test.ts`,
+    `npm run typecheck`,
+    `rg -n "backend_key|runtime_hint|resolved_model_source|resolved_model_package_facts" src/templates/workflows .pantograph/workflows/tiny-sd-turbo-diffusion.json .pantograph/workflows/juggernaut-x-v10-sdxl.json -g '*.json' -g '*.md'`,
+    and `git diff --check`.
+  - Remaining follow-up: the broader canonical workflow/fixture checklist item
+    remains open until non-image tracked examples and any formal workflow
+    schema migration are explicitly reconciled.
 
 **Verification:**
 

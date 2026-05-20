@@ -47,6 +47,10 @@ are small enough to review and represent supported runtime behavior.
 - Image-generation examples must use canonical `llm-inference` with
   `task_kind = image_generation` and must not use retired direct
   `diffusion-inference` nodes.
+- Image-generation examples must not persist graph-visible backend/runtime
+  selection fields such as `backend_key` or `runtime_hint`; runtime selection
+  is scheduler-owned unless a workflow intentionally provides a hard runtime
+  requirement through the canonical runtime input.
 - Puma-Lib nodes in tracked examples retain stable model identity and graph
   intent only. They must not persist raw local model paths, generated media
   bodies, previous run outputs, or derived Pumas dependency/runtime snapshots.

@@ -81,6 +81,29 @@ test('built-in templates do not use retired direct inference nodes', () => {
   }
 });
 
+test('built-in templates keep runtime selection scheduler-owned', () => {
+  for (const templatePath of builtInTemplatePaths) {
+    const template = loadTemplate(templatePath);
+    for (const graph of Object.values(template.dataGraphs)) {
+      for (const node of graph.nodes) {
+        if (node.node_type !== 'llm-inference') {
+          continue;
+        }
+        assert.equal(
+          node.data?.backend_key,
+          undefined,
+          `${templatePath} must not persist retired backend_key on canonical inference`,
+        );
+        assert.equal(
+          node.data?.runtime_hint,
+          undefined,
+          `${templatePath} must not persist retired runtime_hint on canonical inference`,
+        );
+      }
+    }
+  }
+});
+
 test('puma-lib to canonical inference template edges remain intent-only', () => {
   const templates = builtInTemplatePaths.map(loadTemplate);
 
@@ -135,9 +158,10 @@ test('tiny sd template uses canonical image-generation inference', () => {
       (node) =>
         node.node_type === 'llm-inference' &&
         node.data?.task_kind === 'image_generation' &&
-        node.data?.backend_key === 'pytorch',
+        node.data?.backend_key === undefined &&
+        node.data?.runtime === undefined,
     ),
-    'tiny sd template must use canonical llm-inference',
+    'tiny sd template must use scheduler-owned canonical llm-inference',
   );
   assert.equal(
     edges.some(
@@ -188,7 +212,8 @@ test('tracked image-generation workflows use canonical llm inference shape', () 
       `${workflow.metadata.name} must not use retired direct diffusion inference`,
     );
     assert.equal(inferenceNode.data?.task_kind, 'image_generation');
-    assert.equal(inferenceNode.data?.backend_key, 'pytorch');
+    assert.equal(inferenceNode.data?.backend_key, undefined);
+    assert.equal(inferenceNode.data?.runtime, undefined);
     assert.equal(inferenceNode.data?.runtime_hint, undefined);
     assert.equal(
       typeof pumaNode.data?.model_id,
