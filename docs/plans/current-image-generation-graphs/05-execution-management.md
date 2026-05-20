@@ -7372,6 +7372,33 @@ Worker rules:
   - Remaining follow-up: implement the next code slice from the updated
     closeout order, starting with contract inventory or the narrowest remaining
     `model_path` removal/rejection boundary.
+- 2026-05-20 Milestone 5 post-plan codebase investigation update:
+  - Smallest useful vertical slice: record the read-only investigation of the
+    legacy-removal closeout plan's actual blast radius across `workflow-nodes`,
+    workflow-service graph semantics, node-engine typed inference builders,
+    tracked workflow fixtures, frontend/Tauri device config, runtime recovery,
+    embedding restart, and managed-runtime projection.
+  - Allowed write set:
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this planning update does not preserve
+    old behavior. It records `puma-lib` path production, node-engine
+    retired-fact intake, non-image workflow fixture drift, and
+    fallback-shaped runtime/device paths as constraints to remove, replace,
+    or scope before related checklist rows can close.
+  - Investigation completed: verified that bundled templates and tracked image
+    examples are canonical, while tracked non-image workflow examples still
+    carry retired direct inference nodes and `model_path`/`backend_key`
+    wiring; verified that `puma-lib` still registers model options on
+    `model_path`; verified that node-engine still accepts retired model fact
+    inputs; verified that `DeviceConfig` remains generic-looking at the
+    frontend/Tauri boundary.
+  - Verification passed: documentation-only review with `git diff --check --
+    docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md
+    docs/plans/current-image-generation-graphs/05-execution-management.md`.
+  - Remaining follow-up: implement the `puma-lib` contract replacement first,
+    then remove node-engine retired fact intake and reconcile non-image tracked
+    workflows as canonical examples or stale diagnostic fixtures.
 
 ### Traceability Links
 

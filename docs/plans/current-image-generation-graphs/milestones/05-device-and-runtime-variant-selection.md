@@ -922,6 +922,40 @@ before the matching checklist row is closed.
     identity remains explicit `pumas_model_ref`, `model_id`, or currently
     scoped model fields until the broader workflow schema migration removes
     remaining legacy model-path graph data.
+- **Replace `puma-lib` path producer semantics:** `workflow-nodes` still
+  describes `puma-lib` as a model-file-path producer, exposes `model_path` and
+  `backend_key`, registers model-library options on the `model_path` port, and
+  returns executable entry paths as option values when selector rows are ready.
+  This contradicts the Milestone 5 legacy-removal contract. The replacement
+  direction is to make `pumas_model_ref` the canonical graph-facing selection
+  value, keep Pumas selector/readiness metadata display-only, and remove
+  `backend_key`/raw path output as current execution signals. Any remaining
+  path-shaped selector metadata must be named display/debug or stale-diagnostic
+  evidence and must not feed execution, memory identity, package-fact lookup, or
+  scheduler candidate synthesis.
+- **Update stale `workflow-nodes` documentation with the contract change:** the
+  input-node README still says `puma-lib` preserves a graph-facing
+  `model_path` facade and emits `backend_key`. The same implementation slice
+  that replaces the descriptor/options contract must update that README so
+  documentation does not keep a second design alive.
+- **Remove node-engine legacy model/fact intake:** node-engine typed inference
+  request builders still accept `resolved_model_source`,
+  `resolved_model_package_facts`, and `model_package_facts` graph inputs as
+  compatibility sources, and image/text/rerank builders still derive request
+  model names or GGUF paths from `model_path`, `selected_artifact_path`, or
+  `entry_path`. The canonical node-engine boundary should accept
+  graph-authored `pumas_model_ref` plus reduced host/planning facts through one
+  current internal handoff. It should not parse retired graph fields, scan model
+  directories, or use Pumas artifact paths as display model identity after the
+  image planner has a Pumas artifact load target.
+- **Tracked saved workflow closure is broader than image examples:** bundled
+  templates and tracked image examples are already canonical, but tracked
+  non-image workflow files such as Whisper STT and KittenTTS still use retired
+  direct inference nodes, `model_path`, graph-visible `backend_key`, and
+  dependency-environment path wiring. These files must either be converted to
+  canonical scheduler-owned model/runtime/device contracts or explicitly moved
+  into stale diagnostic fixture coverage. They must not remain tracked as
+  successful examples of current execution behavior.
 - **Preserve the clean image planner boundary:** the current image-generation
   planner shape is the model to preserve: side-effect-free input, Pumas package
   facts, Pumas artifact load target, and a scheduler-owned
@@ -934,6 +968,14 @@ before the matching checklist row is closed.
   observation only. Real-time resource observation for parallel runtimes and
   multi-device workflows remains a later objective and must not be simulated by
   storing incidental resource snapshots in scheduler history.
+- **Runtime/device fallback-shaped paths need explicit scoping or removal:**
+  Tauri recovery currently hides device-listing failures by passing an empty
+  device list into embedding restart, embedding GPU-parallel mode uses
+  llama.cpp-local `DeviceBackend::Auto`, and managed-runtime projection has a
+  best-effort install-directory fallback. These paths may remain only when they
+  are explicitly projection/local-adapter behavior and cannot influence
+  scheduler admission or executable runtime/device selection. If they do
+  influence execution, replace them with typed diagnostics.
 
 ### Re-plan Boundaries
 
