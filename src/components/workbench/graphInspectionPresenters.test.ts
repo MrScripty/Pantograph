@@ -8,6 +8,7 @@ import {
   isSavedGraphNodeSelectionKey,
   resolveSavedGraphSelectedNodeId,
   resolveSavedWorkflowInspectionPath,
+  savedGraphNodeFocusDomId,
 } from './graphInspectionPresenters.ts';
 import type { WorkflowGraphInspectionProjection } from '../../services/workflow/types.ts';
 
@@ -100,6 +101,15 @@ test('saved graph inspection display model uses backend diagnostics without run 
   assert.equal(isSavedGraphNodeSelectionKey('Enter'), true);
   assert.equal(isSavedGraphNodeSelectionKey(' '), true);
   assert.equal(isSavedGraphNodeSelectionKey('Escape'), false);
+});
+
+test('saved graph node focus ids are stable and selector-safe', () => {
+  assert.equal(savedGraphNodeFocusDomId('puma-lib-1'), 'saved-graph-node-puma-lib-1');
+  assert.equal(
+    savedGraphNodeFocusDomId('puma-lib-1:pumas_model_ref'),
+    'saved-graph-node-puma-lib-1_003a_pumas_model_ref',
+  );
+  assert.equal(savedGraphNodeFocusDomId(''), 'saved-graph-node-node');
 });
 
 test('graph inspection canvas wrapper preserves backend stale diagnostics', () => {

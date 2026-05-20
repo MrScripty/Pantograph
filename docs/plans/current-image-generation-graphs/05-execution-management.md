@@ -7220,6 +7220,30 @@ Worker rules:
     pantograph-workflow-service -- --check`, and `git diff --check`.
   - Remaining follow-up: none for Milestone 3. Live Pumas model availability
     remains owned by Pumas resolution and execution planning diagnostics.
+- 2026-05-20 saved-graph focus preservation slice:
+  - Smallest useful vertical slice: complete the remaining Milestone 4
+    keyboard-focus row for saved-graph stale details using the existing Node
+    presenter test strategy.
+  - Allowed write set:
+    `src/components/workbench/graphInspectionPresenters.ts`,
+    `src/components/workbench/graphInspectionPresenters.test.ts`,
+    `src/components/workbench/SavedGraphInspectionSnapshot.svelte`,
+    `docs/plans/current-image-generation-graphs/milestones/04-io-inspector-stale-graph-presentation.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the slice does not add polling,
+    subscriptions, a new test platform, manual graph mutation, or
+    frontend-fabricated stale diagnostics. It keeps backend-owned graph facts
+    and frontend-only transient focus/selection state separate.
+  - Implementation completed: added stable presenter-owned saved-graph node
+    focus ids, returns focus to the selected graph node after the stale-details
+    panel updates, and records that no push/subscription helper is required
+    because this milestone pass introduced no push/subscription path.
+  - Verification passed: `node --experimental-strip-types --test
+    src/components/workbench/graphInspectionPresenters.test.ts`, `npm run
+    typecheck`, and `git diff --check`.
+  - Remaining follow-up: none for Milestone 4. Browser-mounted focus
+    regression tests remain deferred until the repository adopts a DOM-capable
+    frontend test strategy.
 
 ### Traceability Links
 

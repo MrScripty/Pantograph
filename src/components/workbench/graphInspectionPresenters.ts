@@ -107,6 +107,19 @@ export function formatSavedGraphNodeAccessibleLabel(
   return parts.join(', ');
 }
 
+export function savedGraphNodeFocusDomId(nodeId: string): string {
+  const encoded = Array.from(nodeId)
+    .map((character) => {
+      if (/^[A-Za-z0-9_-]$/.test(character)) {
+        return character;
+      }
+      const codePoint = character.codePointAt(0) ?? 0;
+      return `_${codePoint.toString(16).padStart(4, '0')}_`;
+    })
+    .join('');
+  return `saved-graph-node-${encoded || 'node'}`;
+}
+
 export function isSavedGraphNodeSelectionKey(key: string): boolean {
   return key === 'Enter' || key === ' ';
 }

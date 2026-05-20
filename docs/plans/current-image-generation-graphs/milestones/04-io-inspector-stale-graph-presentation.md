@@ -21,7 +21,7 @@ which nodes or edges are stale.
   node is selected.
 - [x] Make stale-node selection, artifact read actions, graph navigation, and
   settings navigation reachable by keyboard and exposed with accessible names.
-- [ ] Preserve focus after selecting nodes or opening stale details so keyboard
+- [x] Preserve focus after selecting nodes or opening stale details so keyboard
   users do not lose their place in the graph/detail split view.
 - [x] Keep graph facts, stale diagnostics, model facts, artifact records, and
   retention facts backend-owned. Frontend may own only transient selection,
@@ -30,7 +30,7 @@ which nodes or edges are stale.
   manually mutate DOM or graph state outside the presenter/store boundary.
 - [x] Do not add page-local polling. Use the existing query/event pattern or
   add a backend-owned push/subscription path with explicit lifecycle cleanup.
-- [ ] If a push/subscription path is introduced, define one page-local
+- [x] If a push/subscription path is introduced, define one page-local
   subscription helper that owns subscribe/unsubscribe, duplicate-listener
   prevention, stale-event coalescing, and unmount cleanup.
 - [x] Preserve artifact reading behavior for valid executed runs.
@@ -99,14 +99,17 @@ which nodes or edges are stale.
   `npm run typecheck`, and `git diff --check` passed after moving saved graph
   path selection and selected-node preservation helpers into the Node-tested
   presenter layer.
+- `node --experimental-strip-types --test src/components/workbench/graphInspectionPresenters.test.ts`,
+  `npm run typecheck`, and `git diff --check` passed after adding stable
+  presenter-owned saved-graph node focus ids and returning focus to the
+  selected graph node after the stale-details panel updates. No push,
+  subscription, or polling path was introduced, so the subscription-helper
+  requirement is not applicable for this milestone pass.
 
 **Remaining Follow-Up:**
 
-- Add focused component/accessibility tests for keyboard stale-node selection,
-  focus preservation, and saved-graph mode without artifact controls using the
-  existing Node test strategy where possible.
 - Keep browser-focus-specific verification deferred until the repository adopts
   a DOM-capable frontend test strategy; do not add test dependencies in this
   plan pass.
 
-**Status:** Partially completed on 2026-05-10
+**Status:** Complete

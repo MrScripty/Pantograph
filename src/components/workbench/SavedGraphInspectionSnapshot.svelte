@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import {
     formatSavedGraphNodeAccessibleLabel,
     isSavedGraphNodeSelectionKey,
+    savedGraphNodeFocusDomId,
     type SavedGraphInspectionDisplayModel,
   } from './graphInspectionPresenters';
   import { runGraphStaleDiagnosticClass } from './runGraphPresenters';
@@ -18,6 +20,12 @@
 
   function selectNode(nodeId: string): void {
     onSelectNode?.(nodeId);
+    void restoreSelectedNodeFocus(nodeId);
+  }
+
+  async function restoreSelectedNodeFocus(nodeId: string): Promise<void> {
+    await tick();
+    document.getElementById(savedGraphNodeFocusDomId(nodeId))?.focus();
   }
 
   function handleNodeKeydown(event: KeyboardEvent, nodeId: string): void {
@@ -68,6 +76,7 @@
       {#each model.canvas.nodes as node (node.id)}
         <g
           transform={`translate(${node.x}, ${node.y})`}
+          id={savedGraphNodeFocusDomId(node.id)}
           role="button"
           tabindex="0"
           aria-label={formatSavedGraphNodeAccessibleLabel(node)}
