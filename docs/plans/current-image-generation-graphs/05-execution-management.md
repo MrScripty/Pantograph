@@ -7326,6 +7326,30 @@ Worker rules:
   - Remaining follow-up: KV-cache memory-impact still tracks
     `resolved_model_source` as a graph change signal and needs a separate
     focused semantic slice.
+- 2026-05-20 Milestone 5 KV-cache memory-impact retired source signal removal
+  slice:
+  - Smallest useful vertical slice: stop KV-cache memory-impact classification
+    from treating `resolved_model_source` changes on `llm-inference` nodes as
+    model identity changes.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/graph/memory_impact.rs`,
+    `crates/pantograph-workflow-service/src/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this removes one retired graph signal
+    from memory-impact semantics and adds no alias, package-fact inference,
+    compatibility migration, scheduler bypass, or runtime fallback.
+  - Implementation completed: removed `resolved_model_source` from the
+    model-identity tracked fields and added a focused test proving that changes
+    to the retired field fall through to tokenizer/config refresh behavior.
+  - Verification passed: `cargo fmt --all -- --check`, `cargo test -p
+    pantograph-workflow-service graph::memory_impact`, `cargo check -p
+    pantograph-workflow-service`, and `git diff --check`.
+  - Verification deviation: the first format check failed and `cargo fmt
+    --all` was run; verification was rerun successfully.
+  - Remaining follow-up: `model_path` still participates in memory-impact
+    model-change detection and needs a separate schema/legacy saved graph
+    ownership decision before removal or scoping.
 
 ### Traceability Links
 

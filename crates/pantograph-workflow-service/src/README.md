@@ -221,7 +221,7 @@ executor, the service fails closed.
   raw workflow strings.
 - Graph edit helpers and KV-cache memory-impact summaries do not treat legacy
   `runtime_hint`, `resolved_model_source`, or `resolved_model_package_facts`
-  fields as current runtime/backend/model signals.
+  fields as current runtime/backend/model identity signals.
 - Host calls that load/unload runtimes occur outside session-store locks.
 - Trace stores own canonical event timestamps, idempotent terminal replay, and
   retry/reset behavior for repeated execution ids.

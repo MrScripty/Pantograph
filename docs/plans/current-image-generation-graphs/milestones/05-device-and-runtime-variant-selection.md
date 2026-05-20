@@ -868,6 +868,11 @@ before the matching checklist row is closed.
   - 2026-05-20 update: graph edge-insert input priority now treats
     `resolved_model_source` and `resolved_model_package_facts` as ordinary
     optional JSON ports instead of preferred model-reference ports.
+  - 2026-05-20 update: KV-cache memory-impact no longer treats
+    `resolved_model_source` changes as model identity changes. Canonical model
+    identity remains explicit `pumas_model_ref`, `model_id`, or currently
+    scoped model fields until the broader workflow schema migration removes
+    remaining legacy model-path graph data.
 - **Preserve the clean image planner boundary:** the current image-generation
   planner shape is the model to preserve: side-effect-free input, Pumas package
   facts, Pumas artifact load target, and a scheduler-owned
@@ -5325,6 +5330,35 @@ Stop and re-plan before implementation when any remaining slice would require:
     `resolved_model_source` as a graph change signal and needs its own focused
     slice because it affects memory-impact semantics rather than edge-insert
     helper ordering.
+- 2026-05-20 slice: KV-cache memory-impact retired source signal removal.
+  - Smallest useful vertical slice: stop KV-cache memory-impact classification
+    from treating `resolved_model_source` changes on canonical `llm-inference`
+    nodes as model identity changes.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/graph/memory_impact.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, this milestone file,
+    and `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the slice removes one retired graph
+    signal from memory-impact semantics and adds no alias, package-fact
+    inference, compatibility migration, scheduler bypass, or runtime fallback.
+    `resolved_model_source` changes now fall through to ordinary
+    tokenizer/config refresh behavior rather than model identity replacement.
+  - Per-slice standards evidence: workflow-service remains the graph
+    memory-impact owner; no public DTO, generated binding, persisted schema,
+    lockfile, frontend UI, runtime lifecycle, subprocess, path access, feature
+    flag, worker, or platform-specific code changed. The focused unit test
+    pins the exact retired-field classification.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service graph::memory_impact`,
+    `cargo check -p pantograph-workflow-service`, and `git diff --check`.
+  - Verification deviation: the first format check failed and `cargo fmt
+    --all` was run; the format check and focused memory-impact tests passed
+    afterward.
+  - Remaining follow-up: `model_path` still participates in memory-impact
+    model-change detection. Removing or scoping that field requires a separate
+    workflow schema/legacy saved graph ownership decision because existing
+    graph persistence tests still preserve legacy model-path data.
 
 **Verification:**
 
