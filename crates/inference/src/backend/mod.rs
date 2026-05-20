@@ -37,7 +37,7 @@ use crate::device_contracts::{
     BackendId, DeviceResolutionDiagnostic, DeviceResolutionDiagnosticCode,
     DeviceResolutionDiagnosticSeverity, InferenceDeviceClass, RuntimeVariantId,
 };
-use crate::execution_telemetry::BackendExecutionContext;
+use crate::execution_telemetry::{BackendExecutionContext, RuntimeNativeTelemetryProvider};
 use crate::image_generation_planner::ImageGenerationExecutionPlan;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::managed_runtime::ManagedBinaryId;
@@ -1100,6 +1100,14 @@ pub trait InferenceBackend: Send + Sync {
     /// Pantograph process. Managed sidecar backends return the concrete child
     /// process id they own for execution resource observations.
     fn active_runtime_process_id(&self) -> Option<u32> {
+        None
+    }
+
+    /// Runtime-native telemetry provider for the active backend runtime.
+    ///
+    /// Providers report structured runtime/API metrics or typed unavailable
+    /// facts. Process RSS remains owned by `RuntimeResourceMonitor`.
+    fn runtime_native_telemetry_provider(&self) -> Option<Arc<dyn RuntimeNativeTelemetryProvider>> {
         None
     }
 

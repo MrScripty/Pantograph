@@ -747,6 +747,31 @@ PyTorch/diffusers and produce a retained image artifact.
     - Remaining follow-up: add the separate runtime-native telemetry provider
       contract with typed unavailable states before any runtime/API metrics are
       labeled as `managed_runtime_telemetry`.
+  - 2026-05-20 runtime-native telemetry provider contract slice:
+    - Smallest useful vertical slice: introduce a backend-owned terminal
+      telemetry provider contract and merge its output through the existing
+      execution telemetry scope.
+    - Allowed files touched:
+      `crates/inference/src/execution_telemetry.rs`,
+      `crates/inference/src/lib.rs`,
+      `crates/inference/src/backend/mod.rs`,
+      `crates/inference/src/backend/llamacpp.rs`,
+      `crates/inference/src/backend/README.md`,
+      `crates/inference/src/gateway.rs`,
+      `crates/inference/src/gateway_tests.rs`, and this plan.
+    - No-fallback/no-legacy confirmation: runtime-native telemetry remains
+      separate from process RSS, uses
+      `InferenceResourceObservationSourceKind::ManagedRuntimeTelemetry`, and
+      currently reports typed `missing_runtime_capability` availability for
+      llama.cpp instead of fake values. The scheduler still does not probe,
+      parse logs, or choose between telemetry producers.
+    - Verification passed:
+      `cargo test -p inference test_chat_completion_stream_with_lifecycle_merges_runtime_native_telemetry --lib`
+      and `cargo check -p inference`.
+    - Remaining follow-up: adapter-specific runtime/API metrics can now be
+      added behind the provider when a runtime exposes bounded structured
+      facts; runtimes without such APIs should continue returning typed
+      unavailable states.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

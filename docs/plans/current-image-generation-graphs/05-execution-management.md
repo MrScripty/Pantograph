@@ -330,6 +330,16 @@ Update during implementation:
   `cargo test -p inference active_process_id_reports_ready_sidecar_child_pid_only --lib`
   and
   `cargo test -p inference test_chat_completion_stream_with_lifecycle_monitors_active_runtime_process --lib`.
+- 2026-05-20: Runtime-native telemetry provider contract slice completed.
+  Backends can now expose a `RuntimeNativeTelemetryProvider` that finishes into
+  a typed resource observation or no observation. Gateway terminal telemetry
+  merges the provider output through `InferenceExecutionTelemetryScope`.
+  llama.cpp sidecars currently report `managed_runtime_telemetry`
+  availability as `missing_runtime_capability` for peak RAM/VRAM, while
+  concrete metrics remain a later adapter-specific implementation.
+  Verification passed:
+  `cargo test -p inference test_chat_completion_stream_with_lifecycle_merges_runtime_native_telemetry --lib`
+  and `cargo check -p inference`.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

@@ -105,7 +105,7 @@ pub use execution_evidence::{
 };
 pub use execution_telemetry::{
     BackendExecutionContext, InferenceExecutionTelemetryError, InferenceExecutionTelemetryRecorder,
-    InferenceExecutionTelemetryScope,
+    InferenceExecutionTelemetryScope, RuntimeNativeTelemetryProvider,
 };
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,

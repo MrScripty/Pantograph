@@ -27,8 +27,9 @@ use crate::model_contracts::{
 };
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 use crate::resource_observation::{
-    InferenceExecutionResourceObservation, InferenceResourceObservationMetricKind,
-    InferenceResourceObservationSourceKind, InferenceResourceObservationUnavailableState,
+    InferenceExecutionResourceObservation, InferenceResourceObservationAvailability,
+    InferenceResourceObservationMetricKind, InferenceResourceObservationSourceKind,
+    InferenceResourceObservationUnavailableState,
 };
 use crate::runtime_load::{LlamaCppActiveRuntimeDescriptor, LlamaCppRuntimeMode};
 use crate::types::{
@@ -39,7 +40,10 @@ use crate::types::{
     InferenceRequestLifecycleEventSinkError, InferenceUsage, MultimodalGenerationRequest,
     MultimodalInputPart, RuntimeFactReadiness, VideoUnderstandingRequest,
 };
-use crate::{BackendExecutionContext, InferenceDeviceClass, InferenceDeviceId};
+use crate::{
+    BackendExecutionContext, InferenceDeviceClass, InferenceDeviceId,
+    InferenceExecutionTelemetryError, RuntimeNativeTelemetryProvider,
+};
 
 #[path = "gateway_tests/start_config.rs"]
 mod start_config;
@@ -60,8 +64,28 @@ struct MockLifecycleStreamBackend {
     usage_on_terminal: Option<InferenceUsage>,
     cache_handle_on_terminal: Option<String>,
     active_runtime_process_id: Option<u32>,
+    runtime_native_unavailable_state: Option<InferenceResourceObservationUnavailableState>,
 }
 struct MockKvBackend;
+
+struct MockRuntimeNativeTelemetryProvider {
+    unavailable_state: InferenceResourceObservationUnavailableState,
+}
+
+impl RuntimeNativeTelemetryProvider for MockRuntimeNativeTelemetryProvider {
+    fn finish_resource_observation(
+        &self,
+    ) -> Result<Option<InferenceExecutionResourceObservation>, InferenceExecutionTelemetryError>
+    {
+        Ok(Some(InferenceExecutionResourceObservation::unavailable(
+            vec![InferenceResourceObservationAvailability::new(
+                InferenceResourceObservationMetricKind::PeakVramBytes,
+                self.unavailable_state,
+                Some(InferenceResourceObservationSourceKind::ManagedRuntimeTelemetry),
+            )],
+        )?))
+    }
+}
 
 #[derive(Default)]
 struct RecordingLifecycleSink {
@@ -949,6 +973,14 @@ impl InferenceBackend for MockLifecycleStreamBackend {
 
     fn active_runtime_process_id(&self) -> Option<u32> {
         self.active_runtime_process_id
+    }
+
+    fn runtime_native_telemetry_provider(&self) -> Option<Arc<dyn RuntimeNativeTelemetryProvider>> {
+        self.runtime_native_unavailable_state
+            .map(|unavailable_state| {
+                Arc::new(MockRuntimeNativeTelemetryProvider { unavailable_state })
+                    as Arc<dyn RuntimeNativeTelemetryProvider>
+            })
     }
 
     async fn chat_completion_stream(
@@ -2082,6 +2114,7 @@ async fn test_execute_typed_text_filters_path_shaped_cache_handle() {
             usage_on_terminal: None,
             cache_handle_on_terminal: Some("/tmp/private/kv-cache.bin".to_string()),
             active_runtime_process_id: None,
+            runtime_native_unavailable_state: None,
         }),
         "mock",
     );
@@ -3271,6 +3304,59 @@ async fn test_chat_completion_stream_with_lifecycle_monitors_active_runtime_proc
 }
 
 #[tokio::test]
+async fn test_chat_completion_stream_with_lifecycle_merges_runtime_native_telemetry() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: false,
+            runtime_native_unavailable_state: Some(
+                InferenceResourceObservationUnavailableState::MissingRuntimeCapability,
+            ),
+            ..Default::default()
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    let mut stream = gateway
+        .chat_completion_stream_with_lifecycle(
+            r#"{"model":"mock-chat"}"#.to_string(),
+            Some("req-native-telemetry".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("stream should start");
+
+    while stream.next().await.is_some() {}
+
+    let completed = sink
+        .events()
+        .into_iter()
+        .find(|event| {
+            event.phase == InferenceLifecyclePhase::BackendExecution
+                && event.kind == InferenceRequestLifecycleEventKind::Completed
+        })
+        .expect("backend execution completion event");
+    let resource_observation = completed
+        .resource_observation
+        .as_ref()
+        .expect("stream completion should include resource observation");
+
+    assert!(
+        resource_observation
+            .availability()
+            .iter()
+            .any(|availability| {
+                availability.metric_kind() == InferenceResourceObservationMetricKind::PeakVramBytes
+                    && availability.source_kind()
+                        == Some(InferenceResourceObservationSourceKind::ManagedRuntimeTelemetry)
+                    && availability.state()
+                        == InferenceResourceObservationUnavailableState::MissingRuntimeCapability
+            }),
+        "runtime-native telemetry should merge typed unavailable availability"
+    );
+}
+
+#[tokio::test]
 async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_phases() {
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
@@ -3432,6 +3518,7 @@ async fn test_stream_typed_text_with_lifecycle_records_terminal_chunk_usage() {
             }),
             cache_handle_on_terminal: Some("kv-stream-checkpoint".to_string()),
             active_runtime_process_id: None,
+            runtime_native_unavailable_state: None,
         }),
         "mock",
     );
@@ -3508,6 +3595,7 @@ async fn test_stream_typed_text_with_lifecycle_filters_path_shaped_cache_handle(
             usage_on_terminal: None,
             cache_handle_on_terminal: Some("/tmp/private/kv-stream.bin".to_string()),
             active_runtime_process_id: None,
+            runtime_native_unavailable_state: None,
         }),
         "mock",
     );

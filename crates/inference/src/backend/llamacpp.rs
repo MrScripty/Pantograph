@@ -18,13 +18,21 @@ use super::{
     BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend, LlamaCppRuntimeSettings,
 };
 use crate::device_contracts::{DeviceResolutionDiagnosticCode, InferenceDeviceClass};
+use crate::execution_telemetry::{
+    InferenceExecutionTelemetryError, RuntimeNativeTelemetryProvider,
+};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
 use crate::runtime_load::LlamaCppActiveRuntimeDescriptor;
 use crate::server::LlamaServer;
 use crate::types::{RerankRequest, RerankResponse};
-use crate::{BackendHintLabel, ModelArtifactKind};
+use crate::{
+    BackendHintLabel, InferenceExecutionResourceObservation,
+    InferenceResourceObservationAvailability, InferenceResourceObservationMetricKind,
+    InferenceResourceObservationSourceKind, InferenceResourceObservationUnavailableState,
+    ModelArtifactKind,
+};
 
 #[path = "llamacpp_support.rs"]
 mod llamacpp_support;
@@ -42,6 +50,31 @@ pub struct LlamaCppBackend {
     http_client: reqwest::Client,
     /// Process spawner (stored after start)
     spawner: Option<Arc<dyn ProcessSpawner>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LlamaCppRuntimeNativeTelemetryProvider;
+
+impl RuntimeNativeTelemetryProvider for LlamaCppRuntimeNativeTelemetryProvider {
+    fn finish_resource_observation(
+        &self,
+    ) -> Result<Option<InferenceExecutionResourceObservation>, InferenceExecutionTelemetryError>
+    {
+        Ok(Some(InferenceExecutionResourceObservation::unavailable(
+            vec![
+                InferenceResourceObservationAvailability::new(
+                    InferenceResourceObservationMetricKind::PeakRamBytes,
+                    InferenceResourceObservationUnavailableState::MissingRuntimeCapability,
+                    Some(InferenceResourceObservationSourceKind::ManagedRuntimeTelemetry),
+                ),
+                InferenceResourceObservationAvailability::new(
+                    InferenceResourceObservationMetricKind::PeakVramBytes,
+                    InferenceResourceObservationUnavailableState::MissingRuntimeCapability,
+                    Some(InferenceResourceObservationSourceKind::ManagedRuntimeTelemetry),
+                ),
+            ],
+        )?))
+    }
 }
 
 impl LlamaCppBackend {
@@ -319,6 +352,13 @@ impl InferenceBackend for LlamaCppBackend {
 
     fn active_runtime_process_id(&self) -> Option<u32> {
         self.server.active_process_id()
+    }
+
+    fn runtime_native_telemetry_provider(&self) -> Option<Arc<dyn RuntimeNativeTelemetryProvider>> {
+        self.server.active_process_id().map(|_| {
+            Arc::new(LlamaCppRuntimeNativeTelemetryProvider)
+                as Arc<dyn RuntimeNativeTelemetryProvider>
+        })
     }
 
     async fn chat_completion_stream(

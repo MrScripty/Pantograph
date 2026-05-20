@@ -1009,6 +1009,13 @@ Staged implementation:
         `not_implemented`, `missing_runtime_capability`,
         `runtime_not_installed`, or `not_available`. Initial runtimes may
         return unavailable facts; do not fake zero-byte metrics.
+        - 2026-05-20 implementation update: added the
+          `RuntimeNativeTelemetryProvider` contract and gateway terminal merge
+          path. The llama.cpp backend now exposes a provider only for ready
+          managed sidecars and reports `managed_runtime_telemetry`
+          availability as `missing_runtime_capability` for peak RAM/VRAM
+          rather than fabricating metrics. This keeps child-process RSS and
+          runtime-native telemetry as separate typed sources.
      3. Wire individual runtime adapters to the native telemetry provider only
         when they expose structured metrics. Adapter-local parsing of
         free-form output is allowed only if it is immediately converted into

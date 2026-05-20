@@ -54,6 +54,10 @@ the llama.cpp adapter can switch into a dedicated reranking mode when needed.
 Backend execution methods that can produce runtime telemetry receive a minimal
 `BackendExecutionContext`; that context carries diagnostic recorders only and
 does not move lifecycle ownership out of the gateway.
+Backends that own managed runtime processes may also expose a
+`RuntimeNativeTelemetryProvider`; providers report structured runtime/API
+metrics or typed unavailable facts and must not simulate those facts from OS
+process RSS.
 
 ## Alternatives Rejected
 

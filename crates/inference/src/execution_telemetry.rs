@@ -69,6 +69,17 @@ impl BackendExecutionContext {
     }
 }
 
+/// Backend-owned provider for runtime-native terminal telemetry.
+///
+/// Implementations may call structured runtime APIs or return typed
+/// unavailable observations. They must not parse unbounded process logs or
+/// simulate runtime-native metrics from OS process RSS.
+pub trait RuntimeNativeTelemetryProvider: Send + Sync {
+    fn finish_resource_observation(
+        &self,
+    ) -> Result<Option<InferenceExecutionResourceObservation>, InferenceExecutionTelemetryError>;
+}
+
 /// Cloneable backend-facing telemetry recorder.
 #[derive(Debug, Clone)]
 pub struct InferenceExecutionTelemetryRecorder {

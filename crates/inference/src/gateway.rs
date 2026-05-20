@@ -45,7 +45,8 @@ use crate::types::{
 };
 use crate::{
     BackendExecutionContext, InferenceExecutionResourceObservation,
-    InferenceExecutionTelemetryScope, RuntimeResourceMonitor, RuntimeResourceMonitorGuard,
+    InferenceExecutionTelemetryScope, RuntimeNativeTelemetryProvider, RuntimeResourceMonitor,
+    RuntimeResourceMonitorGuard,
 };
 
 const IMAGE_GENERATION_BYTES_PER_RGBA_PIXEL: u64 = 4;
@@ -785,17 +786,23 @@ impl InferenceGateway {
         guard.active_llamacpp_runtime_descriptor()
     }
 
-    async fn active_runtime_process_id(&self) -> Option<u32> {
+    async fn active_runtime_telemetry_sources(
+        &self,
+    ) -> (Option<u32>, Option<Arc<dyn RuntimeNativeTelemetryProvider>>) {
         let guard = self.backend.read().await;
-        guard.active_runtime_process_id()
+        (
+            guard.active_runtime_process_id(),
+            guard.runtime_native_telemetry_provider(),
+        )
     }
 
     async fn start_execution_telemetry(&self) -> GatewayExecutionTelemetry {
-        let process_id = self
-            .active_runtime_process_id()
-            .await
-            .unwrap_or_else(std::process::id);
-        start_execution_telemetry_for_process(process_id)
+        let (process_id, runtime_native_telemetry_provider) =
+            self.active_runtime_telemetry_sources().await;
+        start_execution_telemetry_for_process(
+            process_id.unwrap_or_else(std::process::id),
+            runtime_native_telemetry_provider,
+        )
     }
 
     /// Restore the last non-embedding inference runtime when available.
@@ -2992,10 +2999,10 @@ fn image_generation_planner_diagnostic_code_label(
         .unwrap_or_else(|| format!("{code:?}"))
 }
 
-#[derive(Debug)]
 struct GatewayExecutionTelemetry {
     scope: InferenceExecutionTelemetryScope,
     resource_monitor: Option<RuntimeResourceMonitorGuard>,
+    runtime_native_telemetry_provider: Option<Arc<dyn RuntimeNativeTelemetryProvider>>,
 }
 
 impl GatewayExecutionTelemetry {
@@ -3004,10 +3011,14 @@ impl GatewayExecutionTelemetry {
     }
 }
 
-fn start_execution_telemetry_for_process(process_id: u32) -> GatewayExecutionTelemetry {
+fn start_execution_telemetry_for_process(
+    process_id: u32,
+    runtime_native_telemetry_provider: Option<Arc<dyn RuntimeNativeTelemetryProvider>>,
+) -> GatewayExecutionTelemetry {
     GatewayExecutionTelemetry {
         scope: InferenceExecutionTelemetryScope::new(),
         resource_monitor: start_runtime_resource_monitor_for_process(process_id),
+        runtime_native_telemetry_provider,
     }
 }
 
@@ -3028,6 +3039,23 @@ fn finish_optional_execution_telemetry(
             .record_resource_observation(observation)
         {
             log::warn!("failed to record runtime resource observation: {error}");
+        }
+    }
+    if let Some(provider) = telemetry.runtime_native_telemetry_provider {
+        match provider.finish_resource_observation() {
+            Ok(Some(observation)) => {
+                if let Err(error) = telemetry
+                    .scope
+                    .recorder()
+                    .record_resource_observation(observation)
+                {
+                    log::warn!("failed to record runtime-native telemetry observation: {error}");
+                }
+            }
+            Ok(None) => {}
+            Err(error) => {
+                log::warn!("failed to finish runtime-native telemetry provider: {error}");
+            }
         }
     }
     match telemetry.scope.drain_resource_observation() {
