@@ -25,8 +25,9 @@ routing without hardcoding runtime choices into the UI or executor.
 - Input descriptors must stay host-agnostic.
 - Host-owned nodes such as `puma-lib` still need discoverable metadata for the
   frontend and dependency preflight.
-- Runtime-executable model facts must come from the Pumas execution descriptor
-  when a model can resolve one.
+- Runtime-executable artifact paths must come from the Pumas artifact
+  load-target contract at the host/planning boundary, not from graph-visible
+  input-node outputs.
 - Model-list/package-fact summary details must come from Pumas summary snapshot
   and summary resolution APIs, not Pumas storage internals.
 - Model selector rows must come from Pumas `ModelLibrarySelectorSnapshot`
@@ -35,22 +36,22 @@ routing without hardcoding runtime choices into the UI or executor.
 - Pumas selector access must be explicit: owner API, local client, or read-only
   library. Read-only selector access is a local indexed read and must not start
   reconciliation, downloads, watchers, or hidden lifecycle work.
-- Model metadata fallbacks must stay additive so older Pumas records continue to
-  resolve when descriptor lookup is unavailable.
+- Pumas selector unavailable states must be projected as typed unavailable
+  options or diagnostics. They must not be hidden behind empty successful
+  option lists or path-shaped fallback values.
 
 ## Decision
-Keep input nodes as descriptor-first modules. `puma_lib.rs` emits model path,
-`task_type_primary`, backend hints, dependency requirements, and inference
-settings so downstream routing can distinguish text, audio, and diffusion
-flows. For `puma-lib`, Pantograph preserves the graph-facing `model_path`,
-`model_type`, and `task_type_primary` facade, but it should source those values
-from Pumas `ModelExecutionDescriptor` whenever a `model_id` is available and
-descriptor resolution succeeds. Record metadata remains a display/fallback
-contract only, not the runtime source of truth. The model option provider also
-populates rows from Pumas `ModelLibrarySelectorSnapshot`, captures package-fact
-summary status, summary payload, and the producer cursor for the populated page
-so UI/model-list consumers can refresh from Pumas update feeds without
-inspecting Pumas storage.
+Keep input nodes as descriptor-first modules. `puma_lib.rs` emits the selected
+`pumas_model_ref`, task metadata, recommended backend display metadata,
+dependency requirements, and inference settings so downstream routing can
+distinguish text, audio, and diffusion flows without accepting local paths as
+model identity. The graph-facing executable selection value is
+`pumas_model_ref`; raw artifact paths and backend keys are not current
+execution outputs. The model option provider populates rows from Pumas
+`ModelLibrarySelectorSnapshot`, captures package-fact summary status, summary
+payload, readiness state, storage/validation state, and the producer cursor for
+the populated page so UI/model-list consumers can refresh from Pumas update
+feeds without inspecting Pumas storage.
 
 ## Alternatives Rejected
 - Keep an unregistered `model-provider` `NodeExecutor` in this crate.
@@ -78,8 +79,10 @@ inspecting Pumas storage.
   arrive during summary regeneration invalidate only affected rows before those
   affected rows are refilled against the newest cursor.
 - Pantograph must not infer Pumas runtime bundle semantics from projected
-  metadata when an execution descriptor is available.
-- Fallback task inference must remain conservative and deterministic.
+  display/debug metadata. Runtime execution consumes Pumas-approved load
+  targets at the host/planning boundary.
+- Task inference from selector metadata must remain conservative and
+  deterministic.
 - Stored Pumas inference settings are reused only when they are non-empty
   arrays; otherwise the node falls back to descriptor/API defaults so empty
   metadata does not masquerade as an executable settings contract.
@@ -110,36 +113,38 @@ assert_eq!(metadata.node_type, "model-provider");
 ## API Consumer Contract
 - Consumers should treat these modules as node descriptor sources, not direct
   execution APIs.
-- `puma-lib` outputs are append-only workflow metadata contracts.
-- `puma-lib` preserves the `model_path` facade, but hosts may source that value
-  from Pumas execution descriptors instead of raw library record paths.
+- `puma-lib` outputs are workflow metadata contracts centered on
+  `pumas_model_ref`.
 - Consumers must not assume Pantograph inferred runtime-executable paths from
-  `metadata.json`; the host may rebind the same facade from the upstream
-  execution descriptor contract.
-- Consumers must treat selector `indexed_path` as display/debug data. A
-  selector `entry_path` is executable only when the selector row reports ready
-  entry and artifact states.
+  `metadata.json`, selector rows, or option values. Execution paths are resolved
+  later through Pumas-owned artifact load targets.
+- Consumers must treat selector display paths as display/debug data only. They
+  are not executable graph values.
 - Consumers must treat selected-model detail as role-dependent. Owner and
   local-client Pumas access may provide batch execution descriptors, package
   summaries, and inference settings; read-only access may provide only the
   bounded selector row and empty inference settings.
 
 ## Structured Producer Contract
-- `puma-lib` emits `model_path`, `model_id`, `model_type`,
-  `task_type_primary`, `backend_key`, `recommended_backend`, `platform_context`,
+- `puma-lib` emits `pumas_model_ref`, `model_id`, `model_type`,
+  `task_type_primary`, `recommended_backend`, `platform_context`,
   `selected_binding_ids`, `dependency_bindings`,
   `dependency_requirements_id`, `inference_settings`, and
   `dependency_requirements`.
-- When `ModelExecutionDescriptor` resolution succeeds, `model_path` must be the
-  executable `entry_path`, `model_type` should prefer the descriptor model
-  type, and `task_type_primary` should prefer descriptor task data unless more
-  explicit task metadata is present.
+- `puma-lib` option values are typed Pumas model-reference payloads. Option
+  metadata may include display/debug paths, readiness state, storage kind,
+  validation state, and package summary facts; those fields are not executable
+  graph inputs.
+- Missing, stale, invalid, partial, ambiguous, or not-yet-detailed selector
+  states are represented as disabled typed unavailable options or diagnostics.
+  They are not converted to executable paths, backend choices, or successful
+  empty fallback results.
 - Selected `puma-lib` hydration should prefer the explicit selector-access role
   and must not read Pumas storage internals or synthesize runtime policy. The
   producer may project read-only selector-row facts when batch detail is not
   available.
-- Metadata fields such as `bundle_format`, `storage_kind`, and `entry_path` are
-  compatibility fallbacks only. They are not the authoritative runtime contract
+- Metadata fields such as storage kind, validation state, and display paths are
+  selector/debug evidence only. They are not the authoritative runtime contract
   for executable model selection.
 - Diffusion models should resolve to canonical image-generation graph intent
   when explicit metadata is missing but `model_type == diffusion`. External

@@ -914,20 +914,32 @@ mod tests {
             .iter()
             .find(|contract| contract.node_type.as_str() == "puma-lib")
             .expect("puma-lib contract");
-        let model_path = puma_lib
-            .output(&port_id("model_path").expect("model path port id"))
-            .expect("model path output");
+        assert!(
+            puma_lib
+                .output(&port_id("model_path").expect("model path port id"))
+                .is_none(),
+            "puma-lib must not expose model_path as an executable output"
+        );
+        assert!(
+            puma_lib
+                .output(&port_id("backend_key").expect("backend key port id"))
+                .is_none(),
+            "puma-lib must not expose backend_key as an executable output"
+        );
+        let pumas_model_ref = puma_lib
+            .output(&port_id("pumas_model_ref").expect("pumas model ref port id"))
+            .expect("pumas model ref output");
 
-        let provider = model_path
+        let provider = pumas_model_ref
             .options_provider
             .as_ref()
             .expect("registered options provider");
         assert_eq!(provider.node_type.as_str(), "puma-lib");
-        assert_eq!(provider.port_id.as_str(), "model_path");
+        assert_eq!(provider.port_id.as_str(), "pumas_model_ref");
 
-        let serialized = serde_json::to_value(model_path).expect("provider serialization");
+        let serialized = serde_json::to_value(pumas_model_ref).expect("provider serialization");
         assert_eq!(serialized["options_provider"]["node_type"], "puma-lib");
-        assert_eq!(serialized["options_provider"]["port_id"], "model_path");
+        assert_eq!(serialized["options_provider"]["port_id"], "pumas_model_ref");
 
         let llm_inference = contracts
             .iter()

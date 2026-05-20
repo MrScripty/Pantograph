@@ -627,6 +627,28 @@ fixture contract must not remain reachable as an alternate execution path.
      stale, invalid, unavailable, or not-implemented Pumas states become typed
      unavailable options or diagnostics. Documentation must describe the
      replacement contract and remove the old `model_path` facade language.
+   - 2026-05-20 implementation: completed the workflow-node contract slice.
+     `puma-lib` descriptors now expose `pumas_model_ref` as the selectable
+     graph value and no longer expose `model_path` or graph-visible
+     `backend_key` execution outputs. The registered `PortOptionsProvider`
+     moved from `model_path` to `pumas_model_ref`, option values now carry the
+     typed Pumas model-reference payload instead of executable entry paths, and
+     selector paths are projected only as `display_*` metadata. Non-ready
+     selector rows are disabled with typed port-option unavailable states and
+     stable Pumas selector reason codes.
+   - No-fallback/no-legacy confirmation: this slice did not add a compatibility
+     alias for `model_path` or `backend_key`, did not synthesize missing
+     selected artifact fields from parallel selector metadata, and did not
+     preserve executable path option values. Pumas remains authoritative for
+     model references and later artifact load-target resolution.
+   - Verification: `cargo fmt --all -- --check`, `cargo test -p
+     workflow-nodes puma_lib --features model-library`, and `cargo test -p
+     workflow-nodes builtin_contracts_preserve_registered_port_options_provider_refs
+     --features model-library`.
+   - Remaining follow-up: node-engine still has retired model/fact intake and
+     non-image workflow examples still carry retired direct inference shapes;
+     those remain separate closeout slices and were intentionally not touched
+     by this workflow-node contract slice.
 
 3. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

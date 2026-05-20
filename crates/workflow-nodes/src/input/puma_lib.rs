@@ -3,10 +3,11 @@
 //! This module registers a stub node descriptor for `puma-lib` so that
 //! `register_builtins()` discovers the node via `inventory`. Actual execution
 //! is handled by the host application through the callback bridge — the host
-//! provides the model file path from its local pumas-core library.
+//! provides the selected Pumas model reference from its local pumas-core
+//! library.
 //!
 //! When the `model-library` feature is enabled, this module also registers
-//! a `PortOptionsProvider` for the `model_path` port, enabling hosts to
+//! a `PortOptionsProvider` for the `pumas_model_ref` port, enabling hosts to
 //! query available models from the pumas-library.
 
 use async_trait::async_trait;
@@ -15,12 +16,10 @@ use node_engine::{
     ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor, TaskMetadata,
 };
 
-const PORT_MODEL_PATH: &str = "model_path";
 const PORT_PUMAS_MODEL_REF: &str = "pumas_model_ref";
 const PORT_MODEL_ID: &str = "model_id";
 const PORT_MODEL_TYPE: &str = "model_type";
 const PORT_TASK_TYPE_PRIMARY: &str = "task_type_primary";
-const PORT_BACKEND_KEY: &str = "backend_key";
 const PORT_RECOMMENDED_BACKEND: &str = "recommended_backend";
 const PORT_PLATFORM_CONTEXT: &str = "platform_context";
 const PORT_SELECTED_BINDING_IDS: &str = "selected_binding_ids";
@@ -33,7 +32,7 @@ const PORT_DEPENDENCY_REQUIREMENTS: &str = "dependency_requirements";
 ///
 /// The node is discoverable by all consumers (including puma-bot NIF) but
 /// always fails at runtime — the host must intercept execution via the
-/// callback bridge and supply the model file path itself.
+/// callback bridge and supply the selected model reference itself.
 #[derive(Clone)]
 pub struct PumaLibTask {
     task_id: String,
@@ -53,15 +52,13 @@ impl TaskDescriptor for PumaLibTask {
             node_type: "puma-lib".to_string(),
             category: NodeCategory::Input,
             label: "Puma-Lib".to_string(),
-            description: "Provides AI model file path".to_string(),
+            description: "Provides a Pumas model reference".to_string(),
             inputs: vec![],
             outputs: vec![
-                PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::optional(PORT_PUMAS_MODEL_REF, "Pumas Model Ref", PortDataType::Json),
                 PortMetadata::optional(PORT_MODEL_ID, "Model ID", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_TYPE, "Model Type", PortDataType::String),
                 PortMetadata::optional(PORT_TASK_TYPE_PRIMARY, "Task Type", PortDataType::String),
-                PortMetadata::optional(PORT_BACKEND_KEY, "Backend Key", PortDataType::String),
                 PortMetadata::optional(
                     PORT_RECOMMENDED_BACKEND,
                     "Recommended Backend",
@@ -114,16 +111,17 @@ mod options_provider {
     use crate::setup::{PumasSelectorAccess, PUMAS_SELECTOR_ACCESS};
     use async_trait::async_trait;
     use node_engine::{
-        ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider, PortOptionsQuery,
-        PortOptionsResult,
+        ExecutorExtensions, NodeEngineError, PortOption, PortOptionAvailabilityState,
+        PortOptionsProvider, PortOptionsQuery, PortOptionsResult,
+    };
+    use pumas_library::models::{
+        ModelArtifactState, ModelEntryPathState, ModelLibrarySelectorSnapshotRequest,
+        ModelLibrarySelectorSnapshotRow,
     };
     #[cfg(test)]
     use pumas_library::models::{
         ModelExecutionDescriptor, ModelLibraryChangeKind, ModelLibraryRefreshScope,
         ModelLibraryUpdateFeed, ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
-    };
-    use pumas_library::models::{
-        ModelLibrarySelectorSnapshotRequest, ModelLibrarySelectorSnapshotRow,
     };
     #[cfg(test)]
     use std::collections::HashMap;
@@ -146,7 +144,7 @@ mod options_provider {
             .map(canonical_graph_task_type_primary)
     }
 
-    /// Provides available models from pumas-library for the `model_path` port.
+    /// Provides available models from pumas-library for the `pumas_model_ref` port.
     pub struct PumaLibOptionsProvider;
 
     /// Compute conservative inference settings when the API-backed settings
@@ -452,9 +450,86 @@ mod options_provider {
     }
 
     fn selector_row_value(row: &ModelLibrarySelectorSnapshotRow) -> serde_json::Value {
-        row.executable_entry_path()
-            .map(|path| serde_json::json!(path))
-            .unwrap_or_else(|| serde_json::json!(row.model_ref.model_id))
+        serde_json::to_value(&row.model_ref).unwrap_or_else(|_| {
+            serde_json::json!({
+                "model_id": row.model_ref.model_id,
+            })
+        })
+    }
+
+    fn selector_row_unavailable_state(
+        row: &ModelLibrarySelectorSnapshotRow,
+    ) -> Option<PortOptionAvailabilityState> {
+        if row.is_executable_reference_ready() {
+            return None;
+        }
+
+        match (row.entry_path_state, row.artifact_state) {
+            (ModelEntryPathState::Missing, _) | (_, ModelArtifactState::Missing) => {
+                Some(PortOptionAvailabilityState::MissingModelFacts)
+            }
+            (ModelEntryPathState::NeedsDetail, _) | (_, ModelArtifactState::NeedsDetail) => {
+                Some(PortOptionAvailabilityState::MissingModelFacts)
+            }
+            (ModelEntryPathState::Partial, _) | (_, ModelArtifactState::Partial) => {
+                Some(PortOptionAvailabilityState::MissingDependency)
+            }
+            (ModelEntryPathState::Invalid, _) | (_, ModelArtifactState::Invalid) => {
+                Some(PortOptionAvailabilityState::RequiresModelCapability)
+            }
+            (ModelEntryPathState::Ambiguous, _) | (_, ModelArtifactState::Ambiguous) => {
+                Some(PortOptionAvailabilityState::RequiresModelCapability)
+            }
+            (ModelEntryPathState::Stale, _) | (_, ModelArtifactState::Stale) => {
+                Some(PortOptionAvailabilityState::MissingModelFacts)
+            }
+            (ModelEntryPathState::Ready, ModelArtifactState::Ready) => None,
+        }
+    }
+
+    fn selector_row_unavailable_reason_code(
+        row: &ModelLibrarySelectorSnapshotRow,
+    ) -> Option<String> {
+        selector_row_unavailable_state(row).map(|_| {
+            format!(
+                "pumas_selector_{}_{}",
+                entry_path_state_code(row.entry_path_state),
+                artifact_state_code(row.artifact_state)
+            )
+        })
+    }
+
+    fn selector_row_unavailable_reason(row: &ModelLibrarySelectorSnapshotRow) -> Option<String> {
+        selector_row_unavailable_state(row).map(|_| {
+            format!(
+                "Pumas selector row is not ready: entry path is {:?}, artifact is {:?}",
+                row.entry_path_state, row.artifact_state
+            )
+        })
+    }
+
+    fn entry_path_state_code(state: ModelEntryPathState) -> &'static str {
+        match state {
+            ModelEntryPathState::Ready => "ready",
+            ModelEntryPathState::Missing => "missing",
+            ModelEntryPathState::Partial => "partial",
+            ModelEntryPathState::Invalid => "invalid",
+            ModelEntryPathState::Ambiguous => "ambiguous",
+            ModelEntryPathState::NeedsDetail => "needs_detail",
+            ModelEntryPathState::Stale => "stale",
+        }
+    }
+
+    fn artifact_state_code(state: ModelArtifactState) -> &'static str {
+        match state {
+            ModelArtifactState::Ready => "ready",
+            ModelArtifactState::Missing => "missing",
+            ModelArtifactState::Partial => "partial",
+            ModelArtifactState::Invalid => "invalid",
+            ModelArtifactState::Ambiguous => "ambiguous",
+            ModelArtifactState::NeedsDetail => "needs_detail",
+            ModelArtifactState::Stale => "stale",
+        }
     }
 
     fn selector_row_option_metadata(
@@ -481,10 +556,9 @@ mod options_provider {
             "task_type_primary": task_type_primary,
             "recommended_backend": row.recommended_backend,
             "runtime_engine_hints": runtime_engine_hints,
-            "entry_path": row.executable_entry_path(),
-            "indexed_path": row.indexed_path,
+            "display_entry_path": row.executable_entry_path(),
+            "display_indexed_path": row.indexed_path,
             "selected_artifact_id": row.selected_artifact_id,
-            "selected_artifact_path": row.selected_artifact_path,
             "entry_path_state": row.entry_path_state,
             "artifact_state": row.artifact_state,
             "selector_detail_state": row.detail_state,
@@ -518,15 +592,16 @@ mod options_provider {
         row: &ModelLibrarySelectorSnapshotRow,
         cursor: &str,
     ) -> PortOption {
+        let unavailable_state = selector_row_unavailable_state(row);
         PortOption {
             value: selector_row_value(row),
             label: row.display_name.clone(),
             description: Some(selector_row_description(row)),
             metadata: Some(selector_row_option_metadata(row, cursor)),
-            disabled: false,
-            unavailable_state: None,
-            unavailable_reason_code: None,
-            unavailable_reason: None,
+            disabled: unavailable_state.is_some(),
+            unavailable_state,
+            unavailable_reason_code: selector_row_unavailable_reason_code(row),
+            unavailable_reason: selector_row_unavailable_reason(row),
         }
     }
 
@@ -577,7 +652,7 @@ mod options_provider {
 #[cfg(feature = "model-library")]
 inventory::submit!(node_engine::PortQueryFn {
     node_type: "puma-lib",
-    port_id: "model_path",
+    port_id: "pumas_model_ref",
     provider: || Box::new(options_provider::PumaLibOptionsProvider),
 });
 
@@ -609,9 +684,9 @@ mod tests {
         let meta = PumaLibTask::descriptor();
 
         assert!(meta.inputs.is_empty());
-        assert_eq!(meta.outputs.len(), 13);
+        assert_eq!(meta.outputs.len(), 11);
 
-        assert!(meta.outputs.iter().any(|p| p.id == "model_path"));
+        assert!(!meta.outputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.outputs.iter().any(|p| p.id == "pumas_model_ref"
             && p.data_type == PortDataType::Json
             && !p.required));
@@ -622,7 +697,7 @@ mod tests {
         assert!(meta.outputs.iter().any(|p| p.id == "model_id"));
         assert!(meta.outputs.iter().any(|p| p.id == "model_type"));
         assert!(meta.outputs.iter().any(|p| p.id == "task_type_primary"));
-        assert!(meta.outputs.iter().any(|p| p.id == "backend_key"));
+        assert!(!meta.outputs.iter().any(|p| p.id == "backend_key"));
         assert!(meta.outputs.iter().any(|p| p.id == "recommended_backend"));
         assert!(meta.outputs.iter().any(|p| p.id == "platform_context"
             && p.data_type == PortDataType::Json
@@ -1261,7 +1336,7 @@ mod model_library_tests {
     }
 
     #[test]
-    fn test_selector_row_option_uses_entry_path_only_when_ready() {
+    fn test_selector_row_option_uses_pumas_model_ref_as_value() {
         let ready = selector_snapshot_row(
             "llm/imported/ready",
             ModelEntryPathState::Ready,
@@ -1270,8 +1345,15 @@ mod model_library_tests {
         let ready_option = port_option_from_selector_row(&ready, "model-library-updates:1");
         assert_eq!(
             ready_option.value,
-            serde_json::json!("/models/llm/imported/ready/model.gguf")
+            serde_json::json!({
+                "model_ref_contract_version": 1,
+                "model_id": "llm/imported/ready",
+                "selected_artifact_id": "model.gguf",
+                "selected_artifact_path": "llm/imported/ready/model.gguf"
+            })
         );
+        assert!(!ready_option.disabled);
+        assert!(ready_option.unavailable_state.is_none());
         let ready_metadata = ready_option
             .metadata
             .as_ref()
@@ -1282,9 +1364,15 @@ mod model_library_tests {
             serde_json::json!("llm/imported/ready")
         );
         assert_eq!(
-            ready_metadata["indexed_path"],
+            ready_metadata["display_indexed_path"],
             serde_json::json!("indexed/llm/imported/ready")
         );
+        assert_eq!(
+            ready_metadata["display_entry_path"],
+            serde_json::json!("/models/llm/imported/ready/model.gguf")
+        );
+        assert!(ready_metadata.get("entry_path").is_none());
+        assert!(ready_metadata.get("selected_artifact_path").is_none());
         assert_eq!(
             ready_metadata["selector_row_executable"],
             serde_json::json!(true)
@@ -1298,18 +1386,86 @@ mod model_library_tests {
         let partial_option = port_option_from_selector_row(&partial, "model-library-updates:1");
         assert_eq!(
             partial_option.value,
-            serde_json::json!("llm/imported/partial")
+            serde_json::json!({
+                "model_ref_contract_version": 1,
+                "model_id": "llm/imported/partial",
+                "selected_artifact_id": "model.gguf",
+                "selected_artifact_path": "llm/imported/partial/model.gguf"
+            })
+        );
+        assert!(partial_option.disabled);
+        assert_eq!(
+            partial_option.unavailable_state,
+            Some(node_engine::PortOptionAvailabilityState::MissingDependency)
+        );
+        assert_eq!(
+            partial_option.unavailable_reason_code.as_deref(),
+            Some("pumas_selector_partial_ready")
         );
         let partial_metadata = partial_option
             .metadata
             .as_ref()
             .and_then(serde_json::Value::as_object)
             .expect("selector option metadata should be an object");
-        assert!(partial_metadata["entry_path"].is_null());
+        assert!(partial_metadata["display_entry_path"].is_null());
         assert_eq!(
             partial_metadata["selector_row_executable"],
             serde_json::json!(false)
         );
+    }
+
+    #[test]
+    fn test_selector_row_unavailable_states_are_typed_disabled_options() {
+        let cases = [
+            (
+                ModelEntryPathState::Missing,
+                ModelArtifactState::Ready,
+                node_engine::PortOptionAvailabilityState::MissingModelFacts,
+                "pumas_selector_missing_ready",
+            ),
+            (
+                ModelEntryPathState::Invalid,
+                ModelArtifactState::Ready,
+                node_engine::PortOptionAvailabilityState::RequiresModelCapability,
+                "pumas_selector_invalid_ready",
+            ),
+            (
+                ModelEntryPathState::Stale,
+                ModelArtifactState::Ready,
+                node_engine::PortOptionAvailabilityState::MissingModelFacts,
+                "pumas_selector_stale_ready",
+            ),
+            (
+                ModelEntryPathState::NeedsDetail,
+                ModelArtifactState::Ready,
+                node_engine::PortOptionAvailabilityState::MissingModelFacts,
+                "pumas_selector_needs_detail_ready",
+            ),
+            (
+                ModelEntryPathState::Ambiguous,
+                ModelArtifactState::Ready,
+                node_engine::PortOptionAvailabilityState::RequiresModelCapability,
+                "pumas_selector_ambiguous_ready",
+            ),
+        ];
+
+        for (entry_state, artifact_state, expected_state, expected_code) in cases {
+            let row =
+                selector_snapshot_row("llm/imported/unavailable", entry_state, artifact_state);
+            let option = port_option_from_selector_row(&row, "model-library-updates:1");
+
+            assert!(option.disabled, "case {expected_code} should be disabled");
+            assert_eq!(option.unavailable_state, Some(expected_state));
+            assert_eq!(
+                option.unavailable_reason_code.as_deref(),
+                Some(expected_code)
+            );
+            assert!(option.value.is_object());
+            assert_ne!(
+                option.value,
+                serde_json::json!("/models/llm/imported/unavailable/model.gguf")
+            );
+        }
     }
 
     #[test]
@@ -1377,9 +1533,11 @@ mod model_library_tests {
         assert_eq!(result.options.len(), 1);
         let option = &result.options[0];
         assert_eq!(
-            option.value,
-            serde_json::json!(bundle_root.display().to_string())
+            option.value["model_id"],
+            serde_json::json!("diffusion/imported/test-bundle")
         );
+        assert!(option.value.is_object());
+        assert!(!option.disabled);
         let metadata = option
             .metadata
             .as_ref()
@@ -1411,7 +1569,7 @@ mod model_library_tests {
         let model_dir = temp_dir
             .path()
             .join("shared-resources/models/llm/imported/test-gguf");
-        let model_file = write_library_owned_file_model(&model_dir, "model.gguf", 256);
+        write_library_owned_file_model(&model_dir, "model.gguf", 256);
 
         let api = Arc::new(PumasApi::builder(temp_dir.path()).build().await.unwrap());
         api.rebuild_model_index().await.unwrap();
@@ -1436,9 +1594,11 @@ mod model_library_tests {
         assert_eq!(result.options.len(), 1);
         let option = &result.options[0];
         assert_eq!(
-            option.value,
-            serde_json::json!(model_file.display().to_string())
+            option.value["model_id"],
+            serde_json::json!("llm/imported/test-gguf")
         );
+        assert!(option.value.is_object());
+        assert!(!option.disabled);
         let metadata = option
             .metadata
             .as_ref()
@@ -1531,9 +1691,10 @@ mod model_library_tests {
         assert_eq!(result.options.len(), 1);
         let option = &result.options[0];
         assert_eq!(
-            option.value,
-            serde_json::json!("/models/read-only/model.gguf")
+            option.value["model_id"],
+            serde_json::json!("llm/imported/read-only")
         );
+        assert!(!option.disabled);
         let metadata = option
             .metadata
             .as_ref()

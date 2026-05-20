@@ -7422,6 +7422,35 @@ Worker rules:
     behavior. It makes the path-producing `puma-lib` contract the next serial
     replacement boundary and prevents later scheduler/node-engine slices from
     treating raw paths or backend keys as accepted compatibility aliases.
+- 2026-05-20 Milestone 5 `puma-lib` contract replacement slice:
+  - Smallest useful vertical slice: replace the `puma-lib` workflow-node
+    descriptor and model selector options contract so graph selection uses
+    `pumas_model_ref` rather than executable `model_path` or graph-visible
+    `backend_key` values.
+  - Allowed write set: `crates/workflow-nodes/src/input/puma_lib.rs`,
+    `crates/workflow-nodes/src/input/README.md`,
+    `crates/workflow-nodes/src/contracts.rs`, this milestone plan, and this
+    execution log. Node-engine execution, scheduler policy, saved workflows,
+    generated DTOs, lockfiles, and root proposal markdown files were not
+    touched.
+  - No-fallback/no-legacy confirmation: descriptor outputs removed
+    `model_path` and `backend_key`; the provider is registered on
+    `pumas_model_ref`; option values are typed Pumas model-reference payloads;
+    non-ready selector rows become typed disabled options; display paths remain
+    display metadata only.
+  - Implementation completed: updated workflow-node descriptor metadata,
+    provider registration, option value projection, disabled/unavailable state
+    mapping, contract tests, and input-node README contract text.
+  - Verification passed: `cargo fmt --all -- --check`, `cargo test -p
+    workflow-nodes puma_lib --features model-library`, and `cargo test -p
+    workflow-nodes builtin_contracts_preserve_registered_port_options_provider_refs
+    --features model-library`.
+  - Deviations: real Pumas selector snapshots may provide selected artifact
+    fields outside the nested `PumasModelRef`; this slice intentionally did not
+    copy those parallel fields into the option value, keeping `PumasModelRef`
+    authoritative.
+  - Remaining follow-up: remove node-engine retired model/fact intake and
+    reconcile non-image tracked workflow examples in their own slices.
 
 ### Traceability Links
 
