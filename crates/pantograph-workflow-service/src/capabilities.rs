@@ -499,20 +499,6 @@ fn extract_model_ids_from_value(value: &serde_json::Value, out: &mut HashSet<Str
                         }
                     }
                 }
-                if matches!(
-                    key.as_str(),
-                    "model_path"
-                        | "modelPath"
-                        | "entry_path"
-                        | "entryPath"
-                        | "selected_artifact_path"
-                        | "selectedArtifactPath"
-                ) {
-                    if let Some(model_id) = child.as_str().and_then(model_id_from_pumas_model_path)
-                    {
-                        out.insert(model_id);
-                    }
-                }
                 extract_model_ids_from_value(child, out);
             }
         }
@@ -522,34 +508,6 @@ fn extract_model_ids_from_value(value: &serde_json::Value, out: &mut HashSet<Str
             }
         }
         _ => {}
-    }
-}
-
-fn model_id_from_pumas_model_path(path: &str) -> Option<String> {
-    let normalized = path.trim().replace('\\', "/");
-    let marker = "shared-resources/models/";
-    let (_, suffix) = normalized.split_once(marker)?;
-    let model_id = model_id_from_pumas_model_suffix(suffix)?;
-    Some(model_id.to_string())
-}
-
-fn model_id_from_pumas_model_suffix(suffix: &str) -> Option<&str> {
-    let model_id = suffix.trim_matches('/');
-    if model_id.is_empty() {
-        return None;
-    }
-
-    if path_has_gguf_extension(model_id) {
-        model_id.rsplit_once('/').and_then(|(parent, _)| {
-            let parent = parent.trim_matches('/');
-            if parent.is_empty() {
-                None
-            } else {
-                Some(parent)
-            }
-        })
-    } else {
-        Some(model_id)
     }
 }
 
@@ -577,13 +535,6 @@ fn extract_node_family_runtime_requirement(node: &StoredGraphNode, out: &mut Has
         }
         _ => {}
     }
-}
-
-fn path_has_gguf_extension(path: &str) -> bool {
-    Path::new(path)
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"))
 }
 
 fn derive_roles(node_type: &str, data: &serde_json::Value) -> HashSet<String> {
@@ -903,29 +854,44 @@ mod tests {
     }
 
     #[test]
-    fn extract_required_models_recovers_pumas_model_id_from_library_path() {
+    fn extract_required_models_ignores_pumas_library_paths_without_model_identity() {
         let nodes = vec![StoredGraphNode {
             id: "puma".to_string(),
             node_type: "puma-lib".to_string(),
             data: serde_json::json!({
+                "model_id": "",
                 "modelPath": "/opt/Pumas-Library/shared-resources/models/llm/gen-verse/trado-8b-instruct",
             }),
             position: StoredPosition::default(),
         }];
 
-        assert_eq!(
-            extract_required_models(&nodes),
-            vec!["llm/gen-verse/trado-8b-instruct".to_string()]
-        );
+        assert!(extract_required_models(&nodes).is_empty());
     }
 
     #[test]
-    fn extract_required_models_recovers_pumas_model_id_from_gguf_file_path() {
+    fn extract_required_models_ignores_selected_artifact_paths_without_model_identity() {
         let nodes = vec![StoredGraphNode {
             id: "puma".to_string(),
             node_type: "puma-lib".to_string(),
             data: serde_json::json!({
                 "selected_artifact_path": "/opt/Pumas-Library/shared-resources/models/vlm/qwen35/qwen3_6-27b-heretic-ara-gguf/Qwen3.6-27B-heretic-ara-Q4_K_M.gguf",
+            }),
+            position: StoredPosition::default(),
+        }];
+
+        assert!(extract_required_models(&nodes).is_empty());
+    }
+
+    #[test]
+    fn extract_required_models_uses_explicit_pumas_model_identity() {
+        let nodes = vec![StoredGraphNode {
+            id: "puma".to_string(),
+            node_type: "puma-lib".to_string(),
+            data: serde_json::json!({
+                "pumas_model_ref": {
+                    "model_id": "vlm/qwen35/qwen3_6-27b-heretic-ara-gguf",
+                    "selected_artifact_path": "/opt/Pumas-Library/shared-resources/models/vlm/qwen35/qwen3_6-27b-heretic-ara-gguf/Qwen3.6-27B-heretic-ara-Q4_K_M.gguf"
+                }
             }),
             position: StoredPosition::default(),
         }];

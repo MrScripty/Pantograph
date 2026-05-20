@@ -861,6 +861,10 @@ before the matching checklist row is closed.
   and should be removed when the workflow/fixture closure slice runs. The
   canonical source is explicit `pumas_model_ref`; Pumas owns path-to-model
   interpretation.
+  - 2026-05-20 update: workflow-service capability extraction now ignores
+    path-shaped model fields and uses only explicit model identity fields such
+    as `model_id` and `pumas_model_ref.model_id`. Pumas path-to-model
+    interpretation remains outside Pantograph capability extraction.
 - **Preserve the clean image planner boundary:** the current image-generation
   planner shape is the model to preserve: side-effect-free input, Pumas package
   facts, Pumas artifact load target, and a scheduler-owned
@@ -5220,6 +5224,46 @@ Stop and re-plan before implementation when any remaining slice would require:
   - Remaining follow-up: the broader canonical workflow/fixture checklist item
     remains open until non-image tracked examples and any formal workflow
     schema migration are explicitly reconciled.
+- 2026-05-20 slice: path-derived Pumas model inference removal.
+  - Smallest useful vertical slice: stop workflow-service capability extraction
+    from converting Pumas-looking `model_path`, `entry_path`, or
+    `selected_artifact_path` values into required model ids.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/capabilities.rs`,
+    `crates/pantograph-workflow-service/src/README.md`, this milestone file,
+    and `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: the slice removes a legacy inference
+    path instead of preserving it. Pantograph no longer derives model identity
+    from graph-local filesystem paths; capability extraction consumes explicit
+    `model_id` or `pumas_model_ref.model_id` facts only, leaving Pumas as the
+    owner of path-to-model interpretation and artifact load-target resolution.
+  - Per-slice standards evidence: workflow-service remains the host-agnostic
+    capability/preflight owner and does not add dependencies on Pumas
+    filesystem state, frontend, Tauri, diagnostics-ledger, generated DTOs,
+    lockfiles, persisted schemas, worker execution, or runtime startup paths.
+    The slice is synchronous pure JSON inspection with no lifecycle tasks,
+    subprocesses, path access, feature changes, frontend accessibility surface,
+    or cross-platform cfg. The changed file remains over the decomposition
+    threshold; no responsibility was added, and this slice removes helper code.
+  - Tests/fixtures: capability unit tests now prove Pumas library paths and
+    selected artifact paths are ignored without explicit model identity, while
+    nested `pumas_model_ref.model_id` remains accepted as the canonical model
+    fact.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service --lib capabilities`,
+    `cargo check -p pantograph-workflow-service`, and
+    `git diff --check -- crates/pantograph-workflow-service/src/capabilities.rs crates/pantograph-workflow-service/src/README.md`.
+  - Verification deviation: `cargo test -p pantograph-workflow-service
+    capabilities` failed before running this slice's integration path because
+    `crates/pantograph-workflow-service/tests/contract.rs` has unrelated
+    `RunListProjectionRecord`/`RunDetailProjectionRecord` initializers missing
+    `memory_failure_kind`, `observed_peak_ram_bytes`, and
+    `observed_peak_vram_bytes`. The focused library capability tests and crate
+    check were run successfully for this slice.
+  - Remaining follow-up: non-image tracked workflow examples and any formal
+    workflow schema migration still need explicit reconciliation before the
+    broad workflow/fixture checklist item can close.
 
 **Verification:**
 

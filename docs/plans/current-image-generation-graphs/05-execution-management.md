@@ -7244,6 +7244,36 @@ Worker rules:
   - Remaining follow-up: none for Milestone 4. Browser-mounted focus
     regression tests remain deferred until the repository adopts a DOM-capable
     frontend test strategy.
+- 2026-05-20 Milestone 5 path-derived Pumas model inference removal slice:
+  - Smallest useful vertical slice: remove workflow-service capability
+    extraction of model ids from Pumas-looking `model_path`, `entry_path`, and
+    `selected_artifact_path` values while preserving explicit
+    `model_id`/`pumas_model_ref.model_id` discovery.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/src/capabilities.rs`,
+    `crates/pantograph-workflow-service/src/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the slice deletes legacy path-derived
+    model inference and adds no compatibility alias, graph migration, Pumas path
+    join, backend fallback, or scheduler bypass. Pumas remains the authority for
+    path-to-model interpretation and artifact load-target resolution.
+  - Implementation completed: removed the path parser helpers, updated
+    capability tests to prove path-shaped fields are ignored without explicit
+    model identity, added the positive `pumas_model_ref.model_id` test, and
+    documented the workflow-service invariant.
+  - Verification passed: `cargo fmt --all -- --check`, `cargo test -p
+    pantograph-workflow-service --lib capabilities`, `cargo check -p
+    pantograph-workflow-service`, and `git diff --check -- crates/pantograph-workflow-service/src/capabilities.rs crates/pantograph-workflow-service/src/README.md`.
+  - Verification deviation: `cargo test -p pantograph-workflow-service
+    capabilities` failed before exercising this slice because unrelated
+    integration-test initializers in
+    `crates/pantograph-workflow-service/tests/contract.rs` are missing
+    `memory_failure_kind`, `observed_peak_ram_bytes`, and
+    `observed_peak_vram_bytes`. The focused library test and crate check passed.
+  - Remaining follow-up: non-image tracked workflow examples and formal
+    workflow schema migration ownership remain open Milestone 5 workflow/fixture
+    closure work.
 
 ### Traceability Links
 

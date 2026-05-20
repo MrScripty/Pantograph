@@ -151,6 +151,11 @@ policy free to choose among valid executable candidates. Explicit values become
 hard scheduler requirements only after selector validation, and package facts
 such as `recommended_backend` remain dependency/capability evidence rather than
 required runtime constraints.
+Workflow model discovery uses explicit model identity fields such as
+`model_id` and `pumas_model_ref.model_id`. It does not derive model ids from
+`model_path`, `entry_path`, or `selected_artifact_path`; Pumas owns path to
+model interpretation and Pantograph consumes Pumas-owned model references or
+artifact load targets.
 Workflow technical-fit decisions now also mirror selected runtime variant,
 device class/id, resource estimates, observed-throughput hints, and bounded
 device diagnostics from backend/runtime selectors. These fields are transport
