@@ -1027,6 +1027,17 @@ Staged implementation:
     `inference::server`, `inference::embedding_runtime`, and
     `backend::llamacpp_support` behind typed adapter-local memory failure
     translation.
+    - 2026-05-20 re-plan boundary: do not begin this item as an ad hoc string
+      cleanup. The current llama.cpp startup paths return `String` failures
+      from sidecar readiness loops, while typed memory failure observations now
+      flow through execution telemetry. Resolving this cleanly requires a
+      planned typed startup/runtime failure contract that defines how
+      adapter-local OOM detection maps to `InferenceMemoryFailureKind`, how
+      backend startup errors preserve scheduler/diagnostics details without
+      raw log leakage, and whether embedding sidecar startup shares the same
+      contract or a narrower llama.cpp startup error type. No compatibility
+      shim or fallback string parser should be preserved outside that typed
+      adapter-local boundary.
 11. [ ] Extend runtime-registry candidate history DTOs and embedded-runtime
    history projection with observed memory and OOM fields already computed by
    diagnostics-ledger.

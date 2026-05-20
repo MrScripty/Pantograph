@@ -772,6 +772,17 @@ PyTorch/diffusers and produce a retained image artifact.
       added behind the provider when a runtime exposes bounded structured
       facts; runtimes without such APIs should continue returning typed
       unavailable states.
+  - 2026-05-20 legacy OOM handling re-plan boundary:
+    - Stop before replacing llama.cpp sidecar OOM string handling. The current
+      paths span `inference::server`, `inference::embedding_runtime`, and
+      `backend::llamacpp_support`, return startup/readiness failures as
+      strings, and predate the typed execution telemetry contract.
+    - The next implementation plan must define the typed adapter-local
+      startup/runtime failure contract, how detected OOM maps to
+      `InferenceMemoryFailureKind`, how startup diagnostics avoid raw log
+      leakage, and whether the dedicated embedding sidecar shares the same
+      contract. No compatibility shim or scheduler-side log parsing should be
+      introduced.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated

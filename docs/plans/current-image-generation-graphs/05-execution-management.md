@@ -340,6 +340,13 @@ Update during implementation:
   Verification passed:
   `cargo test -p inference test_chat_completion_stream_with_lifecycle_merges_runtime_native_telemetry --lib`
   and `cargo check -p inference`.
+- 2026-05-20: Re-plan boundary found before legacy OOM string handling. The
+  remaining cleanup spans sidecar readiness loops, backend startup errors,
+  scheduler-facing diagnostics, and typed memory failure telemetry. Plan the
+  replacement as a typed adapter-local startup/runtime failure contract before
+  editing `inference::server`, `inference::embedding_runtime`, or
+  `backend::llamacpp_support`; do not preserve fallback string parsing outside
+  that boundary.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed
