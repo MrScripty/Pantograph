@@ -686,6 +686,79 @@ a valid decision.
      user-local files and assert that examples either use canonical inference
      contracts or are explicitly out of scope for Milestone 5.
 
+### Standards Compliance Gates
+
+The closeout slices above were iterated against the repository standards in
+`/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`
+on 2026-05-20. Implementation must keep these gates true; if a slice cannot
+meet them, stop and re-plan instead of adding compatibility or local bypasses.
+
+- **Plan/worktree hygiene:** each slice must start from a clean implementation
+  worktree except explicitly approved plan/proposal markdown. Shared contracts,
+  generated DTOs, lockfiles, saved workflow files, persisted schemas, workflow
+  fixtures, and global config files remain serial integration-owner work and
+  must not be split across parallel workers.
+- **Layering and crate roles:** contracts and validated DTOs stay in the
+  contract-owning crates. `inference` remains runtime/backend-facing and must
+  not depend on workflow-service, diagnostics-ledger, frontend, Tauri, graph
+  internals, or scheduler policy crates. Frontend/Tauri/node-engine adapters
+  may pass typed user intent and consume backend-confirmed facts, but they must
+  not choose an executable backend/runtime/device after the scheduler decision.
+- **Typed boundaries:** raw strings, paths, booleans, numeric values, and
+  display labels entering IPC, persisted, worker, runtime, or cross-crate
+  boundaries must parse once into validated types with typed diagnostics.
+  Public fallible APIs must use structured error enums rather than
+  `Result<T, String>`, and public DTOs should derive useful `Debug`, use
+  explicit serde casing, and use `#[non_exhaustive]` where future extension is
+  expected.
+- **Rust API and module shape:** planning, parsing, normalization, policy, and
+  projection helpers should remain synchronous unless they perform real
+  concurrent I/O. New modules must pass the decomposition review when they
+  approach the repository thresholds: files over 500 lines, UI components over
+  250 lines, modules with more than roughly seven public functions, or modules
+  with more than three distinct responsibilities.
+- **Concurrency and lifecycle:** any task, stream, local service, subprocess,
+  install job, probe, watcher, or refresh loop introduced or touched by a slice
+  must have one lifecycle owner, tracked handles, cancellation/shutdown
+  behavior, timeout policy, bounded queues/requests where applicable, and
+  panic/error reporting at the owner. No global Tokio runtimes, discarded
+  `tokio::spawn` handles, unbounded queues, or blocking work in async request
+  and lifecycle paths are allowed.
+- **Path and resource security:** filesystem, subprocess, dynamic-library,
+  Pumas artifact, artifact-store, pid-file, and worker-visible paths must go
+  through the shared allowed-root validation boundary before use. Pumas owns
+  model library state and artifact load targets; Pantograph may validate
+  whether an approved target can be handed to a selected runtime/worker, but it
+  must not join Pumas paths or infer artifact files from model directories.
+  Local services must bind to loopback and define connection/request limits.
+- **Checked arithmetic and resource accounting:** dimensions, token/context
+  limits, batch sizes, byte ranges, cache counters, timing/duration values,
+  memory estimates, resource observations, and scheduler/admission budgets that
+  cross public/runtime/worker/persisted boundaries must use checked arithmetic.
+  Overflow, underflow, impossible totals, or unrepresentable values fail with
+  typed diagnostics; absence may default only at the canonical owner of that
+  default.
+- **Frontend ownership and accessibility:** UI code renders backend-owned
+  capability/readiness facts and keeps only transient form intent locally.
+  Runtime/device controls must not synthesize executable choices, optimistically
+  display backend-owned state, or rank/select runtimes. Interactive controls
+  need semantic elements or complete ARIA/keyboard handling, accessible names,
+  focus-visible behavior, and tests using resilient accessible selectors.
+  Polling must be avoided when event/subscription updates are feasible; any
+  remaining poll must be scoped and have deterministic teardown tests.
+- **Interop and fixture coverage:** every DTO crossing Rust crate, Tauri/TS,
+  diagnostics-ledger, Python worker, persisted-state, or saved-workflow
+  boundaries needs native-side contract tests and the matching host/consumer
+  fixture or smoke path for the slice that changes it. Serde tag/casing/field
+  shape must be asserted rather than inferred from TypeScript or Rust compile
+  checks alone.
+- **Documentation and traceability:** when a slice changes a public contract,
+  feature flag, module role, structured producer, host-facing API, persisted
+  artifact, or ownership boundary, update the relevant README/plan entry in
+  the same commit. New or reorganized source directories need meaningful
+  README coverage under the documentation standards; placeholder prose is not
+  acceptable.
+
 ### Re-plan Boundaries
 
 Stop and re-plan before implementation when any remaining slice would require:
