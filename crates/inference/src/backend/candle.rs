@@ -724,21 +724,48 @@ mod tests {
     fn test_capabilities() {
         let caps = CandleBackend::static_capabilities();
         assert!(!caps.vision);
+        assert!(!caps.image_generation);
         assert!(caps.embeddings);
         assert!(caps.gpu);
         assert!(!caps.streaming);
         assert!(caps.supports_task(InferenceTaskId::Embedding));
+        assert!(!caps.supports_task(InferenceTaskId::ImageGeneration));
         assert!(!caps.supports_task(InferenceTaskId::TextGeneration));
+        assert_eq!(caps.facts.tasks.len(), 1);
+        assert_eq!(caps.facts.tasks[0].task_id, InferenceTaskId::Embedding);
         assert!(caps.facts.runtime_variants.iter().any(|variant| {
             variant.runtime_variant_id.as_str() == "candle.cpu"
                 && variant.device_class == InferenceDeviceClass::Cpu
                 && !variant.available
+                && variant.diagnostics.iter().any(|diagnostic| {
+                    diagnostic
+                        .message
+                        .contains("executable model loading is not implemented")
+                })
         }));
         assert!(caps.facts.runtime_variants.iter().any(|variant| {
             variant.runtime_variant_id.as_str() == "candle.cuda"
                 && variant.device_class == InferenceDeviceClass::Cuda
                 && !variant.available
+                && variant.diagnostics.iter().any(|diagnostic| {
+                    diagnostic.code == DeviceResolutionDiagnosticCode::MissingRuntimeVariant
+                })
         }));
+        #[cfg(target_os = "macos")]
+        assert!(caps.facts.runtime_variants.iter().any(|variant| {
+            variant.runtime_variant_id.as_str() == "candle.metal"
+                && variant.device_class == InferenceDeviceClass::Metal
+                && !variant.available
+                && variant.diagnostics.iter().any(|diagnostic| {
+                    diagnostic.code == DeviceResolutionDiagnosticCode::MissingRuntimeVariant
+                })
+        }));
+        #[cfg(not(target_os = "macos"))]
+        assert!(!caps
+            .facts
+            .runtime_variants
+            .iter()
+            .any(|variant| variant.runtime_variant_id.as_str() == "candle.metal"));
         assert_eq!(
             caps.facts.features.kv_cache,
             BackendFeatureSupport::Unsupported

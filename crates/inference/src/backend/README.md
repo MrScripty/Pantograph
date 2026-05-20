@@ -83,6 +83,17 @@ process RSS.
   until executable model loading exists. Its current load-plan helpers are
   factual validation of Pumas package files, dtype, model type, and device hints,
   not runtime admission, residency, or scheduling policy.
+- Candle image generation remains a future capability even though upstream
+  Candle publishes diffusion examples. Pantograph may expose Candle for image
+  generation only after it has an executable Candle diffusion loader, typed
+  Pumas package/component support for that loader, backend readiness facts for
+  every selectable runtime variant, and technical-fit tests proving explicit
+  Candle image-generation requests either select a real executable candidate or
+  fail through structured diagnostics. Until then Candle capability facts must
+  advertise no `image_generation` task, all Candle runtime variants remain
+  unavailable, CUDA/Metal build-feature readiness stays diagnostic-only, and
+  MKL/Accelerate remain CPU optimization metadata rather than scheduler-visible
+  runtime variants.
 
 ## Revisit Triggers
 

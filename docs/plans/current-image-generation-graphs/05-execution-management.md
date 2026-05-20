@@ -387,6 +387,18 @@ Update during implementation:
   Memory/OOM history weighting remains a later scheduler-policy objective,
   not a compatibility fallback and not a current image-generation execution
   blocker.
+- 2026-05-20: Completed the Candle future-capability guardrail. Candle
+  capability tests now explicitly prove image generation is not advertised,
+  Candle runtime variants remain unavailable with typed diagnostics, and the
+  backend README documents that upstream Candle diffusion examples do not make
+  Candle selectable until Pantograph has executable Candle diffusion loading,
+  typed Pumas component support, runtime readiness facts, and technical-fit
+  tests. Existing embedded-runtime technical-fit coverage proves an explicit
+  Candle image-generation request fails through structured diagnostics without
+  fallback selection. Verification passed:
+  `cargo test -p inference --features backend-candle test_capabilities --lib`
+  and
+  `cargo test -p pantograph-embedded-runtime candle_image_generation_override_rejects_backend_incompatibility_without_selection --lib`.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed
