@@ -5264,6 +5264,36 @@ Stop and re-plan before implementation when any remaining slice would require:
   - Remaining follow-up: non-image tracked workflow examples and any formal
     workflow schema migration still need explicit reconciliation before the
     broad workflow/fixture checklist item can close.
+- 2026-05-20 slice: workflow diagnostics contract memory-field compile
+  unblock.
+  - Smallest useful vertical slice: update the workflow-service contract
+    snapshots that construct diagnostics-ledger run-list/run-detail projection
+    records so they include the current observed memory fields.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/tests/contract.rs`, this milestone
+    file, and
+    `docs/plans/current-image-generation-graphs/05-execution-management.md`.
+  - No-fallback/no-legacy confirmation: this is a test-contract alignment
+    slice only. It does not add compatibility defaults, change projection
+    behavior, alter runtime execution, or relax memory diagnostics. The JSON
+    snapshots explicitly pin the nullable fields instead of relying on
+    unverified omission.
+  - Per-slice standards evidence: diagnostics-ledger remains the owner of the
+    projection record types; workflow-service tests consume the public contract
+    shape. No production code, generated bindings, lockfiles, persisted schema,
+    frontend UI, lifecycle tasks, subprocesses, path access, feature flags, or
+    platform-specific code changed.
+  - Verification passed:
+    `cargo fmt --all -- --check`,
+    `cargo test -p pantograph-workflow-service workflow_run_`,
+    `cargo test -p pantograph-workflow-service capabilities`,
+    `cargo check -p pantograph-workflow-service`, and
+    `git diff --check -- crates/pantograph-workflow-service/tests/contract.rs`.
+  - Verification deviation: the first attempt used two Cargo test filters in
+    one command, which Cargo rejected before tests ran. Verification was rerun
+    with the valid single broader `workflow_run_` filter.
+  - Remaining follow-up: none for the compile blocker. Broader memory policy
+    work remains under the scheduler/resource-observation closeout items.
 
 **Verification:**
 

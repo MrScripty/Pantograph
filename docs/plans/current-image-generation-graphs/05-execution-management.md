@@ -7274,6 +7274,32 @@ Worker rules:
   - Remaining follow-up: non-image tracked workflow examples and formal
     workflow schema migration ownership remain open Milestone 5 workflow/fixture
     closure work.
+- 2026-05-20 Milestone 5 workflow diagnostics contract memory-field compile
+  unblock slice:
+  - Smallest useful vertical slice: fix the two workflow-service contract
+    snapshots that construct diagnostics-ledger run projection records without
+    the current observed memory fields.
+  - Allowed write set:
+    `crates/pantograph-workflow-service/tests/contract.rs`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: this test-only slice adds explicit
+    nullable memory observation fields to the contract snapshots. It does not
+    add defaults, compatibility shims, projection migrations, runtime behavior,
+    or scheduler fallback.
+  - Implementation completed: added `observed_peak_ram_bytes`,
+    `observed_peak_vram_bytes`, and `memory_failure_kind` to the run-list and
+    run-detail projection record initializers plus their expected JSON
+    snapshots.
+  - Verification passed: `cargo fmt --all -- --check`, `cargo test -p
+    pantograph-workflow-service workflow_run_`, `cargo test -p
+    pantograph-workflow-service capabilities`, `cargo check -p
+    pantograph-workflow-service`, and `git diff --check --
+    crates/pantograph-workflow-service/tests/contract.rs`.
+  - Verification deviation: the first focused command attempted two Cargo test
+    filters at once and failed before tests ran. The valid broader
+    `workflow_run_` filter was rerun successfully.
+  - Remaining follow-up: none for this compile blocker.
 
 ### Traceability Links
 
