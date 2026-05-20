@@ -7050,6 +7050,53 @@ Worker rules:
     entrypoint. Manual desktop validation still needs to confirm Juggernaut
     graph visibility, Pumas model resolution, stale diagnostic behavior, and
     image output artifact retention.
+- 2026-05-20 headless current image release-smoke slice:
+  - Smallest useful vertical slice: extend the existing release smoke so it
+    validates the current image workflow graph path through bounded headless
+    contracts instead of requiring a desktop GUI session.
+  - Allowed write set: `scripts/check-runtime-redistributables-smoke.sh`,
+    `scripts/check-current-image-workflow-smoke.mjs`, `scripts/README.md`,
+    `docs/plans/current-image-generation-graphs/milestones/08-release-build-and-user-validation.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - No-fallback/no-legacy confirmation: the smoke validates canonical
+    `puma-lib -> llm-inference -> image-output` graph shape for both the
+    tracked Juggernaut workflow and the bundled current image template. It
+    rejects retired executable inference node types and does not add any
+    compatibility shim, runtime fallback, or frontend inference path.
+  - Implementation completed: added a Node smoke validator for the tracked
+    Juggernaut graph and bundled current image template, then extended
+    `bash launcher.sh --release-smoke` to run that validator plus focused
+    Rust checks for node inventory visibility, Pumas model resolution, stale
+    graph diagnostics, and image artifact retention.
+  - Verification passed: `node scripts/check-current-image-workflow-smoke.mjs`,
+    `cargo test -p workflow-nodes test_inventory_collects_all_builtins --lib`,
+    `cargo test -p pantograph-embedded-runtime
+    puma_lib_execution_rebinds_stale_model_path_from_selector_access_without_pumas_api
+    --lib`, `cargo test -p pantograph-workflow-service
+    inspection_projection_returns_stable_stale_graph_diagnostics --lib`,
+    `cargo test -p pantograph-workflow-service
+    workflow_io_artifact_query_reads_refreshed_projection --lib`,
+    `bash launcher.sh --release-smoke`, and `git diff --check`.
+  - Discovered issue deferred: the previous release smoke had an exact
+    embedded-runtime preflight test filter that executed zero tests. Running
+    the intended tests directly showed
+    `workflow_preflight_blocks_selected_runtime_failed_after_restart` and
+    `workflow_preflight_blocks_interrupted_runtime_job_after_restart` now use a
+    stale helper that writes incidental `backend_key` metadata onto a
+    `text-input` node, while canonical runtime requirements come only from
+    typed inference `runtime` input. A quick helper canonicalization proved the
+    required-backend assertion, but the tests still need a dedicated slice to
+    update their expected readiness/preflight path without reintroducing legacy
+    metadata behavior.
+  - Standards and boundary notes: no dependencies, lockfiles, workflow
+    fixtures, generated files, sqlite WAL/SHM files, or production runtime
+    paths changed. The new smoke script is an internal developer validation
+    tool documented in `scripts/README.md`; it reads checked-in workflow JSON
+    only and exits with typed, bounded diagnostic messages.
+  - Remaining follow-up: a real desktop/model execution validation remains a
+    manual/user-environment activity. The automated plan gate now has
+    deterministic release-smoke coverage for the graph and contract boundaries
+    named in Milestone 8.
 
 ### Traceability Links
 

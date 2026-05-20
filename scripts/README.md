@@ -8,7 +8,8 @@ main app entrypoint.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `check-runtime-redistributables-smoke.sh` | Verifies a built Pantograph release artifact exists, then runs the bounded managed-runtime contract smoke that covers runtime-manager view projection, workflow preflight blocking, and diagnostics projection. |
+| `check-runtime-redistributables-smoke.sh` | Verifies a built Pantograph release artifact exists, then runs the bounded release contract smoke that covers managed-runtime view projection, runtime diagnostics projection, current image workflow shape, Pumas resolution, stale graph diagnostics, and image artifact retention. |
+| `check-current-image-workflow-smoke.mjs` | Validates the bundled current image workflow template and tracked Juggernaut workflow still use canonical `puma-lib -> llm-inference -> image-output` graph shape without retired executable inference nodes. |
 | `check-decision-traceability.sh` | Enforces source-directory README/ADR decision traceability for changed source directories, with repo-specific host-facing and structured-producer paths plus a grep fallback when `ripgrep` is unavailable. |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
 | `check-scheduler-only-workflow-execution.sh` | Fails when public Rust, Tauri, binding, or frontend source reintroduces direct workflow execution APIs outside scheduler session execution. |
@@ -59,6 +60,9 @@ can be debugged without the full app UI in the loop.
   clean CI runners.
 - Smoke tests target real Pantograph worker/runtime modules, not forks of that
   logic.
+- Release contract smoke is headless: it validates the built artifact and
+  canonical workflow/runtime contracts, not a full desktop GUI or model
+  execution session.
 - C# runtime execution smokes create workflow sessions before submitting runs.
 - Public workflow execution validation rejects direct run APIs; callers must use
   scheduler session create/run/close surfaces.
@@ -86,6 +90,7 @@ specific script being executed.
 ```bash
 python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
+node scripts/check-current-image-workflow-smoke.mjs
 npm run lint:no-new
 npm run lint:a11y
 npm run format:check

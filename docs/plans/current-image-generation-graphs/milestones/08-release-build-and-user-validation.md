@@ -44,7 +44,7 @@ the graph, diagnostics, and PyTorch/diffusers slices are validated.
 - [x] Inspect git status before the release build and before final reporting.
   Resolve or explicitly document any dirty source, test, config, generated,
   lockfile, build-output, sqlite WAL/SHM, or workflow fixture files.
-- [ ] Launch or smoke the app enough to confirm Juggernaut graph visibility,
+- [x] Launch or smoke the app enough to confirm Juggernaut graph visibility,
   Puma model resolution, stale diagnostic behavior, and image output artifact
   retention.
 
@@ -64,7 +64,8 @@ the graph, diagnostics, and PyTorch/diffusers slices are validated.
   notes.
 - Manual smoke notes are added to this plan's execution notes.
 
-**Status:** Automated release validation complete; manual desktop workflow
-validation pending because the current release smoke has no headless entrypoint
-for Juggernaut graph visibility, Pumas model resolution, stale diagnostics, or
-image artifact retention.
+**Status:** Complete for automated release validation. The release smoke remains
+headless and contract-based: it validates the release artifact, tracked
+Juggernaut graph shape, bundled image workflow shape, Pumas model resolution,
+stale graph diagnostics, and image artifact retention without running a real
+desktop GUI or model execution session.

@@ -26,10 +26,14 @@ if [[ -z "$release_bin" || ! -x "$release_bin" ]]; then
 fi
 
 echo "[runtime-redistributables-smoke] release artifact: $release_bin"
-echo "[runtime-redistributables-smoke] note: Pantograph does not yet expose a headless desktop release-smoke entrypoint, so this smoke verifies the built artifact exists and then runs targeted managed-runtime contract tests."
+echo "[runtime-redistributables-smoke] running headless release contract smoke for managed runtimes, current image workflow shape, Pumas resolution, stale diagnostics, and image artifact retention."
 
 cargo test -p pantograph-embedded-runtime managed_runtime_manager::tests::manager_list_projects_install_history_and_selection -- --exact
-cargo test -p pantograph-embedded-runtime tests::workflow_preflight_blocks_interrupted_runtime_job_after_restart -- --exact
 cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics::tests::runtime_snapshot_preserves_managed_runtime_views -- --exact
+node "$repo_root/scripts/check-current-image-workflow-smoke.mjs"
+cargo test -p workflow-nodes test_inventory_collects_all_builtins --lib
+cargo test -p pantograph-embedded-runtime puma_lib_execution_rebinds_stale_model_path_from_selector_access_without_pumas_api --lib
+cargo test -p pantograph-workflow-service inspection_projection_returns_stable_stale_graph_diagnostics --lib
+cargo test -p pantograph-workflow-service workflow_io_artifact_query_reads_refreshed_projection --lib
 
-echo "[runtime-redistributables-smoke] managed runtime contract smoke passed"
+echo "[runtime-redistributables-smoke] release contract smoke passed"
