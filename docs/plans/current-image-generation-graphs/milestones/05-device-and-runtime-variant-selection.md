@@ -759,6 +759,71 @@ meet them, stop and re-plan instead of adding compatibility or local bypasses.
   README coverage under the documentation standards; placeholder prose is not
   acceptable.
 
+### Codebase Investigation Findings
+
+The closeout plan was rechecked against the current codebase on 2026-05-20.
+These findings are implementation constraints for the remaining slices. They
+must be resolved directly or recorded as a deferred owner-specific follow-up
+before the matching checklist row is closed.
+
+- **Embedded-runtime technical-fit decomposition:** before expanding candidate
+  synthesis, ledger projection, or scheduler history behavior, decompose
+  `crates/pantograph-embedded-runtime/src/technical_fit.rs` into focused
+  modules. The current file mixes host async lookup, Pumas fact resolution,
+  dependency readiness probing, candidate synthesis, history lookup, DTO
+  projection, and tests. The decomposition target is a thin orchestration
+  facade with separate modules for Pumas/package-fact resolution, candidate
+  synthesis, history summaries, workflow/runtime DTO projection, and tests.
+- **No lossy projection catch-alls:** runtime-to-workflow projection mappings
+  must not use `_ =>` arms that silently coerce unknown dependency readiness,
+  resolver owner, device, runtime, or diagnostic states into a generic known
+  state. Add explicit mappings when contracts add variants; otherwise emit a
+  typed internal/projection diagnostic so contract drift is visible.
+- **Typed Pumas unavailable states:** Pumas package-fact and artifact-load-target
+  lookup must not collapse Owner, LocalClient, ReadOnly, missing selector,
+  stale facts, decode failure, or resolver failure into an empty package-facts
+  vector plus a log line. Each state needs a typed non-selectable candidate or
+  scheduler diagnostic with Pumas access mode, model id, and resolver status.
+  When artifact load-target resolution is available, technical-fit and image
+  planning should consume that Pumas-owned contract rather than model-level
+  descriptor APIs.
+- **Explicit runtime observation facts:** runtime-registry observation must not
+  infer executable runtime identity from `backend_key`, display backend name,
+  or `"unknown"`. A ready runtime observation needs an explicit runtime id and
+  runtime variant/source facts from the lifecycle snapshot or selected
+  scheduler decision. Missing runtime facts should produce typed observation
+  diagnostics instead of alias-derived runtime records.
+- **Global device config replacement:** the current frontend/Tauri
+  `DeviceConfig` path still looks like generic device selection while the Rust
+  type is a llama.cpp adapter-local selector plus `gpu_layers`. Remaining UI
+  work must replace or strictly scope this path so scheduler-owned
+  runtime/device intent is separate from llama.cpp runtime settings. New
+  frontend controls should submit typed intent, and llama.cpp-specific controls
+  such as `gpu_layers` should stay clearly adapter-local.
+- **Owned process-spawner tasks:** `StdProcessSpawner` currently starts stdout,
+  stderr, and process-monitor tasks through untracked `tokio::spawn` calls.
+  Lifecycle hardening must replace this with an owned sidecar process handle
+  that tracks task handles, drains or cancels them on shutdown, reports task
+  panics/errors at the owner, and preserves bounded event delivery.
+- **Remove path-derived Pumas model inference:** workflow capability extraction
+  still derives model ids from path-shaped fields such as `model_path`,
+  `entry_path`, and `selected_artifact_path`. This is legacy graph inspection
+  and should be removed when the workflow/fixture closure slice runs. The
+  canonical source is explicit `pumas_model_ref`; Pumas owns path-to-model
+  interpretation.
+- **Preserve the clean image planner boundary:** the current image-generation
+  planner shape is the model to preserve: side-effect-free input, Pumas package
+  facts, Pumas artifact load target, and a scheduler-owned
+  `BackendExecutionDecision` produce one execution plan or typed diagnostics.
+  Future image-family, scheduler, or worker extensions should extend this
+  boundary rather than passing full Pumas facts through graph nodes or letting
+  the worker/runtime select execution state.
+- **Resource monitor staging:** terminal process RSS observation is acceptable
+  as the current stage, but it must remain explicitly labeled as terminal
+  observation only. Real-time resource observation for parallel runtimes and
+  multi-device workflows remains a later objective and must not be simulated by
+  storing incidental resource snapshots in scheduler history.
+
 ### Re-plan Boundaries
 
 Stop and re-plan before implementation when any remaining slice would require:
