@@ -803,7 +803,7 @@ mod tests {
             .expect_err("mismatched runtime should not be reused");
 
         assert!(
-            matches!(error, BackendError::StartupFailed(ref message) if message.contains("spawn_sidecar")),
+            matches!(error, BackendError::StartupFailed(ref message) if message.contains("process error")),
             "unexpected error: {error:?}"
         );
     }
@@ -846,7 +846,7 @@ mod tests {
             .expect_err("mismatched port should not be reused");
 
         assert!(
-            matches!(error, BackendError::StartupFailed(ref message) if message.contains("spawn_sidecar")),
+            matches!(error, BackendError::StartupFailed(ref message) if message.contains("process error")),
             "unexpected error: {error:?}"
         );
     }
@@ -889,7 +889,7 @@ mod tests {
             .expect_err("mismatched context size should not be reused");
 
         assert!(
-            matches!(error, BackendError::StartupFailed(ref message) if message.contains("spawn_sidecar")),
+            matches!(error, BackendError::StartupFailed(ref message) if message.contains("process error")),
             "unexpected error: {error:?}"
         );
     }

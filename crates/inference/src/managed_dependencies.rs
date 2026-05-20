@@ -130,6 +130,9 @@ mod tests {
         )
         .expect_err("empty temp root has no selected llama.cpp version");
 
-        assert!(error.contains("binaries are not installed"));
+        assert!(
+            error.contains("does not have managed runtime state"),
+            "unexpected runtime sidecar command error: {error}"
+        );
     }
 }
