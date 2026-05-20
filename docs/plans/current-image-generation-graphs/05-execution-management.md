@@ -7611,6 +7611,28 @@ Worker rules:
     descriptor model-path inputs, lower-level descriptor/cache/activity
     correlation, and any direct explicit `model_path` graph edges with typed
     Pumas model-reference request/result contracts.
+- 2026-05-20 Milestone 5 dependency-planning contract ownership re-plan:
+  - Decision: use option 3, a neutral shared dependency-planning contract owner,
+    before replacing `ModelDependencyRequest.model_path` and
+    `ModelRefV2.model_path`.
+  - Rationale: node-engine should forward validated graph intent, not own Pumas
+    artifact semantics. Inference contracts are useful references, but the
+    dependency-planning boundary spans graph execution, host/Pumas resolution,
+    scheduler intent, dependency readiness, and worker handoff, so it must not
+    become image/PyTorch/inference-feature-specific.
+  - Plan update completed: Milestone 5 now requires a contract-owner gate first,
+    then staged node-engine adapter, host resolver, graph model-ref successor,
+    Pumas load-target, cache/activity identity, preflight caller, and legacy DTO
+    removal slices. The shared contract must provide typed request/result/
+    diagnostic DTOs, serde fixtures, README traceability, and validated
+    parsing from raw graph JSON without introducing parallel artifact authority
+    or executable path identity.
+  - No-fallback/no-legacy confirmation: this planning update does not preserve
+    path-shaped compatibility. It makes the remaining `model_path` fields
+    explicit removal targets and keeps executable local paths scoped to
+    selected backend/worker handoff after Pumas-approved planning.
+  - Verification: docs-only update; `git diff --check` to be run before the
+    planning commit.
 
 ### Traceability Links
 
