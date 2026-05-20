@@ -275,6 +275,15 @@ Update during implementation:
   OOM string detection must be retired or confined to typed adapter-local
   translation, and runtime-registry candidate history must expose observed
   memory/OOM facts before scheduler history ranking consumes them.
+- 2026-05-19: Resource observation re-plan direction updated after codebase
+  design review. The next telemetry work should introduce an inference-owned
+  execution telemetry scope/recorder at the gateway/backend boundary and use it
+  as the canonical backend-to-lifecycle observation path. Initial behavior is
+  terminal summary only: PyTorch worker observations and process-RSS facts are
+  recorded into the scope, then the gateway drains and merges them into the
+  existing terminal lifecycle event. Live observation streaming, participant
+  identity for parallel runtimes/devices, and scheduler real-time feedback
+  remain later explicit contract slices.
 - 2026-05-10: Continued Milestone 5 by removing embedded-runtime dependency
   preflight backend preference from legacy `runtime_hint`. Backend preference
   now comes from `backend_key` or package/requirements facts until typed

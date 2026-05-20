@@ -616,6 +616,26 @@ PyTorch/diffusers and produce a retained image artifact.
     source, and availability facts. This is diagnostic projection only; run
     terminal payload wiring, producer telemetry, resource monitoring, and
     scheduler ranking remain separate slices.
+  - 2026-05-19 telemetry-scope re-plan update: implement the option-4
+    architecture boundary now while enabling option-3 behavior first. Add an
+    inference-owned `InferenceExecutionTelemetryScope` and cloneable recorder
+    as the single typed ingress for backend/resource observations. The gateway
+    creates the scope at the backend execution boundary, passes only the
+    minimal recorder or a minimal `BackendExecutionContext` containing that
+    recorder to backend code, drains/merges observations into the existing
+    terminal lifecycle event, and remains the only owner of lifecycle event
+    emission. Backend code must not emit lifecycle diagnostics directly,
+    return telemetry through task-output metadata, parse workflow/Pumas facts
+    for telemetry, use thread-local/global observation state, or preserve a
+    parallel result-wrapper compatibility path. The first implementation
+    should record PyTorch worker success/failure observations that are already
+    present on the worker envelope, then fold process-RSS monitoring into the
+    same scope so observed CUDA/MPS/CPU/process metrics merge through one
+    canonical path. Live observation streaming, scheduler real-time feedback,
+    participant identity for parallel runtimes/devices, and any new
+    `ResourceObserved`/observation event kind remain later explicit contract
+    slices; do not add them until the ledger/UI/scheduler consumption contract
+    is designed.
 - [x] Validate Pumas-provided paths and artifact entry paths against the
   approved Pumas/model roots before worker execution.
   - 2026-05-17: image-generation execution now accepts only validated
