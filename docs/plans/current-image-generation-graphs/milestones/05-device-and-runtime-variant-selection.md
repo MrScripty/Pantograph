@@ -530,6 +530,181 @@ typed diagnostic and the canonical design is fixed.
 - [x] Update relevant module READMEs for runtime variant ownership and device
   policy boundaries.
 
+## Remaining Implementation Detail Plan
+
+This section is the closeout map for the remaining unchecked Milestone 5
+items. It does not create fallback or compatibility work. Each slice either
+removes a retired path, replaces it with the canonical scheduler-owned
+contract, or records a typed diagnostic when the canonical contract cannot make
+a valid decision.
+
+### Closeout Order
+
+1. **Checklist Reconciliation And Contract Inventory**
+   - Purpose: separate already-implemented checklist rows from true remaining
+     code work before touching more execution paths.
+   - Allowed write set: this milestone file and narrowly scoped test-only
+     fixture index files if a missing fixture is discovered and can be added
+     without changing runtime behavior.
+   - Required inventory:
+     `InferenceDevicePolicy`, `InferenceDeviceId`, `RuntimeVariantId`,
+     `RuntimeVariantCapability`, `DeviceResolutionRequest`,
+     `DeviceResolutionDecision`, `BackendExecutionCandidate`,
+     `BackendExecutionDecision`, runtime-load phase records,
+     diagnostics-ledger scheduler/run payloads, TypeScript mirrors, Python
+     worker load envelopes, managed-runtime persisted state, Tauri command
+     DTOs, and saved workflow/template JSON.
+   - Acceptance: every boundary is listed as `covered`, `missing fixture`,
+     `not a boundary`, or `deferred with owner`. Missing fixtures become the
+     next smallest slice; broad rows are not marked complete from prose alone.
+
+2. **Raw Device Boundary Removal**
+   - Purpose: eliminate remaining cross-crate or cross-process raw device
+     strings as trusted scheduler/runtime state.
+   - Allowed primary write areas by slice:
+     `crates/inference/src/config.rs`, `crates/inference/src/backend/`,
+     `crates/inference/src/server.rs`,
+     `crates/node-engine/src/core_executor/`,
+     `crates/pantograph-embedded-runtime/src/`, and the matching tests and
+     READMEs. Do not mix these areas in one slice unless the compiler requires
+     a single contract change.
+   - Required direction: public planning/admission contracts use
+     `InferenceDevicePolicy`, `InferenceDeviceClass`, `InferenceDeviceId`, and
+     `RuntimeVariantId`. Backend-local strings such as llama.cpp selectors,
+     PyTorch `"cuda:0"`, Python worker `"auto"`, or sidecar `DeviceConfig`
+     values may exist only inside the adapter/worker translation boundary.
+   - Required removals/replacements: no `unknown -> auto`, no malformed ordinal
+     `-> 0`, no frontend-generated executable device choices, no
+     gateway-active-backend inference, and no node-engine backend routing that
+     independently chooses a runtime after the scheduler decision exists.
+   - Acceptance: tests prove explicit device intent is either admitted with the
+     selected runtime variant/device facts or rejected with a typed diagnostic;
+     `auto` is policy intent only and never a concrete selected device id.
+
+3. **Candidate Synthesis And Ledger Projection Closure**
+   - Purpose: finish the policy input path so automatic selection sees complete
+     candidate facts and diagnostics-ledger history can explain the decision.
+   - Allowed primary write areas:
+     `crates/pantograph-embedded-runtime/src/technical_fit.rs`,
+     `crates/pantograph-runtime-registry/src/technical_fit.rs`,
+     `crates/pantograph-diagnostics-ledger/src/`, workflow-service projection
+     DTOs, TypeScript mirror types, and focused fixtures.
+   - Required candidate facts: selected/candidate backend id, task/model
+     compatibility, Pumas model/package fact status, runtime variant id,
+     runtime availability/readiness, device class/id facts, resource estimate,
+     throughput/history hints when threshold-eligible, bounded candidate
+     diagnostics, and policy trace ids.
+   - Required failure behavior: missing Pumas facts, stale Pumas facts,
+     unavailable runtime variants, oversized candidate sets, impossible
+     explicit runtime/device requests, and unrankable candidate state produce
+     non-selectable candidates or no-decision diagnostics. They must not
+     select a capability-only or fallback backend.
+   - Acceptance: scheduler trace and ledger summaries can reconstruct why a
+     candidate was selected or rejected without inspecting graph internals,
+     frontend state, Pumas filesystem paths, or display strings.
+
+4. **Lifecycle Ownership Hardening**
+   - Purpose: make every touched long-running operation explicitly owned,
+     cancellable, bounded, and observable.
+   - Allowed primary write areas:
+     managed-runtime install/progress modules, runtime-registry lifecycle
+     helpers, backend startup/load helpers, device probes, Python worker
+     process ownership, Tauri command adapters, and matching tests.
+   - Required ownership fields for each background operation: owner/composition
+     root, start API, stop/cancel API, shutdown behavior, timeout policy,
+     overlap/restart policy, error/panic reporting, and projection/refresh
+     notification path.
+   - Required local-service constraints: loopback-only binding, explicit
+     readiness timeout, startup timeout, shutdown timeout, bounded
+     connection/request policy, and lifecycle-owned process termination.
+   - Acceptance: tests cover cancellation or teardown for each new/changed
+     task, and no adapter creates global Tokio runtimes, untracked tasks,
+     unbounded queues, or self-owned long-lived subprocesses.
+
+5. **Allowed-Root And Worker-Visible Path Closure**
+   - Purpose: ensure every executable, dynamic library, Pumas artifact, and
+     worker-visible path is approved by the owning boundary before filesystem
+     or subprocess use.
+   - Allowed primary write areas:
+     `crates/pantograph-path-security`, managed-runtime command handoff,
+     Pumas artifact load-target consumption, node-engine file IO,
+     workflow-service artifact access, Python worker request construction, and
+     focused tests.
+   - Required source of truth: Pumas-owned artifact load targets are trusted as
+     Pumas-approved local paths with typed storage/validation state, but
+     Pantograph still validates whether a path is allowed to be handed to the
+     selected runtime/worker. Pantograph must not join Pumas paths or infer
+     artifact files from model directories.
+   - Acceptance: tests prove runtime roots, executables, dynamic-library paths,
+     pid files, Pumas artifact paths, artifact-store paths, and worker-visible
+     paths cannot escape their approved roots and fail with typed diagnostics.
+
+6. **Checked Numeric Boundary Closure**
+   - Purpose: remove remaining saturation, clamping, defaulting, or raw
+     arithmetic from public/runtime/worker boundaries where invalid values
+     should fail.
+   - Allowed primary write areas by slice: image request normalization,
+     context/token/batch limit handling, byte-range projections, runtime/worker
+     request DTO construction, memory/resource estimates, and diagnostics
+     projection code.
+   - Required policy: explicit zero, overflow, underflow, or unrepresentable
+     totals fail with typed diagnostics. Absence may still mean a documented
+     default only when the receiving canonical contract owns that default.
+   - Acceptance: focused tests cover each changed arithmetic boundary and
+     demonstrate no impossible value reaches a backend, worker, persisted
+     ledger row, or frontend contract.
+
+7. **Frontend Runtime/Device Contract Closure**
+   - Purpose: make the UI a renderer of backend-owned capability facts and a
+     submitter of typed intent only.
+   - Allowed primary write areas: `src/components/DeviceConfig.svelte`,
+     device/runtime presenter helpers and tests, workflow runtime/device
+     command bindings, TypeScript workflow DTO mirrors, and accessibility
+     tests that can run under the repository's current Node test approach.
+   - Required UI behavior: no synthetic fallback choices, no optimistic
+     executable device state, no frontend runtime ranking, no hidden
+     `llama-server` final-choice language, accessible selectors/names,
+     keyboard-safe controls, focus-visible behavior where controls are
+     interactive, and deterministic cleanup for subscriptions or scoped polls.
+   - Acceptance: frontend tests prove selected values come from backend facts
+     or transient form intent, submit paths reject stale/unconfirmed choices,
+     and labels explain scheduler/backend ownership without implying frontend
+     execution authority.
+
+8. **Workflow And Fixture Shape Closure**
+   - Purpose: remove retired graph-visible execution hints from tracked
+     workflows/templates and freeze the canonical examples used by tests.
+   - Allowed primary write areas: tracked `.pantograph/workflows/` examples,
+     tracked `.pantograph/orchestrations/` examples,
+     `src/templates/workflows/`, template/saved-workflow tests, and this plan.
+   - Required graph shape: canonical inference examples carry
+     `pumas_model_ref`, task kind, task options, generation/options inputs, and
+     optional canonical runtime/device intent only. They must not carry
+     `backend_key`, `runtime_hint`, resolved Pumas package facts, raw local
+     model paths, generated output bodies, or scheduler decisions.
+   - Acceptance: tests distinguish intentionally tracked examples from ignored
+     user-local files and assert that examples either use canonical inference
+     contracts or are explicitly out of scope for Milestone 5.
+
+### Re-plan Boundaries
+
+Stop and re-plan before implementation when any remaining slice would require:
+- keeping a legacy raw-device, backend, runtime, or graph field as an accepted
+  compatibility alias;
+- allowing a backend, frontend component, node-engine executor, or worker to
+  choose a runtime after the scheduler decision exists;
+- making `inference` depend on workflow-service, diagnostics-ledger, frontend,
+  Tauri, or graph internals to obtain scheduler facts;
+- letting Pantograph infer Pumas artifact paths instead of consuming Pumas-owned
+  load targets;
+- adding a new polling/background task without a named owner, cancellation
+  path, timeout, and teardown test;
+- changing runtime-selection algorithm semantics without keeping the policy in
+  the scheduler/runtime-registry boundary; or
+- changing feature flags, generated bindings, lockfiles, persisted schemas, or
+  saved workflow fixtures without updating the matching verification and
+  documentation in the same slice.
+
 **Implementation Notes:**
 
 - 2026-05-10 slice: device/runtime contract gate only.
