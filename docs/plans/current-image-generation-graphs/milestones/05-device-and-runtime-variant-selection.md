@@ -803,19 +803,36 @@ fixture contract must not remain reachable as an alternate execution path.
         `ModelDependencyRequest` check/install use cases. These contracts must
         reuse `DependencyPlanningIdentityKey`, `DependencyPlanningRequest`,
         typed dependency override patches, selected binding ids, platform
-        context, and typed diagnostics. They must not carry `model_path`,
-        `modelPath`, `entry_path`, `selected_artifact_path`, local load paths,
-        raw platform JSON, raw mode strings, or path-shaped Pumas aliases as
-        request identity. The environment contracts may report environment
-        readiness, install status, manifest ids, environment refs, and bounded
-        activity facts, but executable Pumas load targets remain host/planner
-        handoff facts and must not become graph/frontend identity. Add serde
-        fixtures and validation tests for resolve, check, install, unavailable,
-        invalid, and path-field rejection states. This gate is option 3 from
-        the node-engine re-plan: dependency-environment and canonical inference
-        preflight receive a complete typed replacement before any production
-        resolver migration, so the old path-shaped resolver does not survive as
-        a temporary canonical branch.
+        context, and typed diagnostics. The contract must be domain-only:
+        update `pantograph-dependency-planning` public re-exports, crate docs,
+        README traceability, fixture README notes, and public serde fixtures in
+        the same slice, but do not add Pumas lookups, Python/package-manager
+        I/O, frontend dependencies, runtime selection policy, async tasks, or
+        host adapter code to the contract crate. Public request action,
+        readiness, install, validation, and failure-state fields must be enums
+        or validated newtypes, not raw `String` modes or incidental metadata.
+        Raw graph/frontend payloads must parse once at the boundary into these
+        domain types before internal use. The contracts must not carry
+        `model_path`, `modelPath`, `entry_path`, `selected_artifact_path`, local
+        load paths, raw platform JSON, raw mode strings, unvalidated binding
+        ids, or path-shaped Pumas aliases as request identity. The environment
+        contracts may report environment readiness, install status, manifest
+        ids, environment refs, and bounded activity facts, but executable Pumas
+        load targets remain host/planner handoff facts and must not become
+        graph/frontend identity. Add public API tests, serde fixtures, and
+        validation tests for resolve, check, install, unavailable, invalid,
+        unknown-field rejection, malformed id rejection, and path-field
+        rejection states. Required verification for this gate:
+        `cargo fmt -p pantograph-dependency-planning -- --check`,
+        `cargo test -p pantograph-dependency-planning`,
+        `cargo check -p pantograph-dependency-planning`,
+        `cargo check -p pantograph-dependency-planning --all-features`,
+        `cargo check -p pantograph-dependency-planning --no-default-features`,
+        and `git diff --check`. This gate is option 3 from the node-engine
+        re-plan: dependency-environment and canonical inference preflight
+        receive a complete typed replacement before any production resolver
+        migration, so the old path-shaped resolver does not survive as a
+        temporary canonical branch.
      4. Resolver boundary replacement gate: replace the old
         `ModelDependencyResolver` methods that consume `ModelDependencyRequest`
         and return `ModelRefV2` with typed operations for dependency planning
@@ -824,8 +841,11 @@ fixture contract must not remain reachable as an alternate execution path.
         returns `DependencyPreflightModelRef` plus typed diagnostics. The
         dependency-environment operations consume the typed environment request
         contracts from the previous gate and return typed environment
-        readiness/install results. Do not keep a conversion path from the new
-        request contracts back into `ModelDependencyRequest`.
+        readiness/install results. Delete or replace the old trait methods,
+        helper builders, and test stubs in the same slice that migrates their
+        callers; do not leave default trait adapters, dead alternate methods,
+        or a conversion path from the new request contracts back into
+        `ModelDependencyRequest`.
      5. Node-engine adapter gate: migrate node-engine request construction to
         build the shared typed request synchronously from graph inputs and to
         return/forward the path-free preflight successor. Decode and validate
@@ -859,7 +879,10 @@ fixture contract must not remain reachable as an alternate execution path.
         correlation use the same typed identity key. Split embedded-runtime
         dependency identity descriptors from selected backend/worker load-target
         handoff descriptors so cache/activity/environment identity cannot
-        accidentally reuse executable paths.
+        accidentally reuse executable paths. Tests in this gate must isolate
+        durable state such as temp roots, environment manifests, sqlite files,
+        caches, and install locks per test or serialize with an explicit guard;
+        shared mutable dependency-environment state between tests is rejected.
      9. Update frontend dependency-environment source discovery, action DTOs,
         auto-run gating, display/status copy, and node tests so the UI discovers
         and submits `pumas_model_ref` plus task/scheduler intent instead of
@@ -867,7 +890,11 @@ fixture contract must not remain reachable as an alternate execution path.
         contract, not an alias or compatibility layer. Update frontend mocks,
         mock workflow backends, saved workflow fixtures, and dependency
         environment tests in the same gate so test scaffolding does not preserve
-        the retired contract.
+        the retired contract. Frontend TypeScript interfaces must mirror the
+        Rust serde wire shape exactly, including enum spellings and field
+        casing, and affected frontend verification uses the existing Node test
+        harness plus `npm run typecheck`; do not introduce a new frontend test
+        runner for this migration.
      10. Update Puma-Lib execution and dependency-input assembly so canonical
         inference graphs propagate `pumas_model_ref`, task facts, selected
         binding ids, and scheduler intent only. Remove stale path rebinding and
@@ -918,7 +945,13 @@ fixture contract must not remain reachable as an alternate execution path.
      `DependencyPlanningResult`, does not contain `PumasArtifactLoadTarget`, and
      cannot be converted back into `ModelRefV2`. Frontend and mock-backend tests
      prove no successful dependency-environment action or activity matcher is
-     keyed by `modelPath`/`model_path`.
+     keyed by `modelPath`/`model_path`. Documentation acceptance requires the
+     affected crate/module READMEs and fixture READMEs to describe the new
+     request/result ownership, validation rules, lifecycle/error semantics, and
+     rejected legacy contract. Tooling acceptance requires the affected Rust
+     crates to pass fmt, targeted tests, default/all-features/no-default-features
+     checks where public feature contracts exist, and the frontend slice to pass
+     the existing Node test harness plus typecheck.
    - 2026-05-21 implementation: completed the contract-only path-free
      preflight successor slice in `pantograph-dependency-planning`.
      `DependencyPlanningIdentityKey` now provides a shared cache/activity/
@@ -956,6 +989,16 @@ fixture contract must not remain reachable as an alternate execution path.
      path-shaped resolver can be removed rather than preserved as a temporary
      branch. The next implementation slice is the dependency-environment typed
      contract gate, not a node-engine adapter-only slice.
+   - 2026-05-21 standards iteration: reviewed the option 3 staging against
+     `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+     `INTEROP-STANDARDS.md`, `TESTING-STANDARDS.md`,
+     `DOCUMENTATION-STANDARDS.md`, and the Rust API/tooling standards. Added
+     guardrails requiring domain-only contract ownership, README and fixture
+     traceability, typed action/state/id fields, parse-once boundary
+     validation, explicit public serde fixtures, public API tests, feature-mode
+     checks, frontend Node-test/typecheck verification, durable test-state
+     isolation, and deletion of old resolver methods instead of default
+     adapters or compatibility aliases.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

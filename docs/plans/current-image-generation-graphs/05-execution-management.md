@@ -7882,6 +7882,34 @@ Worker rules:
     states. Production resolver migration follows only after that replacement
     contract exists.
   - Verification passed for this docs-only update: `git diff --check`.
+- 2026-05-21 Milestone 5 standards iteration for option 3:
+  - Standards reviewed:
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/PLAN-STANDARDS.md`,
+    `ARCHITECTURE-PATTERNS.md`, `INTEROP-STANDARDS.md`,
+    `TESTING-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`,
+    `languages/rust/RUST-API-STANDARDS.md`, and
+    `languages/rust/RUST-TOOLING-STANDARDS.md`.
+  - Blast-radius findings: the option 3 plan touches the contract/domain crate,
+    node-engine resolver trait and preflight callers, embedded-runtime
+    dependency check/install/cache/activity paths, frontend dependency-
+    environment action/status DTOs, mock workflow backends, saved workflow
+    fixtures, and module/fixture READMEs. Current code still contains
+    path-shaped success paths, raw JSON/string mode parsing, and test stubs
+    around `ModelDependencyRequest`, so the plan must require replacement and
+    deletion rather than adapters.
+  - Plan update completed: Milestone 5 now requires domain-only contract
+    ownership, public re-exports, crate and fixture README updates, typed
+    request action/readiness/install/validation/failure states, validated ids,
+    parse-once boundary validation, serde fixtures, public API tests, feature-
+    mode Rust checks, durable test-state isolation, frontend Node-test and
+    typecheck verification, and deletion of old resolver methods without
+    default trait adapters or compatibility aliases.
+  - No-fallback/no-legacy confirmation: this standards pass keeps option 3 as
+    a replacement path. It does not approve `ModelDependencyRequest` as an
+    alternate branch, `ModelRefV2` repair, `modelPath` frontend aliases, raw
+    platform JSON, or path-shaped cache/activity identity.
+  - Verification passed for this docs-only standards update: `git diff
+    --check`.
 
 ### Traceability Links
 
