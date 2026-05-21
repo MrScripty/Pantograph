@@ -8,6 +8,12 @@ frontend, persisted, and worker-adjacent consumers must preserve.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `dependency_environment_check_request.json` | Typed dependency-environment check request keyed by path-free identity and requirements id. |
+| `dependency_environment_install_request.json` | Typed dependency-environment install request with dependency override patches and environment ref. |
+| `dependency_environment_invalid_result.json` | Invalid dependency-environment install result with typed failure state and diagnostic. |
+| `dependency_environment_ready_result.json` | Ready dependency-environment check result with typed readiness/install/validation states and environment ref. |
+| `dependency_environment_resolve_request.json` | Typed dependency-environment resolve request that carries planning facts without path identity. |
+| `dependency_environment_unavailable_result.json` | Unavailable dependency-environment resolve result with typed failure state and diagnostic. |
 | `dependency_planning_identity_key.json` | Path-free cache/activity/preflight identity keyed by Pumas model ref, task, runtime/device selection facts, platform, and selected bindings. |
 | `dependency_planning_request.json` | Valid graph/host dependency-planning request keyed by `pumas_model_ref`, including selected binding ids and manual dependency override patches. |
 | `dependency_planning_ready_result.json` | Ready result carrying a Pumas-approved load target for backend handoff. |
@@ -21,6 +27,10 @@ shape reviewable and testable.
 
 ## Constraints
 - Request fixtures must not contain local model path identity.
+- Dependency-environment request fixtures must carry typed
+  resolve/check/install actions, not raw mode strings.
+- Dependency-environment check/install request fixtures require
+  `dependency_requirements_id`.
 - Identity and preflight fixtures must not contain `model_path`,
   `selected_artifact_path`, `entry_path`, local load paths, or load targets.
 - Load paths may appear only in ready result fixtures as Pumas-approved handoff
@@ -41,6 +51,11 @@ cross-layer tests without importing unrelated runtime behavior.
 - `dependency_planning_request.json` uses `pumas_model_ref`.
 - Request fixtures keep manual dependency override patches in the shared
   contract shape.
+- Dependency-environment request fixtures keep `DependencyPlanningIdentityKey`
+  and `DependencyPlanningRequest` aligned on model ref, task, artifact kind,
+  platform, selected bindings, runtime, and device facts.
+- Dependency-environment result fixtures use typed readiness, install,
+  validation, and failure states.
 - Ready results include exactly one host/planner load target.
 - Unavailable results include diagnostics and no load target.
 - Path-free identity/preflight fixtures stay separate from ready result
@@ -76,3 +91,6 @@ cargo test -p pantograph-dependency-planning dependency_planning_request_fixture
 - Optional fields may be omitted only when the DTO default has explicit
   semantics.
 - New enum values require fixture and consumer updates in the same slice.
+- Path-shaped fields such as `model_path`, `modelPath`, `entry_path`,
+  `selected_artifact_path`, or `local_load_path` are rejected in
+  dependency-environment request fixtures.

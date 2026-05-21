@@ -5,12 +5,20 @@
 //! actions, persisted fixtures, and backend/worker handoff boundaries. It does
 //! not call Pumas, inspect files, select runtimes, or execute workers.
 
+mod environment;
 mod error;
 mod model_ref;
 mod preflight;
 mod request;
 mod result;
 
+pub use environment::{
+    DependencyEnvironmentAction, DependencyEnvironmentFailureState, DependencyEnvironmentId,
+    DependencyEnvironmentInstallState, DependencyEnvironmentManifestId,
+    DependencyEnvironmentReadinessState, DependencyEnvironmentRef, DependencyEnvironmentRequest,
+    DependencyEnvironmentResult, DependencyEnvironmentValidationState,
+    ValidatedDependencyEnvironmentRequest,
+};
 pub use error::{DependencyPlanningContractError, PumasArtifactEntryPathError};
 pub use model_ref::{
     ModelArtifactKind, ModelRefMigrationDiagnostic, ModelStorageKind, ModelValidationState,

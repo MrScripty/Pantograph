@@ -3,14 +3,15 @@
 ## Purpose
 This crate owns Pantograph's shared dependency-planning contracts: typed model
 identity, scheduler intent, dependency override patches, planning request/result
-DTOs, Pumas-facing load target mirrors, and diagnostics used across graph
-execution, host planning, frontend actions, persisted fixtures, and backend
-handoff boundaries.
+DTOs, dependency-environment request/result DTOs, Pumas-facing load target
+mirrors, and diagnostics used across graph execution, host planning, frontend
+actions, persisted fixtures, and backend handoff boundaries.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
 | `src/lib.rs` | Curated public re-exports for dependency-planning consumers. |
+| `src/environment.rs` | Typed dependency-environment resolve/check/install request, result, state, and environment-ref contracts. |
 | `src/model_ref.rs` | Pumas-compatible model reference and artifact load-target contract mirrors. |
 | `src/preflight.rs` | Path-free preflight model reference successor and shared dependency-planning identity/correlation key. |
 | `src/request.rs` | Typed dependency-planning request, caller context, scheduler intent, dependency overrides, and validated ids. |
@@ -33,12 +34,18 @@ one neutral contract boundary before runtime behavior is migrated.
   paths or select executable runtimes directly.
 - Worker-visible local paths may appear only in host/planner result handoff
   shapes after Pumas has approved a load target.
+- Dependency-environment actions are typed resolve/check/install operations.
+  They are not raw frontend modes and they do not authorize path-based model
+  lookup.
 
 ## Decision
 Create a small workspace crate with validated request/result DTOs and
 Pumas-compatible model/load-target mirrors. Existing inference-facing Pumas DTOs
 are re-exported from this crate so Pantograph has one canonical mirror location
-instead of parallel artifact DTO families.
+instead of parallel artifact DTO families. Dependency-environment contracts live
+in this crate because they are shared boundary DTOs for graph, frontend,
+embedded-runtime, and host dependency systems; the actual package-manager and
+Pumas I/O remains outside this crate.
 
 ## Alternatives Rejected
 - Keep dependency-planning DTOs in `node-engine`: rejected because node-engine
@@ -63,6 +70,14 @@ instead of parallel artifact DTO families.
   must never contain `PumasArtifactLoadTarget`, `model_path`, local load paths,
   `entry_path`, or `selected_artifact_path`.
 - Pumas load targets are result/handoff facts, not graph identity.
+- Dependency-environment requests carry a typed action and a matching
+  `DependencyPlanningIdentityKey` plus `DependencyPlanningRequest`. The identity
+  key and planning request must agree on model ref, task, artifact kind,
+  platform, selected bindings, and any runtime/device facts present in both.
+- Dependency-environment check/install requests require a
+  `dependency_requirements_id`; resolve requests may omit it.
+- Dependency-environment readiness, install, validation, and failure states are
+  typed enums.
 - Raw graph JSON and frontend payloads must parse once into validated domain
   types before internal use.
 - Missing, stale, invalid, unavailable, ambiguous, needs-detail, and
@@ -91,11 +106,62 @@ instead of parallel artifact DTO families.
 ## Usage Examples
 ```rust
 use pantograph_dependency_planning::{
-    DependencyNodeTypeId, DependencyPlanningCallerContext, DependencyPlanningPlatformContext,
-    DependencyPlanningRequest, DependencyTaskId, PumasModelRef, ValidatedDependencyPlanningRequest,
+    DependencyEnvironmentAction, DependencyEnvironmentRequest, DependencyNodeTypeId,
+    DependencyPlanningCallerContext, DependencyPlanningIdentityKey,
+    DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyTaskId, PumasModelRef,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
+};
+
+let model_ref = PumasModelRef {
+    model_id: "models/example".to_string(),
+    revision: None,
+    selected_artifact_id: Some("artifact-1".to_string()),
+    selected_artifact_path: None,
+    migration_diagnostics: Vec::new(),
 };
 
 let request = DependencyPlanningRequest {
+    model_ref: model_ref.clone(),
+    task_id: DependencyTaskId::parse("image_generation")?,
+    task_type: None,
+    expected_artifact_kind: None,
+    scheduler_intent: Default::default(),
+    platform_context: Some(DependencyPlanningPlatformContext::from_os_arch(
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+    )?),
+    selected_binding_ids: Vec::new(),
+    dependency_override_patches: Vec::new(),
+    caller_context: DependencyPlanningCallerContext {
+        source_node_type: Some(DependencyNodeTypeId::parse("dependency-environment")?),
+        ..Default::default()
+    },
+};
+
+let identity_key = DependencyPlanningIdentityKey {
+    model_ref,
+    task_id: request.task_id.clone(),
+    task_type: request.task_type.clone(),
+    expected_artifact_kind: request.expected_artifact_kind.clone(),
+    selected_runtime_id: None,
+    selected_device_id: None,
+    platform_context: request.platform_context.clone(),
+    selected_binding_ids: request.selected_binding_ids.clone(),
+};
+
+let environment_request = DependencyEnvironmentRequest {
+    contract_version: 1,
+    action: DependencyEnvironmentAction::Resolve,
+    identity_key,
+    planning_request: request.clone(),
+    dependency_requirements_id: None,
+    environment_ref: None,
+};
+
+let _validated_environment =
+    ValidatedDependencyEnvironmentRequest::try_from(environment_request)?;
+
+let planning_request = DependencyPlanningRequest {
     model_ref: PumasModelRef {
         model_id: "models/example".to_string(),
         revision: None,
@@ -119,30 +185,34 @@ let request = DependencyPlanningRequest {
     },
 };
 
-let _validated = ValidatedDependencyPlanningRequest::try_from(request)?;
+let _validated = ValidatedDependencyPlanningRequest::try_from(planning_request)?;
 # Ok::<(), pantograph_dependency_planning::DependencyPlanningContractError>(())
 ```
 
 ## API Consumer Contract
-- Inputs: dependency-planning request DTOs decoded from graph, frontend, or host
-  payloads.
-- Outputs: typed dependency-planning results and diagnostics.
+- Inputs: dependency-planning and dependency-environment request DTOs decoded
+  from graph, frontend, or host payloads.
+- Outputs: typed dependency-planning results, dependency-environment results,
+  environment refs, and diagnostics.
 - Lifecycle: this crate has no runtime lifecycle and starts no tasks.
 - Errors: boundary validation returns `DependencyPlanningContractError`; planning
-  failures are represented as `DependencyPlanningResult` states and typed
+  and dependency-environment failures are represented as typed result states and
   diagnostics.
 - Compatibility: fields and enum meanings are machine-consumed by Rust,
   frontend, persisted fixtures, and worker-adjacent code. Breaking wire-shape
   changes require a coordinated migration.
 
 ## Structured Producer Contract
-- Stable fields: request/result field names, enum spellings, typed diagnostic
-  codes, and Pumas-compatible model/load-target shapes.
+- Stable fields: request/result field names, dependency-environment action and
+  state enum spellings, typed diagnostic codes, environment-ref ids, and
+  Pumas-compatible model/load-target shapes.
 - Defaults: omitted scheduler intent, caller context, selected bindings, and
-  diagnostics mean empty intent/context/bindings/diagnostics.
+  diagnostics mean empty intent/context/bindings/diagnostics. Omitted
+  dependency-environment contract version means version 1.
 - Enum semantics: result states distinguish unavailable, invalid, stale,
-  ambiguous, needs-detail, missing, and not-implemented because scheduler and UI
-  decisions depend on those differences.
+  ambiguous, needs-detail, missing, and not-implemented; dependency-environment
+  readiness/install/validation/failure states are distinct because scheduler,
+  activity, and UI decisions depend on those differences.
 - Ordering: selected binding ids and diagnostics preserve producer order.
 - Compatibility: serde fixture tests are required for public DTO changes.
 - Regeneration/migration: when Pumas or frontend wire shapes change, update this

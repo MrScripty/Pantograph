@@ -1,9 +1,13 @@
 use pantograph_dependency_planning::{
-    DependencyPlanningContractError, DependencyPlanningDiagnosticCode,
-    DependencyPlanningIdentityKey, DependencyPlanningPlatformContext, DependencyPlanningRequest,
-    DependencyPlanningResult, DependencyPlanningState, DependencyPreflightModelRef,
-    ModelArtifactKind, PumasArtifactEntryPath, PumasArtifactEntryPathError,
-    PumasArtifactLoadPathKind, ValidatedDependencyPlanningRequest,
+    DependencyEnvironmentAction, DependencyEnvironmentFailureState,
+    DependencyEnvironmentInstallState, DependencyEnvironmentReadinessState,
+    DependencyEnvironmentRequest, DependencyEnvironmentResult,
+    DependencyEnvironmentValidationState, DependencyPlanningContractError,
+    DependencyPlanningDiagnosticCode, DependencyPlanningIdentityKey,
+    DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyPlanningResult,
+    DependencyPlanningState, DependencyPreflightModelRef, ModelArtifactKind,
+    PumasArtifactEntryPath, PumasArtifactEntryPathError, PumasArtifactLoadPathKind,
+    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
 };
 
 const VALID_REQUEST: &str = include_str!("fixtures/dependency_planning_request.json");
@@ -12,6 +16,16 @@ const UNAVAILABLE_RESULT: &str =
     include_str!("fixtures/dependency_planning_unavailable_result.json");
 const IDENTITY_KEY: &str = include_str!("fixtures/dependency_planning_identity_key.json");
 const PREFLIGHT_MODEL_REF: &str = include_str!("fixtures/dependency_preflight_model_ref.json");
+const ENV_RESOLVE_REQUEST: &str =
+    include_str!("fixtures/dependency_environment_resolve_request.json");
+const ENV_CHECK_REQUEST: &str = include_str!("fixtures/dependency_environment_check_request.json");
+const ENV_INSTALL_REQUEST: &str =
+    include_str!("fixtures/dependency_environment_install_request.json");
+const ENV_READY_RESULT: &str = include_str!("fixtures/dependency_environment_ready_result.json");
+const ENV_UNAVAILABLE_RESULT: &str =
+    include_str!("fixtures/dependency_environment_unavailable_result.json");
+const ENV_INVALID_RESULT: &str =
+    include_str!("fixtures/dependency_environment_invalid_result.json");
 
 #[test]
 fn dependency_planning_request_fixture_decodes_and_validates() {
@@ -254,4 +268,208 @@ fn dependency_planning_identity_key_rejects_selected_artifact_path_identity() {
             reason: "path-free dependency identity must not carry selected artifact paths"
         }
     );
+}
+
+#[test]
+fn dependency_environment_request_fixtures_decode_and_validate() {
+    let cases = [
+        (
+            ENV_RESOLVE_REQUEST,
+            DependencyEnvironmentAction::Resolve,
+            false,
+        ),
+        (ENV_CHECK_REQUEST, DependencyEnvironmentAction::Check, true),
+        (
+            ENV_INSTALL_REQUEST,
+            DependencyEnvironmentAction::Install,
+            true,
+        ),
+    ];
+
+    for (fixture, expected_action, requires_requirements_id) in cases {
+        let request: DependencyEnvironmentRequest =
+            serde_json::from_str(fixture).expect("environment request fixture should decode");
+        let validated = ValidatedDependencyEnvironmentRequest::try_from(request)
+            .expect("environment request fixture should validate");
+
+        assert_eq!(validated.as_request().action, expected_action);
+        assert_eq!(
+            validated.as_request().identity_key.model_ref.model_id,
+            "image/stable-diffusion/tiny-sd"
+        );
+        assert_eq!(
+            validated
+                .as_request()
+                .identity_key
+                .selected_runtime_id
+                .as_ref()
+                .map(|id| id.as_str()),
+            Some("pytorch")
+        );
+        assert_eq!(
+            validated.as_request().dependency_requirements_id.is_some(),
+            requires_requirements_id
+        );
+    }
+}
+
+#[test]
+fn dependency_environment_result_fixtures_decode_and_validate() {
+    let ready: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("ready environment result should decode");
+    ready
+        .validate()
+        .expect("ready environment result should validate");
+    assert_eq!(
+        ready.readiness_state,
+        DependencyEnvironmentReadinessState::Ready
+    );
+    assert_eq!(
+        ready.install_state,
+        DependencyEnvironmentInstallState::Installed
+    );
+    assert_eq!(
+        ready.validation_state,
+        DependencyEnvironmentValidationState::Valid
+    );
+    assert!(ready.environment_ref.is_some());
+
+    let unavailable: DependencyEnvironmentResult = serde_json::from_str(ENV_UNAVAILABLE_RESULT)
+        .expect("unavailable environment result should decode");
+    unavailable
+        .validate()
+        .expect("unavailable environment result should validate");
+    assert_eq!(
+        unavailable.failure_state,
+        Some(DependencyEnvironmentFailureState::RequirementsUnavailable)
+    );
+    assert_eq!(unavailable.diagnostics.len(), 1);
+
+    let invalid: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_INVALID_RESULT).expect("invalid environment result should decode");
+    invalid
+        .validate()
+        .expect("invalid environment result should validate");
+    assert_eq!(
+        invalid.failure_state,
+        Some(DependencyEnvironmentFailureState::InvalidRequest)
+    );
+    assert_eq!(
+        invalid
+            .diagnostics
+            .first()
+            .map(|diagnostic| &diagnostic.code),
+        Some(&DependencyPlanningDiagnosticCode::InvalidRequest)
+    );
+}
+
+#[test]
+fn dependency_environment_check_request_requires_requirements_id() {
+    let request: DependencyEnvironmentRequest =
+        serde_json::from_str(ENV_RESOLVE_REQUEST).expect("fixture should decode");
+    let request = DependencyEnvironmentRequest {
+        action: DependencyEnvironmentAction::Check,
+        ..request
+    };
+
+    assert_eq!(
+        ValidatedDependencyEnvironmentRequest::try_from(request)
+            .expect_err("check request should require dependency requirements id"),
+        DependencyPlanningContractError::MissingField {
+            field: "dependency_requirements_id"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_request_rejects_path_shaped_json_fields() {
+    let value = serde_json::json!({
+        "action": "resolve",
+        "identity_key": {
+            "model_ref": {
+                "model_id": "image/stable-diffusion/tiny-sd"
+            },
+            "task_id": "image_generation"
+        },
+        "planning_request": {
+            "model_ref": {
+                "model_id": "image/stable-diffusion/tiny-sd"
+            },
+            "task_id": "image_generation",
+            "model_path": "/models/tiny-sd"
+        }
+    });
+
+    assert_eq!(
+        ValidatedDependencyEnvironmentRequest::try_from(value)
+            .expect_err("environment requests must reject path-shaped identity fields"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_environment_request",
+            reason: "request must not contain path-shaped dependency identity fields"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_request_rejects_unknown_mode_field() {
+    let value: serde_json::Value =
+        serde_json::from_str(ENV_RESOLVE_REQUEST).expect("fixture should parse");
+    let mut object = value
+        .as_object()
+        .expect("fixture should be an object")
+        .clone();
+    object.insert("mode".to_string(), serde_json::json!("auto"));
+
+    assert_eq!(
+        ValidatedDependencyEnvironmentRequest::try_from(serde_json::Value::Object(object))
+            .expect_err("environment requests must use typed action, not raw mode"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_environment_request",
+            reason: "request JSON did not match dependency environment contract"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_request_rejects_mismatched_identity_key() {
+    let mut request: DependencyEnvironmentRequest =
+        serde_json::from_str(ENV_RESOLVE_REQUEST).expect("fixture should decode");
+    request.identity_key.task_id = "text_generation"
+        .parse()
+        .expect("test task id should be valid");
+
+    assert_eq!(
+        ValidatedDependencyEnvironmentRequest::try_from(request)
+            .expect_err("identity key must match planning request"),
+        DependencyPlanningContractError::InvalidField {
+            field: "identity_key.task_id",
+            reason: "identity key task id must match planning request task id"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_request_rejects_malformed_environment_ids() {
+    let value = serde_json::json!({
+        "action": "check",
+        "identity_key": {
+            "model_ref": {
+                "model_id": "image/stable-diffusion/tiny-sd"
+            },
+            "task_id": "image_generation"
+        },
+        "planning_request": {
+            "model_ref": {
+                "model_id": "image/stable-diffusion/tiny-sd"
+            },
+            "task_id": "image_generation"
+        },
+        "dependency_requirements_id": "tiny-sd:pytorch:linux-x86_64",
+        "environment_ref": {
+            "environment_id": "python/pytorch"
+        }
+    });
+
+    serde_json::from_value::<DependencyEnvironmentRequest>(value)
+        .expect_err("environment id must be a validated id, not a path");
 }

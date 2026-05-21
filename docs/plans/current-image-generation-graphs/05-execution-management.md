@@ -7910,6 +7910,47 @@ Worker rules:
     platform JSON, or path-shaped cache/activity identity.
   - Verification passed for this docs-only standards update: `git diff
     --check`.
+- 2026-05-21 Milestone 5 dependency-environment typed contract:
+  - Smallest useful vertical slice: add the contract-only
+    dependency-environment resolve/check/install DTOs before any production
+    resolver migration.
+  - Allowed write set: `crates/pantograph-dependency-planning/`,
+    `docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md`,
+    and this execution log. Root proposal markdown files remained ignored.
+  - Implementation completed: `DependencyEnvironmentRequest` and
+    `DependencyEnvironmentResult` now provide typed dependency-environment
+    resolve/check/install contracts. The request carries
+    `DependencyPlanningIdentityKey` plus `DependencyPlanningRequest` and
+    validates their shared model ref, task, artifact kind, platform, selected
+    bindings, and runtime/device facts. The result carries typed readiness,
+    install, validation, failure, environment-ref, and diagnostic facts.
+  - Tests/fixtures added: public serde fixtures cover resolve, check, install,
+    ready, unavailable, and invalid states. Contract tests cover fixture
+    decoding/validation, check/install requirements ids, path-shaped request
+    field rejection, unknown raw mode rejection, mismatched identity rejection,
+    malformed environment ids, and typed diagnostics.
+  - No-fallback/no-legacy confirmation: production node-engine,
+    embedded-runtime, frontend, Pumas lookup, package-manager, scheduler, and
+    host adapter behavior were not changed. This slice adds no conversion from
+    the typed dependency-environment contract back into
+    `ModelDependencyRequest` and no path-shaped compatibility alias.
+  - Standards evidence: the contract stays in the domain crate, public types
+    are re-exported through `lib.rs`, README and fixture README traceability was
+    updated, raw JSON is validated before becoming trusted internal input, and
+    environment refs use validated newtypes rather than raw path or mode
+    strings.
+  - Verification passed:
+    `cargo fmt -p pantograph-dependency-planning`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo fmt -p pantograph-dependency-planning -- --check`,
+    `cargo check -p pantograph-dependency-planning`,
+    `cargo check -p pantograph-dependency-planning --all-features`,
+    `cargo check -p pantograph-dependency-planning --no-default-features`, and
+    `git diff --check`.
+  - Remaining follow-up: migrate the node-engine resolver boundary,
+    dependency-environment check/install consumers, cache/activity identity, and
+    frontend dependency-environment DTOs to these typed contracts, then remove
+    `ModelDependencyRequest` and path-shaped resolver/test surfaces.
 
 ### Traceability Links
 

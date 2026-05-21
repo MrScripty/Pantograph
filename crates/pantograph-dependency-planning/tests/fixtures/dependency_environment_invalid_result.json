@@ -1,0 +1,37 @@
+{
+  "action": "install",
+  "identity_key": {
+    "model_ref": {
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "revision": "main",
+      "selected_artifact_id": "artifact-diffusers"
+    },
+    "task_id": "image_generation",
+    "task_type": "text_to_image",
+    "expected_artifact_kind": "diffusers_bundle",
+    "selected_runtime_id": "pytorch",
+    "selected_device_id": "cuda:0",
+    "platform_context": {
+      "platform_key": "linux-x86_64"
+    },
+    "selected_binding_ids": [
+      "diffusers.scheduler"
+    ]
+  },
+  "readiness_state": "invalid",
+  "install_state": "failed",
+  "validation_state": "invalid",
+  "failure_state": "invalid_request",
+  "dependency_requirements_id": "tiny-sd:pytorch:linux-x86_64:torch-diffusers",
+  "diagnostics": [
+    {
+      "code": "invalid_request",
+      "severity": "error",
+      "message": "Dependency override patch targeted an unknown requirement.",
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "runtime_id": "pytorch",
+      "device_id": "cuda:0",
+      "field_path": "planning_request.dependency_override_patches[0].requirement_name"
+    }
+  ]
+}

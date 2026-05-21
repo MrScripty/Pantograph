@@ -999,6 +999,42 @@ fixture contract must not remain reachable as an alternate execution path.
      checks, frontend Node-test/typecheck verification, durable test-state
      isolation, and deletion of old resolver methods instead of default
      adapters or compatibility aliases.
+   - 2026-05-21 implementation: completed the contract-only
+     dependency-environment typed contract gate in
+     `pantograph-dependency-planning`. Added `DependencyEnvironmentRequest`,
+     `DependencyEnvironmentResult`, typed resolve/check/install action,
+     readiness/install/validation/failure states, environment ids, environment
+     refs, and `ValidatedDependencyEnvironmentRequest`. The request contract
+     carries both `DependencyPlanningIdentityKey` and `DependencyPlanningRequest`
+     and validates that their model ref, task facts, artifact kind, platform,
+     selected bindings, and any runtime/device facts present in both match.
+     Check/install requests require `dependency_requirements_id`; resolve
+     requests may omit it.
+   - No-fallback/no-legacy confirmation: this slice did not touch production
+     node-engine, embedded-runtime, frontend, Pumas lookup, Python/package
+     manager, runtime selection, or host adapter behavior. It adds no adapter
+     from the new dependency-environment contract back to
+     `ModelDependencyRequest` and does not preserve path-shaped request identity
+     as an alternate branch.
+   - Standards evidence: dependency-environment DTOs live in the existing
+     contract/domain crate, are re-exported through `lib.rs`, reject unknown
+     top-level request fields through serde, reject path-shaped request fields
+     through validated JSON parsing, validate environment ids as newtypes, and
+     are covered by public serde fixtures for resolve, check, install, ready,
+     unavailable, and invalid states. The crate README and fixture README now
+     describe ownership, validation rules, lifecycle/error semantics, and the
+     rejected legacy contract.
+   - Verification: `cargo fmt -p pantograph-dependency-planning`,
+     `cargo test -p pantograph-dependency-planning`,
+     `cargo fmt -p pantograph-dependency-planning -- --check`,
+     `cargo check -p pantograph-dependency-planning`,
+     `cargo check -p pantograph-dependency-planning --all-features`,
+     `cargo check -p pantograph-dependency-planning --no-default-features`, and
+     `git diff --check`.
+   - Remaining follow-up: replace the node-engine resolver boundary and
+     dependency-environment check/install consumers with the typed contracts,
+     then remove `ModelDependencyRequest`, `ModelRefV2` preflight repair, and
+     path-shaped cache/activity/frontend dependency-environment identity.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

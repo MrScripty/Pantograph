@@ -1,0 +1,53 @@
+{
+  "action": "check",
+  "identity_key": {
+    "model_ref": {
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "revision": "main",
+      "selected_artifact_id": "artifact-diffusers"
+    },
+    "task_id": "image_generation",
+    "task_type": "text_to_image",
+    "expected_artifact_kind": "diffusers_bundle",
+    "selected_runtime_id": "pytorch",
+    "selected_device_id": "cuda:0",
+    "platform_context": {
+      "platform_key": "linux-x86_64"
+    },
+    "selected_binding_ids": [
+      "diffusers.scheduler"
+    ]
+  },
+  "planning_request": {
+    "model_ref": {
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "revision": "main",
+      "selected_artifact_id": "artifact-diffusers"
+    },
+    "task_id": "image_generation",
+    "task_type": "text_to_image",
+    "expected_artifact_kind": "diffusers_bundle",
+    "scheduler_intent": {
+      "requested_runtime_id": "pytorch",
+      "requested_device_id": "cuda:0"
+    },
+    "platform_context": {
+      "platform_key": "linux-x86_64"
+    },
+    "selected_binding_ids": [
+      "diffusers.scheduler"
+    ],
+    "caller_context": {
+      "source_node_type": "dependency-environment",
+      "workflow_id": "workflow-image",
+      "node_id": "node-deps",
+      "port_id": "pumas_model_ref",
+      "run_id": "run-1"
+    }
+  },
+  "dependency_requirements_id": "tiny-sd:pytorch:linux-x86_64:torch-diffusers",
+  "environment_ref": {
+    "environment_id": "python:pytorch:cu124",
+    "manifest_id": "manifest:tiny-sd:pytorch:linux-x86_64"
+  }
+}

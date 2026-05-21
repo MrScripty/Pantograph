@@ -1,0 +1,36 @@
+{
+  "action": "resolve",
+  "identity_key": {
+    "model_ref": {
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "revision": "main",
+      "selected_artifact_id": "artifact-diffusers"
+    },
+    "task_id": "image_generation",
+    "task_type": "text_to_image",
+    "expected_artifact_kind": "diffusers_bundle",
+    "selected_runtime_id": "pytorch",
+    "selected_device_id": "cuda:0",
+    "platform_context": {
+      "platform_key": "linux-x86_64"
+    },
+    "selected_binding_ids": [
+      "diffusers.scheduler"
+    ]
+  },
+  "readiness_state": "unavailable",
+  "install_state": "blocked",
+  "validation_state": "unavailable",
+  "failure_state": "requirements_unavailable",
+  "diagnostics": [
+    {
+      "code": "runtime_unavailable",
+      "severity": "error",
+      "message": "PyTorch dependency requirements are not available for the selected platform.",
+      "model_id": "image/stable-diffusion/tiny-sd",
+      "runtime_id": "pytorch",
+      "device_id": "cuda:0",
+      "field_path": "planning_request.scheduler_intent.requested_runtime_id"
+    }
+  ]
+}
