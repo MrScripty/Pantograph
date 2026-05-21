@@ -8139,6 +8139,39 @@ Worker rules:
     generated DTOs, lockfiles, or saved workflows until that contract gate
     passes.
   - Verification passed for this docs-only design update: `git diff --check`.
+- 2026-05-21 Milestone 5 path-free preflight standards iteration:
+  - Standards reviewed:
+    `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/CODING-STANDARDS.md`,
+    `ARCHITECTURE-PATTERNS.md`, `INTEROP-STANDARDS.md`,
+    `TESTING-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`,
+    `languages/rust/RUST-API-STANDARDS.md`, and
+    `languages/rust/RUST-TOOLING-STANDARDS.md`.
+  - Existing-code finding: `pantograph-dependency-planning` already owns a
+    small path-free `preflight` module and exports
+    `DependencyPlanningIdentityKey`/`DependencyPreflightModelRef`. The next
+    slice should extend that owner into the request/result contract gate
+    instead of creating a second preflight contract in node-engine,
+    embedded-runtime, scheduler, or frontend code.
+  - Blast-radius finding: the option 2 decision is standards-compliant only if
+    implementation keeps preflight narrow. Without explicit guardrails, the
+    next slice could accidentally pass full dependency-environment status or
+    install payloads through graph/node-engine identity, let scheduler intent
+    become a scheduler decision, or reintroduce local paths through fields such
+    as `selected_artifact_path`, `local_load_path`, Python executable paths, or
+    package source paths.
+  - Plan update completed: Milestone 5 now requires the next contract gate to
+    extend `pantograph-dependency-planning::preflight`, reuse existing validated
+    contracts, reject path-shaped and load-target/package-fact fields, keep
+    scheduler/runtime/device values as intent or hard requirements only, split
+    the preflight module if it approaches decomposition limits, update READMEs
+    and fixtures, and run the full dependency-planning contract verification
+    set.
+  - No-fallback/no-legacy confirmation: this standards pass does not authorize
+    compatibility shims. The later migration must remove `ModelRefV2`,
+    `ModelDependencyRequest.model_path`, path-derived model-id repair, and old
+    node-engine-owned dependency result DTOs when their canonical replacements
+    land.
+  - Verification passed: `git diff --check -- docs/plans/current-image-generation-graphs/milestones/05-device-and-runtime-variant-selection.md docs/plans/current-image-generation-graphs/05-execution-management.md`.
 
 ### Traceability Links
 

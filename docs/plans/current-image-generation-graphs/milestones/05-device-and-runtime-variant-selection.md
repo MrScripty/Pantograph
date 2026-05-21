@@ -1207,6 +1207,60 @@ fixture contract must not remain reachable as an alternate execution path.
      requirement facts, missing dependency-environment identity, invalid
      selected binding ids, unknown-field rejection, path-shaped field
      rejection, and typed diagnostics.
+   - 2026-05-21 standards iteration for the path-free preflight split: the
+     next contract gate must extend the existing
+     `pantograph-dependency-planning` preflight owner rather than creating a
+     second node-engine, embedded-runtime, scheduler, or frontend-owned
+     preflight DTO family. Use explicit public names such as
+     `DependencyPreflightRequest`, `DependencyPreflightResult`, and
+     `ValidatedDependencyPreflightRequest` unless implementation discovers a
+     narrower standards-compliant name and records that deviation in this plan
+     before coding. Reuse existing validated contracts (`PumasModelRef`,
+     `DependencyTaskId`, `ModelArtifactKind`, `SchedulerIntent` or a narrower
+     typed scheduler requirement wrapper,
+     `DependencyPlanningPlatformContext`,
+     `DependencyPlanningCallerContext`, `DependencyEnvironmentRef`,
+     `DependencyRequirementsId`, `DependencyBindingId`, and
+     `DependencyPlanningDiagnostic`) instead of adding parallel DTO families.
+   - Contract-shape requirements for that slice: public boundary structs must
+     use snake_case serde and reject unknown fields where they represent the
+     preflight protocol. Raw payloads must parse into validated wrappers and
+     public validators must return `DependencyPlanningContractError`. The
+     preflight contract must reject path-shaped fields including `model_path`,
+     `modelPath`, `selected_artifact_path`, `entry_path`, `local_load_path`,
+     `manifest_path`, Python executable paths, package source paths, or other
+     executable/local filesystem handoff fields. It may reference the selected
+     dependency-environment identity, readiness, requirements id, and selected
+     binding ids, but it must not embed broad status/install payloads unless a
+     consumer requires that shape and this plan records why. It must not carry
+     Pumas load targets, package facts, backend-local device strings, worker
+     environment variables, scheduler-selected runtime/device/load-target
+     decisions, or executable paths.
+   - Scheduler-intent clarification: explicit runtime/device values in
+     preflight are graph/caller intent or scheduler requirements only. If the
+     graph explicitly supplies a runtime or device, scheduler/host planning
+     must either satisfy the requirement or emit typed diagnostics. If the
+     graph does not supply one, scheduler/host planning decides from facts,
+     resource state, runtime availability, and ledger history. Preflight never
+     selects the final backend/runtime/device and never bypasses scheduler
+     policy.
+   - Decomposition, documentation, and test requirements: keep
+     `preflight.rs` below the 500-line target. If request/result/scalar code
+     would make the file broad, split it into a documented `src/preflight/`
+     child module before committing. Update crate-root re-exports, package
+     README, `src/README.md`, and fixture README in the same slice. Add focused
+     serde and validator coverage for valid request/result fixtures,
+     unknown-field rejection, path-field rejection, missing
+     dependency-environment identity, malformed or duplicate selected binding
+     ids, explicit runtime/device scheduler requirements, diagnostics order,
+     and rejection of load-target/package-fact fields. Required verification:
+     `cargo fmt -p pantograph-dependency-planning`,
+     `cargo test -p pantograph-dependency-planning`,
+     `cargo fmt -p pantograph-dependency-planning -- --check`,
+     `cargo check -p pantograph-dependency-planning`,
+     `cargo check -p pantograph-dependency-planning --all-features`,
+     `cargo check -p pantograph-dependency-planning --no-default-features`,
+     and `git diff --check`.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device
