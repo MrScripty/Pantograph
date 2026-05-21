@@ -25,5 +25,49 @@
   "environment_ref": {
     "environment_id": "python:pytorch:cu124",
     "manifest_id": "manifest:tiny-sd:pytorch:linux-x86_64"
+  },
+  "requirements": [
+    {
+      "name": "diffusers",
+      "kind": "python_package",
+      "version_constraint": ">=0.29",
+      "python": {
+        "import_name": "diffusers",
+        "python_requires": ">=3.10",
+        "package_manager": "pip"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "binding_id": "diffusers.scheduler",
+      "requirement_name": "diffusers",
+      "environment_kind": "python",
+      "profile_id": "python:pytorch:cu124",
+      "python": {
+        "index_url": "https://download.pytorch.org/whl/cu124",
+        "extra_index_urls": [
+          "https://pypi.org/simple"
+        ],
+        "marker": "platform_system == 'Linux'"
+      }
+    }
+  ],
+  "selected_binding_ids": [
+    "diffusers.scheduler"
+  ],
+  "binding_statuses": [
+    {
+      "binding_id": "diffusers.scheduler",
+      "state": "ready",
+      "validation_state": "valid",
+      "checked_at_ms": 1779398400000,
+      "installed_at_ms": 1779398300000
+    }
+  ],
+  "operation": {
+    "state": "succeeded",
+    "started_at_ms": 1779398399000,
+    "completed_at_ms": 1779398400000
   }
 }

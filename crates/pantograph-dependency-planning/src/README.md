@@ -10,6 +10,8 @@ frontend state, and scheduler policy.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `lib.rs` | Public re-export surface for contract consumers. |
+| `environment.rs` | Dependency-environment request/result DTOs, typed requirement and binding rows, status rows, operation timestamps, validation errors, environment refs, and validation helpers. |
+| `environment/` | Child modules for dependency-environment result payload rows that would otherwise make the envelope module too broad. |
 | `error.rs` | Typed validation errors for request parsing and load-target result invariants. |
 | `model_ref.rs` | Pumas-compatible model reference, artifact entry path, artifact kind, storage, validation, and load-target mirrors. |
 | `preflight.rs` | Path-free preflight model reference successor and shared dependency-planning identity/correlation key. |
@@ -53,6 +55,12 @@ is the only public facade.
 - Platform context uses a validated platform key instead of raw JSON.
 - Source node type stays in caller context for traceability and must not become
   runtime selection policy.
+- Dependency-environment result rows use typed requirement kinds, environment
+  kinds, binding status states, operation states, validation codes, ids,
+  requirement names, validation field paths, and non-zero operation timestamps.
+- Python/package-manager fields are contained in Python-specific detail structs
+  so managed-binary, system-package, runtime-feature, device/toolchain, and
+  non-Python dependencies can be added without overloading Python rows.
 
 ## Revisit Triggers
 - The crate exceeds the decomposition thresholds.
@@ -85,9 +93,14 @@ assert_eq!(task_id.as_str(), "image_generation");
 - Raw JSON should be decoded into the public request/result types and validated
   before internal use.
 - Errors from validation use `DependencyPlanningContractError`.
+- Dependency-environment unavailable, invalid, missing, failed, and
+  not-implemented outcomes are result states with diagnostics, not string
+  errors.
 
 ## Structured Producer Contract
 - Stable fields and enum spellings are asserted by `tests/contract.rs`.
 - Optional scheduler intent, selected bindings, caller context, and diagnostics
   default to empty values.
 - New public DTO fields require fixture updates in the same slice.
+- Boundary request/result/row structs reject unknown fields where they carry
+  dependency-environment protocol state.

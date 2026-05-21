@@ -8029,6 +8029,59 @@ Worker rules:
     identity as an alternate branch.
   - Verification passed for this docs-only standards update: `git diff
     --check`.
+- 2026-05-21 Milestone 5 shared dependency result payload slice:
+  - Slice: expand the shared `pantograph-dependency-planning`
+    dependency-environment result contract before replacing the
+    node-engine-owned resolver result DTOs.
+  - Allowed write set used:
+    `crates/pantograph-dependency-planning/src/environment.rs`,
+    `crates/pantograph-dependency-planning/src/environment/`,
+    `crates/pantograph-dependency-planning/src/lib.rs`,
+    `crates/pantograph-dependency-planning/README.md`,
+    `crates/pantograph-dependency-planning/src/README.md`,
+    `crates/pantograph-dependency-planning/tests/contract.rs`,
+    `crates/pantograph-dependency-planning/tests/fixtures/`, and this plan.
+  - Implementation completed: dependency-environment results now carry shared
+    typed requirement rows, binding rows, selected binding ids, per-binding
+    status rows, operation timestamps, validation-error rows, environment refs,
+    and diagnostics. New type coverage includes requirement kind, environment
+    kind, binding status, operation state, validation code, profile id,
+    requirement name, validation field path, and non-zero operation timestamp.
+    Python/package-manager facts are scoped to `PythonRequirementDetails` and
+    `PythonBindingDetails`. Decomposition review split payload rows into
+    `src/environment/payload.rs`, scalar contracts into
+    `src/environment/scalar.rs`, and action/state enums into
+    `src/environment/state.rs` with a directory README, keeping the parent
+    `environment.rs` focused on the request/result envelope.
+  - Focused tests/fixtures added or updated: ready result rows, unavailable
+    requirements, invalid install failure row, no-binding unavailable result,
+    unknown-field rejection, duplicate selected binding ids, invalid
+    timestamps, path-shaped diagnostic field paths, and Python-detail
+    containment.
+  - Standards evidence: new boundary rows use snake_case serde and deny
+    unknown fields; selected binding order is preserved while duplicate
+    selected binding ids are rejected; operation timestamps are non-zero and
+    ordered; diagnostic and validation field paths reject filesystem-shaped
+    paths; public validation returns `DependencyPlanningContractError`; crate
+    README, source README, environment child-module README, and fixture README
+    document the new contract.
+  - No-fallback/no-legacy confirmation: this slice did not migrate
+    `ModelDependencyResolver`, did not adapt the new shared result contract back
+    into `ModelDependencyRequirements`, `ModelDependencyStatus`, or
+    `ModelDependencyInstallResult`, and did not touch node-engine,
+    embedded-runtime, frontend, workers, scheduler policy, Pumas lookup,
+    generated DTOs, lockfiles, or saved workflow behavior.
+  - Verification passed: `cargo fmt -p pantograph-dependency-planning`,
+    `cargo test -p pantograph-dependency-planning`,
+    `cargo fmt -p pantograph-dependency-planning -- --check`,
+    `cargo check -p pantograph-dependency-planning`,
+    `cargo check -p pantograph-dependency-planning --all-features`, and
+    `cargo check -p pantograph-dependency-planning --no-default-features`.
+    Final whitespace verification passed: `git diff --check`.
+  - Remaining follow-up: replace the node-engine resolver boundary with these
+    shared result payloads and remove the old node-engine-owned
+    `ModelDependencyRequirements`, `ModelDependencyStatus`, and
+    `ModelDependencyInstallResult` contracts rather than mapping into them.
 
 ### Traceability Links
 

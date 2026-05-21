@@ -6,11 +6,34 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::error::DependencyPlanningContractError;
 use crate::preflight::DependencyPlanningIdentityKey;
 use crate::request::{
-    DependencyPlanningRequest, DependencyRequirementsId, DeviceIntentId, RuntimeIntentId,
+    DependencyBindingId, DependencyPlanningRequest, DependencyRequirementsId, DeviceIntentId,
+    RuntimeIntentId,
 };
 use crate::result::DependencyPlanningDiagnostic;
 
 const MAX_ENVIRONMENT_ID_LEN: usize = 128;
+
+mod payload;
+mod scalar;
+mod state;
+
+pub use payload::{
+    DependencyBindingStatusRow, DependencyBindingStatusState, DependencyEnvironmentKind,
+    DependencyEnvironmentOperation, DependencyEnvironmentOperationState,
+    DependencyEnvironmentValidationCode, DependencyEnvironmentValidationError,
+    DependencyRequirement, DependencyRequirementBinding, DependencyRequirementKind,
+    PythonBindingDetails, PythonPackageManagerKind, PythonRequirementDetails,
+};
+use scalar::{validate_diagnostics, validate_unique_binding_ids};
+pub use scalar::{
+    DependencyBindingProfileId, DependencyOperationTimestampMs, DependencyRequirementName,
+    DependencyValidationFieldPath,
+};
+pub use state::{
+    DependencyEnvironmentAction, DependencyEnvironmentFailureState,
+    DependencyEnvironmentInstallState, DependencyEnvironmentReadinessState,
+    DependencyEnvironmentValidationState,
+};
 
 macro_rules! environment_id {
     ($name:ident, $field:literal) => {
@@ -88,71 +111,6 @@ environment_id!(
     DependencyEnvironmentManifestId,
     "dependency_environment_manifest_id"
 );
-
-/// Typed dependency-environment action requested by graph or frontend callers.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum DependencyEnvironmentAction {
-    Resolve,
-    Check,
-    Install,
-}
-
-/// Dependency-environment readiness state reported after resolve/check/install.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum DependencyEnvironmentReadinessState {
-    Unknown,
-    Resolved,
-    Ready,
-    Missing,
-    Unavailable,
-    Invalid,
-    Failed,
-    NotImplemented,
-}
-
-/// Dependency-environment install state reported by host dependency actions.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum DependencyEnvironmentInstallState {
-    NotRequested,
-    NotInstalled,
-    Installing,
-    Installed,
-    Failed,
-    Blocked,
-    NotImplemented,
-}
-
-/// Validation state for dependency-environment contracts and resolved facts.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum DependencyEnvironmentValidationState {
-    Valid,
-    Invalid,
-    Stale,
-    Unavailable,
-    NotImplemented,
-}
-
-/// High-level failure state for dependency-environment results.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum DependencyEnvironmentFailureState {
-    InvalidRequest,
-    RequirementsUnavailable,
-    EnvironmentUnavailable,
-    CheckFailed,
-    InstallFailed,
-    NotImplemented,
-    InternalError,
-}
 
 /// Stable environment reference returned by dependency-environment operations.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -304,6 +262,18 @@ pub struct DependencyEnvironmentResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment_ref: Option<DependencyEnvironmentRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requirements: Vec<DependencyRequirement>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bindings: Vec<DependencyRequirementBinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_binding_ids: Vec<DependencyBindingId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub binding_statuses: Vec<DependencyBindingStatusRow>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<DependencyEnvironmentOperation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub validation_errors: Vec<DependencyEnvironmentValidationError>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<DependencyPlanningDiagnostic>,
 }
 
@@ -319,6 +289,23 @@ impl DependencyEnvironmentResult {
         if let Some(environment_ref) = &self.environment_ref {
             environment_ref.validate()?;
         }
+        validate_unique_binding_ids(&self.selected_binding_ids)?;
+        for requirement in &self.requirements {
+            requirement.validate()?;
+        }
+        for binding in &self.bindings {
+            binding.validate()?;
+        }
+        for status in &self.binding_statuses {
+            status.validate()?;
+        }
+        if let Some(operation) = &self.operation {
+            operation.validate()?;
+        }
+        for error in &self.validation_errors {
+            error.validate()?;
+        }
+        validate_diagnostics(&self.diagnostics)?;
         Ok(())
     }
 }

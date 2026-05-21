@@ -1112,6 +1112,45 @@ fixture contract must not remain reachable as an alternate execution path.
      touch manifests, temp roots, install locks, caches, sqlite files, or
      package-manager state must isolate durable state per test or serialize with
      an explicit guard.
+   - 2026-05-21 implementation: expanded `pantograph-dependency-planning`
+     dependency-environment results with shared typed payload rows for
+     requirements, bindings, selected binding ids, per-binding status,
+     operation timestamps, validation errors, environment refs, and
+     diagnostics. Requirement kind, environment kind, binding status,
+     operation state, validation code, profile id, requirement name, validation
+     field path, and operation timestamp are now typed contract fields.
+     Python/package-manager-specific facts are contained in
+     `PythonRequirementDetails` and `PythonBindingDetails` so future
+     managed-binary, system-package, runtime-feature, device/toolchain, or
+     non-Python dependencies do not inherit Python-only generic fields. A
+     decomposition review split the payload row contracts into
+     `src/environment/payload.rs`, scalar contracts into
+     `src/environment/scalar.rs`, and action/state enums into
+     `src/environment/state.rs` with a directory README so `environment.rs`
+     remains the dependency-environment request/result envelope owner instead
+     of becoming a broad dependency-domain module.
+   - No-fallback/no-legacy confirmation: this slice did not migrate
+     `ModelDependencyResolver`, did not map the new shared payloads back into
+     `ModelDependencyRequirements`, `ModelDependencyStatus`, or
+     `ModelDependencyInstallResult`, and did not touch node-engine,
+     embedded-runtime, frontend, worker, scheduler, Pumas lookup, generated DTO,
+     lockfile, or saved-workflow behavior. The shared result contract is now
+     ready for the later resolver replacement slice to remove the old
+     node-engine-owned result DTOs instead of shimming them.
+   - Standards evidence: new boundary rows use snake_case serde and deny
+     unknown fields; selected binding order is preserved while duplicate
+     selected binding ids are rejected; operation timestamps are non-zero and
+     ordered; diagnostic and validation field paths reject filesystem-shaped
+     paths; public validation returns `DependencyPlanningContractError`; crate
+     README, source README, environment child-module README, and fixture README
+     document the new contract.
+   - Verification: `cargo fmt -p pantograph-dependency-planning`,
+     `cargo test -p pantograph-dependency-planning`,
+     `cargo fmt -p pantograph-dependency-planning -- --check`,
+     `cargo check -p pantograph-dependency-planning`,
+     `cargo check -p pantograph-dependency-planning --all-features`, and
+     `cargo check -p pantograph-dependency-planning --no-default-features`.
+     Final whitespace verification passed: `git diff --check`.
 
 4. **Raw Device Boundary Removal**
    - Purpose: eliminate remaining cross-crate or cross-process raw device

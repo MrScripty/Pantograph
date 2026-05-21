@@ -23,6 +23,55 @@
   "validation_state": "invalid",
   "failure_state": "invalid_request",
   "dependency_requirements_id": "tiny-sd:pytorch:linux-x86_64:torch-diffusers",
+  "requirements": [
+    {
+      "name": "diffusers",
+      "kind": "python_package",
+      "python": {
+        "import_name": "diffusers",
+        "package_manager": "pip"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "binding_id": "diffusers.scheduler",
+      "requirement_name": "diffusers",
+      "environment_kind": "python",
+      "profile_id": "python:pytorch:cu124"
+    }
+  ],
+  "selected_binding_ids": [
+    "diffusers.scheduler"
+  ],
+  "binding_statuses": [
+    {
+      "binding_id": "diffusers.scheduler",
+      "state": "failed",
+      "validation_state": "invalid",
+      "checked_at_ms": 1779398400000,
+      "diagnostics": [
+        {
+          "code": "invalid_request",
+          "severity": "error",
+          "message": "Dependency override patch targeted an unknown requirement.",
+          "field_path": "planning_request.dependency_override_patches[0].requirement_name"
+        }
+      ]
+    }
+  ],
+  "operation": {
+    "state": "failed",
+    "started_at_ms": 1779398399000,
+    "completed_at_ms": 1779398400000
+  },
+  "validation_errors": [
+    {
+      "code": "invalid_requirement",
+      "field_path": "planning_request.dependency_override_patches[0].requirement_name",
+      "message": "Dependency override patch targeted an unknown requirement."
+    }
+  ],
   "diagnostics": [
     {
       "code": "invalid_request",

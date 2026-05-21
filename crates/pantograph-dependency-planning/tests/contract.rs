@@ -1,13 +1,14 @@
 use pantograph_dependency_planning::{
     DependencyEnvironmentAction, DependencyEnvironmentFailureState,
-    DependencyEnvironmentInstallState, DependencyEnvironmentReadinessState,
-    DependencyEnvironmentRequest, DependencyEnvironmentResult,
-    DependencyEnvironmentValidationState, DependencyPlanningContractError,
-    DependencyPlanningDiagnosticCode, DependencyPlanningIdentityKey,
-    DependencyPlanningPlatformContext, DependencyPlanningRequest, DependencyPlanningResult,
-    DependencyPlanningState, DependencyPreflightModelRef, ModelArtifactKind,
-    PumasArtifactEntryPath, PumasArtifactEntryPathError, PumasArtifactLoadPathKind,
-    ValidatedDependencyEnvironmentRequest, ValidatedDependencyPlanningRequest,
+    DependencyEnvironmentInstallState, DependencyEnvironmentKind,
+    DependencyEnvironmentReadinessState, DependencyEnvironmentRequest, DependencyEnvironmentResult,
+    DependencyEnvironmentValidationState, DependencyOperationTimestampMs,
+    DependencyPlanningContractError, DependencyPlanningDiagnosticCode,
+    DependencyPlanningIdentityKey, DependencyPlanningPlatformContext, DependencyPlanningRequest,
+    DependencyPlanningResult, DependencyPlanningState, DependencyPreflightModelRef,
+    DependencyRequirementKind, ModelArtifactKind, PumasArtifactEntryPath,
+    PumasArtifactEntryPathError, PumasArtifactLoadPathKind, ValidatedDependencyEnvironmentRequest,
+    ValidatedDependencyPlanningRequest,
 };
 
 const VALID_REQUEST: &str = include_str!("fixtures/dependency_planning_request.json");
@@ -26,6 +27,8 @@ const ENV_UNAVAILABLE_RESULT: &str =
     include_str!("fixtures/dependency_environment_unavailable_result.json");
 const ENV_INVALID_RESULT: &str =
     include_str!("fixtures/dependency_environment_invalid_result.json");
+const ENV_NO_BINDING_RESULT: &str =
+    include_str!("fixtures/dependency_environment_no_binding_result.json");
 
 #[test]
 fn dependency_planning_request_fixture_decodes_and_validates() {
@@ -333,6 +336,20 @@ fn dependency_environment_result_fixtures_decode_and_validate() {
         DependencyEnvironmentValidationState::Valid
     );
     assert!(ready.environment_ref.is_some());
+    assert_eq!(ready.requirements.len(), 1);
+    assert_eq!(
+        ready.requirements[0].kind,
+        DependencyRequirementKind::PythonPackage
+    );
+    assert!(ready.requirements[0].python.is_some());
+    assert_eq!(ready.bindings.len(), 1);
+    assert_eq!(
+        ready.bindings[0].environment_kind,
+        DependencyEnvironmentKind::Python
+    );
+    assert_eq!(ready.selected_binding_ids.len(), 1);
+    assert_eq!(ready.binding_statuses.len(), 1);
+    assert!(ready.operation.is_some());
 
     let unavailable: DependencyEnvironmentResult = serde_json::from_str(ENV_UNAVAILABLE_RESULT)
         .expect("unavailable environment result should decode");
@@ -360,6 +377,19 @@ fn dependency_environment_result_fixtures_decode_and_validate() {
             .first()
             .map(|diagnostic| &diagnostic.code),
         Some(&DependencyPlanningDiagnosticCode::InvalidRequest)
+    );
+    assert_eq!(invalid.binding_statuses.len(), 1);
+    assert_eq!(invalid.validation_errors.len(), 1);
+
+    let no_binding: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_NO_BINDING_RESULT).expect("no-binding result should decode");
+    no_binding
+        .validate()
+        .expect("no-binding unavailable result should validate");
+    assert!(no_binding.selected_binding_ids.is_empty());
+    assert_eq!(
+        no_binding.failure_state,
+        Some(DependencyEnvironmentFailureState::RequirementsUnavailable)
     );
 }
 
@@ -472,4 +502,113 @@ fn dependency_environment_request_rejects_malformed_environment_ids() {
 
     serde_json::from_value::<DependencyEnvironmentRequest>(value)
         .expect_err("environment id must be a validated id, not a path");
+}
+
+#[test]
+fn dependency_environment_result_rejects_unknown_fields() {
+    let mut value: serde_json::Value =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should parse");
+    value
+        .as_object_mut()
+        .expect("fixture should be an object")
+        .insert("legacy_status".to_string(), serde_json::json!("ready"));
+
+    serde_json::from_value::<DependencyEnvironmentResult>(value)
+        .expect_err("environment results must reject unknown legacy fields");
+}
+
+#[test]
+fn dependency_environment_result_rejects_duplicate_selected_binding_ids() {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result
+        .selected_binding_ids
+        .push("diffusers.scheduler".parse().expect("valid binding id"));
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("selected binding ids must be unique"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_environment_result.selected_binding_ids",
+            reason: "selected binding ids must be unique"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_result_rejects_invalid_operation_timestamps() {
+    serde_json::from_value::<DependencyOperationTimestampMs>(serde_json::json!(0))
+        .expect_err("zero is not a valid operation timestamp");
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    let operation = result
+        .operation
+        .as_mut()
+        .expect("ready fixture includes operation timing");
+    operation.started_at_ms = Some(DependencyOperationTimestampMs::parse(200).unwrap());
+    operation.completed_at_ms = Some(DependencyOperationTimestampMs::parse(100).unwrap());
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("completion cannot precede start"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_operation.completed_at_ms",
+            reason: "operation completion timestamp must not be earlier than start timestamp"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_result_rejects_path_shaped_validation_fields() {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_INVALID_RESULT).expect("fixture should decode");
+    result
+        .diagnostics
+        .first_mut()
+        .expect("invalid fixture has diagnostic")
+        .field_path = Some("/tmp/model".to_string());
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("diagnostic field path must not be a filesystem path"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_diagnostic.field_path",
+            reason: "validation field paths must be contract fields, not filesystem paths"
+        }
+    );
+}
+
+#[test]
+fn dependency_environment_result_rejects_python_details_on_non_python_rows() {
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.requirements[0].kind = DependencyRequirementKind::RuntimeManagedBinary;
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("python details are requirement-kind scoped"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_requirement.python",
+            reason: "python details are allowed only for python package requirements"
+        }
+    );
+
+    let mut result: DependencyEnvironmentResult =
+        serde_json::from_str(ENV_READY_RESULT).expect("fixture should decode");
+    result.bindings[0].environment_kind = DependencyEnvironmentKind::ManagedBinary;
+
+    assert_eq!(
+        result
+            .validate()
+            .expect_err("python details are binding-kind scoped"),
+        DependencyPlanningContractError::InvalidField {
+            field: "dependency_binding.python",
+            reason: "python details are allowed only for python environment bindings"
+        }
+    );
 }

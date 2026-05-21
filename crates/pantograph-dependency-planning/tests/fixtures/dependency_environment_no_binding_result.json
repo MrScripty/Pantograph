@@ -13,10 +13,7 @@
     "selected_device_id": "cuda:0",
     "platform_context": {
       "platform_key": "linux-x86_64"
-    },
-    "selected_binding_ids": [
-      "diffusers.scheduler"
-    ]
+    }
   },
   "readiness_state": "unavailable",
   "install_state": "blocked",
@@ -32,9 +29,6 @@
       }
     }
   ],
-  "selected_binding_ids": [
-    "diffusers.scheduler"
-  ],
   "operation": {
     "state": "blocked",
     "started_at_ms": 1779398400000,
@@ -44,11 +38,11 @@
     {
       "code": "runtime_unavailable",
       "severity": "error",
-      "message": "PyTorch dependency requirements are not available for the selected platform.",
+      "message": "No dependency binding is available for the selected runtime.",
       "model_id": "image/stable-diffusion/tiny-sd",
       "runtime_id": "pytorch",
       "device_id": "cuda:0",
-      "field_path": "planning_request.scheduler_intent.requested_runtime_id"
+      "field_path": "identity_key.selected_binding_ids"
     }
   ]
 }

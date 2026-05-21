@@ -11,7 +11,8 @@ actions, persisted fixtures, and backend handoff boundaries.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `src/lib.rs` | Curated public re-exports for dependency-planning consumers. |
-| `src/environment.rs` | Typed dependency-environment resolve/check/install request, result, state, and environment-ref contracts. |
+| `src/environment.rs` | Typed dependency-environment resolve/check/install request, result, requirement, binding, status-row, operation, validation-error, and environment-ref contracts. |
+| `src/environment/` | Dependency-environment child modules for result payload rows and row-level validation helpers. |
 | `src/model_ref.rs` | Pumas-compatible model reference and artifact load-target contract mirrors. |
 | `src/preflight.rs` | Path-free preflight model reference successor and shared dependency-planning identity/correlation key. |
 | `src/request.rs` | Typed dependency-planning request, caller context, scheduler intent, dependency overrides, and validated ids. |
@@ -37,6 +38,10 @@ one neutral contract boundary before runtime behavior is migrated.
 - Dependency-environment actions are typed resolve/check/install operations.
   They are not raw frontend modes and they do not authorize path-based model
   lookup.
+- Dependency-environment result payloads carry shared requirement, binding,
+  status, operation, validation-error, and environment-ref facts as typed rows.
+  Runtime-specific and package-manager-specific facts stay behind optional
+  detail structs instead of becoming generic dependency fields.
 
 ## Decision
 Create a small workspace crate with validated request/result DTOs and
@@ -78,6 +83,13 @@ Pumas I/O remains outside this crate.
   `dependency_requirements_id`; resolve requests may omit it.
 - Dependency-environment readiness, install, validation, and failure states are
   typed enums.
+- Dependency-environment requirement kinds, environment kinds, binding status
+  states, operation states, validation codes, selected binding ids, profile ids,
+  requirement names, validation field paths, and operation timestamps are typed
+  contract values.
+- Python/package-manager facts are scoped to `PythonRequirementDetails` and
+  `PythonBindingDetails`; non-Python dependency classes must not reuse those
+  fields.
 - Raw graph JSON and frontend payloads must parse once into validated domain
   types before internal use.
 - Missing, stale, invalid, unavailable, ambiguous, needs-detail, and
@@ -193,7 +205,8 @@ let _validated = ValidatedDependencyPlanningRequest::try_from(planning_request)?
 - Inputs: dependency-planning and dependency-environment request DTOs decoded
   from graph, frontend, or host payloads.
 - Outputs: typed dependency-planning results, dependency-environment results,
-  environment refs, and diagnostics.
+  requirement rows, binding rows, binding status rows, operation facts,
+  validation-error rows, environment refs, and diagnostics.
 - Lifecycle: this crate has no runtime lifecycle and starts no tasks.
 - Errors: boundary validation returns `DependencyPlanningContractError`; planning
   and dependency-environment failures are represented as typed result states and
@@ -204,16 +217,22 @@ let _validated = ValidatedDependencyPlanningRequest::try_from(planning_request)?
 
 ## Structured Producer Contract
 - Stable fields: request/result field names, dependency-environment action and
-  state enum spellings, typed diagnostic codes, environment-ref ids, and
-  Pumas-compatible model/load-target shapes.
+  state enum spellings, requirement/binding/status/operation enum spellings,
+  typed diagnostic codes, environment-ref ids, and Pumas-compatible
+  model/load-target shapes.
 - Defaults: omitted scheduler intent, caller context, selected bindings, and
   diagnostics mean empty intent/context/bindings/diagnostics. Omitted
-  dependency-environment contract version means version 1.
+  dependency-environment requirements, bindings, binding statuses, validation
+  errors, and operation facts mean the producer has no facts for that row set.
+  Omitted dependency-environment contract version means version 1.
 - Enum semantics: result states distinguish unavailable, invalid, stale,
   ambiguous, needs-detail, missing, and not-implemented; dependency-environment
   readiness/install/validation/failure states are distinct because scheduler,
   activity, and UI decisions depend on those differences.
 - Ordering: selected binding ids and diagnostics preserve producer order.
+- Validation: operation timestamps must be non-zero and completion must not
+  precede start; selected binding ids must be unique; validation field paths are
+  contract paths, not filesystem paths.
 - Compatibility: serde fixture tests are required for public DTO changes.
 - Regeneration/migration: when Pumas or frontend wire shapes change, update this
   crate's fixtures and downstream consumers in the same slice.

@@ -13,10 +13,16 @@ mod request;
 mod result;
 
 pub use environment::{
+    DependencyBindingProfileId, DependencyBindingStatusRow, DependencyBindingStatusState,
     DependencyEnvironmentAction, DependencyEnvironmentFailureState, DependencyEnvironmentId,
-    DependencyEnvironmentInstallState, DependencyEnvironmentManifestId,
+    DependencyEnvironmentInstallState, DependencyEnvironmentKind, DependencyEnvironmentManifestId,
+    DependencyEnvironmentOperation, DependencyEnvironmentOperationState,
     DependencyEnvironmentReadinessState, DependencyEnvironmentRef, DependencyEnvironmentRequest,
-    DependencyEnvironmentResult, DependencyEnvironmentValidationState,
+    DependencyEnvironmentResult, DependencyEnvironmentValidationCode,
+    DependencyEnvironmentValidationError, DependencyEnvironmentValidationState,
+    DependencyOperationTimestampMs, DependencyRequirement, DependencyRequirementBinding,
+    DependencyRequirementKind, DependencyRequirementName, DependencyValidationFieldPath,
+    PythonBindingDetails, PythonPackageManagerKind, PythonRequirementDetails,
     ValidatedDependencyEnvironmentRequest,
 };
 pub use error::{DependencyPlanningContractError, PumasArtifactEntryPathError};
